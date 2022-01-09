@@ -40,7 +40,7 @@ Yep, we have a great community -- [join us here](https://community.slatebox.com)
 
 ## What's the deal? Who built this?
 
-My name is [Tim Heckel](https://github.com/TimHeckel), and I'm Slatebox's creator. There's a lot of backstory to this project, but basically it's been a labor of love over many years. If you're interested, check out the [blog](https://blog.slatbox.com) to get all the juicy details.
+My name is [Tim Heckel](https://github.com/TimHeckel), and I'm Slatebox's creator. There's a lot of backstory to this project, but basically it's been a labor of love over many years. If you're interested, check out the [blog](https://blog.slatebox.com) to get all the juicy details.
 
 ## Want to help development?
 
