@@ -1,0 +1,4 @@
+_locale: 'it-IT'
+_namespace: ''
+common:
+    name: yml-it

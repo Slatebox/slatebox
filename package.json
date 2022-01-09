@@ -1,0 +1,13 @@
+{
+  "name": "slatebox",
+  "private": true,
+  "workspaces": [
+    "packages/**",
+    "desktop",
+    "web"
+  ],
+  "nohoist": [
+  ],
+  "scripts": {
+  }
+}

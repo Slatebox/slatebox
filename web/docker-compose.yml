@@ -1,0 +1,42 @@
+version: '3'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '${BASE_PORT:-2006}:3000'
+    depends_on:
+      - mongo
+    environment:
+      ROOT_URL: ${APP_ROOT_URL:-http://localhost}
+      MONGO_URL: ${MONGO_URL:-mongodb://mongo:27017/meteor}
+      PORT: 3000
+      METEOR_SETTINGS: >
+        {
+          "nounProject": {
+            "key": "${NOUN_PROJECT_KEY}",
+            "secret": "${NOUN_PROJECT_SECRET}"
+          },
+          "mailGun": {
+            "server": "${MAIL_URL}"
+          },
+          "public": {
+            "env": "${MAIL_URL:-dev}",
+            "baseUrl": "${BASE_URL:-http://localhost:2006}",
+            "googleFontAPIKey": "${GOOGLE_API_KEY}",
+            "googleImageSearchEngineKey": "${GOOGLE_IMAGE_SEARCH_API_KEY}",
+            "googleImageSearchAPIKey": "${GOOGLE_API_KEY}",
+            "pixabayAPIKey": "${PIXABAY_API_KEY}"
+          }
+        }
+  mongo:
+    image: mongo:latest
+    command:
+      - --storageEngine=wiredTiger
+    volumes:
+      - data:/data/db
+
+volumes:
+  data:
