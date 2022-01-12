@@ -1,0 +1,2924 @@
+{
+	"_id" : "05e5acd816e2",
+	"created" : 1636767336081,
+	"lastSaved" : 1636767336081,
+	"nodes" : [
+		{
+			"options" : {
+				"id" : "d7b2013812ca",
+				"name" : "child_12",
+				"text" : "",
+				"image" : "",
+				"xPos" : 9556.66,
+				"yPos" : 10118.61,
+				"height" : 174.97999999999956,
+				"width" : 1174.460000000001,
+				"borderStyle" : "-",
+				"borderWidth" : 4,
+				"borderColor" : "#000000",
+				"borderOpacity" : null,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 1,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : false,
+				"showTextTab" : false,
+				"showShapeTab" : false,
+				"showImageTab" : false,
+				"showEffectTab" : false,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : true,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#e3e3e3",
+				"foregroundColor" : "#000",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M9556.66,10118.61C9556.66,10118.61,10731.12,10118.61,10731.12,10118.61C10731.12,10118.61,10731.12,10293.59,10731.12,10293.59C10731.12,10293.59,9556.66,10293.59,9556.66,10293.59C9556.66,10293.59,9556.66,10118.61,9556.66,10118.61",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10143.89,
+						"y" : 10206.1
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 87.48999999999978,
+					"width" : 1174.460000000001,
+					"height" : 174.97999999999956
+				},
+				"textBounds" : {
+					"x" : 9556.66,
+					"y" : 10118.61,
+					"x2" : 10731.12,
+					"y2" : 10293.59,
+					"width" : 1174.460000000001,
+					"height" : 174.97999999999956,
+					"cx" : 10143.89,
+					"cy" : 10206.1
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1636677215983,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [ ]
+			}
+		},
+		{
+			"options" : {
+				"id" : "db81e6180672",
+				"name" : "30ec0b59a6af",
+				"text" : "Don't want to use all the colors? Change the text to \"X\" and it won't be used.",
+				"image" : "",
+				"xPos" : 10036.8,
+				"yPos" : 10624.76,
+				"height" : 36,
+				"width" : 270,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 0,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 0,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : true,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : true,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : false,
+				"showTextTab" : false,
+				"showShapeTab" : false,
+				"showImageTab" : false,
+				"showEffectTab" : false,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : true,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#f44336",
+				"foregroundColor" : "#000",
+				"fontSize" : 16,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M10036.8,10624.76C10036.8,10624.76,10306.8,10624.76,10306.8,10624.76C10306.8,10624.76,10306.8,10660.76,10306.8,10660.76C10306.8,10660.76,10036.8,10660.76,10036.8,10660.76C10036.8,10660.76,10036.8,10624.76,10036.8,10624.76",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10171.8,
+						"y" : 10642.76
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 18,
+					"width" : 270,
+					"height" : 36
+				},
+				"textBounds" : {
+					"x" : 10036.8,
+					"y" : 10624.76,
+					"x2" : 10306.8,
+					"y2" : 10660.76,
+					"width" : 270,
+					"height" : 36,
+					"cx" : 10171.8,
+					"cy" : 10642.76
+				},
+				"textXAlign" : "start",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1636678282711,
+				"parents" : [
+					"9e5d29a79efe"
+				]
+			},
+			"relationships" : {
+				"associations" : [ ]
+			}
+		},
+		{
+			"options" : {
+				"id" : "ba6a0b81685d",
+				"name" : "e9ea825e18d5",
+				"text" : "Define the default color palette and node style by editing the circles.\nEdit the slate to change default background properties.",
+				"image" : "",
+				"xPos" : 9963.54,
+				"yPos" : 10246.06,
+				"height" : 10,
+				"width" : 736.539999999999,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000000",
+				"borderOpacity" : 0,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 0,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : true,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : true,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : false,
+				"showTextTab" : false,
+				"showShapeTab" : false,
+				"showImageTab" : false,
+				"showEffectTab" : false,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : true,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#000000",
+				"foregroundColor" : "#B86D0A",
+				"fontSize" : 22,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M9963.54,10246.06C9963.54,10246.06,10700.08,10246.06,10700.08,10246.06C10700.08,10246.06,10700.08,10256.06,10700.08,10256.06C10700.08,10256.06,9963.54,10256.06,9963.54,10256.06C9963.54,10256.06,9963.54,10246.06,9963.54,10246.06",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10331.808,
+						"y" : 10251.064
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 5,
+					"width" : 736.539999999999,
+					"height" : 10
+				},
+				"textBounds" : {
+					"x" : 9963.54,
+					"y" : 10246.06,
+					"x2" : 10700.08,
+					"y2" : 10256.06,
+					"width" : 736.539999999999,
+					"height" : 10,
+					"cx" : 10331.810000000001,
+					"cy" : 10251.06
+				},
+				"textXAlign" : "end",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1636677830326
+			},
+			"relationships" : {
+				"associations" : [ ]
+			}
+		},
+		{
+			"options" : {
+				"id" : "a2da27041c5a",
+				"name" : "a2da27041c5a",
+				"text" : "Slatebox Theme Generator",
+				"image" : "",
+				"xPos" : 10027.346782477001,
+				"yPos" : 10160.142949719999,
+				"height" : 36.6541005600011,
+				"width" : 270.0864350459997,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 0,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 0,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : true,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : true,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : false,
+				"showTextTab" : false,
+				"showShapeTab" : false,
+				"showImageTab" : false,
+				"showEffectTab" : false,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : true,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#b8b8b8",
+				"foregroundColor" : "#B86D0A",
+				"fontSize" : 92,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M10027.39,10160.47C10027.39,10160.47,10297.39,10160.47,10297.39,10160.47C10297.39,10160.47,10297.39,10196.47,10297.39,10196.47C10297.39,10196.47,10027.39,10196.47,10027.39,10196.47C10027.39,10196.47,10027.39,10160.47,10027.39,10160.47",
+				"rotate" : {
+					"rotationAngle" : 0.13882700072595355,
+					"point" : {
+						"x" : 10162.39,
+						"y" : 10178.47
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 18.32705027999873,
+					"width" : 270.0864350459997,
+					"height" : 36.65410055999928
+				},
+				"textBounds" : {
+					"x" : 10027.346782477001,
+					"y" : 10160.142949719999,
+					"x2" : 10297.433217523001,
+					"y2" : 10196.797050279998,
+					"width" : 270.0864350459997,
+					"height" : 36.65410055999928,
+					"cx" : 10162.390000000001,
+					"cy" : 10178.469999999998
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635097229639
+			},
+			"relationships" : {
+				"associations" : [ ]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_3",
+				"name" : "child_3",
+				"text" : "Child 3",
+				"image" : "",
+				"xPos" : 10531.76,
+				"yPos" : 10713.764837695198,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 1,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#673ab7",
+				"foregroundColor" : "#fff",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M10531.76,10787.76C10531.76,10730.88,10603.42,10695.33,10660.76,10723.78C10687.36,10736.97,10703.76,10761.37,10703.76,10787.76C10703.76,10844.63,10632.1,10880.19,10574.76,10851.74C10548.16,10838.53,10531.76,10814.15,10531.76,10787.76",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10617.756000000001,
+						"y" : 10787.75933535965
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445105,
+					"width" : 172,
+					"height" : 147.9889953289021
+				},
+				"textBounds" : {
+					"x" : 10531.76,
+					"y" : 10713.764837695198,
+					"x2" : 10703.76,
+					"y2" : 10861.7538330241,
+					"width" : 172,
+					"height" : 147.9889953289021,
+					"cx" : 10617.76,
+					"cy" : 10787.75933535965
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635097520862,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_3",
+						"parentId" : "child_2",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_4",
+						"parentId" : "child_3",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "parent",
+				"name" : "parent",
+				"text" : "parent",
+				"image" : "",
+				"xPos" : 9670.77,
+				"yPos" : 10430.469476896717,
+				"height" : 169.9983867835399,
+				"width" : 232,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 1,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#f44336",
+				"foregroundColor" : "#000",
+				"fontSize" : 18,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M9670.77,10515.47C9670.77,10450.12,9767.41,10409.29,9844.77,10441.98C9880.66,10457.11,9902.77,10485.14,9902.77,10515.47C9902.77,10580.8,9806.13,10621.65,9728.77,10588.96C9692.88,10573.78,9670.77,10545.8,9670.77,10515.47",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 9786.77,
+						"y" : 10515.468670288486
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 84.99919339176995,
+					"width" : 232,
+					"height" : 169.9983867835399
+				},
+				"textBounds" : {
+					"x" : 9670.77,
+					"y" : 10430.469476896717,
+					"x2" : 9902.77,
+					"y2" : 10600.467863680256,
+					"width" : 232,
+					"height" : 169.9983867835399,
+					"cx" : 9786.77,
+					"cy" : 10515.468670288486
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635096964145
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_1",
+						"parentId" : "parent",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "30ec0b59a6af",
+				"name" : "30ec0b59a6af",
+				"text" : "All newly created parent nodes will have this effect by default.",
+				"image" : "",
+				"xPos" : 9865.6,
+				"yPos" : 10386.48,
+				"height" : 36,
+				"width" : 270,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 0,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 0,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : true,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : true,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : false,
+				"showTextTab" : false,
+				"showShapeTab" : false,
+				"showImageTab" : false,
+				"showEffectTab" : false,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : true,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#f44336",
+				"foregroundColor" : "#000",
+				"fontSize" : 16,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M9865.6,10386.48C9865.6,10386.48,10135.6,10386.48,10135.6,10386.48C10135.6,10386.48,10135.6,10422.48,10135.6,10422.48C10135.6,10422.48,9865.6,10422.48,9865.6,10422.48C9865.6,10422.48,9865.6,10386.48,9865.6,10386.48",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10000.6,
+						"y" : 10404.48
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 18,
+					"width" : 270,
+					"height" : 36
+				},
+				"textBounds" : {
+					"x" : 9865.6,
+					"y" : 10386.48,
+					"x2" : 10135.6,
+					"y2" : 10422.48,
+					"width" : 270,
+					"height" : 36,
+					"cx" : 10000.6,
+					"cy" : 10404.48
+				},
+				"textXAlign" : "start",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635103832400,
+				"parents" : [
+					"9e5d29a79efe"
+				]
+			},
+			"relationships" : {
+				"associations" : [ ]
+			}
+		},
+		{
+			"options" : {
+				"id" : "ed35f6334564",
+				"name" : "ed35f6334564",
+				"text" : "Standalone",
+				"image" : "",
+				"xPos" : 9674.77,
+				"yPos" : 10386.48,
+				"height" : 30,
+				"width" : 164,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 0,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 0,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : true,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : true,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : false,
+				"showTextTab" : false,
+				"showShapeTab" : false,
+				"showImageTab" : false,
+				"showEffectTab" : false,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : true,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#ffffff",
+				"foregroundColor" : "#000",
+				"fontSize" : 30,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M9674.77,10386.48C9674.77,10386.48,9838.77,10386.48,9838.77,10386.48C9838.77,10386.48,9838.77,10416.48,9838.77,10416.48C9838.77,10416.48,9674.77,10416.48,9674.77,10416.48C9674.77,10416.48,9674.77,10386.48,9674.77,10386.48",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 9756.77,
+						"y" : 10401.48
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 15,
+					"width" : 164,
+					"height" : 30
+				},
+				"textBounds" : {
+					"x" : 9674.77,
+					"y" : 10386.48,
+					"x2" : 9838.77,
+					"y2" : 10416.48,
+					"width" : 164,
+					"height" : 30,
+					"cx" : 9756.77,
+					"cy" : 10401.48
+				},
+				"textXAlign" : "start",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : "pencil",
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635097137435
+			},
+			"relationships" : {
+				"associations" : [ ]
+			}
+		},
+		{
+			"options" : {
+				"id" : "parent_->_child",
+				"name" : "parent_->_child",
+				"text" : "parent -> Child",
+				"image" : "",
+				"xPos" : 9667.77,
+				"yPos" : 10771.48,
+				"height" : 22,
+				"width" : 178,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 0,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 0,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : true,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : true,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : false,
+				"showTextTab" : false,
+				"showShapeTab" : false,
+				"showImageTab" : false,
+				"showEffectTab" : false,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : true,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#ffffff",
+				"foregroundColor" : "#000",
+				"fontSize" : 30,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M9667.77,10771.48C9667.77,10771.48,9845.77,10771.48,9845.77,10771.48C9845.77,10771.48,9845.77,10793.48,9845.77,10793.48C9845.77,10793.48,9667.77,10793.48,9667.77,10793.48C9667.77,10793.48,9667.77,10771.48,9667.77,10771.48",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 9756.77,
+						"y" : 10782.48
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 11,
+					"width" : 178,
+					"height" : 22
+				},
+				"textBounds" : {
+					"x" : 9667.77,
+					"y" : 10771.48,
+					"x2" : 9845.77,
+					"y2" : 10793.48,
+					"width" : 178,
+					"height" : 22,
+					"cx" : 9756.77,
+					"cy" : 10782.48
+				},
+				"textXAlign" : "start",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : "pencil",
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635097229639
+			},
+			"relationships" : {
+				"associations" : [ ]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_1",
+				"name" : "child_1",
+				"text" : "Child 1",
+				"image" : "",
+				"xPos" : 9898.77,
+				"yPos" : 10710.474837695197,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 1,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#e91e63",
+				"foregroundColor" : "#000",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M9898.77,10784.47C9898.77,10727.59,9970.43,10692.04,10027.77,10720.49C10054.37,10733.68,10070.77,10758.08,10070.77,10784.47C10070.77,10841.34,9999.11,10876.9,9941.77,10848.45C9915.17,10835.24,9898.77,10810.86,9898.77,10784.47",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 9984.77,
+						"y" : 10784.469335359649
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445105,
+					"width" : 172,
+					"height" : 147.9889953289021
+				},
+				"textBounds" : {
+					"x" : 9898.77,
+					"y" : 10710.474837695197,
+					"x2" : 10070.77,
+					"y2" : 10858.4638330241,
+					"width" : 172,
+					"height" : 147.9889953289021,
+					"cx" : 9984.77,
+					"cy" : 10784.469335359649
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635097410496,
+				"parents" : [
+					"9e5d29a79efe"
+				]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_1",
+						"parentId" : "parent",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_2",
+						"parentId" : "child_1",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_2",
+				"name" : "child_2",
+				"text" : "Child 2",
+				"image" : "",
+				"xPos" : 10226.63,
+				"yPos" : 10712.474837695197,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 1,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#9c27b0",
+				"foregroundColor" : "#000",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M10226.63,10786.47C10226.63,10729.59,10298.29,10694.04,10355.63,10722.49C10382.23,10735.68,10398.63,10760.08,10398.63,10786.47C10398.63,10843.34,10326.97,10878.9,10269.63,10850.45C10243.03,10837.24,10226.63,10812.86,10226.63,10786.47",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10312.626,
+						"y" : 10786.469335359649
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445105,
+					"width" : 172,
+					"height" : 147.9889953289021
+				},
+				"textBounds" : {
+					"x" : 10226.63,
+					"y" : 10712.474837695197,
+					"x2" : 10398.63,
+					"y2" : 10860.4638330241,
+					"width" : 172,
+					"height" : 147.9889953289021,
+					"cx" : 10312.63,
+					"cy" : 10786.469335359649
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635097493816,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_3",
+						"parentId" : "child_2",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_2",
+						"parentId" : "child_1",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_4",
+				"name" : "child_4",
+				"text" : "Child 4",
+				"image" : "",
+				"xPos" : 10528.97,
+				"yPos" : 11019.014837695198,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 1,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#3f51b5",
+				"foregroundColor" : "#fff",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M10528.97,11093.01C10528.97,11036.13,10600.63,11000.58,10657.97,11029.03C10684.57,11042.22,10700.97,11066.62,10700.97,11093.01C10700.97,11149.88,10629.31,11185.44,10571.97,11156.99C10545.37,11143.78,10528.97,11119.4,10528.97,11093.01",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10614.97,
+						"y" : 11093.01133535965
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445105,
+					"width" : 172,
+					"height" : 147.9889953289021
+				},
+				"textBounds" : {
+					"x" : 10528.97,
+					"y" : 11019.014837695198,
+					"x2" : 10700.97,
+					"y2" : 11167.0038330241,
+					"width" : 172,
+					"height" : 147.9889953289021,
+					"cx" : 10614.97,
+					"cy" : 11093.00933535965
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635622021430,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_4",
+						"parentId" : "child_3",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_5",
+						"parentId" : "child_4",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_5",
+				"name" : "child_5",
+				"text" : "Child 5",
+				"image" : "",
+				"xPos" : 10224.79,
+				"yPos" : 11017.724837695197,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 1,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#2196f3",
+				"foregroundColor" : "#000",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M10224.79,11091.72C10224.79,11034.84,10296.45,10999.29,10353.79,11027.74C10380.39,11040.93,10396.79,11065.33,10396.79,11091.72C10396.79,11148.59,10325.13,11184.15,10267.79,11155.7C10241.19,11142.49,10224.79,11118.11,10224.79,11091.72",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10310.79,
+						"y" : 11091.721335359649
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445105,
+					"width" : 172,
+					"height" : 147.9889953289021
+				},
+				"textBounds" : {
+					"x" : 10224.79,
+					"y" : 11017.724837695197,
+					"x2" : 10396.79,
+					"y2" : 11165.7138330241,
+					"width" : 172,
+					"height" : 147.9889953289021,
+					"cx" : 10310.79,
+					"cy" : 11091.719335359649
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635622098564,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_5",
+						"parentId" : "child_4",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_6",
+						"parentId" : "child_5",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_6",
+				"name" : "child_6",
+				"text" : "Child 6",
+				"image" : "",
+				"xPos" : 9898.7,
+				"yPos" : 11019.014837695198,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 1,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#03a9f4",
+				"foregroundColor" : "#000",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M9898.7,11093.01C9898.7,11036.13,9970.36,11000.58,10027.7,11029.03C10054.3,11042.22,10070.7,11066.62,10070.7,11093.01C10070.7,11149.88,9999.04,11185.44,9941.7,11156.99C9915.1,11143.78,9898.7,11119.4,9898.7,11093.01",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 9984.702,
+						"y" : 11093.01133535965
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445105,
+					"width" : 172,
+					"height" : 147.9889953289021
+				},
+				"textBounds" : {
+					"x" : 9898.7,
+					"y" : 11019.014837695198,
+					"x2" : 10070.7,
+					"y2" : 11167.0038330241,
+					"width" : 172,
+					"height" : 147.9889953289021,
+					"cx" : 9984.7,
+					"cy" : 11093.00933535965
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635622151034,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_6",
+						"parentId" : "child_5",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_7",
+						"parentId" : "child_6",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_8",
+				"name" : "child_8",
+				"text" : "Child 8",
+				"image" : "",
+				"xPos" : 10222.85,
+				"yPos" : 11308.814837695196,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 1,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#009688",
+				"foregroundColor" : "#000",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M10222.85,11382.81C10222.85,11325.93,10294.51,11290.38,10351.85,11318.83C10378.45,11332.02,10394.85,11356.42,10394.85,11382.81C10394.85,11439.68,10323.19,11475.24,10265.85,11446.79C10239.25,11433.58,10222.85,11409.2,10222.85,11382.81",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10308.85,
+						"y" : 11382.809335359649
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445287,
+					"width" : 172,
+					"height" : 147.9889953289039
+				},
+				"textBounds" : {
+					"x" : 10222.85,
+					"y" : 11308.814837695196,
+					"x2" : 10394.85,
+					"y2" : 11456.8038330241,
+					"width" : 172,
+					"height" : 147.9889953289039,
+					"cx" : 10308.85,
+					"cy" : 11382.809335359649
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635622388499,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_8",
+						"parentId" : "child_7",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_9",
+						"parentId" : "child_8",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_9",
+				"name" : "child_9",
+				"text" : "Child 9",
+				"image" : "",
+				"xPos" : 10527.89,
+				"yPos" : 11308.814837695196,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 1,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#4caf50",
+				"foregroundColor" : "#000",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M10527.89,11382.81C10527.89,11325.93,10599.55,11290.38,10656.89,11318.83C10683.49,11332.02,10699.89,11356.42,10699.89,11382.81C10699.89,11439.68,10628.23,11475.24,10570.89,11446.79C10544.29,11433.58,10527.89,11409.2,10527.89,11382.81",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10613.89,
+						"y" : 11382.809335359649
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445287,
+					"width" : 172,
+					"height" : 147.9889953289039
+				},
+				"textBounds" : {
+					"x" : 10527.89,
+					"y" : 11308.814837695196,
+					"x2" : 10699.89,
+					"y2" : 11456.8038330241,
+					"width" : 172,
+					"height" : 147.9889953289039,
+					"cx" : 10613.89,
+					"cy" : 11382.809335359649
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635622395634,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_9",
+						"parentId" : "child_8",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_10",
+						"parentId" : "child_9",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_10",
+				"name" : "child_10",
+				"text" : "Child 10",
+				"image" : "",
+				"xPos" : 10525.1,
+				"yPos" : 11601.194837695197,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 1,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#8bc34a",
+				"foregroundColor" : "#000",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M10525.1,11675.19C10525.1,11618.31,10596.76,11582.76,10654.1,11611.21C10680.7,11624.4,10697.1,11648.8,10697.1,11675.19C10697.1,11732.06,10625.44,11767.62,10568.1,11739.17C10541.5,11725.96,10525.1,11701.58,10525.1,11675.19",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10611.1,
+						"y" : 11675.18933535965
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445287,
+					"width" : 172,
+					"height" : 147.9889953289039
+				},
+				"textBounds" : {
+					"x" : 10525.1,
+					"y" : 11601.194837695197,
+					"x2" : 10697.1,
+					"y2" : 11749.1838330241,
+					"width" : 172,
+					"height" : 147.9889953289039,
+					"cx" : 10611.1,
+					"cy" : 11675.18933535965
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635622468012,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_10",
+						"parentId" : "child_9",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_11",
+						"parentId" : "child_10",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_11",
+				"name" : "child_11",
+				"text" : "Child 11",
+				"image" : "",
+				"xPos" : 10218.34,
+				"yPos" : 11599.904837695198,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 1,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#cddc39",
+				"foregroundColor" : "#000",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M10218.34,11673.9C10218.34,11617.02,10290,11581.47,10347.34,11609.92C10373.94,11623.11,10390.34,11647.51,10390.34,11673.9C10390.34,11730.77,10318.68,11766.33,10261.34,11737.88C10234.74,11724.67,10218.34,11700.29,10218.34,11673.9",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10304.34,
+						"y" : 11673.899335359649
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445105,
+					"width" : 172,
+					"height" : 147.9889953289021
+				},
+				"textBounds" : {
+					"x" : 10218.34,
+					"y" : 11599.904837695198,
+					"x2" : 10390.34,
+					"y2" : 11747.8938330241,
+					"width" : 172,
+					"height" : 147.9889953289021,
+					"cx" : 10304.34,
+					"cy" : 11673.899335359649
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635622482977,
+				"parents" : [
+					"child_10"
+				]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_11",
+						"parentId" : "child_10",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_12",
+						"parentId" : "child_11",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_12",
+				"name" : "child_12",
+				"text" : "Child 12",
+				"image" : "",
+				"xPos" : 9896.12,
+				"yPos" : 11598.614837695197,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 1,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#ffeb3b",
+				"foregroundColor" : "#000",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M9896.12,11672.61C9896.12,11615.73,9967.78,11580.18,10025.12,11608.63C10051.72,11621.82,10068.12,11646.22,10068.12,11672.61C10068.12,11729.48,9996.46,11765.04,9939.12,11736.59C9912.52,11723.38,9896.12,11699,9896.12,11672.61",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 9982.12,
+						"y" : 11672.609335359648
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445105,
+					"width" : 172,
+					"height" : 147.9889953289021
+				},
+				"textBounds" : {
+					"x" : 9896.12,
+					"y" : 11598.614837695197,
+					"x2" : 10068.12,
+					"y2" : 11746.603833024099,
+					"width" : 172,
+					"height" : 147.9889953289021,
+					"cx" : 9982.12,
+					"cy" : 11672.609335359648
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635622500926,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_12",
+						"parentId" : "child_11",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_13",
+						"parentId" : "child_12",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_7",
+				"name" : "child_7",
+				"text" : "Child 7",
+				"image" : "",
+				"xPos" : 9897.2,
+				"yPos" : 11308.814837695196,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : 1,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#00bcd4",
+				"foregroundColor" : "#000",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M9897.2,11382.81C9897.2,11325.93,9968.86,11290.38,10026.2,11318.83C10052.8,11332.02,10069.2,11356.42,10069.2,11382.81C10069.2,11439.68,9997.54,11475.24,9940.2,11446.79C9913.6,11433.58,9897.2,11409.2,9897.2,11382.81",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 9983.202,
+						"y" : 11382.81133535965
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445287,
+					"width" : 172,
+					"height" : 147.9889953289039
+				},
+				"textBounds" : {
+					"x" : 9897.2,
+					"y" : 11308.814837695196,
+					"x2" : 10069.2,
+					"y2" : 11456.8038330241,
+					"width" : 172,
+					"height" : 147.9889953289039,
+					"cx" : 9983.2,
+					"cy" : 11382.809335359649
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1635622373908,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_8",
+						"parentId" : "child_7",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_7",
+						"parentId" : "child_6",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_13",
+				"name" : "child_12",
+				"text" : "Child 13",
+				"image" : "",
+				"xPos" : 9897.19,
+				"yPos" : 11889.704837695197,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : null,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#ffc108",
+				"foregroundColor" : "#000",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M9897.19,11963.7C9897.19,11906.82,9968.85,11871.27,10026.19,11899.72C10052.79,11912.91,10069.19,11937.31,10069.19,11963.7C10069.19,12020.57,9997.53,12056.13,9940.19,12027.68C9913.59,12014.47,9897.19,11990.09,9897.19,11963.7",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 9983.19,
+						"y" : 11963.699335359648
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445105,
+					"width" : 172,
+					"height" : 147.9889953289021
+				},
+				"textBounds" : {
+					"x" : 9897.19,
+					"y" : 11889.704837695197,
+					"x2" : 10069.19,
+					"y2" : 12037.6938330241,
+					"width" : 172,
+					"height" : 147.9889953289021,
+					"cx" : 9983.19,
+					"cy" : 11963.699335359648
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1636676980038,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_13",
+						"parentId" : "child_12",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_14",
+						"parentId" : "child_13",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_14",
+				"name" : "child_12",
+				"text" : "Child 14",
+				"image" : "",
+				"xPos" : 10217.69,
+				"yPos" : 11892.284837695197,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : null,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#ff9900",
+				"foregroundColor" : "#000",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M10217.69,11966.28C10217.69,11909.4,10289.35,11873.85,10346.69,11902.3C10373.29,11915.49,10389.69,11939.89,10389.69,11966.28C10389.69,12023.15,10318.03,12058.71,10260.69,12030.26C10234.09,12017.05,10217.69,11992.67,10217.69,11966.28",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10303.69,
+						"y" : 11966.27933535965
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445287,
+					"width" : 172,
+					"height" : 147.9889953289039
+				},
+				"textBounds" : {
+					"x" : 10217.69,
+					"y" : 11892.284837695197,
+					"x2" : 10389.69,
+					"y2" : 12040.2738330241,
+					"width" : 172,
+					"height" : 147.9889953289039,
+					"cx" : 10303.69,
+					"cy" : 11966.27933535965
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1636677063629,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_14",
+						"parentId" : "child_13",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_15",
+						"parentId" : "child_14",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_15",
+				"name" : "child_12",
+				"text" : "Child 15",
+				"image" : "",
+				"xPos" : 10526.81,
+				"yPos" : 11893.574837695196,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : null,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#ff5521",
+				"foregroundColor" : "#000",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M10526.81,11967.57C10526.81,11910.69,10598.47,11875.14,10655.81,11903.59C10682.41,11916.78,10698.81,11941.18,10698.81,11967.57C10698.81,12024.44,10627.15,12060,10569.81,12031.55C10543.21,12018.34,10526.81,11993.96,10526.81,11967.57",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10612.81,
+						"y" : 11967.569335359647
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445105,
+					"width" : 172,
+					"height" : 147.9889953289039
+				},
+				"textBounds" : {
+					"x" : 10526.81,
+					"y" : 11893.574837695196,
+					"x2" : 10698.81,
+					"y2" : 12041.5638330241,
+					"width" : 172,
+					"height" : 147.9889953289039,
+					"cx" : 10612.81,
+					"cy" : 11967.569335359647
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1636677093285,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_15",
+						"parentId" : "child_14",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_16",
+						"parentId" : "child_15",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_16",
+				"name" : "child_12",
+				"text" : "Child 16",
+				"image" : "",
+				"xPos" : 10525.31,
+				"yPos" : 12184.664837695196,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : null,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#785548",
+				"foregroundColor" : "#fff",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M10525.31,12258.66C10525.31,12201.78,10596.97,12166.23,10654.31,12194.68C10680.91,12207.87,10697.31,12232.27,10697.31,12258.66C10697.31,12315.53,10625.65,12351.09,10568.31,12322.64C10541.71,12309.43,10525.31,12285.05,10525.31,12258.66",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10611.31,
+						"y" : 12258.659335359647
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445105,
+					"width" : 172,
+					"height" : 147.9889953289039
+				},
+				"textBounds" : {
+					"x" : 10525.31,
+					"y" : 12184.664837695196,
+					"x2" : 10697.31,
+					"y2" : 12332.6538330241,
+					"width" : 172,
+					"height" : 147.9889953289039,
+					"cx" : 10611.31,
+					"cy" : 12258.659335359647
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1636677204173,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_16",
+						"parentId" : "child_15",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					},
+					{
+						"childId" : "child_17",
+						"parentId" : "child_16",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		},
+		{
+			"options" : {
+				"id" : "child_17",
+				"name" : "child_12",
+				"text" : "Child 17",
+				"image" : "",
+				"xPos" : 10217.26,
+				"yPos" : 12182.084837695196,
+				"height" : 147.99495193110306,
+				"width" : 172,
+				"borderStyle" : "solid",
+				"borderWidth" : 2,
+				"borderColor" : "#000",
+				"borderOpacity" : 1,
+				"lineColor" : "#333",
+				"lineOpacity" : 1,
+				"lineEffect" : "",
+				"lineWidth" : 5,
+				"opacity" : null,
+				"textOpacity" : 1,
+				"showDelete" : false,
+				"showAddAndDeleteConditionally" : false,
+				"showResize" : false,
+				"showAdd" : false,
+				"showRelationshipConnector" : false,
+				"showRelationshipDelete" : false,
+				"showRelationshipProperties" : true,
+				"showRelationshipReassign" : false,
+				"showRotate" : false,
+				"showMenu" : true,
+				"showColorTab" : true,
+				"showTextTab" : true,
+				"showShapeTab" : false,
+				"showImageTab" : true,
+				"showEffectTab" : true,
+				"spaceBetweenNodesWhenAdding" : 30,
+				"disableMenuAsTemplate" : false,
+				"disableDrag" : true,
+				"allowDrag" : true,
+				"allowMenu" : true,
+				"allowContext" : true,
+				"allowResize" : true,
+				"isLocked" : false,
+				"isComment" : false,
+				"backgroundColor" : "#617e8c",
+				"foregroundColor" : "#000",
+				"fontSize" : 20,
+				"fontFamily" : "Roboto",
+				"fontStyle" : "normal",
+				"vectorPath" : "M10217.26,12256.08C10217.26,12199.2,10288.92,12163.65,10346.26,12192.1C10372.86,12205.29,10389.26,12229.69,10389.26,12256.08C10389.26,12312.95,10317.6,12348.51,10260.26,12320.06C10233.66,12306.85,10217.26,12282.47,10217.26,12256.08",
+				"rotate" : {
+					"rotationAngle" : 0,
+					"point" : {
+						"x" : 10303.26,
+						"y" : 12256.07933535965
+					}
+				},
+				"textOffset" : {
+					"x" : 0,
+					"y" : 73.99449766445287,
+					"width" : 172,
+					"height" : 147.9889953289039
+				},
+				"textBounds" : {
+					"x" : 10217.26,
+					"y" : 12182.084837695196,
+					"x2" : 10389.26,
+					"y2" : 12330.0738330241,
+					"width" : 172,
+					"height" : 147.9889953289039,
+					"cx" : 10303.26,
+					"cy" : 12256.07933535965
+				},
+				"textXAlign" : "middle",
+				"textYAlign" : "middle",
+				"link" : {
+					"show" : false,
+					"type" : "",
+					"data" : "",
+					"thumbnail" : {
+						"width" : 175,
+						"height" : 175
+					}
+				},
+				"parentArrowForChildren" : [ ],
+				"noChildArrowForChildren" : [ ],
+				"filters" : {
+					"vect" : null,
+					"text" : null,
+					"line" : null
+				},
+				"isEllipse" : false,
+				"copiedFromId" : "8f94ce8da0d7",
+				"copiedAt" : 1636677215983,
+				"parents" : [ ]
+			},
+			"relationships" : {
+				"associations" : [
+					{
+						"childId" : "child_17",
+						"parentId" : "child_16",
+						"isStraightLine" : false,
+						"lineColor" : "#333",
+						"lineEffect" : "",
+						"lineOpacity" : 1,
+						"lineWidth" : 5
+					}
+				]
+			}
+		}
+	],
+	"options" : {
+		"id" : "05e5acd816e2",
+		"instance" : "",
+		"name" : "Theme Generator",
+		"description" : "Use this template to generate new themes for Slatebox. Define the default color palette and the node style. Any background modifications will automatically be applied when this theme is chosen.",
+		"basedOnThemeId" : "",
+		"containerStyle" : {
+			"width" : "auto",
+			"height" : "auto",
+			"backgroundColor" : "#ffffff",
+			"backgroundEffect" : null
+		},
+		"viewPort" : {
+			"useInertiaScrolling" : true,
+			"showGrid" : false,
+			"snapToObjects" : false,
+			"gridSize" : 50,
+			"originalWidth" : 50000,
+			"width" : 64400,
+			"height" : 64400,
+			"left" : 7128.490993788818,
+			"top" : 7885.152730211221,
+			"zoom" : {
+				"w" : 64400,
+				"h" : 64400,
+				"l" : 7007.6909937888295,
+				"t" : 7893.452730211228,
+				"r" : 0.7763975155279503
+			},
+			"allowDrag" : true,
+			"originalHeight" : 50000
+		},
+		"enabled" : true,
+		"allowDrag" : true,
+		"showbirdsEye" : true,
+		"sizeOfbirdsEye" : 200,
+		"showMultiSelect" : true,
+		"showZoom" : true,
+		"showUndoRedo" : true,
+		"showStatus" : true,
+		"showLocks" : true,
+		"mindMapMode" : false,
+		"isPublic" : true,
+		"isFeatured" : false,
+		"isCommunity" : false,
+		"autoEnableDefaultFilters" : true,
+		"defaultLineColor" : "#333",
+		"isSharing" : true,
+		"imageFolder" : "/images/",
+		"collaboration" : {
+			"allow" : true
+		},
+		"allowVideoChat" : false,
+		"isInfographic" : false,
+		"isPrivate" : false,
+		"isUnlisted" : false,
+		"nodeOrder" : [
+			"d7b2013812ca",
+			"db81e6180672",
+			"ba6a0b81685d",
+			"a2da27041c5a",
+			"child_3",
+			"parent",
+			"30ec0b59a6af",
+			"ed35f6334564",
+			"parent_->_child",
+			"child_1",
+			"child_2",
+			"child_4",
+			"child_5",
+			"child_6",
+			"child_8",
+			"child_9",
+			"child_10",
+			"child_11",
+			"child_12",
+			"child_7",
+			"child_13",
+			"child_14",
+			"child_15",
+			"child_16",
+			"child_17"
+		],
+		"lastTouches" : [ ],
+		"isTemplate" : true,
+		"templateApproved" : true
+	},
+	"shareId" : "a42da07b",
+	"userId" : "iujvgzjY2H9by4YbH",
+	"isThemeGenerator" : true
+}

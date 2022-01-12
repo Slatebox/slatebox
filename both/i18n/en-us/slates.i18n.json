@@ -1,0 +1,21 @@
+{
+  "_namespace": "slates",
+  "mySlates": "My Slates",
+  "mySlatesSubHeader": " ",
+  "teamSlates": "Team Slates",
+  "teamSlatesSubHeader": "All team slates and any of my shared slates",
+  "communitySlates": "Community Slates",
+  "communitySlatesSubHeader": " ",
+  "templates": "Slate Templates",
+  "templatesSubHeader": " ",
+  "noTeamSlates": "Your teammates haven't created any slates yet!",
+  "noCommunitySlates": "No community slates found! Try changing your filter.",
+  "noTemplates": "No templates found! Try changing your filter.",
+  "noSelfSlates": "No slates found!",
+  "defaultNewSlateName": "New Slate",
+  "communitySlatePreview": "This slate is read only, but you can copy it for editing into your own account using this buttton",
+  "communitySlatePreviewButtonText": "Copy",
+  "templateSlatePreview": "Create a slate using this template",
+  "slatePreviewButtonText": "Copy",
+  "templateSlatePreviewButtonText": "Create"
+}
