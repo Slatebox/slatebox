@@ -44,6 +44,7 @@
     "@material-ui/lab": "^4.0.0-alpha.56",
     "bcrypt": "^5.0.0",
     "cohere-js": "^1.0.10",
+    "concurrently": "^7.0.0",
     "deepmerge": "^4.2.2",
     "embeddable-google-fonts": "^1.0.1",
     "font-picker-react": "^3.5.2",
@@ -99,7 +100,6 @@
     "testModule": "tests/main.js"
   },
   "devDependencies": {
-    "concurrently": "^6.2.0",
     "eslint": "^7.18.0",
     "eslint-plugin-react": "^7.22.0",
     "eslint-plugin-react-hooks": "^4.2.0"

@@ -148,13 +148,15 @@ export const SlateSharing = (props) => {
   let unlistedViewsThisMonth = guestViewData?.totalUnlistedViewsByMonth && guestViewData?.totalUnlistedViewsByMonth[new Date().getMonth() + 1] ? guestViewData?.totalUnlistedViewsByMonth[new Date().getMonth() + 1] : guestViewData?.allowableUnlistedViewsPerMonth;
 
   function enact(exp) {
-    slate.isPublic = exp === "public";
-    slate.isPrivate = exp === "private";
-    slate.isUnlisted = exp === "unlisted";
+    const isPublic = exp === "public";
+    const isPrivate = exp === "private";
+    const isUnlisted = exp === "unlisted";
     // ("updating ", slate.isPublic, slate.isUnlisted, slate.isPrivate);
-    Slates.update({ _id: slate?.options?.id }, { $set: { "options.isPublic": slate.isPublic, "options.isPrivate": slate.isPrivate, "options.isUnlisted": slate.isUnlisted }});
+    Slates.update({ _id: slate?.options?.id }, { $set: { "options.isPublic": isPublic, "options.isPrivate": isPrivate, "options.isUnlisted": isUnlisted }});
     
-    //dispatch({ type: "canvas", sharingExpanded: exp });
+    dispatch({ type: "canvas", slatePrivacy: { isPublic, isPrivate, isUnlisted } });
+    console.log("dispatching slatePrivacy", { isPublic, isPrivate, isUnlisted });
+
   }
 
   const setExpanded = async (exp) => {

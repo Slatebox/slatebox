@@ -828,7 +828,6 @@ export default class canvas {
         if (self.slate.options.containerStyle.backgroundColorAsGradient) {
           self.internal.style.backgroundColor = "";
           let bgStyle = `${self.slate.options.containerStyle.backgroundGradientType}-gradient(${self.slate.options.containerStyle.backgroundGradientColors.join(",")})`;
-          console.log("bgStyle ", bgStyle);
           self.internal.parentElement.style.background = bgStyle;
         } else {
           self.internal.style.backgroundColor = self.slate.options.containerStyle.backgroundColor || "#fff";

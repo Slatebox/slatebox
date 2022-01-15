@@ -176,7 +176,7 @@ method[CONSTANTS.methods.organizations.guestViewReport] = async function() {
       let type = gv.isUnlisted ? "unlisted" : "public";
 
       let owner = slateOwners.find(so => so._id === gv.slateOwnerUserId);
-      let slateOwner = owner ? (owner.profile && owner.profile.firstName.trim() !== "" ? `${owner.profile.firstName} ${owner.profile.lastName}` : owner.emails[0].address.split('@')[0]) : "[Removed]";
+      let slateOwner = owner ? (owner.profile && owner.profile.firstName && owner.profile.firstName.trim() !== "" ? `${owner.profile.firstName} ${owner.profile.lastName}` : owner.emails[0].address.split('@')[0]) : "[Removed]";
 
       rows.push([new Date(gv.timestamp).toLocaleDateString(), type, slateName, slateOwner, userDetails]);
 

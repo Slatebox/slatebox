@@ -113,6 +113,8 @@ export const Main = () => {
   let onCanvas = useSelector(state => state.onCanvas);
   let slateName = useSelector(state => state.slateName || '');
   let slate = useSelector(state => state.slate);
+  let slatePrivacy = useSelector(state => state.slatePrivacy) || { isPublic: slate?.isPublic, isPrivate: slate?.isPrivate, isUnlisted: slate?.isUnlisted };
+  console.log("slateprivacy changed", slatePrivacy);
   let collaborator = useSelector(state => state.collaborator);
   let openShareDialog = useSelector(state => state.openShareDialog);
   let canManageSlate = useSelector(state => state.canManageSlate);
@@ -295,7 +297,7 @@ export const Main = () => {
   return (
     <>
       <CssBaseline />
-      {/* <LoadHeap /> */}
+      <LoadHeap />
       <ChatWootConfig />
       <ThemeProvider theme={theme}>
         <div id="appRoot" className={classes.root}>
@@ -330,7 +332,7 @@ export const Main = () => {
                   <Grid item>
                     <Grid alignItems="center" container spacing={2}>
                       <Grid item>
-                        {slate?.options?.isPrivate ? <Chip color="secondary" icon={<LockIcon />} label="private" /> : (slate?.options?.isUnlisted ? <Chip icon={<VpnLockIcon />} label="unlisted" /> : <Chip icon={<PublicIcon />} label="public" />)}
+                        {slatePrivacy.isPrivate ? <Chip color="secondary" icon={<LockIcon />} label="private" /> : (slatePrivacy.isUnlisted ? <Chip icon={<VpnLockIcon />} label="unlisted" /> : <Chip icon={<PublicIcon />} label="public" />)}
                       </Grid>
                       {slate && !slate.options.eligibleForThemeCompilation &&
                         <Grid item>
@@ -387,7 +389,7 @@ export const Main = () => {
                             className={classes.button}
                             onClick={async (e) => {
                               if (!Meteor.user().orgId && !["solo_monthly", "solo_yearly"].includes(Meteor.user().planType)) {
-                                let intendState = slate.options?.isPublic ? "private" : "public";
+                                let intendState = slate?.options.isPublic ? "private" : "public";
                                 const result = await confirmService.show({
                                   theme: theme,
                                   title: `Manage Slate Privacy`,

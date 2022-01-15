@@ -10,7 +10,7 @@ export const LoadHeap = (props) => {
       console.log("loaded heap 2 ", e, t); 
       window.heap.appid = e, window.heap.config = t = t || {}; 
       var r = document.createElement("script"); 
-      r.type = "text/javascript", r.async = !0, r.src = "https://cdn.heapanalytics.com/js/heap-" + e + ".js"; 
+      r.type = "text/javascript", r.async = !0, r.src = `https://cdn.heapanalytics.com/js/heap-${e}.js`; 
       var a = document.getElementsByTagName("script")[0]; 
       a.parentNode.insertBefore(r, a); 
       for (var n = function (e) { 
