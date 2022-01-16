@@ -10,15 +10,15 @@ services:
     expose:
       - "27017"
     extra_hosts:
-      "sb-mongo-1 sb-mongo-1.slatebox.com:192.168.128.66"
-      "sb-mongo-2 sb-mongo-2.slatebox.com:192.168.198.90"
-      "sb-mongo-3 sb-mongo-3.slatebox.com:192.168.220.24"
+      - "sb-mongo-1 sb-mongo-1.slatebox.com:192.168.128.66"
+      - "sb-mongo-2 sb-mongo-2.slatebox.com:192.168.198.90"
+      - "sb-mongo-3 sb-mongo-3.slatebox.com:192.168.220.24"
     depends_on:
       - mongo
     environment:
       ROOT_URL: ${APP_ROOT_URL:-http://localhost}
       MONGO_URL: ${MONGO_URL:-mongodb://mongo:27017/meteor}
-      MONGO_OPLOG_URL: ${MONGO_URL:-mongodb://mongo:27017/local}
+      MONGO_OPLOG_URL: ${MONGO_OPLOG_URL:-mongodb://mongo:27017/local}
       PORT: 3000
       METEOR_SETTINGS: >
         {
