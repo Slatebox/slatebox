@@ -7,8 +7,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - '${BASE_PORT:-2006}:3000'
-    expose:
-      - "27017"
+      - 27017:27017
     extra_hosts:
       - "sb-mongo-1 sb-mongo-1.slatebox.com:192.168.128.66"
       - "sb-mongo-2 sb-mongo-2.slatebox.com:192.168.198.90"
@@ -22,6 +21,23 @@ services:
       PORT: 3000
       METEOR_SETTINGS: >
         {
+          "redisOplog": {
+            "redis": {
+              "port": 6379,
+              "host": "${REDIS_OPLOG_URL}:-redis-oplog.slatebox.com"
+            },
+            "retryIntervalMs": 1000,
+            "mutationDefaults": {
+              "optimistic": true,
+              "pushToRedis": true
+            },
+            "cacheTimeout": 1800000,
+            "cacheTimer": 300000,
+            "secondaryReads": null,
+            "raceDetectionDelay": 1000,
+            "raceDetection": true,
+            "debug": true
+          },
           "nounProject": {
             "key": "${NOUN_PROJECT_KEY}",
             "secret": "${NOUN_PROJECT_SECRET}"
