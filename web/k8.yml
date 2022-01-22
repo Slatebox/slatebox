@@ -38,8 +38,15 @@ spec:
         - containerPort: 2006
       hostAliases:
       - hostnames:
-        - "www.example.com"
-        ip: "10.0.2.4"
+        - "sb-mongo-1"
+        - "sb-mongo-1.slatebox.com"
+        ip: "192.168.128.66"
+        - "sb-mongo-2"
+        - "sb-mongo-2.slatebox.com"
+        ip: "192.168.198.90"
+        - "sb-mongo-2"
+        - "sb-mongo-2.slatebox.com"
+        ip: "192.168.220.24"
       imagePullSecrets:
       - name: slateboxcreds
 ---

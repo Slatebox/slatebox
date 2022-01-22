@@ -2,19 +2,62 @@ version: '3'
 
 services:
   app:
-    deploy:
-      resources:
-        limits:
-          memory: 8gb
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - '${BASE_PORT:-2006}:2006'
+      - '${BASE_PORT:-2006}:3000'
     extra_hosts:
       - "sb-mongo-1 sb-mongo-1.slatebox.com:192.168.128.66"
       - "sb-mongo-2 sb-mongo-2.slatebox.com:192.168.198.90"
       - "sb-mongo-3 sb-mongo-3.slatebox.com:192.168.220.24"
+    environment:
+      ROOT_URL: ${APP_ROOT_URL:-http://localhost}
+      MONGO_URL: ${MONGO_URL}
+      MONGO_OPLOG_URL: ${MONGO_OPLOG_URL}
+      PORT: 3000
+      METEOR_SETTINGS: >
+        {
+          "redisOplog": {
+            "redis": {
+              "port": 6379,
+              "host": "${REDIS_OPLOG_URL}:-redis-oplog.slatebox.com"
+            },
+            "retryIntervalMs": 1000,
+            "mutationDefaults": {
+              "optimistic": true,
+              "pushToRedis": true
+            },
+            "cacheTimeout": 1800000,
+            "cacheTimer": 300000,
+            "secondaryReads": null,
+            "raceDetectionDelay": 1000,
+            "raceDetection": true,
+            "debug": true
+          },
+          "nounProject": {
+            "key": "${NOUN_PROJECT_KEY}",
+            "secret": "${NOUN_PROJECT_SECRET}"
+          },
+          "monti": {
+            "appId": ${MONTI_APP_ID},
+            "appSecret": ${MONTI_APP_SECRET},
+          },
+          "stripePrivateKey": ${STRIPE_PRIVATE_KEY},
+          "mailGun": {
+            "server": "${MAIL_URL}"
+          },
+          "public": {
+            "env": "${SB_ENV:-prod}",
+            "baseUrl": "${APP_ROOT_URL:-https://app.slatebox.com}",
+            "stripePublicKey": "${STRIPE_PUBLIC_KEY}",
+            "googleFontAPIKey": "${GOOGLE_API_KEY}",
+            "googleImageSearchEngineKey": "${GOOGLE_IMAGE_SEARCH_API_KEY}",
+            "googleImageSearchAPIKey": "${GOOGLE_API_KEY}",
+            "heapIOKey": "${HEAP_IO_KEY}",
+            "pixabayAPIKey": "${PIXABAY_API_KEY}"
+          }
+        }
 
 volumes:
   data:
