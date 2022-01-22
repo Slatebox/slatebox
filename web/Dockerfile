@@ -57,6 +57,7 @@ COPY --from=1 $APP_BUNDLE_FOLDER/bundle $APP_BUNDLE_FOLDER/bundle/
 
 EXPOSE 2006
 
+
 # Start app
 ENTRYPOINT ["/docker/entrypoint.sh"]
 
