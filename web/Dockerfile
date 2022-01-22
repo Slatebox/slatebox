@@ -47,6 +47,7 @@ COPY --from=1 $SCRIPTS_FOLDER $SCRIPTS_FOLDER/
 # Copy in app bundle with the built and installed dependencies from the previous image
 COPY --from=1 $APP_BUNDLE_FOLDER/bundle $APP_BUNDLE_FOLDER/bundle/
 
+
 ENV APP_BUNDLE_FOLDER /opt/bundle
 ENV SCRIPTS_FOLDER /docker
 ENV ROOT_URL ${APP_ROOT_URL:-http://localhost}
