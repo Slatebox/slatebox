@@ -42,6 +42,6 @@ jobs:
           docker build -f ./web/Dockerfile --tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:${{ github.sha }} .
           docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:${{ github.sha }}
           export DOCKER_CONFIG=$(cat ~/.docker/config.json | base64 -w 0)
-          sed -i'' -e 's/DOCKER_HUB_USERNAME/${{ secrets.DOCKER_HUB_USERNAME }}/g' -e 's/DOCKER_HUB_REPOSITORY/${{ secrets.DOCKER_HUB_REPOSITORY }}/g' -e 's/IMAGE_LABEL/${{ github.sha }}/g' -e "s/DOCKER_CONFIG/$DOCKER_CONFIG/g" ./web/k8.yaml
-          kubectl apply -f ./web/k8.yaml
+          sed -i'' -e 's/DOCKER_HUB_USERNAME/${{ secrets.DOCKER_HUB_USERNAME }}/g' -e 's/DOCKER_HUB_REPOSITORY/${{ secrets.DOCKER_HUB_REPOSITORY }}/g' -e 's/IMAGE_LABEL/${{ github.sha }}/g' -e "s/DOCKER_CONFIG/$DOCKER_CONFIG/g" ./web/k8.yml
+          kubectl apply -f ./web/k8.yml
         
