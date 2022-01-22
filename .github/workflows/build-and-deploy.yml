@@ -7,6 +7,23 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      APP_ROOT_URL: ${{ secrets.APP_ROOT_URL }}
+      BASE_PORT:  ${{ secrets.BASE_PORT }}
+      GOOGLE_API_KEY:  ${{ secrets.GOOGLE_API_KEY }}
+      GOOGLE_IMAGE_SEARCH_API_KEY: ${{ secrets.GOOGLE_IMAGE_SEARCH_API_KEY }}
+      HEAP_IO_KEY: ${{ secrets.HEAP_IO_KEY }}
+      MAIL_URL: ${{ secrets.MAIL_URL }}
+      MONGO_OPLOG_URL: ${{ secrets.MONGO_OPLOG_URL }}
+      MONGO_URL: ${{ secrets.MONGO_URL }}
+      MONTI_APP_ID: ${{ secrets.MONTI_APP_ID }}
+      MONTI_APP_SECRET: ${{ secrets.MONTI_APP_SECRET }}
+      NOUN_PROJECT_KEY: ${{ secrets.NOUN_PROJECT_KEY }}
+      NOUN_PROJECT_SECRET: ${{ secrets.NOUN_PROJECT_SECRET }}
+      PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+      SB_ENV: ${{ secrets.SB_ENV }}
+      STRIPE_PRIVATE_KEY: ${{ secrets.STRIPE_PRIVATE_KEY }}
+      STRIPE_PUBLIC_KEY: ${{ secrets.STRIPE_PUBLIC_KEY }}
     steps:
       - name: checkout
         uses: actions/checkout@v2
@@ -22,26 +39,10 @@ jobs:
           kubeconfig: ${{ secrets.KUBE_CONFIG }}
       - name: Docker Build and Push, Kubernetes apply
         run: |
-          docker build -f ./web/Dockerfile --tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:${{ github.sha }} .
+          cd ./web
+          docker build --tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:${{ github.sha }} .
           docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:${{ github.sha }}
           export DOCKER_CONFIG=$(cat ~/.docker/config.json | base64 -w 0)
-          sed -i'' -e 's/DOCKER_HUB_USERNAME/${{ secrets.DOCKER_HUB_USERNAME }}/g' -e 's/DOCKER_HUB_REPOSITORY/${{ secrets.DOCKER_HUB_REPOSITORY }}/g' -e 's/IMAGE_LABEL/${{ github.sha }}/g' -e "s/DOCKER_CONFIG/$DOCKER_CONFIG/g" ./web/k8.yml
-          kubectl apply -f ./web/k8.yml
-        env:
-          APP_ROOT_URL: ${{ secrets.APP_ROOT_URL }}
-          BASE_PORT:  ${{ secrets.BASE_PORT }}
-          GOOGLE_API_KEY:  ${{ secrets.GOOGLE_API_KEY }}
-          GOOGLE_IMAGE_SEARCH_API_KEY: ${{ secrets.GOOGLE_IMAGE_SEARCH_API_KEY }}
-          HEAP_IO_KEY: ${{ secrets.HEAP_IO_KEY }}
-          MAIL_URL: ${{ secrets.MAIL_URL }}
-          MONGO_OPLOG_URL: ${{ secrets.MONGO_OPLOG_URL }}
-          MONGO_URL: ${{ secrets.MONGO_URL }}
-          MONTI_APP_ID: ${{ secrets.MONTI_APP_ID }}
-          MONTI_APP_SECRET: ${{ secrets.MONTI_APP_SECRET }}
-          NOUN_PROJECT_KEY: ${{ secrets.NOUN_PROJECT_KEY }}
-          NOUN_PROJECT_SECRET: ${{ secrets.NOUN_PROJECT_SECRET }}
-          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-          SB_ENV: ${{ secrets.SB_ENV }}
-          STRIPE_PRIVATE_KEY: ${{ secrets.STRIPE_PRIVATE_KEY }}
-          STRIPE_PUBLIC_KEY: ${{ secrets.STRIPE_PUBLIC_KEY }}
+          sed -i'' -e 's/DOCKER_HUB_USERNAME/${{ secrets.DOCKER_HUB_USERNAME }}/g' -e 's/DOCKER_HUB_REPOSITORY/${{ secrets.DOCKER_HUB_REPOSITORY }}/g' -e 's/IMAGE_LABEL/${{ github.sha }}/g' -e "s/DOCKER_CONFIG/$DOCKER_CONFIG/g" ./k8.yml
+          kubectl apply -f ./k8.yml
         
