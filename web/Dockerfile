@@ -17,9 +17,11 @@ ARG SB_ENV=$SB_ENV
 ARG STRIPE_PRIVATE_KEY=$STRIPE_PRIVATE_KEY
 ARG STRIPE_PUBLIC_KEY=$STRIPE_PUBLIC_KEY
 
+ARG TEST_ARG "someval"
+
 FROM geoffreybooth/meteor-base:2.5
 
-RUN echo "initial Args APP_ROOT_URL: $APP_ROOT_URL ROOT_URL: $ROOT_URL SB_ENV: $SB_ENV"
+RUN echo "initial Args APP_ROOT_URL: $APP_ROOT_URL ROOT_URL: $ROOT_URL SB_ENV: $SB_ENV TEST_ARG: $TEST_ARG"
 
 # Copy app package.json and package-lock.json into container
 COPY ./app/package*.json $APP_SOURCE_FOLDER/
@@ -37,7 +39,7 @@ FROM node:14.18.1-alpine
 ENV APP_BUNDLE_FOLDER /opt/bundle
 ENV SCRIPTS_FOLDER /docker
 
-RUN echo "Second Args APP_ROOT_URL: $APP_ROOT_URL ROOT_URL: $ROOT_URL SB_ENV: $SB_ENV"
+RUN echo "Second Args APP_ROOT_URL: $APP_ROOT_URL ROOT_URL: $ROOT_URL SB_ENV: $SB_ENV TEST_ARG: $TEST_ARG"
 
 # Install OS build dependencies, which stay with this intermediate image but don’t become part of the final published image
 RUN apk --no-cache add \
@@ -58,10 +60,11 @@ RUN bash $SCRIPTS_FOLDER/build-meteor-npm-dependencies.sh --build-from-source
 # See previous FROM line; this must match
 FROM node:14.18.1-alpine
 
-RUN echo "Third Args APP_ROOT_URL: $APP_ROOT_URL ROOT_URL: $ROOT_URL SB_ENV: $SB_ENV"
+RUN echo "Third Args APP_ROOT_URL: $APP_ROOT_URL ROOT_URL: $ROOT_URL SB_ENV: $SB_ENV TEST_ARG: $TEST_ARG"
 
 ENV APP_BUNDLE_FOLDER /opt/bundle
 ENV SCRIPTS_FOLDER /docker
+ENV TEST_ARG $TEST_ARG
 ENV ROOT_URL ${APP_ROOT_URL:-http://localhost}
 ENV MONGO_URL ${MONGO_URL}
 ENV MONGO_OPLOG_URL ${MONGO_OPLOG_URL}
@@ -73,7 +76,7 @@ RUN apk --no-cache add \
 	bash \
 	ca-certificates
 
-RUN echo "Fourth Args APP_ROOT_URL: $APP_ROOT_URL ROOT_URL: $ROOT_URL SB_ENV: $SB_ENV"
+RUN echo "Fourth Args APP_ROOT_URL: $APP_ROOT_URL ROOT_URL: $ROOT_URL SB_ENV: $SB_ENV TEST_ARG: $TEST_ARG"
 
 # Copy in entrypoint with the built and installed dependencies from the previous image
 COPY --from=1 $SCRIPTS_FOLDER $SCRIPTS_FOLDER/
