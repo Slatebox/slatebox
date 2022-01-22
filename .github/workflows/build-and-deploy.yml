@@ -21,6 +21,12 @@ jobs:
           method: kubeconfig
           kubeconfig: ${{ secrets.KUBE_CONFIG }}
       - name: Docker Build and Push, Kubernetes apply
+        run: |
+          docker build -f ./web/Dockerfile --tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:${{ github.sha }} .
+          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:${{ github.sha }}
+          export DOCKER_CONFIG=$(cat ~/.docker/config.json | base64 -w 0)
+          sed -i'' -e 's/DOCKER_HUB_USERNAME/${{ secrets.DOCKER_HUB_USERNAME }}/g' -e 's/DOCKER_HUB_REPOSITORY/${{ secrets.DOCKER_HUB_REPOSITORY }}/g' -e 's/IMAGE_LABEL/${{ github.sha }}/g' -e "s/DOCKER_CONFIG/$DOCKER_CONFIG/g" ./web/k8.yml
+          kubectl apply -f ./web/k8.yml
         env:
           APP_ROOT_URL: ${{ secrets.APP_ROOT_URL }}
           BASE_PORT:  ${{ secrets.BASE_PORT }}
@@ -38,10 +44,4 @@ jobs:
           SB_ENV: ${{ secrets.SB_ENV }}
           STRIPE_PRIVATE_KEY: ${{ secrets.STRIPE_PRIVATE_KEY }}
           STRIPE_PUBLIC_KEY: ${{ secrets.STRIPE_PUBLIC_KEY }}
-        run: |
-          docker build -f ./web/Dockerfile --tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:${{ github.sha }} .
-          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:${{ github.sha }}
-          export DOCKER_CONFIG=$(cat ~/.docker/config.json | base64 -w 0)
-          sed -i'' -e 's/DOCKER_HUB_USERNAME/${{ secrets.DOCKER_HUB_USERNAME }}/g' -e 's/DOCKER_HUB_REPOSITORY/${{ secrets.DOCKER_HUB_REPOSITORY }}/g' -e 's/IMAGE_LABEL/${{ github.sha }}/g' -e "s/DOCKER_CONFIG/$DOCKER_CONFIG/g" ./web/k8.yml
-          kubectl apply -f ./web/k8.yml
         
