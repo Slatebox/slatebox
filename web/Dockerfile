@@ -37,6 +37,9 @@ RUN bash $SCRIPTS_FOLDER/build-meteor-npm-dependencies.sh --build-from-source
 # See previous FROM line; this must match
 FROM node:14.18.1-alpine
 
+ENV APP_BUNDLE_FOLDER /opt/bundle
+ENV SCRIPTS_FOLDER /docker
+
 # Install OS runtime dependencies
 RUN apk --no-cache add \
 	bash \
