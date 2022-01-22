@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
       - name: slatebox-prod
-        image: TimHeckel/slatebox-prod:latest
+        image: timheckel/slatebox-prod:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 2006
