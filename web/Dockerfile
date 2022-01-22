@@ -36,6 +36,11 @@ RUN bash $SCRIPTS_FOLDER/build-meteor-npm-dependencies.sh --build-from-source
 # See previous FROM line; this must match
 FROM node:14.18.1-alpine
 
+# Install OS runtime dependencies
+RUN apk --no-cache add \
+	bash \
+	ca-certificates
+
 ENV APP_BUNDLE_FOLDER /opt/bundle
 ENV SCRIPTS_FOLDER /docker
 ENV ROOT_URL ${APP_ROOT_URL:-http://localhost}
@@ -43,11 +48,6 @@ ENV MONGO_URL ${MONGO_URL}
 ENV MONGO_OPLOG_URL ${MONGO_OPLOG_URL}
 ENV PORT 2006
 ENV METEOR_SETTINGS "{\"redisOplog\": { \"redis\": { \"port\": 6379, \"host\": \"${REDIS_OPLOG_URL}:-redis-oplog.slatebox.com\" }, \"retryIntervalMs\": 1000, \"mutationDefaults\": { \"optimistic\": true, \"pushToRedis\": true }, \"cacheTimeout\": 1800000, \"cacheTimer\": 300000, \"secondaryReads\": null, \"raceDetectionDelay\": 1000, \"raceDetection\": true, \"debug\": true},\"nounProject\": { \"key\": \"${NOUN_PROJECT_KEY}\", \"secret\": \"${NOUN_PROJECT_SECRET}\"},\"monti\": { \"appId\": \"${MONTI_APP_ID}\", \"appSecret\": \"${MONTI_APP_SECRET}\",},\"stripePrivateKey\": \"${STRIPE_PRIVATE_KEY}\",\"mailGun\": { \"server\": \"${MAIL_URL}\"},\"public\": { \"env\": \"${SB_ENV:-prod}\", \"baseUrl\": \"${APP_ROOT_URL:-https://app.slatebox.com}\", \"stripePublicKey\": \"${STRIPE_PUBLIC_KEY}\", \"googleFontAPIKey\": \"${GOOGLE_API_KEY}\", \"googleImageSearchEngineKey\": \"${GOOGLE_IMAGE_SEARCH_API_KEY}\", \"googleImageSearchAPIKey\": \"${GOOGLE_API_KEY}\", \"heapIOKey\": \"${HEAP_IO_KEY}\", \"pixabayAPIKey\": \"${PIXABAY_API_KEY}\"} }"
-
-# Install OS runtime dependencies
-RUN apk --no-cache add \
-	bash \
-	ca-certificates
 
 # Copy in entrypoint with the built and installed dependencies from the previous image
 COPY --from=1 $SCRIPTS_FOLDER $SCRIPTS_FOLDER/
