@@ -2,7 +2,7 @@ version: '3'
 
 services:
   app:
-    image: slatebox-prod:latest
+    image: ${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPOSITORY}:latest
     build:
       context: .
       dockerfile: Dockerfile
