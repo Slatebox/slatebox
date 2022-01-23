@@ -23,14 +23,15 @@ jobs:
       - name: Docker Build and Push, Kubernetes apply
         run: |
           cd ./web
-          docker build --tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:latest .
-          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:latest
+          # docker build --tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:latest .
+          # docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:latest
           export DOCKER_CONFIG=$(cat ~/.docker/config.json | base64 -w 0)
           export ROOT_URL_SECRET=$(echo ${{ secrets.APP_ROOT_URL }} | base64 -w 0)
           export MONGO_URL_SECRET=$(echo ${{ secrets.MONGO_URL }} | base64 -w 0)
           export MONGO_OPLOG_URL_SECRET=$(echo ${{ secrets.MONGO_OPLOG_URL }} | base64 -w 0)
           export PORT_SECRET=$(echo ${{ secrets.PORT }} | base64 -w 0)
           export METEOR_SETTINGS_SECRET=$(echo ${{ secrets.METEOR_SETTINGS }} | base64 -w 0)
+          echo "ROOT_URL_SECRET: $ROOT_URL_SECRET MONGO_URL_SECRET: $MONGO_URL_SECRET MONGO_OPLOG_URL_SECRET $MONGO_OPLOG_URL_SECRET PORT_SECRET: $PORT_SECRET METEOR_SETTINGS_SECRET: $METEOR_SETTINGS_SECRET"
           sed -i'' -e 's/DOCKER_HUB_USERNAME/${{ secrets.DOCKER_HUB_USERNAME }}/g' -e 's/DOCKER_HUB_REPOSITORY/${{ secrets.DOCKER_HUB_REPOSITORY }}/g' -e 's/IMAGE_LABEL/latest/g' -e "s/DOCKER_CONFIG/$DOCKER_CONFIG/g" -e "s/ROOT_URL_SECRET/$ROOT_URL_SECRET/g" -e "s/MONGO_URL_SECRET/$MONGO_URL_SECRET/g" -e "s/MONGO_OPLOG_URL_SECRET/$MONGO_OPLOG_URL_SECRET/g" -e "s/PORT_SECRET/$PORT_SECRET/g" -e "s/METEOR_SETTINGS_SECRET/$METEOR_SETTINGS_SECRET/g" ./k8.yml
           kubectl apply -f ./k8.yml
         
