@@ -100,8 +100,8 @@ metadata:
   labels:
     app: slatebox-prod
   annotations:
-    service.beta.kubernetes.io/linode-loadbalancer-preserve: true
-    service.beta.kubernetes.io/linode-loadbalancer-default-protocol: http
+    service.beta.kubernetes.io/linode-loadbalancer-preserve: "true"
+    service.beta.kubernetes.io/linode-loadbalancer-default-protocol: "http"
     service.beta.kubernetes.io/linode-loadbalancer-port-443: '{ "tls-secret-name": "slatebox-tls", "protocol": "https" }'
 spec:
   type: LoadBalancer
