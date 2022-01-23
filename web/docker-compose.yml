@@ -3,15 +3,16 @@ version: '3'
 services:
   app:
     image: ${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPOSITORY}:latest
+    # command: tail -F anything
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - '${BASE_PORT:-2006}:3000'
+      - '${BASE_PORT:-3000}:3000'
     extra_hosts:
-      - "sb-mongo-1 sb-mongo-1.slatebox.com:192.168.128.66"
-      - "sb-mongo-2 sb-mongo-2.slatebox.com:192.168.198.90"
-      - "sb-mongo-3 sb-mongo-3.slatebox.com:192.168.220.24"
+      - "sb-mongo-1 sb-mongo-1.slatebox.com:45.56.97.91" #192.168.128.66
+      - "sb-mongo-2 sb-mongo-2.slatebox.com:104.200.28.237" #192.168.198.90
+      - "sb-mongo-3 sb-mongo-3.slatebox.com:104.200.28.186" #192.168.220.24
     environment:
       ROOT_URL: ${APP_ROOT_URL:-http://localhost}
       MONGO_URL: ${MONGO_URL}
@@ -41,10 +42,10 @@ services:
             "secret": "${NOUN_PROJECT_SECRET}"
           },
           "monti": {
-            "appId": ${MONTI_APP_ID},
-            "appSecret": ${MONTI_APP_SECRET},
+            "appId": "${MONTI_APP_ID}",
+            "appSecret": "${MONTI_APP_SECRET}"
           },
-          "stripePrivateKey": ${STRIPE_PRIVATE_KEY},
+          "stripePrivateKey": "${STRIPE_PRIVATE_KEY}",
           "mailGun": {
             "server": "${MAIL_URL}"
           },
