@@ -89,7 +89,7 @@ spec:
         imagePullPolicy: Always
         name: slatebox-prod
       imagePullSecrets:
-      - name: slateboxenv
+      - name: slateboxcreds
 ---
 # This section will create a service in the Kubernetes cluster
 # so that the deployment can be accessed from the outside
