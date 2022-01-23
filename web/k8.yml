@@ -8,17 +8,6 @@ data:
   .dockerconfigjson: DOCKER_CONFIG
 type: kubernetes.io/dockerconfigjson
 ---
-apiVersion: v1
-data:
-  ROOT_URL: ROOT_URL_SECRET
-  MONGO_URL: MONGO_URL_SECRET
-  MONGO_OPLOG_URL: MONGO_OPLOG_URL_SECRET
-  PORT: PORT_SECRET
-  METEOR_SETTINGS: METEOR_SETTINGS_SECRET
-kind: Secret
-metadata:
-  name: slateboxenvs
----
 # This section will create a deployment in the Kubernetes cluster
 apiVersion: apps/v1
 kind: Deployment
