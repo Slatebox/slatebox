@@ -42,11 +42,29 @@ spec:
         app: slatebox-prod
     spec:
       containers:
-      - name: slatebox-prod
+        name: slatebox-prod
         image: docker.io/timheckel/slatebox-prod:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
+      hostAliases:
+      - ip: "192.168.128.66"
+        hostnames:
+        - "sb-mongo-1"
+        - "sb-mongo-1.slatebox.com"
+      - ip: "192.168.198.90"
+        hostnames:
+        - "sb-mongo-2"
+        - "sb-mongo-2.slatebox.com"
+      - ip: "192.168.220.24"
+        hostnames:
+        - "sb-mongo-3"
+        - "sb-mongo-3.slatebox.com"
+      - ip: "192.168.208.125"
+        hostnames:
+        - "sb-redis-oplog"
+      imagePullSecrets:
+        - name: slateboxcreds
       - env:
         - name: ROOT_URL
           valueFrom:
