@@ -38,15 +38,10 @@ spec:
       maxUnavailable: 0
   template:
     metadata:
+      creationTimestamp: null
       labels:
         app: slatebox-prod
     spec:
-      containers:
-      - image: docker.io/timheckel/slatebox-prod:latest
-        name: slatebox-prod
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 3000
       hostAliases:
       - ip: "192.168.128.66"
         hostnames:
@@ -63,6 +58,7 @@ spec:
       - ip: "192.168.208.125"
         hostnames:
         - "sb-redis-oplog"
+      containers:
       - env:
         - name: ROOT_URL
           valueFrom:
@@ -89,8 +85,11 @@ spec:
             secretKeyRef:
               key: METEOR_SETTINGS
               name: slateboxenvs
+        image: docker.io/timheckel/slatebox-prod:latest
+        imagePullPolicy: Always
+        name: slatebox-prod
       imagePullSecrets:
-        - name: slateboxcreds
+      - name: slateboxenv
 ---
 # This section will create a service in the Kubernetes cluster
 # so that the deployment can be accessed from the outside
