@@ -85,7 +85,7 @@ spec:
             secretKeyRef:
               key: METEOR_SETTINGS
               name: slateboxenvs
-        image: docker.io/timheckel/slatebox-prod:latest
+        image: timheckel/slatebox-prod:latest
         imagePullPolicy: Always
         name: slatebox-prod
       imagePullSecrets:
