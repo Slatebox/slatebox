@@ -3,3 +3,4 @@ settings*
 deploy
 mongoBackup
 .DS_STORE
+.ssl-cert

@@ -1,0 +1,20 @@
+# This section will create a service in the Kubernetes cluster
+# so that the deployment can be accessed from the outside
+apiVersion: v1
+kind: Service
+metadata:
+  name: slatebox-loadbalancer
+  labels:
+    app: slatebox-prod
+  annotations:
+    service.beta.kubernetes.io/linode-loadbalancer-default-protocol: https
+    service.beta.kubernetes.io/linode-loadbalancer-port-443: '{ "tls-secret-name": "slatebox-tls", "protocol": "http" }'
+spec:
+  type: LoadBalancer
+  selector:
+    app: slatebox-prod
+  ports:
+    - protocol: TCP
+      name: https
+      port: 443
+      targetPort: 3000
