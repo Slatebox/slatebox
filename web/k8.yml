@@ -90,7 +90,6 @@ spec:
         name: slatebox-prod
       imagePullSecrets:
       - name: slateboxcreds
-      
 ---
 # This section will create a service in the Kubernetes cluster
 # so that the deployment can be accessed from the outside
