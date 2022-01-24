@@ -54,7 +54,4 @@ COPY --from=1 $APP_BUNDLE_FOLDER/bundle $APP_BUNDLE_FOLDER/bundle/
 # Start app
 ENTRYPOINT ["/docker/entrypoint.sh"]
 
-CMD ["touch", "/var/log/slatebox.log"]
-CMD ["touch", "/var/log/slatebox-error.log"]
-
-CMD ["node", "main.js > /var/log/slatebox.log 2> /var/log/slatebox-error.log"]
+CMD ["node", "main.js"]
