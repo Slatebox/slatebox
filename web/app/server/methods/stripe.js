@@ -10,6 +10,8 @@ method[CONSTANTS.methods.stripe.createSession] = async function(opts) {
 
     const stripeAPI = stripe(Meteor.settings.stripePrivateKey);
 
+    console.log("creating sesh ", opts.type);
+
     switch (opts.type) {
       case "checkout": {
         const priceId = opts.priceId;
@@ -57,10 +59,15 @@ method[CONSTANTS.methods.stripe.createSession] = async function(opts) {
       }
       case "portal": {
         let customerId = Meteor.user().orgId ? Organizations.findOne({ _id: Meteor.user().orgId }).customerId : Meteor.user().customerId;
+        console.log("customerId ", Meteor.user().orgId, Meteor.user().customerId, customerId);
         if (customerId) {
+          console.log("create billing session", {
+            customer: customerId,
+            return_url: opts.returnUrl
+          });
           const session = await stripeAPI.billingPortal.sessions.create({
             customer: customerId,
-            return_url: opts.returnUrl,
+            return_url: opts.returnUrl
           });
           return session.url;
         } else {

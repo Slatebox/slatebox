@@ -73,8 +73,8 @@ export const DisplaySlates = (props) => {
   const dispatch = useDispatch();
   const theme = useTheme();
   const slatePage = useSelector(state => state.slatePage) || 1;
-  const slateRecordsPerPage = useSelector(state => state.slateRecordsPerPage) || props.pinSlatePerPageCount ? props.slateMinimumPerPage : 12;
-  const slateMinimumPerPage = useSelector(state => state.slateMinimumPerPage) || props.slateMinimumPerPage || 4;
+  const slateRecordsPerPage = useSelector(state => state.slateRecordsPerPage) || (props.pinSlatePerPageCount ? props.slateMinimumPerPage : 12);
+  const slateMinimumPerPage = useSelector(state => state.slateMinimumPerPage) || (props.slateMinimumPerPage || 4);
   const filterString = useSelector(state => state.filterString) || null;
   const privateOnly = useSelector(state => state.privateOnly) || false;
   const totalSlates = useSelector(state => state.totalSlates) || 0;
@@ -96,9 +96,12 @@ export const DisplaySlates = (props) => {
     dispatch({ type: "displayslates", filterString: null });
   }, [props]);
 
+  console.log("getting slates 0", slateRecordsPerPage);
+
   useEffect(() => {
     function getSlates() {
       setLoading(true);
+      console.log("getting slates ", slateRecordsPerPage);
       Meteor.call(CONSTANTS.methods.slates.get, { skip: (slatePage - 1) * slateRecordsPerPage, limit: slateRecordsPerPage, type: props.type, filterString: filterString, private: privateOnly }, (err, nextSlates) => {
         if (nextSlates) {
           let allSlates = nextSlates.slates;
@@ -112,6 +115,7 @@ export const DisplaySlates = (props) => {
         }
       });
     }
+    console.log("getting slates 1", slateRecordsPerPage);
     if (Meteor.userId()) {
       getSlates();
     }
