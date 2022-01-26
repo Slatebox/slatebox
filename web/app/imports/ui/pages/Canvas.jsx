@@ -491,6 +491,8 @@ export const Canvas = () => {
 
       if (createWithTheme) {
         slate.current.applyTheme(createWithTheme, true);
+        // fix for init node
+        // slate.nodes.allNodes[0].options.vectorPath = slate.nodes.allNodes[0].vect.attr("path");
         dispatch({ type: "canvas", createWithTheme: null });
         await saveSlate({ slate: slate.current });
       }

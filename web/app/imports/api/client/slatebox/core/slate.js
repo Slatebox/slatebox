@@ -914,6 +914,7 @@ export default class slate extends base {
       if (base.vectorPath && syncWithTheme) {
         // const node = self.nodes.one(id);
         // const sendPath = utils._transformPath(base.vectorPath, `T${node.options.xPos},${node.options.xPos}`);
+        // console.log("v s ", base.vectorpath, sendPath);
         self.collab.invoke({ type: "onNodeShapeChanged", data: { id: id, shape: base.vectorPath } });
       }
 

@@ -88,6 +88,13 @@ spec:
         image: timheckel/slatebox-prod:latest
         imagePullPolicy: Always
         name: slatebox-prod
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
       imagePullSecrets:
       - name: slateboxcreds
 ---

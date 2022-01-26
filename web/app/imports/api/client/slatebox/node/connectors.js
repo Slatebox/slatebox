@@ -225,7 +225,7 @@ export default class connectors {
     delete options.id;
     delete options.link;
     delete options.showParentArrow;
-    const targetXPos = (self._lastUnpinned.xPos || self.node.options.xPos) + (self._lastUnpinned.width || self.node.options.width) + self.node.options.spaceBetweenNodesWhenAdding || 30;
+    const targetXPos = (self._lastUnpinned.xPos || self.node.options.xPos) + (self._lastUnpinned.width || self.node.options.width || 220) + self.node.options.spaceBetweenNodesWhenAdding || 30;
     const targetYPos = self._lastUnpinned.yPos || self.node.options.yPos;
     // don't replace text if the shape is alpha, otherwise the intent here is to copy the text
     if (options.opacity > 10) {
@@ -253,6 +253,8 @@ export default class connectors {
           console.log("before options", options.vectorPath, options.xPos, options.yPos);
           const base = theme.styles[`child_${nextChild}`];
           console.log("base is ", base);
+          // always adjust the vectorPath to use the node's current x y
+          // base.vectorPath = utils._transformPath(base.vectorPath, `T${options.xPos},${options.yPos}`);
           Object.assign(options, base);
           console.log("after options", options.vectorPath, options.xPos, options.yPos);
         }
