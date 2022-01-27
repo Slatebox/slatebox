@@ -1,24 +1,3 @@
-# This section will create a secret in the Kubernetes cluster.
-# We need this for private docker repos.
-apiVersion: v1
-kind: Secret
-metadata:
-  name: slateboxcreds
-data:
-  .dockerconfigjson: DOCKER_CONFIG
-type: kubernetes.io/dockerconfigjson
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: slateboxenvs
-data:
-  ROOT_URL: ROOT_URL_SECRET
-  MONGO_URL: MONGO_URL_SECRET
-  MONGO_OPLOG_URL: MONGO_OPLOG_URL_SECRET
-  PORT: PORT_SECRET
-  METEOR_SETTINGS: METEOR_SETTINGS_SECRET
----
 # This section will create a deployment in the Kubernetes cluster
 apiVersion: apps/v1
 kind: Deployment
@@ -97,29 +76,3 @@ spec:
             memory: 1Gi
       imagePullSecrets:
       - name: slateboxcreds
----
-# This section will create a service in the Kubernetes cluster
-# so that the deployment can be accessed from the outside
-apiVersion: v1
-kind: Service
-metadata:
-  name: slatebox-loadbalancer
-  labels:
-    app: slatebox-prod
-  annotations:
-    service.beta.kubernetes.io/linode-loadbalancer-preserve: "true"
-    service.beta.kubernetes.io/linode-loadbalancer-default-protocol: "http"
-    service.beta.kubernetes.io/linode-loadbalancer-port-443: '{ "tls-secret-name": "slatebox-tls", "protocol": "https" }'
-spec:
-  type: LoadBalancer
-  selector:
-    app: slatebox-prod
-  sessionAffinity: ClientIP
-  sessionAffinityConfig:
-    clientIP:
-      timeoutSeconds: 100
-  ports:
-    - protocol: TCP
-      name: https
-      port: 443
-      targetPort: 3000

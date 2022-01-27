@@ -147,19 +147,20 @@ export default class utils {
 
   static addEvent(obj, type, fn, optId = null, once = false) {
     if (obj) {
-      function checkHandler(e) {
-        if (optId && e.target.id === optId) {
-          fn(e);
-        } else {
-          fn(e);
-        }
+      console.log("adding event", type, fn);
+      if (optId && e.target.id === optId) {
+        obj.addEventListener(type, fn, { capture: false, once: once });
+      } else {
+        const rs = obj.addEventListener(type, fn); //, { capture: false, once: once });
+        console.log("added event", rs);
       }
-      obj.addEventListener(type, checkHandler, { capture: false, once: once });
+      
     }
   }
   
-  static removeEvent(obj, type, fn) {
-    obj.removeEventListener(type, fn, false);
+  static removeEvent(obj, type, fn, once = false) {
+    const rs = obj.removeEventListener(type, fn); //, { capture: false, once: once });
+    console.log("removing event", obj, type, rs);
   }
 
   // push an event listener into existing array of listeners

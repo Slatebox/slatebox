@@ -63,6 +63,9 @@ export const NodeDrawer = (props) => {
   // node settings
   const [applyNodeSettingsOpen, setApplyNodeSettingsOpen] = React.useState(false);
 
+  console.log("unbinding keyboard", props);
+  props?.slate?.keyboard.unbindGlobal();
+
   useEffect(() => {
     setTabVisibilityMap({
       showColorTab: props?.node?.options.showColorTab, 
@@ -134,7 +137,7 @@ export const NodeDrawer = (props) => {
     setTabVisibilityMap(tvm);
   }
 
-  let contentTabs = ["Color", "Text", "Shape", "Image", "Effects"]; 
+  let contentTabs = ["Text", "Color","Shape", "Image", "Effects"]; 
   // let ix = 0;
   // ["Color", "Text", "Shape", "Image", "Effects"].forEach(name => {
   //   const nx = name === "Effects" ? "Effect" : name;
@@ -159,12 +162,16 @@ export const NodeDrawer = (props) => {
     return tabVisibilityMap[prop] ? {} : { visibility: "hidden" };
   }
 
+  const dtab = drawerTab == null ? 0 : drawerTab;
+  console.log("drawerTab is", dtab);
+
   return (
     <SwipeableDrawer
       anchor="bottom"
       open={props.open}
       onClose={() => {
         props?.closeDrawer();
+        props?.slate.keyboard.bindGlobal();
       }}
       onOpen={() => { }}
       disableBackdropTransition={true}
@@ -211,14 +218,14 @@ export const NodeDrawer = (props) => {
           } />
         }
       </Tabs>
-      {tabVisibilityMap.showColorTab &&
+      {tabVisibilityMap.showTextTab &&
         <TabPanel value={drawerTab} index={0}>
-          <NodeColor node={props.node} onChange={props.updateNode} />
+          <NodeText node={props.node} onChange={props.updateNode} />
         </TabPanel>
       }
-      {tabVisibilityMap.showTextTab &&
+      {tabVisibilityMap.showColorTab &&
         <TabPanel value={drawerTab} index={1}>
-          <NodeText node={props.node} onChange={props.updateNode} />
+          <NodeColor node={props.node} onChange={props.updateNode} />
         </TabPanel>
       }
       {tabVisibilityMap.showShapeTab &&
