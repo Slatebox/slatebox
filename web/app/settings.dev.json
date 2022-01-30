@@ -1,0 +1,16 @@
+{
+  "nounProject": {
+    "key": "${NOUN_PROJECT_KEY}",
+    "secret": "${NOUN_PROJECT_SECRET}"
+  },
+  "mailGun": {
+    "server": "${MAIL_URL}"
+  },
+  "public": {
+    "baseUrl": "${BASE_URL:-http://localhost:3000}",
+    "googleFontAPIKey": "${GOOGLE_API_KEY}",
+    "googleImageSearchEngineKey": "${GOOGLE_IMAGE_SEARCH_API_KEY}",
+    "googleImageSearchAPIKey": "${GOOGLE_API_KEY}",
+    "pixabayAPIKey": "${PIXABAY_API_KEY}"
+  }
+}
