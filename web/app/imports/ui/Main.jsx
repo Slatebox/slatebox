@@ -406,6 +406,7 @@ export const Main = () => {
                                       slate.options.isPrivate = true;
                                       slate.options.isUnlisted = false;
                                       Slates.update({ _id: slate.options.id }, { $set: { "options.isPublic": false, "options.isPrivate": true, "options.isUnlisted": false } });
+                                      dispatch({ type: "canvas", slatePrivacy: { isPublic: false, isPrivate: true, isUnlisted: false } });
                                       dispatch({ type: "canvas", globalMessage: { visible: true, text: `You've set this slate to private`, severity: "info", autoHide: 60000 } });
                                       break;
                                     }
@@ -414,6 +415,7 @@ export const Main = () => {
                                       slate.options.isPrivate = false;
                                       slate.options.isUnlisted = false;
                                       Slates.update({ _id: slate.options.id }, { $set: { "options.isPublic": true, "options.isPrivate": false, "options.isUnlisted": false } });
+                                      dispatch({ type: "canvas", slatePrivacy: { isPublic: true, isPrivate: false, isUnlisted: false } });
                                       dispatch({ type: "canvas", globalMessage: { visible: true, text: `You've set this slate to public`, severity: "info", autoHide: 60000 } });
                                       break;
                                     }
