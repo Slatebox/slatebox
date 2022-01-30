@@ -1,6 +1,0 @@
-node_modules
-settings*
-deploy
-mongoBackup
-.DS_STORE
-.ssl-cert
