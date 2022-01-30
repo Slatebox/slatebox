@@ -30,7 +30,7 @@ spec:
   selector:
     matchLabels:
       app: slatebox-prod
-  replicas: 3
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -90,7 +90,7 @@ spec:
         name: slatebox-prod
         resources:
           limits:
-            cpu: 750m
+            cpu: 1000m
             memory: 1Gi
           requests:
             cpu: 750m
