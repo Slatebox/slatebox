@@ -220,6 +220,7 @@ method[CONSTANTS.methods.users.invite] = async function(opts) {
       const resEmail = Accounts.sendEnrollmentEmail(userId, opts.email);
       console.log("enroll email sent", resEmail);
     }
+
     return { success: true };
 };
 

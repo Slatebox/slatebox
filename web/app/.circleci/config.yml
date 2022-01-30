@@ -1,0 +1,217 @@
+version: 2.1
+
+workflows:
+  version: 2
+  build-stage-test:
+    jobs:
+      - testOnStage
+      # - buildLocally
+
+commands:
+  build_slatebox:
+    parameters:
+      as_directory:
+        type: boolean
+        default: false
+    steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "0a:f1:3e:41:e2:1b:59:9b:b4:24:b5:c1:dd:d8:7b:4e"
+      - run: apt-get update
+      - run: apt-get install -y build-essential
+      - run: apt-get install -y curl
+      - run: apt install -y software-properties-common
+      - run: apt install -y git
+      - checkout
+      - restore_cache:
+          key: build-temp-{{ checksum ".meteor/release" }}-{{ checksum ".circleci/config.yml" }}
+      - restore_cache:
+          key: meteor-release-{{ checksum ".meteor/release" }}-{{ checksum ".meteor/versions" }}-{{ checksum ".circleci/config.yml" }}
+      - restore_cache:
+          key: meteor-packages
+      - restore_cache:
+          key: npm-packages-{{ checksum "package.json" }}-{{ checksum "package-lock.json" }}-{{ checksum ".circleci/config.yml" }}
+      - run:
+          name: restore cached meteor bin
+          command: |
+            if [ -e ~/build-temp/meteor-bin ]
+            then
+                echo "Cached Meteor bin found, restoring it"
+                cp ~/build-temp/meteor-bin /usr/local/bin/meteor
+            else
+                echo "No cached Meteor bin found."
+            fi
+      - run:
+          name: install Meteor
+          command: |
+            # only install meteor if bin isn't found
+            command -v meteor >/dev/null 2>&1 || curl https://install.meteor.com | /bin/sh
+      - run:
+          name: check versions
+          command: |
+            echo "Meteor version:"
+            # this forces Meteor to download whatever release your project is using
+            meteor --version
+            which meteor
+            echo "Meteor node version:"
+            meteor node -v
+            echo "Meteor npm version:"
+            meteor npm -v
+      - run:
+          name: copy meteor bin to build cache
+          command: |
+            mkdir -p ~/build-temp
+            cp /usr/local/bin/meteor ~/build-temp/meteor-bin
+      - save_cache:
+          key: build-temp-{{ checksum ".meteor/release" }}-{{ checksum ".circleci/config.yml" }}
+          paths:
+            - ~/build-temp
+      - run:
+          name: install npm packages
+          command: meteor npm i
+      - run: 
+          name: install slatebox library
+          command: |
+            cd ~/app/node_modules
+            ssh-keyscan github.com >> $HOME/.ssh/known_hosts
+            git clone git@github.com:TimHeckel/slateboxjs.git 
+            rm slatebox
+            mv slateboxjs slatebox
+            cd slatebox
+            meteor npm install
+            cd ~/app
+      - save_cache:
+          key: npm-packages-{{ checksum "package.json" }}-{{ checksum "package-lock.json" }}-{{ checksum ".circleci/config.yml" }}
+          paths:
+            - ./node_modules/
+            - ~/.npm/
+      - run: meteor build ~/slatebox-build <<# parameters.as_directory >> --directory <</ parameters.as_directory >> --server-only --architecture os.linux.x86_64
+      - when:
+          condition:
+            and: 
+              - equal: [ true, << parameters.as_directory >> ]
+          steps:
+            - run: 
+                name: node module surgery
+                command: |
+                  cd ~/slatebox-build/bundle/programs/server
+                  meteor npm install
+                  cd ~/slatebox-build/bundle/programs/server/npm/node_modules/meteor/accounts-password/node_modules
+                  rm -fr bcrypt
+                  meteor npm install -D bcrypt@5.0.0
+
+orbs:
+  python: circleci/python@1.0.0
+jobs:
+  testOnStage:
+    working_directory: ~/app
+    circleci_ip_ranges: true
+    docker:
+      - image: testim/docker-cli
+        environment:
+          # lang settings required for Meteor's Mongo
+          LANG: C.UTF-8
+          LANGUAGE: C.UTF-8
+          LC_ALL: C.UTF-8
+          LC_NUMERIC: en_US.UTF-8
+          METEOR_BIN_TMP_DIR: /home/circleci/build-temp/
+          METEOR_BIN_TMP_FILE: meteor-bin-temp
+          CIRCLE_TEST_REPORTS: /tmp/circleci-test-results
+          METEOR_ALLOW_SUPERUSER: "true"
+          APP_HOST: staging.slatebox.com
+          ROOT_URL: https://staging.slatebox.com
+          START_PORT: 3000
+          SSH_HOST: root@66.228.38.248
+          APP_DIR: ~/app
+          SB_APP_DIR: /var/www/slatebox
+          SB_ENV: prod
+          CDN_URL: https://assets.slatebox.com
+          NUMBER_SERVERS: 1
+    steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "14:7d:78:e1:56:78:bd:f8:a5:4a:ac:88:53:e1:49:cc"
+      - build_slatebox:
+          as_directory: false
+      - run: rsync -e "ssh -o StrictHostKeyChecking=no" -avP ~/slatebox-build/app.tar.gz $SSH_HOST:/tmp/bundle.tgz
+      - run: ssh $SSH_HOST "SERVER_NAME=$APP_HOST ROOT_URL=$ROOT_URL:$START_PORT APP_DIR=$SB_APP_DIR MONGO_URL=$MONGO_URL MONGO_OPLOG_URL=$MONGO_OPLOG_URL START_PORT=$START_PORT NUMBER_SERVERS=$NUMBER_SERVERS SB_ENV=prod CDN_URL=$CDN_URL METEOR_SETTINGS='$METEOR_SETTINGS' " sudo -E bash -s < ./.circleci/runOnServer.sh
+      - run: mkdir -p $CIRCLE_TEST_REPORTS/testim/
+      - run: 
+          name: invoke testim
+          command: |
+            testim --base-url "https://staging.slatebox.com" --token "c4OxWQRRg1cPDVfhleijrBaSz7ovr39R1hFebVngDHXnk00JvK" --project "4i1jsrM26xwEE6Vi9yuO" --grid "Testim-Grid" --report-file $CIRCLE_TEST_REPORTS/testim/results.xml
+      - save_cache:
+          key: meteor-release-{{ checksum ".meteor/release" }}-{{ checksum ".meteor/versions" }}-{{ checksum ".circleci/config.yml" }}
+          paths:
+            - ~/.meteor
+      - save_cache:
+          key: meteor-packages-{{ epoch }}
+          paths:
+            - .meteor/local
+      - store_artifacts:
+          path: /tmp/circleci-test-results
+      - store_test_results:
+          path: /tmp/circleci-test-results  
+  testLocally:
+    working_directory: ~/app
+    circleci_ip_ranges: true
+    docker:
+      - image: testim/docker-cli
+        environment:
+          # lang settings required for Meteor's Mongo
+          LANG: C.UTF-8
+          LANGUAGE: C.UTF-8
+          LC_ALL: C.UTF-8
+          LC_NUMERIC: en_US.UTF-8
+          METEOR_BIN_TMP_DIR: /home/circleci/build-temp/
+          METEOR_BIN_TMP_FILE: meteor-bin-temp
+          CIRCLE_TEST_REPORTS: /tmp/circleci-test-results
+          METEOR_ALLOW_SUPERUSER: "true"
+          SERVER_NAME: localhost
+          ROOT_URL: http://localhost:3000
+          APP_DIR: ~/app
+          SB_ENV: prod
+          CDN_URL: https://assets.slatebox.com
+    steps:
+      - run: 
+          name: Add Hosts
+          command: |
+            echo "45.56.97.91 sb-mongo-1" >> /etc/hosts
+            echo "104.200.28.237 sb-mongo-2" >> /etc/hosts
+            echo "104.200.28.186 sb-mongo-3" >> /etc/hosts
+      - build_slatebox:
+          as_directory: true
+      - run: npm install -g wait-on
+      - run:
+          name: install and run stripe cli
+          command: |
+            mkdir ~/stripe
+            mkdir -p /root/.config/stripe
+            cd ~/stripe
+            curl -LJO https://github.com/stripe/stripe-cli/releases/download/v1.7.0/stripe_1.7.0_linux_x86_64.tar.gz
+            tar -xvf stripe_1.7.0_linux_x86_64.tar.gz
+            ./stripe config --set test_mode_api_key $CIRCLE_STRIPE_LOGIN_KEY
+      - run:
+          command:  ~/stripe/stripe listen --forward-to http://localhost:3000/hooks
+          background: true
+      - run: 
+          command: PORT=3000 meteor node ~/slatebox-build/bundle/main.js
+          background: true
+      - run: wait-on http://localhost:3000
+      - run: mkdir -p $CIRCLE_TEST_REPORTS/testim/
+      - run: 
+          name: invoke testim
+          command: |
+            npm i -g @testim/testim-cli && testim --token "c4OxWQRRg1cPDVfhleijrBaSz7ovr39R1hFebVngDHXnk00JvK" --project "4i1jsrM26xwEE6Vi9yuO" --use-local-chrome-driver --user e1afr4yn6XM3G1uqKHo4
+      - save_cache:
+          key: meteor-release-{{ checksum ".meteor/release" }}-{{ checksum ".meteor/versions" }}-{{ checksum ".circleci/config.yml" }}
+          paths:
+            - ~/.meteor
+      - save_cache:
+          key: meteor-packages-{{ epoch }}
+          paths:
+            - .meteor/local
+      - store_artifacts:
+          path: /tmp/circleci-test-results
+      - store_test_results:
+          path: /tmp/circleci-test-results

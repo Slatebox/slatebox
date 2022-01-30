@@ -1,0 +1,1 @@
+kubectl create secret tls slatebox-tls --cert ./slatebox-2020.crt --key ./slatebox-2020.key

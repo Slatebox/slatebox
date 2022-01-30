@@ -1,0 +1,10 @@
+node_modules
+<<<<<<< HEAD
+settings*
+=======
+settings*
+deploy
+mongoBackup
+.DS_STORE
+.ssl-cert
+>>>>>>> 8da8af0950a46a2e3e387ef302edec57a7aaa2b2

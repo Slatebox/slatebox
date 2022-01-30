@@ -30,6 +30,7 @@ export const ProfileMenu = (props) => {
     //get pricing data
     if (Meteor.user()) {
       let plan = "team";
+      plan = plan || "free";
       let name = getUserName(Meteor.userId());
       let color ="secondary";
       let isVerified = false;

@@ -23,6 +23,7 @@ Meteor.startup(() => {
     return user;
   });
 
+  // to do: get pod internal IPs and insert them here (10.2.0.50)
   if (!Servers.findOne()) {
     if (Meteor.settings.env === "dev") {
       Servers.insert({ external: "localhost:3000", internal: "localhost:3000", active: true });

@@ -1,4 +1,6 @@
 node_modules
 settings*
+deploy
+mongoBackup
 .DS_STORE
-.history
+.ssl-cert

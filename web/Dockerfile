@@ -1,4 +1,5 @@
 # The tag here should match the Meteor version of your app, per .meteor/release
+
 FROM geoffreybooth/meteor-base:2.5
 
 # Copy app package.json and package-lock.json into container
@@ -10,7 +11,6 @@ RUN bash $SCRIPTS_FOLDER/build-app-npm-dependencies.sh
 COPY ./app $APP_SOURCE_FOLDER/
 
 RUN bash $SCRIPTS_FOLDER/build-meteor-bundle.sh
-
 
 # Use the specific version of Node expected by your Meteor release, per https://docs.meteor.com/changelog.html; this is expected for Meteor 2.5
 FROM node:14.18.1-alpine
@@ -32,7 +32,6 @@ COPY --from=0 $SCRIPTS_FOLDER $SCRIPTS_FOLDER/
 COPY --from=0 $APP_BUNDLE_FOLDER/bundle $APP_BUNDLE_FOLDER/bundle/
 
 RUN bash $SCRIPTS_FOLDER/build-meteor-npm-dependencies.sh --build-from-source
-
 
 # Start another Docker stage, so that the final image doesn’t contain the layer with the build dependencies
 # See previous FROM line; this must match

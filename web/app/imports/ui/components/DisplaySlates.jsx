@@ -73,8 +73,8 @@ export const DisplaySlates = (props) => {
   const dispatch = useDispatch();
   const theme = useTheme();
   const slatePage = useSelector(state => state.slatePage) || 1;
-  const slateRecordsPerPage = useSelector(state => state.slateRecordsPerPage) || props.pinSlatePerPageCount ? props.slateMinimumPerPage : 12;
-  const slateMinimumPerPage = useSelector(state => state.slateMinimumPerPage) || props.slateMinimumPerPage || 4;
+  const slateRecordsPerPage = useSelector(state => state.slateRecordsPerPage) || (props.pinSlatePerPageCount ? props.slateMinimumPerPage : 12);
+  const slateMinimumPerPage = useSelector(state => state.slateMinimumPerPage) || (props.slateMinimumPerPage || 4);
   const filterString = useSelector(state => state.filterString) || null;
   const privateOnly = useSelector(state => state.privateOnly) || false;
   const totalSlates = useSelector(state => state.totalSlates) || 0;

@@ -1,0 +1,38 @@
+name: Build and deploy slatebox-prod to linode k8
+on:
+  push:
+    branches:
+      - docker
+  workflow_dispatch:
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+      - name: login to dockerhub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+      - name: Kubernetes set context
+        uses: Azure/k8s-set-context@v1
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+      - name: Docker Build and Push, Kubernetes apply
+        run: |
+          cd ./web
+          docker build --tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:latest .
+          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:latest
+
+          # set up sb secrets
+          sed -i'' -e "s/ROOT_URL_SECRET/${{ secrets.ROOT_URL }}/g"  -e "s/MONGO_URL_SECRET/${{ secrets.MONGO_URL }}/g"  -e "s/MONGO_OPLOG_URL_SECRET/${{ secrets.MONGO_OPLOG_URL }}/g"  -e "s/PORT_SECRET/${{ secrets.PORT }}/g"  -e "s/METEOR_SETTINGS_SECRET/${{ secrets.METEOR_SETTINGS }}/g" ./k8.yml
+
+          # set up docker creds
+          export DOCKER_CONFIG=$(cat ~/.docker/config.json | base64 -w 0)
+          sed -i'' -e 's/DOCKER_HUB_USERNAME/${{ secrets.DOCKER_HUB_USERNAME }}/g' -e 's/DOCKER_HUB_REPOSITORY/${{ secrets.DOCKER_HUB_REPOSITORY }}/g' -e 's/IMAGE_LABEL/latest/g' -e "s/DOCKER_CONFIG/$DOCKER_CONFIG/g" ./k8.yml
+
+          # apply both
+          kubectl apply -f ./k8.yml
+        

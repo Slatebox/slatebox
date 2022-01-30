@@ -39,9 +39,11 @@ export const Canvas = () => {
   const slateDrawerOpen = useSelector(state => state.slateDrawerOpen);
   const extensionsDrawerOpen = useSelector(state => state.extensionsDrawerOpen);
   const createWithTheme = useSelector(state => state.createWithTheme);
+  const nodeDrawerOpen = useSelector(state => state.nodeDrawerOpen);
+  console.log("regetting node drawer", nodeDrawerOpen);
   let containerId = "slateCanvas";
   const [commentDrawerOpts, setCommentDrawer] = React.useState({ open: false, nodeId: null, slateId: null, slateName: null, orgId: null, cb: null });
-  const [nodeDrawerOpts, setNodeDrawer] = React.useState({ open: false, node: null, cb: null });
+  const [nodeDrawerOpts, setNodeDrawer] = React.useState({ open: false, node: null, cb: null, slate: null });
   const [lineDrawerOpts, setLineDrawer] = React.useState({ open: false, node: null, association: null, cb: null });
   const slateOrgId = React.useRef(null);
   // let canvasReady = useTracker(() => {
@@ -101,6 +103,7 @@ export const Canvas = () => {
     } else {
       setNodeDrawer({
         node: node
+        , slate: slate.current
         , open: true
         , updateNode: (pkg) => {
 
@@ -465,6 +468,8 @@ export const Canvas = () => {
 
       if (createWithTheme) {
         slate.current.applyTheme(createWithTheme, true);
+        // fix for init node
+        // slate.nodes.allNodes[0].options.vectorPath = slate.nodes.allNodes[0].vect.attr("path");
         dispatch({ type: "canvas", createWithTheme: null });
         await saveSlate({ slate: slate.current });
       }

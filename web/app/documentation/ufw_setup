@@ -1,0 +1,42 @@
+
+correct output on mongo servers:
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW       Anywhere
+27017                      ALLOW       192.168.128.0/17
+42003                      ALLOW       192.168.128.0/17
+42000                      ALLOW       192.168.128.0/17
+27017/tcp                  ALLOW       76.17.204.120 #current ip of me
+22/tcp (v6)                ALLOW       Anywhere (v6)
+
++ all the circle servers
+
+sudo ufw allow from x.x.x.x proto tcp to any port 27017
+
+
+correct for sb-oplog-redis:
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW       Anywhere
+6379                       ALLOW       192.168.128.0/17
+6379                       ALLOW       76.17.204.120
+22/tcp (v6)                ALLOW       Anywhere (v6)
+
+
++ all the circle servers
+
+
+correct for haproxy:
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW       Anywhere
+80/tcp                     ALLOW       Anywhere
+443/tcp                    ALLOW       Anywhere
+1976                       ALLOW       Anywhere
+22/tcp (v6)                ALLOW       Anywhere (v6)
+80/tcp (v6)                ALLOW       Anywhere (v6)
+443/tcp (v6)               ALLOW       Anywhere (v6)
+1976 (v6)                  ALLOW       Anywhere (v6)
