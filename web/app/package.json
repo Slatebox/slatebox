@@ -8,16 +8,8 @@
     ]
   },
   "scripts": {
-    "start": "meteor run --settings ./settings.dev.json",
-    "visualize": "meteor --production --extra-packages bundle-visualizer",
-    "start-test": "cross-env NODE_OPTIONS=--max-old-space-size=8196 testim --webpackConfig='./webpack.config.js' run \"./tests/**/*.test.js\" --require-credentials",
-    "test": "meteor npm run start-test",
-    "dev-test": "cross-env NODE_OPTIONS=--max-old-space-size=8196 testim --webpackConfig='./webpack.config.js' run \"./tests/**/*.test.ts\" --require-credentials --reporters=chrome,console",
-    "test-debug": "cross-env NODE_OPTIONS=--max-old-space-size=8196 testim --inspect 9229 --webpackConfig='./webpack.config.js' run \"./tests/**/*.test.ts\" --require-credentials",
-    "test-debug-file": "cross-env NODE_OPTIONS=--max-old-space-size=8196 testim --inspect 9229 --webpackConfig='./webpack.config.js' --require-credentials run",
-    "test-debug-examples": "cross-env NODE_OPTIONS=--max-old-space-size=8196 testim --inspect 9229 --webpackConfig='./webpack.config.js' run \"./tests/examples/*.test.ts\" --require-credentials",
-    "test-headless": "cross-env NODE_OPTIONS=--max-old-space-size=8196 testim --inspect 9229 --webpackConfig='./webpack.config.js' run \"./tests/**/*.test.ts\" --require-credentials --headless",
-    "test-ci": "cross-env NODE_OPTIONS=--max-old-space-size=8196 testim --webpackConfig='./webpack.config.js' run \"./tests/**/*.test.ts\" --grid testim-grid"
+    "start": "sed -i '' -e 's/\\CHATWOOT_TOKEN/$CHATWOOT_TOKEN/' ./client/main.html && METEOR_SETTINGS=$(echo $(sed -e \"s/\\NOUN_PROJECT_KEY/$NOUN_PROJECT_KEY/\" -e \"s/\\NOUN_PROJECT_SECRET/$NOUN_PROJECT_SECRET/\" -e \"s/\\MAIL_URL/$MAIL_URL/\" -e \"s/\\CHATWOOT_TOKEN/$CHATWOOT_TOKEN/\" -e \"s/\\BASE_URL/$BASE_URL/\" -e \"s/\\GOOGLE_API_KEY/$GOOGLE_API_KEY/\" -e \"s/\\GOOGLE_IMAGE_SEARCH_API_KEY/$GOOGLE_IMAGE_SEARCH_API_KEY/\" -e \"s/\\GOOGLE_API_KEY/$GOOGLE_API_KEY/\" -e \"s/\\PIXABAY_API_KEY/$PIXABAY_API_KEY/\" settings.json)) meteor",
+    "visualize": "meteor --production --extra-packages bundle-visualizer"
   },
   "dependencies": {
     "@babel/runtime": "^7.12.5",
@@ -101,20 +93,11 @@
     "mainModule": {
       "client": "client/main.jsx",
       "server": "server/main.js"
-    },
-    "testModule": "tests/main.js"
+    }
   },
   "devDependencies": {
     "eslint": "^7.18.0",
     "eslint-plugin-react": "^7.22.0",
-    "eslint-plugin-react-hooks": "^4.2.0",
-    "testim": "latest",
-    "@testim/testim-cli": "latest",
-    "@types/node": "12.7.1",
-    "@types/chai": "4.2.2",
-    "chai": "4.2.0",
-    "ts-loader": "6.0.4",
-    "typescript": "3.5.3",
-    "cross-env": "5.2.1"
+    "eslint-plugin-react-hooks": "^4.2.0"
   }
 }

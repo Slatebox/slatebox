@@ -1,2 +1,4 @@
 node_modules/
 .history
+test-results/
+playwright-report/

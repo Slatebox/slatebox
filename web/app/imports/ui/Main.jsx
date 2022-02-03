@@ -112,7 +112,7 @@ export const Main = () => {
   let onCanvas = useSelector(state => state.onCanvas);
   let slateName = useSelector(state => state.slateName || '');
   let slate = useSelector(state => state.slate);
-  let slatePrivacy = useSelector(state => state.slatePrivacy) || { isPublic: slate?.isPublic, isPrivate: slate?.isPrivate, isUnlisted: slate?.isUnlisted };
+  let slatePrivacy = useSelector(state => state.slatePrivacy) || { isPublic: slate?.options.isPublic, isPrivate: slate?.options.isPrivate, isUnlisted: slate?.options.isUnlisted };
   console.log("slateprivacy changed", slatePrivacy);
   let collaborator = useSelector(state => state.collaborator);
   let openShareDialog = useSelector(state => state.openShareDialog);

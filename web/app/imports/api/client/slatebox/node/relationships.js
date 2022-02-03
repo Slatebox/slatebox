@@ -608,6 +608,16 @@ export default class relationships {
       self.node.text.mousedown(function (e) {
         self.node.vect.start(e);
       });
+      function showText() {
+        self.slate.events?.onTextPaneRequested?.apply(this, [self.node, (opts) => {
+        }]);
+      }
+      self.node.vect.dblclick((e) => {
+        showText();
+      });
+      self.node.text.dblclick((e) => {
+        showText();
+      });
     }
 
     // self.node.both.mousedown(function() {
