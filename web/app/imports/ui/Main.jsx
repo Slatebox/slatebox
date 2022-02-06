@@ -114,7 +114,6 @@ export const Main = () => {
   let slateName = useSelector(state => state.slateName || '');
   let slate = useSelector(state => state.slate);
   let slatePrivacy = useSelector(state => state.slatePrivacy) || { isPublic: slate?.isPublic, isPrivate: slate?.isPrivate, isUnlisted: slate?.isUnlisted };
-  console.log("slateprivacy changed", slatePrivacy);
   let collaborator = useSelector(state => state.collaborator);
   let openShareDialog = useSelector(state => state.openShareDialog);
   let canManageSlate = useSelector(state => state.canManageSlate);
@@ -418,6 +417,7 @@ export const Main = () => {
                                         slate.options.isPrivate = true;
                                         slate.options.isUnlisted = false;
                                         Slates.update({ _id: slate.options.id }, { $set: { "options.isPublic": false, "options.isPrivate": true, "options.isUnlisted": false } });
+                                        dispatch({ type: "canvas", slatePrivacy: { isPublic: false, isPrivate: true, isUnlisted: false } });
                                         dispatch({ type: "canvas", globalMessage: { visible: true, text: `You've set this slate to private`, severity: "info", autoHide: 60000 } });
                                       }
                                       break;
@@ -427,6 +427,7 @@ export const Main = () => {
                                       slate.options.isPrivate = false;
                                       slate.options.isUnlisted = false;
                                       Slates.update({ _id: slate.options.id }, { $set: { "options.isPublic": true, "options.isPrivate": false, "options.isUnlisted": false } });
+                                      dispatch({ type: "canvas", slatePrivacy: { isPublic: true, isPrivate: false, isUnlisted: false } });
                                       dispatch({ type: "canvas", globalMessage: { visible: true, text: `You've set this slate to public`, severity: "info", autoHide: 60000 } });
                                       break;
                                     }

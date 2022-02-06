@@ -155,8 +155,6 @@ export const SlateSharing = (props) => {
     Slates.update({ _id: slate?.options?.id }, { $set: { "options.isPublic": isPublic, "options.isPrivate": isPrivate, "options.isUnlisted": isUnlisted }});
     
     dispatch({ type: "canvas", slatePrivacy: { isPublic, isPrivate, isUnlisted } });
-    console.log("dispatching slatePrivacy", { isPublic, isPrivate, isUnlisted });
-
   }
 
   const setExpanded = async (exp) => {

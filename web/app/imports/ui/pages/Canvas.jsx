@@ -40,7 +40,6 @@ export const Canvas = () => {
   const extensionsDrawerOpen = useSelector(state => state.extensionsDrawerOpen);
   const createWithTheme = useSelector(state => state.createWithTheme);
   const nodeDrawerOpen = useSelector(state => state.nodeDrawerOpen);
-  console.log("regetting node drawer", nodeDrawerOpen);
   let containerId = "slateCanvas";
   const [commentDrawerOpts, setCommentDrawer] = React.useState({ open: false, nodeId: null, slateId: null, slateName: null, orgId: null, cb: null });
   const [nodeDrawerOpts, setNodeDrawer] = React.useState({ open: false, node: null, cb: null, slate: null });
