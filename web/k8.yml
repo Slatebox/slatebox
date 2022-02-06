@@ -57,7 +57,7 @@ spec:
         - "sb-mongo-3.slatebox.com"
       - ip: "192.168.208.125"
         hostnames:
-        - "sb-redis-oplog"
+        - "redis-oplog.slatebox.com"
       containers:
       - env:
         - name: ROOT_URL
@@ -93,7 +93,7 @@ spec:
             cpu: 1000m
             memory: 1Gi
           requests:
-            cpu: 750m
+            cpu: 1000m
             memory: 1Gi
       imagePullSecrets:
       - name: slateboxcreds
