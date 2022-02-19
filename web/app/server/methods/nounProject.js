@@ -62,7 +62,7 @@ method[CONSTANTS.methods.nounProject.get] = async function (opts) {
 
         const timestamp = parseInt(new Date().valueOf() / 1000, 10);
         const nonce = Random.id();
-        const bulkOp = NounProjectResults.rawCollection().initializeUnorderedBulkOp();
+        const bulkOp = NO_CACHE ? null : NounProjectResults.rawCollection().initializeUnorderedBulkOp();
 
         // working oauth header:
         // OAuth oauth_consumer_key="1cc0ae21b6964d71b9eb8108fa39f3e9"
