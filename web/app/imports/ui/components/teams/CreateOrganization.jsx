@@ -111,10 +111,7 @@ export const CreateOrganization = () => {
             </Box>
             <Box pl={2} pr={2} m={2}>
               <Typography variant="subtitle2">
-                { !Organizations.findOne() || Organizations.findOne()?.planType === "free"
-                ? <>You can add as many team members as you'd like on the forever free team plan. You have access to 3 private slates and unlimited public slates.</>
-                : <>Congratulations, you&apos;ve already upgraded to Slatebox Pro! Team members are $5/mo (billed annually).</>
-                }
+                Add as many team members as you'd like.
               </Typography>
             </Box>
             <Box m={2}>
@@ -162,14 +159,12 @@ export const CreateOrganization = () => {
   async function finalize() {
     try {
 
-      //create org (removes planType from user, attaches planType to user, attaches orgId to user)
       let orgId = await promisify(Meteor.call, CONSTANTS.methods.organizations.create, { name: teamName, createdByUserId: Meteor.userId() });
 
       //explicitly update the user with the orgId
       await promisify(Meteor.call, CONSTANTS.methods.users.update, { userId: Meteor.userId(), orgId: orgId });
 
       //invite users
-      console.log("sending invites ", currentInvites);
       await promisify(Meteor.call, CONSTANTS.methods.users.invite, { orgId: orgId, invites: currentInvites });
       dispatch({ type: "canvas", currentInvites: [] });
 

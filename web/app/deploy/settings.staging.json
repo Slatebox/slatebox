@@ -1,0 +1,49 @@
+{
+  "env": "staging",
+  "redisOplog": {
+    "redis": {
+      "port": 6379,
+      "host": "192.168.208.125"
+    },
+    "retryIntervalMs": 10000,
+    "mutationDefaults": {
+      "optimistic": true,
+      "pushToRedis": true
+    },
+    "debug": true
+  },
+  "testim": {
+    "apiKey": "PAK-IIBjZHo4CtPt28-KSEXNg9zvMpXJy1ILRxjtI8tynbptoRHvpX7drhwOuTMk382xPKhqpLESsr9paMB+F"
+  },
+  "monti": {
+    "appId": "565dQDEy2sxdFJScd",
+    "appSecret": "6c183fb3-8f74-413f-98b0-4aa4028051b0"
+  },
+  "nounProject": {
+    "key": "1cc0ae21b6964d71b9eb8108fa39f3e9",
+    "secret": "605d66d9390a4ffa82e3df0855ad033b"
+  },
+  "stripePrivateKey": "BtIB6N7ZvWgRo4Kg8w8LddTdAY4fqG2z",
+  "mailGun": {
+    "server": "smtp://postmaster%40slatebox.com:265bf5a2521ba1ea96a9d7117197da44@smtp.mailgun.org:587"
+  },
+  "chatWoot": {
+    "userIdentityValidationToken": "aegPcCX4owZTpinKfd8QBQgx"
+  },
+  "public": {
+    "env": "dev",
+    "baseUrl": "https://staging.slatebox.com",
+    "stripePublicKey": "pk_live_10kGBdxtSKoG9aYDXI0R5YINEJaUOnHn49A96fw1A5ynLgMnlNXUxepTLd7XudmEvLKn1e0gjn2CfyNTTmdY3yBv2000DtnIhsS",
+    "googleFontAPIKey": "AIzaSyAUAnpBVXQu_XYjUBoO7f5tbcL0JB3H5-o",
+    "scraperAPI": "6ca066dd826418fd17618cccecf0866f",
+    "googleImageSearchEngineKey": "3ba8a3199f8e2eb8c",
+    "googleImageSearchAPIKey": "AIzaSyAUAnpBVXQu_XYjUBoO7f5tbcL0JB3H5-o",
+    "heapIOKey": "705323485",
+    "pexelsAPIKey": "563492ad6f91700001000001ac10762e553f4d8dac45653ace7ea82b",
+    "pixabayAPIKey": "19963320-6ab7ac7b334db9ba793963793",
+    "unsplashAccessKey": "6k9l8aNdS5dK6-dygNXA4R6TehFXBnnmJzwjZl9czgE",
+    "unsplashSecretKey": "NUbnnKKx6FUeZSj-kbTtXLpgoObftT0zY3kQAcIz3rM",
+    "rapidAPIKey": "1b112f2671mshceb182652432b7dp1544fcjsnd137a945d573",
+    "cohereKey": "PrQDWMfnBBjgd9uSYWFCNqWr"
+  }
+}

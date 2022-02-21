@@ -1,5 +1,3 @@
-import { PricingTiers } from "./models";
-
 export const utils = {
   ipFromConnection: function (connection) {
     let ip;

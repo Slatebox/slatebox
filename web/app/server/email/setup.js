@@ -11,9 +11,7 @@ export default setup = function() {
   Accounts.emailTemplates.siteName = "Slatebox";
   Accounts.emailTemplates.from = "Slatebox <info@slatebox.com>";
 
-  function _compileEmail(user, url, type, asText) {
-
-    console.log("user for email ", JSON.stringify(user));
+  function compileEmail(user, url, type, asText) {
 
     let userName = user.emails[0].address ? " " + user.emails[0].address.split("@")[0] : "";
     if (user.profile && user.profile.firstName) {
@@ -133,19 +131,19 @@ export default setup = function() {
   };
 
   Accounts.emailTemplates.verifyEmail.html = function (user, url) {
-    return _compileEmail(user, url, "verify");
+    return compileEmail(user, url, "verify");
   };
 
   Accounts.emailTemplates.verifyEmail.text = function (user, url) {
-    return _compileEmail(user, url, "verify", true);
+    return compileEmail(user, url, "verify", true);
   };
 
   Accounts.emailTemplates.resetPassword.html = function (user, url) {
-    return _compileEmail(user, url, "forgot");
+    return compileEmail(user, url, "forgot");
   };
 
   Accounts.emailTemplates.resetPassword.text = function (user, url) {
-    return _compileEmail(user, url, "forgot", true);
+    return compileEmail(user, url, "forgot", true);
   };
 
   //only org admins send enrollment emails
@@ -154,11 +152,11 @@ export default setup = function() {
   };
 
   Accounts.emailTemplates.enrollAccount.text = function(user, url) {
-    return _compileEmail(user, url, "enrollInvite", true);
+    return compileEmail(user, url, "enrollInvite", true);
   }
 
   Accounts.emailTemplates.enrollAccount.html = function (user, url) {
-    return _compileEmail(user, url, "enrollInvite");
+    return compileEmail(user, url, "enrollInvite");
   }
 
   //strips the # from the genned urls

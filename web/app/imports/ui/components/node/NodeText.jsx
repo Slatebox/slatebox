@@ -164,7 +164,7 @@ export const NodeText = (props) => {
             onFocus={(e) => { 
               let self = e.target;
               setTimeout(function() { 
-                self.selectionStart = self.selectionEnd = 10000; 
+                self.selectionStart = self.selectionEnd = 10000;
               }, 0);
             }}
             InputLabelProps={{

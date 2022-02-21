@@ -8,9 +8,8 @@ let method = {};
 
 method[CONSTANTS.methods.chatWoot.identifyUser] = async function () {
   // console.log("calling chatwoot identity", Meteor.userId());
-  if (Meteor.userId()) {
+  if (Meteor.userId() && Meteor.settings.chatWoot.userIdentityValidationToken) {
     const hash = CryptoJS.HmacSHA256(Meteor.userId(), Meteor.settings.chatWoot.userIdentityValidationToken).toString(CryptoJS.enc.Hex);
-    console.log("chatwoot hash", hash);
     return hash;
   }
 };

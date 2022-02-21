@@ -75,32 +75,6 @@ method[CONSTANTS.methods.slates.update] = async function(opts) {
   }
 
   if (Meteor.userId() || accessibleGuest) {
-    //enforce all slates to be public if they are in free mode.
-    // if (Meteor.user().planType === "free") {
-    //   if (!Meteor.user().orgId) {
-    //     opts.slate.options.isPublic = true;
-    //   } else {
-    //     if (!opts.slate.options.isPublic || opts.slate.options.isPublic === true) {
-    //       opts.slate.options.isPublic = true;
-    //       let exists = SlateAccess.findOne({ _id: `public_${opts.slate.options.id}` });
-    //       if (!exists) {
-    //         SlateAccess.insert({ 
-    //           type: "public",
-    //           _id: `public_${opts.slate.options.id}`, 
-    //           orgId: Meteor.user().orgId,
-    //           slateId: opts.slate.options.id, 
-    //           slateAccessPermissionId: CONSTANTS.slateAccessPermissions.edit.id,
-    //           accessKey: Random.id().substring(0, 8)
-    //         });
-    //       }
-    //     }
-    //   }
-    // }
-
-    // if (!opts.slate._id) {
-    //   opts.slate._id = opts.slate.options.id;
-    // }
-
     if (!opts.slate.created) {
       opts.slate.created = new Date().valueOf();
     }
@@ -397,9 +371,8 @@ method[CONSTANTS.methods.slates.createSnapshot] = async function (opts) {
       const ps = stringSimilarity.compareTwoStrings(opts.snapshot, last ? last.snapshot : "");
       console.log("percentSimilar", ps);
       // 0.9985405384644929
-      let isFree = Meteor.user().planType === "free" || Meteor.user().orgId && Organizations.findOne(Meteor.user().orgId).planType === "free";
-      let threshold = isFree ? .75 : .95;
-      if (ps < threshold) { // snapshot every 5% change if paid or 20% change if free
+      let threshold = .75;
+      if (ps < threshold) { // snapshot every 25% change
         SlateSnapshots.insert({ slateId: opts.slateId, userId: Meteor.userId(), snapshot: opts.snapshot, created: new Date() });
       }
       return true;

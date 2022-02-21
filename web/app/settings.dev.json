@@ -1,0 +1,40 @@
+{
+  "env": "dev",
+  "redisOplog": {
+    "redis": {
+      "port": 6379,
+      "host": "default:6fTssjQjq7@127.0.0.40"
+    },
+    "retryIntervalMs": 1000,
+    "mutationDefaults": {
+      "optimistic": true,
+      "pushToRedis": true
+    },
+    "cacheTimeout": 1800000,
+    "cacheTimer": 300000,
+    "secondaryReads": null,
+    "raceDetectionDelay": 1000,
+    "raceDetection": true,
+    "debug": true
+  },
+  "nounProject": {
+      "key": "1cc0ae21b6964d71b9eb8108fa39f3e9"
+    , "secret": "605d66d9390a4ffa82e3df0855ad033b"
+  },
+   "mailGun": {
+    "server": "smtp://postmaster%40slatebox.com:265bf5a2521ba1ea96a9d7117197da44@smtp.mailgun.org:587"
+  },
+  "chatWoot": {
+    "userIdentityValidationToken": "aegPcCX4owZTpinKfd8QBQgx"
+  },
+  "stripePrivateKey": "ROJ2x7cOig89e5sxBhdBKxbGsCNUnaV8",
+  "public": {
+    "env": "dev",
+    "baseUrl": "http://localhost:3000",
+    "googleFontAPIKey": "AIzaSyAUAnpBVXQu_XYjUBoO7f5tbcL0JB3H5-o",
+    "googleImageSearchEngineKey": "3ba8a3199f8e2eb8c",
+    "googleImageSearchAPIKey": "AIzaSyAUAnpBVXQu_XYjUBoO7f5tbcL0JB3H5-o",
+    "pixabayAPIKey": "19963320-6ab7ac7b334db9ba793963793",
+    "stripePublicKey": "pk_test_10kGBdxtSKoG9aYDXI0R5YINEJaUOnHn4qVqIfuM7LWwejHXpIT4B7sVOFLqkkazO7VTe4REkr86wCj8PNDwERPd100vvYZQOww"
+  }
+}

@@ -1,13 +1,13 @@
 {
-    "name": "app.slatebox.com",
-    "private": true,
-    "workspaces": [
-      "packages/**",
-      "desktop",
-      "web"
-    ],
-    "nohoist": [
-    ],
-    "scripts": {
-    }
+  "name": "slatebox",
+  "private": true,
+  "workspaces": [
+    "packages/**",
+    "desktop",
+    "web"
+  ],
+  "nohoist": [
+  ],
+  "scripts": {
   }
+}

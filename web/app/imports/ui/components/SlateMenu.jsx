@@ -60,7 +60,6 @@ export const SlateMenu = (props) => {
   }
 
   async function changeSlatePrivacy() {
-
     function enact() {
       const curPublic = !props.slate.options.isPublic;
       let isPublic = curPublic;
@@ -69,31 +68,7 @@ export const SlateMenu = (props) => {
       Slates.update({ _id: props.slate._id }, { $set: { "options.isPublic": isPublic, "options.isPrivate": isPrivate, "options.isUnlisted": isUnlisted }});
       dispatch({ type: "displayslates", invokeRerender: Random.id() });
     }
-    if ( ((!Meteor.user().orgId && !["solo_monthly", "solo_yearly"].includes(Meteor.user().planType) || Organizations.findOne()?.planType === "free")) && props.slate.options.isPublic) {
-      const nonPublics = await promisify(Meteor.call, CONSTANTS.methods.slates.getNonPublic);
-      if (nonPublics.length >= CONSTANTS.privateSlateLimit) {
-        //past the limit, so show payment options OR registration depending on user state
-        if (Meteor.user().isAnonymous) {
-          dispatch({
-            type: "registration"
-            , registrationOpen: true
-            , registrationMessage: `You've already set 3 slates as private or unlisted. The next step is to register your account so you can upgrade for unlimited private slates!`
-          });
-        } else {
-          dispatch({
-            type: "payment"
-            , paymentOpen: true
-            , paymentMessage: `Upgrade to have more than ${CONSTANTS.privateSlateLimit} private or unlisted slates. (Current private or unlisted slates: ${nonPublics.map(p => p.name).join(", ")}.)`
-            , paymentFocus: `more than ${CONSTANTS.privateSlateLimit} private slates`
-            , paymentEmphasis: `Upgrade below.`
-          });
-        }
-      } else {
-        enact();
-      }
-    } else {
-      enact();
-    }
+    enact();
   }
 
   const [slateAnchorEl, setSlateAnchorEl] = React.useState(null);

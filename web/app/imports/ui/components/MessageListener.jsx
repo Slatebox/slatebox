@@ -36,7 +36,6 @@ export const MessageListener = (props) => {
     if (Messages.find({ read: false, priority: 10 }, { sort: { timestamp: -1 } }).count() > 0) {
       //do something with the messages - priority = 10 means a global dispatch, effect='celebration' means baloons or something!
       all = Messages.find({ read: false, priority: 10 }).fetch().sort((a,b) => { return a.timestamp - b.timestamp });
-      console.log("found messages to notify user", all);
       let celebrate = all.some(m => m.effect === "celebrate");
       if (all.length > 0) {
         message(all[0].title, all.map(a => a.text).join(", "), all[0].onOK);

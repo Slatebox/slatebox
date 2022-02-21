@@ -13,7 +13,7 @@ import Chip from '@material-ui/core/Chip';
 import Grid from '@material-ui/core/Grid';
 import { promisify } from '../../api/client/promisify';
 import { CONSTANTS } from '../../api/common/constants';
-import { PricingTiers, Organizations } from '../../api/common/models';
+import { Organizations } from '../../api/common/models';
 import Button from '@material-ui/core/Button';
 import { useMediaQuery } from '@material-ui/core';
 import { getUserName } from '../../api/common/getUserName';
@@ -28,29 +28,21 @@ export const ProfileMenu = (props) => {
 
   const userDetails = useTracker(() => {
     //get pricing data
-    Meteor.subscribe(CONSTANTS.publications.pricingTiers);
     if (Meteor.user()) {
-      let plan = Meteor.user().orgId ? Organizations.findOne()?.planType : Meteor.user().planType;
+      let plan = "team";
       plan = plan || "free";
       let name = getUserName(Meteor.userId());
-      let color = plan === "free" ? "default" : "secondary";
+      let color ="secondary";
       let isVerified = false;
       if (Meteor.user() && !Meteor.user().isAnonymous && Meteor.user().emails && Meteor.user().emails.length > 0 && Meteor.user().emails[0].verified) {
         isVerified = true;
       }
       return { plan, name, color, isVerified }
     }
-    return { plan: "free", name: "Guest", color: "primary", isVerified: false };
+    return { plan: "team", name: "Guest", color: "secondary", isVerified: false };
   });
 
-  let headerPlanMessage = "";
-  useTracker(() => {
-    Meteor.subscribe(CONSTANTS.publications.pricingTiers);
-    let pt = Meteor.user().orgId ? Organizations.findOne()?.planType : Meteor.user().planType;
-    const tier = PricingTiers.findOne({ $or: [{ "yearly.priceId": pt }, { "monthly.priceId": pt }] });
-    headerPlanMessage = tier?.headerText || "Forever Free Team";
-  });
-
+  let headerPlanMessage = "Team";
   const logout = () => {
     Meteor.logout();
   }
@@ -63,30 +55,6 @@ export const ProfileMenu = (props) => {
     history.push("/profile");
     setAnchorEl(null);
   };
-
-  const createPortalSession = async () => {
-    if (Meteor.user().isAnonymous) {
-      dispatch({
-        type: "registration"
-        , registrationOpen: true
-        , registrationMessage: `Register to create an account.`
-      });
-    } else if (Meteor.user().planType === "free" || Organizations.findOne()?.planType === "free") {
-      dispatch({
-        type: "payment"
-        , paymentOpen: true
-        , paymentMessage: `You are currently on the forever free plan.`
-        , paymentFocus: null
-      });
-    } else {
-      const url = await promisify(Meteor.call, CONSTANTS.methods.stripe.createSession, { type: "portal", returnUrl: window.location.href });
-      if (url) {
-        window.location.href = url;
-      } else {
-        console.error("error creating biling session");
-      }
-    }
-  }
 
   function openSupport() {
     window.$chatwoot.toggle();
@@ -101,7 +69,7 @@ export const ProfileMenu = (props) => {
       </Grid>
       <Grid item>
         {mdmq &&
-          <Chip variant="outlined" color={userDetails.color} size="small" label={headerPlanMessage} onClick={createPortalSession} />
+          <Chip variant="outlined" color={userDetails.color} size="small" label={headerPlanMessage} />
         }
       </Grid>
       <Grid item>
@@ -121,9 +89,6 @@ export const ProfileMenu = (props) => {
           onClose={() => setAnchorEl(null)}
         >
           <MenuItem onClick={loadProfile}>Profile</MenuItem>
-          <MenuItem onClick={createPortalSession}>
-            {((Organizations.findOne() && Organizations.findOne().planType !== "free") || Meteor.user().planType !== "free") ? "Billing" : "Upgrade"}
-          </MenuItem>
           { mdmq ? null : <MenuItem onClick={openSupport}>Support</MenuItem> }
           <MenuItem onClick={logout}>Logout</MenuItem>
         </Menu>

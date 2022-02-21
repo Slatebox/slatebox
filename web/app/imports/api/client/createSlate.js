@@ -9,7 +9,7 @@ import { Organizations } from '../common/models.js';
 import { utils } from '../common/utils.js';
 
 const createSlate = async function(s, events, collaboration, isNew, isGuest) {
-  let publicDefault = true;
+  let publicDefault = false;
 
   async function ensureDeps() {
     return new Promise((resolve, reject) => {
@@ -24,12 +24,6 @@ const createSlate = async function(s, events, collaboration, isNew, isGuest) {
   }
 
   await ensureDeps();
-
-  if (Meteor.user() && Meteor.user().orgId) {
-    publicDefault =  Organizations.findOne().planType === "free";
-  } else if (Meteor.user() && Meteor.user().planType !== "free") {
-    publicDefault = false;
-  }
 
   const opts = {
     name: s.options?.name || "New Slate"

@@ -45,10 +45,8 @@ const copySlate = async (slate, allowTemplateCopy) => {
 
   copy._id = Random.id();
   copy.options.id = copy._id;
-  let planType = Meteor.user().orgId ? Organizations.findOne()?.planType : Meteor.user().planType;
-  const isPublic = planType === "free" ? true : false;
   
-  Object.assign(copy.options, { isPublic: isPublic, isCommunity: false, isFeatured: false });
+  Object.assign(copy.options, { isPublic: false, isCommunity: false, isFeatured: false });
 
   copy.userId = Meteor.userId();
   copy.shareId = await promisify(Meteor.call, CONSTANTS.methods.slates.generateShareId);

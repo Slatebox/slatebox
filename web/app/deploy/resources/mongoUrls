@@ -1,0 +1,5 @@
+PROD=mongodb://sbuser:jPyvYtQbzmrBifBJ@sb-mongo-1.slatebox.com:27017,sb-mongo-2.slatebox.com:27017,sb-mongo-3.slatebox.com:27017/slatebox?replicaSet=sb0\&authSource=admin\&ssl=true\&tlsAllowInvalidHostnames=true
+PROD_OPLOG=mongodb://oplogger:sb.oplog@sb-mongo-1.slatebox.com:27017,sb-mongo-2.slatebox.com:27017,sb-mongo-3.slatebox.com:27017/local?replicaSet=sb0\&authSource=admin\&ssl=true\&tlsAllowInvalidHostnames=true
+
+STAGE=mongodb://sbuser:jPyvYtQbzmrBifBJ@sb-mongo-1.slatebox.com:27017,sb-mongo-2.slatebox.com:27017,sb-mongo-3.slatebox.com:27017/slatebox?replicaSet=sb0\&authSource=admin\&ssl=true\&tlsAllowInvalidHostnames=true
+STAGE_OPLOG=mongodb://oplogger:sb.oplog@sb-mongo-1.slatebox.com:27017,sb-mongo-2.slatebox.com:27017,sb-mongo-3.slatebox.com:27017/local?replicaSet=sb0\&authSource=admin\&ssl=true\&tlsAllowInvalidHostnames=true

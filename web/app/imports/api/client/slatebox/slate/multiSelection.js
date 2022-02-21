@@ -2,7 +2,7 @@ import utils from '../helpers/utils.js';
 import uniq from 'lodash.uniq';
 import refreshRelationships from '../helpers/refreshRelationships.js'
 import { Slatebox } from '../index.js';
-import { cloneDeep } from 'lodash';
+import cloneDeep from 'lodash.clonedeep';
 
 export default class multiSelection {
 

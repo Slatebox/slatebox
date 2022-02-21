@@ -129,19 +129,6 @@ export const GuestViewReport = (props) => {
         </Typography>
       </Grid>
       }
-      {Organizations?.findOne()?.planType === "free" ?
-        <Grid item>
-          <Button color="secondary" onClick={showUpgrade} variant="outlined">
-            Upgrade from {data.allowableUnlistedViewsPerMonth} to {data.allowableUnlistedViewsPerMonthOnProTeam} guest views per month with Team Pro
-          </Button>
-        </Grid>
-      :
-        <Grid item>
-          <Button color="secondary" onClick={showSupport} variant="outlined">
-            Need more guest views? Just let us know. 
-          </Button>
-        </Grid>
-      }
     </Grid>
   );
 }

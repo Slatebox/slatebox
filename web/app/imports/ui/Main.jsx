@@ -47,13 +47,11 @@ import TableChartIcon from '@material-ui/icons/TableChart';
 import ShareIcon from '@material-ui/icons/Share';
 import { Routes } from '../ui/Routes.jsx';
 
-import { LoadHeap } from './components/LoadHeap.jsx';
 import { ChatWootConfig } from './components/ChatWootConfig.jsx';
 import { MessageListener } from './components/MessageListener.jsx';
 import { CONSTANTS } from '../api/common/constants.js';
 import { ProfileMenu } from './components/ProfileMenu';
 import { Register } from './common/Register.jsx';
-import { Payment } from './common/Payment.jsx';
 
 import confirmService from '../ui/common/confirm';
 import Snackbar from '@material-ui/core/Snackbar';
@@ -70,6 +68,7 @@ import { getUserName } from '../api/common/getUserName.js';
 import { promisify } from '../api/client/promisify.js';
 import { createAnonymousUser } from '/imports/api/client/createAnonymousUser.js';
 import { SlateSnapshots } from './components/slate/SlateSnapshots';
+import { LoadHeap } from './components/LoadHeap.jsx';
 
 //all subscriptions
 //import {} from '../../client/allSubscriptions.js';
@@ -113,8 +112,7 @@ export const Main = () => {
   let onCanvas = useSelector(state => state.onCanvas);
   let slateName = useSelector(state => state.slateName || '');
   let slate = useSelector(state => state.slate);
-  let slatePrivacy = useSelector(state => state.slatePrivacy) || { isPublic: slate?.isPublic, isPrivate: slate?.isPrivate, isUnlisted: slate?.isUnlisted };
-  console.log("slateprivacy changed", slatePrivacy);
+  let slatePrivacy = useSelector(state => state.slatePrivacy) || { isPublic: slate?.options.isPublic, isPrivate: slate?.options.isPrivate, isUnlisted: slate?.options.isUnlisted };
   let collaborator = useSelector(state => state.collaborator);
   let openShareDialog = useSelector(state => state.openShareDialog);
   let canManageSlate = useSelector(state => state.canManageSlate);
@@ -320,8 +318,8 @@ export const Main = () => {
                   <Grid container alignItems="center" justify="flex-start" spacing={1}>
                     <Grid item>
                       {onCanvas || orgName ?
-                        <img src="/images/slatebox_small_logo.svg" alt="Slatebox - Visualize Everything" className={classes.logo} />
-                        : <img src="/images/slatebox_logo.svg" alt="Slatebox - Visualize Everything" className={classes.logo} />}
+                        <img src="/images/slatebox_small_logo.svg" alt="Slatebox - Open And Free Remote Collaboration" className={classes.logo} />
+                        : <img src="/images/slatebox_logo.svg" alt="Slatebox - Open And Free Remote Collaboration" className={classes.logo} />}
                     </Grid>
                     <Grid item>
                       {orgName && <Typography component="span" variant="h5" color="secondary">&nbsp;&nbsp;{orgName}</Typography>}
@@ -388,8 +386,8 @@ export const Main = () => {
                             color="secondary"
                             className={classes.button}
                             onClick={async (e) => {
-                              if (!Meteor.user().orgId && !["solo_monthly", "solo_yearly"].includes(Meteor.user().planType)) {
-                                let intendState = slate?.options.isPublic ? "private" : "public";
+                              if (!Meteor.user().orgId) {
+                                let intendState = slate.options?.isPublic ? "private" : "public";
                                 const result = await confirmService.show({
                                   theme: theme,
                                   title: `Manage Slate Privacy`,
@@ -403,23 +401,12 @@ export const Main = () => {
                                 if (result) {
                                   switch (result) {
                                     case "private": {
-                                      const nonPublics = await promisify(Meteor.call, CONSTANTS.methods.slates.getNonPublic);
-                                      if (nonPublics.length >= CONSTANTS.privateSlateLimit) {
-                                        //past the limit, so show payment options
-                                        dispatch({
-                                          type: "payment"
-                                          , paymentOpen: true
-                                          , paymentMessage: `Upgrade to have more than ${CONSTANTS.privateSlateLimit} private or unlisted slates. (Current private or unlisted slates: ${nonPublics.map(p => p.name).join(", ")}.)`
-                                          , paymentFocus: `more than ${CONSTANTS.privateSlateLimit} private slates`
-                                          , paymentEmphasis: `Upgrade below.`
-                                        });
-                                      } else {
-                                        slate.options.isPublic = false;
-                                        slate.options.isPrivate = true;
-                                        slate.options.isUnlisted = false;
-                                        Slates.update({ _id: slate.options.id }, { $set: { "options.isPublic": false, "options.isPrivate": true, "options.isUnlisted": false } });
-                                        dispatch({ type: "canvas", globalMessage: { visible: true, text: `You've set this slate to private`, severity: "info", autoHide: 60000 } });
-                                      }
+                                      slate.options.isPublic = false;
+                                      slate.options.isPrivate = true;
+                                      slate.options.isUnlisted = false;
+                                      Slates.update({ _id: slate.options.id }, { $set: { "options.isPublic": false, "options.isPrivate": true, "options.isUnlisted": false } });
+                                      dispatch({ type: "canvas", slatePrivacy: { isPublic: false, isPrivate: true, isUnlisted: false } });
+                                      dispatch({ type: "canvas", globalMessage: { visible: true, text: `You've set this slate to private`, severity: "info", autoHide: 60000 } });
                                       break;
                                     }
                                     case "public": {
@@ -427,6 +414,7 @@ export const Main = () => {
                                       slate.options.isPrivate = false;
                                       slate.options.isUnlisted = false;
                                       Slates.update({ _id: slate.options.id }, { $set: { "options.isPublic": true, "options.isPrivate": false, "options.isUnlisted": false } });
+                                      dispatch({ type: "canvas", slatePrivacy: { isPublic: true, isPrivate: false, isUnlisted: false } });
                                       dispatch({ type: "canvas", globalMessage: { visible: true, text: `You've set this slate to public`, severity: "info", autoHide: 60000 } });
                                       break;
                                     }
@@ -511,7 +499,7 @@ export const Main = () => {
                     <ListItemText primary="My Slates" />
                   </ListItem>
                 </Tooltip>
-                {(AuthManager.userHasClaim(Meteor.userId(), [CONSTANTS.claims.canEditUsers._id, CONSTANTS.claims.canViewUsers._id]) || (loadedUser && loadedUser.planType === "free" && !loadedUser.orgId)) &&
+                {(AuthManager.userHasClaim(Meteor.userId(), [CONSTANTS.claims.canEditUsers._id, CONSTANTS.claims.canViewUsers._id]) || (loadedUser && !loadedUser.orgId)) &&
                   <Tooltip placement="top" title={open ? "" : "Manage Team"}>
                     <ListItem button component={Link} to="/team">
                       <ListItemIcon>
@@ -589,7 +577,6 @@ export const Main = () => {
             <div className={clsx(classes.appBarSpacer)} />
             <Routes />
             <Register user={loadedUser} />
-            <Payment user={loadedUser} />
           </main>
         </div>
         <Snackbar anchorOrigin={{ vertical: 'top', horizontal: 'center' }} open={globalMessage.visible} onClose={handleClose} autoHideDuration={globalMessage.autoHide || 10000}>

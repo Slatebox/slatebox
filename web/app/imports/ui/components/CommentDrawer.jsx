@@ -16,8 +16,6 @@ import { NodeEffect } from './node/NodeEffect.jsx';
 
 import { promisify } from '../../api/client/promisify.js';
 
-import LockIcon from '@material-ui/icons/Lock';
-import LockOpenIcon from '@material-ui/icons/LockOpen';
 import EditIcon from '@material-ui/icons/Edit';
 import DeleteIcon from '@material-ui/icons/Delete';
 import CancelIcon from '@material-ui/icons/Cancel';
@@ -29,25 +27,17 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useTracker } from 'meteor/react-meteor-data';
 import { Messages, Tags, Comments } from '../../api/common/models.js';
 import { CONSTANTS } from '../../api/common/constants.js';
-import TableContainer from '@material-ui/core/TableContainer';
-import Table from '@material-ui/core/Table';
-import TableRow from '@material-ui/core/TableRow';
-import TableCell from '@material-ui/core/TableCell';
 import IconButton from '@material-ui/core/IconButton';
-import TableBody from '@material-ui/core/TableBody';
 import Switch from '@material-ui/core/Switch';
 import AuthManager from '../../api/common/AuthManager.js';
 import { Mention, MentionsInput } from 'react-mentions';
 import { getUserName } from '../../api/common/getUserName.js';
-import Paper from '@material-ui/core/Paper';
 import Button from '@material-ui/core/Button';
 import Typography from '@material-ui/core/Typography';
 import Box from '@material-ui/core/Box';
 import Grid from '@material-ui/core/Grid';
 import Container from '@material-ui/core/Container';
 import Divider from '@material-ui/core/Divider';
-import Chip from '@material-ui/core/Chip';
-import { utils } from '../../api/common/utils.js';
 
 import { useTheme } from '@material-ui/core/styles';
 

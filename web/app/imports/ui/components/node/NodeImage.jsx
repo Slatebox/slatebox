@@ -105,20 +105,12 @@ export const NodeImage = (props) => {
 
     async function search() {
 
-      if (Meteor.user().isAnonymous) {
+      if (!Meteor.settings.public.googleImageSearchEngineKey || !Meteor.settings.public.googleImageSearchAPIKey) {
         dispatch({
           type: "registration"
           , registrationOpen: true
-          , registrationMessage: `Want to search images? It just takes a second to register.`
+          , registrationMessage: `You need to set up the google image search engine key(s) before searching images.`
           , paymentWillBeRequested: true
-        });
-        return;
-      } else if (Meteor.user().planType === "free" || Organizations.findOne()?.planType === "free") {
-        dispatch({
-          type: "payment"
-          , paymentOpen: true
-          , paymentMessage: `Add full Google image search!`
-          , paymentFocus: "image search"
         });
         return;
       }

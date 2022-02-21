@@ -257,31 +257,16 @@ export const Canvas = () => {
         });
 
         if (slateBase.options.isUnlisted) {
-          if (trackGuest.allow) {
-            //allowed and noted
-            loadSlate(slateBase, false, true);
-            await confirmService.show({
-              theme: theme,
-              title: `Welcome to Slatebox!`,
-              message: `You have ${verb} access to this slate by ${trackGuest.slateOwnerUserName}. Enjoy!`,
-              actionItems: [
-                { label: "OK", return: true }
-              ]
-            });
-          } else {
-            //not allowed
-            //show the slate, but then layer immediately with the confirm dialogue; don't allow editing...
-            await loadSlate(slateBase, false, true);
-            await confirmService.show({
-              theme: theme,
-              title: `Oops...there are no more guest views available this month.`,
-              message: `Apologies, but ${verb} access to this slate won't work right now - the organization has exceeded its limit of guest slate interactions this month.`,
-              actionItems: [
-                { label: "OK", return: true }
-              ]
-            });
-            history.push(Meteor.settings.public.baseUrl);
-          }    
+          //allowed and noted
+          loadSlate(slateBase, false, true);
+          await confirmService.show({
+            theme: theme,
+            title: `Welcome to Slatebox!`,
+            message: `You have ${verb} access to this slate by ${trackGuest.slateOwnerUserName}. Enjoy!`,
+            actionItems: [
+              { label: "OK", return: true }
+            ]
+          });    
         } else if (slateBase.options.isPublic) {
           //public slate
           loadSlate(slateBase, false, true);
@@ -294,16 +279,6 @@ export const Canvas = () => {
             ]
           });
         }
-        //if the org is on the free plan, limit the number of guest collaborators (without creating a user) to three.
-        // try {
-        //   let email = await promisify(Meteor.call, CONSTANTS.methods.users.createAnonymous, { orgId: slateBase.orgId });
-        //   console.log("call completed ", email);
-        //   Meteor.loginWithPassword(email, CONSTANTS.anonUserPwd, (err, data) => {
-        //     loadSlate(slateBase, isNew);
-        //   });
-        // } catch (err) {
-        //   console.log("error ", err);
-        // }
       } else {
         loadSlate(slateBase, isNew, false);
         if (Meteor.userId() !== slateBase.userId) {
@@ -336,7 +311,6 @@ export const Canvas = () => {
               { label: "OK", return: true }
             ]
           });
-          console.log("res is ", res);
           cb(res);
         },
         onTakeSnapshot: async (opts) => {

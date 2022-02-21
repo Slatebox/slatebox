@@ -250,7 +250,7 @@ export const Profile = () => {
                 </Grid>
               </Grid>
             </Grid>
-            {Meteor.user() && Meteor.user().planType !== "free" && !Organizations.findOne() && 
+            {Meteor.user() && !Organizations.findOne() && 
               <Grid item xs={12}>
                 <GuestViewReport />
               </Grid>

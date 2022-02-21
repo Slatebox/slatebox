@@ -1,16 +1,25 @@
+import Container from '@material-ui/core/Container';
+import { makeStyles } from '@material-ui/core/styles';
+import Typography from '@material-ui/core/Typography';
 import React, { useState } from 'react';
 
-export const NotFound = () => {
-  const [counter, setCounter] = useState(0);
+const useStyles = makeStyles((theme) => ({
+  paper: {
+    marginTop: theme.spacing(8),
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+  }
+}));
 
-  const increment = () => {
-    setCounter(counter + 1);
-  };
+export const NotFound = (props) => {  
+  const classes = useStyles();
 
   return (
-    <div>
-      <button onClick={increment}>Click Me</button>
-      <p>You've pressed the button {counter} times.</p>
-    </div>
+    <Container component="main" maxWidth="md">
+      <div className={classes.paper}>
+        <Typography variant="h4" style={{color: "#fff"}}>Oops...page not found</Typography>
+      </div>
+    </Container>
   );
 };

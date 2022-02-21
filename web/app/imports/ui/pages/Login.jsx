@@ -146,7 +146,7 @@ export const Login = (props) => {
           }}
           className={classes.register}
         >
-          Start now. No regististration required.
+          Start now. No Registration required.
         </Button>
       </div>
       <Snackbar anchorOrigin={{vertical: 'top', horizontal: 'center'}} open={warning?.visible} onClose={closeLoginWarning} autoHideDuration={6000}>

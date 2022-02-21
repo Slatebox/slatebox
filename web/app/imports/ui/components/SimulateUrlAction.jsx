@@ -7,7 +7,6 @@ import { useParams } from 'react-router-dom';
 //ONLY USED FOR TESTING
 export const SimulateUrlAction = () => {
   const { type, identifier } = useParams();
-  console.log("loading simulation ", type, identifier);
   const history = useHistory();
   async function getToken() {
     const token = await promisify(Meteor.call, CONSTANTS.methods.users.getTokenByEmailForTesting, { email: identifier, type: type });

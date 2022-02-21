@@ -13,7 +13,6 @@ import { ResetPassword } from './pages/ResetPassword.jsx';
 import { VerifyEmail } from './pages/VerifyEmail.jsx';
 import { NotFound } from './pages/NotFound.jsx';
 import { AdminTools } from './pages/AdminTools.jsx';
-import { StripeManagement } from './components/StripeManagement';
 import { promisify } from '../api/client/promisify.js';
 import { TeamSettings } from './pages/TeamSettings.jsx';
 import { SimulateUrlAction } from './components/SimulateUrlAction.jsx';
@@ -51,7 +50,6 @@ export const Routes = () => {
       <PrivateRoute component={TeamSlates} path="/team/slates" />
       <PrivateRoute component={TeamSettings} path="/team/settings" />
       <PrivateRoute component={Team} path="/team" />
-      <PrivateRoute component={StripeManagement} path="/success" />
       {AuthManager.userHasClaim(Meteor.userId(), [CONSTANTS.claims.uberMensch._id]) && <PrivateRoute component={AdminTools} path="/admin" /> }
       <Route path="/canvas/:id?/:nodeId?">
         <Canvas />

@@ -253,8 +253,6 @@ export default class connectors {
           console.log("before options", options.vectorPath, options.xPos, options.yPos);
           const base = theme.styles[`child_${nextChild}`];
           console.log("base is ", base);
-          // always adjust the vectorPath to use the node's current x y
-          // base.vectorPath = utils._transformPath(base.vectorPath, `T${options.xPos},${options.yPos}`);
           Object.assign(options, base);
           console.log("after options", options.vectorPath, options.xPos, options.yPos);
         }

@@ -40,7 +40,7 @@ import FilterNoneIcon from '@material-ui/icons/FilterNone';
 import BrushIcon from '@material-ui/icons/Brush';
 import Toolbar from '@material-ui/core/Toolbar';
 import Slide from '@material-ui/core/Slide';
-import { cloneDeep } from 'lodash';
+import cloneDeep from 'lodash.clonedeep';
 import Grid from '@material-ui/core/Grid';
 import Button from '@material-ui/core/Button';
 import { Chip, useMediaQuery } from '@material-ui/core';
@@ -96,12 +96,9 @@ export const DisplaySlates = (props) => {
     dispatch({ type: "displayslates", filterString: null });
   }, [props]);
 
-  console.log("getting slates 0", slateRecordsPerPage);
-
   useEffect(() => {
     function getSlates() {
       setLoading(true);
-      console.log("getting slates ", slateRecordsPerPage);
       Meteor.call(CONSTANTS.methods.slates.get, { skip: (slatePage - 1) * slateRecordsPerPage, limit: slateRecordsPerPage, type: props.type, filterString: filterString, private: privateOnly }, (err, nextSlates) => {
         if (nextSlates) {
           let allSlates = nextSlates.slates;
@@ -115,7 +112,6 @@ export const DisplaySlates = (props) => {
         }
       });
     }
-    console.log("getting slates 1", slateRecordsPerPage);
     if (Meteor.userId()) {
       getSlates();
     }

@@ -63,7 +63,6 @@ export const NodeDrawer = (props) => {
   // node settings
   const [applyNodeSettingsOpen, setApplyNodeSettingsOpen] = React.useState(false);
 
-  console.log("unbinding keyboard", props);
   props?.slate?.keyboard.unbindGlobal();
 
   useEffect(() => {
@@ -163,7 +162,6 @@ export const NodeDrawer = (props) => {
   }
 
   const dtab = drawerTab == null ? 0 : drawerTab;
-  console.log("drawerTab is", dtab);
 
   return (
     <SwipeableDrawer
