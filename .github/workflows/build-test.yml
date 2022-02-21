@@ -19,7 +19,7 @@ jobs:
         uses: Azure/k8s-set-context@v1
         with:
           method: kubeconfig
-          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+          kubeconfig: ${{ secrets.HETZNER_KUBE_CONFIG }}
       - name: Docker Build and Push, Kubernetes apply
         run: |
           cd ./web
