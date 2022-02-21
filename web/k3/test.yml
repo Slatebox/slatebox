@@ -13,11 +13,11 @@ kind: Secret
 metadata:
   name: test-slateboxenvs
 data:
-  ROOT_URL: TEST_ROOT_URL_SECRET
-  MONGO_URL: TEST_MONGO_URL_SECRET
-  MONGO_OPLOG_URL: TEST_MONGO_OPLOG_URL_SECRET
-  PORT: TEST_PORT_SECRET
-  METEOR_SETTINGS: TEST_METEOR_SETTINGS_SECRET
+  TEST_ROOT_URL: TEST_ROOT_URL_SECRET
+  TEST_MONGO_URL: TEST_MONGO_URL_SECRET
+  TEST_MONGO_OPLOG_URL: TEST_MONGO_OPLOG_URL_SECRET
+  TEST_PORT: TEST_PORT_SECRET
+  TEST_METEOR_SETTINGS: TEST_METEOR_SETTINGS_SECRET
 ---
 # This section will create a deployment in the Kubernetes cluster
 apiVersion: apps/v1
@@ -44,27 +44,27 @@ spec:
     spec:
       containers:
       - env:
-        - name: TEST_ROOT_URL
+        - name: ROOT_URL
           valueFrom:
             secretKeyRef:
               key: TEST_ROOT_URL
               name: test-slateboxenvs
-        - name: TEST_MONGO_URL
+        - name: MONGO_URL
           valueFrom:
             secretKeyRef:
               key: TEST_MONGO_URL
               name: test-slateboxenvs
-        - name: TEST_MONGO_OPLOG_URL
+        - name: MONGO_OPLOG_URL
           valueFrom:
             secretKeyRef:
               key: TEST_MONGO_OPLOG_URL
               name: test-slateboxenvs
-        - name: TEST_PORT
+        - name: PORT
           valueFrom:
             secretKeyRef:
               key: TEST_PORT
               name: test-slateboxenvs
-        - name: TEST_METEOR_SETTINGS
+        - name: METEOR_SETTINGS
           valueFrom:
             secretKeyRef:
               key: TEST_METEOR_SETTINGS
