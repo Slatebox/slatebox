@@ -145,6 +145,14 @@ Meteor.publish(CONSTANTS.publications.claims, function() {
   }
 });
 
+Meteor.publish(CONSTANTS.publications.pricingTiers, function() {
+	if (Meteor.user()) {
+		return PricingTiers.find({}, { disableOplog: true });
+	} else {
+		this.ready();
+	}
+});
+
 Meteor.publish(CONSTANTS.publications.permissions, function() {
   const user = Meteor.users.findOne({ _id: this.userId });
 	if (user?.orgId) {

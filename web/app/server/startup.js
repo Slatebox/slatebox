@@ -2,6 +2,7 @@ import { Meteor } from 'meteor/meteor';
 import { Accounts } from 'meteor/accounts-base';
 import { Servers } from '../imports/api/common/models.js';
 import setup from './email/setup';
+import ip from 'ip';
 import './bootstrap/all.js';
 
 Meteor.startup(() => {
@@ -11,6 +12,9 @@ Meteor.startup(() => {
 
   //monti
   //Monti.connect('565dQDEy2sxdFJScd', '6c183fb3-8f74-413f-98b0-4aa4028051b0');
+
+  const ownIp = ip.address();
+  console.log("ownIp ", ownIp);
 
   Accounts.onCreateUser(function (suggested, user) {
     user.isAnonymous = suggested.isAnonymous || false;
@@ -26,28 +30,30 @@ Meteor.startup(() => {
   // to do: get pod internal IPs and insert them here (10.2.0.50)
   if (!Servers.findOne()) {
     if (Meteor.settings.env === "dev") {
-      Servers.insert({ external: "localhost:3000", internal: "localhost:3000", active: true });
-      Servers.insert({ external: "localhost:4000", internal: "localhost:4000", active: true })
-    } else {
-      Servers.insert({ external: "45.56.96.205:3000", internal: "192.168.208.100:3000", active: true });
-      Servers.insert({ external: "69.164.214.64:3000", internal: "192.168.201.170:3000", active: true });
-      Servers.insert({ external: "172.104.26.237:3000", internal: "192.168.212.88:3000", active: true });
+      Servers.insert({ internal: "localhost:3000", active: true });
+      Servers.insert({ internal: "localhost:4000", active: true })
+    } else if (Meteor.settings.env === "test") {
+      Servers.insert({ internal: "10.42.3.16:3000", active: true });
+      Servers.insert({ internal: "10.42.4.11:3000", active: true });
+    } else if (Meteor.settings.env === "prod") {
+      Servers.insert({ internal: "192.168.208.100:3000", active: true });
+      Servers.insert({ internal: "192.168.201.170:3000", active: true });
+      Servers.insert({ internal: "192.168.212.88:3000", active: true });
     }
   }
 
-  console.log("Meteor absolute URL is ", Meteor.absoluteUrl()); //is external
+  console.log("internal ip is", ownIp); //is external
 
   for (let s of Servers.find().fetch()) {
-    let serverIP = Meteor.absoluteUrl().replace(/http:\/\//gi, "").replace("/", "");
 
     //this is a server proxy for Streamy to push from other web servers to the client
-    console.log("comparing servers ", serverIP, s.external, s.active);
-    if (s.external !== serverIP && s.active) { 
+    console.log("comparing servers ", ownIp,  s.active);
+    if (s.internal !== ownIp && s.active) { 
 
       let connection = DDP.connect(s.internal); //always use internal for ddp
       let streamyConnection = new Streamy.Connection(connection);
 
-      console.log("stream - set up message listener", serverIP);
+      console.log("stream - set up message listener", ownIp);
       // Attach message handlers
       connection._stream.on('message', function onMessage(data) {
 

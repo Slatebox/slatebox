@@ -8,7 +8,8 @@
     ]
   },
   "scripts": {
-    "start": "sed -i '' -e 's/\\CHATWOOT_TOKEN/$CHATWOOT_TOKEN/' ./client/main.html && METEOR_SETTINGS=$(echo $(sed -e \"s/\\NOUN_PROJECT_KEY/$NOUN_PROJECT_KEY/\" -e \"s/\\NOUN_PROJECT_SECRET/$NOUN_PROJECT_SECRET/\" -e \"s/\\MAIL_URL/$MAIL_URL/\" -e \"s/\\CHATWOOT_TOKEN/$CHATWOOT_TOKEN/\" -e \"s/\\BASE_URL/$BASE_URL/\" -e \"s/\\GOOGLE_API_KEY/$GOOGLE_API_KEY/\" -e \"s/\\GOOGLE_IMAGE_SEARCH_API_KEY/$GOOGLE_IMAGE_SEARCH_API_KEY/\" -e \"s/\\GOOGLE_API_KEY/$GOOGLE_API_KEY/\" -e \"s/\\PIXABAY_API_KEY/$PIXABAY_API_KEY/\" settings.json)) meteor",
+    "start": "concurrently \"testim connect\" \"stripe listen --forward-to http://localhost:3000/hooks\" \"meteor run --settings ./settings.dev.json\"",
+    "startWithEnv": "sed -i '' -e 's/\\CHATWOOT_TOKEN/$CHATWOOT_TOKEN/' ./client/main.html && METEOR_SETTINGS=$(echo $(sed -e \"s/\\NOUN_PROJECT_KEY/$NOUN_PROJECT_KEY/\" -e \"s/\\NOUN_PROJECT_SECRET/$NOUN_PROJECT_SECRET/\" -e \"s/\\MAIL_URL/$MAIL_URL/\" -e \"s/\\CHATWOOT_TOKEN/$CHATWOOT_TOKEN/\" -e \"s/\\BASE_URL/$BASE_URL/\" -e \"s/\\GOOGLE_API_KEY/$GOOGLE_API_KEY/\" -e \"s/\\GOOGLE_IMAGE_SEARCH_API_KEY/$GOOGLE_IMAGE_SEARCH_API_KEY/\" -e \"s/\\GOOGLE_API_KEY/$GOOGLE_API_KEY/\" -e \"s/\\PIXABAY_API_KEY/$PIXABAY_API_KEY/\" settings.json)) meteor",
     "visualize": "meteor --production --extra-packages bundle-visualizer"
   },
   "dependencies": {
@@ -48,6 +49,7 @@
     "font-picker-react": "^3.5.2",
     "hex-rgb": "^4.2.0",
     "image-to-base64": "^2.2.0",
+    "ip": "^1.1.5",
     "js-cookie": "^2.2.1",
     "lodash.chunk": "^4.2.0",
     "lodash.clone": "^4.5.0",
@@ -96,6 +98,7 @@
     }
   },
   "devDependencies": {
+    "concurrently": "^6.2.0",
     "eslint": "^7.18.0",
     "eslint-plugin-react": "^7.22.0",
     "eslint-plugin-react-hooks": "^4.2.0"

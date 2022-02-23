@@ -6,8 +6,6 @@
     "desktop",
     "web"
   ],
-  "nohoist": [
-  ],
-  "scripts": {
-  }
+  "nohoist": [],
+  "scripts": {}
 }

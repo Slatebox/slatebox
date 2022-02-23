@@ -96,6 +96,7 @@ export const CONSTANTS = {
     claims: "claims",
     slateAccess: "slateAccess",
     permissions: "permissions",
+    pricingTiers: "pricingTiers",
     templates: "templates",
     approvalRequests: "approvalRequests"
   },

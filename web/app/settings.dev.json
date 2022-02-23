@@ -33,6 +33,7 @@
     "baseUrl": "http://localhost:3000",
     "googleFontAPIKey": "AIzaSyAUAnpBVXQu_XYjUBoO7f5tbcL0JB3H5-o",
     "googleImageSearchEngineKey": "3ba8a3199f8e2eb8c",
+    "heapIOKey": "705323485",
     "googleImageSearchAPIKey": "AIzaSyAUAnpBVXQu_XYjUBoO7f5tbcL0JB3H5-o",
     "pixabayAPIKey": "19963320-6ab7ac7b334db9ba793963793",
     "stripePublicKey": "pk_test_10kGBdxtSKoG9aYDXI0R5YINEJaUOnHn4qVqIfuM7LWwejHXpIT4B7sVOFLqkkazO7VTe4REkr86wCj8PNDwERPd100vvYZQOww"

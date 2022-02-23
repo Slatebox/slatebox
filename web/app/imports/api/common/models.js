@@ -22,6 +22,7 @@ const Tags = new Mongo.Collection("tags");
 const NounProjectResults = new Mongo.Collection("nounProjectResults");
 const NounProjectResultsMetaData = new Mongo.Collection("nounProjectResultsMetaData");
 const Servers = new Mongo.Collection("servers");
+const PricingTiers = new Mongo.Collection("pricingTiers");
 const GuestViews = new Mongo.Collection("guestViews");
 const OrgPreferences = new Mongo.Collection("orgPreferences");
 
@@ -43,6 +44,7 @@ export {
   , NounProjectResults
   , NounProjectResultsMetaData
   , Servers
+  , PricingTiers
   , Tags
   , Audit
   , Messages
