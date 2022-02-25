@@ -1,7 +1,7 @@
 /* eslint-disable no-underscore-dangle */
 import Base from './Base'
 import getTransformedPath from '../helpers/getTransformedPath'
-import utils from '../helpers/Utils'
+import Utils from '../helpers/Utils'
 
 export default class Node extends Base {
   constructor(options) {
@@ -10,7 +10,7 @@ export default class Node extends Base {
     this.openLock = null
     this.lm = null
     this.options = {
-      id: utils.guid(),
+      id: Utils.guid(),
       name: '',
       text: '',
       image: '',
@@ -204,7 +204,7 @@ export default class Node extends Base {
     // both the text and vect -- the actual attr update happens at the "up" in the
     // relationships.js module -- and the transform("") there causes these transient
     // transforms to be removed and replaced with the permanent attr updates.
-    // note the "up" function there calls into the utils.transformPath on Slatebox.js
+    // note the "up" function there calls into the Utils.transformPath on Slatebox.js
     // proper where the transform("") and the attr permanent record is done.
     this.vect.transform(transformString)
     this.text.transform(transformString)
@@ -516,7 +516,7 @@ export default class Node extends Base {
 
     const vpt = self.vect.getBBox()
     const zr = self.slate.options.viewPort.zoom.r
-    const d = utils.getDimensions(self.slate.options.container)
+    const d = Utils.getDimensions(self.slate.options.container)
     const cw = d.width
     const ch = d.height
     const nw = self.options.width * zr

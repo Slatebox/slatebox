@@ -530,6 +530,14 @@ export default class Canvas {
       window.requestAnimationFrame(() => {
         self.internal.style.left = `${x * -1}px`
         self.internal.style.top = `${y * -1}px`
+        console.trace()
+        console.log(
+          'set style',
+          x,
+          y,
+          self.internal.style.left,
+          self.internal.style.top
+        )
         self.slate.options.viewPort.left = Math.abs(x)
         self.slate.options.viewPort.top = Math.abs(y)
         if (opts.callbacks.after) opts.callbacks.after.apply(self.slate)
