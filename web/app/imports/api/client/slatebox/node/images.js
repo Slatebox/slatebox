@@ -1,88 +1,87 @@
-import '../deps/emile.js';
-import utils from  '../helpers/utils.js';
+import '../deps/emile'
 
-export default class images {
-
+export default class Images {
   constructor(slate, node) {
-    this.slate = slate;
-    this.node = node;
+    this.slate = slate
+    this.node = node
   }
 
   getTargetImageDimensions() {
-    let _transImageHeight, _transImageWidth;
-    const origImageRatio = this.node.options.imageOrigWidth / this.node.options.imageOrigHeight;
+    let transImageHeight
+    let transImageWidth
+    const origImageRatio =
+      this.node.options.imageOrigWidth / this.node.options.imageOrigHeight
 
-    const noRotationPath = this.slate.paper.path(this.node.vect.attr("path"));
-    let noRotationBB = noRotationPath.getBBox();
-    const nodeRatio = noRotationBB.width / noRotationBB.height;
+    const noRotationPath = this.slate.paper.path(this.node.vect.attr('path'))
+    const noRotationBB = noRotationPath.getBBox()
+    const nodeRatio = noRotationBB.width / noRotationBB.height
     if (origImageRatio < nodeRatio) {
-      _transImageWidth = noRotationBB.width;
-      _transImageHeight = noRotationBB.width / origImageRatio;
+      transImageWidth = noRotationBB.width
+      transImageHeight = noRotationBB.width / origImageRatio
     } else if (origImageRatio > nodeRatio) {
-      _transImageHeight = noRotationBB.height;
-      _transImageWidth = noRotationBB.height * origImageRatio;
+      transImageHeight = noRotationBB.height
+      transImageWidth = noRotationBB.height * origImageRatio
     } else {
-      _transImageWidth = noRotationBB.width;
-      _transImageHeight = noRotationBB.height;
+      transImageWidth = noRotationBB.width
+      transImageHeight = noRotationBB.height
     }
 
-    noRotationPath.remove();
+    noRotationPath.remove()
 
     return {
-      width: _transImageWidth,
-      height: _transImageHeight
+      width: transImageWidth,
+      height: transImageHeight,
     }
-  };
+  }
 
   imageSizeCorrection() {
     if (this.node.vect.pattern) {
-      const _targetImageDimensions = this.getTargetImageDimensions();
-      const img = this.node.vect.pattern.getElementsByTagName("image")[0];
-      img.setAttribute("height", _targetImageDimensions.height);
-      img.setAttribute("width", _targetImageDimensions.width);
+      const targetImageDimensions = this.getTargetImageDimensions()
+      const img = this.node.vect.pattern.getElementsByTagName('image')[0]
+      img.setAttribute('height', targetImageDimensions.height)
+      img.setAttribute('width', targetImageDimensions.width)
     }
-  };
+  }
 
-  set(img, w, h, blnKeepResizerOpen, useMainCanvas = false) {
+  set(img, w, h, blnKeepResizerOpen) {
+    this.node.vect.data({ relativeFill: true })
+    this.node.options.image = img
+    this.node.options.origImage = { w, h } // needed for image copying if done later
+    this.node.options.imageOrigHeight = h // for scaling node to image size purposes; this value should never be changed
+    this.node.options.imageOrigWidth = w
+    this.node.options['fill-opacity'] = 1
 
-    this.node.vect.data({ relativeFill: true });
-    this.node.options.image = img;
-    this.node.options.origImage = { w, h }; // needed for image copying if done later 
-    this.node.options.imageOrigHeight = h; //for scaling node to image size purposes; this value should never be changed
-    this.node.options.imageOrigWidth = w;
-    this.node.options["fill-opacity"] = 1;
+    // delete previous fill before adding a new image
+    // this.node.vect.pattern.parentElement.removeChild(this.node.vect.pattern);
+    // $(this.node.vect.pattern).detach();
 
-    //delete previous fill before adding a new image
-    //this.node.vect.pattern.parentElement.removeChild(this.node.vect.pattern);
-    //$(this.node.vect.pattern).detach();
+    const sz = {
+      fill: `url(${this.node.options.image})`,
+      'stroke-width': this.node.options.borderWidth,
+      stroke: '#000',
+    }
 
-    const sz = { "fill": "url(" + this.node.options.image + ")", "stroke-width": this.node.options.borderWidth, "stroke": "#000" };
+    const targetImageDimensions = this.getTargetImageDimensions()
 
-    const _targetImageDimensions = this.getTargetImageDimensions();
+    this.node.vect.imageOrigHeight = targetImageDimensions.height
+    this.node.vect.imageOrigWidth = targetImageDimensions.width
 
-    this.node.vect.imageOrigHeight = _targetImageDimensions.height;
-    this.node.vect.imageOrigWidth = _targetImageDimensions.width;
+    this.node.vect.attr({ 'fill-opacity': 1 }) // IMPORTANT: for some reason Raphael breaks when setting 'sz' object and this at the same time
+    this.node.vect.attr(sz)
 
-    this.node.vect.attr({ "fill-opacity": 1 }); //IMPORTANT: for some reason Raphael breaks when setting 'sz' object and this at the same time
-    this.node.vect.attr(sz);
+    const rotatedBB = this.node.vect.getBBox()
+    this.node.options.width = rotatedBB.width
+    this.node.options.height = rotatedBB.height
 
-    const rotatedBB = this.node.vect.getBBox();
-    this.node.options.width = rotatedBB.width;
-    this.node.options.height = rotatedBB.height;
-
-    this.node.relationships.refreshOwnRelationships();
+    this.node.relationships.refreshOwnRelationships()
     if (blnKeepResizerOpen) {
-      this.node.setPosition({ x: rotatedBB.x, y: rotatedBB.y }, true);
-      this.node.menu && this.node.menu.hide();
-      this.node.rotate && this.node.rotate.hide();
-      //this.node.resize && this.node.resize.hide();
+      this.node.setPosition({ x: rotatedBB.x, y: rotatedBB.y }, true)
+      if (this.node.menu) this.node.menu.hide()
+      if (this.node.rotate) this.node.rotate.hide()
+      // this.node.resize && this.node.resize.hide();
     } else {
-      this.node.setPosition({ x: rotatedBB.x, y: rotatedBB.y });
+      this.node.setPosition({ x: rotatedBB.x, y: rotatedBB.y })
     }
-    this.node.connectors && this.node.connectors.remove();
-    //this.node.resize && this.node.resize.hide();
-    //this.node.rotate && this.node.rotate.hide();
-    // tempPath && tempPath.remove();
-
-  };
+    if (this.node.connectors) this.node.connectors.remove()
+  }
 }

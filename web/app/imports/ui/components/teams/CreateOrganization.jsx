@@ -111,7 +111,10 @@ export const CreateOrganization = () => {
             </Box>
             <Box pl={2} pr={2} m={2}>
               <Typography variant="subtitle2">
-                Add as many team members as you'd like.
+                { !Organizations.findOne() || Organizations.findOne()?.planType === "free"
+                ? <>You can add as many team members as you'd like on the forever free team plan. You have access to 3 private slates and unlimited public slates.</>
+                : <>Congratulations, you&apos;ve already upgraded to Slatebox Pro! Team members are $5/mo (billed annually).</>
+                }
               </Typography>
             </Box>
             <Box m={2}>

@@ -7,6 +7,7 @@ import './methods/themes.js';
 import './methods/nounProject.js';
 import './methods/collaborators.js';
 import './methods/utils.js';
+import './methods/stripe.js';
 import './methods/organizations.js';
 import './methods/slateAccess.js';
 import './methods/chatWoot.js';
@@ -27,6 +28,9 @@ import './startup.js';
 
 //permissions
 import './permissions.js';
+
+//stripe hooks
+import './stripeHooks.js';
 
 //sbimages
 import './sbImages.js';

@@ -20,6 +20,8 @@ Meteor.startup(() => {
     user.isAnonymous = suggested.isAnonymous || false;
     if (suggested.orgId) {
       user.orgId = suggested.orgId;
+    } else {
+      user.planType = suggested.planType || "free";
     }
     if (suggested.userName) user.userName = suggested.userName;
     if (suggested.profile) user.profile = suggested.profile;

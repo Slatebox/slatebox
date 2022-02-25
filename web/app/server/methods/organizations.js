@@ -2,7 +2,7 @@
 import { Random } from 'meteor/random';
 import { Meteor } from 'meteor/meteor';
 import { CONSTANTS } from '../../imports/api/common/constants.js';
-import { GuestViews, Organizations, Permissions, Slates, ArchivedSlates, Messages } from '../../imports/api/common/models.js'
+import { GuestViews, Organizations, Permissions, PricingTiers, Slates, ArchivedSlates, Messages } from '../../imports/api/common/models.js'
 import AuthManager from '../../imports/api/common/AuthManager.js';
 
 let method = {};
@@ -71,27 +71,43 @@ method[CONSTANTS.methods.organizations.delete] = async function() {
 }
 
 method[CONSTANTS.methods.organizations.trackGuest] = async function(opts) {
+
+  let entity = opts.slateOrgId ? Organizations.findOne({ _id: opts.slateOrgId }) : Meteor.users.findOne({ _id: opts.slateOwner });
+  let total = GuestViews.find({ orgId: opts.orgId, month: new Date().getMonth() + 1 }, { fields: { _id: 1 } }).fetch().length;
   let slateOwner = Meteor.call(CONSTANTS.methods.users.getUserName, { userId: opts.slateOwner });
-  GuestViews.upsert({
-    _id: opts.guestCollaboratorId
-  }, {
-    slateOrgId: opts.slateOrgId,
-    slateId: opts.slateId,
-    slateOwnerUserId: opts.slateOwner,
-    timestamp: new Date().valueOf(),
-    month: new Date().getMonth() + 1,
-    userId: opts.userId,
-    orgId: opts.orgId,
-    actualGuest: !opts.userId,
-    guestCollaboratorId: opts.guestCollaboratorId,
-    isUnlisted: opts.isUnlisted,
-    isPublic: opts.isPublic
-  });
-  return { allow: true, slateOwnerUserName: slateOwner };
+
+  let allowGuestAccess = opts.isUnlisted ? false : true;
+  if (opts.isUnlisted) {
+    console.log("org is ", entity, opts);
+    let allowableGuestViews = PricingTiers.findOne({ $or: [{ "monthly.priceId": entity.planType }, { "yearly.priceId": entity.planType }] }).guestViewsPerMonth;
+    console.log("guestViews ", total, allowableGuestViews);
+    allowGuestAccess = total < allowableGuestViews;
+  }
+  if (allowGuestAccess) {
+    GuestViews.upsert({
+      _id: opts.guestCollaboratorId
+    }, {
+      slateOrgId: opts.slateOrgId,
+      slateId: opts.slateId,
+      slateOwnerUserId: opts.slateOwner,
+      timestamp: new Date().valueOf(),
+      month: new Date().getMonth() + 1,
+      userId: opts.userId,
+      orgId: opts.orgId,
+      actualGuest: !opts.userId,
+      guestCollaboratorId: opts.guestCollaboratorId,
+      isUnlisted: opts.isUnlisted,
+      isPublic: opts.isPublic
+    });
+    return { allow: true, slateOwnerUserName: slateOwner };
+  } else {
+    //put a message in the orgOwner's mailbox noting that this guest was rejected
+    return { allow: false, slateOwnerUserName: slateOwner };
+  }
 }
 
 method[CONSTANTS.methods.organizations.guestViewReport] = async function() {
-  if ((Meteor.user() && Meteor.user().orgId && AuthManager.userHasClaim(Meteor.userId(), [CONSTANTS.claims.admin._id])) || (Meteor.user() && !Meteor.user().orgId)) {
+  if ((Meteor.user() && Meteor.user().orgId && AuthManager.userHasClaim(Meteor.userId(), [CONSTANTS.claims.admin._id])) || (Meteor.user() && !Meteor.user().orgId && Meteor.user().planType !== "free")) {
     let rows = [];
     /*
     {
@@ -119,8 +135,8 @@ method[CONSTANTS.methods.organizations.guestViewReport] = async function() {
     const orgsAccessed  = Organizations.find({ _id: { $in: guestViews.map(gv => gv.orgId )}}).fetch();
 
     let entity = Meteor.user().orgId ? Organizations.findOne({ _id: Meteor.user().orgId }) : Meteor.user();
-    let allowableGuestViews = 9999; 
-    let allowableGuestViewsOnProTeam = 9999;
+    let allowableGuestViews = PricingTiers.findOne({ $or: [{ "monthly.priceId": entity.planType }, { "yearly.priceId": entity.planType }] }).guestViewsPerMonth;
+    let allowableGuestViewsOnProTeam = PricingTiers.findOne({ useForProOrgGuestViewCount: true }).guestViewsPerMonth;
     let headers = ["Date", "Type", "Slate", "Owner", "Guest"];
     const totalUnlistedViewsByMonth = {};
     const totalPublicViewsByMonth = {};

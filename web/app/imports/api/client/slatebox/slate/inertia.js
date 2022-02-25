@@ -1,49 +1,38 @@
-import { WheelGestures } from 'wheel-gestures';
-import utils from '../helpers/utils';
+import { WheelGestures } from 'wheel-gestures'
+import utils from '../helpers/Utils'
 
-export default class inertia {
-
+export default class Inertia {
   constructor(slate) {
-    this.slate = slate;
-    this.scale = 1;
-    this.wheelEnd = null;
-    this.xyOffset = null;
+    this.slate = slate
+    this.scale = 1
+    this.wheelEnd = null
+    this.xyOffset = null
     if (slate.options.viewPort.useInertiaScrolling) {
-      this._init();
+      this.init()
     }
   }
 
   setScale(val) {
-    this.scale = val;
+    this.scale = val
   }
 
-  _init() {
-    //create an instance per element
-    const self = this;
-    const wheelGestures = WheelGestures({ momentum: true });
+  init() {
+    // create an instance per element
+    const self = this
+    const wheelGestures = WheelGestures({ momentum: true })
 
     // this disabled the fwd/back gesture navigation
-    //document.body.style["overscroll-behavior-x"] = "none";
-    //document.body.html.style["overscroll-behavior-x"] = "none";
+    // document.body.style["overscroll-behavior-x"] = "none";
+    // document.body.html.style["overscroll-behavior-x"] = "none";
 
     // find and observe the element the user can interact with
-    wheelGestures.observe(self.slate.canvas.internal);
+    wheelGestures.observe(self.slate.canvas.internal)
 
-    // function scale() {
-    //   window.requestAnimationFrame(() => {
-    //     const style = { transform: `scale(${self.scale})` } //, "transform-origin": `${self.slate.options.viewPort.left}px ${self.slate.options.viewPort.top}px` };
-    //     console.log("ws is now", self.xyOffset);
-    //     self.slate.canvas.internal.style["transform-origin"] = `${self.slate.options.viewPort.left + self.xyOffset.x}px ${self.slate.options.viewPort.top + self.xyOffset.y}px`;
-    //     self.slate.canvas.internal.style.transform = `scale(${self.slate.options.viewPort.zoom.r})`; // = style;
-    //   })
-    // }
-
-    //add your event callback 
-    let start = {};
+    let start = {}
     wheelGestures.on('wheel', (e) => {
       if (self.slate.options.allowDrag) {
         if (e.event.ctrlKey) {
-          //will not include this for now
+          // will not include this for now
           // if (!self.snappedZoom) {
           //   self.snappedZoom = self.slate.options.viewPort.zoom.w;
           // }
@@ -60,35 +49,36 @@ export default class inertia {
           //   //self.slate?.collab?.send({ type: "onCanvasMove", data: { left: self.slate.options.viewPort.left, top: self.slate.options.viewPort.top } });
           // }
         } else {
-
-          let deltaX = e.event.deltaX * .8; //.5 is the modifier to slow self down a bit
-          let deltaY = e.event.deltaY * .8;
+          const deltaX = e.event.deltaX * 0.8 // .5 is the modifier to slow self down a bit
+          const deltaY = e.event.deltaY * 0.8
 
           if (e.isStart) {
-            start = utils.positionedOffset(self.slate.canvas.internal);
-            //hide filters during dragging
-            self.slate.toggleFilters(true);
+            start = utils.positionedOffset(self.slate.canvas.internal)
+            // hide filters during dragging
+            self.slate.toggleFilters(true)
           }
-          self.slate.canvas.move({ 
-            x: deltaX
-            , y: deltaY
-            , dur: 0
-            , isAbsolute: false
-          });
-          //self.slate.birdsEye && self.slate.birdsEye.refresh(true);
-          //console.trace();
+          self.slate.canvas.move({
+            x: deltaX,
+            y: deltaY,
+            dur: 0,
+            isAbsolute: false,
+          })
+          // self.slate.birdsEye && self.slate.birdsEye.refresh(true);
+          // console.trace();
 
           if (e.isEnding) {
-            const end = utils.positionedOffset(self.slate.canvas.internal);
-            self.slate.birdsEye && self.slate.birdsEye.refresh(true);  
-            self.slate.canvas.broadcast({ x: start.left - end.left, y: start.top - end.top });
+            const end = utils.positionedOffset(self.slate.canvas.internal)
+            if (self.slate.birdsEye) self.slate.birdsEye.refresh(true)
+            self.slate.canvas.broadcast({
+              x: start.left - end.left,
+              y: start.top - end.top,
+            })
 
-            //show filters after dragging
-            self.slate.toggleFilters(false);
-            
+            // show filters after dragging
+            self.slate.toggleFilters(false)
           }
         }
       }
-    });
+    })
   }
 }

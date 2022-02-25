@@ -1,11 +1,11 @@
-import { Slatebox } from '../../index.js';
+import { Slatebox } from '../../index.js'
 
 Slatebox.base.registerPlugin({
-    name: "attempt"
-  , opts: {}
-  , plugin: class extends Slatebox.node {
+  name: 'attempt',
+  opts: {},
+  plugin: class extends Slatebox.Node {
     doAttempt() {
-      console.log("HELLO NODE do I have inherited properties? ", this.disable);
+      console.log('HELLO NODE do I have inherited properties? ', this.disable)
     }
-  }
-});
+  },
+})

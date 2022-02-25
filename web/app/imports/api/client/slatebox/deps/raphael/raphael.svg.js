@@ -1,9 +1,10 @@
-import { eve } from '../eve.js';
-import { R } from './raphael.core.potential.js';
+/* eslint-disable */
 
-export const Raphael = function () {
+import { eve } from '../eve.js'
+import { R } from './raphael.core.js'
 
-  var has = "hasOwnProperty",
+export const Raphael = (function () {
+  var has = 'hasOwnProperty',
     Str = String,
     toFloat = parseFloat,
     toInt = parseInt,
@@ -12,128 +13,140 @@ export const Raphael = function () {
     abs = math.abs,
     pow = math.pow,
     separator = /[, ]+/,
-    E = "",
-    S = " ";
-  var xlink = "http://www.w3.org/1999/xlink",
+    E = '',
+    S = ' '
+  var xlink = 'http://www.w3.org/1999/xlink',
     markers = {
-      block: "M5,0 0,2.5 5,5z",
-      classic: "M5,0 0,2.5 5,5 3.5,3 3.5,2z",
-      diamond: "M2.5,0 5,2.5 2.5,5 0,2.5z",
-      open: "M6,1 1,3.5 6,6",
-      oval: "M2.5,0A2.5,2.5,0,0,1,2.5,5 2.5,2.5,0,0,1,2.5,0z"
+      block: 'M5,0 0,2.5 5,5z',
+      classic: 'M5,0 0,2.5 5,5 3.5,3 3.5,2z',
+      diamond: 'M2.5,0 5,2.5 2.5,5 0,2.5z',
+      open: 'M6,1 1,3.5 6,6',
+      oval: 'M2.5,0A2.5,2.5,0,0,1,2.5,5 2.5,2.5,0,0,1,2.5,0z',
     },
-    markerCounter = {};
+    markerCounter = {}
   var $ = function (el, attr) {
-    if (attr) {
-      if (typeof el == "string") {
-        el = $(el);
-      }
-      for (var key in attr) if (attr[has](key)) {
-        if (key.substring(0, 6) == "xlink:") {
-          el.setAttributeNS(xlink, key.substring(6), Str(attr[key]));
-        } else {
-          el.setAttribute(key, Str(attr[key]));
+      if (attr) {
+        if (typeof el == 'string') {
+          el = $(el)
         }
+        for (var key in attr)
+          if (attr[has](key)) {
+            if (key.substring(0, 6) == 'xlink:') {
+              el.setAttributeNS(xlink, key.substring(6), Str(attr[key]))
+            } else {
+              el.setAttribute(key, Str(attr[key]))
+            }
+          }
+      } else {
+        el = R._g.doc.createElementNS('http://www.w3.org/2000/svg', el)
+        el.style && (el.style.webkitTapHighlightColor = 'rgba(0,0,0,0)')
       }
-    } else {
-      el = R._g.doc.createElementNS("http://www.w3.org/2000/svg", el);
-      el.style && (el.style.webkitTapHighlightColor = "rgba(0,0,0,0)");
-    }
-    return el;
-  },
+      return el
+    },
     addGradientFill = function (element, gradient) {
-      var type = "linear",
+      var type = 'linear',
         id = element.id + gradient,
-        fx = .5, fy = .5,
+        fx = 0.5,
+        fy = 0.5,
         o = element.node,
         SVG = element.paper,
         s = o.style,
-        el = R._g.doc.getElementById(id);
+        el = R._g.doc.getElementById(id)
       if (!el) {
-        gradient = Str(gradient).replace(R._radial_gradient, function (all, _fx, _fy) {
-          type = "radial";
-          if (_fx && _fy) {
-            fx = toFloat(_fx);
-            fy = toFloat(_fy);
-            var dir = ((fy > .5) * 2 - 1);
-            pow(fx - .5, 2) + pow(fy - .5, 2) > .25 &&
-              (fy = math.sqrt(.25 - pow(fx - .5, 2)) * dir + .5) &&
-              fy != .5 &&
-              (fy = fy.toFixed(5) - 1e-5 * dir);
+        gradient = Str(gradient).replace(
+          R._radial_gradient,
+          function (all, _fx, _fy) {
+            type = 'radial'
+            if (_fx && _fy) {
+              fx = toFloat(_fx)
+              fy = toFloat(_fy)
+              var dir = (fy > 0.5) * 2 - 1
+              pow(fx - 0.5, 2) + pow(fy - 0.5, 2) > 0.25 &&
+                (fy = math.sqrt(0.25 - pow(fx - 0.5, 2)) * dir + 0.5) &&
+                fy != 0.5 &&
+                (fy = fy.toFixed(5) - 1e-5 * dir)
+            }
+            return E
           }
-          return E;
-        });
-        gradient = gradient.split(/\s*\-\s*/);
-        if (type == "linear") {
-          var angle = gradient.shift();
-          angle = -toFloat(angle);
+        )
+        gradient = gradient.split(/\s*\-\s*/)
+        if (type == 'linear') {
+          var angle = gradient.shift()
+          angle = -toFloat(angle)
           if (isNaN(angle)) {
-            return null;
+            return null
           }
           var vector = [0, 0, math.cos(R.rad(angle)), math.sin(R.rad(angle))],
-            max = 1 / (mmax(abs(vector[2]), abs(vector[3])) || 1);
-          vector[2] *= max;
-          vector[3] *= max;
+            max = 1 / (mmax(abs(vector[2]), abs(vector[3])) || 1)
+          vector[2] *= max
+          vector[3] *= max
           if (vector[2] < 0) {
-            vector[0] = -vector[2];
-            vector[2] = 0;
+            vector[0] = -vector[2]
+            vector[2] = 0
           }
           if (vector[3] < 0) {
-            vector[1] = -vector[3];
-            vector[3] = 0;
+            vector[1] = -vector[3]
+            vector[3] = 0
           }
         }
-        var dots = R._parseDots(gradient);
+        var dots = R._parseDots(gradient)
         if (!dots) {
-          return null;
+          return null
         }
-        id = id.replace(/[\(\)\s,\xb0#]/g, "_");
+        id = id.replace(/[\(\)\s,\xb0#]/g, '_')
 
         if (element.gradient && id != element.gradient.id) {
-          SVG.defs.removeChild(element.gradient);
-          delete element.gradient;
+          SVG.defs.removeChild(element.gradient)
+          delete element.gradient
         }
 
         if (!element.gradient) {
-          el = $(type + "Gradient", { id: id });
-          element.gradient = el;
-          $(el, type == "radial" ? {
-            fx: fx,
-            fy: fy
-          } : {
-              x1: vector[0],
-              y1: vector[1],
-              x2: vector[2],
-              y2: vector[3],
-              gradientTransform: element.matrix.invert()
-            });
-          SVG.defs.appendChild(el);
+          el = $(type + 'Gradient', { id: id })
+          element.gradient = el
+          $(
+            el,
+            type == 'radial'
+              ? {
+                  fx: fx,
+                  fy: fy,
+                }
+              : {
+                  x1: vector[0],
+                  y1: vector[1],
+                  x2: vector[2],
+                  y2: vector[3],
+                  gradientTransform: element.matrix.invert(),
+                }
+          )
+          SVG.defs.appendChild(el)
           for (var i = 0, ii = dots.length; i < ii; i++) {
-            el.appendChild($("stop", {
-              offset: dots[i].offset ? dots[i].offset : i ? "100%" : "0%",
-              "stop-color": dots[i].color || "#fff",
-              "stop-opacity": isFinite(dots[i].opacity) ? dots[i].opacity : 1
-            }));
+            el.appendChild(
+              $('stop', {
+                offset: dots[i].offset ? dots[i].offset : i ? '100%' : '0%',
+                'stop-color': dots[i].color || '#fff',
+                'stop-opacity': isFinite(dots[i].opacity) ? dots[i].opacity : 1,
+              })
+            )
           }
         }
       }
       $(o, {
         fill: fillurl(id),
         opacity: 1,
-        "fill-opacity": 1
-      });
-      s.fill = E;
-      s.opacity = 1;
-      s.fillOpacity = 1;
-      return 1;
+        'fill-opacity': 1,
+      })
+      s.fill = E
+      s.opacity = 1
+      s.fillOpacity = 1
+      return 1
     },
     isIE9or10 = function () {
-      var mode = document.documentMode;
-      return mode && (mode === 9 || mode === 10);
+      var mode = document.documentMode
+      return mode && (mode === 9 || mode === 10)
     },
     fillurl = function (id) {
       //SLATEBOX - always make the fillurl relative to the page, makes svg exports work
-      return "url('#" + id + "')";
+      return "url('#" + id + "')"
       // if (isIE9or10()) {
       //     return "url('#" + id + "')";
       // }
@@ -148,21 +161,24 @@ export const Raphael = function () {
     },
     //SLATEBOX - edit for image filling (not tiling patterns) of path elements
     updatePosition = function (o) {
-      if (!o.data("relativeFill")) {
-        var bbox = o.getBBox(1);
-        $(o.pattern, { patternTransform: o.matrix.invert() + " translate(" + bbox.x + "," + bbox.y + ")" });
+      if (!o.data('relativeFill')) {
+        var bbox = o.getBBox(1)
+        $(o.pattern, {
+          patternTransform:
+            o.matrix.invert() + ' translate(' + bbox.x + ',' + bbox.y + ')',
+        })
       }
     },
     addArrow = function (o, value, isEnd) {
-      if (o.type == "path") {
-        var values = Str(value).toLowerCase().split("-"),
+      if (o.type == 'path') {
+        var values = Str(value).toLowerCase().split('-'),
           p = o.paper,
-          se = isEnd ? "end" : "start",
+          se = isEnd ? 'end' : 'start',
           node = o.node,
           attrs = o.attrs,
-          stroke = attrs["stroke-width"],
+          stroke = attrs['stroke-width'],
           i = values.length,
-          type = "classic",
+          type = 'classic',
           from,
           to,
           dx,
@@ -170,480 +186,576 @@ export const Raphael = function () {
           attr,
           w = 3,
           h = 3,
-          t = 5;
+          t = 5
         while (i--) {
           switch (values[i]) {
-            case "block":
-            case "classic":
-            case "oval":
-            case "diamond":
-            case "open":
-            case "none":
-              type = values[i];
-              break;
-            case "wide": h = 5; break;
-            case "narrow": h = 2; break;
-            case "long": w = 5; break;
-            case "short": w = 2; break;
+            case 'block':
+            case 'classic':
+            case 'oval':
+            case 'diamond':
+            case 'open':
+            case 'none':
+              type = values[i]
+              break
+            case 'wide':
+              h = 5
+              break
+            case 'narrow':
+              h = 2
+              break
+            case 'long':
+              w = 5
+              break
+            case 'short':
+              w = 2
+              break
           }
         }
-        if (type == "open") {
-          w += 2;
-          h += 2;
-          t += 2;
-          dx = 1;
-          refX = isEnd ? 4 : 1;
+        if (type == 'open') {
+          w += 2
+          h += 2
+          t += 2
+          dx = 1
+          refX = isEnd ? 4 : 1
           attr = {
-            fill: "none",
-            stroke: attrs.stroke
-          };
+            fill: 'none',
+            stroke: attrs.stroke,
+          }
         } else {
-          refX = dx = w / 2;
+          refX = dx = w / 2
           attr = {
             fill: attrs.stroke,
-            stroke: "none"
-          };
+            stroke: 'none',
+          }
         }
         if (o._.arrows) {
           if (isEnd) {
-            o._.arrows.endPath && markerCounter[o._.arrows.endPath]--;
-            o._.arrows.endMarker && markerCounter[o._.arrows.endMarker]--;
+            o._.arrows.endPath && markerCounter[o._.arrows.endPath]--
+            o._.arrows.endMarker && markerCounter[o._.arrows.endMarker]--
           } else {
-            o._.arrows.startPath && markerCounter[o._.arrows.startPath]--;
-            o._.arrows.startMarker && markerCounter[o._.arrows.startMarker]--;
+            o._.arrows.startPath && markerCounter[o._.arrows.startPath]--
+            o._.arrows.startMarker && markerCounter[o._.arrows.startMarker]--
           }
         } else {
-          o._.arrows = {};
+          o._.arrows = {}
         }
-        if (type != "none") {
-          var pathId = "raphael-marker-" + type,
-            markerId = "raphael-marker-" + se + type + w + h + "-obj" + o.id;
+        if (type != 'none') {
+          var pathId = 'raphael-marker-' + type,
+            markerId = 'raphael-marker-' + se + type + w + h + '-obj' + o.id
           //SLATEBOX - addition to make sure arrows show in svg extract
-          if (!R._g.doc.getElementById(pathId) || (R._g.doc.getElementById(pathId) && getComputedStyle(R._g.doc.getElementById(pathId)).display === "none")) {
-            p.defs.appendChild($($("path"), {
-              "stroke-linecap": "round",
-              d: markers[type],
-              id: pathId
-            }));
-            markerCounter[pathId] = 1;
+          if (
+            !R._g.doc.getElementById(pathId) ||
+            (R._g.doc.getElementById(pathId) &&
+              getComputedStyle(R._g.doc.getElementById(pathId)).display ===
+                'none')
+          ) {
+            p.defs.appendChild(
+              $($('path'), {
+                'stroke-linecap': 'round',
+                d: markers[type],
+                id: pathId,
+              })
+            )
+            markerCounter[pathId] = 1
           } else {
-            markerCounter[pathId]++;
+            markerCounter[pathId]++
           }
           var marker = R._g.doc.getElementById(markerId),
-            use;
+            use
           if (!marker) {
-            marker = $($("marker"), {
+            marker = $($('marker'), {
               id: markerId,
               markerHeight: h,
               markerWidth: w,
-              orient: "auto",
+              orient: 'auto',
               refX: refX,
-              refY: h / 2
-            });
-            use = $($("use"), {
-              "xlink:href": "#" + pathId,
-              transform: (isEnd ? "rotate(180 " + w / 2 + " " + h / 2 + ") " : E) + "scale(" + w / t + "," + h / t + ")",
-              "stroke-width": (1 / ((w / t + h / t) / 2)).toFixed(4)
-            });
-            marker.appendChild(use);
-            p.defs.appendChild(marker);
-            markerCounter[markerId] = 1;
+              refY: h / 2,
+            })
+            use = $($('use'), {
+              'xlink:href': '#' + pathId,
+              transform:
+                (isEnd ? 'rotate(180 ' + w / 2 + ' ' + h / 2 + ') ' : E) +
+                'scale(' +
+                w / t +
+                ',' +
+                h / t +
+                ')',
+              'stroke-width': (1 / ((w / t + h / t) / 2)).toFixed(4),
+            })
+            marker.appendChild(use)
+            p.defs.appendChild(marker)
+            markerCounter[markerId] = 1
           } else {
-            markerCounter[markerId]++;
-            use = marker.getElementsByTagName("use")[0];
+            markerCounter[markerId]++
+            use = marker.getElementsByTagName('use')[0]
           }
-          $(use, attr);
-          var delta = dx * (type != "diamond" && type != "oval");
+          $(use, attr)
+          var delta = dx * (type != 'diamond' && type != 'oval')
           if (isEnd) {
-            from = o._.arrows.startdx * stroke || 0;
-            to = R.getTotalLength(attrs.path) - delta * stroke;
+            from = o._.arrows.startdx * stroke || 0
+            to = R.getTotalLength(attrs.path) - delta * stroke
           } else {
-            from = delta * stroke;
-            to = R.getTotalLength(attrs.path) - (o._.arrows.enddx * stroke || 0);
+            from = delta * stroke
+            to = R.getTotalLength(attrs.path) - (o._.arrows.enddx * stroke || 0)
           }
-          attr = {};
-          attr["marker-" + se] = "url(#" + markerId + ")";
+          attr = {}
+          attr['marker-' + se] = 'url(#' + markerId + ')'
           if (to || from) {
-            attr.d = R.getSubpath(attrs.path, from, to);
+            attr.d = R.getSubpath(attrs.path, from, to)
           }
-          $(node, attr);
-          o._.arrows[se + "Path"] = pathId;
-          o._.arrows[se + "Marker"] = markerId;
-          o._.arrows[se + "dx"] = delta;
-          o._.arrows[se + "Type"] = type;
-          o._.arrows[se + "String"] = value;
+          $(node, attr)
+          o._.arrows[se + 'Path'] = pathId
+          o._.arrows[se + 'Marker'] = markerId
+          o._.arrows[se + 'dx'] = delta
+          o._.arrows[se + 'Type'] = type
+          o._.arrows[se + 'String'] = value
         } else {
           if (isEnd) {
-            from = o._.arrows.startdx * stroke || 0;
-            to = R.getTotalLength(attrs.path) - from;
+            from = o._.arrows.startdx * stroke || 0
+            to = R.getTotalLength(attrs.path) - from
           } else {
-            from = 0;
-            to = R.getTotalLength(attrs.path) - (o._.arrows.enddx * stroke || 0);
+            from = 0
+            to = R.getTotalLength(attrs.path) - (o._.arrows.enddx * stroke || 0)
           }
-          o._.arrows[se + "Path"] && $(node, { d: R.getSubpath(attrs.path, from, to) });
-          delete o._.arrows[se + "Path"];
-          delete o._.arrows[se + "Marker"];
-          delete o._.arrows[se + "dx"];
-          delete o._.arrows[se + "Type"];
-          delete o._.arrows[se + "String"];
+          o._.arrows[se + 'Path'] &&
+            $(node, { d: R.getSubpath(attrs.path, from, to) })
+          delete o._.arrows[se + 'Path']
+          delete o._.arrows[se + 'Marker']
+          delete o._.arrows[se + 'dx']
+          delete o._.arrows[se + 'Type']
+          delete o._.arrows[se + 'String']
         }
-        for (attr in markerCounter) if (markerCounter[has](attr) && !markerCounter[attr]) {
-          var item = R._g.doc.getElementById(attr);
-          item && item.parentNode.removeChild(item);
-        }
+        for (attr in markerCounter)
+          if (markerCounter[has](attr) && !markerCounter[attr]) {
+            var item = R._g.doc.getElementById(attr)
+            item && item.parentNode.removeChild(item)
+          }
       }
     },
     dasharray = {
-      "-": [3, 1],
-      ".": [1, 1],
-      "-.": [3, 1, 1, 1],
-      "-..": [3, 1, 1, 1, 1, 1],
-      ". ": [1, 3],
-      "- ": [4, 3],
-      "--": [8, 3],
-      "- .": [4, 3, 1, 3],
-      "--.": [8, 3, 1, 3],
-      "--..": [8, 3, 1, 3, 1, 3]
+      '-': [3, 1],
+      '.': [1, 1],
+      '-.': [3, 1, 1, 1],
+      '-..': [3, 1, 1, 1, 1, 1],
+      '. ': [1, 3],
+      '- ': [4, 3],
+      '--': [8, 3],
+      '- .': [4, 3, 1, 3],
+      '--.': [8, 3, 1, 3],
+      '--..': [8, 3, 1, 3, 1, 3],
     },
     addDashes = function (o, value, params) {
-      value = dasharray[Str(value).toLowerCase()];
+      value = dasharray[Str(value).toLowerCase()]
       if (value) {
-        var width = o.attrs["stroke-width"] || "1",
-          butt = { round: width, square: width, butt: 0 }[o.attrs["stroke-linecap"] || params["stroke-linecap"]] || 0,
+        var width = o.attrs['stroke-width'] || '1',
+          butt =
+            { round: width, square: width, butt: 0 }[
+              o.attrs['stroke-linecap'] || params['stroke-linecap']
+            ] || 0,
           dashes = [],
-          i = value.length;
+          i = value.length
         while (i--) {
-          dashes[i] = value[i] * width + ((i % 2) ? 1 : -1) * butt;
+          dashes[i] = value[i] * width + (i % 2 ? 1 : -1) * butt
         }
-        $(o.node, { "stroke-dasharray": dashes.join(",") });
-      }
-      else {
-        $(o.node, { "stroke-dasharray": "none" });
+        $(o.node, { 'stroke-dasharray': dashes.join(',') })
+      } else {
+        $(o.node, { 'stroke-dasharray': 'none' })
       }
     },
     setFillAndStroke = function (o, params) {
       var node = o.node,
         attrs = o.attrs,
-        vis = node.style.visibility;
-      node.style.visibility = "hidden";
+        vis = node.style.visibility
+      node.style.visibility = 'hidden'
       for (var att in params) {
         if (params[has](att)) {
           if (!R._availableAttrs[has](att)) {
-            continue;
+            continue
           }
-          var value = params[att];
-          attrs[att] = value;
+          var value = params[att]
+          attrs[att] = value
           switch (att) {
-            case "blur":
-              o.blur(value);
-              break;
-            case "title":
-              var title = node.getElementsByTagName("title");
+            case 'blur':
+              o.blur(value)
+              break
+            case 'title':
+              var title = node.getElementsByTagName('title')
 
               // Use the existing <title>.
               if (title.length && (title = title[0])) {
-                title.firstChild.nodeValue = value;
+                title.firstChild.nodeValue = value
               } else {
-                title = $("title");
-                var val = R._g.doc.createTextNode(value);
-                title.appendChild(val);
-                node.appendChild(title);
+                title = $('title')
+                var val = R._g.doc.createTextNode(value)
+                title.appendChild(val)
+                node.appendChild(title)
               }
-              break;
-            case "href":
-            case "target":
-              var pn = node.parentNode;
-              if (pn.tagName.toLowerCase() != "a") {
-                var hl = $("a");
-                pn.insertBefore(hl, node);
-                hl.appendChild(node);
-                pn = hl;
+              break
+            case 'href':
+            case 'target':
+              var pn = node.parentNode
+              if (pn.tagName.toLowerCase() != 'a') {
+                var hl = $('a')
+                pn.insertBefore(hl, node)
+                hl.appendChild(node)
+                pn = hl
               }
-              if (att == "target") {
-                pn.setAttributeNS(xlink, "show", value == "blank" ? "new" : value);
+              if (att == 'target') {
+                pn.setAttributeNS(
+                  xlink,
+                  'show',
+                  value == 'blank' ? 'new' : value
+                )
               } else {
-                pn.setAttributeNS(xlink, att, value);
+                pn.setAttributeNS(xlink, att, value)
               }
-              break;
-            case "cursor":
-              node.style.cursor = value;
-              break;
-            case "transform":
-              o.transform(value);
-              break;
-            case "arrow-start":
-              addArrow(o, value);
-              break;
-            case "arrow-end":
-              addArrow(o, value, 1);
-              break;
-            case "clip-rect":
-              var rect = Str(value).split(separator);
+              break
+            case 'cursor':
+              node.style.cursor = value
+              break
+            case 'transform':
+              o.transform(value)
+              break
+            case 'arrow-start':
+              addArrow(o, value)
+              break
+            case 'arrow-end':
+              addArrow(o, value, 1)
+              break
+            case 'clip-rect':
+              var rect = Str(value).split(separator)
               if (rect.length == 4) {
-                o.clip && o.clip.parentNode.parentNode.removeChild(o.clip.parentNode);
-                var el = $("clipPath"),
-                  rc = $("rect");
-                el.id = R.createUUID();
+                o.clip &&
+                  o.clip.parentNode.parentNode.removeChild(o.clip.parentNode)
+                var el = $('clipPath'),
+                  rc = $('rect')
+                el.id = R.createUUID()
                 $(rc, {
                   x: rect[0],
                   y: rect[1],
                   width: rect[2],
-                  height: rect[3]
-                });
-                el.appendChild(rc);
-                o.paper.defs.appendChild(el);
-                $(node, { "clip-path": "url(#" + el.id + ")" });
-                o.clip = rc;
+                  height: rect[3],
+                })
+                el.appendChild(rc)
+                o.paper.defs.appendChild(el)
+                $(node, { 'clip-path': 'url(#' + el.id + ')' })
+                o.clip = rc
               }
               if (!value) {
-                var path = node.getAttribute("clip-path");
+                var path = node.getAttribute('clip-path')
                 if (path) {
-                  var clip = R._g.doc.getElementById(path.replace(/(^url\(#|\)$)/g, E));
-                  clip && clip.parentNode.removeChild(clip);
-                  $(node, { "clip-path": E });
-                  delete o.clip;
+                  var clip = R._g.doc.getElementById(
+                    path.replace(/(^url\(#|\)$)/g, E)
+                  )
+                  clip && clip.parentNode.removeChild(clip)
+                  $(node, { 'clip-path': E })
+                  delete o.clip
                 }
               }
-              break;
-            case "path":
-
-              //SLATEBOX - changed "$(node, {d: value ? attrs.path = R._pathToAbsolute(value) : "M0,0"});" 
+              break
+            case 'path':
+              //SLATEBOX - changed "$(node, {d: value ? attrs.path = R._pathToAbsolute(value) : "M0,0"});"
               //to $(node, {d: value ? attrs.path = value : "M0,0"}); in the line below -->
-              if (o.type == "path") {
-                $(node, { d: value ? attrs.path = value : "M0,0" }); // <--
-                o._.dirty = 1;
+              if (o.type == 'path') {
+                $(node, { d: value ? (attrs.path = value) : 'M0,0' }) // <--
+                o._.dirty = 1
                 if (o._.arrows) {
-                  "startString" in o._.arrows && addArrow(o, o._.arrows.startString);
-                  "endString" in o._.arrows && addArrow(o, o._.arrows.endString, 1);
+                  'startString' in o._.arrows &&
+                    addArrow(o, o._.arrows.startString)
+                  'endString' in o._.arrows &&
+                    addArrow(o, o._.arrows.endString, 1)
                 }
               }
-              break;
-            case "width":
-              node.setAttribute(att, value);
-              o._.dirty = 1;
+              break
+            case 'width':
+              node.setAttribute(att, value)
+              o._.dirty = 1
               if (attrs.fx) {
-                att = "x";
-                value = attrs.x;
+                att = 'x'
+                value = attrs.x
               } else {
-                break;
+                break
               }
-            case "x":
+            case 'x':
               if (attrs.fx) {
-                value = -attrs.x - (attrs.width || 0);
+                value = -attrs.x - (attrs.width || 0)
               }
-            case "rx":
-              if (att == "rx" && o.type == "rect") {
-                break;
+            case 'rx':
+              if (att == 'rx' && o.type == 'rect') {
+                break
               }
-            case "cx":
-              node.setAttribute(att, value);
-              o.pattern && updatePosition(o);
-              o._.dirty = 1;
-              break;
-            case "height":
-              node.setAttribute(att, value);
-              o._.dirty = 1;
+            case 'cx':
+              node.setAttribute(att, value)
+              o.pattern && updatePosition(o)
+              o._.dirty = 1
+              break
+            case 'height':
+              node.setAttribute(att, value)
+              o._.dirty = 1
               if (attrs.fy) {
-                att = "y";
-                value = attrs.y;
+                att = 'y'
+                value = attrs.y
               } else {
-                break;
+                break
               }
-            case "y":
+            case 'y':
               if (attrs.fy) {
-                value = -attrs.y - (attrs.height || 0);
+                value = -attrs.y - (attrs.height || 0)
               }
-            case "ry":
-              if (att == "ry" && o.type == "rect") {
-                break;
+            case 'ry':
+              if (att == 'ry' && o.type == 'rect') {
+                break
               }
-            case "cy":
-              node.setAttribute(att, value);
-              o.pattern && updatePosition(o);
-              o._.dirty = 1;
-              break;
-            case "r":
-              if (o.type == "rect") {
-                $(node, { rx: value, ry: value });
+            case 'cy':
+              node.setAttribute(att, value)
+              o.pattern && updatePosition(o)
+              o._.dirty = 1
+              break
+            case 'r':
+              if (o.type == 'rect') {
+                $(node, { rx: value, ry: value })
               } else {
-                node.setAttribute(att, value);
+                node.setAttribute(att, value)
               }
-              o._.dirty = 1;
-              break;
-            case "src":
-              if (o.type == "image") {
-                node.setAttributeNS(xlink, "href", value);
+              o._.dirty = 1
+              break
+            case 'src':
+              if (o.type == 'image') {
+                node.setAttributeNS(xlink, 'href', value)
               }
-              break;
-            case "stroke-width":
+              break
+            case 'stroke-width':
               if (o._.sx != 1 || o._.sy != 1) {
-                value /= mmax(abs(o._.sx), abs(o._.sy)) || 1;
+                value /= mmax(abs(o._.sx), abs(o._.sy)) || 1
               }
-              node.setAttribute(att, value);
-              if (attrs["stroke-dasharray"]) {
-                addDashes(o, attrs["stroke-dasharray"], params);
+              node.setAttribute(att, value)
+              if (attrs['stroke-dasharray']) {
+                addDashes(o, attrs['stroke-dasharray'], params)
               }
               if (o._.arrows) {
-                "startString" in o._.arrows && addArrow(o, o._.arrows.startString);
-                "endString" in o._.arrows && addArrow(o, o._.arrows.endString, 1);
+                'startString' in o._.arrows &&
+                  addArrow(o, o._.arrows.startString)
+                'endString' in o._.arrows &&
+                  addArrow(o, o._.arrows.endString, 1)
               }
-              break;
-            case "stroke-dasharray":
-              addDashes(o, value, params);
-              break;
-            case "fill":
+              break
+            case 'stroke-dasharray':
+              addDashes(o, value, params)
+              break
+            case 'fill':
               //SLATEBOX a few edits for image filling (not tiling patterns) of path elements
-              var relativeFill = o.data("relativeFill"),
-                isURL = Str(value).match(R._ISURL);
+              var relativeFill = o.data('relativeFill'),
+                isURL = Str(value).match(R._ISURL)
               if (isURL) {
-                if (value.indexOf("(#") > -1) {
+                if (value.indexOf('(#') > -1) {
                   //internal reference
-                  $(node, { fill: value });
+                  $(node, { fill: value })
                 } else {
                   //image, external
-                  el = $("pattern");
-                  var ig = $("image");
-                  el.id = R.createUUID();
-                  $(el, { x: 0, y: 0, patternUnits: relativeFill ? "objectBoundingBox" : "userSpaceOnUse", height: 1, width: 1 });
-                  $(ig, { x: 0, y: 0, "xlink:href": isURL[1] });
-                  el.appendChild(ig);
-
-                  (function (el) {
+                  el = $('pattern')
+                  var ig = $('image')
+                  el.id = R.createUUID()
+                  $(el, {
+                    x: 0,
+                    y: 0,
+                    patternUnits: relativeFill
+                      ? 'objectBoundingBox'
+                      : 'userSpaceOnUse',
+                    height: 1,
+                    width: 1,
+                  })
+                  $(ig, { x: 0, y: 0, 'xlink:href': isURL[1] })
+                  el.appendChild(ig)
+                  ;(function (el) {
                     R._preload(isURL[1], function () {
                       var w = this.offsetWidth,
-                        h = this.offsetHeight;
-                      var tempPath = o.paper.path(o.attr("path"));
-                      var bbox = tempPath.getBBox();
-                      $(el, { width: relativeFill ? 1 : w, height: relativeFill ? 1 : h });
+                        h = this.offsetHeight
+                      var tempPath = o.paper.path(o.attr('path'))
+                      var bbox = tempPath.getBBox()
+                      $(el, {
+                        width: relativeFill ? 1 : w,
+                        height: relativeFill ? 1 : h,
+                      })
                       //SLATEBOX - image fixes for FF/safari
-                      $(ig, { width: relativeFill ? (o.imageOrigWidth || bbox.width) : w, height: relativeFill ? (o.imageOrigHeight || bbox.height) : h });
-                      delete o.imageOrigHeight;
-                      delete o.imageOrigWidth;
-                      tempPath.remove();
+                      $(ig, {
+                        width: relativeFill
+                          ? o.imageOrigWidth || bbox.width
+                          : w,
+                        height: relativeFill
+                          ? o.imageOrigHeight || bbox.height
+                          : h,
+                      })
+                      delete o.imageOrigHeight
+                      delete o.imageOrigWidth
+                      tempPath.remove()
                       //end image fixes for SB
-                    });
-                  })(el);
-                  o.paper.defs.appendChild(el);
-                  $(node, { fill: "url(#" + el.id + ")" });
-                  o.pattern = el;
-                  o.pattern && updatePosition(o);
+                    })
+                  })(el)
+                  o.paper.defs.appendChild(el)
+                  $(node, { fill: 'url(#' + el.id + ')' })
+                  o.pattern = el
+                  o.pattern && updatePosition(o)
                 }
 
-                break;
+                break
               }
-              var clr = R.getRGB(value);
+              var clr = R.getRGB(value)
               if (!clr.error) {
-                delete params.gradient;
-                delete attrs.gradient;
-                !R.is(attrs.opacity, "undefined") &&
-                  R.is(params.opacity, "undefined") &&
-                  $(node, { opacity: attrs.opacity });
-                !R.is(attrs["fill-opacity"], "undefined") &&
-                  R.is(params["fill-opacity"], "undefined") &&
-                  $(node, { "fill-opacity": attrs["fill-opacity"] });
-              } else if ((o.type == "circle" || o.type == "ellipse" || Str(value).charAt() != "r") && addGradientFill(o, value)) {
-                if ("opacity" in attrs || "fill-opacity" in attrs) {
-                  var gradient = R._g.doc.getElementById(node.getAttribute("fill").replace(/^url\(#|\)$/g, E));
+                delete params.gradient
+                delete attrs.gradient
+                !R.is(attrs.opacity, 'undefined') &&
+                  R.is(params.opacity, 'undefined') &&
+                  $(node, { opacity: attrs.opacity })
+                !R.is(attrs['fill-opacity'], 'undefined') &&
+                  R.is(params['fill-opacity'], 'undefined') &&
+                  $(node, { 'fill-opacity': attrs['fill-opacity'] })
+              } else if (
+                (o.type == 'circle' ||
+                  o.type == 'ellipse' ||
+                  Str(value).charAt() != 'r') &&
+                addGradientFill(o, value)
+              ) {
+                if ('opacity' in attrs || 'fill-opacity' in attrs) {
+                  var gradient = R._g.doc.getElementById(
+                    node.getAttribute('fill').replace(/^url\(#|\)$/g, E)
+                  )
                   if (gradient) {
-                    var stops = gradient.getElementsByTagName("stop");
-                    $(stops[stops.length - 1], { "stop-opacity": ("opacity" in attrs ? attrs.opacity : 1) * ("fill-opacity" in attrs ? attrs["fill-opacity"] : 1) });
+                    var stops = gradient.getElementsByTagName('stop')
+                    $(stops[stops.length - 1], {
+                      'stop-opacity':
+                        ('opacity' in attrs ? attrs.opacity : 1) *
+                        ('fill-opacity' in attrs ? attrs['fill-opacity'] : 1),
+                    })
                   }
                 }
-                attrs.gradient = value;
-                attrs.fill = "none";
-                break;
+                attrs.gradient = value
+                attrs.fill = 'none'
+                break
               }
-              clr[has]("opacity") && $(node, { "fill-opacity": clr.opacity > 1 ? clr.opacity / 100 : clr.opacity });
-            case "stroke":
-              clr = R.getRGB(value);
-              node.setAttribute(att, clr.hex);
-              att == "stroke" && clr[has]("opacity") && $(node, { "stroke-opacity": clr.opacity > 1 ? clr.opacity / 100 : clr.opacity });
-              if (att == "stroke" && o._.arrows) {
-                "startString" in o._.arrows && addArrow(o, o._.arrows.startString);
-                "endString" in o._.arrows && addArrow(o, o._.arrows.endString, 1);
+              clr[has]('opacity') &&
+                $(node, {
+                  'fill-opacity':
+                    clr.opacity > 1 ? clr.opacity / 100 : clr.opacity,
+                })
+            case 'stroke':
+              clr = R.getRGB(value)
+              node.setAttribute(att, clr.hex)
+              att == 'stroke' &&
+                clr[has]('opacity') &&
+                $(node, {
+                  'stroke-opacity':
+                    clr.opacity > 1 ? clr.opacity / 100 : clr.opacity,
+                })
+              if (att == 'stroke' && o._.arrows) {
+                'startString' in o._.arrows &&
+                  addArrow(o, o._.arrows.startString)
+                'endString' in o._.arrows &&
+                  addArrow(o, o._.arrows.endString, 1)
               }
-              break;
-            case "gradient":
-              (o.type == "circle" || o.type == "ellipse" || Str(value).charAt() != "r") && addGradientFill(o, value);
-              break;
-            case "opacity":
-              if (attrs.gradient && !attrs[has]("stroke-opacity")) {
-                $(node, { "stroke-opacity": value > 1 ? value / 100 : value });
+              break
+            case 'gradient':
+              ;(o.type == 'circle' ||
+                o.type == 'ellipse' ||
+                Str(value).charAt() != 'r') &&
+                addGradientFill(o, value)
+              break
+            case 'opacity':
+              if (attrs.gradient && !attrs[has]('stroke-opacity')) {
+                $(node, { 'stroke-opacity': value > 1 ? value / 100 : value })
               }
             // fall
-            case "fill-opacity":
+            case 'fill-opacity':
               if (attrs.gradient) {
-                gradient = R._g.doc.getElementById(node.getAttribute("fill").replace(/^url\(#|\)$/g, E));
+                gradient = R._g.doc.getElementById(
+                  node.getAttribute('fill').replace(/^url\(#|\)$/g, E)
+                )
                 if (gradient) {
-                  stops = gradient.getElementsByTagName("stop");
-                  $(stops[stops.length - 1], { "stop-opacity": value });
+                  stops = gradient.getElementsByTagName('stop')
+                  $(stops[stops.length - 1], { 'stop-opacity': value })
                 }
-                break;
+                break
               }
             default:
-              att == "font-size" && (value = toInt(value, 10) + "px");
+              att == 'font-size' && (value = toInt(value, 10) + 'px')
               var cssrule = att.replace(/(\-.)/g, function (w) {
-                return w.substring(1).toUpperCase();
-              });
-              node.style[cssrule] = value;
-              o._.dirty = 1;
-              node.setAttribute(att, value);
-              break;
+                return w.substring(1).toUpperCase()
+              })
+              node.style[cssrule] = value
+              o._.dirty = 1
+              node.setAttribute(att, value)
+              break
           }
         }
       }
 
-      tuneText(o, params);
-      node.style.visibility = vis;
+      tuneText(o, params)
+      node.style.visibility = vis
     },
     leading = 1.2,
     tuneText = function (el, params) {
-      if (el.type != "text" || !(params[has]("text") || params[has]("font") || params[has]("font-size") || params[has]("x") || params[has]("y"))) {
-        return;
+      if (
+        el.type != 'text' ||
+        !(
+          params[has]('text') ||
+          params[has]('font') ||
+          params[has]('font-size') ||
+          params[has]('x') ||
+          params[has]('y')
+        )
+      ) {
+        return
       }
       var a = el.attrs,
         node = el.node,
-        fontSize = node.firstChild ? toInt(R._g.doc.defaultView.getComputedStyle(node.firstChild, E).getPropertyValue("font-size"), 10) : 10;
+        fontSize = node.firstChild
+          ? toInt(
+              R._g.doc.defaultView
+                .getComputedStyle(node.firstChild, E)
+                .getPropertyValue('font-size'),
+              10
+            )
+          : 10
 
-      if (params[has]("text")) {
-        a.text = params.text;
+      if (params[has]('text')) {
+        a.text = params.text
         while (node.firstChild) {
-          node.removeChild(node.firstChild);
+          node.removeChild(node.firstChild)
         }
-        var texts = Str(params.text).split("\n"),
+        var texts = Str(params.text).split('\n'),
           tspans = [],
-          tspan;
+          tspan
         for (var i = 0, ii = texts.length; i < ii; i++) {
-          tspan = $("tspan");
-          i && $(tspan, { dy: fontSize * leading, x: a.x });
-          tspan.appendChild(R._g.doc.createTextNode(texts[i]));
-          node.appendChild(tspan);
-          tspans[i] = tspan;
+          tspan = $('tspan')
+          i && $(tspan, { dy: fontSize * leading, x: a.x })
+          tspan.appendChild(R._g.doc.createTextNode(texts[i]))
+          node.appendChild(tspan)
+          tspans[i] = tspan
         }
       } else {
-        tspans = node.getElementsByTagName("tspan");
-        for (i = 0, ii = tspans.length; i < ii; i++) if (i) {
-          $(tspans[i], { dy: fontSize * leading, x: a.x });
-        } else {
-          $(tspans[0], { dy: 0 });
-        }
+        tspans = node.getElementsByTagName('tspan')
+        for (i = 0, ii = tspans.length; i < ii; i++)
+          if (i) {
+            $(tspans[i], { dy: fontSize * leading, x: a.x })
+          } else {
+            $(tspans[0], { dy: 0 })
+          }
       }
-      $(node, { x: a.x, y: a.y });
-      el._.dirty = 1;
+      $(node, { x: a.x, y: a.y })
+      el._.dirty = 1
       var bb = el._getBBox(),
-        dif = a.y - (bb.y + bb.height / 2);
-      dif && R.is(dif, "finite") && $(tspans[0], { dy: dif });
+        dif = a.y - (bb.y + bb.height / 2)
+      dif && R.is(dif, 'finite') && $(tspans[0], { dy: dif })
     },
     getRealNode = function (node) {
-      if (node.parentNode && node.parentNode.tagName.toLowerCase() === "a") {
-        return node.parentNode;
+      if (node.parentNode && node.parentNode.tagName.toLowerCase() === 'a') {
+        return node.parentNode
       } else {
-        return node;
+        return node
       }
     },
     Element = function (node, svg) {
       var X = 0,
-        Y = 0;
+        Y = 0
       /*\
        * Element.node
        [ property (object) ]
@@ -658,7 +770,7 @@ export const Raphael = function () {
        |     c.attr("fill", "red");
        | };
       \*/
-      this[0] = this.node = node;
+      this[0] = this.node = node
       /*\
        * Element.raphael
        [ property (object) ]
@@ -671,7 +783,7 @@ export const Raphael = function () {
        |     this.attr({fill: this.paper.raphael.hsb2rgb(hsb).hex});
        | }
       \*/
-      node.raphael = true;
+      node.raphael = true
       /*\
        * Element.id
        [ property (number) ]
@@ -679,19 +791,21 @@ export const Raphael = function () {
        * Unique id of the element. Especially useful when you want to listen to events of the element,
        * because all events are fired in format `<module>.<action>.<id>`. Also useful for @Paper.getById method.
       \*/
-      this.id = guid();
-      node.raphaelid = this.id;
+      this.id = guid()
+      node.raphaelid = this.id
 
       /**
-      * Method that returns a 5 letter/digit id, enough for 36^5 = 60466176 elements
-      * @returns {string} id
-      */
+       * Method that returns a 5 letter/digit id, enough for 36^5 = 60466176 elements
+       * @returns {string} id
+       */
       function guid() {
-        return ("0000" + (Math.random() * Math.pow(36, 5) << 0).toString(36)).slice(-5);
+        return (
+          '0000' + ((Math.random() * Math.pow(36, 5)) << 0).toString(36)
+        ).slice(-5)
       }
 
-      this.matrix = R.matrix();
-      this.realPath = null;
+      this.matrix = R.matrix()
+      this.realPath = null
       /*\
        * Element.paper
        [ property (object) ]
@@ -704,8 +818,8 @@ export const Raphael = function () {
        |         .attr({stroke: "red"});
        | }
       \*/
-      this.paper = svg;
-      this.attrs = this.attrs || {};
+      this.paper = svg
+      this.attrs = this.attrs || {}
       this._ = {
         transform: [],
         sx: 1,
@@ -713,43 +827,43 @@ export const Raphael = function () {
         deg: 0,
         dx: 0,
         dy: 0,
-        dirty: 1
-      };
-      !svg.bottom && (svg.bottom = this);
+        dirty: 1,
+      }
+      !svg.bottom && (svg.bottom = this)
       /*\
        * Element.prev
        [ property (object) ]
        **
        * Reference to the previous element in the hierarchy.
       \*/
-      this.prev = svg.top;
-      svg.top && (svg.top.next = this);
-      svg.top = this;
+      this.prev = svg.top
+      svg.top && (svg.top.next = this)
+      svg.top = this
       /*\
        * Element.next
        [ property (object) ]
        **
        * Reference to the next element in the hierarchy.
       \*/
-      this.next = null;
+      this.next = null
     },
-    elproto = R.el;
+    elproto = R.el
 
-  Element.prototype = elproto;
-  elproto.constructor = Element;
+  Element.prototype = elproto
+  elproto.constructor = Element
 
   R._engine.path = function (pathString, SVG) {
-    var el = $("path");
-    SVG.canvas && SVG.canvas.appendChild(el);
-    var p = new Element(el, SVG);
-    p.type = "path";
+    var el = $('path')
+    SVG.canvas && SVG.canvas.appendChild(el)
+    var p = new Element(el, SVG)
+    p.type = 'path'
     setFillAndStroke(p, {
-      fill: "none",
-      stroke: "#000",
-      path: pathString
-    });
-    return p;
-  };
+      fill: 'none',
+      stroke: '#000',
+      path: pathString,
+    })
+    return p
+  }
   /*\
    * Element.rotate
    [ method ]
@@ -766,23 +880,23 @@ export const Raphael = function () {
   \*/
   elproto.rotate = function (deg, cx, cy) {
     if (this.removed) {
-      return this;
+      return this
     }
-    deg = Str(deg).split(separator);
+    deg = Str(deg).split(separator)
     if (deg.length - 1) {
-      cx = toFloat(deg[1]);
-      cy = toFloat(deg[2]);
+      cx = toFloat(deg[1])
+      cy = toFloat(deg[2])
     }
-    deg = toFloat(deg[0]);
-    (cy == null) && (cx = cy);
+    deg = toFloat(deg[0])
+    cy == null && (cx = cy)
     if (cx == null || cy == null) {
-      var bbox = this.getBBox(1);
-      cx = bbox.x + bbox.width / 2;
-      cy = bbox.y + bbox.height / 2;
+      var bbox = this.getBBox(1)
+      cx = bbox.x + bbox.width / 2
+      cy = bbox.y + bbox.height / 2
     }
-    this.transform(this._.transform.concat([["r", deg, cx, cy]]));
-    return this;
-  };
+    this.transform(this._.transform.concat([['r', deg, cx, cy]]))
+    return this
+  }
   /*\
    * Element.scale
    [ method ]
@@ -800,25 +914,25 @@ export const Raphael = function () {
   \*/
   elproto.scale = function (sx, sy, cx, cy) {
     if (this.removed) {
-      return this;
+      return this
     }
-    sx = Str(sx).split(separator);
+    sx = Str(sx).split(separator)
     if (sx.length - 1) {
-      sy = toFloat(sx[1]);
-      cx = toFloat(sx[2]);
-      cy = toFloat(sx[3]);
+      sy = toFloat(sx[1])
+      cx = toFloat(sx[2])
+      cy = toFloat(sx[3])
     }
-    sx = toFloat(sx[0]);
-    (sy == null) && (sy = sx);
-    (cy == null) && (cx = cy);
+    sx = toFloat(sx[0])
+    sy == null && (sy = sx)
+    cy == null && (cx = cy)
     if (cx == null || cy == null) {
-      var bbox = this.getBBox(1);
+      var bbox = this.getBBox(1)
     }
-    cx = cx == null ? bbox.x + bbox.width / 2 : cx;
-    cy = cy == null ? bbox.y + bbox.height / 2 : cy;
-    this.transform(this._.transform.concat([["s", sx, sy, cx, cy]]));
-    return this;
-  };
+    cx = cx == null ? bbox.x + bbox.width / 2 : cx
+    cy = cy == null ? bbox.y + bbox.height / 2 : cy
+    this.transform(this._.transform.concat([['s', sx, sy, cx, cy]]))
+    return this
+  }
   /*\
    * Element.translate
    [ method ]
@@ -832,17 +946,17 @@ export const Raphael = function () {
   \*/
   elproto.translate = function (dx, dy) {
     if (this.removed) {
-      return this;
+      return this
     }
-    dx = Str(dx).split(separator);
+    dx = Str(dx).split(separator)
     if (dx.length - 1) {
-      dy = toFloat(dx[1]);
+      dy = toFloat(dx[1])
     }
-    dx = toFloat(dx[0]) || 0;
-    dy = +dy || 0;
-    this.transform(this._.transform.concat([["t", dx, dy]]));
-    return this;
-  };
+    dx = toFloat(dx[0]) || 0
+    dy = +dy || 0
+    this.transform(this._.transform.concat([['t', dx, dy]]))
+    return this
+  }
   /*\
    * Element.transform
    [ method ]
@@ -881,23 +995,23 @@ export const Raphael = function () {
    = (object) @Element
   \*/
   elproto.transform = function (tstr) {
-    var _ = this._;
+    var _ = this._
     if (tstr == null) {
-      return _.transform;
+      return _.transform
     }
-    R._extractTransform(this, tstr);
+    R._extractTransform(this, tstr)
 
-    this.clip && $(this.clip, { transform: this.matrix.invert() });
-    this.pattern && updatePosition(this);
-    this.node && $(this.node, { transform: this.matrix });
+    this.clip && $(this.clip, { transform: this.matrix.invert() })
+    this.pattern && updatePosition(this)
+    this.node && $(this.node, { transform: this.matrix })
 
     if (_.sx != 1 || _.sy != 1) {
-      var sw = this.attrs[has]("stroke-width") ? this.attrs["stroke-width"] : 1;
-      this.attr({ "stroke-width": sw });
+      var sw = this.attrs[has]('stroke-width') ? this.attrs['stroke-width'] : 1
+      this.attr({ 'stroke-width': sw })
     }
 
-    return this;
-  };
+    return this
+  }
   /*\
    * Element.hide
    [ method ]
@@ -906,9 +1020,9 @@ export const Raphael = function () {
    = (object) @Element
   \*/
   elproto.hide = function () {
-    if (!this.removed) this.node.style.display = "none";
-    return this;
-  };
+    if (!this.removed) this.node.style.display = 'none'
+    return this
+  }
   /*\
    * Element.show
    [ method ]
@@ -917,9 +1031,9 @@ export const Raphael = function () {
    = (object) @Element
   \*/
   elproto.show = function () {
-    if (!this.removed) this.node.style.display = "";
-    return this;
-  };
+    if (!this.removed) this.node.style.display = ''
+    return this
+  }
   /*\
    * Element.remove
    [ method ]
@@ -927,66 +1041,66 @@ export const Raphael = function () {
    * Removes element from the paper.
   \*/
   elproto.remove = function () {
-    var node = getRealNode(this.node);
+    var node = getRealNode(this.node)
     if (this.removed || !node.parentNode) {
-      return;
+      return
     }
-    var paper = this.paper;
-    paper.__set__ && paper.__set__.exclude(this);
-    eve.unbind("raphael.*.*." + this.id);
+    var paper = this.paper
+    paper.__set__ && paper.__set__.exclude(this)
+    eve.unbind('raphael.*.*.' + this.id)
     if (this.gradient) {
-      paper.defs.removeChild(this.gradient);
+      paper.defs.removeChild(this.gradient)
     }
-    R._tear(this, paper);
+    R._tear(this, paper)
 
-    node.parentNode.removeChild(node);
+    node.parentNode.removeChild(node)
 
     // Remove custom data for element
-    this.removeData();
+    this.removeData()
 
     for (var i in this) {
-      this[i] = typeof this[i] == "function" ? R._removedFactory(i) : null;
+      this[i] = typeof this[i] == 'function' ? R._removedFactory(i) : null
     }
-    this.removed = true;
-  };
+    this.removed = true
+  }
   elproto._getBBox = function () {
-    if (this.node.style.display == "none") {
-      this.show();
-      var hide = true;
+    if (this.node.style.display == 'none') {
+      this.show()
+      var hide = true
     }
     var canvasHidden = false,
-      containerStyle;
+      containerStyle
     if (this.paper.canvas.parentElement) {
-      containerStyle = this.paper.canvas.parentElement.style;
+      containerStyle = this.paper.canvas.parentElement.style
     } //IE10+ can't find parentElement
     else if (this.paper.canvas.parentNode) {
-      containerStyle = this.paper.canvas.parentNode.style;
+      containerStyle = this.paper.canvas.parentNode.style
     }
 
-    if (containerStyle && containerStyle.display == "none") {
-      canvasHidden = true;
-      containerStyle.display = "";
+    if (containerStyle && containerStyle.display == 'none') {
+      canvasHidden = true
+      containerStyle.display = ''
     }
-    var bbox = {};
+    var bbox = {}
     try {
-      bbox = this.node.getBBox();
+      bbox = this.node.getBBox()
     } catch (e) {
       // Firefox 3.0.x, 25.0.1 (probably more versions affected) play badly here - possible fix
       bbox = {
         x: this.node.clientLeft,
         y: this.node.clientTop,
         width: this.node.clientWidth,
-        height: this.node.clientHeight
+        height: this.node.clientHeight,
       }
     } finally {
-      bbox = bbox || {};
+      bbox = bbox || {}
       if (canvasHidden) {
-        containerStyle.display = "none";
+        containerStyle.display = 'none'
       }
     }
-    hide && this.hide();
-    return bbox;
-  };
+    hide && this.hide()
+    return bbox
+  }
   /*\
    * Element.attr
    [ method ]
@@ -1070,64 +1184,77 @@ export const Raphael = function () {
   \*/
   elproto.attr = function (name, value) {
     if (this.removed) {
-      return this;
+      return this
     }
     if (name == null) {
-      var res = {};
-      for (var a in this.attrs) if (this.attrs[has](a)) {
-        res[a] = this.attrs[a];
-      }
-      res.gradient && res.fill == "none" && (res.fill = res.gradient) && delete res.gradient;
-      res.transform = this._.transform;
-      return res;
+      var res = {}
+      for (var a in this.attrs)
+        if (this.attrs[has](a)) {
+          res[a] = this.attrs[a]
+        }
+      res.gradient &&
+        res.fill == 'none' &&
+        (res.fill = res.gradient) &&
+        delete res.gradient
+      res.transform = this._.transform
+      return res
     }
-    if (value == null && R.is(name, "string")) {
-      if (name == "fill" && this.attrs.fill == "none" && this.attrs.gradient) {
-        return this.attrs.gradient;
+    if (value == null && R.is(name, 'string')) {
+      if (name == 'fill' && this.attrs.fill == 'none' && this.attrs.gradient) {
+        return this.attrs.gradient
       }
-      if (name == "transform") {
-        return this._.transform;
+      if (name == 'transform') {
+        return this._.transform
       }
       var names = name.split(separator),
-        out = {};
+        out = {}
       for (var i = 0, ii = names.length; i < ii; i++) {
-        name = names[i];
+        name = names[i]
         if (name in this.attrs) {
-          out[name] = this.attrs[name];
-        } else if (R.is(this.paper.customAttributes[name], "function")) {
-          out[name] = this.paper.customAttributes[name].def;
+          out[name] = this.attrs[name]
+        } else if (R.is(this.paper.customAttributes[name], 'function')) {
+          out[name] = this.paper.customAttributes[name].def
         } else {
-          out[name] = R._availableAttrs[name];
+          out[name] = R._availableAttrs[name]
         }
       }
-      return ii - 1 ? out : out[names[0]];
+      return ii - 1 ? out : out[names[0]]
     }
-    if (value == null && R.is(name, "array")) {
-      out = {};
+    if (value == null && R.is(name, 'array')) {
+      out = {}
       for (i = 0, ii = name.length; i < ii; i++) {
-        out[name[i]] = this.attr(name[i]);
+        out[name[i]] = this.attr(name[i])
       }
-      return out;
+      return out
     }
     if (value != null) {
-      var params = {};
-      params[name] = value;
-    } else if (name != null && R.is(name, "object")) {
-      params = name;
+      var params = {}
+      params[name] = value
+    } else if (name != null && R.is(name, 'object')) {
+      params = name
     }
     for (var key in params) {
-      eve("raphael.attr." + key + "." + this.id, this, params[key]);
+      eve('raphael.attr.' + key + '.' + this.id, this, params[key])
     }
-    for (key in this.paper.customAttributes) if (this.paper.customAttributes[has](key) && params[has](key) && R.is(this.paper.customAttributes[key], "function")) {
-      var par = this.paper.customAttributes[key].apply(this, [].concat(params[key]));
-      this.attrs[key] = params[key];
-      for (var subkey in par) if (par[has](subkey)) {
-        params[subkey] = par[subkey];
+    for (key in this.paper.customAttributes)
+      if (
+        this.paper.customAttributes[has](key) &&
+        params[has](key) &&
+        R.is(this.paper.customAttributes[key], 'function')
+      ) {
+        var par = this.paper.customAttributes[key].apply(
+          this,
+          [].concat(params[key])
+        )
+        this.attrs[key] = params[key]
+        for (var subkey in par)
+          if (par[has](subkey)) {
+            params[subkey] = par[subkey]
+          }
       }
-    }
-    setFillAndStroke(this, params);
-    return this;
-  };
+    setFillAndStroke(this, params)
+    return this
+  }
   /*\
    * Element.toFront
    [ method ]
@@ -1137,14 +1264,14 @@ export const Raphael = function () {
   \*/
   elproto.toFront = function () {
     if (this.removed) {
-      return this;
+      return this
     }
-    var node = getRealNode(this.node);
-    node.parentNode.appendChild(node);
-    var svg = this.paper;
-    svg.top != this && R._tofront(this, svg);
-    return this;
-  };
+    var node = getRealNode(this.node)
+    node.parentNode.appendChild(node)
+    var svg = this.paper
+    svg.top != this && R._tofront(this, svg)
+    return this
+  }
   /*\
    * Element.toBack
    [ method ]
@@ -1154,15 +1281,15 @@ export const Raphael = function () {
   \*/
   elproto.toBack = function () {
     if (this.removed) {
-      return this;
+      return this
     }
-    var node = getRealNode(this.node);
-    var parentNode = node.parentNode;
-    parentNode.insertBefore(node, parentNode.firstChild);
-    R._toback(this, this.paper);
-    var svg = this.paper;
-    return this;
-  };
+    var node = getRealNode(this.node)
+    var parentNode = node.parentNode
+    parentNode.insertBefore(node, parentNode.firstChild)
+    R._toback(this, this.paper)
+    var svg = this.paper
+    return this
+  }
   /*\
    * Element.insertAfter
    [ method ]
@@ -1172,19 +1299,21 @@ export const Raphael = function () {
   \*/
   elproto.insertAfter = function (element) {
     if (this.removed || !element) {
-      return this;
+      return this
     }
 
-    var node = getRealNode(this.node);
-    var afterNode = getRealNode(element.node || element[element.length - 1].node);
+    var node = getRealNode(this.node)
+    var afterNode = getRealNode(
+      element.node || element[element.length - 1].node
+    )
     if (afterNode.nextSibling) {
-      afterNode.parentNode.insertBefore(node, afterNode.nextSibling);
+      afterNode.parentNode.insertBefore(node, afterNode.nextSibling)
     } else {
-      afterNode.parentNode.appendChild(node);
+      afterNode.parentNode.appendChild(node)
     }
-    R._insertafter(this, element, this.paper);
-    return this;
-  };
+    R._insertafter(this, element, this.paper)
+    return this
+  }
   /*\
    * Element.insertBefore
    [ method ]
@@ -1194,77 +1323,85 @@ export const Raphael = function () {
   \*/
   elproto.insertBefore = function (element) {
     if (this.removed || !element) {
-      return this;
+      return this
     }
 
-    var node = getRealNode(this.node);
-    var beforeNode = getRealNode(element.node || element[0].node);
-    beforeNode.parentNode.insertBefore(node, beforeNode);
-    R._insertbefore(this, element, this.paper);
-    return this;
-  };
+    var node = getRealNode(this.node)
+    var beforeNode = getRealNode(element.node || element[0].node)
+    beforeNode.parentNode.insertBefore(node, beforeNode)
+    R._insertbefore(this, element, this.paper)
+    return this
+  }
   elproto.blur = function (size) {
     // Experimental. No Safari support. Use it on your own risk.
-    var t = this;
+    var t = this
     if (+size !== 0) {
-      var fltr = $("filter"),
-        blur = $("feGaussianBlur");
-      t.attrs.blur = size;
-      fltr.id = R.createUUID();
-      $(blur, { stdDeviation: +size || 1.5 });
-      fltr.appendChild(blur);
-      t.paper.defs.appendChild(fltr);
-      t._blur = fltr;
-      $(t.node, { filter: "url(#" + fltr.id + ")" });
+      var fltr = $('filter'),
+        blur = $('feGaussianBlur')
+      t.attrs.blur = size
+      fltr.id = R.createUUID()
+      $(blur, { stdDeviation: +size || 1.5 })
+      fltr.appendChild(blur)
+      t.paper.defs.appendChild(fltr)
+      t._blur = fltr
+      $(t.node, { filter: 'url(#' + fltr.id + ')' })
     } else {
       if (t._blur) {
-        t._blur.parentNode.removeChild(t._blur);
-        delete t._blur;
-        delete t.attrs.blur;
+        t._blur.parentNode.removeChild(t._blur)
+        delete t._blur
+        delete t.attrs.blur
       }
-      t.node.removeAttribute("filter");
+      t.node.removeAttribute('filter')
     }
-    return t;
-  };
+    return t
+  }
   R._engine.circle = function (svg, x, y, r) {
-    var el = $("circle");
-    svg.canvas && svg.canvas.appendChild(el);
-    var res = new Element(el, svg);
-    res.attrs = { cx: x, cy: y, r: r, fill: "none", stroke: "#000" };
-    res.type = "circle";
-    $(el, res.attrs);
-    return res;
-  };
+    var el = $('circle')
+    svg.canvas && svg.canvas.appendChild(el)
+    var res = new Element(el, svg)
+    res.attrs = { cx: x, cy: y, r: r, fill: 'none', stroke: '#000' }
+    res.type = 'circle'
+    $(el, res.attrs)
+    return res
+  }
   R._engine.rect = function (svg, x, y, w, h, r) {
-    var el = $("rect");
-    svg.canvas && svg.canvas.appendChild(el);
-    var res = new Element(el, svg);
-    res.attrs = { x: x, y: y, width: w, height: h, rx: r || 0, ry: r || 0, fill: "none", stroke: "#000" };
-    res.type = "rect";
-    $(el, res.attrs);
-    return res;
-  };
+    var el = $('rect')
+    svg.canvas && svg.canvas.appendChild(el)
+    var res = new Element(el, svg)
+    res.attrs = {
+      x: x,
+      y: y,
+      width: w,
+      height: h,
+      rx: r || 0,
+      ry: r || 0,
+      fill: 'none',
+      stroke: '#000',
+    }
+    res.type = 'rect'
+    $(el, res.attrs)
+    return res
+  }
   R._engine.g = function (svg) {
-    var el = $("g");
-    svg.canvas && svg.canvas.appendChild(el);
-    var res = new Element(el, svg);
-    res.type = "g";
-    res.canvas = res.node;
+    var el = $('g')
+    svg.canvas && svg.canvas.appendChild(el)
+    var res = new Element(el, svg)
+    res.type = 'g'
+    res.canvas = res.node
     //adding support for adding elements inside <g>
-    var elements = ['circle', 'rect', 'ellipse', 'image', 'text', 'g', 'path'];
+    var elements = ['circle', 'rect', 'ellipse', 'image', 'text', 'g', 'path']
     elements.forEach(function (element) {
       res[element] = function () {
-        var args = [res];
-        for (var i = 0; i < arguments.length; i++)
-          args.push(arguments[i]);
-        var out = R._engine[element].apply(this, args);
-        return out;
+        var args = [res]
+        for (var i = 0; i < arguments.length; i++) args.push(arguments[i])
+        var out = R._engine[element].apply(this, args)
+        return out
       }
-    });
-    $(el, res.attrs);
-    return res;
-  };
-  R._engine.def = function(def) {
+    })
+    $(el, res.attrs)
+    return res
+  }
+  R._engine.def = function (def) {
     //SLATEBOX - add ability to programattically add defs
     // {
     //   type: "pattern",
@@ -1288,19 +1425,21 @@ export const Raphael = function () {
       </pattern>
     */
 
-    const id = def.id || `raphael-def-${R.createUUID()}`;
+    const id = def.id || `raphael-def-${R.createUUID()}`
 
     //if exists, remove and rebuild
-    const exists = Array.prototype.slice.call(this.defs.children).find(c => c.getAttribute('id') === id);
-    exists && this.defs.removeChild(exists);
+    const exists = Array.prototype.slice
+      .call(this.defs.children)
+      .find((c) => c.getAttribute('id') === id)
+    exists && this.defs.removeChild(exists)
 
     let defOpts = {
-      id: id
-    };
+      id: id,
+    }
 
-    Object.assign(defOpts, {...def});
+    Object.assign(defOpts, { ...def })
     //no need to have inside=[object object] as it is used elsewhere below
-    delete defOpts.inside;
+    delete defOpts.inside
 
     // if (def.height != null) defOpts.height = def.height;
     // if (def.width != null) defOpts.width = def.width;
@@ -1325,151 +1464,152 @@ export const Raphael = function () {
     // }
 
     //always rebuild
-    const rDef = $($(def.tag || "pattern"), defOpts);
+    const rDef = $($(def.tag || 'pattern'), defOpts)
     if (def.inside) {
-      def.inside.forEach(i => {
-        const ins = $($(i.type), i.attrs || {});
-        rDef.appendChild(ins);
+      def.inside.forEach((i) => {
+        const ins = $($(i.type), i.attrs || {})
+        rDef.appendChild(ins)
         if (i.nested) {
           if (i.nested.forEach) {
-            i.nested.forEach(nx => {
-              const nest = $($(nx.type), nx.attrs || {});
-              ins.appendChild(nest);
-            });
+            i.nested.forEach((nx) => {
+              const nest = $($(nx.type), nx.attrs || {})
+              ins.appendChild(nest)
+            })
           } else {
-            Object.keys(i.nested).forEach(n => {
-              const nest = $($(n), i.nested[n] || {});
-              ins.appendChild(nest);
-            });
+            Object.keys(i.nested).forEach((n) => {
+              const nest = $($(n), i.nested[n] || {})
+              ins.appendChild(nest)
+            })
           }
         }
-      });      
+      })
     }
-    this.defs.appendChild(rDef);
-  };
+    this.defs.appendChild(rDef)
+  }
   R._engine.ellipse = function (svg, x, y, rx, ry) {
-    var el = $("ellipse");
-    svg.canvas && svg.canvas.appendChild(el);
-    var res = new Element(el, svg);
-    res.attrs = { cx: x, cy: y, rx: rx, ry: ry, fill: "none", stroke: "#000" };
-    res.type = "ellipse";
-    $(el, res.attrs);
-    return res;
-  };
+    var el = $('ellipse')
+    svg.canvas && svg.canvas.appendChild(el)
+    var res = new Element(el, svg)
+    res.attrs = { cx: x, cy: y, rx: rx, ry: ry, fill: 'none', stroke: '#000' }
+    res.type = 'ellipse'
+    $(el, res.attrs)
+    return res
+  }
   R._engine.image = function (svg, src, x, y, w, h) {
-    var el = $("image");
-    $(el, { x: x, y: y, width: w, height: h, preserveAspectRatio: "none" });
-    el.setAttributeNS(xlink, "href", src);
-    svg.canvas && svg.canvas.appendChild(el);
-    var res = new Element(el, svg);
-    res.attrs = { x: x, y: y, width: w, height: h, src: src };
-    res.type = "image";
-    return res;
-  };
+    var el = $('image')
+    $(el, { x: x, y: y, width: w, height: h, preserveAspectRatio: 'none' })
+    el.setAttributeNS(xlink, 'href', src)
+    svg.canvas && svg.canvas.appendChild(el)
+    var res = new Element(el, svg)
+    res.attrs = { x: x, y: y, width: w, height: h, src: src }
+    res.type = 'image'
+    return res
+  }
   R._engine.text = function (svg, x, y, text) {
-    var el = $("text");
-    svg.canvas && svg.canvas.appendChild(el);
-    var res = new Element(el, svg);
+    var el = $('text')
+    svg.canvas && svg.canvas.appendChild(el)
+    var res = new Element(el, svg)
     res.attrs = {
       x: x,
       y: y,
-      "text-anchor": "middle",
+      'text-anchor': 'middle',
       text: text,
-      "font-family": R._availableAttrs["font-family"],
-      "font-size": R._availableAttrs["font-size"],
-      stroke: "none",
-      fill: "#000"
-    };
-    res.type = "text";
-    setFillAndStroke(res, res.attrs);
-    return res;
-  };
-  R._engine.setSize = function (width, height) {
-    this.width = width || this.width;
-    this.height = height || this.height;
-    this.canvas.setAttribute("width", this.width);
-    this.canvas.setAttribute("height", this.height);
-    if (this._viewBox) {
-      this.setViewBox.apply(this, this._viewBox);
+      'font-family': R._availableAttrs['font-family'],
+      'font-size': R._availableAttrs['font-size'],
+      stroke: 'none',
+      fill: '#000',
     }
-    return this;
-  };
+    res.type = 'text'
+    setFillAndStroke(res, res.attrs)
+    return res
+  }
+  R._engine.setSize = function (width, height) {
+    this.width = width || this.width
+    this.height = height || this.height
+    this.canvas.setAttribute('width', this.width)
+    this.canvas.setAttribute('height', this.height)
+    if (this._viewBox) {
+      this.setViewBox.apply(this, this._viewBox)
+    }
+    return this
+  }
   R._engine.create = function () {
     var con = R._getContainer.apply(0, arguments),
       container = con && con.container,
       x = con.x,
       y = con.y,
       width = con.width,
-      height = con.height;
+      height = con.height
     if (!container) {
-      throw new Error("SVG container not found.");
+      throw new Error('SVG container not found.')
     }
-    var cnvs = $("svg"),
-      css = "overflow:hidden;",
-      isFloating;
-    x = x || 0;
-    y = y || 0;
-    width = width || 512;
-    height = height || 342;
+    var cnvs = $('svg'),
+      css = 'overflow:hidden;',
+      isFloating
+    x = x || 0
+    y = y || 0
+    width = width || 512
+    height = height || 342
     $(cnvs, {
       height: height,
       width: width,
-      xmlns: "http://www.w3.org/2000/svg"
-    });
+      xmlns: 'http://www.w3.org/2000/svg',
+    })
     if (container == 1) {
-      cnvs.style.cssText = css + "position:absolute;left:" + x + "px;top:" + y + "px";
-      R._g.doc.body.appendChild(cnvs);
-      isFloating = 1;
+      cnvs.style.cssText =
+        css + 'position:absolute;left:' + x + 'px;top:' + y + 'px'
+      R._g.doc.body.appendChild(cnvs)
+      isFloating = 1
     } else {
-      cnvs.style.cssText = css + "position:relative";
+      cnvs.style.cssText = css + 'position:relative'
       if (container.firstChild) {
-        container.insertBefore(cnvs, container.firstChild);
+        container.insertBefore(cnvs, container.firstChild)
       } else {
-        container.appendChild(cnvs);
+        container.appendChild(cnvs)
       }
     }
-    container = new R._Paper;
-    container.width = width;
-    container.height = height;
-    container.canvas = cnvs;
-    container.clear();
-    container._left = container._top = 0;
-    isFloating && (container.renderfix = function () { });
-    container.renderfix();
-    return container;
-  };
+    container = new R._Paper()
+    container.width = width
+    container.height = height
+    container.canvas = cnvs
+    container.clear()
+    container._left = container._top = 0
+    isFloating && (container.renderfix = function () {})
+    container.renderfix()
+    return container
+  }
   R._engine.setViewBox = function (x, y, w, h, fit) {
-    eve("raphael.setViewBox", this, this._viewBox, [x, y, w, h, fit]);
+    eve('raphael.setViewBox', this, this._viewBox, [x, y, w, h, fit])
     var paperSize = this.getSize(),
       size = mmax(w / paperSize.width, h / paperSize.height),
       top = this.top,
-      aspectRatio = fit ? "xMidYMid meet" : "xMinYMin",
+      aspectRatio = fit ? 'xMidYMid meet' : 'xMinYMin',
       vb,
-      sw;
+      sw
     if (x == null) {
       if (this._vbSize) {
-        size = 1;
+        size = 1
       }
-      delete this._vbSize;
-      vb = "0 0 " + this.width + S + this.height;
+      delete this._vbSize
+      vb = '0 0 ' + this.width + S + this.height
     } else {
-      this._vbSize = size;
-      vb = x + S + y + S + w + S + h;
+      this._vbSize = size
+      vb = x + S + y + S + w + S + h
     }
     $(this.canvas, {
       viewBox: vb,
-      preserveAspectRatio: aspectRatio
-    });
+      preserveAspectRatio: aspectRatio,
+    })
     while (size && top) {
-      sw = "stroke-width" in top.attrs ? top.attrs["stroke-width"] : 1;
-      top.attr({ "stroke-width": sw });
-      top._.dirty = 1;
-      top._.dirtyT = 1;
-      top = top.prev;
+      sw = 'stroke-width' in top.attrs ? top.attrs['stroke-width'] : 1
+      top.attr({ 'stroke-width': sw })
+      top._.dirty = 1
+      top._.dirtyT = 1
+      top = top.prev
     }
-    this._viewBox = [x, y, w, h, !!fit];
-    return this;
-  };
+    this._viewBox = [x, y, w, h, !!fit]
+    return this
+  }
   /*\
    * Paper.renderfix
    [ method ]
@@ -1483,25 +1623,25 @@ export const Raphael = function () {
   R.prototype.renderfix = function () {
     var cnvs = this.canvas,
       s = cnvs.style,
-      pos;
+      pos
     try {
-      pos = cnvs.getScreenCTM() || cnvs.createSVGMatrix();
+      pos = cnvs.getScreenCTM() || cnvs.createSVGMatrix()
     } catch (e) {
-      pos = cnvs.createSVGMatrix();
+      pos = cnvs.createSVGMatrix()
     }
     var left = -pos.e % 1,
-      top = -pos.f % 1;
+      top = -pos.f % 1
     if (left || top) {
       if (left) {
-        this._left = (this._left + left) % 1;
-        s.left = this._left + "px";
+        this._left = (this._left + left) % 1
+        s.left = this._left + 'px'
       }
       if (top) {
-        this._top = (this._top + top) % 1;
-        s.top = this._top + "px";
+        this._top = (this._top + top) % 1
+        s.top = this._top + 'px'
       }
     }
-  };
+  }
   /*\
    * Paper.clear
    [ method ]
@@ -1509,14 +1649,14 @@ export const Raphael = function () {
    * Clears the paper, i.e. removes all the elements.
   \*/
   R.prototype.clear = function () {
-    R.eve("raphael.clear", this);
-    var c = this.canvas;
+    R.eve('raphael.clear', this)
+    var c = this.canvas
     while (c.firstChild) {
-      c.removeChild(c.firstChild);
+      c.removeChild(c.firstChild)
     }
-    this.bottom = this.top = null;
-    c.appendChild(this.defs = $("defs"));
-  };
+    this.bottom = this.top = null
+    c.appendChild((this.defs = $('defs')))
+  }
   /*\
    * Paper.remove
    [ method ]
@@ -1524,24 +1664,25 @@ export const Raphael = function () {
    * Removes the paper from the DOM.
   \*/
   R.prototype.remove = function () {
-    eve("raphael.remove", this);
-    this.canvas.parentNode && this.canvas.parentNode.removeChild(this.canvas);
+    eve('raphael.remove', this)
+    this.canvas.parentNode && this.canvas.parentNode.removeChild(this.canvas)
     for (var i in this) {
-      this[i] = typeof this[i] == "function" ? R._removedFactory(i) : null;
+      this[i] = typeof this[i] == 'function' ? R._removedFactory(i) : null
     }
-  };
-  var setproto = R.st;
-
-  for (var method in elproto) if (elproto[has](method) && !setproto[has](method)) {
-    setproto[method] = (function (methodname) {
-      return function () {
-        var arg = arguments;
-        return this.forEach(function (el) {
-          el[methodname].apply(el, arg);
-        });
-      };
-    })(method);
   }
+  var setproto = R.st
 
-  return R;
-}();
+  for (var method in elproto)
+    if (elproto[has](method) && !setproto[has](method)) {
+      setproto[method] = (function (methodname) {
+        return function () {
+          var arg = arguments
+          return this.forEach(function (el) {
+            el[methodname].apply(el, arg)
+          })
+        }
+      })(method)
+    }
+
+  return R
+})()
