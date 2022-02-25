@@ -579,32 +579,32 @@ export default class Canvas {
 
   clear() {
     this.slate.options.container.innerHTML = ''
-    return this.slate._
+    return this.slate
   }
 
   wire() {
     const self = this
-    Object.keys(self.eve.init).forEach((ee) => {
-      self.internal[self.eve.init[ee]] = null
+    self.eve.init.forEach((ee) => {
+      self.internal[ee] = self.Canvas.initDrag
     })
-    Object.keys(self.eve.drag).forEach((ee) => {
-      self.internal[self.eve.init[ee]] = self.Canvas.onDrag
+    self.eve.drag.forEach((ee) => {
+      self.internal[ee] = self.Canvas.onDrag
     })
-    Object.keys(self.eve.up).forEach((ee) => {
-      self.internal[self.eve.init[ee]] = self.Canvas.endDrag
+    self.eve.up.forEach((ee) => {
+      self.internal[ee] = self.Canvas.endDrag
     })
   }
 
   unwire() {
     const self = this
-    Object.keys(self.eve.init).forEach((ee) => {
-      self.internal[self.eve.init[ee]] = null
+    self.eve.init.forEach((ee) => {
+      self.internal[ee] = null
     })
-    Object.keys(self.eve.drag).forEach((ee) => {
-      self.internal[self.eve.init[ee]] = null
+    self.eve.drag.forEach((ee) => {
+      self.internal[ee] = null
     })
-    Object.keys(self.eve.up).forEach((ee) => {
-      self.internal[self.eve.init[ee]] = null
+    self.eve.up.forEach((ee) => {
+      self.internal[ee] = null
     })
   }
 

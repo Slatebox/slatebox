@@ -17,7 +17,7 @@ export default class Comments {
         const x = mp.x + self.slate.options.viewPort.left
         const y = mp.y + self.slate.options.viewPort.top
 
-        const tpath = Utils._transformPath(comment, `T${x},${y}s2,2`)
+        const tpath = Utils.lowLevelTransformPath(comment, `T${x},${y}s2,2`)
         const pbox = Utils.getBBox({ path: tpath })
 
         const commentNodeOpts = {
