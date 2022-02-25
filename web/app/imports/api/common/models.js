@@ -5,8 +5,6 @@ const Collaboration = new Mongo.Collection("collaboration");
 const Slates = new Mongo.Collection("slates");
 const Collaborators = new Mongo.Collection("collaborators");
 
-const StripeEvents = new Mongo.Collection("stripeEvents");
-
 //Audit
 const Audit = new Mongo.Collection("audit");
 const Messages = new Mongo.Collection("messages");
@@ -47,7 +45,6 @@ export {
   , NounProjectResultsMetaData
   , Servers
   , PricingTiers
-  , StripeEvents
   , Tags
   , Audit
   , Messages

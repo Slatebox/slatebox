@@ -1,51 +1,56 @@
-import invoke from 'lodash.invoke'
+import invoke from 'lodash.invoke';
 
-export default class Menu {
+export default class menu {
+
   constructor(slate, node) {
-    this.slate = slate
-    this.node = node
-    this.m = null
-    this.isOpen = false
+    this.slate = slate;
+    this.node = node;
+    this._m = null
+    this._isOpen = false;
   }
 
   isOpen() {
-    return this.isOpen
+    return this._isOpen;
   }
 
-  show() {
-    const self = this
-    const r = self.slate.paper
-    if (self.m) {
-      invoke(self.m, 'remove')
-      self.m = null
-    }
-    const bb = self.node.vect.getBBox()
-    const { x, y } = bb
-    self.m = r.set()
-    self.isOpen = true
+  show(ttl) {
+    const self = this;
 
-    // right, bottom, and settings connectors
-    self.node.connectors.show(x, y, self.m, () => {
+    //fire event
+    
+    var r = self.slate.paper;
+    if (ttl === undefined) ttl = 3000;
+    if (self._m) { invoke(self._m, 'remove'); self._m = null; }
+
+    const bb = self.node.vect.getBBox();
+    var _x = bb.x;
+    var _y = bb.y;
+    self._m = r.set();
+    self._isOpen = true;
+
+    //right, bottom, and settings connectors
+    self.node.connectors.show(_x, _y, self._m, function () {
       if (self.slate.events?.onMenuRequested) {
-        self.slate.events?.onMenuRequested(self.node, () => {})
+        self.slate.events?.onMenuRequested(self.node, (opts) => { });
       }
-    })
+    });
   }
 
   hide(exceptionElemId) {
-    if (this.m) {
-      this.m.forEach((m) => {
+    if (this._m) {
+      this._m.forEach(m => {
         if (m.id !== exceptionElemId) {
-          m.remove()
+          m.remove();
         }
-      })
-      this.m.items = exceptionElemId
-        ? null
-        : this.m.items.filter((item) => item.id !== exceptionElemId)
-      this.node?.connectors?.iconBar?.remove()
+      });
+      this._m.items = exceptionElemId ? null : this._m.items.filter((item) => {
+        return item.id !== exceptionElemId;
+      });
+      this.node?.connectors?.iconBar?.remove();
     }
 
-    this.node.rotate.hide()
-    this.isOpen = false
+    this.node.rotate.hide();
+    this._isOpen = false;
   }
+
 }

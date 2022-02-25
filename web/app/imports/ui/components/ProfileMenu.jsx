@@ -28,12 +28,11 @@ export const ProfileMenu = (props) => {
 
   const userDetails = useTracker(() => {
     //get pricing data
-    Meteor.subscribe(CONSTANTS.publications.pricingTiers);
     if (Meteor.user()) {
-      let plan = Meteor.user().orgId ? Organizations.findOne()?.planType : Meteor.user().planType;
+      let plan = "team";
       plan = plan || "free";
       let name = getUserName(Meteor.userId());
-      let color = plan === "free" ? "default" : "secondary";
+      let color ="secondary";
       let isVerified = false;
       if (Meteor.user() && !Meteor.user().isAnonymous && Meteor.user().emails && Meteor.user().emails.length > 0 && Meteor.user().emails[0].verified) {
         isVerified = true;

@@ -62,12 +62,6 @@ export const CONSTANTS = {
       optimizeSVG: "utils.optimizeSVG",
       createImage: "utils.createImage"
     },
-    stripe: {
-      createSession: "stripe.createSession",
-      confirmPayment: "stripe.confirmPayment",
-      updateSubscriptionQuantity: "stripe.updateSubscriptionQuantity",
-      deleteCustomer: "stripe.deleteCustomer"
-    },
     organizations: {
       create: "organizations.create",
       trackGuest: "organizations.trackGuest",

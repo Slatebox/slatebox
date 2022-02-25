@@ -1,7 +1,7 @@
 import { Meteor } from 'meteor/meteor';
 import slateFilter from '/imports/api/common/slateFilter.js';
 import { CONSTANTS } from '/imports/api/common/constants.js';
-import { PricingTiers, Messages, Slates, Collaboration, Organizations, Claims, Permissions, SlateAccess, Collaborators, Comments } from '/imports/api/common/models.js';
+import { Messages, Slates, Collaboration, Organizations, Claims, Permissions, SlateAccess, Collaborators, Comments } from '/imports/api/common/models.js';
 import AuthManager from '../imports/api/common/AuthManager';
 import { ApprovalRequests } from '../imports/api/common/models';
 
@@ -23,7 +23,7 @@ Meteor.publish(CONSTANTS.publications.slateAccess, function() {
 });
 
 Meteor.publish(CONSTANTS.publications.users.me, function publishMe() {
-  return Meteor.users.find({ _id: this.userId }, { fields: { isAnonymous: 1, orgId: 1, isOrgOwner: 1, createdAt: 1, planType: 1, roles: 1 } });
+  return Meteor.users.find({ _id: this.userId }, { fields: { isAnonymous: 1, orgId: 1, isOrgOwner: 1, createdAt: 1, roles: 1 } });
 });
 
 // Meteor.publish(CONSTANTS.publications.mySlates, function(filter) {

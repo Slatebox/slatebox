@@ -32,7 +32,7 @@ import InfoIcon from '@material-ui/icons/Info';
 import MailOutlineIcon from '@material-ui/icons/MailOutline';
 
 import confirmService from '../../common/confirm';
-import { Permissions, Claims, PricingTiers, Slates, Organizations } from '../../../api/common/models.js';
+import { Permissions, Claims, Slates, Organizations } from '../../../api/common/models.js';
 import AuthManager from '../../../api/common/AuthManager.js';
 import { CONSTANTS } from '../../../api/common/constants.js';
 import { promisify } from '../../../api/client/promisify.js';
@@ -87,11 +87,10 @@ export const ManageOrganization = (props) => {
 
   async function removeMember(member) {
     const userDetails = await promisify(Meteor.call, CONSTANTS.methods.users.get, { _id: member._id, includeSlateCounts: true });
-    const billingMessage = Organizations.findOne().planType === "free" ? "" : "<p>This will also reduce the quantity of billable team members and you'll be prorated the credit at the end of the current billing cycle.</p>";
     const res = await confirmService.show({
       theme: theme,
       title: "Remove user?",
-      message: `<p>Are you certain you want to remove ${member.profile.firstName} ${member.profile.lastName} (${member.emails[0].address})? Note that the ${userDetails[0].slateCount} slate(s) attached to them will be also be removed.</p>${billingMessage}<p><b>This delete CANNOT be undone.</b></p>`,
+      message: `<p>Are you certain you want to remove ${member.profile.firstName} ${member.profile.lastName} (${member.emails[0].address})? Note that the ${userDetails[0].slateCount} slate(s) attached to them will be also be removed. <b>This delete CANNOT be undone.</b></p>`,
       actionItems: [
         { label: "Cancel", return: false },
         { label: "OK", return: true }
@@ -103,9 +102,6 @@ export const ManageOrganization = (props) => {
       Slates.find({ userId: member.userId }).fetch().forEach((s) => {
         Slates.remove({ _id: s._id });
       });
-      if (Organizations.findOne().planType !== "free") {
-        await promisify(Meteor.call, CONSTANTS.methods.stripe.updateSubscriptionQuantity);
-      }
     }
     
   }
@@ -181,32 +177,9 @@ export const ManageOrganization = (props) => {
   async function inviteNewMembers() {
     try {
       if (currentInvites.length > 0) {
-        if (Organizations.findOne().planType !== "free") {
-          let priceId = Organizations.findOne().planType;
-          let tier = PricingTiers.findOne({ $or: [{ "yearly.priceId": priceId }, { "monthly.priceId": priceId }] });
-          let price = tier.yearly.priceId === priceId ? tier.yearly.price : tier.monthly.price;
-          let billedAnnually = tier.yearly.priceId === priceId ? " (billed annually)" : "";
-          const result = await confirmService.show({
-            theme: theme,
-            title: `Grow your team!`,
-            message: `<p>Adding ${currentInvites.length} team member(s) on your current plan costs $${price * currentInvites.length}.00 additional per month${billedAnnually}.</p><p>Payment will automatically be prorated and made during your regular billing cycle, with nothing due now.</p>`,
-            actionItems: [
-              { label: "Cancel", return: false },
-              { label: "Invite new members", return: true }
-            ]
-          });
-          if (result) {
-            //invite users
-            await promisify(Meteor.call, CONSTANTS.methods.users.invite, { orgId: Meteor.user().orgId, invites: currentInvites });
-            dispatch({ type: "canvas", currentInvites: [] });
-          } else {
-            return null;
-          }
-        } else {
-          //free plans can invite as many users as they want
-          await promisify(Meteor.call, CONSTANTS.methods.users.invite, { orgId: Meteor.user().orgId, invites: currentInvites });
-          dispatch({ type: "canvas", currentInvites: [] });
-        }
+        //free plans can invite as many users as they want
+        await promisify(Meteor.call, CONSTANTS.methods.users.invite, { orgId: Meteor.user().orgId, invites: currentInvites });
+        dispatch({ type: "canvas", currentInvites: [] });
       } else {
         dispatch({ type: "canvas", theme: theme, globalMessage: { visible: true, isSnackBar: true, text: `You haven't added any team members to invite yet!`, severity: "error", autoHide: 10000 } });
       }

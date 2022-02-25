@@ -15,7 +15,7 @@ method[CONSTANTS.methods.users.createAnonymous] = async function(opts) {
   console.log("creating user ", ip, CONSTANTS.ipWhitelist); //76.17.204.120
   //if (CONSTANTS.ipWhitelist.includes(ip)) {
     const email = 'user@' + Random.id() + ".com";
-    const base = { isAnonymous: true, password: CONSTANTS.anonUserPwd, email: email, profile: { name: '' }, planType: "free" };
+    const base = { isAnonymous: true, password: CONSTANTS.anonUserPwd, email: email, profile: { name: '' } };
     if (opts && opts.orgId) {
       Object.assign(base, { orgId: opts.orgId });
     }
@@ -221,14 +221,7 @@ method[CONSTANTS.methods.users.invite] = async function(opts) {
       console.log("enroll email sent", resEmail);
     }
 
-    let qtyUpdate = null;
-    if (Organizations.findOne({ _id: opts.orgId }).planType !== "free") {
-      //the user has already confirmed they want to add users, so update the quantity of the users subscription
-      //below runs sync on the server, no await due to fibers
-      qtyUpdate = Meteor.call(CONSTANTS.methods.stripe.updateSubscriptionQuantity);
-    }
-
-    return { success: true, qtyUpdate };
+    return { success: true };
 };
 
 method[CONSTANTS.methods.users.resendEnrollment] = async function(opts) {

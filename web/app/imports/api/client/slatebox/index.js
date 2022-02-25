@@ -1,6 +1,6 @@
-import Slate from './core/Slate'
-import Node from './core/Node'
-import Base from './core/Base'
-import Utils from './helpers/Utils'
+import slate from './core/slate.js';
+import node from './core/node.js';
+import base from './core/base.js';
+import utils from './helpers/utils.js';
 
-export const Slatebox = { Slate, Node, Base, Utils }
+export const Slatebox = { slate, node, base, utils };
