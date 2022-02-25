@@ -2,7 +2,8 @@
   <title>Slatebox</title>
   <style>
     /* important for font select */
-    .dropdown-button,.font-list {
+    .dropdown-button,
+    .font-list {
       background-color: #0f1f34 !important;
     }
     .active-font {
@@ -11,7 +12,7 @@
     .font-button:hover {
       background-color: #333 !important;
     }
-    div[id^=font-picker].expanded ul {
+    div[id^='font-picker'].expanded ul {
       max-height: 150px !important;
     }
     body {
@@ -21,26 +22,28 @@
       overscroll-behavior-x: none;
     }
   </style>
+  <script src="https://js.stripe.com/v3/"></script>
 </head>
 
 <body>
   <div id="react-target"></div>
   <script>
     window.chatwootSettings = {
-      hideMessageBubble: true
-    };
-    (function(d,t) {
-      const BASE_URL="https://app.chatwoot.com";
-      const g=d.createElement(t),s=d.getElementsByTagName(t)[0];
-      g.src=BASE_URL+"/packs/js/sdk.js";
-      s.parentNode.insertBefore(g,s);
-      g.onload=function(){
+      hideMessageBubble: true,
+    }
+    ;(function (d, t) {
+      const BASE_URL = 'https://app.chatwoot.com'
+      const g = d.createElement(t),
+        s = d.getElementsByTagName(t)[0]
+      g.src = BASE_URL + '/packs/js/sdk.js'
+      s.parentNode.insertBefore(g, s)
+      g.onload = function () {
         window.chatwootSDK.run({
           websiteToken: 'RzeWpAGHkPBNZuUFiC2Z73yi',
-          baseUrl: BASE_URL
+          baseUrl: BASE_URL,
         })
       }
-    })(document,"script");
+    })(document, 'script')
     // window.addEventListener('chatwoot:ready', function () {
     // });
   </script>
