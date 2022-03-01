@@ -1,81 +1,100 @@
-import React, { useEffect, useState } from 'react';
-import { Meteor } from 'meteor/meteor';
-import { useTheme } from '@material-ui/core/styles';
-import { makeStyles } from '@material-ui/core/styles';
-import useMediaQuery from '@material-ui/core/useMediaQuery';
-import Grid from '@material-ui/core/Grid';
-import Tooltip from '@material-ui/core/Tooltip';
+import React, { useEffect, useState } from 'react'
+import PropTypes from 'prop-types'
+import { Meteor } from 'meteor/meteor'
+import { useSelector } from 'react-redux'
+import Grid from '@material-ui/core/Grid'
+import Tooltip from '@material-ui/core/Tooltip'
 import ToggleButtonGroup from '@material-ui/lab/ToggleButtonGroup'
 import ToggleButton from '@material-ui/lab/ToggleButton'
-import Box from '@material-ui/core/Box';
-import { HexColor } from "../../common/HexColor.jsx"
-import { PresetColors } from '../../common/PresetColors.jsx';
-import Brightness1Icon from '@material-ui/icons/Brightness1';
-import Typography from '@material-ui/core/Typography';
-import { useSelector } from 'react-redux';
-import Button from '@material-ui/core/Button';
-import TextField from '@material-ui/core/TextField';
-import { CONSTANTS } from '../../../api/common/constants.js';
-import FormControl from '@material-ui/core/FormControl';
-import InputLabel from '@material-ui/core/InputLabel';
-import Select from '@material-ui/core/Select';
-import MenuItem from '@material-ui/core/MenuItem';
-import { promisify } from '../../../api/client/promisify.js';
+import Box from '@material-ui/core/Box'
+import Brightness1Icon from '@material-ui/icons/Brightness1'
+import Typography from '@material-ui/core/Typography'
+import FormControl from '@material-ui/core/FormControl'
+import InputLabel from '@material-ui/core/InputLabel'
+import Select from '@material-ui/core/Select'
+import MenuItem from '@material-ui/core/MenuItem'
+import CONSTANTS from '../../../api/common/constants'
+import PresetColors from '../../common/PresetColors'
+import HexColor from '../../common/HexColor'
+import promisify from '../../../api/client/promisify'
 
-export const SlateColors = (props) => {
+export default function SlateColors({ onChange }) {
+  const slate = useSelector((state) => state.slate)
 
-  const theme = useTheme();
-  const matches = useMediaQuery(theme.breakpoints.up('md'));
-  const slate = useSelector(state => state.slate);
+  let bcolor = slate?.options?.containerStyle?.backgroundColor
+  bcolor = bcolor || '#fff'
 
-  let bcolor = slate?.options?.containerStyle?.backgroundColor;
-  bcolor = bcolor ? bcolor : "#fff";
+  let lcolor = slate?.options?.defaultLineColor
+  lcolor = lcolor || '#000'
 
-  let lcolor = slate?.options?.defaultLineColor;
-  lcolor = lcolor ? lcolor : "#000";
+  const [selectedColor, updateColor] = React.useState(bcolor)
+  const [colorType, setType] = React.useState('onSlateBackgroundColorChanged')
 
-  const [selectedColor, updateColor] = React.useState(bcolor);
-  const [colorType, setType] = React.useState('onSlateBackgroundColorChanged');
+  const bgGradient = slate?.options?.containerStyle?.backgroundColorAsGradient
+  const bgGradientType =
+    slate?.options?.containerStyle?.backgroundGradientType || 'linear'
+  const bgGradientColors = React.useRef(
+    slate?.options?.containerStyle?.backgroundGradientColors || []
+  )
+  const bgGradientStrategy =
+    slate?.options?.containerStyle?.backgroundGradientStrategy || 'shades'
+  const [asGradient, setAsGradient] = React.useState(bgGradient)
+  const [linearOrRadial, setLinearOrRadial] = React.useState(bgGradientType)
+  const [gradientColorCount, setGradientColorCount] = React.useState(
+    bgGradientColors.current.length ? bgGradientColors.current.length : 2
+  )
+  const [bgStrategy, setBgStrategy] = React.useState(bgGradientStrategy)
 
-  let bgGradient = slate?.options?.containerStyle?.backgroundColorAsGradient;
-  let bgGradientType = slate?.options?.containerStyle?.backgroundGradientType || "linear";
-  let bgGradientColors = React.useRef(slate?.options?.containerStyle?.backgroundGradientColors || []);
-  let bgGradientStrategy = slate?.options?.containerStyle?.backgroundGradientStrategy || "shades";
-  const [asGradient, setAsGradient] = React.useState(bgGradient);
-  const [linearOrRadial, setLinearOrRadial] = React.useState(bgGradientType);
-  const [gradientColorCount, setGradientColorCount] = React.useState(bgGradientColors.current.length ? bgGradientColors.current.length : 2);
-  const [bgStrategy, setBgStrategy] = React.useState(bgGradientStrategy);
-  
   useEffect(() => {
     async function enactColorChange() {
       if (asGradient) {
-        const palette = await promisify(Meteor.call, CONSTANTS.methods.themes.buildColorPalette, { type: bgStrategy, base: selectedColor });
-        bgGradientColors.current = palette.slice(0, gradientColorCount);
-        console.log("bgcolors", bgGradientColors);
+        const palette = await promisify(
+          Meteor.call,
+          CONSTANTS.methods.themes.buildColorPalette,
+          { type: bgStrategy, base: selectedColor }
+        )
+        bgGradientColors.current = palette.slice(0, gradientColorCount)
+        console.log('bgcolors', bgGradientColors)
       }
-      const payload = { color: selectedColor, asGradient: asGradient, gradientType: linearOrRadial, gradientColors: bgGradientColors.current, gradientStrategy: bgStrategy };
-      props.onChange({ type: colorType, data: payload });
+      const payload = {
+        color: selectedColor,
+        asGradient,
+        gradientType: linearOrRadial,
+        gradientColors: bgGradientColors.current,
+        gradientStrategy: bgStrategy,
+      }
+      onChange({ type: colorType, data: payload })
     }
-    if (selectedColor !== "transparent") {
-      enactColorChange();
+    if (selectedColor !== 'transparent') {
+      enactColorChange()
     }
-  }, [selectedColor, colorType, asGradient, linearOrRadial, gradientColorCount, bgStrategy]);
-  
+  }, [
+    selectedColor,
+    colorType,
+    asGradient,
+    linearOrRadial,
+    gradientColorCount,
+    bgStrategy,
+  ])
 
   const setColor = async (color) => {
-    updateColor(color);
+    updateColor(color)
   }
 
   const handleType = (event, newType) => {
-    setType(newType);
-    let c = newType === "onSlateBackgroundColorChanged" ? bcolor : lcolor;
-    updateColor(c);
+    setType(newType)
+    const c = newType === 'onSlateBackgroundColorChanged' ? bcolor : lcolor
+    updateColor(c)
   }
 
   const genColors = (event, newStrategy) => {
     if (newStrategy) {
-      setBgStrategy(newStrategy);
+      setBgStrategy(newStrategy)
     }
+  }
+
+  SlateColors.propTypes = {
+    onChange: PropTypes.func.isRequired,
   }
 
   return (
@@ -87,25 +106,34 @@ export const SlateColors = (props) => {
           onChange={handleType}
           aria-label="color type"
         >
-          <ToggleButton value="onSlateBackgroundColorChanged" aria-label="onSlateBackgroundColorChanged">
+          <ToggleButton
+            value="onSlateBackgroundColorChanged"
+            aria-label="onSlateBackgroundColorChanged"
+          >
             <Tooltip title="Slate background color" placement="top">
               <Grid container alignItems="center" justify="center">
                 <Grid item>
                   <Brightness1Icon htmlColor={bcolor} />
                 </Grid>
-                <Grid item style={{ fontSize: "7pt" }}>
+                <Grid item style={{ fontSize: '7pt' }}>
                   Background
                 </Grid>
               </Grid>
             </Tooltip>
           </ToggleButton>
-          <ToggleButton value="onLineColorChanged" aria-label="onLineColorChanged">
-            <Tooltip title="Default color of relationship lines between nodes" placement="top">
+          <ToggleButton
+            value="onLineColorChanged"
+            aria-label="onLineColorChanged"
+          >
+            <Tooltip
+              title="Default color of relationship lines between nodes"
+              placement="top"
+            >
               <Grid container alignItems="center" justify="center">
                 <Grid item>
                   <Brightness1Icon htmlColor={lcolor} />
                 </Grid>
-                <Grid item style={{ fontSize: "7pt" }}>
+                <Grid item style={{ fontSize: '7pt' }}>
                   Relationships
                 </Grid>
               </Grid>
@@ -114,16 +142,22 @@ export const SlateColors = (props) => {
         </ToggleButtonGroup>
       </Grid>
       <Grid item>
-        <HexColor
-          color={selectedColor}
-          noAlpha={true}
-          onChange={setColor}/>
+        <HexColor color={selectedColor} noAlpha onChange={setColor} />
       </Grid>
-      {colorType === "onSlateBackgroundColorChanged" && 
+      {colorType === 'onSlateBackgroundColorChanged' && (
         <Grid container spacing={2} justify="space-evenly">
           <Grid item xs={12}>
-            <ToggleButton style={{width: "100%"}} selected={asGradient} color="secondary" size="small" 
-              onChange={() => { setAsGradient(!asGradient); }}>As Gradient...</ToggleButton>
+            <ToggleButton
+              style={{ width: '100%' }}
+              selected={asGradient}
+              color="secondary"
+              size="small"
+              onChange={() => {
+                setAsGradient(!asGradient)
+              }}
+            >
+              As Gradient...
+            </ToggleButton>
           </Grid>
           <Grid item>
             <FormControl variant="outlined" size="small">
@@ -133,11 +167,15 @@ export const SlateColors = (props) => {
                 disabled={!asGradient}
                 id="color-gradient-count"
                 value={gradientColorCount}
-                onChange={(e) => { setGradientColorCount(e.target.value); }}
+                onChange={(e) => {
+                  setGradientColorCount(e.target.value)
+                }}
                 label="Gradient Color Count"
               >
                 {Array.from({ length: 17 }).map((c, ind) => (
-                  <MenuItem key={ind} value={ind + 2}>{ind + 2}</MenuItem>
+                  <MenuItem key={ind} value={ind + 2}>
+                    {ind + 2}
+                  </MenuItem>
                 ))}
               </Select>
             </FormControl>
@@ -150,7 +188,9 @@ export const SlateColors = (props) => {
                 disabled={!asGradient}
                 id="gradient-style-type"
                 value={linearOrRadial}
-                onChange={(e) => { setLinearOrRadial(e.target.value); }}
+                onChange={(e) => {
+                  setLinearOrRadial(e.target.value)
+                }}
                 label="Gradient Color Count"
               >
                 <MenuItem value="linear">linear</MenuItem>
@@ -165,25 +205,43 @@ export const SlateColors = (props) => {
               onChange={genColors}
               aria-label="gen type"
             >
-              <ToggleButton value="palette" aria-label="palette" disabled={!asGradient}>
-                <Tooltip title="Generate gradient as complementary colors of the selected color" placement="top">
+              <ToggleButton
+                value="palette"
+                aria-label="palette"
+                disabled={!asGradient}
+              >
+                <Tooltip
+                  title="Generate gradient as complementary colors of the selected color"
+                  placement="top"
+                >
                   <Typography variant="body2">Complementary</Typography>
                 </Tooltip>
               </ToggleButton>
-              <ToggleButton value="shades" aria-label="shades" disabled={!asGradient}>
-                <Tooltip title="Generate gradient as shades of the selected color" placement="top">
+              <ToggleButton
+                value="shades"
+                aria-label="shades"
+                disabled={!asGradient}
+              >
+                <Tooltip
+                  title="Generate gradient as shades of the selected color"
+                  placement="top"
+                >
                   <Typography variant="body2">Shades</Typography>
                 </Tooltip>
               </ToggleButton>
             </ToggleButtonGroup>
           </Grid>
         </Grid>
-      }
+      )}
       <Grid item>
-        <Box style={{ padding: "10px" }}>
-          <PresetColors onColorChange={(color) => { setColor(color) }} />
+        <Box style={{ padding: '10px' }}>
+          <PresetColors
+            onColorChange={(color) => {
+              setColor(color)
+            }}
+          />
         </Box>
       </Grid>
     </Grid>
-  );
+  )
 }

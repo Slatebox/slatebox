@@ -1,12 +1,12 @@
-import utils from '../helpers/utils'
-import sbIcons from '../helpers/sbIcons.js'
-import zoomSlider from './zoomSlider.js'
-import undoRedo from './undoRedo.js'
-import { Raphael } from '../deps/raphael/raphael.svg.js'
-import { shapes } from '../deps/raphael/raphael.fn.shapes.js'
-import { extensions } from '../deps/raphael/raphael.el.extensions.js'
+/* eslint-disable no-underscore-dangle */
 import uniq from 'lodash.uniq'
-import { embedGoogleFonts } from '../helpers/embedGoogleFonts.js'
+import utils from '../helpers/utils'
+import sbIcons from '../helpers/sbIcons'
+import { Raphael } from '../deps/raphael/raphael.svg'
+import { shapes } from '../deps/raphael/raphael.fn.shapes'
+import { extensions } from '../deps/raphael/raphael.el.extensions'
+import embedGoogleFonts from '../helpers/embedGoogleFonts'
+import '../deps/emile'
 
 export default class canvas {
   constructor(slate) {
@@ -18,7 +18,7 @@ export default class canvas {
       throw new Error('You must provide a container to initiate the canvas!')
     }
 
-    //customize raphael -- modifies global Raphael for all other imports
+    // customize raphael -- modifies global Raphael for all other imports
     shapes(Raphael)
     extensions(Raphael)
 
@@ -40,116 +40,102 @@ export default class canvas {
     const self = this
     const imageFolder = self.slate.options.imageFolder || '/images/'
     const c = self.slate.options.container
-    const slate = self.slate
+    const { slate } = self
 
     self.Canvas = {
       objInitPos: {},
       objInitialMousePos: { x: 0, y: 0 },
-      initDrag: function (e) {
-        console.log('is ctrl', slate.isCtrl)
+      initDrag(e) {
         if (slate.isCtrl) {
-          slate.multiSelection && slate.multiSelection.start()
+          slate.multiSelection?.start()
         }
         if (slate.options.allowDrag) {
           self.isDragging = true
 
-          slate.multiSelection && slate.multiSelection.end()
-          slate.nodes && slate.nodes.closeAllMenus()
+          slate.multiSelection?.end()
+          slate.nodes?.closeAllMenus()
 
-          var m = utils.mousePos(e)
+          const m = utils.mousePos(e)
           self.Canvas.objInitPos = utils.positionedOffset(self.internal)
-          var offsets = utils.positionedOffset(slate.options.container)
+          const offsets = utils.positionedOffset(slate.options.container)
           self.Canvas.objInitialMousePos = {
             x: m.x + offsets.left,
             y: m.y + offsets.top,
           }
-          var xy = self.cp(e)
+          const xy = self.cp(e)
 
           if (self.status)
-            self.status.innerHTML = Math.abs(xy.x) + ', ' + Math.abs(xy.y)
+            self.status.innerHTML = `${Math.abs(xy.x)}, ${Math.abs(xy.y)}`
 
           if (slate.options.showStatus) {
             if (self.status) self.status.style.display = 'block'
-            slate.multiSelection && slate.multiSelection.hide()
+            slate.multiSelection?.hide()
           }
 
-          self.internal.style.cursor =
-            'url(' + imageFolder + 'closedhand.cur), default'
+          self.internal.style.cursor = `url(${imageFolder}closedhand.cur), default`
 
           if (m.allTouches) {
             slate.options.lastTouches = m.allTouches
           }
 
-          slate.removeContextMenus && slate.removeContextMenus()
+          if (slate.removeContextMenus) slate.removeContextMenus()
 
           slate.draggingZoom = self.slate.options.viewPort.zoom
 
-          //hide filters during dragging
+          // hide filters during dragging
           slate.toggleFilters(true)
 
           utils.stopEvent(e)
+        } else if (slate.onSelectionStart) {
+          slate.onSelectionStart.apply(self, [e])
         } else {
-          if (slate.onSelectionStart) {
-            slate.onSelectionStart.apply(self, [e])
-          } else {
-            utils.stopEvent(e)
-          }
+          utils.stopEvent(e)
         }
       },
-      setCursor: function (containerInstance) {
+      setCursor() {
         if (self.isDragging)
-          self.internal.style.cursor =
-            'url(' + imageFolder + 'closedhand.cur), default'
+          self.internal.style.cursor = `url(${imageFolder}closedhand.cur), default`
         else
-          self.internal.style.cursor =
-            'url(' + imageFolder + 'openhand.cur), default'
+          self.internal.style.cursor = `url(${imageFolder}openhand.cur), default`
       },
-      onDrag: function (e) {
+      onDrag(e) {
         requestAnimationFrame(() => {
-          //broadcast custom collab
-          var mp = utils.mousePos(e)
-          //var offsets = utils.positionedOffset(slate.options.container);
-          slate.collab && slate.collab.send({ type: 'onMouseMoved', data: mp })
+          // broadcast custom collab
+          const mp = utils.mousePos(e)
+          slate.collab?.send({ type: 'onMouseMoved', data: mp })
 
           if (self.isDragging && slate.options.allowDrag) {
-            // slate.birdsEye && slate.birdsEye.refresh(true);
-            var xy = self.cp(e)
+            const xy = self.cp(e)
             if (xy.allTouches && xy.allTouches.length > 1) {
               slate.options.lastTouches = xy.allTouches
             }
 
-            // if (xy.x > slate.options.viewPort.width - 1000 || xy.y > slate.options.viewPort.height - 1000) {
-            //   utils.stopEvent(e);
-            // } else {
             if (self.status)
-              self.status.innerHTML = Math.abs(xy.x) + ', ' + Math.abs(xy.y)
-            self.internal.style.left = xy.x + 'px'
-            self.internal.style.top = xy.y + 'px'
-            //}
+              self.status.innerHTML = `${Math.abs(xy.x)}, ${Math.abs(xy.y)}`
+            self.internal.style.left = `${xy.x}px`
+            self.internal.style.top = `${xy.y}px`
           }
         })
       },
-      endDrag: function (e) {
+      endDrag(e) {
         if (self.isDragging && slate.options.allowDrag) {
           self.isDragging = false
-          //var m = utils.mousePos(e);
 
-          self.internal.style.cursor =
-            'url(' + imageFolder + 'openhand.cur), default'
+          self.internal.style.cursor = `url(${imageFolder}openhand.cur), default`
           if (self.status) self.status.style.display = 'none'
-          slate.multiSelection && slate.multiSelection.show()
+          slate.multiSelection?.show()
 
-          var xy = self.cp(e)
+          const xy = self.cp(e)
           slate.draggingZoom = null
           self.endDrag(xy)
 
-          //show filters after dragging
+          // show filters after dragging
           slate.toggleFilters(false)
         }
       },
     }
 
-    //wipe it clean
+    // wipe it clean
     if (!slate.options.preserve) c.innerHTML = ''
 
     if (self.slate.paper) {
@@ -160,34 +146,31 @@ export default class canvas {
       c.removeChild(self.internal)
     }
 
-    //internal
+    // internal
     self.internal = document.createElement('div')
     self.internal.setAttribute(
       'class',
       `slateboxInternal_${self.slate.options.id}`
     )
-    //console.log("setting slate canvas", `slateboxInternal_${self.slate.options.id}`);
-    var _w = slate.options.viewPort.width
-    var _h = slate.options.viewPort.height
-    var _l = slate.options.viewPort.left
-    var _t = slate.options.viewPort.top
-    self.internal.style.width = _w + 100000 + 'px'
-    self.internal.style.height = _h + 100000 + 'px'
-    self.internal.style.left = _l * -1 + 'px'
-    self.internal.style.top = _t * -1 + 'px'
+    // console.log("setting slate canvas", `slateboxInternal_${self.slate.options.id}`);
+    const _w = slate.options.viewPort.width
+    const _h = slate.options.viewPort.height
+    const _l = slate.options.viewPort.left
+    const _t = slate.options.viewPort.top
+    self.internal.style.width = `${_w + 100000}px`
+    self.internal.style.height = `${_h + 100000}px`
+    self.internal.style.left = `${_l * -1}px`
+    self.internal.style.top = `${_t * -1}px`
     self.internal.style.position = 'absolute'
     self.internal.style['-webkit-transform'] = `translateZ(0)`
     self.internal.style.transform = `translateZ(0)` // `translate3d(0,0,0)`; //helps with GPU based rendering
     c.appendChild(self.internal)
 
-    self.internal.addEventListener('mousedown', (e) => {
-      self.slate &&
-        self.slate.events &&
-        self.slate.events.onCanvasClicked &&
-        self.slate.events.onCanvasClicked()
+    self.internal.addEventListener('mousedown', () => {
+      self.slate?.events?.onCanvasClicked?.apply()
     })
 
-    //status
+    // status
     if (self.slate.options.showStatus) {
       self.status = document.createElement('div')
       self.status.style.position = 'absolute'
@@ -206,19 +189,13 @@ export default class canvas {
       c.appendChild(self.status)
     }
 
-    //style container
+    // style container
     c.style.position = 'relative'
     c.style.overflow = 'hidden'
 
-    //style internal
-    const borderTop = slate.borderTop + 2 || 2
-    self.internal.style.borderTop = slate.borderTop + 'px'
-    self.internal.style.cursor = 'url(' + imageFolder + 'openhand.cur), default'
-
-    // self.internal.style.overflow = 'scroll';
-    // self.internal.style["-webkit-overflow-scrolling"] = "touch";
-    // self.internal.style["touch-action"] = "auto";
-
+    // style internal
+    self.internal.style.borderTop = `${slate.borderTop}px`
+    self.internal.style.cursor = `url(${imageFolder}openhand.cur), default`
     self.slate.paper = Raphael(self.internal, _w, _h)
 
     self.refreshBackground()
@@ -230,35 +207,32 @@ export default class canvas {
     slate.options.viewPort.originalHeight = _h
     slate.options.viewPort.originalWidth = _w
 
-    //set up initial zoom params
+    // set up initial zoom params
     self.resize(_w)
 
-    //show zoom slider
+    // show zoom slider
     if (slate.options.showZoom) {
-      //slate.zoomSlider.show();
-      slate.zoomSlider && slate.zoomSlider.show(slate.options.viewPort.width)
-      // slate.zoomSlider.show();
-      // slate.zoomSlider.setValue();
+      if (slate.zoomSlider) slate.zoomSlider.show(slate.options.viewPort.width)
     }
 
-    //show undo redo
+    // show undo redo
     if (slate.options.showUndoRedo) {
-      slate.undoRedo && slate.undoRedo.show()
+      if (slate.undoRedo) slate.undoRedo.show()
     }
 
-    //show birdsEye -- this is self referential on canvas in loadJSON inside slate.js, so this must be deferred until canvas constructor is done.
+    // show birdsEye -- this is self referential on canvas in loadJSON inside slate, so this must be deferred until canvas constructor is done.
     if (slate.options.showbirdsEye) {
       if (slate.birdsEye.enabled()) {
         slate.birdsEye.reload(slate.exportJSON())
       } else {
         slate.birdsEye.show({
           size: slate.options.sizeOfbirdsEye || 200,
-          onHandleMove: function (left, top) {},
+          onHandleMove() {},
         })
       }
     }
 
-    //set up the shareable/branding if need be
+    // set up the shareable/branding if need be
     if (
       !slate.options.isbirdsEye &&
       (slate.options.isSharing || slate.options.isEmbedding)
@@ -271,7 +245,7 @@ export default class canvas {
       _parent.className = 'sb_parent_shareable'
 
       const _styles = utils.buildStyle({
-        height: !!_iframe ? _scaleSize + 8 + 'px' : _scaleSize + 'px',
+        height: _iframe ? `${_scaleSize + 8}px` : `${_scaleSize}px`,
       })
       _parent.setAttribute('style', _styles)
 
@@ -285,14 +259,14 @@ export default class canvas {
 
       if (!slate.options.isbirdsEye && slate.options.isSharing) {
         const _svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${_btnSize}" height="${_btnSize}"><path fill="#333" stroke="#000" d="{path}" stroke-dasharray="none" stroke-width="1" opacity="1" fill-opacity="1"></path></svg>`
-        //stick sharing buttons (one-click png export and one-click copy embed)
+        // stick sharing buttons (one-click png export and one-click copy embed)
         ;['download', 'embed'].forEach((e) => {
           const _btn = document.createElement('div')
           _btn.className = 'sb_share'
           _btn.setAttribute('data-action', e)
           const _bstyles = utils.buildStyle({
-            width: _btnSize + 'px',
-            height: _btnSize + 'px',
+            width: `${_btnSize}px`,
+            height: `${_btnSize}px`,
           })
           _btn.setAttribute('style', _bstyles)
           const _new = utils.centerAndScalePathToFitContainer({
@@ -303,16 +277,16 @@ export default class canvas {
           _btn.innerHTML = _svg.replace(/{path}/gi, _new.path)
           _parent.appendChild(_btn)
 
-          utils.addEvent(_btn, 'click', function (e) {
+          utils.addEvent(_btn, 'click', () => {
             const _act = this.getAttribute('data-action')
             switch (_act) {
-              case 'embed':
+              case 'embed': {
                 const _et = document.createElement('textarea')
                 document.body.appendChild(_et)
                 let _val = ''
 
-                if (!!_iframe) {
-                  _val = `<iframe id='sb_embed_${slate.options.id}' src='${location.href}' width='${_iframe.clientWidth}' height='${_iframe.clientHeight}' frameborder='0' scrolling='no'></iframe>`
+                if (_iframe) {
+                  _val = `<iframe id='sb_embed_${slate.options.id}' src='${window.location.href}' width='${_iframe.clientWidth}' height='${_iframe.clientHeight}' frameborder='0' scrolling='no'></iframe>`
                 } else {
                   const _ele = slate.options.container.parentElement
                   const _raw = _ele.innerHTML
@@ -353,9 +327,14 @@ export default class canvas {
                 }, 1500)
 
                 break
-              case 'download':
-                slate.png() //if self is missing images, make sure you're not accidently clicking birdsEye
+              }
+              case 'download': {
+                slate.png()
                 break
+              }
+              default: {
+                break
+              }
             }
           })
         })
@@ -366,63 +345,16 @@ export default class canvas {
       }
     }
 
-    // setTimeout(() => {
-    //   //add defs to the svg post creation
-    //   //these are used to show a background grid
-    //   self.slate.paper.def({
-    //     type: "pattern",
-    //     id: "smallGrid",
-    //     height: 10,
-    //     width: 10,
-    //     patternUnits: "userSpaceOnUse",
-    //     inside: [{
-    //       type: "path",
-    //       attrs: {
-    //         d: "M 10 0 L 0 0 0 10",
-    //         fill: "none",
-    //         stroke: "gray",
-    //         "stroke-width": "0.5"
-    //       }
-    //     }]
-    //   });
-    //   self.slate.paper.def({
-    //     type: "pattern",
-    //     id: "grid",
-    //     height: 100,
-    //     width: 100,
-    //     patternUnits: "userSpaceOnUse",
-    //     inside: [
-    //       {
-    //         type: "rect",
-    //         attrs: {
-    //           width: "100",
-    //           height: "100",
-    //           fill: "url(#smallGrid)"
-    //         }
-    //       },
-    //       {
-    //         type: "path",
-    //         attrs: {
-    //           d: "M 100 0 L 0 0 0 100",
-    //           fill: "none",
-    //           stroke: "gray",
-    //           "stroke-width": "1"
-    //         }
-    //       }
-    //     ]
-    //   });
-    // }, 1000);
-
     self.windowSize = utils.windowSize()
     self.containerOffset = utils.positionedOffset(self.slate.options.container)
-    utils.addEvent(window, 'resize', function () {
+    utils.addEvent(window, 'resize', () => {
       self.windowSize = utils.windowSize()
       self.containerOffset = utils.positionedOffset(
         self.slate.options.container
       )
       if (self.dken !== null) {
-        self.dken.style.width = self.ws.width + 'px'
-        self.dken.style.height = self.ws.height + 'px'
+        self.dken.style.width = `${self.ws.width}px`
+        self.dken.style.height = `${self.ws.height}px`
       }
     })
 
@@ -431,20 +363,20 @@ export default class canvas {
       self.slate.birdsEye?.refresh()
     }, 500)
     self.completeInit = true
-  } //init
+  } // init
 
   cp(e) {
-    var m = utils.mousePos(e)
+    const m = utils.mousePos(e)
 
-    var difX =
+    let difX =
       this.Canvas.objInitPos.left + (m.x - this.Canvas.objInitialMousePos.x)
-    var difY =
+    let difY =
       this.Canvas.objInitPos.top + (m.y - this.Canvas.objInitialMousePos.y)
 
-    var _width = this.slate.options.containerStyle.width
-    var _height = this.slate.options.containerStyle.height
-    var _vpWidth = this.slate.options.viewPort.width
-    var _vpHeight = this.slate.options.viewPort.height
+    const _width = this.slate.options.containerStyle.width
+    const _height = this.slate.options.containerStyle.height
+    const _vpWidth = this.slate.options.viewPort.width
+    const _vpHeight = this.slate.options.viewPort.height
 
     if (difX > 0) difX = 0
     else if (Math.abs(difX) + _width > _vpWidth) difX = _width - _vpWidth
@@ -455,11 +387,11 @@ export default class canvas {
   }
 
   endDrag(coords) {
-    this.slate.options.viewPort.left = Math.abs(coords.x) // Math.abs((difX * this.slate.options.viewPort.zoom) / this.slate.options.viewPort.width);
-    this.slate.options.viewPort.top = Math.abs(coords.y) // Math.abs((difY * this.slate.options.viewPort.zoom) / this.slate.options.viewPort.height);
+    this.slate.options.viewPort.left = Math.abs(coords.x)
+    this.slate.options.viewPort.top = Math.abs(coords.y)
 
-    this.internal.style.left = coords.x + 'px'
-    this.internal.style.top = coords.y + 'px'
+    this.internal.style.left = `${coords.x}px`
+    this.internal.style.top = `${coords.y}px`
 
     const curPos = utils.positionedOffset(this.internal)
     const moved = {
@@ -467,7 +399,7 @@ export default class canvas {
       y: this.Canvas.objInitPos.top - curPos.top,
     }
 
-    this.slate.birdsEye && this.slate.birdsEye.refresh(true)
+    this.slate.birdsEye?.refresh(true)
 
     if (this.slate.collaboration.allow) {
       this.broadcast(moved)
@@ -475,21 +407,20 @@ export default class canvas {
   }
 
   broadcast(moved) {
-    this.slate.collab &&
-      this.slate.collab.send({
-        type: 'onCanvasMove',
-        data: {
-          left: this.slate.options.viewPort.left,
-          top: this.slate.options.viewPort.top,
-          relative: moved,
-          orient: this.slate.getOrientation(),
-        },
-      })
+    this.slate.collab?.send({
+      type: 'onCanvasMove',
+      data: {
+        left: this.slate.options.viewPort.left,
+        top: this.slate.options.viewPort.top,
+        relative: moved,
+        orient: this.slate.getOrientation(),
+      },
+    })
   }
 
   zoom(_opts) {
     const self = this
-    var opts = {
+    const opts = {
       dur: 500,
       callbacks: { after: null, during: null },
       easing: 'easeFromTo',
@@ -500,39 +431,35 @@ export default class canvas {
 
     self.slate.nodes.closeAllConnectors()
 
-    var _startZoom = self.slate.options.viewPort.zoom.w
-    var _targetZoom =
+    const _startZoom = self.slate.options.viewPort.zoom.w
+    const _targetZoom =
       self.slate.options.viewPort.originalWidth *
-      (100 / parseInt(opts.zoomPercent))
-    var _zoomDif = Math.abs(_targetZoom - _startZoom)
+      (100 / parseInt(opts.zoomPercent, 10))
+    const _zoomDif = Math.abs(_targetZoom - _startZoom)
 
     opts.dur = !opts.dur && opts.dur !== 0 ? 500 : opts.dur
 
-    //self.internal.style.transform = perspective(config.perspective / targetScale) + scale(_zoomDif);
-    //self.internal.style.transitionDuration = opts.dur + "ms";
-    //self.internal.style.transitionDelay = "0ms";
-
+    // eslint-disable-next-line no-undef
     emile(self.internal, 'padding:1px', {
       duration: opts.dur,
-      before: function () {
+      before() {
         self.slate.options.allowDrag = false
       },
-      after: function () {
+      after() {
         self.slate.options.allowDrag = true
         self.slate.zoomSlider.set(_targetZoom)
-        self.slate.birdsEye && self.slate.birdsEye.refresh(true)
-        opts.callbacks.after &&
-          opts.callbacks.after.apply(self.slate, [_targetZoom])
+        self.slate.birdsEye?.refresh(true)
+        opts.callbacks?.after?.apply(self.slate, [_targetZoom])
       },
-      during: function (pc) {
-        var _val =
+      during(pc) {
+        const _val =
           _targetZoom > _startZoom
             ? _startZoom + _zoomDif * pc
             : _startZoom - _zoomDif * pc
         self.slate.zoom(0, 0, _val, _val, false)
         self.slate.canvas.resize(_val)
-        self.slate.birdsEye && self.slate.birdsEye.refresh(true)
-        opts.callbacks && opts.callbacks.during && opts.callbacks.during(pc)
+        self.slate.birdsEye?.refresh(true)
+        opts.callbacks?.during?.apply(pc)
       },
       easing: utils.easing[opts.easing],
     })
@@ -540,7 +467,7 @@ export default class canvas {
 
   move(_opts) {
     const self = this
-    var opts = {
+    const opts = {
       x: 0,
       y: 0,
       dur: 500,
@@ -551,92 +478,79 @@ export default class canvas {
 
     Object.assign(opts, _opts)
 
-    var x = opts.x
-    var y = opts.y
+    let { x } = opts
+    let { y } = opts
     if (opts.isAbsolute === false) {
       x = self.slate.options.viewPort.left + x
       y = self.slate.options.viewPort.top + y
     }
 
-    // if (x > self.slate.options.viewPort.width - 1000 || y > self.slate.options.viewPort.height - 1000) {
-    //   //already at boundary
-    // } else {
-
     self.slate.nodes.closeAllConnectors()
     if (opts.dur > 0) {
-      emile(self.internal, 'left:' + x * -1 + 'px;top:' + y * -1 + 'px', {
+      // eslint-disable-next-line no-undef
+      emile(self.internal, `left:${x * -1}px;top:${y * -1}px`, {
         duration: opts.dur,
-        before: function () {
+        before() {
           self.slate.options.allowDrag = false
         },
-        after: function () {
+        after() {
           self.slate.options.allowDrag = true
           self.slate.options.viewPort.left = Math.abs(
-            parseInt(self.internal.style.left.replace('px', ''))
+            parseInt(self.internal.style.left.replace('px', ''), 10)
           )
           self.slate.options.viewPort.top = Math.abs(
-            parseInt(self.internal.style.top.replace('px', ''))
+            parseInt(self.internal.style.top.replace('px', ''), 10)
           )
-          self.slate.birdsEye && self.slate.birdsEye.refresh(true)
-          opts.callbacks.after && opts.callbacks.after.apply(self.slate)
+          self.slate.birdsEye?.refresh(true)
+          opts.callbacks.after.apply(self.slate)
         },
-        during: function (pc) {
-          self.slate.birdsEye && self.slate.birdsEye.refresh(true)
-          opts.callbacks && opts.callbacks.during && opts.callbacks.during(pc)
+        during(pc) {
+          self.slate.birdsEye?.refresh(true)
+          opts.callbacks?.during?.apply(pc)
         },
         easing: utils.easing[opts.easing],
       })
     } else {
-      //x = Math.abs(self.slate.options.viewPort.left) + Math.abs(x) * -1;
-      //y = Math.abs(self.slate.options.viewPort.top) + Math.abs(y) * -1;
       window.requestAnimationFrame(() => {
-        self.internal.style.left = x * -1 + 'px'
-        self.internal.style.top = y * -1 + 'px'
+        self.internal.style.left = `${x * -1}px`
+        self.internal.style.top = `${y * -1}px`
         self.slate.options.viewPort.left = Math.abs(x)
         self.slate.options.viewPort.top = Math.abs(y)
-        opts.callbacks.after && opts.callbacks.after.apply(self.slate)
+        opts.callbacks?.after?.apply(self.slate)
       })
     }
-    //}
+    // }
   }
 
   resize(val) {
-    val = parseInt(val)
+    const uval = parseInt(val, 10)
 
-    let R = this.slate.options.viewPort.width / val
-    let dimen = utils.getDimensions(this.slate.options.container)
-
-    //this.internal.style.width = "50000px";
-    //this.internal.style.height = "50000px";
-
+    const R = this.slate.options.viewPort.width / uval
+    const dimen = utils.getDimensions(this.slate.options.container)
     let _top = this.slate.options.viewPort.top * -1 * R
     let _left = this.slate.options.viewPort.left * -1 * R
 
-    let _centerY = ((dimen.height / 2) * R - dimen.height / 2) * -1
-    let _centerX = ((dimen.width / 2) * R - dimen.width / 2) * -1
+    const _centerY = ((dimen.height / 2) * R - dimen.height / 2) * -1
+    const _centerX = ((dimen.width / 2) * R - dimen.width / 2) * -1
 
-    _top = _top + _centerY
-    _left = _left + _centerX
+    _top += _centerY
+    _left += _centerX
 
-    let threshold = this.slate.options.viewPort.originalWidth - 1000
+    const threshold = this.slate.options.viewPort.originalWidth - 1000
 
     if (-_top > threshold || -_left > threshold) {
-      //already at boundary
       return false
-    } else {
-      this.internal.style.top = _top + 'px'
-      this.internal.style.left = _left + 'px'
-      this.slate.options.viewPort.zoom = {
-        w: val,
-        h: val,
-        l: parseFloat(_left * -1),
-        t: parseFloat(_top * -1),
-        r: this.slate.options.viewPort.originalWidth / val,
-      }
-      return true
     }
-    //console.log(val);
-    //if (this.slate.options.viewPort.lockZoom === false) z.r = R;
+    this.internal.style.top = `${_top}px`
+    this.internal.style.left = `${_left}px`
+    this.slate.options.viewPort.zoom = {
+      w: uval,
+      h: uval,
+      l: parseFloat(_left * -1),
+      t: parseFloat(_top * -1),
+      r: this.slate.options.viewPort.originalWidth / uval,
+    }
+    return true
   }
 
   clear() {
@@ -645,67 +559,29 @@ export default class canvas {
   }
 
   wire() {
-    for (var ee in this.eve.init) {
-      this.internal[this.eve.init[parseInt(ee)]] = this.Canvas.initDrag
-    }
-    for (var ee in this.eve.drag) {
-      this.internal[this.eve.drag[parseInt(ee)]] = this.Canvas.onDrag
-    }
-    for (var ee in this.eve.up) {
-      this.internal[this.eve.up[parseInt(ee)]] = this.Canvas.endDrag
-    }
-
-    var origVal, zoomX, zoomY
-    // this.internal.ongesturestart = function(e) {
-    //   e.preventDefault();
-    //   this.slate.options.allowDrag = false;
-    //   if (this.slate.options.lastTouches) {
-    //     var lt = this.slate.options.lastTouches;
-    //     zoomX = lt[0].x;
-    //     zoomY = lt[0].y;
-    //     if (lt.length > 1) {
-    //       zoomX = (Math.max(lt[0].x, lt[1].x || 0) - Math.min(lt[0].x, lt[1].x || lt[0].x)) / 2; // + Math.min(lt[0].x, lt[1].x || lt[0].x);
-    //       zoomY = (Math.max(lt[0].y, lt[1].y || 0) - Math.min(lt[0].y, lt[1].y || lt[0].y)) / 2; // + Math.min(lt[0].y, lt[1].y || lt[0].y);
-    //     }
-    //     origVal = this.slate.options.viewPort.zoom.w;
-    //     //this.slate.paper.rect(xMiddle + this.slate.options.viewPort.left, yMiddle + this.slate.options.viewPort.top, 10, 10);
-    //   }
-    // }
-    // this.internal.ongesturechange = function(e) {
-    //   var val = origVal / e.scale;
-
-    //   this.slate.zoom(0, 0, val, val, false);
-    //   this.slate.this.canvas.resize(val); //, zoomX, zoomY
-
-    //   utils.select('li.rmitem')[0].innerHTML = this.slate.options.lastTouches[0].x + " , " + this.slate.options.lastTouches[1].x
-    // }
-    // this.internal.ongestureend = function(e) {
-    //   this.slate.options.allowDrag = true;
-    //   //try expanding the canvas -- i think this is consistently firing, but the this.internal is out of scope after a bit...
-
-    //   //utils.select('li.rmitem')[0].innerHTML = z.w + " , " + z.h + " , " + z.l + " , " + z.t;
-    //   var z = this.slate.options.viewPort.zoom;
-    //   var vp = this.slate.options.viewPort;
-    //   vp.width = z.w;
-    //   vp.height = z.h;
-    //   vp.left = z.l;
-    //   vp.top = z.t;
-    // }
+    const self = this
+    self.eve.init.forEach((ee) => {
+      self.internal[ee] = self.Canvas.initDrag
+    })
+    self.eve.drag.forEach((ee) => {
+      self.internal[ee] = self.Canvas.onDrag
+    })
+    self.eve.up.forEach((ee) => {
+      self.internal[ee] = self.Canvas.endDrag
+    })
   }
 
   unwire() {
-    for (var ee in this.eve.init) {
-      this.internal[this.eve.init[parseInt(ee)]] = null
-    }
-    for (var ee in this.eve.drag) {
-      this.internal[this.eve.drag[parseInt(ee)]] = null
-    }
-    for (var ee in this.eve.up) {
-      this.internal[this.eve.up[parseInt(ee)]] = null
-    }
-    for (var ee in this.eve.gest) {
-      this.internal[this.eve.gest[parseInt(ee)]] = null
-    }
+    const self = this
+    self.eve.init.forEach((ee) => {
+      self.internal[ee] = null
+    })
+    self.eve.drag.forEach((ee) => {
+      self.internal[ee] = null
+    })
+    self.eve.up.forEach((ee) => {
+      self.internal[ee] = null
+    })
   }
 
   rawSVG(cb) {
@@ -726,13 +602,14 @@ export default class canvas {
     }
 
     function extractImages(__svg) {
-      let images = uniq(
+      let ssvg = __svg
+      const images = uniq(
         self.slate.nodes.allNodes.map((n) => n.options.image).filter((f) => !!f)
       )
       if (images.length > 0) {
         images.forEach((i, ind) => {
           if (self.slate.events.onBase64ImageRequested) {
-            //server side gen
+            // server side gen
             let imageType = 'png'
             if (i.indexOf('jpg')) {
               imageType = 'jpeg'
@@ -746,39 +623,39 @@ export default class canvas {
                 if (err) {
                   console.error('Unable to retrieve base64 from image', err)
                 } else {
-                  let ix = i.replace(/&/gi, '&amp;')
-                  while (__svg.indexOf(ix) > -1) {
-                    __svg = __svg.replace(ix, res)
+                  const ix = i.replace(/&/gi, '&amp;')
+                  while (ssvg.indexOf(ix) > -1) {
+                    ssvg = ssvg.replace(ix, res)
                   }
                 }
                 if (ind + 1 === images.length) {
-                  finalize(__svg)
+                  finalize(ssvg)
                 }
               }
             )
           } else {
-            //client side only -- good luck with CORS - this method should be avoided
+            // client side only -- good luck with CORS - this method should be avoided
             utils
               .toDataUrl(i)
               .then((dataUrl) => {
-                __svg = __svg.replace(new RegExp(i, 'gi'), dataUrl)
+                ssvg = ssvg.replace(new RegExp(i, 'gi'), dataUrl)
               })
               .catch((err) => {
                 console.error('Unable to get image', err)
               })
               .finally(() => {
                 if (ind + 1 === images.length) {
-                  finalize(__svg)
+                  finalize(ssvg)
                 }
               })
           }
         })
       } else {
-        finalize(__svg)
+        finalize(ssvg)
       }
     }
 
-    //always embed fonts and fix links -- a style node is always added in the init
+    // always embed fonts and fix links -- a style node is always added in the init
     embedGoogleFonts({
       fonts: uniq(self.slate.nodes.allNodes.map((n) => n.options.fontFamily)),
       text: uniq(
@@ -790,18 +667,17 @@ export default class canvas {
         .trim(),
       styleNode: self.internal.querySelector('svg > defs > style'),
     }).then(() => {
-      //need to swap out xlink:href with href for the blob to work w/ the pixelate (or other) filter
+      // need to swap out xlink:href with href for the blob to work w/ the pixelate (or other) filter
       let __svg = self.internal.innerHTML.replace(/xlink:href/gi, 'href')
-      let slateBg = self.slate.options.containerStyle.backgroundImage
+      const slateBg = self.slate.options.containerStyle.backgroundImage
       if (slateBg) {
-        //server side gen
+        // server side gen
         let bgImageType = 'png'
         if (slateBg.indexOf('jpg')) {
           bgImageType = 'jpeg'
         } else if (slateBg.indexOf('gif')) {
           bgImageType = 'gif'
         }
-        console.log('going to get base64', slateBg, bgImageType)
         self.slate.events.onBase64ImageRequested(
           slateBg,
           bgImageType,
@@ -820,36 +696,13 @@ export default class canvas {
     })
   }
 
-  darken(percent) {
-    if (this.dken === null) {
-      this.dken = document.createElement('div')
-      var ws = utils.windowSize()
-      this.dken.style.backgroundColor = '#ccc'
-      this.dken.style.position = 'absolute'
-      this.dken.style.left = '0px'
-      this.dken.style.top = '0px'
-      this.dken.style.width = ws.width + 'px'
-      this.dken.style.height = ws.height + 'px'
-      this.dken.style.zIndex = 999
-      this.dken.style.filter = 'alpha(opacity=' + percent + ')'
-      this.dken.style.opacity = percent / 100
-      document.body.appendChild(this.dken)
-    }
-    return this.dken
-  }
-
-  lighten() {
-    this.dken && document.body.removeChild(this.dken)
-    this.dken = null
-  }
-
   bgToBack() {
     this._bg?.toBack()
   }
 
   hideBg(t) {
     const self = this
-    let e = self.slate.options.containerStyle.backgroundEffect
+    const e = self.slate.options.containerStyle.backgroundEffect
     self._bg?.remove()
     delete self._bg
     if (e) {
@@ -903,39 +756,30 @@ export default class canvas {
       }
     }
 
-    //show only on first load
+    // show only on first load
     if (!self.initBg && self.slate.options.containerStyle.backgroundEffect) {
       self.initBg = true
       self.hideBg(1)
     }
 
-    // let e = self.slate.options.containerStyle.backgroundEffect;
-    //self.internal.style.filter = "";
-    // self._bg?.remove();
-    // if (e && !self.slate.options.isbirdsEye && !self.bgIsCleared) {
-    //   self._bg = self.slate.paper.rect(0, 0, self.slate.options.viewPort.width, self.slate.options.viewPort.height)
-    //       .attr({ filter: `url(#${e})`, fill: `url(#${self.slate.filters.availableFilters[e]?.fill})` }).toBack();
-    //   if (self.slate.filters.availableFilters[e]?.backgroundColor) {
-    //     self.slate.options.containerStyle.backgroundColor = self.slate.filters.availableFilters[e].backgroundColor;
-    //   }
-    // }
     switch (self.slate.options.containerStyle.backgroundColor) {
       case 'transparent': {
-        if (self.slate.options.isbirdsEye) {
-        } else if (self.slate.options.isEmbedding) {
-          self.internal.style.backgroundColor = ''
-        } else if (!self.slate.options.containerStyle.backgroundImage) {
-          self.internal.style.backgroundImage =
-            'linear-gradient(45deg,rgba(13,26,43,0.1) 25%,transparent 25%,transparent 75%,rgba(13,26,43,0.1) 75%),linear-gradient(45deg,rgba(13,26,43,0.1) 25%,transparent 25%,transparent 75%,rgba(13,26,43,0.1) 75%)'
-          self.internal.style.backgroundSize = '12px 12px'
-          self.internal.style.backgroundPosition = '0 0,6px 6px'
+        if (!self.slate.options.isbirdsEye) {
+          if (self.slate.options.isEmbedding) {
+            self.internal.style.backgroundColor = ''
+          } else if (!self.slate.options.containerStyle.backgroundImage) {
+            self.internal.style.backgroundImage =
+              'linear-gradient(45deg,rgba(13,26,43,0.1) 25%,transparent 25%,transparent 75%,rgba(13,26,43,0.1) 75%),linear-gradient(45deg,rgba(13,26,43,0.1) 25%,transparent 25%,transparent 75%,rgba(13,26,43,0.1) 75%)'
+            self.internal.style.backgroundSize = '12px 12px'
+            self.internal.style.backgroundPosition = '0 0,6px 6px'
+          }
         }
         break
       }
       default: {
         if (self.slate.options.containerStyle.backgroundColorAsGradient) {
           self.internal.style.backgroundColor = ''
-          let bgStyle = `${
+          const bgStyle = `${
             self.slate.options.containerStyle.backgroundGradientType
           }-gradient(${self.slate.options.containerStyle.backgroundGradientColors.join(
             ','

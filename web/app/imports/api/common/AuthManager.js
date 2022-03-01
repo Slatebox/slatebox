@@ -1,26 +1,20 @@
-import intersection from "lodash.intersection"
-import uniq from "lodash.uniq"
-import { CONSTANTS } from "./constants";
-import { Permissions, Claims } from '/imports/api/common/models.js';
+/* eslint-disable no-underscore-dangle */
+import intersection from 'lodash.intersection'
+import uniq from 'lodash.uniq'
+import CONSTANTS from './constants'
+import { Permissions } from './models'
 
 export default class AuthManager {
-	static userHasClaim(userId, claims, mustBeInAll) {
-		if (!claims.filter) claims = [claims];
-    //always add admin to the list
-    claims = uniq(claims.concat(CONSTANTS.claims.admin._id));
-		const permissions = Permissions.find({ userId: userId }).fetch();
-    // if (permissions.length === 0) {
-    //   console.log("EMPTY PERMS FOUND", permissions);
-    //   console.trace();
-    // }
-		const claimIds = permissions.map((p) => { return p.claimId });
-		//const claimNames = Claims.find({ _id: { $in: claimIds } }).fetch().map(c => c._id);
-    //claimNames  [ 'admin' ] [ 'admin' ] undefined [ 'admin' ]
-    // console.log("claimNames ", claimIds, claims, mustBeInAll, intersection(claimIds, claims));
-		if (mustBeInAll) {
-			return intersection(claimIds, claims).length === claims.length;
-		} else {
-			return intersection(claimIds, claims).length > 0;
-		}
-	}
+  static userHasClaim(userId, claims, mustBeInAll) {
+    let uclaims = claims
+    if (!uclaims.filter) uclaims = [uclaims]
+    // always add admin to the list
+    uclaims = uniq(uclaims.concat(CONSTANTS.claims.admin._id))
+    const permissions = Permissions.find({ userId }).fetch()
+    const claimIds = permissions.map((p) => p.claimId)
+    if (mustBeInAll) {
+      return intersection(claimIds, uclaims).length === uclaims.length
+    }
+    return intersection(claimIds, uclaims).length > 0
+  }
 }

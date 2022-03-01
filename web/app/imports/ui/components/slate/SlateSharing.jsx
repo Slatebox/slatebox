@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react'
+/* eslint-disable no-underscore-dangle */
+import React, { useEffect } from 'react'
+import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import { Random } from 'meteor/random'
 import { useTracker } from 'meteor/react-meteor-data'
 import { useDispatch, useSelector } from 'react-redux'
-import { useTheme } from '@material-ui/core/styles'
 import { makeStyles } from '@material-ui/core/styles'
-import useMediaQuery from '@material-ui/core/useMediaQuery'
 import Dialog from '@material-ui/core/Dialog'
 import DialogTitle from '@material-ui/core/DialogTitle'
 import DialogContent from '@material-ui/core/DialogContent'
@@ -26,23 +26,12 @@ import ListItemIcon from '@material-ui/core/ListItemIcon'
 import ListItemText from '@material-ui/core/ListItemText'
 import TableContainer from '@material-ui/core/TableContainer'
 import Table from '@material-ui/core/Table'
-import TableHead from '@material-ui/core/TableHead'
 import TableRow from '@material-ui/core/TableRow'
 import TableCell from '@material-ui/core/TableCell'
 import Link from '@material-ui/core/Link'
 import { Link as RouterLink } from 'react-router-dom'
-import Tooltip from '@material-ui/core/Tooltip'
-import Checkbox from '@material-ui/core/Checkbox'
 import TableBody from '@material-ui/core/TableBody'
 import Paper from '@material-ui/core/Paper'
-
-import {
-  Organizations,
-  SlateAccess,
-  Slates,
-} from '../../../api/common/models.js'
-import { promisify } from '../../../api/client/promisify.js'
-import { CONSTANTS } from '../../../api/common/constants.js'
 import RadioGroup from '@material-ui/core/RadioGroup'
 import Radio from '@material-ui/core/Radio'
 import FormControlLabel from '@material-ui/core/FormControlLabel'
@@ -50,13 +39,13 @@ import Select from '@material-ui/core/Select'
 import Grid from '@material-ui/core/Grid'
 import MenuItem from '@material-ui/core/MenuItem'
 import { CircularProgress } from '@material-ui/core'
-import TextField from '@material-ui/core/TextField'
-import FormControl from '@material-ui/core/FormControl'
-import Input from '@material-ui/core/Input'
-import InputAdornment from '@material-ui/core/InputAdornment'
 import IconButton from '@material-ui/core/IconButton'
 import Box from '@material-ui/core/Box'
-import AuthManager from '../../../api/common/AuthManager.js'
+import CONSTANTS from '../../../api/common/constants'
+import promisify from '../../../api/client/promisify'
+import { Organizations, SlateAccess, Slates } from '../../../api/common/models'
+import AuthManager from '../../../api/common/AuthManager'
+import slateProps from '../../propTypes/slatePriops'
 
 const useStyles = makeStyles((theme) => ({
   modal: {
@@ -90,47 +79,34 @@ const useStyles = makeStyles((theme) => ({
   },
 }))
 
-export const SlateSharing = (props) => {
-  let slate = props.slate
-
+export default function SlateSharing({ slate }) {
   const dispatch = useDispatch()
-  const theme = useTheme()
-  let sharingExpanded = useTracker(() => {
+  const sharingExpanded = useTracker(() => {
     Meteor.subscribe(CONSTANTS.publications.shareableSlate, slate?.options.id)
     const s = Slates.findOne({ _id: slate?.options?.id })
     if (s?.options?.isUnlisted) {
       return 'unlisted'
-    } else if (s?.options?.isPrivate) {
-      return 'private'
-    } else {
-      return 'public'
     }
+    if (s?.options?.isPrivate) {
+      return 'private'
+    }
+    return 'public'
   })
-  // console.log("sharingExpanded is ", sharingExpanded);
-  //useSelector(state => state.sharingExpanded);
-  // if (!sharingExpanded) {
-  //   if (slate?.options?.isPublic) {
-  //     sharingExpanded = "public";
-  //   } else if (slate?.options?.isUnlisted) {
-  //     sharingExpanded = "unlisted";
-  //   } else if (slate?.options?.isPrivate) {
-  //     sharingExpanded = "private";
-  //   }
-  // }
+
   const openShareDialog = useSelector((state) => state.openShareDialog)
   const classes = useStyles()
-  let members = useTracker(() => {
-    //only non admins need explicit access
-    return Meteor.users
+  const members = useTracker(() =>
+    // only non admins need explicit access
+    Meteor.users
       .find({ orgId: Meteor?.user()?.orgId, _id: { $ne: Meteor.userId() } })
       .fetch()
-      .filter((m) => {
-        return !AuthManager.userHasClaim(m._id, [CONSTANTS.claims.admin._id])
-      })
-  })
-  let slateAccess = useTracker(() => {
-    return SlateAccess.find({ slateId: slate?.options?.id }).fetch()
-  })
+      .filter(
+        (m) => !AuthManager.userHasClaim(m._id, [CONSTANTS.claims.admin._id])
+      )
+  )
+  const slateAccess = useTracker(() =>
+    SlateAccess.find({ slateId: slate?.options?.id }).fetch()
+  )
 
   const [guestViewData, setGuestViewData] = React.useState(null)
   useEffect(() => {
@@ -154,34 +130,79 @@ export const SlateSharing = (props) => {
     getData()
   }, [])
 
-  let unlistedViewsThisMonth =
+  const unlistedViewsThisMonth =
     guestViewData?.totalUnlistedViewsByMonth &&
     guestViewData?.totalUnlistedViewsByMonth[new Date().getMonth() + 1]
       ? guestViewData?.totalUnlistedViewsByMonth[new Date().getMonth() + 1]
       : guestViewData?.allowableUnlistedViewsPerMonth
 
+  function getSlateAccess(type) {
+    const access = slateAccess.find(
+      (sa) => sa._id === `${type}_${slate?.options.id}`
+    )?.slateAccessPermissionId
+    return access || CONSTANTS.slateAccessPermissions.read.id
+  }
+
+  function setSlateAccess(type, slateAccessPermissionId) {
+    if (slateAccess.find((sa) => sa._id === `${type}_${slate.options.id}`)) {
+      SlateAccess.update(
+        { _id: `${type}_${slate.options.id}` },
+        { $set: { slateAccessPermissionId } }
+      )
+    } else if (slate?.options) {
+      SlateAccess.insert({
+        type,
+        _id: `${type}_${slate.options.id}`,
+        slateId: slate.options.id,
+        orgId: Meteor.user().orgId,
+        slateAccessPermissionId,
+        accessKey: Random.id().substring(0, 8),
+        owningUserId: Meteor.userId(),
+      })
+    }
+  }
+
+  function getUrl(type) {
+    const { baseUrl } = Meteor.settings.public
+    let access = slateAccess.find(
+      (sa) => sa._id === `${type}_${slate.options.id}`
+    )
+    let url = access ? `${baseUrl}/canvas/${access.accessKey}` : null
+    if (type !== 'private' && !url) {
+      // create read only by default if it's never been created
+      setSlateAccess(type, CONSTANTS.slateAccessPermissions.read.id)
+      access = slateAccess.find(
+        (sa) => sa._id === `${type}_${slate.options.id}`
+      )
+      url = access ? `${baseUrl}/canvas/${access.accessKey}` : null
+    }
+    return url
+  }
+
   function enact(exp) {
-    slate.isPublic = exp === 'public'
-    slate.isPrivate = exp === 'private'
-    slate.isUnlisted = exp === 'unlisted'
-    // ("updating ", slate.isPublic, slate.isUnlisted, slate.isPrivate);
+    dispatch({
+      type: 'canvas',
+      slatePrivacy: {
+        isPublic: exp === 'public',
+        isPrivate: exp === 'private',
+        isUnlisted: exp === 'unlisted',
+      },
+    })
     Slates.update(
       { _id: slate?.options?.id },
       {
         $set: {
-          'options.isPublic': slate.isPublic,
-          'options.isPrivate': slate.isPrivate,
-          'options.isUnlisted': slate.isUnlisted,
+          'options.isPublic': exp === 'public',
+          'options.isPrivate': exp === 'private',
+          'options.isUnlisted': exp === 'unlisted',
         },
       }
     )
-
-    //dispatch({ type: "canvas", sharingExpanded: exp });
   }
 
   const setExpanded = async (exp) => {
     if (exp === 'private' || exp === 'unlisted') {
-      //check the slate count
+      // check the slate count
       if (
         Meteor.user().planType === 'free' ||
         Organizations.findOne()?.planType === 'free'
@@ -190,11 +211,11 @@ export const SlateSharing = (props) => {
           Meteor.call,
           CONSTANTS.methods.slates.getNonPublic
         )
-        let otherNonPublics = nonPublics.filter(
+        const otherNonPublics = nonPublics.filter(
           (p) => p.id !== slate.options.id
         )
         if (otherNonPublics.length >= CONSTANTS.privateSlateLimit) {
-          //will go past the limit, so show payment options
+          // will go past the limit, so show payment options
           dispatch({
             type: 'payment',
             paymentOpen: true,
@@ -213,14 +234,12 @@ export const SlateSharing = (props) => {
         enact(exp)
       }
     } else {
-      // console.log("updating slate", slate?.options?.id);
-      //Slates.update({ _id: slate?.options?.id }, { $set: { "options.isPublic": true, "options.isPrivate": false, "options.isUnlisted": false }});
       enact(exp)
     }
   }
 
-  const closeShareDialog = (e) => {
-    dispatch({ type: 'canvas', openShareDialog: false }) //, sharingExpanded: null
+  const closeShareDialog = () => {
+    dispatch({ type: 'canvas', openShareDialog: false })
   }
 
   function copyUrl(url) {
@@ -238,103 +257,54 @@ export const SlateSharing = (props) => {
   }
 
   function isChecked(member, slateAccessPermissionId) {
-    let all = slateAccess.filter((sa) => {
-      return sa.userId === member._id
-    })
-    let any = all.find((sa) => {
-      return sa.slateAccessPermissionId === slateAccessPermissionId
-    })
-    // console.log("any is ", all.length, slateAccessPermissionId, any);
+    const all = slateAccess.filter((sa) => sa.userId === member._id)
+    const any = all.find(
+      (sa) => sa.slateAccessPermissionId === slateAccessPermissionId
+    )
     if (
       all.length === 0 &&
       slateAccessPermissionId === CONSTANTS.slateAccessPermissions.none.id
     ) {
       return true
-    } else {
-      return any
     }
+    return any
   }
 
   function handlePermission(member, slateAccessPermissionId) {
     if (
       slateAccess.find(
-        (sa) => sa._id === `private_${member._id}_${props.slate.options.id}`
+        (sa) => sa._id === `private_${member._id}_${slate.options.id}`
       )
     ) {
       SlateAccess.update(
-        { _id: `private_${member._id}_${props.slate.options.id}` },
-        { $set: { slateAccessPermissionId: slateAccessPermissionId } }
+        { _id: `private_${member._id}_${slate.options.id}` },
+        { $set: { slateAccessPermissionId } }
       )
     } else {
       SlateAccess.insert({
         type: 'private',
-        _id: `private_${member._id}_${props.slate.options.id}`,
+        _id: `private_${member._id}_${slate.options.id}`,
         userId: member._id,
         orgId: Meteor.user().orgId,
-        slateId: props.slate.options.id,
-        slateAccessPermissionId: slateAccessPermissionId,
+        slateId: slate.options.id,
+        slateAccessPermissionId,
         accessKey: Random.id().substring(0, 8),
         owningUserId: Meteor.userId(),
       })
     }
   }
 
-  function getUrl(type) {
-    let baseUrl = Meteor.settings.public.baseUrl
-    let access = slateAccess.find(
-      (sa) => sa._id === `${type}_${props.slate.options.id}`
-    )
-    let url = access ? `${baseUrl}/canvas/${access.accessKey}` : null
-    if (type !== 'private' && !url) {
-      //create read only by default if it's never been created
-      setSlateAccess(type, CONSTANTS.slateAccessPermissions.read.id)
-      access = slateAccess.find(
-        (sa) => sa._id === `${type}_${props.slate.options.id}`
-      )
-      url = access ? `${baseUrl}/canvas/${access.accessKey}` : null
-    }
-    // console.log("url is ", url);
-    return url
-  }
-
-  function getSlateAccess(type) {
-    let access = slateAccess.find(
-      (sa) => sa._id === `${type}_${slate?.options.id}`
-    )?.slateAccessPermissionId
-    return access || CONSTANTS.slateAccessPermissions.read.id
-  }
-
-  function setSlateAccess(type, slateAccessPermissionId) {
-    if (
-      slateAccess.find((sa) => sa._id === `${type}_${props.slate.options.id}`)
-    ) {
-      SlateAccess.update(
-        { _id: `${type}_${props.slate.options.id}` },
-        { $set: { slateAccessPermissionId: slateAccessPermissionId } }
-      )
-    } else if (props?.slate?.options) {
-      SlateAccess.insert({
-        type: type,
-        _id: `${type}_${props.slate.options.id}`,
-        slateId: props.slate.options.id,
-        orgId: Meteor.user().orgId,
-        slateAccessPermissionId: slateAccessPermissionId,
-        accessKey: Random.id().substring(0, 8),
-        owningUserId: Meteor.userId(),
-      })
-    }
-  }
-
-  function SelectType(props) {
-    let url = getUrl(props.type)
+  // eslint-disable-next-line react/no-unstable-nested-components
+  function SelectType({ type }) {
+    const url = getUrl(type)
     return (
       <Grid container alignItems="center" justify="flex-start" spacing={2}>
-        <Grid item>Share the {props.type} link below to provide</Grid>
+        <Grid item>Share the {type} link below to provide</Grid>
         <Grid item>
           <Select
-            value={getSlateAccess(props.type)}
+            value={getSlateAccess(type)}
             onChange={(e) => {
-              setSlateAccess(props.type, e.target.value)
+              setSlateAccess(type, e.target.value)
             }}
             variant="outlined"
           >
@@ -365,7 +335,7 @@ export const SlateSharing = (props) => {
               <Grid item>
                 <IconButton
                   aria-label="copy url"
-                  onClick={(e) => {
+                  onClick={() => {
                     copyUrl(url)
                   }}
                   edge="end"
@@ -382,9 +352,17 @@ export const SlateSharing = (props) => {
     )
   }
 
+  SlateSharing.propTypes = {
+    slate: slateProps.isRequired,
+  }
+
+  SelectType.propTypes = {
+    type: PropTypes.string.isRequired,
+  }
+
   return (
     <Dialog
-      fullWidth={true}
+      fullWidth
       maxWidth="md"
       onClose={closeShareDialog}
       aria-labelledby="share-slate"
@@ -398,7 +376,7 @@ export const SlateSharing = (props) => {
         {Meteor.user() && Meteor.user().orgId && (
           <Accordion
             expanded={sharingExpanded === 'private'}
-            onChange={(e) => {
+            onChange={() => {
               setExpanded('private')
             }}
             style={{
@@ -410,7 +388,7 @@ export const SlateSharing = (props) => {
               aria-controls="settingsPanelbh-content"
               id="settingsPanelbh-header"
             >
-              <List dense={true}>
+              <List dense>
                 <ListItem>
                   <ListItemIcon>
                     <VpnKeyIcon />
@@ -449,7 +427,7 @@ export const SlateSharing = (props) => {
                     )}
                     {members.map((member, index) => (
                       <TableRow
-                        key={index}
+                        key={member._id}
                         className={
                           index % 2 ? classes.darkRow : classes.lightRow
                         }
@@ -482,7 +460,7 @@ export const SlateSharing = (props) => {
                                         CONSTANTS.slateAccessPermissions[perm]
                                           .id
                                       )}
-                                      onClick={(e) => {
+                                      onClick={() => {
                                         handlePermission(
                                           member,
                                           CONSTANTS.slateAccessPermissions[perm]
@@ -524,7 +502,7 @@ export const SlateSharing = (props) => {
         )}
         <Accordion
           expanded={sharingExpanded === 'unlisted'}
-          onChange={(e) => {
+          onChange={() => {
             setExpanded('unlisted')
           }}
           style={{
@@ -536,7 +514,7 @@ export const SlateSharing = (props) => {
             aria-controls="colorPanelbh-content"
             id="colorPanelbh-header"
           >
-            <List dense={true}>
+            <List dense>
               <ListItem>
                 <ListItemIcon>
                   <HttpsIcon />
@@ -566,7 +544,7 @@ export const SlateSharing = (props) => {
             aria-controls="colorPanelbh-content"
             id="colorPanelbh-header"
           >
-            <List dense={true}>
+            <List dense>
               <ListItem>
                 <ListItemIcon>
                   <PublicIcon />

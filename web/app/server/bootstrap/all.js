@@ -1,4 +1,4 @@
-import { CONSTANTS } from '../../imports/api/common/constants.js'
+import CONSTANTS from '../../imports/api/common/constants'
 import {
   Claims,
   CachedImages,
@@ -6,7 +6,9 @@ import {
   SlateSnapshots,
   PricingTiers,
   Collaboration,
-} from '../../imports/api/common/models.js'
+  Slates,
+} from '../../imports/api/common/models'
+import themeGenerator from './themeGenerator.json'
 
 if (Claims.find({ _id: 'admin' }).count() === 0) {
   Object.keys(CONSTANTS.claims).forEach((c) => {
@@ -22,7 +24,7 @@ if (Collaboration.find().count() === 0) {
   })
 }
 
-//temporary for all slates
+// temporary for all slates
 // let c = 0;
 // for (let s of Slates.find({}).fetch()) {
 //   c++;
@@ -55,6 +57,13 @@ if (Collaboration.find().count() === 0) {
 // 	// 	"textIndexVersion" : 3
 // 	// },
 // }
+
+const tg = Slates.findOne({ isThemeGenerator: true })
+console.log('themeGenerator', tg)
+if (!tg) {
+  console.log('inserting theme generator')
+  Slates.insert(themeGenerator)
+}
 
 if (CachedImages.find().count() === 0) {
   CachedImages.rawCollection().createIndex({ url: 1, created: 1 })

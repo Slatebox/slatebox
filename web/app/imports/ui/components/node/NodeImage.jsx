@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
+import PropTypes from 'prop-types'
+import { Meteor } from 'meteor/meteor'
 import { useDispatch, useSelector } from 'react-redux'
-import { makeStyles, withStyles } from '@material-ui/core/styles'
+import { makeStyles } from '@material-ui/core/styles'
 import Button from '@material-ui/core/Button'
 import Grid from '@material-ui/core/Grid'
 import GridList from '@material-ui/core/GridList'
@@ -15,14 +17,11 @@ import MenuItem from '@material-ui/core/MenuItem'
 import FormControl from '@material-ui/core/FormControl'
 import Select from '@material-ui/core/Select'
 import InputLabel from '@material-ui/core/InputLabel'
-import Link from '@material-ui/core/Link'
 import CircularProgress from '@material-ui/core/CircularProgress'
 import Brightness1Icon from '@material-ui/icons/Brightness1'
-import Chip from '@material-ui/core/Chip'
 import InfiniteScroll from 'react-infinite-scroll-component'
-
-import { Translation } from '../../common/Translation.jsx'
-import { Organizations } from '../../../api/common/models.js'
+import Translation from '../../common/Translation'
+import { Organizations } from '../../../api/common/models'
 
 const useStyles = makeStyles((theme) => ({
   inputRoot: {
@@ -64,11 +63,11 @@ const useStyles = makeStyles((theme) => ({
   },
 }))
 
-export const NodeImage = (props) => {
+export default function NodeImage({ height, onChange }) {
   const classes = useStyles()
   const dispatch = useDispatch()
 
-  //data.queries.nextimagePage?[0] =
+  // data.queries.nextimagePage?[0] =
 
   // count: 10
   // cx: "3ba8a3199f8e2eb8c"
@@ -81,15 +80,15 @@ export const NodeImage = (props) => {
   // title: "Google Custom Search - dog"
   // totalResults: "9190000000"
 
-  //data.url.template
-  //https://www.googleapis.com/customsearch/v1?q={searchTerms}&num={count?}&start={startIndex?}&lr={language?}&safe={safe?}&cx={cx?}&sort={sort?}&filter={filter?}&gl={gl?}&cr={cr?}&googlehost={googleHost?}&c2coff={disableCnTwTranslation?}&hq={hq?}&hl={hl?}&siteSearch={siteSearch?}&siteSearchFilter={siteSearchFilter?}&exactTerms={exactTerms?}&excludeTerms={excludeTerms?}&linkSite={linkSite?}&orTerms={orTerms?}&relatedSite={relatedSite?}&dateRestrict={dateRestrict?}&lowRange={lowRange?}&highRange={highRange?}&searchType={searchType}&fileType={fileType?}&rights={rights?}&imgSize={imgSize?}&imgType={imgType?}&imgColorType={imgColorType?}&imgDominantColor={imgDominantColor?}&alt=json
+  // data.url.template
+  // https://www.googleapis.com/customsearch/v1?q={searchTerms}&num={count?}&start={startIndex?}&lr={language?}&safe={safe?}&cx={cx?}&sort={sort?}&filter={filter?}&gl={gl?}&cr={cr?}&googlehost={googleHost?}&c2coff={disableCnTwTranslation?}&hq={hq?}&hl={hl?}&siteSearch={siteSearch?}&siteSearchFilter={siteSearchFilter?}&exactTerms={exactTerms?}&excludeTerms={excludeTerms?}&linkSite={linkSite?}&orTerms={orTerms?}&relatedSite={relatedSite?}&dateRestrict={dateRestrict?}&lowRange={lowRange?}&highRange={highRange?}&searchType={searchType}&fileType={fileType?}&rights={rights?}&imgSize={imgSize?}&imgType={imgType?}&imgColorType={imgColorType?}&imgDominantColor={imgDominantColor?}&alt=json
 
   const imageSearchVal = useSelector((state) => state.imageSearchVal) || ''
   const currentSeachVal = useSelector((state) => state.currentSeachVal)
   const isLoading = useSelector((state) => state.isLoading)
   const hasMoreImages = useSelector((state) => state.hasMoreImages)
   const imageItems = useSelector((state) => state.imageItems) || []
-  const limit = useSelector((state) => state.limit) || 10 //max allowed by google
+  const limit = useSelector((state) => state.limit) || 10 // max allowed by google
   const imagePage = useSelector((state) => state.imagePage) || -1
   const selectedImage = useSelector((state) => state.selectedImage)
 
@@ -109,7 +108,8 @@ export const NodeImage = (props) => {
           paymentWillBeRequested: true,
         })
         return
-      } else if (
+      }
+      if (
         Meteor.user().planType === 'free' ||
         Organizations.findOne()?.planType === 'free'
       ) {
@@ -125,8 +125,7 @@ export const NodeImage = (props) => {
       let p = imagePage
       let i = imageItems
       if (imageSearchVal !== currentSeachVal) {
-        //clear
-        console.log('clearing search', imageSearchVal, currentSeachVal)
+        // clear
         dispatch({
           type: 'googleimages',
           imagePage: 0,
@@ -139,7 +138,7 @@ export const NodeImage = (props) => {
         i = []
         sessionStorage.setItem(`sb_${imageSearchVal}`, '0')
       }
-      p++
+      p += 1
 
       const filter = []
       if (imgSize && imgSize !== 'all') filter.push(`&imgSize=${imgSize}`)
@@ -149,21 +148,19 @@ export const NodeImage = (props) => {
       if (imgColorType && imgColorType !== 'all')
         filter.push(`&imgColorType=${imgColorType}`)
       const imgFilter = filter.join('')
-      let url = `https://customsearch.googleapis.com/customsearch/v1?cx=${
+      const url = `https://customsearch.googleapis.com/customsearch/v1?cx=${
         Meteor.settings.public.googleImageSearchEngineKey
       }&num=${limit}&safe=ACTIVE&searchType=image&key=${
         Meteor.settings.public.googleImageSearchAPIKey
       }&start=${p * limit}&q=${imageSearchVal}${imgFilter}`
-      //let url = `https://contextualwebsearch-websearch-v1.p.rapidapi.com/api/Search/ImageSearchAPI?q=${imageSearchVal}}&imagePageNumber=${p}&imagePageSize=${limit}&autoCorrect=true&safeSearch=true`
-      console.log('url is ', url)
 
       if (!sessionStorage.getItem(`sb_${imageSearchVal}`)) {
         sessionStorage.setItem(`sb_${imageSearchVal}`, '0')
       }
 
       if (sessionStorage.getItem(`sb_${url}`)) {
-        let d = JSON.parse(sessionStorage.getItem(`sb_${url}`))
-        let next =
+        const d = JSON.parse(sessionStorage.getItem(`sb_${url}`))
+        const next =
           parseInt(sessionStorage.getItem(`sb_${imageSearchVal}`), 10) + 1
         sessionStorage.setItem(`sb_${imageSearchVal}`, next.toString())
         dispatch({
@@ -181,24 +178,13 @@ export const NodeImage = (props) => {
           mode: 'cors',
           cache: 'default',
         })
-        let response = await fetch(req) //.then(res => { let d = res.json(); console.log("got json back ", d); return d })
-        let d = await response.json()
-        // let existent = [];
-        // console.log("raw body received ", d);
-        // for (let i of d.items) {
-        //   console.log("checking image existence ", i);
-        //   let exists = await imageExists(i.link);
-        //   console.log("Exists ", exists);x`
-        //   if (exists) {
-        //     existent.push(i);
-        //   }
-        // }
+        const response = await fetch(req)
+        const d = await response.json()
         if (d.error) {
-          console.log('Unable to search for images ', d.error.message)
+          console.error('Unable to search for images ', d.error.message)
         } else {
-          console.log('got image results ', d)
           sessionStorage.setItem(`sb_${url}`, JSON.stringify(d))
-          let next =
+          const next =
             parseInt(sessionStorage.getItem(`sb_${imageSearchVal}`), 10) + 1
           sessionStorage.setItem(`sb_${imageSearchVal}`, next.toString())
           dispatch({
@@ -221,7 +207,7 @@ export const NodeImage = (props) => {
     })
   }
 
-  const handleClear = (e) => {
+  const handleClear = () => {
     dispatch({
       type: 'googleimages',
       imagePage: 0,
@@ -238,7 +224,7 @@ export const NodeImage = (props) => {
       selectedImage: opts.selectedImage,
     })
 
-    var pkg = {
+    const pkg = {
       type: 'onNodeImageChanged',
       data: {
         img: opts.image,
@@ -246,7 +232,7 @@ export const NodeImage = (props) => {
         h: opts.height,
       },
     }
-    props.onChange(pkg)
+    onChange(pkg)
   }
 
   function updateFilter(prop, e) {
@@ -288,23 +274,14 @@ export const NodeImage = (props) => {
     'yellow',
   ]
 
-  async function imageExists(src) {
-    try {
-      let res = await fetch(src, { method: 'HEAD' })
-      let rexists = await res.json()
-      console.log('exists is ', rexists)
-      if (rexists.ok) {
-        return true
-      }
-    } catch (err) {
-      console.log('fail', err)
-      return false
-    }
-    return false
+  const handleImageError = (e) => {
+    e.target.src = 'data:image/jpeg;base64,SU1BR0UgTk9UIEZPVU5E'
   }
 
-  console.log('imageItems are ', imageItems)
-  console.log('changing height', props.height)
+  NodeImage.propTypes = {
+    height: PropTypes.number.isRequired,
+    onChange: PropTypes.func.isRequired,
+  }
 
   return (
     <Grid container alignItems="flex-start" justify="space-between" spacing={4}>
@@ -494,8 +471,9 @@ export const NodeImage = (props) => {
             }}
             autoFocus
             onFocus={(e) => {
-              let self = e.target
-              setTimeout(function () {
+              const self = e.target
+              setTimeout(() => {
+                // eslint-disable-next-line no-multi-assign
                 self.selectionStart = self.selectionEnd = 10000
               }, 0)
             }}
@@ -504,7 +482,7 @@ export const NodeImage = (props) => {
       </Grid>
       <Grid item xs={6}>
         <InfiniteScroll
-          dataLength={imageItems?.length || 0} //This is important field to render the next data
+          dataLength={imageItems?.length || 0} // This is important field to render the next data
           next={handleSearch}
           hasMore={hasMoreImages}
           loader={
@@ -512,7 +490,7 @@ export const NodeImage = (props) => {
               <CircularProgress style={{ marginTop: '15px', color: '#fff' }} />
             )
           }
-          height={`${props.height - 45}px`}
+          height={`${height - 45}px`}
           endMessage={
             imageSearchVal !== '' && imagePage > 0 ? (
               <Grid container spacing={1}>
@@ -546,10 +524,10 @@ export const NodeImage = (props) => {
           }
         >
           <GridList cols={3}>
-            {imageItems.map((image, i) => (
+            {imageItems.map((image) => (
               <GridListTile
                 className={classes.imageItemselect}
-                key={i}
+                key={image.link}
                 cols={1}
                 aria-label={image.title}
                 onClick={() =>
@@ -573,9 +551,7 @@ export const NodeImage = (props) => {
                       : image.link
                   }
                   alt={image.image.title}
-                  onError={
-                    (this.src = 'data:image/jpeg;base64,SU1BR0UgTk9UIEZPVU5E')
-                  }
+                  onError={handleImageError}
                 />
                 <GridListTileBar title={image.title} />
               </GridListTile>

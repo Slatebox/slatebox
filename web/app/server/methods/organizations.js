@@ -1,7 +1,10 @@
+/* eslint-disable no-plusplus */
+/* eslint-disable no-nested-ternary */
+/* eslint-disable no-underscore-dangle */
 // methods.js
 import { Random } from 'meteor/random'
 import { Meteor } from 'meteor/meteor'
-import { CONSTANTS } from '../../imports/api/common/constants.js'
+import CONSTANTS from '../../imports/api/common/constants'
 import {
   GuestViews,
   Organizations,
@@ -10,14 +13,13 @@ import {
   ArchivedSlates,
   PricingTiers,
   Messages,
-} from '../../imports/api/common/models.js'
-import AuthManager from '../../imports/api/common/AuthManager.js'
+} from '../../imports/api/common/models'
+import AuthManager from '../../imports/api/common/AuthManager'
 
-let method = {}
-method[CONSTANTS.methods.organizations.create] = async function (opts) {
+const method = {}
+method[CONSTANTS.methods.organizations.create] = async (opts) => {
   if (Meteor.userId()) {
-    let orgId = Random.id()
-    console.log('creating org', orgId)
+    const orgId = Random.id()
     Organizations.insert({
       _id: orgId,
       name: opts.name,
@@ -25,19 +27,19 @@ method[CONSTANTS.methods.organizations.create] = async function (opts) {
       createdByUserId: opts.createdByUserId,
       createdOn: new Date().valueOf(),
     })
-    //always make the creator the owner and admin and remove planType from user henceforth
+    // always make the creator the owner and admin and remove planType from user henceforth
     Meteor.users.update(
       { _id: opts.createdByUserId },
       { $set: { isOrgOwner: true }, $unset: { planType: true } }
     )
     Slates.update(
       { userId: Meteor.userId() },
-      { $set: { orgId: orgId } },
+      { $set: { orgId } },
       { multi: true }
-    ) //retrofit previously created slates by this user
+    ) // retrofit previously created slates by this user
     Permissions.insert({
       userId: opts.createdByUserId,
-      orgId: orgId,
+      orgId,
       claimId: CONSTANTS.claims.admin._id,
     })
     return orgId
@@ -46,15 +48,15 @@ method[CONSTANTS.methods.organizations.create] = async function (opts) {
 }
 
 method[CONSTANTS.methods.organizations.getCancellationImplications] =
-  async function () {
-    let otherUsers = Meteor.users
+  async () => {
+    const otherUsers = Meteor.users
       .find({ orgId: Meteor.user().orgId })
       .fetch()
       .filter((u) => u._id !== Meteor.userId())
-    let otherSlates = Slates.find({
+    const otherSlates = Slates.find({
       userId: { $in: otherUsers.map((u) => u._id) },
     }).count()
-    let mySlates = Slates.find({ userId: Meteor.userId() }).count()
+    const mySlates = Slates.find({ userId: Meteor.userId() }).count()
     const orgOwner = Meteor.users.findOne({
       orgId: Meteor.user().orgId,
       isOrgOwner: true,
@@ -71,16 +73,15 @@ method[CONSTANTS.methods.organizations.getCancellationImplications] =
     }
   }
 
-method[CONSTANTS.methods.organizations.delete] = async function () {
+method[CONSTANTS.methods.organizations.delete] = async () => {
   if (Meteor.user() && Meteor.user().orgId && Meteor.user().isOrgOwner) {
-    let implications = Meteor.call(
+    const implications = Meteor.call(
       CONSTANTS.methods.organizations.getCancellationImplications
     )
     if (implications.otherUsers === 0 && implications.otherSlates === 0) {
-      //only thing left should be the slates for the user in question
-      //archive all this user's slates
-      //remove customer
-      console.log('removing slates')
+      // only thing left should be the slates for the user in question
+      // archive all this user's slates
+      // remove customer
       Slates.remove({ userId: Meteor.userId(), orgId: Meteor.user().orgId })
 
       GuestViews.remove({ slateOrgId: Meteor.user().orgId })
@@ -89,50 +90,44 @@ method[CONSTANTS.methods.organizations.delete] = async function () {
 
       Messages.remove({ userId: Meteor.userId() })
 
-      console.log('removing user', Meteor.userId())
-
       Meteor.users.remove({ _id: Meteor.userId() })
 
       return {
         success: true,
         reason: `Your team, slates, and account have all been completely removed. Thanks for trying Slatebox!`,
       }
-    } else {
-      return {
-        success: false,
-        reason: `You still have ${implications.otherUsers} team members and ${implications.otherSlates} slates for those team members that need to be removed prior to deleting your team account.`,
-      }
     }
-  } else {
     return {
       success: false,
-      reason: `Only team owners are allowed to remove teams`,
+      reason: `You still have ${implications.otherUsers} team members and ${implications.otherSlates} slates for those team members that need to be removed prior to deleting your team account.`,
     }
+  }
+  return {
+    success: false,
+    reason: `Only team owners are allowed to remove teams`,
   }
 }
 
-method[CONSTANTS.methods.organizations.trackGuest] = async function (opts) {
-  let entity = opts.slateOrgId
+method[CONSTANTS.methods.organizations.trackGuest] = async (opts) => {
+  const entity = opts.slateOrgId
     ? Organizations.findOne({ _id: opts.slateOrgId })
     : Meteor.users.findOne({ _id: opts.slateOwner })
-  let total = GuestViews.find(
+  const total = GuestViews.find(
     { orgId: opts.orgId, month: new Date().getMonth() + 1 },
     { fields: { _id: 1 } }
   ).fetch().length
-  let slateOwner = Meteor.call(CONSTANTS.methods.users.getUserName, {
+  const slateOwner = Meteor.call(CONSTANTS.methods.users.getUserName, {
     userId: opts.slateOwner,
   })
 
-  let allowGuestAccess = opts.isUnlisted ? false : true
+  let allowGuestAccess = !opts.isUnlisted
   if (opts.isUnlisted) {
-    console.log('org is ', entity, opts)
-    let allowableGuestViews = PricingTiers.findOne({
+    const allowableGuestViews = PricingTiers.findOne({
       $or: [
         { 'monthly.priceId': entity.planType },
         { 'yearly.priceId': entity.planType },
       ],
     }).guestViewsPerMonth
-    console.log('guestViews ', total, allowableGuestViews)
     allowGuestAccess = total < allowableGuestViews
   }
   if (allowGuestAccess) {
@@ -155,13 +150,12 @@ method[CONSTANTS.methods.organizations.trackGuest] = async function (opts) {
       }
     )
     return { allow: true, slateOwnerUserName: slateOwner }
-  } else {
-    //put a message in the orgOwner's mailbox noting that this guest was rejected
-    return { allow: false, slateOwnerUserName: slateOwner }
   }
+  // put a message in the orgOwner's mailbox noting that this guest was rejected
+  return { allow: false, slateOwnerUserName: slateOwner }
 }
 
-method[CONSTANTS.methods.organizations.guestViewReport] = async function () {
+method[CONSTANTS.methods.organizations.guestViewReport] = async () => {
   if (
     (Meteor.user() &&
       Meteor.user().orgId &&
@@ -170,7 +164,7 @@ method[CONSTANTS.methods.organizations.guestViewReport] = async function () {
       ])) ||
     (Meteor.user() && !Meteor.user().orgId && Meteor.user().planType !== 'free')
   ) {
-    let rows = []
+    const rows = []
     /*
     {
       "_id" : "JE8DMxcowrQ8AhQvC",
@@ -188,7 +182,7 @@ method[CONSTANTS.methods.organizations.guestViewReport] = async function () {
     }
     */
 
-    let gvQuery = Meteor.user().orgId
+    const gvQuery = Meteor.user().orgId
       ? { slateOrgId: Meteor.user().orgId }
       : { slateOwnerUserId: Meteor.userId() }
     const guestViews = GuestViews.find(gvQuery).fetch()
@@ -208,19 +202,19 @@ method[CONSTANTS.methods.organizations.guestViewReport] = async function () {
       _id: { $in: guestViews.map((gv) => gv.orgId) },
     }).fetch()
 
-    let entity = Meteor.user().orgId
+    const entity = Meteor.user().orgId
       ? Organizations.findOne({ _id: Meteor.user().orgId })
       : Meteor.user()
-    let allowableGuestViews = PricingTiers.findOne({
+    const allowableGuestViews = PricingTiers.findOne({
       $or: [
         { 'monthly.priceId': entity.planType },
         { 'yearly.priceId': entity.planType },
       ],
     }).guestViewsPerMonth
-    let allowableGuestViewsOnProTeam = PricingTiers.findOne({
+    const allowableGuestViewsOnProTeam = PricingTiers.findOne({
       useForProOrgGuestViewCount: true,
     }).guestViewsPerMonth
-    let headers = ['Date', 'Type', 'Slate', 'Owner', 'Guest']
+    const headers = ['Date', 'Type', 'Slate', 'Owner', 'Guest']
     const totalUnlistedViewsByMonth = {}
     const totalPublicViewsByMonth = {}
 
@@ -236,9 +230,7 @@ method[CONSTANTS.methods.organizations.guestViewReport] = async function () {
       }
       let user = 'Guest'
       let foreignOrg = null
-      let actUser = usersAccessed.find((u) => u._id === gv.userId)
-
-      console.log('collab user', JSON.stringify(actUser, null, 2))
+      const actUser = usersAccessed.find((u) => u._id === gv.userId)
 
       if (actUser && !actUser.isAnonymous) {
         user =
@@ -257,10 +249,10 @@ method[CONSTANTS.methods.organizations.guestViewReport] = async function () {
       if (foreignOrg) {
         userDetails = `${userDetails} with ${foreignOrg}`
       }
-      let type = gv.isUnlisted ? 'unlisted' : 'public'
+      const type = gv.isUnlisted ? 'unlisted' : 'public'
 
-      let owner = slateOwners.find((so) => so._id === gv.slateOwnerUserId)
-      let slateOwner = owner
+      const owner = slateOwners.find((so) => so._id === gv.slateOwnerUserId)
+      const slateOwner = owner
         ? owner.profile && owner.profile.firstName.trim() !== ''
           ? `${owner.profile.firstName} ${owner.profile.lastName}`
           : owner.emails[0].address.split('@')[0]
@@ -287,18 +279,16 @@ method[CONSTANTS.methods.organizations.guestViewReport] = async function () {
       }
     })
 
-    //sort time desc
-    rows.sort((a, b) => {
-      return new Date(a[0]).valueOf() - new Date(b[0]).valueOf()
-    })
+    // sort time desc
+    rows.sort((a, b) => new Date(a[0]).valueOf() - new Date(b[0]).valueOf())
 
     return {
       headerRow: headers,
       dataRows: rows,
       allowableUnlistedViewsPerMonth: allowableGuestViews,
       allowableUnlistedViewsPerMonthOnProTeam: allowableGuestViewsOnProTeam,
-      totalUnlistedViewsByMonth: totalUnlistedViewsByMonth,
-      totalPublicViewsByMonth: totalPublicViewsByMonth,
+      totalUnlistedViewsByMonth,
+      totalPublicViewsByMonth,
       totalViews: rows.length,
     }
   }

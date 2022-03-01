@@ -5,7 +5,7 @@ const Collaboration = new Mongo.Collection('collaboration')
 const Slates = new Mongo.Collection('slates')
 const Collaborators = new Mongo.Collection('collaborators')
 
-//Audit
+// Audit
 const Audit = new Mongo.Collection('audit')
 const Messages = new Mongo.Collection('messages')
 const Comments = new Mongo.Collection('comments')

@@ -1,18 +1,14 @@
+/* eslint-disable new-cap */
 import { Meteor } from 'meteor/meteor'
-import { useTracker } from 'meteor/react-meteor-data'
-import { CONSTANTS } from '../../api/common/constants.js'
-import { promisify } from './promisify.js'
-import { Slatebox } from './slatebox/index.js'
-import { saveSlate } from './saveSlate.js'
-import AuthManager from '../common/AuthManager.js'
-import { Organizations } from '../common/models.js'
-import { utils } from '../common/utils.js'
+import { Slatebox } from './slatebox/index'
+import saveSlate from './saveSlate'
+import { Organizations } from '../common/models'
 
-const createSlate = async function (s, events, collaboration, isNew, isGuest) {
+async function createSlate(slateBase, events, collaboration, isNew, isGuest) {
   let publicDefault = true
-
+  let newSlate = slateBase
   async function ensureDeps() {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       if (
         (Meteor.user() && Meteor.user().orgId && Organizations.findOne()) ||
         (Meteor.user() && !Meteor.user().orgId) ||
@@ -36,29 +32,29 @@ const createSlate = async function (s, events, collaboration, isNew, isGuest) {
   }
 
   const opts = {
-    name: s.options?.name || 'New Slate',
-    description: s.options?.description || '',
+    name: newSlate.options?.name || 'New Slate',
+    description: newSlate.options?.description || '',
     defaultLineColor: '#333',
     viewPort: {
       allowDrag: true,
       useInertiaScrolling: true,
       showGrid: false,
       snapToObjects: true,
-      // gridSize: 50,
-      // originalWidth: 200000,
-      // width: 200000,
-      // height: 200000,
-      // left: 5000,
-      // top: 5000,
-      // zoom: { w: 50000, h: 50000, r: 1 }
     },
     showMultiSelect:
-      s.options?.showMultiSelect != null ? s.options?.showMultiSelect : true,
+      newSlate.options?.showMultiSelect != null
+        ? newSlate.options?.showMultiSelect
+        : true,
     showUndoRedo:
-      s.options?.showUndoRedo != null ? s.options?.showUndoRedo : true,
+      newSlate.options?.showUndoRedo != null
+        ? newSlate.options?.showUndoRedo
+        : true,
     showbirdsEye:
-      s.options?.showbirdsEye != null ? s.options?.showbirdsEye : true,
-    showZoom: s.options?.showZoom != null ? s.options?.showZoom : true,
+      newSlate.options?.showbirdsEye != null
+        ? newSlate.options?.showbirdsEye
+        : true,
+    showZoom:
+      newSlate.options?.showZoom != null ? newSlate.options?.showZoom : true,
     isSharing: true,
     imageFolder: '/images/',
     container: 'slateCanvas',
@@ -91,21 +87,13 @@ const createSlate = async function (s, events, collaboration, isNew, isGuest) {
     opts.isPrivate = !publicDefault
     opts.isUnlisted = false
   }
-  // console.log("s is ", s);
-  // let opts = isNew ? newOpts : s.options;
-  // opts.viewPort = {
-  //   allowDrag: true,
-  //   useInertiaScrolling: true,
-  //   showGrid: false,
-  //   snapToGrid: false,
-  // }
-  //console.log("using opts for instantiation ", opts, isNew);
+
   const slate = new Slatebox.slate(opts, events, collaboration).init()
 
-  slate.shareId = s.shareId
+  slate.shareId = newSlate.shareId
 
   if (isNew) {
-    //this is a new slate -- create a first node
+    // this is a new slate -- create a first node
     const defaultNodeOpts = {
       name: 'mn',
       text: '',
@@ -124,14 +112,19 @@ const createSlate = async function (s, events, collaboration, isNew, isGuest) {
     const node = new Slatebox.node(defaultNodeOpts)
     slate.nodes.add(node)
 
-    await saveSlate({ slate: slate, userId: s.userId, orgId: s.orgId, pkg: {} })
+    await saveSlate({
+      slate,
+      userId: newSlate.userId,
+      orgId: newSlate.orgId,
+      pkg: {},
+    })
 
-    s = JSON.parse(slate.exportJSON())
+    newSlate = JSON.parse(slate.exportJSON())
   }
 
-  slate.loadJSON(JSON.stringify(s))
+  slate.loadJSON(JSON.stringify(newSlate))
 
   return slate
 }
 
-export { createSlate }
+export default createSlate

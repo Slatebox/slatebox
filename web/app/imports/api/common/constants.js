@@ -1,4 +1,4 @@
-export const CONSTANTS = {
+const CONSTANTS = {
   ipWhitelist: ['127.0.0.1'],
   anonUserPwd: 'ANONYMOUS',
   privateSlateLimit: 3,
@@ -168,7 +168,7 @@ export const CONSTANTS = {
       label: 'Copy Team Slates',
       bound: ['canViewSlates'],
     },
-    //canRemoveSlates: { _id: "canRemoveSlates", label: "Remove Team Slates", description: "Remove team member slates", bound: ["canViewSlates"] },
+    // canRemoveSlates: { _id: "canRemoveSlates", label: "Remove Team Slates", description: "Remove team member slates", bound: ["canViewSlates"] },
     canRemoveComments: {
       _id: 'canRemoveComments',
       label: 'Remove comments from slates',
@@ -177,3 +177,5 @@ export const CONSTANTS = {
     },
   },
 }
+
+export default CONSTANTS

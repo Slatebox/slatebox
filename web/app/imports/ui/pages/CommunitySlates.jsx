@@ -1,9 +1,6 @@
-import React from 'react';
-import { CONSTANTS } from '/imports/api/common/constants.js';
-import { DisplaySlates } from '/imports/ui/components/DisplaySlates';
+import React from 'react'
+import DisplaySlates from '../components/DisplaySlates'
 
-export const CommunitySlates = (props) => {
-  return (
-    <DisplaySlates type="community"/>
-  );
+export default function CommunitySlates() {
+  return <DisplaySlates type="community" />
 }

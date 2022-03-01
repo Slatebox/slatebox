@@ -1,44 +1,49 @@
-import React, { useEffect, useState } from 'react';
-import { useTheme } from '@material-ui/core/styles';
-import useMediaQuery from '@material-ui/core/useMediaQuery';
-import Grid from '@material-ui/core/Grid';
-import ToggleButtonGroup from '@material-ui/lab/ToggleButtonGroup';
-import ToggleButton from '@material-ui/lab/ToggleButton';
-import { useSelector } from 'react-redux';
+import React from 'react'
+import PropTypes from 'prop-types'
+import Grid from '@material-ui/core/Grid'
+import ToggleButtonGroup from '@material-ui/lab/ToggleButtonGroup'
+import ToggleButton from '@material-ui/lab/ToggleButton'
+import { useSelector } from 'react-redux'
 
-export const SlateEffects = (props) => {
+export default function SlateEffects({ onChange }) {
+  const slate = useSelector((state) => state.slate)
 
-  const theme = useTheme();
-  const matches = useMediaQuery(theme.breakpoints.up('md'));
-  const slate = useSelector(state => state.slate);
+  const bEffect = slate?.options?.containerStyle?.backgroundEffect
+  const [selectedFilter, updateEffect] = React.useState(bEffect)
 
-  let bEffect = slate?.options?.containerStyle?.backgroundEffect;
-  const [selectedFilter, updateEffect] = React.useState(bEffect);
-
-  console.log("filter effects", slate?.filters);
-
-  let effects = slate?.filters?.availableFilters || [];
-  let availEffects = [];
-  Object.keys(effects).map(e => {
-    if (effects[e].types.includes("slate")) {
-      availEffects.push(e);
+  const effects = slate?.filters?.availableFilters || []
+  const availEffects = []
+  Object.keys(effects).forEach((e) => {
+    if (effects[e].types.includes('slate')) {
+      availEffects.push(e)
     }
-  });
+  })
 
   const setEffect = (event, filterId) => {
-    //event.target.value
-    console.log("filterId", filterId)
-    props.onChange({ type: "onSlateBackgroundEffectChanged", data: { effect: filterId } });
-    updateEffect(filterId);
+    onChange({
+      type: 'onSlateBackgroundEffectChanged',
+      data: { effect: filterId },
+    })
+    updateEffect(filterId)
+  }
+
+  SlateEffects.propTypes = {
+    onChange: PropTypes.func.isRequired,
   }
 
   return (
-    <Grid container alignItems="center" justify="center" spacing={2} style={{ height: "180px" }}>
+    <Grid
+      container
+      alignItems="center"
+      justify="center"
+      spacing={2}
+      style={{ height: '180px' }}
+    >
       <ToggleButtonGroup
         value={selectedFilter}
         exclusive
         onChange={setEffect}
-        style={{flexWrap: "wrap"}}
+        style={{ flexWrap: 'wrap' }}
         aria-label="slate effect"
       >
         {availEffects.map((e) => (
@@ -48,5 +53,5 @@ export const SlateEffects = (props) => {
         ))}
       </ToggleButtonGroup>
     </Grid>
-  );
+  )
 }

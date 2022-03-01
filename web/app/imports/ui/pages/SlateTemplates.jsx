@@ -1,9 +1,15 @@
-import React from 'react';
-import { CONSTANTS } from '/imports/api/common/constants.js';
-import { DisplaySlates } from '/imports/ui/components/DisplaySlates';
+import React from 'react'
+import DisplaySlates from '../components/DisplaySlates'
 
-export const SlateTemplates = (props) => {
+export default function SlateTemplates() {
   return (
-    <DisplaySlates type="templates" cols={2} cellHeight={350} slateMinimumPerPage={6} pinSlatePerPageCount="true" showDescription="true" />
-  );
+    <DisplaySlates
+      type="templates"
+      cols={2}
+      cellHeight={350}
+      slateMinimumPerPage={6}
+      pinSlatePerPageCount="true"
+      showDescription="true"
+    />
+  )
 }

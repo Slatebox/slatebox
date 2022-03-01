@@ -1,15 +1,15 @@
-import { makeStyles } from '@material-ui/core/styles';
-import React from 'react';
+import { makeStyles } from '@material-ui/core/styles'
+import PropTypes from 'prop-types'
+import React from 'react'
 
 const useStyles = makeStyles((theme) => ({
   content: {
-    margin: theme.spacing(1)
-  }
-}));
+    margin: theme.spacing(1),
+  },
+}))
 
-export const TabPanel = (props) => {
-  const classes = useStyles();
-  const { children, value, index, ...other } = props;
+export default function TabPanel({ children, value, index, ...other }) {
+  const classes = useStyles()
   return (
     <div
       role="tabpanel"
@@ -17,13 +17,21 @@ export const TabPanel = (props) => {
       id={`scrollable-auto-tabpanel-${index}`}
       aria-labelledby={`scrollable-auto-tab-${index}`}
       className={classes.content}
+      // eslint-disable-next-line react/jsx-props-no-spreading
       {...other}
     >
-      {value === index && (
-        <div>
-          {children}
-        </div>
-      )}
+      {value === index && <div>{children}</div>}
     </div>
-  );
+  )
+}
+
+TabPanel.propTypes = {
+  children: PropTypes.node.isRequired,
+  value: PropTypes.number.isRequired,
+  index: PropTypes.number.isRequired,
+  other: PropTypes.node,
+}
+
+TabPanel.defaultProps = {
+  other: null,
 }

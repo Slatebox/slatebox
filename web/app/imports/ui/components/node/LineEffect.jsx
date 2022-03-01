@@ -1,37 +1,45 @@
-import React, { useEffect, useState } from 'react';
-import { useTheme } from '@material-ui/core/styles';
-import useMediaQuery from '@material-ui/core/useMediaQuery';
-import Grid from '@material-ui/core/Grid';
-import ToggleButtonGroup from '@material-ui/lab/ToggleButtonGroup';
-import ToggleButton from '@material-ui/lab/ToggleButton';
+import React from 'react'
+import PropTypes from 'prop-types'
+import Grid from '@material-ui/core/Grid'
+import ToggleButtonGroup from '@material-ui/lab/ToggleButtonGroup'
+import ToggleButton from '@material-ui/lab/ToggleButton'
+import nodeProps from '../../propTypes/nodeProps'
+import associationProps from '../../propTypes/associationProps'
 
-export const LineEffect = (props) => {
+export default function LineEffect({ node, association, onChange }) {
+  const lineEffect = node?.options?.lineEffect
+  const [selectedFilter, updateEffect] = React.useState(lineEffect)
 
-  const theme = useTheme();
-  const matches = useMediaQuery(theme.breakpoints.up('md'));
-
-  console.log("filter effects", props?.node?.slate?.filters);
-  let lineEffect = props?.node?.options?.lineEffect;
-  const [selectedFilter, updateEffect] = React.useState(lineEffect);
-
-  let effects = props?.node?.slate?.filters?.availableFilters || [];
-  let availEffects = [];
-  Object.keys(effects).map(e => {
-    if (effects[e].types.includes("line")) {
-      availEffects.push(e);
+  const effects = node?.slate?.filters?.availableFilters || []
+  const availEffects = []
+  Object.keys(effects).forEach((e) => {
+    if (effects[e].types.includes('line')) {
+      availEffects.push(e)
     }
-  });
+  })
 
-  const setEffect = (event, lineEffect) => {
-    const index = props?.node?.relationships?.associations.findIndex(a => a.id === props.association.id);
-    const data = { val: lineEffect, prop: "lineEffect", associationId: props.association.id, index: index };
-    console.log("sending effect", data);
-    props.onChange({ type: "onLinePropertiesChanged", data });
-    updateEffect(lineEffect);
+  const setEffect = (event, sLineEffect) => {
+    const index = node?.relationships?.associations.findIndex(
+      (a) => a.id === association.id
+    )
+    const data = {
+      val: sLineEffect,
+      prop: 'lineEffect',
+      associationId: association.id,
+      index,
+    }
+    onChange({ type: 'onLinePropertiesChanged', data })
+    updateEffect(lineEffect)
   }
 
   return (
-    <Grid container alignItems="center" justify="center" spacing={2} style={{ height: "180px" }}>
+    <Grid
+      container
+      alignItems="center"
+      justify="center"
+      spacing={2}
+      style={{ height: '180px' }}
+    >
       <ToggleButtonGroup
         value={selectedFilter}
         exclusive
@@ -45,5 +53,16 @@ export const LineEffect = (props) => {
         ))}
       </ToggleButtonGroup>
     </Grid>
-  );
+  )
+}
+
+LineEffect.propTypes = {
+  node: nodeProps,
+  association: associationProps,
+  onChange: PropTypes.func.isRequired,
+}
+
+LineEffect.defaultProps = {
+  node: null,
+  association: null,
 }

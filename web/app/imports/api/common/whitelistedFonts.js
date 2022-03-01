@@ -1,29 +1,29 @@
-//whitelist of potential dynamic imports (Meteor convention)
-//https://docs.meteor.com/packages/dynamic-import.html
+// whitelist of potential dynamic imports (Meteor convention)
+// https://docs.meteor.com/packages/dynamic-import.html
 if (false) {
-  import "@fontsource/courier-prime"
-  import "@fontsource/indie-flower"
-  import "@fontsource/abril-fatface"
-  import "@fontsource/bangers"
-  import "@fontsource/caveat"
-  import "@fontsource/eb-garamond"
-  import "@fontsource/fredoka-one"
-  import "@fontsource/graduate"
-  import "@fontsource/gravitas-one"
-  import "@fontsource/ibm-plex-mono"
-  import "@fontsource/ibm-plex-sans"
-  import "@fontsource/ibm-plex-serif"
-  import "@fontsource/lemon"
-  import "@fontsource/nixie-one"
-  import "@fontsource/noto-sans"
-  import "@fontsource/pt-sans"
-  import "@fontsource/pt-sans-narrow"
-  import "@fontsource/pt-serif"
-  import "@fontsource/permanent-marker"
-  import "@fontsource/rammetto-one"
-  import "@fontsource/roboto"
-  import "@fontsource/roboto-condensed"
-  import "@fontsource/roboto-mono"
-  import "@fontsource/roboto-slab"
-  import "@fontsource/titan-one"
+  import '@fontsource/courier-prime'
+  import '@fontsource/indie-flower'
+  import '@fontsource/abril-fatface'
+  import '@fontsource/bangers'
+  import '@fontsource/caveat'
+  import '@fontsource/eb-garamond'
+  import '@fontsource/fredoka-one'
+  import '@fontsource/graduate'
+  import '@fontsource/gravitas-one'
+  import '@fontsource/ibm-plex-mono'
+  import '@fontsource/ibm-plex-sans'
+  import '@fontsource/ibm-plex-serif'
+  import '@fontsource/lemon'
+  import '@fontsource/nixie-one'
+  import '@fontsource/noto-sans'
+  import '@fontsource/pt-sans'
+  import '@fontsource/pt-sans-narrow'
+  import '@fontsource/pt-serif'
+  import '@fontsource/permanent-marker'
+  import '@fontsource/rammetto-one'
+  import '@fontsource/roboto'
+  import '@fontsource/roboto-condensed'
+  import '@fontsource/roboto-mono'
+  import '@fontsource/roboto-slab'
+  import '@fontsource/titan-one'
 }

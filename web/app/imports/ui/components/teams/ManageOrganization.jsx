@@ -1,7 +1,6 @@
+/* eslint-disable no-underscore-dangle */
 import React from 'react'
 import { Meteor } from 'meteor/meteor'
-import { useHistory } from 'react-router-dom'
-import { useLocation } from 'react-router'
 import { useTracker } from 'meteor/react-meteor-data'
 import { makeStyles, useTheme } from '@material-ui/core/styles'
 import DeleteIcon from '@material-ui/icons/Delete'
@@ -16,20 +15,15 @@ import TableRow from '@material-ui/core/TableRow'
 import Paper from '@material-ui/core/Paper'
 
 import Typography from '@material-ui/core/Typography'
-import Stepper from '@material-ui/core/Stepper'
-import Step from '@material-ui/core/Step'
-import StepLabel from '@material-ui/core/StepLabel'
 import Button from '@material-ui/core/Button'
 import Grid from '@material-ui/core/Grid'
 import TextField from '@material-ui/core/TextField'
-import Snackbar from '@material-ui/core/Snackbar'
-import Alert from '@material-ui/lab/Alert'
 import IconButton from '@material-ui/core/IconButton'
 import Checkbox from '@material-ui/core/Checkbox'
 import Tooltip from '@material-ui/core/Tooltip'
-import InfoIcon from '@material-ui/icons/Info'
 import MailOutlineIcon from '@material-ui/icons/MailOutline'
 
+import Box from '@material-ui/core/Box'
 import confirmService from '../../common/confirm'
 import {
   Permissions,
@@ -37,12 +31,11 @@ import {
   Claims,
   Slates,
   Organizations,
-} from '../../../api/common/models.js'
-import AuthManager from '../../../api/common/AuthManager.js'
-import { CONSTANTS } from '../../../api/common/constants.js'
-import { promisify } from '../../../api/client/promisify.js'
-import { InviteTeamMembers } from './InviteTeamMembers.jsx'
-import Box from '@material-ui/core/Box'
+} from '../../../api/common/models'
+import AuthManager from '../../../api/common/AuthManager'
+import CONSTANTS from '../../../api/common/constants'
+import promisify from '../../../api/client/promisify'
+import InviteTeamMembers from './InviteTeamMembers'
 
 const useStyles = makeStyles((theme) => ({
   root: {
@@ -69,32 +62,27 @@ const useStyles = makeStyles((theme) => ({
   },
 }))
 
-export const ManageOrganization = (props) => {
+export default function ManageOrganization() {
   const classes = useStyles()
   const theme = useTheme()
   const dispatch = useDispatch()
   const currentInvites = useSelector((state) => state.currentInvites) || []
-  const members = useTracker(() => {
-    return Meteor.users
+  const members = useTracker(() =>
+    Meteor.users
       .find({ _id: { $ne: Meteor.userId() }, isOrgOwner: { $ne: true } })
       .fetch()
-  })
+  )
 
   const claims = useTracker(() => {
     if (
       AuthManager.userHasClaim(Meteor.userId(), [CONSTANTS.claims.admin._id])
     ) {
       return Claims.find({ description: { $exists: true } }).fetch()
-    } else {
-      return Claims.find({
-        _id: { $ne: CONSTANTS.claims.admin._id },
-        description: { $exists: true },
-      }).fetch()
     }
-  })
-
-  const permissions = useTracker(() => {
-    return Permissions.find().fetch()
+    return Claims.find({
+      _id: { $ne: CONSTANTS.claims.admin._id },
+      description: { $exists: true },
+    }).fetch()
   })
 
   async function removeMember(member) {
@@ -108,7 +96,7 @@ export const ManageOrganization = (props) => {
         ? ''
         : "<p>This will also reduce the quantity of billable team members and you'll be prorated the credit at the end of the current billing cycle.</p>"
     const res = await confirmService.show({
-      theme: theme,
+      theme,
       title: 'Remove user?',
       message: `<p>Are you certain you want to remove ${member.profile.firstName} ${member.profile.lastName} (${member.emails[0].address})? Note that the ${userDetails[0].slateCount} slate(s) attached to them will be also be removed.</p>${billingMessage}<p><b>This delete CANNOT be undone.</b></p>`,
       actionItems: [
@@ -117,7 +105,7 @@ export const ManageOrganization = (props) => {
       ],
     })
     if (res) {
-      //remove user
+      // remove user
       Meteor.users.remove({ _id: member._id })
       Slates.find({ userId: member.userId })
         .fetch()
@@ -133,14 +121,10 @@ export const ManageOrganization = (props) => {
     }
   }
 
-  function isDisabled(member, claim) {
-    // if (AuthManager.userHasClaim(member._id, [CONSTANTS.claims.admin._id]) && !Meteor.user().isOrgOwner) {
-    //   return true;
-    // } else {
+  function isDisabled() {
     return !AuthManager.userHasClaim(Meteor.userId(), [
       CONSTANTS.claims.canEditUsers._id,
     ])
-    //}
   }
 
   function isChecked(member, claim) {
@@ -153,9 +137,7 @@ export const ManageOrganization = (props) => {
       CONSTANTS.methods.users.update,
       { [prop]: val, userId: member._id }
     )
-    if (update) {
-      //dispatch({ type: "canvas", globalMessage: { visible: false, isSnackBar: true, text: update, severity: "info", autoHide: 10000 } });
-    } else {
+    if (!update) {
       dispatch({
         type: 'canvas',
         globalMessage: {
@@ -171,7 +153,7 @@ export const ManageOrganization = (props) => {
 
   async function handleEmailChange(member, prop) {
     const result = await confirmService.show({
-      theme: theme,
+      theme,
       title: `Change Email`,
       message: `Change the user's email from <b>${member.emails[0].address}</b> to: <div style="padding:10px"><input type="email" style="width: 300px;height:30px;" id="txtNewEmail" value="${member.emails[0].address}"/></div>`,
       actionItems: [
@@ -180,7 +162,7 @@ export const ManageOrganization = (props) => {
       ],
     })
     if (result) {
-      let newEmail = document.getElementById('txtNewEmail').value
+      const newEmail = document.getElementById('txtNewEmail').value
       if (newEmail === member.emails[0].address) {
         dispatch({
           type: 'canvas',
@@ -194,10 +176,14 @@ export const ManageOrganization = (props) => {
         })
       } else {
         // ensure email is not used elsewhere
-        let others = await promisify(Meteor.call, CONSTANTS.methods.users.get, {
-          email: newEmail,
-          count: true,
-        })
+        const others = await promisify(
+          Meteor.call,
+          CONSTANTS.methods.users.get,
+          {
+            email: newEmail,
+            count: true,
+          }
+        )
         if (others > 0) {
           dispatch({
             type: 'canvas',
@@ -210,7 +196,6 @@ export const ManageOrganization = (props) => {
             },
           })
         } else {
-          console.log('changing user email', member._id, prop, newEmail)
           const update = await promisify(
             Meteor.call,
             CONSTANTS.methods.users.update,
@@ -244,8 +229,8 @@ export const ManageOrganization = (props) => {
     }
   }
 
-  async function handlePermission(member, claim, isChecked) {
-    let update = await promisify(
+  async function handlePermission(member, claim, chk) {
+    const update = await promisify(
       Meteor.call,
       CONSTANTS.methods.users.changeRoles,
       {
@@ -254,14 +239,12 @@ export const ManageOrganization = (props) => {
             orgId: member.orgId,
             userId: member._id,
             claimIds: [claim._id],
-            action: isChecked ? 'add' : 'delete',
+            action: chk ? 'add' : 'delete',
           },
         ],
       }
     )
-    if (update) {
-      //dispatch({ type: "canvas", globalMessage: { visible: false, isSnackBar: true, text: update, severity: "info", autoHide: 10000 } });
-    } else {
+    if (!update) {
       dispatch({
         type: 'canvas',
         globalMessage: {
@@ -275,25 +258,25 @@ export const ManageOrganization = (props) => {
     }
   }
 
-  async function inviteNewMembers() {
+  const inviteNewMembers = async () => {
     try {
       if (currentInvites.length > 0) {
         if (Organizations.findOne().planType !== 'free') {
-          let priceId = Organizations.findOne().planType
-          let tier = PricingTiers.findOne({
+          const priceId = Organizations.findOne().planType
+          const tier = PricingTiers.findOne({
             $or: [
               { 'yearly.priceId': priceId },
               { 'monthly.priceId': priceId },
             ],
           })
-          let price =
+          const price =
             tier.yearly.priceId === priceId
               ? tier.yearly.price
               : tier.monthly.price
-          let billedAnnually =
+          const billedAnnually =
             tier.yearly.priceId === priceId ? ' (billed annually)' : ''
           const result = await confirmService.show({
-            theme: theme,
+            theme,
             title: `Grow your team!`,
             message: `<p>Adding ${
               currentInvites.length
@@ -306,17 +289,15 @@ export const ManageOrganization = (props) => {
             ],
           })
           if (result) {
-            //invite users
+            // invite users
             await promisify(Meteor.call, CONSTANTS.methods.users.invite, {
               orgId: Meteor.user().orgId,
               invites: currentInvites,
             })
             dispatch({ type: 'canvas', currentInvites: [] })
-          } else {
-            return null
           }
         } else {
-          //free plans can invite as many users as they want
+          // free plans can invite as many users as they want
           await promisify(Meteor.call, CONSTANTS.methods.users.invite, {
             orgId: Meteor.user().orgId,
             invites: currentInvites,
@@ -326,7 +307,7 @@ export const ManageOrganization = (props) => {
       } else {
         dispatch({
           type: 'canvas',
-          theme: theme,
+          theme,
           globalMessage: {
             visible: true,
             isSnackBar: true,
@@ -339,7 +320,7 @@ export const ManageOrganization = (props) => {
     } catch (err) {
       dispatch({
         type: 'canvas',
-        theme: theme,
+        theme,
         globalMessage: {
           visible: true,
           isSnackBar: true,
@@ -353,7 +334,7 @@ export const ManageOrganization = (props) => {
 
   async function resendEnrollment(user) {
     const res = await confirmService.show({
-      theme: theme,
+      theme,
       title: 'Resend enrollment email?',
       message: `<p>Click OK to resend the user's enrollment email to ${user.emails[0].address}.</p>`,
       actionItems: [
@@ -407,7 +388,7 @@ export const ManageOrganization = (props) => {
             )}
             {members.map((member, index) => (
               <TableRow
-                key={index}
+                key={member._id}
                 className={index % 2 ? classes.darkRow : classes.lightRow}
               >
                 {AuthManager.userHasClaim(Meteor.userId(), [
@@ -421,7 +402,7 @@ export const ManageOrganization = (props) => {
                         ]) && (
                           <IconButton
                             aria-label="delete"
-                            onClick={(e) => {
+                            onClick={() => {
                               removeMember(member)
                             }}
                           >
@@ -440,7 +421,7 @@ export const ManageOrganization = (props) => {
                             >
                               <IconButton
                                 aria-label="resendEnrollment"
-                                onClick={(e) => {
+                                onClick={() => {
                                   resendEnrollment(member)
                                 }}
                               >
@@ -478,7 +459,7 @@ export const ManageOrganization = (props) => {
                       <Grid item xs={12}>
                         <Button
                           variant="text"
-                          onClick={(e) => handleEmailChange(member, 'email')}
+                          onClick={() => handleEmailChange(member, 'email')}
                         >
                           {member.emails && member.emails[0]
                             ? member.emails[0].address

@@ -1,36 +1,42 @@
-import React, { useEffect, useState } from 'react';
-import { useTheme } from '@material-ui/core/styles';
-import useMediaQuery from '@material-ui/core/useMediaQuery';
-import Grid from '@material-ui/core/Grid';
-import ToggleButtonGroup from '@material-ui/lab/ToggleButtonGroup';
-import ToggleButton from '@material-ui/lab/ToggleButton';
+/* eslint-disable react/destructuring-assignment */
+import React from 'react'
+import PropTypes from 'prop-types'
+import Grid from '@material-ui/core/Grid'
+import ToggleButtonGroup from '@material-ui/lab/ToggleButtonGroup'
+import ToggleButton from '@material-ui/lab/ToggleButton'
+import nodeProps from '../../propTypes/nodeProps'
 
-export const NodeEffect = (props) => {
-
-  const theme = useTheme();
-  const matches = useMediaQuery(theme.breakpoints.up('md'));
-
-  console.log("filter effects", props?.node?.slate?.filters);
-
-  let effects = props?.node?.slate?.filters?.availableFilters || [];
-  let availEffects = [];
-  Object.keys(effects).map(e => {
-    if (effects[e].types.includes("vect") || (props?.node?.options.image != null && effects[e].types.includes("image"))) {
-      availEffects.push(e);
+export default function NodeEffect({ node, onChange }) {
+  const effects = node?.slate?.filters?.availableFilters || []
+  const availEffects = []
+  Object.keys(effects).forEach((e) => {
+    if (
+      effects[e].types.includes('vect') ||
+      (node?.options.image != null && effects[e].types.includes('image'))
+    ) {
+      availEffects.push(e)
     }
-  });
-  let filterId = props?.node?.options?.filters?.vect;
+  })
+  const filterId = node?.options?.filters?.vect
 
-  const [selectedFilter, updateEffect] = React.useState(filterId);
+  const [selectedFilter, updateEffect] = React.useState(filterId)
 
-  const setEffect = (event, filterId) => {
-    //event.target.value
-    props.onChange({ type: "onNodeEffectChanged", data: { filter: { apply: "vect", id: filterId } } });
-    updateEffect(filterId);
+  const setEffect = (event, sFilterId) => {
+    onChange({
+      type: 'onNodeEffectChanged',
+      data: { filter: { apply: 'vect', id: sFilterId } },
+    })
+    updateEffect(sFilterId)
   }
 
   return (
-    <Grid container alignItems="center" justify="center" spacing={2} style={{ height: "180px" }}>
+    <Grid
+      container
+      alignItems="center"
+      justify="center"
+      spacing={2}
+      style={{ height: '180px' }}
+    >
       <ToggleButtonGroup
         value={selectedFilter}
         exclusive
@@ -44,5 +50,10 @@ export const NodeEffect = (props) => {
         ))}
       </ToggleButtonGroup>
     </Grid>
-  );
+  )
+}
+
+NodeEffect.propTypes = {
+  node: nodeProps.isRequired,
+  onChange: PropTypes.func.isRequired,
 }

@@ -1,18 +1,20 @@
-import { Meteor } from 'meteor/meteor';
-import { CONSTANTS } from '/imports/api/common/constants.js';
-import { promisify } from './promisify.js';
+import { Meteor } from 'meteor/meteor'
+import CONSTANTS from '/imports/api/common/constants'
+import promisify from './promisify'
 
-const createAnonymousUser = async (onComplete) => {
-  return new Promise(async (resolve, reject) => {
+const createAnonymousUser = async () =>
+  new Promise(async (resolve, reject) => {
     try {
-      let email = await promisify(Meteor.call, CONSTANTS.methods.users.createAnonymous);
-      Meteor.loginWithPassword(email, CONSTANTS.anonUserPwd, (err, data) => {
+      const email = await promisify(
+        Meteor.call,
+        CONSTANTS.methods.users.createAnonymous
+      )
+      Meteor.loginWithPassword(email, CONSTANTS.anonUserPwd, () => {
         resolve(null)
-      });
+      })
     } catch (err) {
-      console.log("error ", err);
-      reject(err);
+      console.error('error creating user', err)
+      reject(err)
     }
-  });
-};
-export { createAnonymousUser };
+  })
+export default createAnonymousUser

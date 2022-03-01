@@ -43,6 +43,7 @@
     "@material-ui/icons": "^4.11.2",
     "@material-ui/lab": "^4.0.0-alpha.56",
     "bcrypt": "^5.0.1",
+    "clsx": "^1.1.1",
     "cohere-js": "^1.0.10",
     "deepmerge": "^4.2.2",
     "embeddable-google-fonts": "^1.0.1",
@@ -69,6 +70,7 @@
     "node-fetch": "^2.6.1",
     "oauth-signature": "^1.5.0",
     "probe-image-size": "^6.0.0",
+    "prop-types": "^15.8.1",
     "react": "^16.13.1",
     "react-colorful": "^4.4.4",
     "react-dom": "^16.13.1",
@@ -100,8 +102,12 @@
   },
   "devDependencies": {
     "concurrently": "^6.2.0",
-    "eslint": "^7.18.0",
-    "eslint-plugin-react": "^7.22.0",
-    "eslint-plugin-react-hooks": "^4.2.0"
+    "eslint": "^8.10.0",
+    "eslint-config-airbnb": "^19.0.4",
+    "eslint-config-prettier": "^8.4.0",
+    "eslint-plugin-import": "^2.25.4",
+    "eslint-plugin-jsx-a11y": "^6.5.1",
+    "eslint-plugin-react": "^7.29.1",
+    "eslint-plugin-react-hooks": "^4.3.0"
   }
 }

@@ -1,2 +1,3 @@
-import utils from './helpers/utils.js';
-export default utils;
+import utils from './helpers/utils'
+
+export default utils

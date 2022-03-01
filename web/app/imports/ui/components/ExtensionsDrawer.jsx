@@ -1,51 +1,54 @@
-import React, { useEffect, useState } from 'react';
-import { makeStyles } from '@material-ui/core/styles';
-import SwipeableDrawer from '@material-ui/core/SwipeableDrawer';
-import Paper from '@material-ui/core/Paper';
+import React from 'react'
+import PropTypes from 'prop-types'
+import { makeStyles } from '@material-ui/core/styles'
+import SwipeableDrawer from '@material-ui/core/SwipeableDrawer'
+import Paper from '@material-ui/core/Paper'
 
 const useStyles = makeStyles((theme) => ({
   paper: {
     backgroundColor: theme.palette.primary.main,
-    height: "100vh",
-    width: "300px"
+    height: '100vh',
+    width: '300px',
   },
   content: {
-    margin: theme.spacing(3)
+    margin: theme.spacing(3),
   },
   whiteText: {
-    color: '#fff'
+    color: '#fff',
   },
   heading: {
-    fontSize: theme.typography.pxToRem(15)
+    fontSize: theme.typography.pxToRem(15),
+  },
+}))
+
+export default function ExtensionsDrawer({ onDrawerClose, open }) {
+  const classes = useStyles()
+  const handleClose = () => {
+    if (onDrawerClose) onDrawerClose()
   }
-}));
 
-export const ExtensionsDrawer = (props) => {
-
-  const classes = useStyles();
-  const handleClose = (e) => {
-    props?.onDrawerClose();
+  ExtensionsDrawer.propTypes = {
+    onDrawerClose: PropTypes.func.isRequired,
+    open: PropTypes.bool.isRequired,
   }
 
   return (
     <SwipeableDrawer
       anchor="right"
-      open={props?.open || false}
+      open={open || false}
       onClose={handleClose}
       onOpen={() => {}}
-      disableBackdropTransition={true}
-      disableDiscovery={true}
-      disableSwipeToOpen={true}
+      disableBackdropTransition
+      disableDiscovery
+      disableSwipeToOpen
       classes={{ paper: classes.paper }}
       ModalProps={{
         BackdropProps: {
-          invisible: true
-        }
+          invisible: true,
+        },
       }}
     >
-      <Paper className={classes.paper}>
-        Coming Soon
-      </Paper>
+      <Paper className={classes.paper}>Coming Soon</Paper>
     </SwipeableDrawer>
   )
 }

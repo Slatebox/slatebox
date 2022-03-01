@@ -1,16 +1,16 @@
 // methods.js
-import { CONSTANTS } from '../../imports/api/common/constants.js';
-import { SlateAccess } from '../../imports/api/common/models.js';
-import { Meteor } from 'meteor/meteor';
+import CONSTANTS from '../../imports/api/common/constants'
+import SlateAccess from '../../imports/api/common/models'
+import { Meteor } from 'meteor/meteor'
 
-let method = {};
+const method = {}
 
-method[CONSTANTS.methods.slateAccess.get] = async function (opts) {
+method[CONSTANTS.methods.slateAccess.get] = async (opts) => {
   if (Meteor.user()) {
-    let access = SlateAccess.find({ slateId: opts.id }).fetch();
-    return access;
+    const access = SlateAccess.find({ slateId: opts.id }).fetch()
+    return access
   }
-  return [];
+  return []
 }
 
-Meteor.methods(method);
+Meteor.methods(method)

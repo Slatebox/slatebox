@@ -1,31 +1,31 @@
+/* eslint-disable no-underscore-dangle */
+/* eslint-disable no-undef */
 import { Meteor } from 'meteor/meteor'
+import { DDP } from 'meteor/ddp-client'
 import { Accounts } from 'meteor/accounts-base'
-import { Servers } from '../imports/api/common/models.js'
-import setup from './email/setup'
 import ip from 'ip'
-import './bootstrap/all.js'
+import { Servers } from '../imports/api/common/models'
+import setup from './email/setup'
+import './bootstrap/all'
 
 Meteor.startup(() => {
-  //setup mail
+  // setup mail
   setup()
 
-  //monti
-  //Monti.connect('565dQDEy2sxdFJScd', '6c183fb3-8f74-413f-98b0-4aa4028051b0');
-
   const ownIp = ip.address()
-  console.log('ownIp ', ownIp)
 
-  Accounts.onCreateUser(function (suggested, user) {
-    user.isAnonymous = suggested.isAnonymous || false
+  Accounts.onCreateUser((suggested, user) => {
+    const muser = user
+    muser.isAnonymous = suggested.isAnonymous || false
     if (suggested.orgId) {
-      user.orgId = suggested.orgId
+      muser.orgId = suggested.orgId
     } else {
-      user.planType = suggested.planType || 'free'
+      muser.planType = suggested.planType || 'free'
     }
-    if (suggested.userName) user.userName = suggested.userName
-    if (suggested.profile) user.profile = suggested.profile
-    if (suggested.isDemo) user.isDemo = suggested.isDemo
-    return user
+    if (suggested.userName) muser.userName = suggested.userName
+    if (suggested.profile) muser.profile = suggested.profile
+    if (suggested.isDemo) muser.isDemo = suggested.isDemo
+    return muser
   })
 
   // to do: get pod internal IPs and insert them here (10.2.0.50)
@@ -43,53 +43,49 @@ Meteor.startup(() => {
     }
   }
 
-  console.log('internal ip is', ownIp) //is external
+  Servers.find()
+    .fetch()
+    .forEach((s) => {
+      // this is a server proxy for Streamy to push from other web servers to the client
+      if (s.internal !== ownIp && s.active) {
+        const connection = DDP.connect(s.internal) // always use internal for ddp
+        const streamyConnection = new Streamy.Connection(connection)
 
-  for (let s of Servers.find().fetch()) {
-    //this is a server proxy for Streamy to push from other web servers to the client
-    console.log('comparing servers ', ownIp, s.active)
-    if (s.internal !== ownIp && s.active) {
-      let connection = DDP.connect(s.internal) //always use internal for ddp
-      let streamyConnection = new Streamy.Connection(connection)
+        // Attach message handlers
+        connection._stream.on('message', (data) => {
+          const parsedData = JSON.parse(data)
+          if (!parsedData.processed && parsedData.msg) {
+            // Retrieve the msg value
+            const { msg } = parsedData
+            parsedData.__fromServer = s.host
+            // And dismiss it
+            delete parsedData.msg
 
-      console.log('stream - set up message listener', ownIp)
-      // Attach message handlers
-      connection._stream.on('message', function onMessage(data) {
-        let parsed_data = JSON.parse(data)
-        if (!parsed_data.processed && parsed_data.msg) {
-          // Retrieve the msg value
-          let msg = parsed_data.msg
-          parsed_data.__fromServer = s.host
-          // And dismiss it
-          delete parsed_data.msg
-
-          parsed_data.processed = true
-          //now we have it FROM the foreign server, so broadcast it on the LOCAL server
-          if (msg.indexOf('streamy$') > -1) {
-            let slateId = msg.split('streamy$')[1]
-            console.log('sending streamy broadcast', slateId, parsed_data)
-            Streamy.broadcast(slateId, parsed_data)
+            parsedData.processed = true
+            // now we have it FROM the foreign server, so broadcast it on the LOCAL server
+            if (msg.indexOf('streamy$') > -1) {
+              const slateId = msg.split('streamy$')[1]
+              Streamy.broadcast(slateId, parsedData)
+            }
           }
-        }
-      })
+        })
 
-      // call when connect to localhost:4000 success
-      streamyConnection.onConnect(function () {
-        console.log(`Connected to ${s.internal}`)
-      })
+        // call when connect to localhost:4000 success
+        streamyConnection.onConnect(() => {
+          // console.log(`Connected to ${s.internal}`)
+        })
 
-      streamyConnection.onDisconnect(function () {
-        console.log(`Disconnected from ${s.internal}`)
-      })
-    }
-  }
+        streamyConnection.onDisconnect(() => {
+          // console.log(`Disconnected from ${s.internal}`)
+        })
+      }
+    })
 
-  //allow broadcasts
-  Streamy.BroadCasts.allow = function (data, from) {
+  // allow broadcasts
+  Streamy.BroadCasts.allow = (data, from) =>
     // from is the socket object
     // data contains raw data you can access:
     //  - the message via data.__msg
     //  - the message data via data.__data
-    return true
-  }
+    true
 })

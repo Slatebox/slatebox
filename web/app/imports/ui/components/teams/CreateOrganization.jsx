@@ -1,8 +1,6 @@
+/* eslint-disable react/jsx-props-no-spreading */
 import React from 'react'
 import { Meteor } from 'meteor/meteor'
-import { useHistory } from 'react-router-dom'
-import { useLocation } from 'react-router'
-import { useTracker } from 'meteor/react-meteor-data'
 import { makeStyles } from '@material-ui/core/styles'
 import { useDispatch, useSelector } from 'react-redux'
 
@@ -15,13 +13,13 @@ import Grid from '@material-ui/core/Grid'
 import TextField from '@material-ui/core/TextField'
 import Snackbar from '@material-ui/core/Snackbar'
 import Alert from '@material-ui/lab/Alert'
-import { InviteTeamMembers } from './InviteTeamMembers'
 import Box from '@material-ui/core/Box'
 import Avatar from '@material-ui/core/Avatar'
 import { deepOrange } from '@material-ui/core/colors'
-import { CONSTANTS } from '../../../api/common/constants.js'
-import { promisify } from '../../../api/client/promisify.js'
 import CircularProgress from '@material-ui/core/CircularProgress'
+import CONSTANTS from '../../../api/common/constants'
+import promisify from '../../../api/client/promisify'
+import InviteTeamMembers from './InviteTeamMembers'
 import { Organizations } from '../../../api/common/models'
 
 const useStyles = makeStyles((theme) => ({
@@ -46,8 +44,68 @@ function getSteps() {
   return ['Create Your Team', 'Add Team Members', 'Send Invites']
 }
 
-export const CreateOrganization = () => {
+export default function CreateOrganization() {
   const dispatch = useDispatch()
+  const currentInvites = useSelector((state) => state.currentInvites) || []
+  const [warningOpen, setWarningOpen] = React.useState(false)
+  const [warning, setWarningText] = React.useState('')
+  const classes = useStyles()
+  const [activeStep, setActiveStep] = React.useState(0)
+  const steps = getSteps()
+  const noSpecialChars = /^[_A-z0-9]*((-|\s| )*[_A-z0-9])*$/g
+  const [teamName, setTeamName] = React.useState('')
+  const closeWarning = () => {
+    setWarningOpen(false)
+  }
+
+  async function finalize() {
+    try {
+      // create org (removes planType from user, attaches planType to user, attaches orgId to user)
+      const orgId = await promisify(
+        Meteor.call,
+        CONSTANTS.methods.organizations.create,
+        { name: teamName, createdByUserId: Meteor.userId() }
+      )
+
+      // explicitly update the user with the orgId
+      await promisify(Meteor.call, CONSTANTS.methods.users.update, {
+        userId: Meteor.userId(),
+        orgId,
+      })
+
+      // invite users
+      await promisify(Meteor.call, CONSTANTS.methods.users.invite, {
+        orgId,
+        invites: currentInvites,
+      })
+      dispatch({ type: 'canvas', currentInvites: [] })
+    } catch (err) {
+      setWarningText(`There was a problem inviting these users: ${err.message}`)
+      setWarningOpen(true)
+      setActiveStep(2)
+    }
+  }
+
+  const handleNext = () => {
+    if (activeStep === 0 && teamName.trim() === '') {
+      setWarningText('You must specify a team name.')
+      setWarningOpen(true)
+    } else if (activeStep === 1 && currentInvites.length === 0) {
+      setWarningText('You have to add at least one team member!')
+      setWarningOpen(true)
+    } else {
+      setWarningText('')
+      setWarningOpen(false)
+      setActiveStep((prevActiveStep) => prevActiveStep + 1)
+    }
+    if (activeStep === 2) {
+      finalize()
+    }
+  }
+
+  const handleBack = () => {
+    setActiveStep((prevActiveStep) => prevActiveStep - 1)
+  }
 
   if (Meteor.user() && Meteor.user().isAnonymous) {
     dispatch({
@@ -59,15 +117,8 @@ export const CreateOrganization = () => {
     return null
   }
 
-  const classes = useStyles()
-  const [activeStep, setActiveStep] = React.useState(0)
-  const steps = getSteps()
-  let noSpecialChars = new RegExp('^[_A-z0-9]*((-|\\s| )*[_A-z0-9])*$', 'g')
-
-  const [teamName, setTeamName] = React.useState('')
   const handleTeamNameChange = (e) => {
     setTeamName(e.target.value)
-    console.log('match?', e.target.value, e.target.value.match(noSpecialChars))
     if (e.target.value.trim() === '') {
       setWarningText('You must specify a team name.')
       setWarningOpen(true)
@@ -81,8 +132,6 @@ export const CreateOrganization = () => {
       setWarningOpen(true)
     }
   }
-
-  const currentInvites = useSelector((state) => state.currentInvites) || []
 
   function getStepContent(step) {
     switch (step) {
@@ -178,61 +227,6 @@ export const CreateOrganization = () => {
     }
   }
 
-  async function finalize() {
-    try {
-      // create org (removes planType from user, attaches planType to user, attaches orgId to user)
-      let orgId = await promisify(
-        Meteor.call,
-        CONSTANTS.methods.organizations.create,
-        { name: teamName, createdByUserId: Meteor.userId() }
-      )
-
-      //explicitly update the user with the orgId
-      await promisify(Meteor.call, CONSTANTS.methods.users.update, {
-        userId: Meteor.userId(),
-        orgId: orgId,
-      })
-
-      //invite users
-      await promisify(Meteor.call, CONSTANTS.methods.users.invite, {
-        orgId: orgId,
-        invites: currentInvites,
-      })
-      dispatch({ type: 'canvas', currentInvites: [] })
-    } catch (err) {
-      setWarningText(`There was a problem inviting these users: ${err.message}`)
-      setWarningOpen(true)
-      setActiveStep(2)
-    }
-  }
-
-  const handleNext = () => {
-    if (activeStep === 0 && teamName.trim() === '') {
-      setWarningText('You must specify a team name.')
-      setWarningOpen(true)
-    } else if (activeStep === 1 && currentInvites.length === 0) {
-      setWarningText('You have to add at least one team member!')
-      setWarningOpen(true)
-    } else {
-      setWarningText('')
-      setWarningOpen(false)
-      setActiveStep((prevActiveStep) => prevActiveStep + 1)
-    }
-    if (activeStep === 2) {
-      finalize()
-    }
-  }
-
-  const handleBack = () => {
-    setActiveStep((prevActiveStep) => prevActiveStep - 1)
-  }
-
-  const [warningOpen, setWarningOpen] = React.useState(false)
-  const [warning, setWarningText] = React.useState('')
-  const closeWarning = (e) => {
-    setWarningOpen(false)
-  }
-
   return (
     <>
       {warningOpen && (
@@ -245,7 +239,7 @@ export const CreateOrganization = () => {
         </Snackbar>
       )}
       <Stepper activeStep={activeStep}>
-        {steps.map((label, index) => {
+        {steps.map((label) => {
           const stepProps = {}
           const labelProps = {}
           return (

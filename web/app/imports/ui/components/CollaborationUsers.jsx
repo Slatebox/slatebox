@@ -1,71 +1,60 @@
-//Streamy is global, so no import needed
-import { Meteor } from 'meteor/meteor';
-import { useTracker } from 'meteor/react-meteor-data';
-import { CONSTANTS } from '../../api/common/constants.js';
+// Streamy is global, so no import needed
+import { Meteor } from 'meteor/meteor'
+import { useTracker } from 'meteor/react-meteor-data'
 import { useSelector } from 'react-redux'
-import { Collaborators, Collaboration } from '../../api/common/models.js';
+import CONSTANTS from '../../api/common/constants'
+import { Collaborators, Collaboration } from '../../api/common/models'
 
-export const CollaborationUsers = (props) => {
-
-  let collaborator = useSelector(state => state.collaborator);
-
-  //console.log("subscribing to collabs");
+export default function CollaborationUsers({ slate }) {
+  const collaborator = useSelector((state) => state.collaborator)
 
   useTracker(() => {
-    if (props.slate?.shareId) {
-      Meteor.subscribe(CONSTANTS.publications.collaborators, [props.slate?.shareId]);
-      //console.log("got collaborators ", Collaborators.find().count());
-
-      //wires hearbeat
+    if (slate?.shareId) {
+      Meteor.subscribe(CONSTANTS.publications.collaborators, [slate?.shareId])
+      // wires hearbeat
       if (collaborator?.instanceId) {
         Collaborators.find({ _id: collaborator?.instanceId }).observe({
-          added: function (doc) {
+          added(doc) {
             if (doc.heartbeat === false) {
-              Collaborators.update({ _id: collaborator?.instanceId }, { $set: { heartbeat: true } });
+              Collaborators.update(
+                { _id: collaborator?.instanceId },
+                { $set: { heartbeat: true } }
+              )
             }
           },
           changed: (doc) => {
-            //console.log("resetting to true ", doc.heartbeat);
             if (doc.heartbeat === false) {
-              Collaborators.update({ _id: collaborator?.instanceId }, { $set: { heartbeat: true } });
+              Collaborators.update(
+                { _id: collaborator?.instanceId },
+                { $set: { heartbeat: true } }
+              )
             }
-          }
-        });
+          },
+        })
       }
     }
-  });
+  })
 
   useTracker(() => {
-    if (props.slate?.shareId) {
-      Meteor.subscribe(CONSTANTS.publications.collaboration
-        , [props.slate?.shareId]
-        , [collaborator?.instanceId]
-        , new Date().valueOf()
-      );
+    if (slate?.shareId) {
+      Meteor.subscribe(
+        CONSTANTS.publications.collaboration,
+        [slate?.shareId],
+        [collaborator?.instanceId],
+        new Date().valueOf()
+      )
 
-      //wires up collaboration
-      //console.log("subscribing to collaboration ", collaborator?.instanceId, props.slate?.shareId);
+      // wires up collaboration
       Collaboration.find().observe({
-        added: function (doc) {
-          //console.log("got collab doc ", doc.instanceId, collaborator?.instanceId, doc);
-          //$(".lastSaved").livestamp(new Date());
-          //console.log("comparing instance ids", doc.instanceId, collaborator?.instanceId);
-          if (doc.instanceId !== collaborator?.instanceId) { //no need for this, as it's excluded in the query
-            props.slate?.collab.invoke(doc);
-            // exist?", doc.data.id); 
-            if (doc.data.id) {
-              //console.log("gonna update the node state ", props.slate?.nodes.one(doc.data.id));
-              //update the node props of any opened drawers
-              // setNodeDrawer({
-              //   node: props.slate?.nodes.one(doc.data.id),
-              //   open: true
-              // })
-            }
+        added(doc) {
+          if (doc.instanceId !== collaborator?.instanceId) {
+            // no need for this, as it's excluded in the query
+            slate?.collab.invoke(doc)
           }
-        }
-      });
+        },
+      })
     }
-  });
-  
-  return null;
-}      
+  })
+
+  return null
+}

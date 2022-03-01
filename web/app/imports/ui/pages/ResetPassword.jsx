@@ -1,29 +1,20 @@
-import { useParams } from "react-router";
-import React, { useEffect, useState } from 'react';
-import { Meteor } from 'meteor/meteor';
-import { Accounts } from 'meteor/accounts-base';
-import Avatar from '@material-ui/core/Avatar';
-import LockOutlinedIcon from '@material-ui/icons/LockOutlined';
-import Typography from '@material-ui/core/Typography';
-import { makeStyles } from '@material-ui/core/styles';
-import { useHistory } from "react-router-dom";
-import Container from '@material-ui/core/Container';
-import Snackbar from '@material-ui/core/Snackbar';
-import Alert from '@material-ui/lab/Alert';
-import { useTracker } from 'meteor/react-meteor-data';
-
-import Paper from "@material-ui/core/Paper";
-import { useSelector, useDispatch } from "react-redux";
-import Box from "@material-ui/core/Box";
-import Button from "@material-ui/core/Button";
-import CircularProgress from "@material-ui/core/CircularProgress";
-import Grid from "@material-ui/core/Grid";
-import TextField from "@material-ui/core/TextField";
-import Link from "@material-ui/core/Link";
-import { Link as RouterLink } from 'react-router-dom';
-
-import { CONSTANTS } from '../../api/common/constants.js' 
-import { promisify } from '../../api/client/promisify.js';
+import React, { useEffect } from 'react'
+import PropTypes from 'prop-types'
+import { Meteor } from 'meteor/meteor'
+import { Accounts } from 'meteor/accounts-base'
+import Avatar from '@material-ui/core/Avatar'
+import LockOutlinedIcon from '@material-ui/icons/LockOutlined'
+import Typography from '@material-ui/core/Typography'
+import { makeStyles } from '@material-ui/core/styles'
+import { useHistory, useParams, Link as RouterLink } from 'react-router-dom'
+import Container from '@material-ui/core/Container'
+import { useDispatch } from 'react-redux'
+import Button from '@material-ui/core/Button'
+import Grid from '@material-ui/core/Grid'
+import TextField from '@material-ui/core/TextField'
+import Link from '@material-ui/core/Link'
+import CONSTANTS from '../../api/common/constants'
+import promisify from '../../api/client/promisify'
 
 const useStyles = makeStyles((theme) => ({
   paper: {
@@ -38,7 +29,7 @@ const useStyles = makeStyles((theme) => ({
   },
   form: {
     width: '100%', // Fix IE 11 issue.
-    height: "250px",
+    height: '250px',
     marginTop: theme.spacing(1),
   },
   submit: {
@@ -47,60 +38,79 @@ const useStyles = makeStyles((theme) => ({
   register: {
     margin: theme.spacing(3, 0, 2),
   },
-}));
+}))
 
-export const ResetPassword = (props) => {  
-  const classes = useStyles();
-  const history = useHistory();
-  const dispatch = useDispatch();
-  const [password, setPassword] = React.useState("");
-  const [confirmPassword, setConfirmPassword] = React.useState("");
-  const [resetPassword, setResetPassword] = React.useState(false);
-  //dispatch({ type: "canvas", noDrawer: true });
-  const { token } = useParams();
+export default function ResetPassword({ asEnroll }) {
+  const classes = useStyles()
+  const history = useHistory()
+  const dispatch = useDispatch()
+  const [password, setPassword] = React.useState('')
+  const [confirmPassword, setConfirmPassword] = React.useState('')
+  const [resetPassword, setResetPassword] = React.useState(false)
+  const { token } = useParams()
 
   if (Meteor.user() && !resetPassword) {
-    history.push("/");
+    history.push('/')
   }
-  
+
   const reset = () => {
-    if (password !== "" && password === confirmPassword) {
-      Accounts.resetPassword(token, password, function(err) {
+    if (password !== '' && password === confirmPassword) {
+      Accounts.resetPassword(token, password, (err) => {
         if (err) {
-          dispatch({ type: "canvas", globalMessage: { visible: true, text: `Oh Snap. There was a problem setting your password. Please contact support. (Error: ${err.reason})`, severity: "error", autoHide: 60000 } });
+          dispatch({
+            type: 'canvas',
+            globalMessage: {
+              visible: true,
+              text: `Oh Snap. There was a problem setting your password. Please contact support. (Error: ${err.reason})`,
+              severity: 'error',
+              autoHide: 60000,
+            },
+          })
         } else {
-          setResetPassword(true);
-          //dispatch({ type: "canvas", noDrawer: false });
+          setResetPassword(true)
+          // dispatch({ type: "canvas", noDrawer: false });
           setTimeout(() => {
-            history.push("/");
+            history.push('/')
           }, 10000)
         }
-      });
+      })
     }
   }
 
   const handlePassword = (e) => {
-    setPassword(e.target.value);
+    setPassword(e.target.value)
   }
 
   const handleConfirm = (e) => {
-    setConfirmPassword(e.target.value);
+    setConfirmPassword(e.target.value)
   }
 
-  const [userAndOrg, setUserAndOrgNames] = React.useState(null);
+  const [userAndOrg, setUserAndOrgNames] = React.useState(null)
   useEffect(() => {
     async function getOrgAndUser() {
-      const uo = await promisify(Meteor.call, CONSTANTS.methods.users.extractUserAndOrgNamesByResetToken, token);
+      const uo = await promisify(
+        Meteor.call,
+        CONSTANTS.methods.users.extractUserAndOrgNamesByResetToken,
+        token
+      )
       if (!uo) {
-        //bad token, go back to homepage
-        dispatch({ type: "canvas", globalMessage: { visible: true, text: `That enroll token is invalid. Please contact your team's administrator.`, severity: "error", autoHide: 60000 } });
-        history.push("/");
+        // bad token, go back to homepage
+        dispatch({
+          type: 'canvas',
+          globalMessage: {
+            visible: true,
+            text: `That enroll token is invalid. Please contact your team's administrator.`,
+            severity: 'error',
+            autoHide: 60000,
+          },
+        })
+        history.push('/')
       } else {
-        setUserAndOrgNames(uo);
+        setUserAndOrgNames(uo)
       }
     }
-    getOrgAndUser();
-  }, []);
+    getOrgAndUser()
+  }, [])
 
   return (
     <Container component="main" maxWidth="xs">
@@ -108,14 +118,31 @@ export const ResetPassword = (props) => {
         <Avatar className={classes.avatar}>
           <LockOutlinedIcon />
         </Avatar>
-        {!resetPassword && 
-          <Grid container alignItems="center" justify="center" className={classes.form} spacing={2}>
+        {!resetPassword && (
+          <Grid
+            container
+            alignItems="center"
+            justify="center"
+            className={classes.form}
+            spacing={2}
+          >
             <Grid item xs={12}>
-              <Typography component="h1" variant="h5" style={{color:"#fff"}}>
-                {props.asEnroll
-                  ? (<>Welcome{userAndOrg?.name ? ` ${userAndOrg.name}` : ""}! You are invited to join the <Typography component="span" variant="h5" color="secondary">{userAndOrg?.orgName}</Typography> team. Please enter a password below.</>)
-                  : (<>Welcome{userAndOrg?.name ? ` ${userAndOrg?.name}` : ""}! Reset your password below.</>)
-                }
+              <Typography component="h1" variant="h5" style={{ color: '#fff' }}>
+                {asEnroll ? (
+                  <>
+                    Welcome{userAndOrg?.name ? ` ${userAndOrg.name}` : ''}! You
+                    are invited to join the{' '}
+                    <Typography component="span" variant="h5" color="secondary">
+                      {userAndOrg?.orgName}
+                    </Typography>{' '}
+                    team. Please enter a password below.
+                  </>
+                ) : (
+                  <>
+                    Welcome{userAndOrg?.name ? ` ${userAndOrg?.name}` : ''}!
+                    Reset your password below.
+                  </>
+                )}
               </Typography>
             </Grid>
             <Grid item xs={12}>
@@ -156,32 +183,68 @@ export const ResetPassword = (props) => {
               />
             </Grid>
             <Grid item>
-              <Button variant="outlined" color="secondary" onClick={reset} disabled={password !== confirmPassword}>{props.asEnroll ? <>Set Password</> : <>Reset Password</>} &amp; Login</Button> 
+              <Button
+                variant="outlined"
+                color="secondary"
+                onClick={reset}
+                disabled={password !== confirmPassword}
+              >
+                {asEnroll ? <>Set Password</> : <>Reset Password</>} &amp; Login
+              </Button>
             </Grid>
           </Grid>
-        }
-        {resetPassword &&
-          <Grid container alignItems="center" justify="center" className={classes.form} spacing={10}>
+        )}
+        {resetPassword && (
+          <Grid
+            container
+            alignItems="center"
+            justify="center"
+            className={classes.form}
+            spacing={10}
+          >
             <Grid item xs={12}>
-              <Typography component="h1" variant="h5" style={{color:"#fff"}}>
-                {props.asEnroll
-                  ? (<>Hooray, you've created a password and joined the {userAndOrg?.orgName} team!</>)
-                  : (<>Horray, password reset!</>)
-                }
+              <Typography component="h1" variant="h5" style={{ color: '#fff' }}>
+                {asEnroll ? (
+                  <>
+                    Hooray, you&apos;ve created a password and joined the{' '}
+                    {userAndOrg?.orgName} team!
+                  </>
+                ) : (
+                  <>Horray, password reset!</>
+                )}
               </Typography>
             </Grid>
             <Grid item xs={12}>
-              <Typography component="h1" variant="subtitle1" style={{color:"#fff"}}>
-                {props.asEnroll
-                  ? (<></>)
-                  : (<>You&apos;re logged in! Redirecting to your dashboard in 10 seconds, or <Link component={RouterLink} to="/" style={{color:"#fff"}}>go there now</Link>!</>)
-                }
+              <Typography
+                component="h1"
+                variant="subtitle1"
+                style={{ color: '#fff' }}
+              >
+                {asEnroll ? (
+                  <div />
+                ) : (
+                  <>
+                    You&apos;re logged in! Redirecting to your dashboard in 10
+                    seconds, or{' '}
+                    <Link
+                      component={RouterLink}
+                      to="/"
+                      style={{ color: '#fff' }}
+                    >
+                      go there now
+                    </Link>
+                    !
+                  </>
+                )}
               </Typography>
             </Grid>
           </Grid>
-        }
+        )}
       </div>
-      
     </Container>
-  );
+  )
+}
+
+ResetPassword.propTypes = {
+  asEnroll: PropTypes.bool.isRequired,
 }

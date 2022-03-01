@@ -1,56 +1,53 @@
-import React, { useState } from 'react'
+/* eslint-disable react/jsx-props-no-spreading */
+/* eslint-disable react/jsx-boolean-value */
+/* eslint-disable no-underscore-dangle */
+import React from 'react'
+import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
-import { Redirect, Route, Switch, useParams } from 'react-router-dom'
-import { MySlates } from './pages/MySlates.jsx'
-import { TeamSlates } from './pages/TeamSlates.jsx'
-import { CommunitySlates } from './pages/CommunitySlates.jsx'
-import { Team } from './pages/Team.jsx'
-import { Profile } from './pages/Profile.jsx'
-import { Canvas } from './pages/Canvas.jsx'
-import { Login } from './pages/Login.jsx'
-import { RecoverPassword } from './pages/RecoverPassword.jsx'
-import { ResetPassword } from './pages/ResetPassword.jsx'
-import { VerifyEmail } from './pages/VerifyEmail.jsx'
-import { NotFound } from './pages/NotFound.jsx'
-import { AdminTools } from './pages/AdminTools.jsx'
-import { promisify } from '../api/client/promisify.js'
-import { TeamSettings } from './pages/TeamSettings.jsx'
-import { SimulateUrlAction } from './components/SimulateUrlAction.jsx'
-import AuthManager from '../api/common/AuthManager.js'
-import { CONSTANTS } from '../api/common/constants.js'
-import { SlateTemplates } from './pages/SlateTemplates.jsx'
-import { ShowThemes } from './pages/ShowThemes.jsx'
-import { StripeManagement } from './components/StripeManagement'
+import { Redirect, Route, Switch } from 'react-router-dom'
+import MySlates from './pages/MySlates'
+import TeamSlates from './pages/TeamSlates'
+import CommunitySlates from './pages/CommunitySlates'
+import Team from './pages/Team'
+import Profile from './pages/Profile'
+import Canvas from './pages/Canvas'
+import Login from './pages/Login'
+import RecoverPassword from './pages/RecoverPassword'
+import ResetPassword from './pages/ResetPassword'
+import VerifyEmail from './pages/VerifyEmail'
+import NotFound from './pages/NotFound'
+import AdminTools from './pages/AdminTools'
+import TeamSettings from './pages/TeamSettings'
+import SimulateUrlAction from './components/SimulateUrlAction'
+import AuthManager from '../api/common/AuthManager'
+import CONSTANTS from '../api/common/constants'
+import SlateTemplates from './pages/SlateTemplates'
+import ShowThemes from './pages/ShowThemes'
+import StripeManagement from './components/StripeManagement'
 
-const PrivateRoute = ({ component: Component, ...rest }) => {
-  let isAuthorized = Meteor.loggingIn && (Meteor.loggingIn() || Meteor.userId())
-  let redirectLocale = '/login'
-  // if (rest.withCondition) {
-  //   const { id } = useParams();
-  //   let getSlate = await promisify(Meteor.call, CONSTANTS.methods.slates.get, { shareId: id });
-  //   if (getSlate?.accessLevel) {
-  //     isAuthorized = true;
-  //     rest.getSlate = getSlate;
-  //   } else if (isAuthorized) {
-  //     isAuthorized = false;
-  //     redirectLocale = "/unauthorized";
-  //   }
-  // }
+function PrivateRoute({ component: Component, ...rest }) {
+  const isAuthorized =
+    Meteor.loggingIn && (Meteor.loggingIn() || Meteor.userId())
+  const redirectLocale = '/login'
   return (
     <Route
       {...rest}
-      render={(props) => {
-        return isAuthorized ? (
+      render={(props) =>
+        isAuthorized ? (
           <Component {...props} />
         ) : (
           <Redirect to={redirectLocale} />
         )
-      }}
+      }
     />
   )
 }
 
-export const Routes = () => {
+PrivateRoute.propTypes = {
+  component: PropTypes.node.isRequired,
+}
+
+export default function Routes() {
   return (
     <Switch>
       <PrivateRoute component={MySlates} exact path="/" />

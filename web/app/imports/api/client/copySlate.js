@@ -1,10 +1,11 @@
+/* eslint-disable no-underscore-dangle */
 import { Meteor } from 'meteor/meteor'
 import { Random } from 'meteor/random'
-import { CONSTANTS } from '/imports/api/common/constants.js'
-import { createAnonymousUser } from '/imports/api/client/createAnonymousUser.js'
-import { Slates, Organizations } from '/imports/api/common/models.js'
 import cloneDeep from 'lodash.clonedeep'
-import { promisify } from './promisify'
+import CONSTANTS from '../common/constants'
+import createAnonymousUser from './createAnonymousUser'
+import { Slates, Organizations } from '../common/models'
+import promisify from './promisify'
 
 const copySlate = async (slate, allowTemplateCopy) => {
   if (!Meteor.user()) {
@@ -13,7 +14,7 @@ const copySlate = async (slate, allowTemplateCopy) => {
 
   const copy = cloneDeep(slate)
 
-  //allowTemplate copies
+  // allowTemplate copies
   if (copy.options.isTemplate && !allowTemplateCopy) {
     copy.options.isTemplate = false
     copy.options.basedOnTemplate = copy.options.id
@@ -33,24 +34,25 @@ const copySlate = async (slate, allowTemplateCopy) => {
 
     // need to adjust node behavior when a template is used
     copy.nodes.forEach((node) => {
+      const n = node
       if (node.options.disableMenuAsTemplate) {
         // when using as a template, disable the ability to access this node's menu altogether.
-        node.options.allowMenu = false
-        node.options.showMenu = false
-        delete node.options.disableMenuAsTemplate
+        n.options.allowMenu = false
+        n.options.showMenu = false
+        delete n.options.disableMenuAsTemplate
       }
     })
   }
 
   copy._id = Random.id()
   copy.options.id = copy._id
-  let planType = Meteor.user().orgId
+  const planType = Meteor.user().orgId
     ? Organizations.findOne()?.planType
     : Meteor.user().planType
-  const isPublic = planType === 'free' ? true : false
+  const isPublic = planType === 'free'
 
   Object.assign(copy.options, {
-    isPublic: isPublic,
+    isPublic,
     isCommunity: false,
     isFeatured: false,
   })
@@ -71,4 +73,4 @@ const copySlate = async (slate, allowTemplateCopy) => {
   return copy.shareId
 }
 
-export { copySlate }
+export default copySlate

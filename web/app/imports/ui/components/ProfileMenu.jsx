@@ -3,7 +3,7 @@ import { Meteor } from 'meteor/meteor'
 import { useDispatch, useSelector } from 'react-redux'
 import { useHistory } from 'react-router-dom'
 import { useTracker } from 'meteor/react-meteor-data'
-import { useTheme } from '@material-ui/core'
+import { useTheme, useMediaQuery } from '@material-ui/core'
 import Menu from '@material-ui/core/Menu'
 import MenuItem from '@material-ui/core/MenuItem'
 import IconButton from '@material-ui/core/IconButton'
@@ -11,31 +11,28 @@ import AccountCircleIcon from '@material-ui/icons/AccountCircle'
 import Typography from '@material-ui/core/Typography'
 import Chip from '@material-ui/core/Chip'
 import Grid from '@material-ui/core/Grid'
-import { promisify } from '../../api/client/promisify'
-import { CONSTANTS } from '../../api/common/constants'
+import promisify from '../../api/client/promisify'
+import CONSTANTS from '../../api/common/constants'
 import { PricingTiers, Organizations } from '../../api/common/models'
-import Button from '@material-ui/core/Button'
-import { useMediaQuery } from '@material-ui/core'
-import { getUserName } from '../../api/common/getUserName'
+import getUserName from '../../api/common/getUserName'
 
-export const ProfileMenu = (props) => {
+export default function ProfileMenu() {
   const dispatch = useDispatch()
   const theme = useTheme()
   const history = useHistory()
-  const smmq = useMediaQuery(theme.breakpoints.up('sm'))
   const mdmq = useMediaQuery(theme.breakpoints.up('md'))
   const lgmq = useMediaQuery(theme.breakpoints.up('lg'))
 
   const userDetails = useTracker(() => {
-    //get pricing data
+    // get pricing data
     Meteor.subscribe(CONSTANTS.publications.pricingTiers)
     if (Meteor.user()) {
       let plan = Meteor.user().orgId
         ? Organizations.findOne()?.planType
         : Meteor.user().planType
       plan = plan || 'free'
-      let name = getUserName(Meteor.userId())
-      let color = plan === 'free' ? 'default' : 'secondary'
+      const name = getUserName(Meteor.userId())
+      const color = plan === 'free' ? 'default' : 'secondary'
       let isVerified = false
       if (
         Meteor.user() &&
@@ -54,7 +51,7 @@ export const ProfileMenu = (props) => {
   let headerPlanMessage = ''
   useTracker(() => {
     Meteor.subscribe(CONSTANTS.publications.pricingTiers)
-    let pt = Meteor.user().orgId
+    const pt = Meteor.user().orgId
       ? Organizations.findOne()?.planType
       : Meteor.user().planType
     const tier = PricingTiers.findOne({
@@ -106,7 +103,7 @@ export const ProfileMenu = (props) => {
     }
   }
 
-  function openSupport() {
+  const openSupport = () => {
     window.$chatwoot.toggle()
   }
 

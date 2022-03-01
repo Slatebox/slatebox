@@ -1,2 +1,3 @@
-import Confirm from './Confirm';
-export default Confirm.create({});
+import Confirm from './Confirm'
+
+export default Confirm.create({})

@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { Meteor } from 'meteor/meteor'
+import { Accounts } from 'meteor/accounts-base'
+import Translation from '../common/Translation'
 import { useDispatch } from 'react-redux'
 import Container from '@material-ui/core/Container'
-import { Translation } from '../common/Translation.jsx'
 import Grid from '@material-ui/core/Grid'
 import { Divider, useTheme } from '@material-ui/core'
 import InputAdornment from '@material-ui/core/InputAdornment'
@@ -12,13 +13,12 @@ import TextField from '@material-ui/core/TextField'
 import Tooltip from '@material-ui/core/Tooltip'
 import Box from '@material-ui/core/Box'
 import confirmService from '../common/confirm'
-import { promisify } from '../../api/client/promisify'
-import { CONSTANTS } from '../../api/common/constants.js'
-import AuthManager from '../../api/common/AuthManager.js'
-import { Organizations } from '../../api/common/models.js'
-import { GuestViewReport } from '../components/teams/GuestViewReport'
+import promisify from '../../api/client/promisify'
+import CONSTANTS from '../../api/common/constants'
+import { Organizations } from '../../api/common/models'
+import GuestViewReport from '../components/teams/GuestViewReport'
 
-export const Profile = () => {
+export default function Profile() {
   const theme = useTheme()
   const dispatch = useDispatch()
   const [email, setEmail] =
@@ -37,7 +37,7 @@ export const Profile = () => {
     })
   }
 
-  function openRegistration() {
+  const openRegistration = () => {
     dispatch({
       type: 'registration',
       registrationOpen: true,
@@ -45,7 +45,7 @@ export const Profile = () => {
     })
   }
 
-  async function handleNewEmail() {
+  const handleNewEmail = async () => {
     if (email.indexOf('@') > -1) {
       if (email === Meteor.user().emails[0].address) {
         dispatch({
@@ -60,7 +60,7 @@ export const Profile = () => {
         return
       }
       const result = await confirmService.show({
-        theme: theme,
+        theme,
         title: `Confirm Email Change`,
         message: `You are changing your email to <strong>${email}</strong>. We will send you a verification email -- please check your inbox and click the verification link.`,
         actionItems: [
@@ -95,7 +95,7 @@ export const Profile = () => {
     }
   }
 
-  function handlePasswordChange() {
+  const handlePasswordChange = () => {
     if (newPassword1 !== newPassword2) {
       dispatch({
         type: 'canvas',
@@ -108,7 +108,7 @@ export const Profile = () => {
       })
       return
     }
-    Accounts.changePassword(currentPassword, newPassword1, (err, res) => {
+    Accounts.changePassword(currentPassword, newPassword1, (err) => {
       if (err) {
         console.error(err)
         dispatch({
@@ -137,11 +137,11 @@ export const Profile = () => {
     })
   }
 
-  async function handleAccountDeletion() {
+  const handleAccountDeletion = async () => {
     if (!Meteor.user().orgId) {
-      //single user -- organzation removals are handled on TeamSettings
-      let res = await confirmService.show({
-        theme: theme,
+      // single user -- organzation removals are handled on TeamSettings
+      const res = await confirmService.show({
+        theme,
         title: `Confirm Account Removal`,
         message: `Are you sure you want to remove your account and all your attached slates? This CANNOT be undone. Confirming below will remove your account and all your slates and log you out.`,
         actionItems: [

@@ -1,9 +1,9 @@
-// methods.js
+/* eslint-disable no-underscore-dangle */
+// methods
 import { Random } from 'meteor/random'
 import { Meteor } from 'meteor/meteor'
 import { Accounts } from 'meteor/accounts-base'
-import { CONSTANTS } from '../../imports/api/common/constants.js'
-import { utils } from '../../imports/api/common/utils.js'
+import CONSTANTS from '../../imports/api/common/constants'
 import AuthManager from '../../imports/api/common/AuthManager'
 
 import {
@@ -13,34 +13,28 @@ import {
   Slates,
   Messages,
   SlateAccess,
-} from '../../imports/api/common/models.js'
+} from '../../imports/api/common/models'
 
-let method = {}
-method[CONSTANTS.methods.users.createAnonymous] = async function (opts) {
-  //HTTP_FORWARDED_COUNT=1 should be set
-  let ip = utils.ipFromConnection(this.connection)
-  console.log('creating user ', ip, CONSTANTS.ipWhitelist) //76.17.204.120
-  //if (CONSTANTS.ipWhitelist.includes(ip)) {
-  const email = 'user@' + Random.id() + '.com'
+const method = {}
+method[CONSTANTS.methods.users.createAnonymous] = async (opts) => {
+  // HTTP_FORWARDED_COUNT=1 should be set
+  const email = `user@${Random.id()}.com`
   const base = {
     isAnonymous: true,
     password: CONSTANTS.anonUserPwd,
-    email: email,
+    email,
     profile: { name: '' },
     planType: 'free',
   }
   if (opts && opts.orgId) {
     Object.assign(base, { orgId: opts.orgId })
   }
-  const id = Accounts.createUser(base)
+  Accounts.createUser(base)
 
   return email
-  // }
-  // console.log("returning null ", ip, CONSTANTS.ipWhitelist);
-  // return null;
 }
 
-method[CONSTANTS.methods.users.impersonate] = async function (email) {
+method[CONSTANTS.methods.users.impersonate] = async (email) => {
   if (
     AuthManager.userHasClaim(Meteor.userId(), [CONSTANTS.claims.uberMensch._id])
   ) {
@@ -61,7 +55,7 @@ method[CONSTANTS.methods.users.impersonate] = async function (email) {
   }
 }
 
-method[CONSTANTS.methods.users.getSlateAccessUrl] = async function (opts) {
+method[CONSTANTS.methods.users.getSlateAccessUrl] = async (opts) => {
   if (opts.slateId) {
     const root = `/canvas`
     const slate = Slates.findOne({ _id: opts.slateId })
@@ -73,23 +67,21 @@ method[CONSTANTS.methods.users.getSlateAccessUrl] = async function (opts) {
     }
     if (Meteor.userId() && Meteor.userId() === slate.userId) {
       return `${root}/${slate.shareId}/${opts.nodeId}`
-    } else {
-      const slateAccess = SlateAccess.findOne({
-        slateId: opts.slateId,
-        type: type,
-      })
-      if (slateAccess) {
-        return `${root}/${slateAccess.accessKey}/${opts.nodeId}`
-      } else {
-        return null
-      }
+    }
+    const slateAccess = SlateAccess.findOne({
+      slateId: opts.slateId,
+      type,
+    })
+    if (slateAccess) {
+      return `${root}/${slateAccess.accessKey}/${opts.nodeId}`
     }
   }
+  return null
 }
 
-method[CONSTANTS.methods.users.getUserName] = async function (opts) {
-  //HTTP_FORWARDED_COUNT=1 should be set
-  let user = Meteor.users.findOne({ _id: opts.userId })
+method[CONSTANTS.methods.users.getUserName] = async (opts) => {
+  // HTTP_FORWARDED_COUNT=1 should be set
+  const user = Meteor.users.findOne({ _id: opts.userId })
   return user?.isAnonymous
     ? 'Guest'
     : `${user?.profile?.firstName} ${user?.profile?.lastName}`.replace(
@@ -98,7 +90,7 @@ method[CONSTANTS.methods.users.getUserName] = async function (opts) {
       ) || user?.emails[0].address.split(' ')[0]
 }
 
-method[CONSTANTS.methods.users.identify] = async function (opts) {
+method[CONSTANTS.methods.users.identify] = async (opts) => {
   if (Meteor.user()) {
     const updateUser = {
       isAnonymous: false,
@@ -116,7 +108,6 @@ method[CONSTANTS.methods.users.identify] = async function (opts) {
     if (opts.email) {
       updateUser['emails.0.address'] = opts.email
     }
-    console.log('updating user', updateUser)
     Meteor.users.update({ _id: Meteor.userId() }, { $set: updateUser })
     Accounts.sendVerificationEmail(Meteor.userId())
     return true
@@ -124,21 +115,20 @@ method[CONSTANTS.methods.users.identify] = async function (opts) {
   return false
 }
 
-method[CONSTANTS.methods.users.resetPassword] = async function (opts) {
+method[CONSTANTS.methods.users.resetPassword] = async (opts) => {
   if (opts.email) {
     const user = Meteor.users.findOne({ 'emails.0.address': opts.email })
     if (user) {
       Accounts.sendResetPasswordEmail(user._id, opts.email)
       return true
-    } else {
-      return false
     }
+    return false
   }
   return false
 }
 
-//only for uber admins
-method[CONSTANTS.methods.users.search] = async function (opts) {
+// only for uber admins
+method[CONSTANTS.methods.users.search] = async (opts) => {
   if (
     AuthManager.userHasClaim(Meteor.userId(), [CONSTANTS.claims.uberMensch._id])
   ) {
@@ -158,10 +148,11 @@ method[CONSTANTS.methods.users.search] = async function (opts) {
       .fetch()
     return all.splice(0, 100)
   }
+  return null
 }
 
-method[CONSTANTS.methods.users.get] = async function (opts) {
-  //needs to be open for registration check of the same email
+method[CONSTANTS.methods.users.get] = async (opts) => {
+  // needs to be open for registration check of the same email
   if (opts.email || opts._id) {
     const find = {}
     if (opts.email) {
@@ -172,42 +163,32 @@ method[CONSTANTS.methods.users.get] = async function (opts) {
     }
     if (opts.count) {
       return Meteor.users.find(find).count()
-    } else {
-      const users = Meteor.users.find(find).fetch()
-      if (opts.includeSlateCounts) {
-        const slates = Slates.find(
-          { userId: { $in: users.map((u) => u._id) } },
-          { fields: { userId: 1, _id: 1 } }
-        ).fetch()
-        console.log('got slates for user ', users, slates)
-        return users.map((u) => {
-          return {
-            user: u,
-            slateCount: slates.filter((s) => s.userId === u._id).length,
-          }
-        })
-      } else {
-        return users
-      }
     }
+    const users = Meteor.users.find(find).fetch()
+    if (opts.includeSlateCounts) {
+      const slates = Slates.find(
+        { userId: { $in: users.map((u) => u._id) } },
+        { fields: { userId: 1, _id: 1 } }
+      ).fetch()
+      return users.map((u) => ({
+        user: u,
+        slateCount: slates.filter((s) => s.userId === u._id).length,
+      }))
+    }
+    return users
   }
+  return null
 }
 
-method[CONSTANTS.methods.users.getTokenByEmailForTesting] = async function (
-  opts
-) {
+method[CONSTANTS.methods.users.getTokenByEmailForTesting] = async (opts) => {
   if (Meteor.settings.public.env === 'dev') {
-    let ip = utils.ipFromConnection(this.connection)
-    console.log('looking up user ', ip, CONSTANTS.ipWhitelist, opts)
-    if (CONSTANTS.ipWhitelist.includes(ip)) {
-      let user = Meteor.users.findOne({ 'emails.0.address': opts.email })
-      switch (opts.type) {
-        case 'verifyEmail': {
-          return user.services.email.verificationTokens[0].token
-        }
-        default: {
-          return 'Unknown'
-        }
+    const user = Meteor.users.findOne({ 'emails.0.address': opts.email })
+    switch (opts.type) {
+      case 'verifyEmail': {
+        return user.services.email.verificationTokens[0].token
+      }
+      default: {
+        return 'Unknown'
       }
     }
   } else {
@@ -215,33 +196,27 @@ method[CONSTANTS.methods.users.getTokenByEmailForTesting] = async function (
   }
 }
 
-method[CONSTANTS.methods.users.extractUserAndOrgNamesByResetToken] =
-  async function (token) {
-    let ip = utils.ipFromConnection(this.connection)
-    console.log('looking up user ', ip, CONSTANTS.ipWhitelist, token)
-    //if (CONSTANTS.ipWhitelist.includes(ip)) {
-    let user = Meteor.users.findOne({
-      $or: [
-        { 'services.password.reset.token': token },
-        { 'services.password.enroll.token': token },
-      ],
-    })
-    console.log('got user by token', user)
-    const orgName =
-      user && user.orgId
-        ? Organizations.findOne({ _id: user.orgId }).name
-        : null
-    return user
-      ? {
-          name: `${user.profile.firstName} ${user.profile.lastName}`,
-          orgName: orgName,
-        }
-      : null
-    // }
-    // return null;
-  }
+method[CONSTANTS.methods.users.extractUserAndOrgNamesByResetToken] = async (
+  token
+) => {
+  const user = Meteor.users.findOne({
+    $or: [
+      { 'services.password.reset.token': token },
+      { 'services.password.enroll.token': token },
+    ],
+  })
+  console.log('got user by token', user)
+  const orgName =
+    user && user.orgId ? Organizations.findOne({ _id: user.orgId }).name : null
+  return user
+    ? {
+        name: `${user.profile.firstName} ${user.profile.lastName}`,
+        orgName,
+      }
+    : null
+}
 
-method[CONSTANTS.methods.users.update] = async function (opts) {
+method[CONSTANTS.methods.users.update] = async (opts) => {
   if (
     Meteor.user() &&
     (Meteor.userId() === opts.userId ||
@@ -268,18 +243,14 @@ method[CONSTANTS.methods.users.update] = async function (opts) {
     }
     if (opts.email) {
       const existing = Meteor.users.findOne({ _id: opts.userId })
-      console.log('found existing ', existing.emails, opts.email)
       if (existing && existing.emails[0].address !== opts.email) {
         Accounts.removeEmail(opts.userId, existing.emails[0].address)
-        console.log('removed email')
         Accounts.addEmail(opts.userId, opts.email, false)
-        console.log('added email')
         Accounts.sendVerificationEmail(opts.userId)
       }
       return `The user's email is updated - a verification email was sent to ${opts.email}.`
     }
     if (Object.keys(upd).length > 0) {
-      console.log('user update is ', opts.userId, upd)
       Meteor.users.update({ _id: opts.userId }, { $set: upd })
     }
     return `The user was successfully updated`
@@ -287,51 +258,39 @@ method[CONSTANTS.methods.users.update] = async function (opts) {
   return `You do not have permission to update this user`
 }
 
-method[CONSTANTS.methods.users.invite] = async function (opts) {
-  //try {
-  console.log('invites are ', JSON.stringify(opts))
-  for (let invite of opts.invites) {
+method[CONSTANTS.methods.users.invite] = async (opts) => {
+  opts.invites.forEach((invite) => {
     const pkg = {
       orgId: opts.orgId,
       email: invite.email.toLowerCase(),
       profile: { firstName: invite.firstName, lastName: invite.lastName },
       intro: { firstView: true },
     }
-    console.log('creating user', pkg)
     const userId = Accounts.createUser(pkg)
-    console.log('user created ', userId)
-    const resEmail = Accounts.sendEnrollmentEmail(userId, opts.email)
-    console.log('enroll email sent', resEmail)
-  }
+    Accounts.sendEnrollmentEmail(userId, opts.email)
+  })
 
   let qtyUpdate = null
   if (Organizations.findOne({ _id: opts.orgId }).planType !== 'free') {
-    //the user has already confirmed they want to add users, so update the quantity of the users subscription
-    //below runs sync on the server, no await due to fibers
     qtyUpdate = Meteor.call(CONSTANTS.methods.stripe.updateSubscriptionQuantity)
   }
 
   return { success: true, qtyUpdate }
-  // } catch (err) {
-  //   return { success: false, error: err.message };
-  // }
 }
 
-method[CONSTANTS.methods.users.resendEnrollment] = async function (opts) {
-  console.log('invites are ', JSON.stringify(opts))
-  for (let user of opts.users) {
+method[CONSTANTS.methods.users.resendEnrollment] = async (opts) => {
+  for (const user of opts.users) {
     const resEmail = Accounts.sendEnrollmentEmail(
       user._id,
       user.emails[0].email
     )
-    console.log('enroll email sent', resEmail)
   }
   return { success: true }
 }
 
-method[CONSTANTS.methods.users.changeEmail] = async function (opts) {
+method[CONSTANTS.methods.users.changeEmail] = async (opts) => {
   if (Meteor.user() && !Meteor.user().isAnonymous) {
-    let previousEmail = Meteor.user().emails[0].address
+    const previousEmail = Meteor.user().emails[0].address
     Accounts.removeEmail(Meteor.userId(), previousEmail)
     Accounts.addEmail(Meteor.userId(), opts.email)
     Accounts.sendVerificationEmail(Meteor.userId())
@@ -339,28 +298,17 @@ method[CONSTANTS.methods.users.changeEmail] = async function (opts) {
   }
 }
 
-method[CONSTANTS.methods.users.delete] = async function () {
-  console.log('deleting user', Meteor.user(), Meteor.user().orgId)
+method[CONSTANTS.methods.users.delete] = async () => {
   if (Meteor.user() && !Meteor.user().orgId) {
     Slates.remove({ userId: Meteor.userId() })
     Messages.remove({ userId: Meteor.userId() })
     Meteor.users.remove({ _id: Meteor.userId() })
     return true
-  } else {
-    return false
   }
+  return false
 }
 
-// {
-//   users: [
-//     orgId: "",
-//     userId: "",
-//     claimIds: [],
-//     action: "add|delete"
-//   ]
-// }
-method[CONSTANTS.methods.users.changeRoles] = async function (opts) {
-  console.log('users are ', opts.users)
+method[CONSTANTS.methods.users.changeRoles] = async (opts) => {
   if (
     Meteor.user() &&
     AuthManager.userHasClaim(Meteor.userId(), [
@@ -368,25 +316,22 @@ method[CONSTANTS.methods.users.changeRoles] = async function (opts) {
     ])
   ) {
     opts.users.forEach((u) => {
-      console.log('updating user ', u.orgId, Meteor.user().orgId)
       if (u.orgId === Meteor.user().orgId) {
         const claims = Claims.find({ _id: { $in: u.claimIds } }).fetch()
         if (claims.length !== u.claimIds.length) {
           throw new Meteor.Error(
-            "You've tried to add or remove role(s) that do not exist: " +
-              JSON.stringify(
-                u.claimIds.filter((r) => r !== claims.map((c) => c._id))
-              )
+            `You've tried to add or remove role(s) that do not exist: ${JSON.stringify(
+              u.claimIds.filter((r) => r !== claims.map((c) => c._id))
+            )}`
           )
         } else {
-          console.log('checking action ', u.action, claims)
           switch (u.action) {
             case 'add':
               if (u.claimIds[0] === 'admin') {
                 Permissions.remove({ orgId: opts.orgId, userId: u.userId })
               }
               claims.forEach((c) => {
-                //only if it doesn't exist
+                // only if it doesn't exist
                 const q = {
                   orgId: Meteor.user().orgId,
                   userId: u.userId,

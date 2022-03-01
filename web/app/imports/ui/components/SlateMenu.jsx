@@ -1,4 +1,6 @@
-import React, { useEffect } from 'react'
+/* eslint-disable no-underscore-dangle */
+import React from 'react'
+import PropTypes from 'prop-types'
 import { Random } from 'meteor/random'
 import { Meteor } from 'meteor/meteor'
 import { useTheme } from '@material-ui/core/styles'
@@ -10,48 +12,44 @@ import FileCopyIcon from '@material-ui/icons/FileCopy'
 import DeleteIcon from '@material-ui/icons/Delete'
 import LockOpenIcon from '@material-ui/icons/LockOpen'
 import LockIcon from '@material-ui/icons/Lock'
-
-//global models
-import { Slates } from '/imports/api/common/models.js'
-
-import { CONSTANTS } from '/imports/api/common/constants.js'
-import { copySlate } from '/imports/api/client/copySlate.js'
-import { useDispatch, useSelector } from 'react-redux'
-import confirmService from '/imports/ui/common/confirm'
-import AuthManager from '../../api/common/AuthManager.js'
-import { Organizations, SlateAccess } from '../../api/common/models.js'
+import { useDispatch } from 'react-redux'
 import MoreVertIcon from '@material-ui/icons/MoreVert'
 import MenuItem from '@material-ui/core/MenuItem'
 import Menu from '@material-ui/core/Menu'
 import ListItemIcon from '@material-ui/core/ListItemIcon'
+import { Slates, Organizations } from '../../api/common/models'
+import confirmService from '../common/confirm'
+import copySlate from '../../api/client/copySlate'
+import CONSTANTS from '../../api/common/constants'
+import AuthManager from '../../api/common/AuthManager'
 
-import { promisify } from '../../api/client/promisify.js'
+import promisify from '../../api/client/promisify'
+import slateProps from '../propTypes/slatePriops'
 
-export const SlateMenu = (props) => {
+export default function SlateMenu({ slate, isTemplate, isCommunity }) {
   const history = useHistory()
   const dispatch = useDispatch()
   const theme = useTheme()
 
   async function copy() {
-    const shareId = await copySlate(props.slate, !props.isTemplate)
-    //causes rerender:
+    const shareId = await copySlate(slate, !isTemplate)
+    // causes rerender:
     dispatch({ type: 'displayslates', invokeRerender: Random.id() })
-    if (props.isCommunity || props.isTemplate) {
+    if (isCommunity || isTemplate) {
       history.push(`/canvas/${shareId}`)
     }
   }
 
   async function deleteSlate() {
-    console.log('slateid', props.slate._id)
     const result = await confirmService.show({
-      theme: theme,
-      title: `Delete ${props.slate.options.name}`,
+      theme,
+      title: `Delete ${slate.options.name}`,
       message: 'Are you sure?',
     })
     if (result) {
       try {
         await promisify(Meteor.call, CONSTANTS.methods.slates.remove, {
-          slateId: props.slate._id,
+          slateId: slate._id,
         })
         dispatch({ type: 'displayslates', invokeRerender: Random.id() })
       } catch (err) {
@@ -70,12 +68,12 @@ export const SlateMenu = (props) => {
 
   async function changeSlatePrivacy() {
     function enact() {
-      const curPublic = !props.slate.options.isPublic
-      let isPublic = curPublic
-      let isPrivate = curPublic === false
-      let isUnlisted = false
+      const curPublic = !slate.options.isPublic
+      const isPublic = curPublic
+      const isPrivate = curPublic === false
+      const isUnlisted = false
       Slates.update(
-        { _id: props.slate._id },
+        { _id: slate._id },
         {
           $set: {
             'options.isPublic': isPublic,
@@ -90,14 +88,14 @@ export const SlateMenu = (props) => {
       ((!Meteor.user().orgId &&
         !['solo_monthly', 'solo_yearly'].includes(Meteor.user().planType)) ||
         Organizations.findOne()?.planType === 'free') &&
-      props.slate.options.isPublic
+      slate.options.isPublic
     ) {
       const nonPublics = await promisify(
         Meteor.call,
         CONSTANTS.methods.slates.getNonPublic
       )
       if (nonPublics.length >= CONSTANTS.privateSlateLimit) {
-        //past the limit, so show payment options OR registration depending on user state
+        // past the limit, so show payment options OR registration depending on user state
         if (Meteor.user().isAnonymous) {
           dispatch({
             type: 'registration',
@@ -139,8 +137,8 @@ export const SlateMenu = (props) => {
   }
 
   return (
-    <>
-      {props.isTemplate ? (
+    <div>
+      {isTemplate ? (
         <Button
           variant="contained"
           color="secondary"
@@ -183,12 +181,12 @@ export const SlateMenu = (props) => {
                 <FileCopyIcon />
               </ListItemIcon>
               <Typography variant="inherit">
-                {props.isTemplate ? <>Use</> : <>Copy</>} Slate
+                {isTemplate ? <>Use</> : <>Copy</>} Slate
               </Typography>
             </MenuItem>
-            {!props.isCommunity &&
-              !props.isTemplate &&
-              (Meteor.userId() === props.slate.userId ||
+            {!isCommunity &&
+              !isTemplate &&
+              (Meteor.userId() === slate.userId ||
                 AuthManager.userHasClaim(Meteor.userId(), [
                   CONSTANTS.claims.admin._id,
                 ])) && (
@@ -204,32 +202,30 @@ export const SlateMenu = (props) => {
                   <Typography variant="inherit">Delete</Typography>
                 </MenuItem>
               )}
-            {!props.isCommunity &&
-              !props.isTemplate &&
-              Meteor.userId() === props.slate.userId && (
-                <MenuItem
-                  onClick={async (e) => {
-                    hideSlateMenu(e)
-                    changeSlatePrivacy()
-                  }}
-                >
-                  <ListItemIcon style={{ marginRight: '-25px' }}>
-                    {props.slate.options.isPublic ? (
-                      <LockOpenIcon />
-                    ) : (
-                      <LockIcon />
-                    )}
-                  </ListItemIcon>
-                  <Typography variant="inherit">
-                    {props.slate.options.isPublic
-                      ? 'Make private'
-                      : 'Make public'}
-                  </Typography>
-                </MenuItem>
-              )}
+            {!isCommunity && !isTemplate && Meteor.userId() === slate.userId && (
+              <MenuItem
+                onClick={async (e) => {
+                  hideSlateMenu(e)
+                  changeSlatePrivacy()
+                }}
+              >
+                <ListItemIcon style={{ marginRight: '-25px' }}>
+                  {slate.options.isPublic ? <LockOpenIcon /> : <LockIcon />}
+                </ListItemIcon>
+                <Typography variant="inherit">
+                  {slate.options.isPublic ? 'Make private' : 'Make public'}
+                </Typography>
+              </MenuItem>
+            )}
           </Menu>
         </>
       )}
-    </>
+    </div>
   )
+}
+
+SlateMenu.propTypes = {
+  slate: slateProps.isRequired,
+  isTemplate: PropTypes.bool.isRequired,
+  isCommunity: PropTypes.bool.isRequired,
 }

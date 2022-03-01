@@ -1,30 +1,40 @@
-// methods.js
-import { CONSTANTS } from '../../imports/api/common/constants.js';
-import { Comments, Messages } from '../../imports/api/common/models.js';
-import { Meteor } from 'meteor/meteor';
+// methods
+import { Meteor } from 'meteor/meteor'
+import CONSTANTS from '../../imports/api/common/constants'
+import { Comments, Messages } from '../../imports/api/common/models'
 
-let method = {};
+const method = {}
 
-method[CONSTANTS.methods.comments.toggleResolve] = async function (opts) {
+method[CONSTANTS.methods.comments.toggleResolve] = async (opts) => {
   if (Meteor.user() && opts.slateId && opts.nodeId) {
-    let update = Comments.update({ slateId: opts.slateId, nodeId: opts.nodeId }, { $set: { resolved: opts.resolved } }, { multi: true });
-    return update;
+    const update = Comments.update(
+      { slateId: opts.slateId, nodeId: opts.nodeId },
+      { $set: { resolved: opts.resolved } },
+      { multi: true }
+    )
+    return update
   }
-  return null;
+  return null
 }
 
-method[CONSTANTS.methods.comments.remove] = async function (opts) {
-  let removeComments = {};
-  let removeMessages = {};
+method[CONSTANTS.methods.comments.remove] = async (opts) => {
+  let removeComments = {}
+  let removeMessages = {}
   if (Meteor.user() && opts.slateId && opts.nodeId) {
-    removeComments = Comments.remove({ slateId: opts.slateId, nodeId: opts.nodeId });
-    removeMessages = Messages.remove({ slateId: opts.slateId, nodeId: opts.nodeId });
+    removeComments = Comments.remove({
+      slateId: opts.slateId,
+      nodeId: opts.nodeId,
+    })
+    removeMessages = Messages.remove({
+      slateId: opts.slateId,
+      nodeId: opts.nodeId,
+    })
   } else if (opts.commentId) {
-    //can be done via a guest
-    removeComments = Comments.remove({ _id: opts.commentId });
-    removeMessages = Messages.remove({ commentId: opts.commentId });
+    // can be done via a guest
+    removeComments = Comments.remove({ _id: opts.commentId })
+    removeMessages = Messages.remove({ commentId: opts.commentId })
   }
-  return { removeComments, removeMessages };
+  return { removeComments, removeMessages }
 }
 
-Meteor.methods(method);
+Meteor.methods(method)

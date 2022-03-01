@@ -1,33 +1,28 @@
-import { WheelGestures } from 'wheel-gestures';
-import utils from '../helpers/utils';
+/* eslint-disable no-underscore-dangle */
+import { WheelGestures } from 'wheel-gestures'
+import utils from '../helpers/utils'
 
 export default class inertia {
-
   constructor(slate) {
-    this.slate = slate;
-    this.scale = 1;
-    this.wheelEnd = null;
-    this.xyOffset = null;
+    this.slate = slate
+    this.scale = 1
+    this.wheelEnd = null
+    this.xyOffset = null
     if (slate.options.viewPort.useInertiaScrolling) {
-      this._init();
+      this._init()
     }
   }
 
   setScale(val) {
-    this.scale = val;
+    this.scale = val
   }
 
   _init() {
-    //create an instance per element
-    const self = this;
-    const wheelGestures = WheelGestures({ momentum: true });
-
-    // this disabled the fwd/back gesture navigation
-    //document.body.style["overscroll-behavior-x"] = "none";
-    //document.body.html.style["overscroll-behavior-x"] = "none";
+    const self = this
+    const wheelGestures = WheelGestures({ momentum: true })
 
     // find and observe the element the user can interact with
-    wheelGestures.observe(self.slate.canvas.internal);
+    wheelGestures.observe(self.slate.canvas.internal)
 
     // function scale() {
     //   window.requestAnimationFrame(() => {
@@ -38,12 +33,12 @@ export default class inertia {
     //   })
     // }
 
-    //add your event callback 
-    let start = {};
+    // add your event callback
+    let start = {}
     wheelGestures.on('wheel', (e) => {
       if (self.slate.options.allowDrag) {
         if (e.event.ctrlKey) {
-          //will not include this for now
+          // will not include this for now
           // if (!self.snappedZoom) {
           //   self.snappedZoom = self.slate.options.viewPort.zoom.w;
           // }
@@ -60,35 +55,34 @@ export default class inertia {
           //   //self.slate?.collab?.send({ type: "onCanvasMove", data: { left: self.slate.options.viewPort.left, top: self.slate.options.viewPort.top } });
           // }
         } else {
-
-          let deltaX = e.event.deltaX * .8; //.5 is the modifier to slow self down a bit
-          let deltaY = e.event.deltaY * .8;
+          const deltaX = e.event.deltaX * 0.8 // .5 is the modifier to slow self down a bit
+          const deltaY = e.event.deltaY * 0.8
 
           if (e.isStart) {
-            start = utils.positionedOffset(self.slate.canvas.internal);
-            //hide filters during dragging
-            self.slate.toggleFilters(true);
+            start = utils.positionedOffset(self.slate.canvas.internal)
+            // hide filters during dragging
+            self.slate.toggleFilters(true)
           }
-          self.slate.canvas.move({ 
-            x: deltaX
-            , y: deltaY
-            , dur: 0
-            , isAbsolute: false
-          });
-          //self.slate.birdsEye && self.slate.birdsEye.refresh(true);
-          //console.trace();
+          self.slate.canvas.move({
+            x: deltaX,
+            y: deltaY,
+            dur: 0,
+            isAbsolute: false,
+          })
 
           if (e.isEnding) {
-            const end = utils.positionedOffset(self.slate.canvas.internal);
-            self.slate.birdsEye && self.slate.birdsEye.refresh(true);  
-            self.slate.canvas.broadcast({ x: start.left - end.left, y: start.top - end.top });
+            const end = utils.positionedOffset(self.slate.canvas.internal)
+            self.slate.birdsEye?.refresh(true)
+            self.slate.canvas.broadcast({
+              x: start.left - end.left,
+              y: start.top - end.top,
+            })
 
-            //show filters after dragging
-            self.slate.toggleFilters(false);
-            
+            // show filters after dragging
+            self.slate.toggleFilters(false)
           }
         }
       }
-    });
+    })
   }
 }
