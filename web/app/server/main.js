@@ -18,7 +18,7 @@ import './methods/stripe'
 import './stripeHooks'
 
 // global models
-import '/imports/api/common/models'
+import '../imports/api/common/models'
 
 // global publications
 import './publications'

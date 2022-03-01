@@ -1,4 +1,4 @@
-name: Build and deploy slatebox-test to hetner k3
+name: Build and deploy slatebox-prod to hetner k3
 on:
   push:
     branches:

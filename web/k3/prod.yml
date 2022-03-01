@@ -30,7 +30,7 @@ spec:
   selector:
     matchLabels:
       app: slatebox-prod
-  replicas: 1
+  replicas: 3
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -89,10 +89,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - prod.slatebox.com
+        - app.slatebox.com
       secretName: cloudflare-slatebox-tls
   rules:
-    - host: prod.slatebox.com
+    - host: app.slatebox.com
       http:
         paths:
           - pathType: Prefix
