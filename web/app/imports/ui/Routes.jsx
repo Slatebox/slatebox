@@ -82,7 +82,7 @@ export default function Routes() {
       <Route path="/slates">
         <CommunitySlates />
       </Route>
-      {Meteor.settings.public.env === 'dev' && (
+      {['dev', 'test'].includes(Meteor.settings.public.env) && (
         <Route path="/simulate/:type/:identifier">
           <SimulateUrlAction />
         </Route>
