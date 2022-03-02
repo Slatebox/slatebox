@@ -181,7 +181,7 @@ method[CONSTANTS.methods.users.get] = async (opts) => {
 }
 
 method[CONSTANTS.methods.users.getTokenByEmailForTesting] = async (opts) => {
-  if (Meteor.settings.public.env === 'dev') {
+  if (['dev', 'test'].includes(Meteor.settings.public.env)) {
     const user = Meteor.users.findOne({ 'emails.0.address': opts.email })
     switch (opts.type) {
       case 'verifyEmail': {
