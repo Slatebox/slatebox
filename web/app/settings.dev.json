@@ -2,8 +2,7 @@
   "env": "dev",
   "redisOplog": {
     "redis": {
-      "port": 6379,
-      "host": "default:6fTssjQjq7@127.0.0.40"
+      "url": "redis://default:hVriQD3UPx@127.0.0.40:6379"
     },
     "retryIntervalMs": 1000,
     "mutationDefaults": {
@@ -18,10 +17,10 @@
     "debug": true
   },
   "nounProject": {
-      "key": "1cc0ae21b6964d71b9eb8108fa39f3e9"
-    , "secret": "605d66d9390a4ffa82e3df0855ad033b"
+    "key": "1cc0ae21b6964d71b9eb8108fa39f3e9",
+    "secret": "605d66d9390a4ffa82e3df0855ad033b"
   },
-   "mailGun": {
+  "mailGun": {
     "server": "smtp://postmaster%40slatebox.com:265bf5a2521ba1ea96a9d7117197da44@smtp.mailgun.org:587"
   },
   "chatWoot": {

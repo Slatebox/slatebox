@@ -31,3 +31,5 @@ accounts-google@1.4.0
 dev-error-overlay@0.1.1
 communitypackages:picker
 meteortesting:mocha
+cultofcoders:redis-oplog
+disable-oplog
