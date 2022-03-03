@@ -27,6 +27,7 @@ jobs:
           cd ./web
           docker build --tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_TEST_REPOSITORY }}:$RELEASE .
           docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_TEST_REPOSITORY }}:$RELEASE
+          docker tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_TEST_REPOSITORY }}:$RELEASE ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_TEST_REPOSITORY }}:latest
           docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_TEST_REPOSITORY }}:latest
 
           # set up sb secrets
