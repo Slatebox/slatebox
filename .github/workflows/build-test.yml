@@ -35,7 +35,7 @@ jobs:
 
           # set up docker creds
           export DOCKER_CONFIG=$(cat ~/.docker/config.json | base64 -w 0)
-          sed -i'' -e 's/DOCKER_HUB_USERNAME/${{ secrets.DOCKER_HUB_USERNAME }}/g' -e 's/DOCKER_HUB_TEST_REPOSITORY/${{ secrets.DOCKER_HUB_TEST_REPOSITORY }}/g' -e 's/IMAGE_LABEL/$RELEASE/g' -e "s/DOCKER_CONFIG/$DOCKER_CONFIG/g" ./k3/test.yml
+          sed -i'' -e 's/DOCKER_HUB_USERNAME/${{ secrets.DOCKER_HUB_USERNAME }}/g' -e 's/DOCKER_HUB_TEST_REPOSITORY/${{ secrets.DOCKER_HUB_TEST_REPOSITORY }}/g' -e "s/IMAGE_LABEL/$RELEASE/g" -e "s/DOCKER_CONFIG/$DOCKER_CONFIG/g" ./k3/test.yml
 
           # apply both
           kubectl apply -f ./k3/test.yml
