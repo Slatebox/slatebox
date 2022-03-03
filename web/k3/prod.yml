@@ -69,7 +69,7 @@ spec:
                 secretKeyRef:
                   key: PROD_METEOR_SETTINGS
                   name: prod-slateboxenvs
-          image: timheckel/slatebox-prod:latest
+          image: timheckel/slatebox-prod:IMAGE_LABEL
           imagePullPolicy: Always
           name: slatebox-prod
           resources:

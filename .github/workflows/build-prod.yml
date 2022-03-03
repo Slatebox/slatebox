@@ -22,16 +22,18 @@ jobs:
           kubeconfig: ${{ secrets.HETZNER_KUBE_CONFIG }}
       - name: Docker Build and Push, Kubernetes apply
         run: |
+          export RELEASE=$(awk -F'[*…]' '/###*/{print $(NF-1)}' CHANGELOG.md | xargs | awk '{split($0, array, /##/); print array[3]}' | xargs | awk '{split($0, a, /-/); print a[1]}' | xargs | awk '{sub(/\[/,"")sub(/\]/,"")}1' $1)
+
           cd ./web
-          docker build --tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_PROD_REPOSITORY }}:latest .
-          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_PROD_REPOSITORY }}:latest
+          docker build --tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_PROD_REPOSITORY }}:$RELEASE .
+          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_PROD_REPOSITORY }}:$RELEASE
 
           # set up sb secrets
           sed -i'' -e "s/PROD_ROOT_URL_SECRET/${{ secrets.PROD_ROOT_URL }}/g"  -e "s/PROD_MONGO_URL_SECRET/${{ secrets.PROD_MONGO_URL }}/g"  -e "s/PROD_MONGO_OPLOG_URL_SECRET/${{ secrets.PROD_MONGO_OPLOG_URL }}/g"  -e "s/PROD_PORT_SECRET/${{ secrets.PROD_PORT }}/g"  -e "s/PROD_METEOR_SETTINGS_SECRET/${{ secrets.PROD_METEOR_SETTINGS }}/g" ./k3/prod.yml
 
           # set up docker creds
           export DOCKER_CONFIG=$(cat ~/.docker/config.json | base64 -w 0)
-          sed -i'' -e 's/DOCKER_HUB_USERNAME/${{ secrets.DOCKER_HUB_USERNAME }}/g' -e 's/DOCKER_HUB_PROD_REPOSITORY/${{ secrets.DOCKER_HUB_PROD_REPOSITORY }}/g' -e 's/IMAGE_LABEL/latest/g' -e "s/DOCKER_CONFIG/$DOCKER_CONFIG/g" ./k3/prod.yml
+          sed -i'' -e 's/DOCKER_HUB_USERNAME/${{ secrets.DOCKER_HUB_USERNAME }}/g' -e 's/DOCKER_HUB_PROD_REPOSITORY/${{ secrets.DOCKER_HUB_PROD_REPOSITORY }}/g' -e 's/IMAGE_LABEL/$RELEASE/g' -e "s/DOCKER_CONFIG/$DOCKER_CONFIG/g" ./k3/prod.yml
 
           # apply both
           kubectl apply -f ./k3/prod.yml
