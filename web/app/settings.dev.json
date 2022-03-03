@@ -2,7 +2,7 @@
   "env": "dev",
   "redisOplog": {
     "redis": {
-      "url": "redis://default:hVriQD3UPx@127.0.0.40:6379"
+      "url": "redis://default:hVriQD3UPx@slatebox-prod-redis-master:6379"
     },
     "retryIntervalMs": 1000,
     "mutationDefaults": {
