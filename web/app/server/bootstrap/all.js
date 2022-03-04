@@ -59,9 +59,7 @@ if (Collaboration.find().count() === 0) {
 // }
 
 const tg = Slates.findOne({ isThemeGenerator: true })
-console.log('themeGenerator', tg)
 if (!tg) {
-  console.log('inserting theme generator')
   Slates.insert(themeGenerator)
 }
 
