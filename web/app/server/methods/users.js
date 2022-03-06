@@ -24,7 +24,6 @@ method[CONSTANTS.methods.users.createAnonymous] = async (opts) => {
     password: CONSTANTS.anonUserPwd,
     email,
     profile: { name: '' },
-    planType: 'free',
   }
   if (opts && opts.orgId) {
     Object.assign(base, { orgId: opts.orgId })
@@ -269,13 +268,7 @@ method[CONSTANTS.methods.users.invite] = async (opts) => {
     const userId = Accounts.createUser(pkg)
     Accounts.sendEnrollmentEmail(userId, opts.email)
   })
-
-  let qtyUpdate = null
-  if (Organizations.findOne({ _id: opts.orgId }).planType !== 'free') {
-    qtyUpdate = Meteor.call(CONSTANTS.methods.stripe.updateSubscriptionQuantity)
-  }
-
-  return { success: true, qtyUpdate }
+  return { success: true }
 }
 
 method[CONSTANTS.methods.users.resendEnrollment] = async (opts) => {

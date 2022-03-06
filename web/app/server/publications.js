@@ -4,7 +4,6 @@ import { Meteor } from 'meteor/meteor'
 import CONSTANTS from '../imports/api/common/constants'
 import {
   Messages,
-  PricingTiers,
   Slates,
   Collaboration,
   Organizations,
@@ -152,14 +151,6 @@ Meteor.publish(CONSTANTS.publications.orgSlates, function () {
 Meteor.publish(CONSTANTS.publications.claims, function () {
   if (Meteor.user()) {
     return Claims.find({}, { disableOplog: true })
-  }
-  this.ready()
-  return null
-})
-
-Meteor.publish(CONSTANTS.publications.pricingTiers, function () {
-  if (Meteor.user()) {
-    return PricingTiers.find({}, { disableOplog: true })
   }
   this.ready()
   return null

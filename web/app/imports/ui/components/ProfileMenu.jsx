@@ -11,13 +11,9 @@ import AccountCircleIcon from '@material-ui/icons/AccountCircle'
 import Typography from '@material-ui/core/Typography'
 import Chip from '@material-ui/core/Chip'
 import Grid from '@material-ui/core/Grid'
-import promisify from '../../api/client/promisify'
-import CONSTANTS from '../../api/common/constants'
-import { PricingTiers, Organizations } from '../../api/common/models'
 import getUserName from '../../api/common/getUserName'
 
 export default function ProfileMenu() {
-  const dispatch = useDispatch()
   const theme = useTheme()
   const history = useHistory()
   const mdmq = useMediaQuery(theme.breakpoints.up('md'))
@@ -25,14 +21,9 @@ export default function ProfileMenu() {
 
   const userDetails = useTracker(() => {
     // get pricing data
-    Meteor.subscribe(CONSTANTS.publications.pricingTiers)
+    const color = 'secondary'
     if (Meteor.user()) {
-      let plan = Meteor.user().orgId
-        ? Organizations.findOne()?.planType
-        : Meteor.user().planType
-      plan = plan || 'free'
       const name = getUserName(Meteor.userId())
-      const color = plan === 'free' ? 'default' : 'secondary'
       let isVerified = false
       if (
         Meteor.user() &&
@@ -43,22 +34,12 @@ export default function ProfileMenu() {
       ) {
         isVerified = true
       }
-      return { plan, name, color, isVerified }
+      return { plan: 'team', name, color, isVerified }
     }
-    return { plan: 'free', name: 'Guest', color: 'primary', isVerified: false }
+    return { plan: 'team', name: 'Guest', color, isVerified: false }
   })
 
-  let headerPlanMessage = ''
-  useTracker(() => {
-    Meteor.subscribe(CONSTANTS.publications.pricingTiers)
-    const pt = Meteor.user().orgId
-      ? Organizations.findOne()?.planType
-      : Meteor.user().planType
-    const tier = PricingTiers.findOne({
-      $or: [{ 'yearly.priceId': pt }, { 'monthly.priceId': pt }],
-    })
-    headerPlanMessage = tier?.headerText || 'Forever Free Team'
-  })
+  const headerPlanMessage = 'Team'
   const logout = () => {
     Meteor.logout()
   }
@@ -70,37 +51,6 @@ export default function ProfileMenu() {
   const loadProfile = () => {
     history.push('/profile')
     setAnchorEl(null)
-  }
-
-  const createPortalSession = async () => {
-    if (Meteor.user().isAnonymous) {
-      dispatch({
-        type: 'registration',
-        registrationOpen: true,
-        registrationMessage: `Register to create an account.`,
-      })
-    } else if (
-      Meteor.user().planType === 'free' ||
-      Organizations.findOne()?.planType === 'free'
-    ) {
-      dispatch({
-        type: 'payment',
-        paymentOpen: true,
-        paymentMessage: `You are currently on the forever free plan.`,
-        paymentFocus: null,
-      })
-    } else {
-      const url = await promisify(
-        Meteor.call,
-        CONSTANTS.methods.stripe.createSession,
-        { type: 'portal', returnUrl: window.location.href }
-      )
-      if (url) {
-        window.location.href = url
-      } else {
-        console.error('error creating biling session')
-      }
-    }
   }
 
   const openSupport = () => {
@@ -135,7 +85,6 @@ export default function ProfileMenu() {
             color={userDetails.color}
             size="small"
             label={headerPlanMessage}
-            onClick={createPortalSession}
           />
         )}
       </Grid>
@@ -161,14 +110,6 @@ export default function ProfileMenu() {
           onClose={() => setAnchorEl(null)}
         >
           <MenuItem onClick={loadProfile}>Profile</MenuItem>
-          {mdmq ? null : <MenuItem onClick={openSupport}>Support</MenuItem>}
-          <MenuItem onClick={createPortalSession}>
-            {(Organizations.findOne() &&
-              Organizations.findOne().planType !== 'free') ||
-            Meteor.user().planType !== 'free'
-              ? 'Billing'
-              : 'Upgrade'}
-          </MenuItem>
           {mdmq ? null : <MenuItem onClick={openSupport}>Support</MenuItem>}
           <MenuItem onClick={logout}>Logout</MenuItem>
         </Menu>

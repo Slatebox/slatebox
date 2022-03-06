@@ -109,18 +109,6 @@ export default function NodeImage({ height, onChange }) {
         })
         return
       }
-      if (
-        Meteor.user().planType === 'free' ||
-        Organizations.findOne()?.planType === 'free'
-      ) {
-        dispatch({
-          type: 'payment',
-          paymentOpen: true,
-          paymentMessage: `Add full Google image search!`,
-          paymentFocus: 'image search',
-        })
-        return
-      }
 
       let p = imagePage
       let i = imageItems

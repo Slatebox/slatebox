@@ -11,10 +11,8 @@ import TableRow from '@material-ui/core/TableRow'
 import Paper from '@material-ui/core/Paper'
 import Typography from '@material-ui/core/Typography'
 import Grid from '@material-ui/core/Grid'
-import Button from '@material-ui/core/Button'
 import promisify from '../../../api/client/promisify'
 import CONSTANTS from '../../../api/common/constants'
-import { Organizations } from '../../../api/common/models'
 
 const useStyles = makeStyles((theme) => ({
   root: {
@@ -63,47 +61,11 @@ export default function GuestViewReport() {
     getData()
   }, [])
 
-  const showSupport = () => {
-    window.$chatwoot.toggle()
-  }
-
-  const showUpgrade = () => {
-    dispatch({
-      type: 'payment',
-      paymentOpen: true,
-      paymentMessage: `You are currently on the forever free plan.`,
-      paymentFocus: null,
-    })
-  }
-
-  const unlistedViewsThisMonth =
-    data?.totalUnlistedViewsByMonth &&
-    data?.totalUnlistedViewsByMonth[new Date().getMonth() + 1]
-      ? data?.totalUnlistedViewsByMonth[new Date().getMonth() + 1]
-      : 0
-
-  const allowableUnlistedViews = data?.allowableUnlistedViewsPerMonth || 10
-
   return (
     <Grid container justify="flex-end" alignItems="center" spacing={2}>
       <Grid item xs={5}>
         <Typography variant="h6" color="secondary">
-          Guest Passes
-        </Typography>
-      </Grid>
-      <Grid item>
-        <Typography
-          variant="h1"
-          color="secondary"
-          style={{ letterSpacing: '-10px' }}
-        >
-          {unlistedViewsThisMonth} / {data?.allowableUnlistedViewsPerMonth}
-        </Typography>
-      </Grid>
-      <Grid item style={{ marginLeft: '10px' }}>
-        <Typography variant="overline" color="secondary">
-          {allowableUnlistedViews - unlistedViewsThisMonth} passes left in{' '}
-          {new Date().toLocaleString('default', { month: 'long' })}
+          Guest Report
         </Typography>
       </Grid>
       {data?.dataRows?.length > 0 ? (
@@ -138,21 +100,6 @@ export default function GuestViewReport() {
             No guest views yet in{' '}
             {new Date().toLocaleString('default', { month: 'long' })}
           </Typography>
-        </Grid>
-      )}
-      {Organizations?.findOne()?.planType === 'free' ? (
-        <Grid item>
-          <Button color="secondary" onClick={showUpgrade} variant="outlined">
-            Upgrade from {data.allowableUnlistedViewsPerMonth} to{' '}
-            {data.allowableUnlistedViewsPerMonthOnProTeam} guest views per month
-            with Team Pro
-          </Button>
-        </Grid>
-      ) : (
-        <Grid item>
-          <Button color="secondary" onClick={showSupport} variant="outlined">
-            Need more guest views? Just let us know.
-          </Button>
         </Grid>
       )}
     </Grid>

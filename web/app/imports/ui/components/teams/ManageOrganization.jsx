@@ -25,13 +25,7 @@ import MailOutlineIcon from '@material-ui/icons/MailOutline'
 
 import Box from '@material-ui/core/Box'
 import confirmService from '../../common/confirm'
-import {
-  Permissions,
-  PricingTiers,
-  Claims,
-  Slates,
-  Organizations,
-} from '../../../api/common/models'
+import { Claims, Slates, Organizations } from '../../../api/common/models'
 import AuthManager from '../../../api/common/AuthManager'
 import CONSTANTS from '../../../api/common/constants'
 import promisify from '../../../api/client/promisify'
@@ -91,14 +85,10 @@ export default function ManageOrganization() {
       CONSTANTS.methods.users.get,
       { _id: member._id, includeSlateCounts: true }
     )
-    const billingMessage =
-      Organizations.findOne().planType === 'free'
-        ? ''
-        : "<p>This will also reduce the quantity of billable team members and you'll be prorated the credit at the end of the current billing cycle.</p>"
     const res = await confirmService.show({
       theme,
       title: 'Remove user?',
-      message: `<p>Are you certain you want to remove ${member.profile.firstName} ${member.profile.lastName} (${member.emails[0].address})? Note that the ${userDetails[0].slateCount} slate(s) attached to them will be also be removed.</p>${billingMessage}<p><b>This delete CANNOT be undone.</b></p>`,
+      message: `<p>Are you certain you want to remove ${member.profile.firstName} ${member.profile.lastName} (${member.emails[0].address})? Note that the ${userDetails[0].slateCount} slate(s) attached to them will be also be removed.</p><p><b>This delete CANNOT be undone.</b></p>`,
       actionItems: [
         { label: 'Cancel', return: false },
         { label: 'OK', return: true },
@@ -112,12 +102,6 @@ export default function ManageOrganization() {
         .forEach((s) => {
           Slates.remove({ _id: s._id })
         })
-      if (Organizations.findOne().planType !== 'free') {
-        await promisify(
-          Meteor.call,
-          CONSTANTS.methods.stripe.updateSubscriptionQuantity
-        )
-      }
     }
   }
 
@@ -261,49 +245,12 @@ export default function ManageOrganization() {
   const inviteNewMembers = async () => {
     try {
       if (currentInvites.length > 0) {
-        if (Organizations.findOne().planType !== 'free') {
-          const priceId = Organizations.findOne().planType
-          const tier = PricingTiers.findOne({
-            $or: [
-              { 'yearly.priceId': priceId },
-              { 'monthly.priceId': priceId },
-            ],
-          })
-          const price =
-            tier.yearly.priceId === priceId
-              ? tier.yearly.price
-              : tier.monthly.price
-          const billedAnnually =
-            tier.yearly.priceId === priceId ? ' (billed annually)' : ''
-          const result = await confirmService.show({
-            theme,
-            title: `Grow your team!`,
-            message: `<p>Adding ${
-              currentInvites.length
-            } team member(s) on your current plan costs $${
-              price * currentInvites.length
-            }.00 additional per month${billedAnnually}.</p><p>Payment will automatically be prorated and made during your regular billing cycle, with nothing due now.</p>`,
-            actionItems: [
-              { label: 'Cancel', return: false },
-              { label: 'Invite new members', return: true },
-            ],
-          })
-          if (result) {
-            // invite users
-            await promisify(Meteor.call, CONSTANTS.methods.users.invite, {
-              orgId: Meteor.user().orgId,
-              invites: currentInvites,
-            })
-            dispatch({ type: 'canvas', currentInvites: [] })
-          }
-        } else {
-          // free plans can invite as many users as they want
-          await promisify(Meteor.call, CONSTANTS.methods.users.invite, {
-            orgId: Meteor.user().orgId,
-            invites: currentInvites,
-          })
-          dispatch({ type: 'canvas', currentInvites: [] })
-        }
+        // invite as many users as they want
+        await promisify(Meteor.call, CONSTANTS.methods.users.invite, {
+          orgId: Meteor.user().orgId,
+          invites: currentInvites,
+        })
+        dispatch({ type: 'canvas', currentInvites: [] })
       } else {
         dispatch({
           type: 'canvas',

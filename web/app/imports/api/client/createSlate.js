@@ -5,7 +5,7 @@ import saveSlate from './saveSlate'
 import { Organizations } from '../common/models'
 
 async function createSlate(slateBase, events, collaboration, isNew, isGuest) {
-  let publicDefault = true
+  let publicDefault = false
   let newSlate = slateBase
   async function ensureDeps() {
     return new Promise((resolve) => {
@@ -24,12 +24,6 @@ async function createSlate(slateBase, events, collaboration, isNew, isGuest) {
   }
 
   await ensureDeps()
-
-  if (Meteor.user() && Meteor.user().orgId) {
-    publicDefault = Organizations.findOne().planType === 'free'
-  } else if (Meteor.user() && Meteor.user().planType !== 'free') {
-    publicDefault = false
-  }
 
   const opts = {
     name: newSlate.options?.name || 'New Slate',

@@ -340,13 +340,6 @@ export default function Profile() {
                 </Grid>
               </Grid>
             </Grid>
-            {Meteor.user() &&
-              Meteor.user().planType !== 'free' &&
-              !Organizations.findOne() && (
-                <Grid item xs={12}>
-                  <GuestViewReport />
-                </Grid>
-              )}
             {Meteor.user() && !Meteor.user()?.orgId && (
               <Grid item xs={12}>
                 <Grid container spacing={2}>

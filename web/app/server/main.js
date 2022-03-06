@@ -12,10 +12,6 @@ import './methods/slateAccess'
 import './methods/chatWoot'
 import './methods/comments'
 import './methods/messages'
-import './methods/stripe'
-
-// stripe hooks
-import './stripeHooks'
 
 // global models
 import '../imports/api/common/models'

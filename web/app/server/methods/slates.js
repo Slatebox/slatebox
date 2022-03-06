@@ -468,15 +468,8 @@ method[CONSTANTS.methods.slates.createSnapshot] = async (opts) => {
       opts.snapshot,
       last ? last.snapshot : ''
     )
-    // console.log('percentSimilar', ps)
-    // 0.9985405384644929
-    const isFree =
-      Meteor.user().planType === 'free' ||
-      (Meteor.user().orgId &&
-        Organizations.findOne(Meteor.user().orgId).planType === 'free')
-    const threshold = isFree ? 0.75 : 0.95
+    const threshold = 0.999
     if (ps < threshold) {
-      // snapshot every 5% change if paid or 20% change if free
       SlateSnapshots.insert({
         slateId: opts.slateId,
         userId: Meteor.userId(),

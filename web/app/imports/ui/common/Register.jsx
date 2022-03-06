@@ -93,16 +93,19 @@ export default function Register({ user }) {
     emailAddress = user.emails[0].address
   }
 
+  const firstName = isAnon ? '' : user?.profile?.firstName
+  const lastName = isAnon ? '' : user?.profile?.lastName
+
   const [formVals, setFormVals] = React.useState({
     firstName: {
-      value: isAnon ? '' : user?.profile?.firstName,
+      value: firstName,
       valid: null,
     },
     lastName: {
-      value: isAnon ? '' : user?.profile?.lastName,
+      value: lastName,
       valid: null,
     },
-    email: { value: isAnon ? '' : emailAddress, valid: null },
+    email: { value: emailAddress, valid: null },
     password: { value: '', valid: null },
   })
   const [actionValue, setActionValue] = React.useState(
@@ -257,6 +260,7 @@ export default function Register({ user }) {
               } else {
                 const fs = cloneDeep(formVals)
                 fs.email.value = ''
+                console.log('setting formv1')
                 setFormVals(fs)
               }
             }
@@ -272,6 +276,7 @@ export default function Register({ user }) {
         break
       }
     }
+    console.log('setting formv2')
     setFormVals(fv)
   }
 

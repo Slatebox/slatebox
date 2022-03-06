@@ -47,6 +47,11 @@ export default function CollaborationUsers({ slate }) {
       // wires up collaboration
       Collaboration.find().observe({
         added(doc) {
+          console.log(
+            'adding collaboration',
+            doc.instanceId,
+            collaborator?.instanceId
+          )
           if (doc.instanceId !== collaborator?.instanceId) {
             // no need for this, as it's excluded in the query
             slate?.collab.invoke(doc)

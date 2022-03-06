@@ -201,41 +201,7 @@ export default function SlateSharing({ slate }) {
   }
 
   const setExpanded = async (exp) => {
-    if (exp === 'private' || exp === 'unlisted') {
-      // check the slate count
-      if (
-        Meteor.user().planType === 'free' ||
-        Organizations.findOne()?.planType === 'free'
-      ) {
-        const nonPublics = await promisify(
-          Meteor.call,
-          CONSTANTS.methods.slates.getNonPublic
-        )
-        const otherNonPublics = nonPublics.filter(
-          (p) => p.id !== slate.options.id
-        )
-        if (otherNonPublics.length >= CONSTANTS.privateSlateLimit) {
-          // will go past the limit, so show payment options
-          dispatch({
-            type: 'payment',
-            paymentOpen: true,
-            paymentMessage: `Upgrade to have more than ${
-              CONSTANTS.privateSlateLimit
-            } private or unlisted slates. (Current private or unlisted slates: ${nonPublics.join(
-              ', '
-            )}.)`,
-            paymentFocus: `more than ${CONSTANTS.privateSlateLimit} private slates`,
-            paymentEmphasis: `Upgrade below.`,
-          })
-        } else {
-          enact(exp)
-        }
-      } else {
-        enact(exp)
-      }
-    } else {
-      enact(exp)
-    }
+    enact(exp)
   }
 
   const closeShareDialog = () => {

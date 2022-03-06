@@ -49,7 +49,7 @@ const copySlate = async (slate, allowTemplateCopy) => {
   const planType = Meteor.user().orgId
     ? Organizations.findOne()?.planType
     : Meteor.user().planType
-  const isPublic = planType === 'free'
+  const isPublic = false
 
   Object.assign(copy.options, {
     isPublic,

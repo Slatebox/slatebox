@@ -11,7 +11,6 @@ import {
   Permissions,
   Slates,
   ArchivedSlates,
-  PricingTiers,
   Messages,
 } from '../../imports/api/common/models'
 import AuthManager from '../../imports/api/common/AuthManager'
@@ -23,7 +22,6 @@ method[CONSTANTS.methods.organizations.create] = async (opts) => {
     Organizations.insert({
       _id: orgId,
       name: opts.name,
-      planType: 'free',
       createdByUserId: opts.createdByUserId,
       createdOn: new Date().valueOf(),
     })
@@ -121,15 +119,6 @@ method[CONSTANTS.methods.organizations.trackGuest] = async (opts) => {
   })
 
   let allowGuestAccess = !opts.isUnlisted
-  if (opts.isUnlisted) {
-    const allowableGuestViews = PricingTiers.findOne({
-      $or: [
-        { 'monthly.priceId': entity.planType },
-        { 'yearly.priceId': entity.planType },
-      ],
-    }).guestViewsPerMonth
-    allowGuestAccess = total < allowableGuestViews
-  }
   if (allowGuestAccess) {
     GuestViews.upsert(
       {
@@ -162,7 +151,7 @@ method[CONSTANTS.methods.organizations.guestViewReport] = async () => {
       AuthManager.userHasClaim(Meteor.userId(), [
         CONSTANTS.claims.admin._id,
       ])) ||
-    (Meteor.user() && !Meteor.user().orgId && Meteor.user().planType !== 'free')
+    (Meteor.user() && !Meteor.user().orgId)
   ) {
     const rows = []
     /*
@@ -202,18 +191,6 @@ method[CONSTANTS.methods.organizations.guestViewReport] = async () => {
       _id: { $in: guestViews.map((gv) => gv.orgId) },
     }).fetch()
 
-    const entity = Meteor.user().orgId
-      ? Organizations.findOne({ _id: Meteor.user().orgId })
-      : Meteor.user()
-    const allowableGuestViews = PricingTiers.findOne({
-      $or: [
-        { 'monthly.priceId': entity.planType },
-        { 'yearly.priceId': entity.planType },
-      ],
-    }).guestViewsPerMonth
-    const allowableGuestViewsOnProTeam = PricingTiers.findOne({
-      useForProOrgGuestViewCount: true,
-    }).guestViewsPerMonth
     const headers = ['Date', 'Type', 'Slate', 'Owner', 'Guest']
     const totalUnlistedViewsByMonth = {}
     const totalPublicViewsByMonth = {}
@@ -285,8 +262,6 @@ method[CONSTANTS.methods.organizations.guestViewReport] = async () => {
     return {
       headerRow: headers,
       dataRows: rows,
-      allowableUnlistedViewsPerMonth: allowableGuestViews,
-      allowableUnlistedViewsPerMonthOnProTeam: allowableGuestViewsOnProTeam,
       totalUnlistedViewsByMonth,
       totalPublicViewsByMonth,
       totalViews: rows.length,

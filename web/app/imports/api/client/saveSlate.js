@@ -92,6 +92,7 @@ const saveSlate = async (opts) => {
           }
 
           uopts.pkg.dated = results
+          console.log('inserting collaborator', uopts)
           Collaboration.insert(uopts.pkg)
         } catch (error) {
           console.error('error saving slate!', error)

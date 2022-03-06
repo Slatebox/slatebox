@@ -23,7 +23,6 @@ import AuthManager from '../api/common/AuthManager'
 import CONSTANTS from '../api/common/constants'
 import SlateTemplates from './pages/SlateTemplates'
 import ShowThemes from './pages/ShowThemes'
-import StripeManagement from './components/StripeManagement'
 
 function PrivateRoute({ component: Component, ...rest }) {
   const isAuthorized =
@@ -57,7 +56,6 @@ export default function Routes() {
       <PrivateRoute component={TeamSlates} path="/team/slates" />
       <PrivateRoute component={TeamSettings} path="/team/settings" />
       <PrivateRoute component={Team} path="/team" />
-      <PrivateRoute component={StripeManagement} path="/success" />
       {AuthManager.userHasClaim(Meteor.userId(), [
         CONSTANTS.claims.uberMensch._id,
       ]) && <PrivateRoute component={AdminTools} path="/admin" />}

@@ -66,7 +66,6 @@ import promisify from '../api/client/promisify'
 import createAnonymousUser from '../api/client/createAnonymousUser'
 import SlateSnapshots from './components/slate/SlateSnapshots'
 import LoadHeap from './components/LoadHeap'
-import Payment from './common/Payment'
 
 // logo color: #0F4C75
 
@@ -653,9 +652,7 @@ export default function Main() {
                   CONSTANTS.claims.canEditUsers._id,
                   CONSTANTS.claims.canViewUsers._id,
                 ]) ||
-                  (loadedUser &&
-                    loadedUser.planType === 'free' &&
-                    !loadedUser.orgId)) && (
+                  (loadedUser && !loadedUser.orgId)) && (
                   <Tooltip placement="top" title={open ? '' : 'Manage Team'}>
                     <ListItem button component={Link} to="/team">
                       <ListItemIcon>
@@ -738,7 +735,6 @@ export default function Main() {
             <div className={clsx(classes.appBarSpacer)} />
             <Routes />
             <Register user={loadedUser} />
-            <Payment user={loadedUser} />
           </main>
         </div>
         <Snackbar

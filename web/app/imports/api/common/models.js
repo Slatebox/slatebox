@@ -10,8 +10,6 @@ const Audit = new Mongo.Collection('audit')
 const Messages = new Mongo.Collection('messages')
 const Comments = new Mongo.Collection('comments')
 
-const StripeEvents = new Mongo.Collection('stripeEvents')
-
 const Claims = new Mongo.Collection('claims')
 const SlateAccess = new Mongo.Collection('slateAccess')
 const Permissions = new Mongo.Collection('permissions')
@@ -26,7 +24,6 @@ const NounProjectResultsMetaData = new Mongo.Collection(
   'nounProjectResultsMetaData'
 )
 const Servers = new Mongo.Collection('servers')
-const PricingTiers = new Mongo.Collection('pricingTiers')
 const GuestViews = new Mongo.Collection('guestViews')
 const OrgPreferences = new Mongo.Collection('orgPreferences')
 
@@ -48,7 +45,6 @@ export {
   NounProjectResults,
   NounProjectResultsMetaData,
   Servers,
-  PricingTiers,
   Tags,
   Audit,
   Messages,
@@ -61,7 +57,6 @@ export {
   Themes,
   PrivateThemes,
   SlateSnapshots,
-  StripeEvents,
   CachedImages,
   CachedImageTiming,
 }
