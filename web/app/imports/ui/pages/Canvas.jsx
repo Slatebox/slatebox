@@ -494,7 +494,7 @@ export default function Canvas() {
         collaborator.current = await promisify(
           Meteor.call,
           CONSTANTS.methods.collaborators.create,
-          { shareId: slateBase.shareId, userId: Meteor.userId(), idx }
+          { shareId: slateBase.shareId, userId: Meteor.userId(), id: idx }
         )
         dispatch({ type: 'collaborator', collaborator: collaborator.current })
       }
