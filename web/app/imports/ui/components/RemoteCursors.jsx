@@ -4,7 +4,7 @@ import React, { useEffect, useRef } from 'react'
 import PropTypes from 'prop-types'
 import Grid from '@material-ui/core/Grid'
 import RemoteCursor from './RemoteCursor'
-import { Slatebox } from 'slatebox'
+import { Slatebox } from 'slateboxjs'
 
 export default function RemoteCursors({
   shareId,
