@@ -274,10 +274,6 @@ export default function Canvas() {
             break
           case 'custom':
             switch (opts.pkg.type) {
-              case 'onSlateVideoChatChanged': {
-                await saveSlate(opts)
-                break
-              }
               case 'onSaveRequested':
                 if (!opts.pkg._id) {
                   await saveSlate(opts)

@@ -1,6 +1,6 @@
 /* eslint-disable new-cap */
 import { Meteor } from 'meteor/meteor'
-import { Slatebox } from './slatebox/index'
+import { Slatebox } from 'slatebox'
 import saveSlate from './saveSlate'
 import { Organizations } from '../common/models'
 

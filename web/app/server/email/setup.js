@@ -30,7 +30,7 @@ export default function setup() {
     let header = `<div style="width:800px;margin-right:auto;margin-left:auto;">
         <div style="clear:both;height:90px;">
           <div style="float:left;width:40%;padding:10px;">
-            <img src="https://assets.slatebox.com/images/slatebox_logo_email.png" alt="Slatebox - Visual Team Collaboration"/>
+            <img src="https://app.slatebox.com/images/slatebox_logo.svg" alt="Slatebox - Visual Team Collaboration"/>
           </div>
           <div style="padding:10px;float:left;font-family:Helvetica;color:#333;font-size:16pt;line-height:35px;width:55%">${welcomeMessage}</div>
         </div>`
