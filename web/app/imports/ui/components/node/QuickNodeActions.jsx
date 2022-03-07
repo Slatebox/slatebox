@@ -15,7 +15,7 @@ import chunk from 'lodash.chunk'
 import cloneDeep from 'lodash.clonedeep'
 import Button from '@material-ui/core/Button'
 import Typography from '@material-ui/core/Typography'
-import { Slatebox } from '../../../api/client/slatebox'
+import { Slatebox } from 'slatebox'
 import defaultShapes from './defaultShapes'
 import slateProps from '../../propTypes/slatePriops'
 

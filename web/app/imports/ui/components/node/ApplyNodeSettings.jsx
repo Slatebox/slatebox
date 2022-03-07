@@ -20,9 +20,8 @@ import CloseIcon from '@material-ui/icons/Close'
 import { withStyles } from '@material-ui/core/styles'
 import defaultBehaviors from './defaultBehaviors'
 import CONSTANTS from '../../../api/common/constants'
-import { Slatebox } from '../../../api/client/slatebox'
+import { Slatebox, utils } from 'slatebox'
 import promisify from '../../../api/client/promisify'
-import utils from '../../../api/client/slatebox/helpers/utils'
 import nodeProps from '../../propTypes/nodeProps'
 
 const styles = (theme) => ({
