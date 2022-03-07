@@ -5,7 +5,7 @@ import saveSlate from './saveSlate'
 import { Organizations } from '../common/models'
 
 async function createSlate(slateBase, events, collaboration, isNew, isGuest) {
-  let publicDefault = false
+  const publicDefault = false
   let newSlate = slateBase
   async function ensureDeps() {
     return new Promise((resolve) => {
