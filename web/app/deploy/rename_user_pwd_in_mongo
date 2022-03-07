@@ -1,3 +1,0 @@
-tnshgas32ax
-
-mongo --port 37017 -u userPerformingRename -p tnshgas32ax --authenticationDatabase=admin  -p

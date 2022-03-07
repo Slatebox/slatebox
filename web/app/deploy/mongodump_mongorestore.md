@@ -1,3 +1,0 @@
-mongodump --ssl --sslAllowInvalidCertificates --host 'sb0/45.56.97.91:27017,104.200.28.237:27017,104.200.28.186:27017' --authenticationDatabase admin --db slatebox -u sbuser -p jPyvYtQbzmrBifBJ --out /tmp -v
-
-mongorestore --ssl --sslAllowInvalidCertificates --host 'sb0/45.56.97.91:27017,104.200.28.237:27017,104.200.28.186:27017' --authenticationDatabase admin --db slatebox -u sbuser -p jPyvYtQbzmrBifBJ slatebox

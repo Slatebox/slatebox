@@ -20,7 +20,7 @@ import DialogContent from '@material-ui/core/DialogContent'
 import Dialog from '@material-ui/core/Dialog'
 import Skeleton from '@material-ui/lab/Skeleton'
 import CONSTANTS from '../../../api/common/constants'
-import { Slatebox } from '../../../api/client/slatebox'
+import { Slatebox } from 'slatebox'
 import promisify from '../../../api/client/promisify'
 import slateProps from '../../propTypes/slatePriops'
 
