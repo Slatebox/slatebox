@@ -32,7 +32,7 @@ import confirmService from '../common/confirm'
 export default function Canvas() {
   const history = useHistory()
   const dispatch = useDispatch()
-  const { id } = useParams()
+  const { id, asEmbed } = useParams()
   const theme = useTheme()
   const slate = React.useRef(null)
   const accessLevel = React.useRef({
@@ -438,7 +438,6 @@ export default function Canvas() {
         CONSTANTS.methods.slates.get,
         { shareId: id }
       )
-      // console.log("got slate perm ", getSlate);
       let slateBase = null
       if (getSlate?.exists === false) {
         isNew = true
@@ -528,25 +527,29 @@ export default function Canvas() {
         if (slateBase.options.isUnlisted) {
           // allowed and noted
           loadSlate(slateBase, false, true)
-          await confirmService.show({
-            theme,
-            title: `Welcome to Slatebox!`,
-            message: `You have ${verb} access to this slate by ${trackGuest.slateOwnerUserName}. Enjoy!`,
-            actionItems: [{ label: 'OK', return: true }],
-          })
+          if (!asEmbed) {
+            await confirmService.show({
+              theme,
+              title: `Welcome to Slatebox!`,
+              message: `You have ${verb} access to this slate by ${trackGuest.slateOwnerUserName}. Enjoy!`,
+              actionItems: [{ label: 'OK', return: true }],
+            })
+          }
         } else if (slateBase.options.isPublic) {
           // public slate
           loadSlate(slateBase, false, true)
-          await confirmService.show({
-            theme,
-            title: `Welcome to Slatebox!`,
-            message: `You have ${verb} access to this publically accessible slate by ${trackGuest.slateOwnerUserName}. Enjoy!`,
-            actionItems: [{ label: 'OK', return: true }],
-          })
+          if (!asEmbed) {
+            await confirmService.show({
+              theme,
+              title: `Welcome to Slatebox!`,
+              message: `You have ${verb} access to this publically accessible slate by ${trackGuest.slateOwnerUserName}. Enjoy!`,
+              actionItems: [{ label: 'OK', return: true }],
+            })
+          }
         }
       } else {
         loadSlate(slateBase, isNew, false)
-        if (Meteor.userId() !== slateBase.userId) {
+        if (Meteor.userId() !== slateBase.userId && !asEmbed) {
           await confirmService.show({
             theme,
             title: `Welcome to Slatebox!`,
@@ -560,10 +563,23 @@ export default function Canvas() {
     prep()
 
     dispatch({ type: 'canvas', onCanvas: true })
+    if (asEmbed) {
+      dispatch({
+        type: 'canvas',
+        embeddedSlate: true,
+      })
+    }
     return () => {
       dispatch({ type: 'canvas', onCanvas: false })
     }
   }, [])
+
+  if (asEmbed) {
+    slate.current?.controller.scaleToFitAndCenter()
+    if (accessLevel.current?.isReadOnly) {
+      slate.current?.disable()
+    }
+  }
 
   return (
     <RemoteCursors

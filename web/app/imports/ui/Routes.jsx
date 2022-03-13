@@ -61,7 +61,7 @@ export default function Routes() {
       {AuthManager.userHasClaim(Meteor.userId(), [
         CONSTANTS.claims.uberMensch._id,
       ]) && <PrivateRoute component={AdminTools} path="/admin" />}
-      <Route path="/canvas/:id?/:nodeId?">
+      <Route path="/canvas/:id?/:nodeId?/:asEmbed?">
         <Canvas />
       </Route>
       <Route path="/login/:email?">

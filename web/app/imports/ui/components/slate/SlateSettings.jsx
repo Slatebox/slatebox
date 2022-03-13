@@ -29,6 +29,9 @@ export default function SlateSettings({ onChange }) {
   const [snapToObjects, setSlatesnapToObjects] = React.useState(
     slate?.options?.viewPort?.snapToObjects
   )
+  const [isFollowMe, setSlateFollowMe] = React.useState(
+    slate?.options?.followMe
+  )
   const [mindMapMode, setSlatemindMapMode] = React.useState(
     slate?.options?.mindMapMode
   )
@@ -68,6 +71,14 @@ export default function SlateSettings({ onChange }) {
     onChange({
       type: 'onSlateSnapToObjectsChanged',
       data: { snapToObjects: e.target.checked },
+    })
+  }
+
+  const setFollowMe = (e) => {
+    setSlateFollowMe(e.target.checked)
+    onChange({
+      type: 'onSlateFollowMeChanged',
+      data: { followMe: e.target.checked },
     })
   }
 
@@ -215,6 +226,18 @@ export default function SlateSettings({ onChange }) {
               aria-label="setSnapToObjects"
             >
               <Switch onChange={setSnapToObjects} checked={snapToObjects} />
+            </Tooltip>
+          </Grid>
+          <Grid item xs={6}>
+            &#34;Follow Me&#34; Mode
+          </Grid>
+          <Grid item xs={6}>
+            <Tooltip
+              title="Synhronize the position of the canvas during collaboration"
+              placement="top"
+              aria-label="setFollowMe"
+            >
+              <Switch onChange={setFollowMe} checked={isFollowMe} />
             </Tooltip>
           </Grid>
           <Grid item xs={6}>
