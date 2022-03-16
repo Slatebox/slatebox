@@ -4,6 +4,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.9.3] - 2022-03-16
+
+### Added
+
+- Added chat during collaboration
+- Added follow me mode for slate canvas and zoom syncing during collaboration
+
+### Changed
+
+- Fixes for remote cursor position
+
 ## [0.9.2] - 2022-03-08
 
 ### Added
