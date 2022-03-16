@@ -2,6 +2,7 @@
 /* eslint-disable no-undef */
 import { Meteor } from 'meteor/meteor'
 import { DDP } from 'meteor/ddp-client'
+import { Log } from 'meteor/logging'
 import { Accounts } from 'meteor/accounts-base'
 import ip from 'ip'
 import { Servers } from '../imports/api/common/models'
@@ -13,6 +14,15 @@ Meteor.startup(() => {
   setup()
 
   const ownIp = ip.address()
+
+  // swallow debug messages
+  Meteor._debug = (function (superMeteorDebug) {
+    return function (error, info) {
+      if (error !== 'discarding unknown livedata message type') {
+        superMeteorDebug(error, info)
+      }
+    }
+  })(Meteor._debug)
 
   Accounts.onCreateUser((suggested, user) => {
     const muser = user

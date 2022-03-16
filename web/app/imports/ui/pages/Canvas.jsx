@@ -25,6 +25,7 @@ import SlateSharing from '../components/slate/SlateSharing'
 import ExtensionsDrawer from '../components/ExtensionsDrawer'
 import RemoteCursors from '../components/RemoteCursors'
 import CollaborationUsers from '../components/CollaborationUsers'
+import Chat from '../components/Chat'
 import QuickNodeActions from '../components/node/QuickNodeActions'
 import AuthManager from '../../api/common/AuthManager'
 import confirmService from '../common/confirm'
@@ -574,12 +575,15 @@ export default function Canvas() {
     }
   }, [])
 
-  if (asEmbed) {
-    slate.current?.controller.scaleToFitAndCenter()
-    if (accessLevel.current?.isReadOnly) {
-      slate.current?.disable()
+  useEffect(() => {
+    if (asEmbed) {
+      slate.current?.controller.scaleToFitAndCenter()
+      slate.current?.disable(null, null, true)
+      // if (accessLevel.current?.isReadOnly) {
+      //   slate.current?.disable(null, null, true)
+      // }
     }
-  }
+  }, [slate.current])
 
   return (
     <RemoteCursors
@@ -621,6 +625,7 @@ export default function Canvas() {
           dispatch({ type: 'canvas', extensionsDrawerOpen: false })
         }}
       />
+      <Chat slate={slate.current} />
       <CollaborationUsers slate={slate.current} />
     </RemoteCursors>
   )

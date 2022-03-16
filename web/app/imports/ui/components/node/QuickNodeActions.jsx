@@ -3,7 +3,8 @@
 import React from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
-import { useDispatch } from 'react-redux'
+import { useTracker } from 'meteor/react-meteor-data'
+import { useDispatch, useSelector } from 'react-redux'
 import { makeStyles } from '@material-ui/core/styles'
 import Grid from '@material-ui/core/Grid'
 import Tooltip from '@material-ui/core/Tooltip'
@@ -24,11 +25,13 @@ export default function QuickNodeActions({
   slate,
   onNodeCreated,
 }) {
+  const chatOpen = useSelector((state) => state.chatOpen)
+  const rightSpace = chatOpen ? 27 : 1
   const useStyles = makeStyles((theme) => ({
     speedDial: {
       position: 'fixed',
       bottom: theme.spacing(1),
-      right: theme.spacing(1),
+      right: theme.spacing(rightSpace),
       alignItems: 'flex-end',
       '& .MuiSpeedDialAction-fab': {
         backgroundColor: 'transparent',

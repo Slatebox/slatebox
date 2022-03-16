@@ -24,25 +24,36 @@ export default function MessageListener(props) {
     }
   }
 
-  let all = []
+  let systemMessages = []
   useTracker(() => {
     // get all messages
-    Meteor.subscribe(CONSTANTS.publications.messages)
+    Meteor.subscribe(CONSTANTS.publications.messages, {
+      type: CONSTANTS.messageTypes.system,
+    })
+    // if statement necessary to trigger reactivity
     if (
       Messages.find(
-        { read: false, priority: 10 },
+        { read: false, priority: 10, type: CONSTANTS.messageTypes.system },
         { sort: { timestamp: -1 } }
       ).count() > 0
     ) {
       // do something with the messages - priority = 10 means a global dispatch, effect='celebration' means baloons or something!
-      all = Messages.find({ read: false, priority: 10 })
+      systemMessages = Messages.find({
+        read: false,
+        priority: 10,
+        type: CONSTANTS.messageTypes.system,
+      })
         .fetch()
         .sort((a, b) => a.timestamp - b.timestamp)
-      const celebrate = all.some((m) => m.effect === 'celebrate')
-      if (all.length > 0) {
-        message(all[0].title, all.map((a) => a.text).join(', '), all[0].onOK)
+      const celebrate = systemMessages.some((m) => m.effect === 'celebrate')
+      if (systemMessages.length > 0) {
+        message(
+          systemMessages[0].title,
+          systemMessages.map((a) => a.text).join(', '),
+          systemMessages[0].onOK
+        )
         // dispatch({ type: "canvas", globalMessage: { visible: true, isSnackBar: false, text: , severity: "success", autoHide: 60000 } });
-        all.forEach((a) => {
+        systemMessages.forEach((a) => {
           Messages.update({ _id: a._id }, { $set: { read: true } })
         })
       }

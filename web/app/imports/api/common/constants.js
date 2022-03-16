@@ -107,6 +107,10 @@ const CONSTANTS = {
     templates: 'templates',
     approvalRequests: 'approvalRequests',
   },
+  messageTypes: {
+    system: 'system',
+    chat: 'chat',
+  },
   messageActionTypes: {
     slate: 'slate',
     modal: 'modal',

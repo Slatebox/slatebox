@@ -22,7 +22,9 @@ import Divider from '@material-ui/core/Divider'
 import IconButton from '@material-ui/core/IconButton'
 import Button from '@material-ui/core/Button'
 import Grid from '@material-ui/core/Grid'
+import Badge from '@material-ui/core/Badge'
 import MenuIcon from '@material-ui/icons/Menu'
+import ChatIcon from '@material-ui/icons/Chat'
 import ChevronLeftIcon from '@material-ui/icons/ChevronLeft'
 import ButtonGroup from '@material-ui/core/ButtonGroup'
 
@@ -57,7 +59,12 @@ import Register from './common/Register'
 
 import confirmService from './common/confirm'
 
-import { Organizations, SlateAccess, Slates } from '../api/common/models'
+import {
+  Organizations,
+  SlateAccess,
+  Slates,
+  Messages,
+} from '../api/common/models'
 import AuthManager from '../api/common/AuthManager'
 
 import MessagesMenu from './components/MessagesMenu'
@@ -124,6 +131,7 @@ export default function Main() {
   }
   // let noDrawer = useSelector(state => state.noDrawer) || false;
   const [snapshotOpen, setSnapshotOpen] = React.useState(false)
+  const [chatIsOpen, setChatOpen] = React.useState(false)
   const dispatch = useDispatch()
   const history = useHistory()
 
@@ -132,6 +140,21 @@ export default function Main() {
   const xlmq = useMediaQuery(theme.breakpoints.up('xl'))
 
   // Cohere.init(Meteor.settings.public.cohereKey);
+
+  const slateHasMessages = useTracker(() => {
+    Meteor.subscribe(CONSTANTS.publications.messages, {
+      type: CONSTANTS.messageTypes.chat,
+      slateShareId: slate?.shareId,
+    })
+    return (
+      Messages.find({
+        type: CONSTANTS.messageTypes.chat,
+        slateShareId: slate?.shareId,
+      }).count() > 0
+    )
+  })
+
+  console.log('slatehasmessages', slateHasMessages)
 
   const slateAccess = useTracker(() => {
     Meteor.subscribe(CONSTANTS.publications.slateAccess, {})
@@ -270,6 +293,11 @@ export default function Main() {
 
   const handleSnapshots = () => {
     setSnapshotOpen(true)
+  }
+
+  const handleChat = () => {
+    setChatOpen(!chatIsOpen)
+    dispatch({ type: 'canvas', chatOpen: !chatIsOpen })
   }
 
   const handleSupport = () => {
@@ -598,6 +626,27 @@ export default function Main() {
                               </Button>
                             </Tooltip>
                           )}
+                        {canManageSlate && slate && (
+                          <Tooltip title={xlmq ? '' : 'Chat'}>
+                            <Button
+                              variant="contained"
+                              color="secondary"
+                              className={classes.button}
+                              onClick={handleChat}
+                              startIcon={
+                                slateHasMessages ? (
+                                  <Badge variant="dot" color="primary">
+                                    <ChatIcon />
+                                  </Badge>
+                                ) : (
+                                  <ChatIcon />
+                                )
+                              }
+                            >
+                              {xlmq && <>Chat</>}
+                            </Button>
+                          </Tooltip>
+                        )}
                       </ButtonGroup>
                     </Grid>
                   )}
