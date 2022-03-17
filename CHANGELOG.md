@@ -4,6 +4,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.9.4] - 2022-03-16
+
+### Added
+
+### Changed
+
+- Changed chat so an empty message isn't broadcast
+- Updated streamy broadcasts to use dns names instead of IP
+
 ## [0.9.3] - 2022-03-16
 
 ### Added

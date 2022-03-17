@@ -61,16 +61,17 @@ export default function Chat() {
   }
 
   const postMessage = () => {
-    Messages.insert({
-      author: getUserName(Meteor.userId()),
-      timestamp: new Date().valueOf(),
-      slateShareId: slate.shareId,
-      userId: Meteor.userId(),
-      text: txtMessage,
-      type: CONSTANTS.messageTypes.chat,
-    })
-    setMessage('')
-    // post
+    if (txtMessage.trim() !== '') {
+      Messages.insert({
+        author: getUserName(Meteor.userId()),
+        timestamp: new Date().valueOf(),
+        slateShareId: slate.shareId,
+        userId: Meteor.userId(),
+        text: txtMessage,
+        type: CONSTANTS.messageTypes.chat,
+      })
+      setMessage('')
+    }
   }
 
   // Chat.propTypes = {
