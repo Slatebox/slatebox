@@ -60,16 +60,18 @@ Meteor.startup(() => {
   //     if (s.internal !== ownIp && s.active) {
   let host = ''
   if (Meteor.settings.env === 'prod') {
-    host = 'slatebox-prod-service'
+    host = 'slatebox-prod-service:3000'
   } else if (Meteor.settings.env === 'test') {
-    host = 'slatebox-test-service'
+    host = 'slatebox-test-service:3000'
   } else if (Meteor.settings.env === 'stage') {
-    host = 'slatebox-stage-service'
+    host = 'slatebox-stage-service:3000'
   } else if (Meteor.settings.env === 'dev') {
     host = 'localhost:3000'
   }
   const connection = DDP.connect(host) // always use internal for ddp
   const streamyConnection = new Streamy.Connection(connection)
+
+  console.log('connecting to ', host, connection)
 
   // Attach message handlers
   connection._stream.on('message', (data) => {
@@ -89,6 +91,10 @@ Meteor.startup(() => {
       }
     }
   })
+
+  // streamyConnection.onError((err) => {
+  //   console.log(`Error connecting to${host}: ${err.message}`)
+  // })
 
   // call when connect to localhost:4000 success
   streamyConnection.onConnect(() => {
