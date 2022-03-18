@@ -17,7 +17,7 @@ export default function SlateEmbed({ slate, getOrientation }) {
   const dispatch = useDispatch()
   const lastEmbedSize = useSelector((state) => state.lastEmbedSize) || 600
   const lastEmbedTemplate = useSelector((state) => state.lastEmbedTemplate)
-  const isIFrame = useSelector((state) => state.isIFrame) || false
+  const isIFrame = useSelector((state) => state.isIFrame) || true
 
   const handleSize = (e) => {
     dispatch({ type: 'embed', lastEmbedSize: e.target.value })
@@ -29,7 +29,7 @@ export default function SlateEmbed({ slate, getOrientation }) {
 
   async function load() {
     const embedOpts = {
-      slateId: slate?.options.id,
+      slateId: slate?.shareId,
       orient: getOrientation(),
       size: lastEmbedSize,
     }
@@ -68,7 +68,11 @@ export default function SlateEmbed({ slate, getOrientation }) {
 
   return (
     <Grid container alignItems="center" justify="center" spacing={4}>
-      <Grid item xs={4}>
+      <Grid item xs={12}>
+        Embed this slate on your own site. This will respect your current slate
+        sharing settings.
+      </Grid>
+      {/* <Grid item xs={4}>
         <TextField
           label="Size"
           size="small"
@@ -89,7 +93,7 @@ export default function SlateEmbed({ slate, getOrientation }) {
             <Switch onChange={setIFrame} value={isIFrame} />
           </Tooltip>
         </Grid>
-      </Grid>
+      </Grid> */}
       <Grid item xs={2}>
         <Tooltip title="Copy embeddable code to clipboard">
           <IconButton

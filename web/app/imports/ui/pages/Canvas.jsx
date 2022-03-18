@@ -25,6 +25,7 @@ import SlateSharing from '../components/slate/SlateSharing'
 import ExtensionsDrawer from '../components/ExtensionsDrawer'
 import RemoteCursors from '../components/RemoteCursors'
 import CollaborationUsers from '../components/CollaborationUsers'
+import Chat from '../components/Chat'
 import QuickNodeActions from '../components/node/QuickNodeActions'
 import AuthManager from '../../api/common/AuthManager'
 import confirmService from '../common/confirm'
@@ -32,7 +33,7 @@ import confirmService from '../common/confirm'
 export default function Canvas() {
   const history = useHistory()
   const dispatch = useDispatch()
-  const { id } = useParams()
+  const { id, asEmbed } = useParams()
   const theme = useTheme()
   const slate = React.useRef(null)
   const accessLevel = React.useRef({
@@ -438,7 +439,6 @@ export default function Canvas() {
         CONSTANTS.methods.slates.get,
         { shareId: id }
       )
-      // console.log("got slate perm ", getSlate);
       let slateBase = null
       if (getSlate?.exists === false) {
         isNew = true
@@ -528,25 +528,29 @@ export default function Canvas() {
         if (slateBase.options.isUnlisted) {
           // allowed and noted
           loadSlate(slateBase, false, true)
-          await confirmService.show({
-            theme,
-            title: `Welcome to Slatebox!`,
-            message: `You have ${verb} access to this slate by ${trackGuest.slateOwnerUserName}. Enjoy!`,
-            actionItems: [{ label: 'OK', return: true }],
-          })
+          if (!asEmbed) {
+            await confirmService.show({
+              theme,
+              title: `Welcome to Slatebox!`,
+              message: `You have ${verb} access to this slate by ${trackGuest.slateOwnerUserName}. Enjoy!`,
+              actionItems: [{ label: 'OK', return: true }],
+            })
+          }
         } else if (slateBase.options.isPublic) {
           // public slate
           loadSlate(slateBase, false, true)
-          await confirmService.show({
-            theme,
-            title: `Welcome to Slatebox!`,
-            message: `You have ${verb} access to this publically accessible slate by ${trackGuest.slateOwnerUserName}. Enjoy!`,
-            actionItems: [{ label: 'OK', return: true }],
-          })
+          if (!asEmbed) {
+            await confirmService.show({
+              theme,
+              title: `Welcome to Slatebox!`,
+              message: `You have ${verb} access to this publically accessible slate by ${trackGuest.slateOwnerUserName}. Enjoy!`,
+              actionItems: [{ label: 'OK', return: true }],
+            })
+          }
         }
       } else {
         loadSlate(slateBase, isNew, false)
-        if (Meteor.userId() !== slateBase.userId) {
+        if (Meteor.userId() !== slateBase.userId && !asEmbed) {
           await confirmService.show({
             theme,
             title: `Welcome to Slatebox!`,
@@ -560,10 +564,26 @@ export default function Canvas() {
     prep()
 
     dispatch({ type: 'canvas', onCanvas: true })
+    if (asEmbed) {
+      dispatch({
+        type: 'canvas',
+        embeddedSlate: true,
+      })
+    }
     return () => {
       dispatch({ type: 'canvas', onCanvas: false })
     }
   }, [])
+
+  useEffect(() => {
+    if (asEmbed) {
+      slate.current?.controller.scaleToFitAndCenter()
+      slate.current?.disable(null, null, true)
+      // if (accessLevel.current?.isReadOnly) {
+      //   slate.current?.disable(null, null, true)
+      // }
+    }
+  }, [slate.current])
 
   return (
     <RemoteCursors
@@ -605,6 +625,7 @@ export default function Canvas() {
           dispatch({ type: 'canvas', extensionsDrawerOpen: false })
         }}
       />
+      <Chat slate={slate.current} />
       <CollaborationUsers slate={slate.current} />
     </RemoteCursors>
   )

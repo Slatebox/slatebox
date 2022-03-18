@@ -22,7 +22,9 @@ import Divider from '@material-ui/core/Divider'
 import IconButton from '@material-ui/core/IconButton'
 import Button from '@material-ui/core/Button'
 import Grid from '@material-ui/core/Grid'
+import Badge from '@material-ui/core/Badge'
 import MenuIcon from '@material-ui/icons/Menu'
+import ChatIcon from '@material-ui/icons/Chat'
 import ChevronLeftIcon from '@material-ui/icons/ChevronLeft'
 import ButtonGroup from '@material-ui/core/ButtonGroup'
 
@@ -57,7 +59,12 @@ import Register from './common/Register'
 
 import confirmService from './common/confirm'
 
-import { Organizations, SlateAccess, Slates } from '../api/common/models'
+import {
+  Organizations,
+  SlateAccess,
+  Slates,
+  Messages,
+} from '../api/common/models'
 import AuthManager from '../api/common/AuthManager'
 
 import MessagesMenu from './components/MessagesMenu'
@@ -111,6 +118,7 @@ export default function Main() {
     isPrivate: slate?.options.isPrivate,
     isUnlisted: slate?.options.isUnlisted,
   }
+  const embeddedSlate = useSelector((state) => state.embeddedSlate)
   const collaborator = useSelector((state) => state.collaborator)
   const openShareDialog = useSelector((state) => state.openShareDialog)
   const canManageSlate = useSelector((state) => state.canManageSlate)
@@ -123,6 +131,7 @@ export default function Main() {
   }
   // let noDrawer = useSelector(state => state.noDrawer) || false;
   const [snapshotOpen, setSnapshotOpen] = React.useState(false)
+  const [chatIsOpen, setChatOpen] = React.useState(false)
   const dispatch = useDispatch()
   const history = useHistory()
 
@@ -131,6 +140,21 @@ export default function Main() {
   const xlmq = useMediaQuery(theme.breakpoints.up('xl'))
 
   // Cohere.init(Meteor.settings.public.cohereKey);
+
+  const slateHasMessages = useTracker(() => {
+    Meteor.subscribe(CONSTANTS.publications.messages, {
+      type: CONSTANTS.messageTypes.chat,
+      slateShareId: slate?.shareId,
+    })
+    return (
+      Messages.find({
+        type: CONSTANTS.messageTypes.chat,
+        slateShareId: slate?.shareId,
+      }).count() > 0
+    )
+  })
+
+  console.log('slatehasmessages', slateHasMessages)
 
   const slateAccess = useTracker(() => {
     Meteor.subscribe(CONSTANTS.publications.slateAccess, {})
@@ -271,6 +295,11 @@ export default function Main() {
     setSnapshotOpen(true)
   }
 
+  const handleChat = () => {
+    setChatOpen(!chatIsOpen)
+    dispatch({ type: 'canvas', chatOpen: !chatIsOpen })
+  }
+
   const handleSupport = () => {
     window.$chatwoot.toggle()
   }
@@ -308,216 +337,244 @@ export default function Main() {
       <ChatWootConfig />
       <ThemeProvider theme={theme}>
         <div id="appRoot" className={classes.root}>
-          <AppBar
-            position="absolute"
-            className={clsx(classes.appBar, open && classes.appBarShift)}
-          >
-            <Toolbar className={classes.toolbar}>
-              {onCanvas || !Meteor.user() ? null : (
-                <IconButton
-                  edge="start"
-                  color="inherit"
-                  aria-label="open drawer"
-                  onClick={handleDrawerOpen}
-                  className={clsx(
-                    classes.menuButton,
-                    open && classes.menuButtonHidden
-                  )}
-                >
-                  <MenuIcon />
-                </IconButton>
-              )}
-              <Grid
-                container
-                className={classes.canvasProps}
-                alignItems="center"
-                justify="space-between"
-                spacing={1}
-              >
-                <Grid item>
-                  <Grid
-                    container
-                    alignItems="center"
-                    justify="flex-start"
-                    spacing={1}
+          {!embeddedSlate && (
+            <AppBar
+              position="absolute"
+              className={clsx(classes.appBar, open && classes.appBarShift)}
+            >
+              <Toolbar className={classes.toolbar}>
+                {onCanvas || !Meteor.user() ? null : (
+                  <IconButton
+                    edge="start"
+                    color="inherit"
+                    aria-label="open drawer"
+                    onClick={handleDrawerOpen}
+                    className={clsx(
+                      classes.menuButton,
+                      open && classes.menuButtonHidden
+                    )}
                   >
-                    <Grid item>
-                      {onCanvas || orgName ? (
-                        <img
-                          src="/images/slatebox_small_logo.svg"
-                          alt="Slatebox - Open And Free Remote Collaboration"
-                          className={classes.logo}
-                        />
-                      ) : (
-                        <img
-                          src="/images/slatebox_logo.svg"
-                          alt="Slatebox - Open And Free Remote Collaboration"
-                          className={classes.logo}
-                        />
-                      )}
-                    </Grid>
-                    <Grid item>
-                      {orgName && (
-                        <Typography
-                          component="span"
-                          variant="h5"
-                          color="secondary"
-                        >
-                          &nbsp;&nbsp;{orgName}
-                        </Typography>
-                      )}
-                    </Grid>
-                  </Grid>
-                </Grid>
-                {onCanvas && lgmq && (
+                    <MenuIcon />
+                  </IconButton>
+                )}
+                <Grid
+                  container
+                  className={classes.canvasProps}
+                  alignItems="center"
+                  justify="space-between"
+                  spacing={1}
+                >
                   <Grid item>
-                    <Grid alignItems="center" container spacing={2}>
+                    <Grid
+                      container
+                      alignItems="center"
+                      justify="flex-start"
+                      spacing={1}
+                    >
                       <Grid item>
-                        {slatePrivacy.isPrivate ? (
-                          <Chip
-                            color="secondary"
-                            icon={<LockIcon />}
-                            label="private"
+                        {onCanvas || orgName ? (
+                          <img
+                            src="/images/slatebox_small_logo.svg"
+                            alt="Slatebox - Open And Free Remote Collaboration"
+                            className={classes.logo}
                           />
-                        ) : slatePrivacy.isUnlisted ? (
-                          <Chip icon={<VpnLockIcon />} label="unlisted" />
                         ) : (
-                          <Chip icon={<PublicIcon />} label="public" />
+                          <img
+                            src="/images/slatebox_logo.svg"
+                            alt="Slatebox - Open And Free Remote Collaboration"
+                            className={classes.logo}
+                          />
                         )}
                       </Grid>
-                      {slate && !slate.options.eligibleForThemeCompilation && (
-                        <Grid item>
-                          <TextField
-                            variant="outlined"
+                      <Grid item>
+                        {orgName && (
+                          <Typography
+                            component="span"
+                            variant="h5"
                             color="secondary"
-                            size="small"
-                            inputProps={{
-                              style: { color: theme.palette.secondary.main },
-                            }}
-                            value={slateName}
-                            disabled={!canManageSlate}
-                            onChange={handleSlateName}
-                          />
-                        </Grid>
-                      )}
+                          >
+                            &nbsp;&nbsp;{orgName}
+                          </Typography>
+                        )}
+                      </Grid>
                     </Grid>
                   </Grid>
-                )}
-                {onCanvas && (
-                  <Grid item>
-                    <ButtonGroup aria-label="outlined button group">
-                      {canManageSlate && (
-                        <Tooltip title={xlmq ? '' : 'Manage Slate'}>
-                          <Button
-                            variant="contained"
-                            color="secondary"
-                            className={classes.button}
-                            onClick={handleManage}
-                            startIcon={<TuneIcon />}
-                          >
-                            {xlmq && (
-                              <div>
-                                {slate &&
-                                !slate.options.eligibleForThemeCompilation
-                                  ? 'Manage'
-                                  : 'Manage Theme'}
-                              </div>
-                            )}
-                          </Button>
-                        </Tooltip>
-                      )}
-                      {!Meteor.userId() && (
-                        <Button
-                          variant="contained"
-                          color="secondary"
-                          className={classes.button}
-                          onClick={async (e) => {
-                            await createAnonymousUser()
-                            dispatch({
-                              type: 'registration',
-                              registrationOpen: true,
-                              registrationMessage: `Register to create an account.`,
-                            })
-                          }}
-                        >
-                          Create Account
-                        </Button>
-                      )}
-                      {slate &&
-                        slate.userId === Meteor.userId() &&
-                        !slate.options.eligibleForThemeCompilation && (
-                          <Tooltip title={xlmq ? '' : 'Privacy & Sharing'}>
+                  {onCanvas && lgmq && (
+                    <Grid item>
+                      <Grid alignItems="center" container spacing={2}>
+                        <Grid item>
+                          {slatePrivacy.isPrivate ? (
+                            <Chip
+                              color="secondary"
+                              icon={<LockIcon />}
+                              label="private"
+                            />
+                          ) : slatePrivacy.isUnlisted ? (
+                            <Chip icon={<VpnLockIcon />} label="unlisted" />
+                          ) : (
+                            <Chip icon={<PublicIcon />} label="public" />
+                          )}
+                        </Grid>
+                        {slate && !slate.options.eligibleForThemeCompilation && (
+                          <Grid item>
+                            <TextField
+                              variant="outlined"
+                              color="secondary"
+                              size="small"
+                              inputProps={{
+                                style: { color: theme.palette.secondary.main },
+                              }}
+                              value={slateName}
+                              disabled={!canManageSlate}
+                              onChange={handleSlateName}
+                            />
+                          </Grid>
+                        )}
+                      </Grid>
+                    </Grid>
+                  )}
+                  {onCanvas && (
+                    <Grid item>
+                      <ButtonGroup aria-label="outlined button group">
+                        {canManageSlate && (
+                          <Tooltip title={xlmq ? '' : 'Manage Slate'}>
                             <Button
                               variant="contained"
                               color="secondary"
                               className={classes.button}
-                              onClick={async (e) => {
-                                if (
-                                  !Meteor.user().orgId &&
-                                  !['solo_monthly', 'solo_yearly'].includes(
-                                    Meteor.user().planType
-                                  )
-                                ) {
-                                  const intendState = slate.options?.isPublic
-                                    ? 'private'
-                                    : 'public'
-                                  const result = await confirmService.show({
-                                    theme,
-                                    title: `Manage Slate Privacy`,
-                                    message:
-                                      'In order to share with your team, you have to first create one. Otherwise you can simply change the privacy below.',
-                                    actionItems: [
-                                      {
-                                        label: 'Create my team',
-                                        return: 'team',
-                                      },
-                                      {
-                                        label: `Make my slate ${intendState}`,
-                                        return: intendState,
-                                      },
-                                      {
-                                        label: `Leave slate ${
-                                          intendState === 'private'
-                                            ? 'public'
-                                            : 'private'
-                                        }`,
-                                        return: false,
-                                      },
-                                    ],
-                                  })
-                                  if (result) {
-                                    switch (result) {
-                                      case 'private': {
-                                        const nonPublics = await promisify(
-                                          Meteor.call,
-                                          CONSTANTS.methods.slates.getNonPublic
-                                        )
-                                        if (
-                                          nonPublics.length >=
-                                          CONSTANTS.privateSlateLimit
-                                        ) {
-                                          // past the limit, so show payment options
-                                          dispatch({
-                                            type: 'payment',
-                                            paymentOpen: true,
-                                            paymentMessage: `Upgrade to have more than ${
-                                              CONSTANTS.privateSlateLimit
-                                            } private or unlisted slates. (Current private or unlisted slates: ${nonPublics
-                                              .map((p) => p.name)
-                                              .join(', ')}.)`,
-                                            paymentFocus: `more than ${CONSTANTS.privateSlateLimit} private slates`,
-                                            paymentEmphasis: `Upgrade below.`,
-                                          })
-                                        } else {
-                                          slate.options.isPublic = false
-                                          slate.options.isPrivate = true
+                              onClick={handleManage}
+                              startIcon={<TuneIcon />}
+                            >
+                              {xlmq && (
+                                <div>
+                                  {slate &&
+                                  !slate.options.eligibleForThemeCompilation
+                                    ? 'Manage'
+                                    : 'Manage Theme'}
+                                </div>
+                              )}
+                            </Button>
+                          </Tooltip>
+                        )}
+                        {!Meteor.userId() && (
+                          <Button
+                            variant="contained"
+                            color="secondary"
+                            className={classes.button}
+                            onClick={async (e) => {
+                              await createAnonymousUser()
+                              dispatch({
+                                type: 'registration',
+                                registrationOpen: true,
+                                registrationMessage: `Register to create an account.`,
+                              })
+                            }}
+                          >
+                            Create Account
+                          </Button>
+                        )}
+                        {slate &&
+                          slate.userId === Meteor.userId() &&
+                          !slate.options.eligibleForThemeCompilation && (
+                            <Tooltip title={xlmq ? '' : 'Privacy & Sharing'}>
+                              <Button
+                                variant="contained"
+                                color="secondary"
+                                className={classes.button}
+                                onClick={async (e) => {
+                                  if (
+                                    !Meteor.user().orgId &&
+                                    !['solo_monthly', 'solo_yearly'].includes(
+                                      Meteor.user().planType
+                                    )
+                                  ) {
+                                    const intendState = slate.options?.isPublic
+                                      ? 'private'
+                                      : 'public'
+                                    const result = await confirmService.show({
+                                      theme,
+                                      title: `Manage Slate Privacy`,
+                                      message:
+                                        'In order to share with your team, you have to first create one. Otherwise you can simply change the privacy below.',
+                                      actionItems: [
+                                        {
+                                          label: 'Create my team',
+                                          return: 'team',
+                                        },
+                                        {
+                                          label: `Make my slate ${intendState}`,
+                                          return: intendState,
+                                        },
+                                        {
+                                          label: `Leave slate ${
+                                            intendState === 'private'
+                                              ? 'public'
+                                              : 'private'
+                                          }`,
+                                          return: false,
+                                        },
+                                      ],
+                                    })
+                                    if (result) {
+                                      switch (result) {
+                                        case 'private': {
+                                          const nonPublics = await promisify(
+                                            Meteor.call,
+                                            CONSTANTS.methods.slates
+                                              .getNonPublic
+                                          )
+                                          if (
+                                            nonPublics.length >=
+                                            CONSTANTS.privateSlateLimit
+                                          ) {
+                                            // past the limit, so show payment options
+                                            dispatch({
+                                              type: 'payment',
+                                              paymentOpen: true,
+                                              paymentMessage: `Upgrade to have more than ${
+                                                CONSTANTS.privateSlateLimit
+                                              } private or unlisted slates. (Current private or unlisted slates: ${nonPublics
+                                                .map((p) => p.name)
+                                                .join(', ')}.)`,
+                                              paymentFocus: `more than ${CONSTANTS.privateSlateLimit} private slates`,
+                                              paymentEmphasis: `Upgrade below.`,
+                                            })
+                                          } else {
+                                            slate.options.isPublic = false
+                                            slate.options.isPrivate = true
+                                            slate.options.isUnlisted = false
+                                            Slates.update(
+                                              { _id: slate.options.id },
+                                              {
+                                                $set: {
+                                                  'options.isPublic': false,
+                                                  'options.isPrivate': true,
+                                                  'options.isUnlisted': false,
+                                                },
+                                              }
+                                            )
+                                            dispatch({
+                                              type: 'canvas',
+                                              globalMessage: {
+                                                visible: true,
+                                                text: `You've set this slate to private`,
+                                                severity: 'info',
+                                                autoHide: 60000,
+                                              },
+                                            })
+                                          }
+                                          break
+                                        }
+                                        case 'public': {
+                                          slate.options.isPublic = true
+                                          slate.options.isPrivate = false
                                           slate.options.isUnlisted = false
                                           Slates.update(
                                             { _id: slate.options.id },
                                             {
                                               $set: {
-                                                'options.isPublic': false,
-                                                'options.isPrivate': true,
+                                                'options.isPublic': true,
+                                                'options.isPrivate': false,
                                                 'options.isUnlisted': false,
                                               },
                                             }
@@ -526,100 +583,96 @@ export default function Main() {
                                             type: 'canvas',
                                             globalMessage: {
                                               visible: true,
-                                              text: `You've set this slate to private`,
+                                              text: `You've set this slate to public`,
                                               severity: 'info',
                                               autoHide: 60000,
                                             },
                                           })
+                                          break
                                         }
-                                        break
+                                        case 'team': {
+                                          history.push('/team')
+                                          break
+                                        }
+                                        default:
+                                          break
                                       }
-                                      case 'public': {
-                                        slate.options.isPublic = true
-                                        slate.options.isPrivate = false
-                                        slate.options.isUnlisted = false
-                                        Slates.update(
-                                          { _id: slate.options.id },
-                                          {
-                                            $set: {
-                                              'options.isPublic': true,
-                                              'options.isPrivate': false,
-                                              'options.isUnlisted': false,
-                                            },
-                                          }
-                                        )
-                                        dispatch({
-                                          type: 'canvas',
-                                          globalMessage: {
-                                            visible: true,
-                                            text: `You've set this slate to public`,
-                                            severity: 'info',
-                                            autoHide: 60000,
-                                          },
-                                        })
-                                        break
-                                      }
-                                      case 'team': {
-                                        history.push('/team')
-                                        break
-                                      }
-                                      default:
-                                        break
                                     }
+                                  } else {
+                                    dispatch({
+                                      type: 'canvas',
+                                      openShareDialog: !openShareDialog,
+                                    })
                                   }
-                                } else {
-                                  dispatch({
-                                    type: 'canvas',
-                                    openShareDialog: !openShareDialog,
-                                  })
-                                }
-                              }}
-                              startIcon={<ShareIcon />}
-                            >
-                              {xlmq && <>Privacy &amp; Sharing</>}
-                            </Button>
-                          </Tooltip>
-                        )}
-                      {canManageSlate &&
-                        slate &&
-                        !slate.options.eligibleForThemeCompilation && (
-                          <Tooltip title={xlmq ? '' : 'Snapshots'}>
+                                }}
+                                startIcon={<ShareIcon />}
+                              >
+                                {xlmq && <>Privacy &amp; Sharing</>}
+                              </Button>
+                            </Tooltip>
+                          )}
+                        {canManageSlate &&
+                          slate &&
+                          !slate.options.eligibleForThemeCompilation && (
+                            <Tooltip title={xlmq ? '' : 'Snapshots'}>
+                              <Button
+                                variant="contained"
+                                color="secondary"
+                                className={classes.button}
+                                onClick={handleSnapshots}
+                                startIcon={<HistoryIcon />}
+                              >
+                                {xlmq && <>Snapshots</>}
+                              </Button>
+                            </Tooltip>
+                          )}
+                        {canManageSlate && slate && (
+                          <Tooltip title={xlmq ? '' : 'Chat'}>
                             <Button
                               variant="contained"
                               color="secondary"
                               className={classes.button}
-                              onClick={handleSnapshots}
-                              startIcon={<HistoryIcon />}
+                              onClick={handleChat}
+                              startIcon={
+                                slateHasMessages ? (
+                                  <Badge variant="dot" color="primary">
+                                    <ChatIcon />
+                                  </Badge>
+                                ) : (
+                                  <ChatIcon />
+                                )
+                              }
                             >
-                              {xlmq && <>Snapshots</>}
+                              {xlmq && <>Chat</>}
                             </Button>
                           </Tooltip>
                         )}
-                    </ButtonGroup>
-                  </Grid>
-                )}
-                <Grid item>
-                  <Grid container>
-                    <Grid item>{userName !== '' && <ProfileMenu />}</Grid>
-                    <Grid item>{userName !== '' && <MessagesMenu />}</Grid>
-                    <Grid item>
-                      {userName !== '' && mdmq && (
-                        <IconButton
-                          edge="start"
-                          color="inherit"
-                          aria-label="contact support"
-                          onClick={handleSupport}
-                        >
-                          <ContactSupportIcon />
-                        </IconButton>
-                      )}
+                      </ButtonGroup>
+                    </Grid>
+                  )}
+                  <Grid item>
+                    <Grid container>
+                      <Grid item>{userName !== '' && <ProfileMenu />}</Grid>
+                      <Grid item>{userName !== '' && <MessagesMenu />}</Grid>
+                      <Grid item>
+                        {userName !== '' && mdmq && (
+                          <IconButton
+                            edge="start"
+                            color="inherit"
+                            aria-label="contact support"
+                            onClick={handleSupport}
+                          >
+                            <ContactSupportIcon />
+                          </IconButton>
+                        )}
+                      </Grid>
                     </Grid>
                   </Grid>
                 </Grid>
-              </Grid>
-            </Toolbar>
-          </AppBar>
-          {Meteor.user() && (
+              </Toolbar>
+            </AppBar>
+          )}
+          {Meteor.user() && !embeddedSlate && (
             <SwipeableDrawer
               variant="permanent"
               classes={{
@@ -735,7 +788,9 @@ export default function Main() {
             </SwipeableDrawer>
           )}
           <main className={classes.content}>
-            <div className={clsx(classes.appBarSpacer)} />
+            <div
+              className={embeddedSlate ? null : clsx(classes.appBarSpacer)}
+            />
             <Routes />
             <Register user={loadedUser} />
             <Payment user={loadedUser} />

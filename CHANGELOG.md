@@ -4,6 +4,50 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.9.9] - 2022-03-16
+
+### Added
+
+### Changed
+
+- Adjusting tweaks for streamy DDP
+
+## [0.9.6] - 2022-03-16
+
+### Added
+
+### Changed
+
+- Tweaks for streamy DDP
+
+## [0.9.5] - 2022-03-16
+
+### Added
+
+### Changed
+
+- Fixed dns name to include port 3000 for streamy
+
+## [0.9.4] - 2022-03-16
+
+### Added
+
+### Changed
+
+- Changed chat so an empty message isn't broadcast
+- Updated streamy broadcasts to use dns names instead of IP
+
+## [0.9.3] - 2022-03-16
+
+### Added
+
+- Added chat during collaboration
+- Added follow me mode for slate canvas and zoom syncing during collaboration
+
+### Changed
+
+- Fixes for remote cursor position
+
 ## [0.9.2] - 2022-03-08
 
 ### Added

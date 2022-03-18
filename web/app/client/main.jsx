@@ -1,6 +1,7 @@
 /* eslint-disable no-underscore-dangle */
 import React from 'react'
 import { Provider } from 'react-redux'
+import { Log } from 'meteor/logging'
 import { Meteor } from 'meteor/meteor'
 import { render } from 'react-dom'
 import has from 'lodash.has'
@@ -22,10 +23,10 @@ Meteor.startup(() => {
   )
 
   // swallow debug messages
-  Meteor._debug = (function (super_meteor_debug) {
+  Meteor._debug = (function (superMeteorDebug) {
     return function (error, info) {
-      if (!(info && has(info, 'msg'))) {
-        super_meteor_debug(error, info)
+      if (error !== 'discarding unknown livedata message type') {
+        superMeteorDebug(error, info)
       }
     }
   })(Meteor._debug)

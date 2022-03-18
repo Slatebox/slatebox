@@ -50,9 +50,22 @@ Meteor.publish(CONSTANTS.publications.shareableSlate, (slateId) => {
   return null
 })
 
-Meteor.publish(CONSTANTS.publications.messages, function () {
+Meteor.publish(CONSTANTS.publications.messages, function (opts) {
   if (this.userId) {
-    return Messages.find({ userId: this.userId }, { sort: { timestamp: -1 } })
+    let msearch = { type: opts.type }
+    switch (opts.type) {
+      case CONSTANTS.messageTypes.system: {
+        msearch = { ...msearch, userId: this.userId }
+        break
+      }
+      case CONSTANTS.messageTypes.chat:
+      default: {
+        msearch = { ...msearch, slateShareId: opts.slateShareId }
+        break
+      }
+    }
+    console.log('getting messages ', msearch, Messages.find(msearch).count())
+    return Messages.find(msearch, { sort: { timestamp: -1 } })
   }
   return null
 })
