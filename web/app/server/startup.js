@@ -71,15 +71,12 @@ Meteor.startup(() => {
   const connection = DDP.connect(host) // always use internal for ddp
   const streamyConnection = new Streamy.Connection(connection)
 
-  console.log('connecting to ', host, connection)
-
   // Attach message handlers
   connection._stream.on('message', (data) => {
     const parsedData = JSON.parse(data)
     if (!parsedData.ips) {
       parsedData.ips = []
     }
-    console.log('parsedData ips', parsedData.ips)
     if (!parsedData.ips.includes(ownIp) && parsedData.msg) {
       // Retrieve the msg value
       const { msg } = parsedData
