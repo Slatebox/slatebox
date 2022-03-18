@@ -83,7 +83,7 @@ Meteor.startup(() => {
       // And dismiss it
       delete parsedData.msg
 
-      parsedData.processed = true
+      // parsedData.processed = true
       // now we have it FROM the foreign server, so broadcast it on the LOCAL server
       if (msg.indexOf('streamy$') > -1) {
         const slateId = msg.split('streamy$')[1]
