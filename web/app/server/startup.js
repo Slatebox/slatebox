@@ -60,11 +60,11 @@ Meteor.startup(() => {
   //     if (s.internal !== ownIp && s.active) {
   let host = ''
   if (Meteor.settings.env === 'prod') {
-    host = 'slatebox-prod-service:3000'
+    host = 'slatebox-prod-service'
   } else if (Meteor.settings.env === 'test') {
-    host = 'slatebox-test-service:3000'
+    host = 'slatebox-test-service'
   } else if (Meteor.settings.env === 'stage') {
-    host = 'slatebox-stage-service:3000'
+    host = 'slatebox-stage-service'
   } else if (Meteor.settings.env === 'dev') {
     host = 'localhost:3000'
   }
@@ -83,7 +83,7 @@ Meteor.startup(() => {
       // And dismiss it
       delete parsedData.msg
 
-      parsedData.processed = true
+      // parsedData.processed = true
       // now we have it FROM the foreign server, so broadcast it on the LOCAL server
       if (msg.indexOf('streamy$') > -1) {
         const slateId = msg.split('streamy$')[1]
