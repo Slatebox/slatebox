@@ -4,7 +4,7 @@ import { Meteor } from 'meteor/meteor'
 import { DDP } from 'meteor/ddp-client'
 // import { Log } from 'meteor/logging'
 import { Accounts } from 'meteor/accounts-base'
-// import ip from 'ip'
+import ip from 'ip'
 // import { Servers } from '../imports/api/common/models'
 import setup from './email/setup'
 import './bootstrap/all'
@@ -13,7 +13,7 @@ Meteor.startup(() => {
   // setup mail
   setup()
 
-  // const ownIp = ip.address()
+  const ownIp = ip.address()
 
   // swallow debug messages
   Meteor._debug = (function (superMeteorDebug) {
@@ -76,14 +76,17 @@ Meteor.startup(() => {
   // Attach message handlers
   connection._stream.on('message', (data) => {
     const parsedData = JSON.parse(data)
-    if (!parsedData.processed && parsedData.msg) {
+    if (!parsedData.ips) {
+      parsedData.ips = []
+    }
+    console.log('parsedData ips', parsedData.ips)
+    if (!parsedData.ips.includes(ownIp) && parsedData.msg) {
       // Retrieve the msg value
       const { msg } = parsedData
       // parsedData.__fromServer = s.host
       // And dismiss it
       delete parsedData.msg
-
-      // parsedData.processed = true
+      parsedData.ips.push(ownIp)
       // now we have it FROM the foreign server, so broadcast it on the LOCAL server
       if (msg.indexOf('streamy$') > -1) {
         const slateId = msg.split('streamy$')[1]
