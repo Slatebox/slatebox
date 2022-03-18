@@ -59,13 +59,13 @@ Meteor.startup(() => {
   //     // this is a server proxy for Streamy to push from other web servers to the client
   //     if (s.internal !== ownIp && s.active) {
   let host = ''
-  if (Meteor.settings.env === 'prod') {
+  if (Meteor.settings.public.env === 'prod') {
     host = 'slatebox-prod-service'
-  } else if (Meteor.settings.env === 'test') {
+  } else if (Meteor.settings.public.env === 'test') {
     host = 'slatebox-test-service'
-  } else if (Meteor.settings.env === 'stage') {
+  } else if (Meteor.settings.public.env === 'stage') {
     host = 'slatebox-stage-service'
-  } else if (Meteor.settings.env === 'dev') {
+  } else if (Meteor.settings.public.env === 'dev') {
     host = 'localhost:3000'
   }
   const connection = DDP.connect(host) // always use internal for ddp
@@ -83,7 +83,7 @@ Meteor.startup(() => {
       // And dismiss it
       delete parsedData.msg
 
-      // parsedData.processed = true
+      parsedData.processed = true
       // now we have it FROM the foreign server, so broadcast it on the LOCAL server
       if (msg.indexOf('streamy$') > -1) {
         const slateId = msg.split('streamy$')[1]
