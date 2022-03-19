@@ -1,1 +1,0 @@
-https://meta.wikimedia.org/wiki/Learning_and_Evaluation/Logic_models#/media/File:Wiki_exampled_Logic_Model.png

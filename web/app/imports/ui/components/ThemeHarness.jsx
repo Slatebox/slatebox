@@ -5,7 +5,7 @@ import Box from '@material-ui/core/Box'
 import PropTypes from 'prop-types'
 import { makeStyles } from '@material-ui/core/styles'
 import React, { useEffect } from 'react'
-import { Slatebox } from 'slatebox'
+import { Slatebox } from 'slateboxjs'
 
 const useStyles = makeStyles(() => ({
   slateTheme: {

@@ -267,14 +267,7 @@ method[CONSTANTS.methods.slates.get] = async (opts) => {
 method[CONSTANTS.methods.slates.getEmbedCode] = async (opts) => {
   if (Meteor.userId()) {
     const { baseUrl } = Meteor.settings.public
-    const orgName = Meteor.user().orgId
-      ? Organizations.findOne(Meteor.user().orgId).name
-      : ''
-    const url = [
-      baseUrl,
-      orgName,
-      '/snap/{{id}}/{{size}}?share={{share}}',
-    ].join('')
+    const url = `${baseUrl}/canvas/${opts.slateId}/all/true`
 
     const multiplier =
       opts.size / Math.max(opts.orient.width, opts.orient.height)
@@ -283,7 +276,7 @@ method[CONSTANTS.methods.slates.getEmbedCode] = async (opts) => {
 
     const base = {
       non: "<div id='sb_embed_{{id}}'><div id='slate_{{id}}' style='width:{{width}}px;height:{{height}}px;'></div><script>(function(w) { var a = 0, _deps = [{t: 'Slatebox', u: '//static.slatebox.com/2.0.0/slatebox.min'}], ck = function() { if (a === 1) { window.onload = function(e) { var ll = document.createElement('link'); ll.rel='stylesheet'; ll.type='text/css'; ll.href='//static.slatebox.com/2.0.0/slatebox.min.css'; document.head.appendChild(ll); var _slate = new Slatebox().slate({ container: 'slate_{{id}}', viewPort:{allowDrag:false},showBirdsEye:false,showZoom:false,showMultiSelect:false,showUndoRedo:false,showAddNodes:false,isEmbedding:true,showLocks:false,isSharing:{{share}}}); _slate.init(); Slatebox.getJSON('{{slateboxUrl}}/api/slates/?id={{id}}&callback=?', function(_json) { _slate.loadJSON(JSON.stringify(_json[0])); _slate.controller.scaleToFitAndCenter(); _slate.disable(); }); } } }; for(dx in _deps) { d = _deps[dx]; if (!w[d.t]) { var sc = document.createElement('script'); sc.src = d.u; sc.async = true; sc.onload = sc.onreadystatechange = function () { var state = sc.readyState; if (!state || /loaded|complete/.test(state)) { a++; ck(); } }; document.head.appendChild(sc); } else { a++; ck(); } }; })(window);</script></div>",
-      iframe: `<iframe id='sb_embed_{{id}}' src='${url}' width='{{width}}' height='{{height}}' frameborder='0' scrolling='no'></iframe>`,
+      iframe: `<iframe id='sb_embed_{{id}}' src='${url}' width='100%' height='100%' frameborder='0' scrolling='no' style="overflow:hidden;overflow-x:hidden;overflow-y:hidden;height:100%;width:100%;position:absolute;top:0px;left:0px;right:0px;bottom:0px"></iframe>`,
     }
 
     const _templates = {

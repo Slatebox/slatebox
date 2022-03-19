@@ -4,7 +4,7 @@ import PropTypes from 'prop-types'
 import { makeStyles } from '@material-ui/core/styles'
 import NearMeIcon from '@material-ui/icons/NearMe'
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles(() => ({
   rotateIcon: {
     transform: 'rotate(270deg)',
   },
@@ -18,16 +18,6 @@ export default function RemoteCursor({
   left,
 }) {
   const classes = useStyles()
-
-  // let secondsToExpire = 10;
-
-  // useEffect(() => {
-  //   this.setInterval(() => {
-  //     if ((new Date().valueOf() - dateLastMoved)/1000 > secondsToExpire) {
-  //       onExpiration(dataKey);
-  //     }
-  //   }, 5000);
-  // }, [])
 
   return (
     <div

@@ -11,6 +11,7 @@ if (false) {
   import '../../../both/i18n/en-us/slates.i18n.json'
   import '../../../both/i18n/en-us/nodeDrawer.i18n.json'
   import '../../../both/i18n/en-us/profile.i18n.json'
+  import '../../../both/i18n/en-us/chat.i18n.json'
   import '../../../both/i18n/en-us/teamSettings.i18n.json'
 }
 
@@ -24,6 +25,7 @@ export default function Translation({ children }) {
     await import(`../../../both/i18n/${loc.toLowerCase()}/slates.i18n.json`)
     await import(`../../../both/i18n/${loc.toLowerCase()}/nodeDrawer.i18n.json`)
     await import(`../../../both/i18n/${loc.toLowerCase()}/profile.i18n.json`)
+    await import(`../../../both/i18n/${loc.toLowerCase()}/chat.i18n.json`)
     await import(
       `../../../both/i18n/${loc.toLowerCase()}/teamSettings.i18n.json`
     )

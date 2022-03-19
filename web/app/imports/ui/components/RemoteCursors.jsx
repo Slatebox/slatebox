@@ -1,10 +1,11 @@
 /* eslint-disable no-undef */
 // Streamy is global, so no import needed
 import React, { useEffect, useRef } from 'react'
+import { useSelector } from 'react-redux'
 import PropTypes from 'prop-types'
 import Grid from '@material-ui/core/Grid'
+import { Slatebox } from 'slateboxjs'
 import RemoteCursor from './RemoteCursor'
-import { Slatebox } from 'slatebox'
 
 export default function RemoteCursors({
   shareId,
@@ -12,60 +13,78 @@ export default function RemoteCursors({
   backgroundColor,
   children,
 }) {
-  // let tracked = 0;
   const [remoteCursors, setCursors] = React.useState({})
   const cursorParent = useRef(null)
   const trackCursorTimes = useRef({})
-
-  // const handleExpiration = function(key) {
-  //   const delCursors = Object.assign({}, remoteCursors);
-  //   delete delCursors[key];
-  //   setCursors(delCursors);
-  // }
-
-  const secondsToExpire = 10
-  // useEffect(() => {
-  //   setInterval(() => {
-  //     Object.keys(trackCursorTimes).forEach(k => {
-  //       if ((new Date().valueOf() - trackCursorTimes.current[k])/1000 > secondsToExpire) {
-  //         const delCursors = Object.assign({}, remoteCursors);
-  //         delete delCursors[k];
-  //         setCursors(delCursors);
-  //       }
-  //     });
-  //   }, 1000);
-  // }, []);
+  const embeddedSlate = useSelector((state) => state.embeddedSlate)
+  const slate = useSelector((state) => state.slate)
 
   useEffect(() => {
     const hexColors = Slatebox.utils.availColors.map((a) => a.hex)
     const foreColors = Slatebox.utils.availColors.map((a) => a.fore)
+    let canvasPos = null
+
+    function wireObserver() {
+      const ele = document.getElementsByClassName('sb_canvas')[0]
+      canvasPos = Slatebox.utils.positionedOffset(ele)
+
+      const observer = new MutationObserver(() => {
+        canvasPos = Slatebox.utils.positionedOffset(ele)
+      })
+
+      observer.observe(ele, {
+        attributes: true,
+        childList: false,
+        subtree: false,
+      })
+    }
+
+    // Later, you can stop observing
+    // observer.disconnect()
+
+    window.setInterval(() => {
+      const newCursors = { ...remoteCursors }
+      Object.keys(remoteCursors).forEach((key) => {
+        if (new Date().valueOf() - trackCursorTimes.current[key] > 1000 * 9) {
+          delete newCursors[key]
+        }
+      })
+      setCursors(newCursors)
+    }, 1000 * 10)
+
     Streamy.on(shareId, (d) => {
       if (d.data.instanceId !== instanceId) {
         switch (d.data.type) {
           case 'onMouseMoved': {
             // tracked++;
             // if (tracked % 5 === 0) {
+            if (!canvasPos) {
+              wireObserver()
+            }
             const cursors = { ...remoteCursors }
             const key = `${d.data.userId}_${d.data.instanceId}`
             if (!cursors[key]) {
-              trackCursorTimes.current[key] = { expTrigger: null, last: -1 }
+              trackCursorTimes.current[key] = new Date().valueOf()
               const ind = Object.keys(cursors).length
               cursors[key] = {
                 dataKey: key,
                 userName: d.data.userName,
                 bgColor: `#${hexColors[ind]}` || '#fff',
                 fgColor: `#${foreColors[ind]}` || '#000',
-                // onExpiration: handleExpiration
               }
             }
-            cursors[key].top = d.data.data.y
-            cursors[key].left = d.data.data.x
-            clearTimeout(trackCursorTimes.current[key].expTrigger)
-            trackCursorTimes.current[key].expTrigger = setTimeout(() => {
-              const delCursors = { ...remoteCursors }
-              delete delCursors[key]
-              setCursors(delCursors)
-            }, 1000 * secondsToExpire)
+            const multiplier =
+              slate.options.viewPort.zoom.r / d.data.data.currentZoom
+
+            cursors[key].top =
+              d.data.data.y * multiplier +
+              d.data.data.top * multiplier -
+              Math.abs(canvasPos.top)
+            cursors[key].left =
+              d.data.data.x * multiplier +
+              d.data.data.left * multiplier -
+              Math.abs(canvasPos.left)
+
             setCursors(cursors)
             break
           }
@@ -77,16 +96,13 @@ export default function RemoteCursors({
     })
   }, [shareId, instanceId])
 
+  const gstyle = embeddedSlate
+    ? { backgroundColor, height: '100%' }
+    : { height: 'calc(100% - 64px)', backgroundColor }
+
   // 64px is the height of the header
   return (
-    <Grid
-      ref={cursorParent}
-      container
-      style={{
-        height: 'calc(100% - 64px)',
-        backgroundColor,
-      }}
-    >
+    <Grid ref={cursorParent} container style={gstyle}>
       {Object.keys(remoteCursors).map((cursor) => (
         <RemoteCursor key={cursor} {...remoteCursors[cursor]} />
       ))}

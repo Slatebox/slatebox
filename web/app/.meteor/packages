@@ -25,7 +25,7 @@ react-meteor-data # React higher-order component for reactively tracking Meteor 
 
 accounts-base@2.2.1
 accounts-password@2.2.0
-yuukan:streamy
+yuukan:streamy@1.4.2
 http@2.0.0-rc230.2
 universe:i18n
 dynamic-import@0.7.2

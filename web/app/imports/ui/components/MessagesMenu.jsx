@@ -21,7 +21,7 @@ import Box from '@material-ui/core/Box'
 import promisify from '../../api/client/promisify'
 import CONSTANTS from '../../api/common/constants'
 import { Messages } from '../../api/common/models'
-import confirmService from '../../ui/common/confirm'
+import confirmService from '../common/confirm'
 
 export default function MessagesMenu() {
   const theme = useTheme()
