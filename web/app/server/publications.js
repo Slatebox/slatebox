@@ -63,7 +63,6 @@ Meteor.publish(CONSTANTS.publications.messages, function (opts) {
         break
       }
     }
-    console.log('getting messages ', msearch, Messages.find(msearch).count())
     return Messages.find(msearch, { sort: { timestamp: -1 } })
   }
   return null
