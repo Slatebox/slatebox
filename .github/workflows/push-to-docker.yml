@@ -20,9 +20,9 @@ jobs:
       - name: Docker Build and Push, Kubernetes apply
         run: |
           cd ./web
-          docker build --tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:{{ github.ref_name }} .
-          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:{{ github.ref_name }}
-          docker tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:{{ github.ref_name }} ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:latest
+          docker build --tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:${{ github.ref_name }} .
+          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:${{ github.ref_name }}
+          docker tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:${{ github.ref_name }} ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:latest
           docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:latest
   Release:
     name: Release
