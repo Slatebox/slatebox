@@ -52,6 +52,7 @@ import { Chip, Tooltip, useMediaQuery } from '@material-ui/core'
 import Routes from './Routes'
 
 import ChatWootConfig from './components/ChatWootConfig'
+import ConnectionStatus from './components/ConnectionStatus'
 import MessageListener from './components/MessageListener'
 import CONSTANTS from '../api/common/constants'
 import ProfileMenu from './components/ProfileMenu'
@@ -153,8 +154,6 @@ export default function Main() {
       }).count() > 0
     )
   })
-
-  console.log('slatehasmessages', slateHasMessages)
 
   const slateAccess = useTracker(() => {
     Meteor.subscribe(CONSTANTS.publications.slateAccess, {})
@@ -816,6 +815,7 @@ export default function Main() {
             setSnapshotOpen(false)
           }}
         />
+        <ConnectionStatus />
       </ThemeProvider>
     </>
   )
