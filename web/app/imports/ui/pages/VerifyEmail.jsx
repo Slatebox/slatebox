@@ -14,6 +14,7 @@ import CircularProgress from '@material-ui/core/CircularProgress'
 import Grid from '@material-ui/core/Grid'
 import Link from '@material-ui/core/Link'
 import { Messages } from '../../api/common/models'
+import CONSTANTS from '../../api/common/constants'
 
 const useStyles = makeStyles((theme) => ({
   paper: {
@@ -70,6 +71,7 @@ export default function VerifyEmail() {
           title: 'Email Verified',
           text: `Hooray, you've verified your email!`,
           read: false,
+          type: CONSTANTS.messageTypes.system,
           priority: 10,
         })
       } else if (err) {

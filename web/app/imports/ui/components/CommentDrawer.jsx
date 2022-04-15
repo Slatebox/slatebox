@@ -236,6 +236,7 @@ export default function CommentDrawer({
           priority: 5,
           slateId,
           nodeId,
+          type: CONSTANTS.messageTypes.system,
           action: {
             type: CONSTANTS.messageActionTypes.slate,
             toolTip: `Go to the slate to reply to this comment`,

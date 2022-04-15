@@ -143,16 +143,19 @@ export default function Main() {
   // Cohere.init(Meteor.settings.public.cohereKey);
 
   const slateHasMessages = useTracker(() => {
-    Meteor.subscribe(CONSTANTS.publications.messages, {
-      type: CONSTANTS.messageTypes.chat,
-      slateShareId: slate?.shareId,
-    })
-    return (
-      Messages.find({
+    if (slate?.shareId) {
+      Meteor.subscribe(CONSTANTS.publications.messages, {
         type: CONSTANTS.messageTypes.chat,
         slateShareId: slate?.shareId,
-      }).count() > 0
-    )
+      })
+      return (
+        Messages.find({
+          type: CONSTANTS.messageTypes.chat,
+          slateShareId: slate?.shareId,
+        }).count() > 0
+      )
+    }
+    return false
   })
 
   const slateAccess = useTracker(() => {

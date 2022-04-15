@@ -4,6 +4,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.9.11] - 2022-04-14
+
+### Added
+
+### Changed
+
+- Messages cleanup, explicit system v chat checks
+
 ## [0.9.10] - 2022-04-14
 
 ### Added

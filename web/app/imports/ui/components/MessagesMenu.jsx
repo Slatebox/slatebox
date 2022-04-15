@@ -26,7 +26,10 @@ import confirmService from '../common/confirm'
 export default function MessagesMenu() {
   const theme = useTheme()
   const messages = useTracker(() =>
-    Messages.find({}, { sort: { timestamp: -1 } }).fetch()
+    Messages.find(
+      { type: CONSTANTS.messageTypes.system },
+      { sort: { timestamp: -1 } }
+    ).fetch()
   )
 
   const [anchorEl, setAnchorEl] = React.useState(null)
@@ -180,22 +183,36 @@ export default function MessagesMenu() {
         }}
         style={{ marginTop: '10px' }}
       >
-        {messages.map((message) => (
+        {messages.length > 0 ? (
+          <>
+            {messages.map((message) => (
+              <MenuItem
+                key={message.timestamp}
+                onClick={handleClose}
+                style={{ whiteSpace: 'normal', width: '500px' }}
+              >
+                <ListItemIcon>
+                  {message.priority === 10 ? (
+                    <AnnouncementIcon fontSize="small" />
+                  ) : (
+                    <InfoIcon fontSize="small" />
+                  )}
+                </ListItemIcon>
+                <RenderMessage message={message} />
+              </MenuItem>
+            ))}
+          </>
+        ) : (
           <MenuItem
-            key={message.timestamp}
             onClick={handleClose}
             style={{ whiteSpace: 'normal', width: '500px' }}
           >
             <ListItemIcon>
-              {message.priority === 10 ? (
-                <AnnouncementIcon fontSize="small" />
-              ) : (
-                <InfoIcon fontSize="small" />
-              )}
+              <InfoIcon fontSize="small" />
             </ListItemIcon>
-            <RenderMessage message={message} />
+            <Typography variant="body2">You have no notifications!</Typography>
           </MenuItem>
-        ))}
+        )}
       </Menu>
     </>
   )

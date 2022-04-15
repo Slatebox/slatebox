@@ -9,6 +9,7 @@ import {
   Organizations,
   PricingTiers,
 } from '../imports/api/common/models'
+import CONSTANTS from '../imports/api/common/constants'
 
 const posts = Picker.filter(
   Meteor.bindEnvironment((req) => req.method === 'POST')
@@ -55,6 +56,7 @@ posts.route('/hooks', (params, req, res) => {
             text: `Your subscription to the ${entity.planType} has been canceled. You're now on the forever free plan, but you can upgrade anytime in your account`,
             read: false,
             priority: 10,
+            type: CONSTANTS.messageTypes.system,
           })
           if (tier.requiresOrgId) {
             Organizations.update(
@@ -130,6 +132,7 @@ posts.route('/hooks', (params, req, res) => {
               title: `Subscription Plan Paused`,
               text: `Your subscription to the ${planType} is paused. You can restart it anytime in your account. In the meantime, you are on the forever free plan.`,
               read: false,
+              type: CONSTANTS.messageTypes.system,
               priority: 10,
             })
           } else if (stripeEvent.data.object.cancel_at_period_end) {
@@ -148,6 +151,7 @@ posts.route('/hooks', (params, req, res) => {
               title: `Subscription Cancellation`,
               text: `Your subscription is set to cancel on ${update.$set.setToCancelOn}. You still have full access on the ${planType} plan until then. At that time you'll be downgraded to the forever free plan.`,
               read: false,
+              type: CONSTANTS.messageTypes.system,
               priority: 10,
             })
           } else if (
@@ -162,6 +166,7 @@ posts.route('/hooks', (params, req, res) => {
               text: `Welcome back! You have successfully reactivated the ${planType} plan!`,
               read: false,
               priority: 10,
+              type: CONSTANTS.messageTypes.system,
               effect: 'celebrate',
             })
             update.$set.resubscribed = true
@@ -238,6 +243,7 @@ posts.route('/hooks', (params, req, res) => {
             text: tier.welcomeMessage,
             read: false,
             priority: 10,
+            type: CONSTANTS.messageTypes.system,
             effect: 'celebrate',
           })
         }
