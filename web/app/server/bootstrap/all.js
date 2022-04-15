@@ -114,8 +114,8 @@ const saasTiers = [
     _id: 'solo',
     isSolo: true,
     monthly: {
-      priceId: 'solo_monthly',
-      price: 5,
+      priceId: 'price_0Kodbg0kGBdxtSKoEpnTO5hD',
+      price: 4,
     },
     yearly: {
       priceId: 'solo_yearly',
@@ -144,12 +144,12 @@ const saasTiers = [
     requiresOrgId: true,
     useForProOrgGuestViewCount: true,
     monthly: {
-      priceId: 'team_monthly',
-      price: 7,
+      priceId: 'price_0KodYY0kGBdxtSKoPwT6nXf5',
+      price: 4,
     },
     yearly: {
-      priceId: 'team_yearly',
-      price: 5,
+      priceId: 'price_0KodZr0kGBdxtSKoK9wdfH0g',
+      price: 3,
     },
     description: [
       'Unlimited PRIVATE slates',

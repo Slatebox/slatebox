@@ -296,7 +296,7 @@ export default function Payment() {
               color="secondary"
               gutterBottom
             >
-              Pricing
+              <b>Special Launch</b> Pricing
             </Typography>
             <Typography
               variant="h5"
@@ -337,7 +337,7 @@ export default function Payment() {
                   </Grid>
                   <Grid item xs={12}>
                     <Typography color="secondary">
-                      <b>Save 28%</b>
+                      <b>Save 25%</b>
                     </Typography>
                   </Grid>
                 </Grid>
