@@ -54,7 +54,6 @@ export default function SlateColors({ onChange }) {
           { type: bgStrategy, base: selectedColor }
         )
         bgGradientColors.current = palette.slice(0, gradientColorCount)
-        console.log('bgcolors', bgGradientColors)
       }
       const payload = {
         color: selectedColor,

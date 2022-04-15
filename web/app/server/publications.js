@@ -52,15 +52,15 @@ Meteor.publish(CONSTANTS.publications.shareableSlate, (slateId) => {
 
 Meteor.publish(CONSTANTS.publications.messages, function (opts) {
   if (this.userId) {
-    let msearch = { type: opts.type }
+    const msearch = { type: opts.type }
     switch (opts.type) {
       case CONSTANTS.messageTypes.system: {
-        msearch = { ...msearch, userId: this.userId }
+        msearch.userId = this.userId
         break
       }
       case CONSTANTS.messageTypes.chat:
       default: {
-        msearch = { ...msearch, slateShareId: opts.slateShareId }
+        msearch.slateShareId = opts.slateShareId
         break
       }
     }
