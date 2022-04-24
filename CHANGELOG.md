@@ -4,6 +4,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.10.0] - 2022-04-24
+
+### Added
+
+- Google Doc Integration
+
+### Changed
+
+- Fixed bug with node behavior
+- Fixed bug with focus during add text only node
+
 ## [0.9.11] - 2022-04-14
 
 ### Added
