@@ -13,6 +13,7 @@ import './methods/chatWoot'
 import './methods/comments'
 import './methods/messages'
 import './methods/stripe'
+import './methods/googleDocs'
 
 // stripe hooks
 import './stripeHooks'

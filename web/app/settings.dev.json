@@ -16,6 +16,11 @@
     "raceDetection": true,
     "debug": true
   },
+  "aws": {
+    "secretKey": "WG7p7NOJYvA/ZzlTZeWzznW8ltqOInqblR47wtL6",
+    "accessKey": "AKIA4RBV65MYOW7VF3XP",
+    "imageBucket": "slatebox-images"
+  },
   "nounProject": {
     "key": "1cc0ae21b6964d71b9eb8108fa39f3e9",
     "secret": "605d66d9390a4ffa82e3df0855ad033b"
@@ -25,6 +30,18 @@
   },
   "chatWoot": {
     "userIdentityValidationToken": "aegPcCX4owZTpinKfd8QBQgx"
+  },
+  "googleDocs": {
+    "web": {
+      "client_id": "1021091009743-ovb18juovbao09rf00klf1qvfk7tekbs.apps.googleusercontent.com",
+      "project_id": "slatebox-docs-integration",
+      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+      "token_uri": "https://oauth2.googleapis.com/token",
+      "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+      "client_secret": "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",
+      "redirect_uris": ["http://localhost:3000"],
+      "javascript_origins": ["http://localhost:3000"]
+    }
   },
   "stripePrivateKey": "ROJ2x7cOig89e5sxBhdBKxbGsCNUnaV8",
   "public": {

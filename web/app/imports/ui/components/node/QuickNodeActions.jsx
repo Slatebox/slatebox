@@ -163,7 +163,7 @@ export default function QuickNodeActions({
       nodeOpts.textOpacity = 1
       nodeOpts.foregroundColor = '#000'
       nodeOpts.fontSize = nodeOpts.fontSize < 20 ? 20 : nodeOpts.fontSize
-      dispatch({ type: 'nodedrawer', drawerTab: 1 })
+      dispatch({ type: 'nodedrawer', drawerTab: 0 })
     } else if (shape.key === 'searchCustom') {
       nodeOpts = setDimens(`T${xPos + 100},${yPos}s10,10`)
       nodeOpts.opacity = 0
