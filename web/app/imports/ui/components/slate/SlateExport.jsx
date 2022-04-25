@@ -32,7 +32,6 @@ export default function SlateExport({ onExport }) {
         Meteor.call,
         CONSTANTS.methods.googleDocs.createAuthUrl
       )
-      console.log('got url', url)
       setUrl(url)
     }
     getUrl()
@@ -71,16 +70,15 @@ export default function SlateExport({ onExport }) {
             autoHide: 10000,
           },
         })
-        onExport('svg', {}, async (opts) => {
-          console.log('sending apptoken', appToken)
+
+        onExport('png', { base64: true }, async (base64) => {
           const details = await promisify(
             Meteor.call,
             CONSTANTS.methods.googleDocs.export,
             appToken,
             slate.options.id,
-            opts.svg
+            base64
           )
-          console.log('export details', details)
 
           setLastDocUrl(
             `https://docs.google.com/document/d/${details.documentId}/edit`

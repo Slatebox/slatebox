@@ -73,22 +73,23 @@ async function uploadImage(imgBuffer, slateId) {
   })
 }
 
-method[CONSTANTS.methods.googleDocs.export] = async (token, slateId, svg) => {
+method[CONSTANTS.methods.googleDocs.export] = async (
+  token,
+  slateId,
+  pngBase64
+) => {
   if (Meteor.user()) {
     try {
+      const embed64 = pngBase64.replace('data:image/png;base64,', '').trim()
       // create the png to include in the google doc
-      const imgBuffer = await sharp(Buffer.from(svg, 'utf8'))
-        .png({ quality: 75 })
+      const imgBuffer = await sharp(Buffer.from(embed64, 'base64'))
         .toBuffer()
-
-      console.log('creating imgBuffer', imgBuffer, svg)
+        .catch((err) => console.log('err is', err))
 
       // upload image to s3 for google docs access
       const slateUrl = await uploadImage(imgBuffer, slateId)
 
       const createUrl = `https://docs.googleapis.com/v1/documents`
-
-      console.log('token is', createUrl, token)
 
       const createOptions = {
         method: 'POST',
@@ -101,14 +102,9 @@ method[CONSTANTS.methods.googleDocs.export] = async (token, slateId, svg) => {
         }),
       }
 
-      console.log('creating doc', createOptions)
-
       const createResult = await (await fetch(createUrl, createOptions)).json()
-      console.log('createResult is ', createResult)
 
       const updateUrl = `https://docs.googleapis.com/v1/documents/${createResult.documentId}:batchUpdate`
-
-      console.log('update url', updateUrl)
 
       const updateOptions = {
         method: 'POST',
@@ -128,13 +124,9 @@ method[CONSTANTS.methods.googleDocs.export] = async (token, slateId, svg) => {
         }),
       }
 
-      console.log('updateOptions', updateOptions)
-
       const updateResult = await await (
         await fetch(updateUrl, updateOptions)
       ).json()
-
-      console.log('updateResult', updateResult)
 
       Slates.update(
         { 'options.id': slateId },
