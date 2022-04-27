@@ -4,15 +4,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-## [0.10.3] - 2022-04-24
-
-### Added
-
-### Changed
-
-- Missing cloudLink param
-
-## [0.10.2] - 2022-04-24
+## [0.10.4] - 2022-04-26
 
 ### Added
 
