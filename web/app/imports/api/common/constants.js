@@ -63,6 +63,7 @@ const CONSTANTS = {
       base64StringFromRemoteUrl: 'utils.base64StringFromRemoteUrl',
       optimizeSVG: 'utils.optimizeSVG',
       createImage: 'utils.createImage',
+      getCloudLink: 'utils.getCloudLink',
     },
     stripe: {
       createSession: 'stripe.createSession',

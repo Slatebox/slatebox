@@ -804,7 +804,17 @@ export default function Main() {
           onClose={handleClose}
           autoHideDuration={globalMessage.autoHide || 10000}
         >
-          <Alert severity={globalMessage.severity}>{globalMessage.text}</Alert>
+          <Alert severity={globalMessage.severity}>
+            {globalMessage.text}
+            {globalMessage.line2 ? (
+              <>
+                <br />
+                {globalMessage.line2}
+              </>
+            ) : (
+              ''
+            )}
+          </Alert>
         </Snackbar>
         <MessageListener />
         <SlateSnapshots

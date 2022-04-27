@@ -36,7 +36,6 @@ method[CONSTANTS.methods.googleDocs.getToken] = async (code) => {
     const oAuth2Client = createGoogleOauthClient()
     try {
       const token = await oAuth2Client.getToken(code)
-      console.log('got token', token)
       return token
     } catch (err) {
       console.error('Error retrieving access token', err)
@@ -46,10 +45,13 @@ method[CONSTANTS.methods.googleDocs.getToken] = async (code) => {
   return null
 }
 
-async function uploadImage(imgBuffer, slateId) {
+async function uploadImage(imgBuffer, slateId, isSvg) {
   return new Promise((resolve, reject) => {
     const slateStream = Readable.from([imgBuffer])
-    console.log('slateStream', slateStream)
+    const file = isSvg
+      ? `${slateId}_${new Date().valueOf()}.svg`
+      : `${slateId}_${new Date().valueOf()}.png`
+    const contentType = isSvg ? 'image/svg+xml' : 'image/png'
     new streamingS3(
       slateStream,
       {
@@ -58,19 +60,49 @@ async function uploadImage(imgBuffer, slateId) {
       },
       {
         Bucket: Meteor.settings.aws.imageBucket,
-        Key: `${slateId}.png`,
-        ContentType: 'image/png',
+        Key: file,
+        ContentType: contentType,
       },
       (e) => {
         if (e) {
           reject(e)
         }
-        resolve(
-          `https://${Meteor.settings.aws.imageBucket}.s3.amazonaws.com/${slateId}.png`
-        )
+        resolve(`${Meteor.settings.aws.cloudUrl}/${file}`)
       }
     )
   })
+}
+
+method[CONSTANTS.methods.utils.getCloudLink] = async (
+  slateId,
+  imgData,
+  isSvg
+) => {
+  if (Meteor.user()) {
+    try {
+      let imgBuffer = ''
+
+      if (isSvg) {
+        imgBuffer = imgData
+      } else {
+        imgBuffer = await sharp(
+          Buffer.from(
+            imgData.replace('data:image/png;base64,', '').trim(),
+            'base64'
+          )
+        )
+          .toBuffer()
+          .catch((err) => console.log('err is', err))
+      }
+
+      // upload image to s3 for google docs access
+      const slateUrl = await uploadImage(imgBuffer, slateId, isSvg)
+      return slateUrl
+    } catch (err) {
+      return Meteor.Error(err)
+    }
+  }
+  return null
 }
 
 method[CONSTANTS.methods.googleDocs.export] = async (

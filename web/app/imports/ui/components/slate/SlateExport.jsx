@@ -9,8 +9,8 @@ import Cookies from 'js-cookie'
 import OauthPopup from 'react-oauth-popup'
 import Tooltip from '@material-ui/core/Tooltip'
 import IconButton from '@material-ui/core/IconButton'
-import TextField from '@material-ui/core/TextField'
 import OpenInNewIcon from '@material-ui/icons/OpenInNew'
+import FileCopyIcon from '@material-ui/icons/FileCopy'
 import CONSTANTS from '../../../api/common/constants'
 import promisify from '../../../api/client/promisify'
 import { Messages } from '../../../api/common/models'
@@ -25,6 +25,19 @@ export default function SlateExport({ onExport }) {
   const [storedToken, setToken] = React.useState(
     Cookies.get(CONSTANTS.googleDocsCookieToken)
   )
+
+  function msg(msg, line2) {
+    dispatch({
+      type: 'canvas',
+      globalMessage: {
+        visible: true,
+        text: msg,
+        line2,
+        severity: 'info',
+        autoHide: 10000,
+      },
+    })
+  }
 
   useEffect(() => {
     async function getUrl() {
@@ -46,7 +59,6 @@ export default function SlateExport({ onExport }) {
           `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${appToken.tokens.access_token}`
         )
       ).json()
-      console.log('valid is', valid)
       if (valid.error) {
         // global message errror
         Cookies.remove(CONSTANTS.googleDocsCookieToken)
@@ -61,15 +73,7 @@ export default function SlateExport({ onExport }) {
           },
         })
       } else {
-        dispatch({
-          type: 'canvas',
-          globalMessage: {
-            visible: true,
-            text: `Exporting to Google Docs...`,
-            severity: 'info',
-            autoHide: 10000,
-          },
-        })
+        msg(`Exporting to Google Docs...`)
 
         onExport('png', { base64: true }, async (base64) => {
           const details = await promisify(
@@ -80,9 +84,9 @@ export default function SlateExport({ onExport }) {
             base64
           )
 
-          setLastDocUrl(
-            `https://docs.google.com/document/d/${details.documentId}/edit`
-          )
+          const gDocUrl = `https://docs.google.com/document/d/${details.documentId}/edit`
+
+          setLastDocUrl(gDocUrl)
 
           // Messages.insert({
           //   timestamp: new Date().valueOf(),
@@ -94,80 +98,137 @@ export default function SlateExport({ onExport }) {
           //   priority: 10,
           // })
 
-          dispatch({
-            type: 'canvas',
-            globalMessage: {
-              visible: false,
-            },
-          })
+          msg(`Export Complete! Google Doc link copied to clipboard.`, gDocUrl)
 
-          window.open(
-            `https://docs.google.com/document/d/${details.documentId}/edit`,
-            '_blank'
-          )
+          navigator.clipboard.writeText(gDocUrl)
+
+          window.open(gDocUrl, '_blank')
         })
       }
     }
   }
 
   const onCode = async (code) => {
-    console.log('got code', code)
     const token = await promisify(
       Meteor.call,
       CONSTANTS.methods.googleDocs.getToken,
       code
     )
-    console.log('retrieved token', token)
     Cookies.set(CONSTANTS.googleDocsCookieToken, JSON.stringify(token))
     setToken(Cookies.get(CONSTANTS.googleDocsCookieToken))
     await exportGoogleDoc()
   }
 
-  const onClose = () => console.log('closed!')
-
-  const exportSVG = () => {
-    onExport('svg', {}, (opts) => {
-      const svgBlob = new Blob([opts.svg], {
-        type: 'image/svg+xml;charset=utf-8',
-      })
-      const svgUrl = URL.createObjectURL(svgBlob)
-      const dl = document.createElement('a')
-      dl.href = svgUrl
-      dl.download = `${(slate?.options.name || 'slate')
-        .replace(/[^a-z0-9]/gi, '_')
-        .toLowerCase()}_${slate?.shareId}.svg`
-      dl.click()
-    })
-  }
-
-  const exportPNG = () => {
-    onExport('png')
-  }
+  const onClose = () => {}
 
   SlateExport.propTypes = {
     onExport: PropTypes.func.isRequired,
   }
 
+  const handlePngSelection = async (index) => {
+    switch (index) {
+      case 1: {
+        msg(`Retrieving Slate PNG cloud link...one moment.`)
+        onExport('png', { base64: true }, async (base64) => {
+          const url = await promisify(
+            Meteor.call,
+            CONSTANTS.methods.utils.getCloudLink,
+            slate.options.id,
+            base64
+          )
+          navigator.clipboard.writeText(url)
+          msg(`Slatebox cloud link copied to clipboard!`, url)
+        })
+        break
+      }
+      case 0:
+      default: {
+        onExport('png')
+        break
+      }
+    }
+  }
+
+  const handleSvgSelection = async (index) => {
+    switch (index) {
+      case 1: {
+        msg(`Retrieving Slate SVG cloud...one moment.`)
+        onExport('svg', {}, async (opts) => {
+          const url = await promisify(
+            Meteor.call,
+            CONSTANTS.methods.utils.getCloudLink,
+            slate.options.id,
+            opts.svg,
+            true
+          )
+          navigator.clipboard.writeText(url)
+          msg(`Slatebox cloud link copied to clipboard!`, url)
+        })
+        break
+      }
+      case 0:
+      default: {
+        onExport('svg', {}, (opts) => {
+          const svgBlob = new Blob([opts.svg], {
+            type: 'image/svg+xml;charset=utf-8',
+          })
+          const svgUrl = URL.createObjectURL(svgBlob)
+          const dl = document.createElement('a')
+          dl.href = svgUrl
+          dl.download = `${(slate?.options.name || 'slate')
+            .replace(/[^a-z0-9]/gi, '_')
+            .toLowerCase()}_${slate?.shareId}.svg`
+          dl.click()
+        })
+        break
+      }
+    }
+  }
+
   return (
     <Grid container alignItems="flex-start" justify="space-between" spacing={2}>
-      <Grid item xs={6}>
+      <Grid item xs={2}>
+        <Tooltip title="Copy PNG Slatebox Cloud Link">
+          <IconButton
+            aria-label="copy png slatebox cloud link"
+            onClick={() => {
+              handlePngSelection(1)
+            }}
+            edge="end"
+          >
+            <FileCopyIcon />
+          </IconButton>
+        </Tooltip>
+      </Grid>
+      <Grid item xs={10}>
         <Button
           variant="outlined"
-          color="secondary"
           fullWidth
-          onClick={exportPNG}
+          onClick={(e) => handlePngSelection(0)}
         >
-          PNG
+          Download PNG
         </Button>
       </Grid>
-      <Grid item xs={6}>
+      <Grid item xs={2}>
+        <Tooltip title="Copy SVG Slatebox Cloud Link">
+          <IconButton
+            aria-label="copy svg slatebox cloud link"
+            onClick={() => {
+              handleSvgSelection(1)
+            }}
+            edge="end"
+          >
+            <FileCopyIcon />
+          </IconButton>
+        </Tooltip>
+      </Grid>
+      <Grid item xs={10}>
         <Button
           variant="outlined"
-          color="secondary"
           fullWidth
-          onClick={exportSVG}
+          onClick={(e) => handleSvgSelection(0)}
         >
-          SVG
+          Download SVG
         </Button>
       </Grid>
       {lastDocUrl && (
@@ -184,12 +245,10 @@ export default function SlateExport({ onExport }) {
           </Tooltip>
         </Grid>
       )}
-      <Grid item xs={10}>
+      <Grid item xs={lastDocUrl ? 10 : 12}>
         {storedToken ? (
           <Button
             variant="outlined"
-            color="secondary"
-            size="large"
             fullWidth
             onClick={(e) => {
               exportGoogleDoc()
@@ -208,7 +267,6 @@ export default function SlateExport({ onExport }) {
               variant="outlined"
               id="btnGoogle"
               color="secondary"
-              size="small"
               fullWidth
             >
               Authenticate And Export To Google Docs
