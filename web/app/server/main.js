@@ -16,6 +16,7 @@ import './methods/stripe'
 import './methods/googleDocs'
 
 // stripe hooks
+
 import './stripeHooks'
 
 // global models
