@@ -34,7 +34,7 @@ export default function SlateExport({ onExport }) {
         text: msg,
         line2,
         severity: 'info',
-        autoHide: 10000,
+        autoHide: 5000,
       },
     })
   }
