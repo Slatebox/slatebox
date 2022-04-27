@@ -4,6 +4,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.10.1] - 2022-04-24
+
+### Added
+
+### Changed
+
+- Reorganized cloud link and export options
+- Slateboxjs multiselection bug fix
+
 ## [0.10.0] - 2022-04-24
 
 ### Added
