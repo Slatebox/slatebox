@@ -77,16 +77,18 @@ Meteor.startup(() => {
     if (!parsedData.ips) {
       parsedData.ips = []
     }
+    console.log('parsedData', parsedData, ownIp)
     if (!parsedData.ips.includes(ownIp) && parsedData.msg) {
       // Retrieve the msg value
       const { msg } = parsedData
       // parsedData.__fromServer = s.host
       // And dismiss it
-      delete parsedData.msg
+      // delete parsedData.msg
       parsedData.ips.push(ownIp)
       // now we have it FROM the foreign server, so broadcast it on the LOCAL server
       if (msg.indexOf('streamy$') > -1) {
         const slateId = msg.split('streamy$')[1]
+        console.log('rebroadcasting parsedData', parsedData, slateId, ownIp)
         Streamy.broadcast(slateId, parsedData)
       }
     }
