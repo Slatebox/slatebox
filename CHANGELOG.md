@@ -4,6 +4,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.10.7] - 2022-04-26
+
+### Added
+
+- Adding gpdr compliance
+- Added ToS and Privacy documents
+
+### Changed
+
 ## [0.10.6] - 2022-04-26
 
 ### Added
