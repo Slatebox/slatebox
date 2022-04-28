@@ -49,6 +49,7 @@ import Snackbar from '@material-ui/core/Snackbar'
 import Alert from '@material-ui/lab/Alert'
 import ViewComfy from '@material-ui/icons/ViewComfy'
 import { Chip, Tooltip, useMediaQuery } from '@material-ui/core'
+import CookieConsent from 'react-cookie-consent'
 import Routes from './Routes'
 
 import ChatWootConfig from './components/ChatWootConfig'
@@ -829,6 +830,9 @@ export default function Main() {
           }}
         />
         <ConnectionStatus />
+        <CookieConsent>
+          This website uses cookies to enhance the user experience.
+        </CookieConsent>
       </ThemeProvider>
     </>
   )
