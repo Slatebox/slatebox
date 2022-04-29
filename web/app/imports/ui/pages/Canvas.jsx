@@ -439,6 +439,7 @@ export default function Canvas() {
         CONSTANTS.methods.slates.get,
         { shareId: id }
       )
+      console.log('got slate', id, getSlate)
       let slateBase = null
       if (getSlate?.exists === false) {
         isNew = true

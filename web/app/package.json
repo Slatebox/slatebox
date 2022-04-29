@@ -87,7 +87,7 @@
     "redux": "^4.0.5",
     "rgb-hex": "^3.0.0",
     "sharp": "^0.29.1",
-    "slateboxjs": "^1.0.13",
+    "slateboxjs": "1.0.14",
     "static-kdtree": "^1.0.2",
     "streaming-s3": "^0.4.5",
     "string-similarity": "^4.0.4",

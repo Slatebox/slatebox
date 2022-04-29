@@ -4,6 +4,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.10.8] - 2022-04-26
+
+### Added
+
+### Changed
+
+- Updated to better collab handling in slateboxjs
+- Fix for quicknode add node to be compliant with better collab handling
+
 ## [0.10.7] - 2022-04-26
 
 ### Added

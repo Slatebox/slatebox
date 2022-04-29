@@ -33,7 +33,7 @@ export default function CollaborationUsers({ slate }) {
         })
       }
     }
-  })
+  }, [slate?.shareId])
 
   useTracker(() => {
     if (slate?.shareId) {
@@ -54,7 +54,7 @@ export default function CollaborationUsers({ slate }) {
         },
       })
     }
-  })
+  }, [slate?.shareId])
 
   return null
 }

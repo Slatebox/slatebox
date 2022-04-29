@@ -69,9 +69,9 @@ export default function SlateColors({ onChange }) {
       }
       onChange({ type: colorType, data: payload })
     }
-    // if (selectedColor !== 'transparent') {
-    //   enactColorChange()
-    // }
+    if (selectedColor !== 'transparent') {
+      enactColorChange()
+    }
   }, [
     selectedColor,
     colorType,

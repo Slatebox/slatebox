@@ -190,6 +190,8 @@ export default function QuickNodeActions({
       nodeOpts = setDimens(`T${xPos},${yPos}s6,6`)
     }
 
+    // always assign an id so that collab is consistent
+    nodeOpts.id = Slatebox.utils.guid(12)
     const node = new Slatebox.node(nodeOpts)
 
     slate?.nodes.add(node)
@@ -197,7 +199,7 @@ export default function QuickNodeActions({
     // send collaboration info
     const pkg = {
       type: 'onNodeAdded',
-      data: slate?.exportDifference(snap),
+      data: { nodeOptions: nodeOpts },
     }
     slate?.collab.send(pkg)
 
