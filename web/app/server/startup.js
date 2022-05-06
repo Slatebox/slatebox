@@ -77,7 +77,7 @@ Meteor.startup(() => {
     if (!parsedData.ips) {
       parsedData.ips = []
     }
-    console.log('parsedData', parsedData, ownIp)
+    // console.log('parsedData', parsedData, ownIp)
     if (!parsedData.ips.includes(ownIp) && parsedData.msg) {
       // Retrieve the msg value
       const { msg } = parsedData
@@ -88,7 +88,7 @@ Meteor.startup(() => {
       // now we have it FROM the foreign server, so broadcast it on the LOCAL server
       if (msg.indexOf('streamy$') > -1) {
         const slateId = msg.split('streamy$')[1]
-        console.log('rebroadcasting parsedData', parsedData, slateId, ownIp)
+        // console.log('rebroadcasting parsedData', parsedData, slateId, ownIp)
         Streamy.broadcast(slateId, parsedData)
       }
     }

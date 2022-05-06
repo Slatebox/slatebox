@@ -9,6 +9,7 @@ import { useTheme } from '@material-ui/core'
 import React, { useEffect } from 'react'
 import Grid from '@material-ui/core/Grid'
 import { useHistory, useParams } from 'react-router-dom'
+import { RemoteParticiant } from 'twilio-video'
 import createSlate from '../../api/client/createSlate'
 import saveSlate from '../../api/client/saveSlate'
 
@@ -29,6 +30,7 @@ import Chat from '../components/Chat'
 import QuickNodeActions from '../components/node/QuickNodeActions'
 import AuthManager from '../../api/common/AuthManager'
 import confirmService from '../common/confirm'
+import getUserName from '../../api/common/getUserName'
 
 export default function Canvas() {
   const history = useHistory()
@@ -495,7 +497,12 @@ export default function Canvas() {
         collaborator.current = await promisify(
           Meteor.call,
           CONSTANTS.methods.collaborators.create,
-          { shareId: slateBase.shareId, userId: Meteor.userId(), id: idx }
+          {
+            shareId: slateBase.shareId,
+            userId: Meteor.userId(),
+            userName: getUserName(Meteor.userId()),
+            id: idx,
+          }
         )
         dispatch({ type: 'collaborator', collaborator: collaborator.current })
       }

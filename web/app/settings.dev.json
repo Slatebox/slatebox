@@ -32,6 +32,11 @@
   "chatWoot": {
     "userIdentityValidationToken": "aegPcCX4owZTpinKfd8QBQgx"
   },
+  "twilio": {
+    "accountSid": "ACc1b4cafb10e678befc8bc924c49c0951",
+    "sid": "SK137ebdbe4f8f779466fb894668dd49e3",
+    "secret": "h4zuxwP6NK7gqPUVaj88mhZmYZzVGniX"
+  },
   "googleDocs": {
     "web": {
       "client_id": "1021091009743-ovb18juovbao09rf00klf1qvfk7tekbs.apps.googleusercontent.com",
