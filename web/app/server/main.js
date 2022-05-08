@@ -14,7 +14,7 @@ import './methods/comments'
 import './methods/messages'
 import './methods/stripe'
 import './methods/googleDocs'
-import './methods/twilio'
+import './methods/daily'
 
 // stripe hooks
 import './stripeHooks'

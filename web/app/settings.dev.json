@@ -32,19 +32,17 @@
   "chatWoot": {
     "userIdentityValidationToken": "aegPcCX4owZTpinKfd8QBQgx"
   },
-  "twilio": {
-    "accountSid": "ACc1b4cafb10e678befc8bc924c49c0951",
-    "sid": "SK137ebdbe4f8f779466fb894668dd49e3",
-    "secret": "h4zuxwP6NK7gqPUVaj88mhZmYZzVGniX"
+  "daily": {
+    "apiKey": "2fd66e08821932bb926be1c710f9677d39590b95156607eb4e64387d45d1a943"
   },
   "googleDocs": {
     "web": {
-      "client_id": "1021091009743-ovb18juovbao09rf00klf1qvfk7tekbs.apps.googleusercontent.com",
-      "project_id": "slatebox-docs-integration",
+      "client_id": "589142584919-mub8oeqqv41j1pgkfgi733g4f1eijsa9.apps.googleusercontent.com",
+      "project_id": "slatebox-docs-integration-loca",
       "auth_uri": "https://accounts.google.com/o/oauth2/auth",
       "token_uri": "https://oauth2.googleapis.com/token",
       "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-      "client_secret": "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",
+      "client_secret": "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",
       "redirect_uris": ["http://localhost:3000"],
       "javascript_origins": ["http://localhost:3000"]
     }
@@ -52,6 +50,7 @@
   "stripePrivateKey": "ROJ2x7cOig89e5sxBhdBKxbGsCNUnaV8",
   "public": {
     "env": "dev",
+    "dailyBaseUrl": "https://slatebox.daily.co",
     "baseUrl": "http://localhost:3000",
     "googleFontAPIKey": "AIzaSyAUAnpBVXQu_XYjUBoO7f5tbcL0JB3H5-o",
     "googleImageSearchEngineKey": "3ba8a3199f8e2eb8c",

@@ -1,19 +1,26 @@
 /* eslint-disable react/jsx-no-useless-fragment */
 /* eslint-disable no-underscore-dangle */
 // Streamy is global, so no import needed
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, useCallback, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { makeStyles } from '@material-ui/core/styles'
 import { Meteor } from 'meteor/meteor'
 import { useTracker } from 'meteor/react-meteor-data'
 import cloneDeep from 'lodash.clonedeep'
 import Grid from '@material-ui/core/Grid'
-import Video from 'twilio-video'
+import DailyIframe from '@daily-co/daily-js'
+import {
+  DailyProvider,
+  useDailyEvent,
+  useDaily,
+} from '@daily-co/daily-react-hooks'
 import CONSTANTS from '../../api/common/constants'
 import { Collaborators, Collaboration } from '../../api/common/models'
 import getUserName from '../../api/common/getUserName'
 import promisify from '../../api/client/promisify'
 import VideoParticipant from './VideoParticipant'
+
+const BASE_DAILY_URL = Meteor.settings.public.dailyBaseUrl
 
 const useStyles = makeStyles((theme) => ({
   pinBottom: {
@@ -56,11 +63,10 @@ const useStyles = makeStyles((theme) => ({
 
 export default function CollaborationUsers({ slate }) {
   const collaborator = useSelector((state) => state.collaborator)
-  const [dominantSpeaker, setDominantSpeaker] = React.useState(null)
+  const [callObject, setCallObject] = useState(null)
   const classes = useStyles()
   const dispatch = useDispatch()
   const capacityIssue = useRef()
-  let accessToken = null
 
   const currentCollaborators = useTracker(() =>
     Collaborators.find({ _id: { $ne: collaborator?.instanceId } }).fetch()
@@ -90,18 +96,45 @@ export default function CollaborationUsers({ slate }) {
   //   trackPublication.on('subscribed', displayTrack)
   // }
 
-  const participantConnected = (participant) => {
-    console.log('adding participant', participant)
-    setParticipants([...currentParticipants, participant])
-  }
+  // const participantConnected = (participant) => {
+  //   console.log('adding participant', participant)
+  //   setParticipants([...currentParticipants, participant])
+  // }
 
-  const participantDisconnected = (participant) => {
-    let newParticipants = cloneDeep(currentParticipants)
-    newParticipants = newParticipants.filter(
-      (p) => p.identity !== participant.identity
-    )
-    setParticipants(newParticipants)
-  }
+  // const participantDisconnected = (participant) => {
+  //   let newParticipants = cloneDeep(currentParticipants)
+  //   newParticipants = newParticipants.filter(
+  //     (p) => p.identity !== participant.identity
+  //   )
+  //   setParticipants(newParticipants)
+  // }
+
+  useDailyEvent(
+    'joined-meeting',
+    useCallback((participant) => {
+      console.log('joined-meeting', participant)
+      setParticipants([...currentParticipants, participant])
+    }, [])
+  )
+
+  useDailyEvent(
+    'left-meeting',
+    useCallback((participant) => {
+      console.log('left-meeting', participant)
+      let newParticipants = cloneDeep(currentParticipants)
+      newParticipants = newParticipants.filter(
+        (p) => p.identity !== participant.identity
+      )
+      setParticipants(newParticipants)
+      // Continue by updating your app UI to render the call UI
+    }, [])
+  )
+
+  //   let newParticipants = cloneDeep(currentParticipants)
+  //   newParticipants = newParticipants.filter(
+  //     (p) => p.identity !== participant.identity
+  //   )
+  //   setParticipants(newParticipants)
 
   const getParticipant = (collaboratorId) => {
     const p = currentParticipants.find((p) => p.identity === collaboratorId)
@@ -110,60 +143,65 @@ export default function CollaborationUsers({ slate }) {
   }
 
   async function provisionRoomAndAccessToken() {
-    console.log('calling provision', slate?.options.id)
+    console.log('calling provision', slate?.shareId)
     if (slate) {
       const createRoom = await promisify(
         Meteor.call,
-        CONSTANTS.methods.twilio.provisionSlateRoom,
+        CONSTANTS.methods.daily.createRoom,
         slate.shareId
       )
       console.log('room created?', createRoom)
       if (createRoom) {
-        const tokenOpts = {
-          room: slate.shareId,
-          userName: getUserName(Meteor.userId()),
-          identity: collaborator._id,
-          // local + remote collaborators
-          validCollaborators: [
-            collaborator._id,
-            ...currentCollaborators.map((c) => c._id),
-          ],
-        }
-        console.log('getting access token', tokenOpts)
-        try {
-          accessToken = await promisify(
-            Meteor.call,
-            CONSTANTS.methods.twilio.generateAccessToken,
-            tokenOpts
-          )
-          if (accessToken.error) {
-            console.log(
-              'too much capacity - current collaboratorId',
-              collaborator._id,
-              accessToken
-            )
-            capacityIssue.current = true
-          } else {
-            capacityIssue.current = false
-            console.log('created access token', accessToken)
-            const room = await Video.connect(accessToken, {
-              room: slate.shareId,
-              video: { width: 125, height: 125 },
-            })
-            console.log('created room', room)
-            // room.on('dominantSpeakerChanged', handleDominantSpeaker)
-            // room.localParticipant.on('trackPublished', (track) => {
-            //   handleTrackPublished(track, room.localParticipant)
-            // })
-            room.on('participantConnected', participantConnected)
-            room.on('participantDisconnected', participantDisconnected)
-            participantConnected(room.localParticipant)
-            room.participants.forEach(participantConnected)
-          }
-        } catch (err) {
-          console.log('current collaboratorId', collaborator._id)
-          console.error(err)
-        }
+        const newCallObject = DailyIframe.createCallObject()
+        setCallObject(newCallObject)
+        console.log('joining room ', `${BASE_DAILY_URL}/${slate?.shareId}`)
+        newCallObject.join({ url: `${BASE_DAILY_URL}/${slate?.shareId}` })
+
+        // const tokenOpts = {
+        //   room: slate.shareId,
+        //   userName: getUserName(Meteor.userId()),
+        //   identity: collaborator._id,
+        //   // local + remote collaborators
+        //   validCollaborators: [
+        //     collaborator._id,
+        //     ...currentCollaborators.map((c) => c._id),
+        //   ],
+        // }
+        // console.log('getting access token', tokenOpts)
+        // try {
+        //   accessToken = await promisify(
+        //     Meteor.call,
+        //     CONSTANTS.methods.twilio.generateAccessToken,
+        //     tokenOpts
+        //   )
+        //   if (accessToken.error) {
+        //     console.log(
+        //       'too much capacity - current collaboratorId',
+        //       collaborator._id,
+        //       accessToken
+        //     )
+        //     capacityIssue.current = true
+        //   } else {
+        //     capacityIssue.current = false
+        //     console.log('created access token', accessToken)
+        //     const room = await Video.connect(accessToken, {
+        //       room: slate.shareId,
+        //       video: { width: 125, height: 125 },
+        //     })
+        //     console.log('created room', room)
+        //     // room.on('dominantSpeakerChanged', handleDominantSpeaker)
+        //     // room.localParticipant.on('trackPublished', (track) => {
+        //     //   handleTrackPublished(track, room.localParticipant)
+        //     // })
+        //     room.on('participantConnected', participantConnected)
+        //     room.on('participantDisconnected', participantDisconnected)
+        //     participantConnected(room.localParticipant)
+        //     room.participants.forEach(participantConnected)
+        //   }
+        // } catch (err) {
+        //   console.log('current collaboratorId', collaborator._id)
+        //   console.error(err)
+        // }
         // clientRoom.participants.forEach((p) => {
         //   p.on('trackPublished', (track) => {
         //     handleTrackPublished(track, p)
@@ -276,7 +314,7 @@ export default function CollaborationUsers({ slate }) {
   }, [slate?.shareId])
 
   return (
-    <>
+    <DailyProvider callObject={callObject}>
       {currentCollaborators.length > 0 ? (
         <Grid container spacing={2} className={classes.pinBottom}>
           <VideoParticipant
@@ -292,6 +330,6 @@ export default function CollaborationUsers({ slate }) {
           ))}
         </Grid>
       ) : null}
-    </>
+    </DailyProvider>
   )
 }

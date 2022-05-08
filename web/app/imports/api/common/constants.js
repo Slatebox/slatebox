@@ -91,8 +91,8 @@ const CONSTANTS = {
       export: 'googleDocs.export',
       createFolder: 'googleDocs.createFolder',
     },
-    twilio: {
-      provisionSlateRoom: 'twilio.provisionSlateRoom',
+    daily: {
+      createRoom: 'daily.createRoom',
       generateAccessToken: 'twilio.generateAccessToken',
     },
   },
