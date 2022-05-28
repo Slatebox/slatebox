@@ -38,21 +38,21 @@ export default function VideoParticipant({
   const callObject = useDaily()
   console.log('callobj', callObject?.meetingState())
   const localParticipant = useLocalParticipant()
-  const [videoMuted, setVideoMuted] = useState(false)
-  const [audioMuted, setAudioMuted] = useState(false)
+  const localVideo = useVideoTrack(localParticipant?.session_id)
+  const localAudio = useAudioTrack(localParticipant?.session_id)
+  const videoMuted = localVideo.isOff
+  const audioMuted = localAudio.isOff
   const videoRef = React.useRef(null)
   const audioRef = React.useRef(null)
 
   const toggleVideo = useCallback(() => {
     console.log('setting local video', videoMuted)
     callObject.setLocalVideo(videoMuted)
-    setVideoMuted(!videoMuted)
     Collaborators.update({ _id: collaborator?._id }, { $set: { videoMuted } })
   }, [callObject, videoMuted])
 
   const toggleMic = useCallback(() => {
     callObject.setLocalAudio(audioMuted)
-    setAudioMuted(!audioMuted)
     Collaborators.update({ _id: collaborator?._id }, { $set: { audioMuted } })
   }, [callObject, audioMuted])
 
@@ -60,7 +60,7 @@ export default function VideoParticipant({
 
   const videoTrack = useVideoTrack(localParticipant?.session_id)
   const audioTrack = useAudioTrack(localParticipant?.session_id)
-  console.log('videoTrack is ', videoTrack.state, videoTrack?.track)
+  console.log('videoTrack is ', videoTrack.state, videoTrack)
   if (videoRef.current && videoTrack && videoTrack.state !== 'loading')
     videoRef.current.srcObject = videoTrack.track
   // if (audioRef.current && audioTrack && audioTrack.state !== 'loading')

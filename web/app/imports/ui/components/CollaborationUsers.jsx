@@ -1,3 +1,5 @@
+/* eslint-disable consistent-return */
+/* eslint-disable no-restricted-syntax */
 /* eslint-disable react/jsx-no-useless-fragment */
 /* eslint-disable no-underscore-dangle */
 // Streamy is global, so no import needed
@@ -13,11 +15,13 @@ import {
   DailyProvider,
   useDailyEvent,
   useDaily,
+  useParticipantIds,
 } from '@daily-co/daily-react-hooks'
 import CONSTANTS from '../../api/common/constants'
 import { Collaborators, Collaboration } from '../../api/common/models'
 import getUserName from '../../api/common/getUserName'
 import promisify from '../../api/client/promisify'
+import SlateVideo from './SlateVideo'
 import VideoParticipant from './VideoParticipant'
 
 const BASE_DAILY_URL = Meteor.settings.public.dailyBaseUrl
@@ -61,9 +65,18 @@ const useStyles = makeStyles((theme) => ({
   },
 }))
 
+/* We decide what UI to show to users based on the state of the app, which is dependent on the state of the call object: see line 137. */
+const STATE_IDLE = 'STATE_IDLE'
+const STATE_CREATING = 'STATE_CREATING'
+const STATE_JOINING = 'STATE_JOINING'
+const STATE_JOINED = 'STATE_JOINED'
+const STATE_LEAVING = 'STATE_LEAVING'
+const STATE_ERROR = 'STATE_ERROR'
+
 export default function CollaborationUsers({ slate }) {
   const collaborator = useSelector((state) => state.collaborator)
   const [callObject, setCallObject] = useState(null)
+  const [appState, setAppState] = useState(STATE_IDLE)
   const classes = useStyles()
   const dispatch = useDispatch()
   const capacityIssue = useRef()
@@ -71,6 +84,8 @@ export default function CollaborationUsers({ slate }) {
   const currentCollaborators = useTracker(() =>
     Collaborators.find({ _id: { $ne: collaborator?.instanceId } }).fetch()
   )
+  const remoteParticipantIds = useParticipantIds({ filter: 'remote' })
+
   const [currentParticipants, setParticipants] = React.useState([])
 
   // const handleDominantSpeaker = (speaker) => {
@@ -109,27 +124,6 @@ export default function CollaborationUsers({ slate }) {
   //   setParticipants(newParticipants)
   // }
 
-  useDailyEvent(
-    'joined-meeting',
-    useCallback((participant) => {
-      console.log('joined-meeting', participant)
-      setParticipants([...currentParticipants, participant])
-    }, [])
-  )
-
-  useDailyEvent(
-    'left-meeting',
-    useCallback((participant) => {
-      console.log('left-meeting', participant)
-      let newParticipants = cloneDeep(currentParticipants)
-      newParticipants = newParticipants.filter(
-        (p) => p.identity !== participant.identity
-      )
-      setParticipants(newParticipants)
-      // Continue by updating your app UI to render the call UI
-    }, [])
-  )
-
   //   let newParticipants = cloneDeep(currentParticipants)
   //   newParticipants = newParticipants.filter(
   //     (p) => p.identity !== participant.identity
@@ -154,60 +148,9 @@ export default function CollaborationUsers({ slate }) {
       if (createRoom) {
         const newCallObject = DailyIframe.createCallObject()
         setCallObject(newCallObject)
+        setAppState(STATE_JOINING)
         console.log('joining room ', `${BASE_DAILY_URL}/${slate?.shareId}`)
         newCallObject.join({ url: `${BASE_DAILY_URL}/${slate?.shareId}` })
-
-        // const tokenOpts = {
-        //   room: slate.shareId,
-        //   userName: getUserName(Meteor.userId()),
-        //   identity: collaborator._id,
-        //   // local + remote collaborators
-        //   validCollaborators: [
-        //     collaborator._id,
-        //     ...currentCollaborators.map((c) => c._id),
-        //   ],
-        // }
-        // console.log('getting access token', tokenOpts)
-        // try {
-        //   accessToken = await promisify(
-        //     Meteor.call,
-        //     CONSTANTS.methods.twilio.generateAccessToken,
-        //     tokenOpts
-        //   )
-        //   if (accessToken.error) {
-        //     console.log(
-        //       'too much capacity - current collaboratorId',
-        //       collaborator._id,
-        //       accessToken
-        //     )
-        //     capacityIssue.current = true
-        //   } else {
-        //     capacityIssue.current = false
-        //     console.log('created access token', accessToken)
-        //     const room = await Video.connect(accessToken, {
-        //       room: slate.shareId,
-        //       video: { width: 125, height: 125 },
-        //     })
-        //     console.log('created room', room)
-        //     // room.on('dominantSpeakerChanged', handleDominantSpeaker)
-        //     // room.localParticipant.on('trackPublished', (track) => {
-        //     //   handleTrackPublished(track, room.localParticipant)
-        //     // })
-        //     room.on('participantConnected', participantConnected)
-        //     room.on('participantDisconnected', participantDisconnected)
-        //     participantConnected(room.localParticipant)
-        //     room.participants.forEach(participantConnected)
-        //   }
-        // } catch (err) {
-        //   console.log('current collaboratorId', collaborator._id)
-        //   console.error(err)
-        // }
-        // clientRoom.participants.forEach((p) => {
-        //   p.on('trackPublished', (track) => {
-        //     handleTrackPublished(track, p)
-        //   })
-        // })
-        console.log('set up all listeners')
       }
     }
   }
@@ -313,8 +256,54 @@ export default function CollaborationUsers({ slate }) {
     }
   }, [slate?.shareId])
 
+  useEffect(() => {
+    if (!callObject) return
+
+    const events = ['joined-meeting', 'left-meeting', 'error', 'camera-error']
+
+    function handleNewMeetingState() {
+      switch (callObject.meetingState()) {
+        case 'joined-meeting':
+          setAppState(STATE_JOINED)
+          break
+        case 'left-meeting':
+          callObject.destroy().then(() => {
+            setCallObject(null)
+            setAppState(STATE_IDLE)
+          })
+          break
+        case 'error':
+          setAppState(STATE_ERROR)
+          break
+        default:
+          break
+      }
+    }
+
+    // Use initial state
+    handleNewMeetingState()
+
+    // Listen for changes in state
+    for (const event of events) {
+      /*
+        We can't use the useDailyEvent hook (https://docs.daily.co/reference/daily-react-hooks/use-daily-event) for this
+        because right now, we're not inside a <DailyProvider/> (https://docs.daily.co/reference/daily-react-hooks/daily-provider)
+        context yet. We can't access the call object via daily-react-hooks just yet, but we will later in Call.js.
+      */
+      callObject.on(event, handleNewMeetingState)
+    }
+
+    // Stop listening for changes in state
+    return function cleanup() {
+      for (const event of events) {
+        callObject.off(event, handleNewMeetingState)
+      }
+    }
+  }, [callObject])
+
   return (
     <DailyProvider callObject={callObject}>
+      <SlateVideo />
       {currentCollaborators.length > 0 ? (
         <Grid container spacing={2} className={classes.pinBottom}>
           <VideoParticipant
