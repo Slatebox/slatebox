@@ -192,7 +192,7 @@ const selfHostedTiers = [
   {
     title: 'Community Edition',
     _id: 'community_edition',
-    subheader: 'Open-Source Licensed',
+    subheader: 'Free & Open Licensing',
     monthly: {
       priceId: 0,
       price: 0,

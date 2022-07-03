@@ -190,11 +190,10 @@ export default function Payment() {
     } else {
       // contact us form
       switch (tier._id) {
-        // case "community_edition": {
-        //   window.location.href = "https://github.com/Slatebox/slatebox-community";
-        //   break;
-        // }
-        case 'community_edition':
+        case 'community_edition': {
+          window.location.href = 'https://github.com/Slatebox/slatebox'
+          break
+        }
         case 'bronze':
         case 'silver':
         case 'gold': {
@@ -396,7 +395,7 @@ export default function Payment() {
                   </Grid>
                   <Grid item xs={12}>
                     <Typography variant="body2">
-                      Open Source &amp; On Premises
+                      Free &amp; Open &amp; On Premises
                     </Typography>
                   </Grid>
                 </Grid>
