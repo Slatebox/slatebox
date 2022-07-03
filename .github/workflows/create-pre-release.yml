@@ -2,7 +2,7 @@ name: Create beta release when beta tag is pushed
 on:
   push:
     tags:
-      - beta.*
+      - v.beta.*
 jobs:
   create-release:
     name: Release

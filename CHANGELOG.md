@@ -4,6 +4,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.10.10] - 2022-07-03
+
+### Added
+
+### Changed
+
+- Fix for the licensing languag
+
 ## [0.10.9] - 2022-07-03
 
 ### Added
