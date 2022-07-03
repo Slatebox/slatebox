@@ -1,10 +1,8 @@
-name: Create pre-release when a tag is pushed to test
+name: Create beta release when beta tag is pushed
 on:
   push:
-    branches:
-      - test
-      tags:
-        - "*"
+    tags:
+      - beta.*
 jobs:
   create-release:
     name: Release

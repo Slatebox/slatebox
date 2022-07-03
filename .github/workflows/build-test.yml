@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - test
-  workflow_dispatch:
 jobs:
   build-and-deploy-to-test:
     runs-on: ubuntu-latest
