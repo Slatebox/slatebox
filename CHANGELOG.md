@@ -4,6 +4,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.10.9] - 2022-04-26
+
+### Added
+
+### Changed
+
+- Fix to snapshots to avoid undefined Slatebox object.
+- Added github release.yml file for auto versioning and release notes.
+
 ## [0.10.8] - 2022-04-26
 
 ### Added
