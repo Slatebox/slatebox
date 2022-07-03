@@ -1,0 +1,16 @@
+name: Create prod release when an release tag is pushed
+on:
+  push:
+    tags:
+      - v.release.*
+jobs:
+  create-release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ncipollo/release-action@v1
+        with:
+          generateReleaseNotes: true
+          name: "v.release.${{ github.ref_name }}"
+          token: ${{ secrets.GITHUB_TOKEN }}

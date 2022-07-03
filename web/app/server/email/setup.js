@@ -30,7 +30,7 @@ export default function setup() {
     let header = `<div style="width:800px;margin-right:auto;margin-left:auto;">
         <div style="clear:both;height:90px;">
           <div style="float:left;width:40%;padding:10px;">
-            <img src="https://assets.slatebox.com/images/slatebox_logo_email.png" alt="Slatebox - Visual Team Collaboration"/>
+            <h5>Slatebox - Visual Team Collaboration</h5>
           </div>
           <div style="padding:10px;float:left;font-family:Helvetica;color:#333;font-size:16pt;line-height:35px;width:55%">${welcomeMessage}</div>
         </div>`
@@ -63,12 +63,12 @@ export default function setup() {
           body = `Yay for joining Slatebox! Please verify your email below.\n\n
               Click here to verify your email: ${url}\n
               Once verified, you'll be able to access all the Slatebox features.\n
-              We're excited to see what you create!`
+              Go forth and build!`
         } else {
           body = `<div style="padding:3px;margin:3px;font-family:Helvetica;font-size:13pt;">
             <h2>Yay for joining Slatebox! Please verify your email below.</h2>
             <p><a href="${url}">Click here to verify your email</a>. Once verified, you'll be able to access all the Slatebox features.</p>
-            <p>We're excited to see what you create!</p>
+            <p>Go forth and build!</p>
           </div>`
         }
         break
@@ -78,13 +78,13 @@ export default function setup() {
       //         Thanks for signing up! Slatebox is super easy to start using. The next step is to set a password for your new administrator account, and after you create the password and log in, then you can start inviting users.\n\n
       //         Click here to set the password on your administrator account: ${url}.\n
       //         Once created, you'll be able to log in and start sending invites.\n
-      //         We're excited to see what you create!`;
+      //         Go forth and build!`;
       //   } else {
       //     body = `<div style="padding:3px;margin:3px;font-family:Helvetica;font-size:13pt;">
       //         <h2>Your new Slatebox ${name} team is ready!</h2>
       //         <p>Thanks for signing up! Slatebox is super easy to start using. The next step is to set a password for your new administrator account, and after you create the password and log in, then you can start inviting users.</p>
       //         <p><a href="${url}">Click here to set the password on your administrator account</a>. Once created, you'll be able to log in and start sending invites.</p>
-      //         <p>We're excited to see what you create!</p>
+      //         <p>Go forth and build!</p>
       //       </div>`;
       //     }
       //   break;
@@ -93,13 +93,13 @@ export default function setup() {
           body = `Hooray! You've been invited to join the ${name} team.\n\n
                 Slatebox is built for real-time visual collaboration with your team. Build a "slate" and easily share your creations.\n\n
                 Click here to join ${name} and start building: ${url}\n
-                We're excited to see what you make!`
+                Go forth and build!`
         } else {
           body = `<div style="padding:3px;margin:3px;font-family:Helvetica;font-size:13pt;">
                 <h2>Hooray! You've been invited to join the ${name} team.</h2>
                 <p>Slatebox is built for real-time visual collaboration with your team. Build a "slate" and easily share your creations.</p>
                 <p><a href="${url}">Click here to join ${name} and start building!</a>.</p>
-                <p>We're excited to see what you make!</p>
+                <p>Go forth and build!</p>
               </div>`
         }
         break
