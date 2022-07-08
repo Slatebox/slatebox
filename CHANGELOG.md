@@ -4,13 +4,22 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.11] - 2022-07-07
+
+### Added
+
+### Changed
+
+- Added video & audio chat
+- Adjusted verbiage for pricing tiers, including video/audio chat and google docs integration
+
 ## [0.10.10] - 2022-07-03
 
 ### Added
 
 ### Changed
 
-- Fix for the licensing languag
+- Fix for the licensing language
 
 ## [0.10.9] - 2022-07-03
 
