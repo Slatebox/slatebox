@@ -3,17 +3,17 @@
 import { Meteor } from 'meteor/meteor'
 import { Random } from 'meteor/random'
 import { useDispatch, useSelector } from 'react-redux'
+import { RecoilRoot } from 'recoil'
 import { useTracker } from 'meteor/react-meteor-data'
 import * as Cookies from 'js-cookie'
 import { useTheme } from '@material-ui/core'
 import React, { useEffect } from 'react'
 import Grid from '@material-ui/core/Grid'
 import { useHistory, useParams } from 'react-router-dom'
-import { RemoteParticiant } from 'twilio-video'
 import createSlate from '../../api/client/createSlate'
 import saveSlate from '../../api/client/saveSlate'
-
 import CONSTANTS from '../../api/common/constants'
+import utils from '../../api/common/utils'
 
 // global models
 import { Collaborators, Comments } from '../../api/common/models'
@@ -277,7 +277,7 @@ export default function Canvas() {
             break
           case 'custom':
             switch (opts.pkg.type) {
-              case 'onSlateVideoChatChanged': {
+              case 'onSlateHuddleChanged': {
                 await saveSlate(opts)
                 break
               }
@@ -485,7 +485,10 @@ export default function Canvas() {
         (!isNew && Meteor.user() && Meteor.user().orgId !== slateBase.orgId)
 
       if (!collaborator.current) {
-        let idx = Random.id()
+        let idx = utils.extractIdFromWebsocketUrl(
+          Meteor.connection._stream.socket._transport.url
+        )
+        console.log('websocket id is', idx)
         if (requiresTracking) {
           if (!Cookies.get(CONSTANTS.guestCollaboratorCookieId)) {
             Cookies.set(CONSTANTS.guestCollaboratorCookieId, idx, {
@@ -634,7 +637,9 @@ export default function Canvas() {
         }}
       />
       <Chat slate={slate.current} />
-      <CollaborationUsers slate={slate.current} />
+      <RecoilRoot>
+        <CollaborationUsers slate={slate.current} />
+      </RecoilRoot>
     </RemoteCursors>
   )
 }

@@ -11,18 +11,14 @@ import { useTracker } from 'meteor/react-meteor-data'
 import cloneDeep from 'lodash.clonedeep'
 import Grid from '@material-ui/core/Grid'
 import DailyIframe from '@daily-co/daily-js'
-import {
-  DailyProvider,
-  useDailyEvent,
-  useDaily,
-  useParticipantIds,
-} from '@daily-co/daily-react-hooks'
+import { DailyProvider } from '@daily-co/daily-react-hooks'
 import CONSTANTS from '../../api/common/constants'
 import { Collaborators, Collaboration } from '../../api/common/models'
 import getUserName from '../../api/common/getUserName'
 import promisify from '../../api/client/promisify'
-import SlateVideo from './SlateVideo'
 import VideoParticipant from './VideoParticipant'
+
+import Button from '@material-ui/core/Button'
 
 const BASE_DAILY_URL = Meteor.settings.public.dailyBaseUrl
 
@@ -30,38 +26,23 @@ const useStyles = makeStyles((theme) => ({
   pinBottom: {
     bottom: '0',
     position: 'absolute',
+  },
+  liveVideoChat: {
     height: '150px',
+    backgroundColor: 'transparent',
     borderTop: '1px solid black',
-    backgroundColor: '#ddd',
   },
-  bubble: {
-    width: '150px',
-    height: '150px',
+  liveAudioChat: {
+    height: '100px',
+    backgroundColor: 'transparent',
+    borderTop: '1px solid black',
   },
-  xlarge: {
-    backgroundColor: theme.palette.secondary.main,
-    border: `1px solid ${theme.palette.primary.main}`,
-    width: theme.spacing(14),
-    height: theme.spacing(14),
+  pendingChat: {
+    height: '60px',
+    padding: '10px',
   },
-  controlIcon: {
-    marginTop: '-28px',
-    '& .MuiSvgIcon-root': { color: '#000' },
-  },
-  viewIcon: {
-    marginTop: '-10px',
-    '& .MuiSvgIcon-root': { color: '#000' },
-    zIndex: '999',
-  },
-  viewIconBg: {
-    backgroundColor: '#fff',
-    width: theme.spacing(3),
-    height: theme.spacing(3),
-  },
-  controlIconBg: {
-    backgroundColor: '#fff',
-    width: theme.spacing(3),
-    height: theme.spacing(3),
+  chatConstrained: {
+    width: `calc(100% - 265px)`,
   },
 }))
 
@@ -75,68 +56,24 @@ const STATE_ERROR = 'STATE_ERROR'
 
 export default function CollaborationUsers({ slate }) {
   const collaborator = useSelector((state) => state.collaborator)
+  const chatOpen = useSelector((state) => state.chatOpen)
+  const huddleEnabled =
+    useSelector((state) => state.huddleEnabled) || slate?.options.huddleEnabled
+  const slateHuddleType =
+    useSelector((state) => state.slateHuddleType) || slate?.options.huddleType
   const [callObject, setCallObject] = useState(null)
   const [appState, setAppState] = useState(STATE_IDLE)
   const classes = useStyles()
   const dispatch = useDispatch()
-  const capacityIssue = useRef()
 
-  const currentCollaborators = useTracker(() =>
-    Collaborators.find({ _id: { $ne: collaborator?.instanceId } }).fetch()
-  )
-  const remoteParticipantIds = useParticipantIds({ filter: 'remote' })
-
-  const [currentParticipants, setParticipants] = React.useState([])
-
-  // const handleDominantSpeaker = (speaker) => {
-  //   setDominantSpeaker(speaker)
-  // }
-
-  // const handleTrackPublished = (trackPublication, participant) => {
-  //   function displayTrack(track) {
-  //     console.log('publishing track', track, participant)
-  //     dispatch({
-  //       type: `mediaChanged-${participant.collaborator.instanceId}`,
-  //       track,
-  //     })
-  //   }
-
-  //   // check if the trackPublication contains a `track` attribute. If it does,
-  //   // we are subscribed to this track. If not, we are not subscribed.
-  //   if (trackPublication.track) {
-  //     displayTrack(trackPublication.track)
-  //   }
-
-  //   // listen for any new subscriptions to this track publication
-  //   trackPublication.on('subscribed', displayTrack)
-  // }
-
-  // const participantConnected = (participant) => {
-  //   console.log('adding participant', participant)
-  //   setParticipants([...currentParticipants, participant])
-  // }
-
-  // const participantDisconnected = (participant) => {
-  //   let newParticipants = cloneDeep(currentParticipants)
-  //   newParticipants = newParticipants.filter(
-  //     (p) => p.identity !== participant.identity
-  //   )
-  //   setParticipants(newParticipants)
-  // }
-
-  //   let newParticipants = cloneDeep(currentParticipants)
-  //   newParticipants = newParticipants.filter(
-  //     (p) => p.identity !== participant.identity
-  //   )
-  //   setParticipants(newParticipants)
-
-  const getParticipant = (collaboratorId) => {
-    const p = currentParticipants.find((p) => p.identity === collaboratorId)
-    console.log('found participant', collaboratorId, p, currentParticipants)
-    return p
-  }
-
-  async function provisionRoomAndAccessToken() {
+  const currentCollaborators = useTracker(() => [
+    collaborator,
+    ...Collaborators.find(
+      { _id: { $ne: collaborator?._id } },
+      { sort: { created: -1 } }
+    ).fetch(),
+  ])
+  async function provisionRoom() {
     console.log('calling provision', slate?.shareId)
     if (slate) {
       const createRoom = await promisify(
@@ -146,93 +83,92 @@ export default function CollaborationUsers({ slate }) {
       )
       console.log('room created?', createRoom)
       if (createRoom) {
-        const newCallObject = DailyIframe.createCallObject()
+        const callOpts = {
+          dailyConfig: {
+            experimentalChromeVideoMuteLightOff: true,
+          },
+        }
+        if (slateHuddleType === 'audio') {
+          callOpts.audioSource = true
+          callOpts.videoSource = false
+        }
+        const newCallObject = DailyIframe.createCallObject(callOpts)
         setCallObject(newCallObject)
         setAppState(STATE_JOINING)
-        console.log('joining room ', `${BASE_DAILY_URL}/${slate?.shareId}`)
-        newCallObject.join({ url: `${BASE_DAILY_URL}/${slate?.shareId}` })
+        const joinResult = await newCallObject.join({
+          url: `${BASE_DAILY_URL}/${slate?.shareId}`,
+          userName: collaborator._id,
+        })
+        /*
+        {
+          "local": {
+            "session_id": "51942055-283f-4c60-a691-8fd49a83f08b",
+            "user_name": "kdbjaFie66LDrHbEy",
+            "user_id": "51942055-283f-4c60-a691-8fd49a83f08b",
+            "joined_at": "2022-07-04T02:09:35.516Z",
+            "local": true,
+            "owner": false,
+            "will_eject_at": "1970-01-01T00:00:00.000Z",
+            "audio": false,
+            "video": false,
+            "screen": false,
+            "tracks": {
+              "audio": {
+                "state": "off",
+                "off": {
+                  "byUser": true
+                },
+                "persistentTrack": null
+              },
+              "video": {
+                "state": "off",
+                "off": {
+                  "byUser": true
+                },
+                "persistentTrack": null
+              },
+              "screenVideo": {
+                "state": "off",
+                "off": {
+                  "byUser": true
+                },
+                "persistentTrack": null
+              },
+              "screenAudio": {
+                "state": "off",
+                "off": {
+                  "byUser": true
+                },
+                "persistentTrack": null
+              }
+            },
+            "cam_info": {},
+            "screen_info": {},
+            "record": false
+          }
+          */
+        Collaborators.update(
+          { _id: collaborator._id },
+          { $set: { videoParticipantId: joinResult.local.session_id } }
+        )
       }
     }
   }
 
-  useEffect(() => {
-    provisionRoomAndAccessToken()
-  }, [slate])
-
-  // useEffect(() => {
-  //   if (room) {
-  //     room.on('dominantSpeakerChanged', handleDominantSpeaker)
-  //     room.localParticipant.on('trackPublished', (track) => {
-  //       handleTrackPublished(track, room.localParticipant)
-  //     })
-  //     room.on('participantConnected', participantConnected)
-  //     room.on('participantDisconnected', participantDisconnected)
-  //     room.participants.forEach((p) => {
-  //       p.on('trackPublish', (track) => {
-  //         handleTrackPublished(track, p)
-  //       })
-  //     })
-  //     return () => {
-  //       room.off('dominantSpeakerChanged', handleDominantSpeaker)
-  //       room.localParticipant.off('trackPublished', (track) => {
-  //         handleTrackPublished(track, null)
-  //       })
-  //     }
-  //   }
-  //   return null
-  // }, [room])
-
   useTracker(() => {
-    if (slate?.shareId) {
-      Meteor.subscribe(CONSTANTS.publications.collaborators, [slate?.shareId])
-      // wires hearbeat
-      if (collaborator?.instanceId) {
-        Collaborators.find({ _id: collaborator?.instanceId }).observe({
-          added(doc) {
-            if (doc.heartbeat === false) {
-              Collaborators.update(
-                { _id: collaborator?.instanceId },
-                { $set: { heartbeat: true } }
-              )
-            }
-            // const collab = copyCollaborators()
-            // const ri = collab.findIndex((c) => c._id === doc._id)
-            // if (ri === -1) {
-            //   collab.push(doc)
-            //   setCollaborators(collab)
-            // }
-          },
-          changed: (doc) => {
-            if (doc.heartbeat === false) {
-              Collaborators.update(
-                { _id: collaborator?.instanceId },
-                { $set: { heartbeat: true } }
-              )
-            }
-            // const collab = copyCollaborators()
-            // const ri = collab.findIndex((c) => c._id === doc._id)
-            // if (ri === -1) {
-            //   currentCollaborators[ri] = doc
-            //   setCollaborators(collab)
-            // }
-          },
-        })
-      }
-      // retry logic
-      Collaborators.find({ shareId: slate.shareId }).observe({
-        removed: (doc) => {
-          console.log(
-            'removed collaborator...retry video',
-            capacityIssue.current
-          )
-          provisionRoomAndAccessToken()
-          // if (capacityIssue.current) {
-          //   // try to connect again
-          //   provisionRoomAndAccessToken()
-          // }
-        },
-      })
-    }
+    Meteor.subscribe(CONSTANTS.publications.collaborators, [slate?.shareId])
+    // Collaborators.find({ shareId: slate?.shareId }).observe({
+    //   removed: (doc) => {
+    //     // ensure that the video doesn't persist when there are no collaborators
+    //     console.log('collab removed', currentCollaborators.length)
+    //     if (currentCollaborators.length <= 1) {
+    //       callObject?.destroy().then(() => {
+    //         setCallObject(null)
+    //         setAppState(STATE_IDLE)
+    //       })
+    //     }
+    //   },
+    // })
   }, [slate?.shareId])
 
   useTracker(() => {
@@ -273,6 +209,7 @@ export default function CollaborationUsers({ slate }) {
           })
           break
         case 'error':
+          console.log('error with camera', callObject.meetingState())
           setAppState(STATE_ERROR)
           break
         default:
@@ -301,24 +238,45 @@ export default function CollaborationUsers({ slate }) {
     }
   }, [callObject])
 
-  return (
-    <DailyProvider callObject={callObject}>
-      <SlateVideo />
-      {currentCollaborators.length > 0 ? (
-        <Grid container spacing={2} className={classes.pinBottom}>
-          <VideoParticipant
-            participant={getParticipant(collaborator._id)}
-            collaborator={collaborator}
-            isLocal
-          />
-          {currentCollaborators.map((c) => (
-            <VideoParticipant
-              participant={getParticipant(c._id)}
-              collaborator={c}
-            />
-          ))}
+  useEffect(() => {
+    if (huddleEnabled && slateHuddleType !== 'disabled') {
+      provisionRoom()
+    } else {
+      console.log('destroy callObject')
+      callObject?.destroy().then(() => {
+        setCallObject(null)
+        setAppState(STATE_IDLE)
+        Collaborators.update(
+          { _id: collaborator._id },
+          { $unset: { videoParticipantId: true } }
+        )
+      })
+    }
+  }, [huddleEnabled, slateHuddleType])
+
+  const cssClass =
+    slateHuddleType === 'audio' ? classes.liveAudioChat : classes.liveVideoChat
+  if (huddleEnabled && slateHuddleType !== 'disabled') {
+    return (
+      <DailyProvider callObject={callObject}>
+        <Grid
+          container
+          spacing={2}
+          className={`${classes.pinBottom} ${
+            huddleEnabled && slateHuddleType ? cssClass : classes.pendingChat
+          } ${chatOpen ? classes.chatConstrained : ''}`}
+        >
+          <>
+            {currentCollaborators.map((c) => (
+              <VideoParticipant
+                collaborator={c}
+                audioOnly={slateHuddleType === 'audio'}
+              />
+            ))}
+          </>
         </Grid>
-      ) : null}
-    </DailyProvider>
-  )
+      </DailyProvider>
+    )
+  }
+  return null
 }

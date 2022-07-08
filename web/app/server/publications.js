@@ -1,6 +1,7 @@
 /* eslint-disable no-underscore-dangle */
 /* eslint-disable func-names */
 import { Meteor } from 'meteor/meteor'
+import utils from '../imports/api/common/utils'
 import CONSTANTS from '../imports/api/common/constants'
 import {
   Messages,
@@ -96,9 +97,24 @@ Meteor.publish(
     })
 )
 
-Meteor.publish(CONSTANTS.publications.collaborators, (shareIds) =>
-  Collaborators.find({ shareId: { $in: shareIds } })
-)
+Meteor.publish(CONSTANTS.publications.collaborators, function (shareIds) {
+  this._session.socket.on(
+    'close',
+    Meteor.bindEnvironment(() => {
+      // console.log(
+      //   'collaborator has disconnected',
+      //   this._session.socket.url,
+      //   this._session
+      // )
+      const collaboratorId = utils.extractIdFromWebsocketUrl(
+        this._session.socket.url
+      )
+      Collaborators.remove({ _id: collaboratorId })
+    })
+  )
+
+  return Collaborators.find({ shareId: { $in: shareIds } })
+})
 
 Meteor.publish(CONSTANTS.publications.organizations, function () {
   const user = Meteor.users.findOne({ _id: this.userId })

@@ -5,6 +5,7 @@
 import { Meteor } from 'meteor/meteor'
 import fetch from 'node-fetch'
 import CONSTANTS from '../../imports/api/common/constants'
+import { Slates } from '../../imports/api/common/models'
 
 const method = {}
 

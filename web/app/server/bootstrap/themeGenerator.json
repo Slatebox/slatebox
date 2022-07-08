@@ -2875,7 +2875,7 @@
     "collaboration": {
       "allow": true
     },
-    "allowVideoChat": false,
+    "huddleType": false,
     "isInfographic": false,
     "isPrivate": false,
     "isUnlisted": false,

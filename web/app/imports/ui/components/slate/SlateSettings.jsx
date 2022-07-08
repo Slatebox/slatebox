@@ -8,11 +8,13 @@ import Typography from '@material-ui/core/Typography'
 import Button from '@material-ui/core/Button'
 import Switch from '@material-ui/core/Switch'
 import TextField from '@material-ui/core/TextField'
+import MenuItem from '@material-ui/core/MenuItem'
+import Select from '@material-ui/core/Select'
 import { useDispatch, useSelector } from 'react-redux'
 import { useTracker } from 'meteor/react-meteor-data'
 import CONSTANTS from '../../../api/common/constants'
 
-import { ApprovalRequests } from '../../../api/common/models'
+import { ApprovalRequests, Organizations } from '../../../api/common/models'
 
 export default function SlateSettings({ onChange }) {
   const dispatch = useDispatch()
@@ -32,7 +34,10 @@ export default function SlateSettings({ onChange }) {
   const [isFollowMe, setSlateFollowMe] = React.useState(
     slate?.options?.followMe
   )
-  const [mindMapMode, setSlatemindMapMode] = React.useState(
+  const [slateHuddleType, setSlateHuddleType] = React.useState(
+    slate?.options?.huddleType
+  )
+  const [mindMapMode, setSlateMindMapMode] = React.useState(
     slate?.options?.mindMapMode
   )
   const [isTemplate, setSlateTemplate] = React.useState(
@@ -82,8 +87,19 @@ export default function SlateSettings({ onChange }) {
     })
   }
 
+  const setHuddleType = (val) => {
+    setSlateHuddleType(val)
+    dispatch({ type: 'canvas', slateHuddleType: val })
+    onChange({
+      type: 'onSlateHuddleChanged',
+      data: {
+        huddleType: val,
+      },
+    })
+  }
+
   const setMindMap = (e) => {
-    setSlatemindMapMode(e.target.checked)
+    setSlateMindMapMode(e.target.checked)
     onChange({
       type: 'onSlateMindMapModeChanged',
       data: { mindMapMode: e.target.checked },
@@ -190,6 +206,25 @@ export default function SlateSettings({ onChange }) {
           }}
         />
       </Grid>
+      <Grid item xs={12}>
+        <Select
+          value={slateHuddleType}
+          onChange={(e) => {
+            setHuddleType(e.target.value)
+          }}
+          variant="outlined"
+        >
+          <MenuItem key="disabled" value="disabled">
+            Disable Huddling
+          </MenuItem>
+          <MenuItem key="audio" value="audio">
+            Allow Audio-Only Huddles
+          </MenuItem>
+          <MenuItem key="video" value="video">
+            Allow Full Video Huddles
+          </MenuItem>
+        </Select>
+      </Grid>
       <Grid item xs={6}>
         Mind Map Mode
       </Grid>
@@ -205,7 +240,7 @@ export default function SlateSettings({ onChange }) {
       {!isTheme ? (
         <>
           <Grid item xs={6}>
-            Show grid
+            Show Grid
           </Grid>
           <Grid item xs={6}>
             <Tooltip
@@ -217,7 +252,7 @@ export default function SlateSettings({ onChange }) {
             </Tooltip>
           </Grid>
           <Grid item xs={6}>
-            Snap to neighbors
+            Snap to Neighbors
           </Grid>
           <Grid item xs={6}>
             <Tooltip
@@ -233,7 +268,7 @@ export default function SlateSettings({ onChange }) {
           </Grid>
           <Grid item xs={6}>
             <Tooltip
-              title="Synhronize the position of the canvas during collaboration"
+              title="Synchronize the position of the canvas during collaboration"
               placement="top"
               aria-label="setFollowMe"
             >
