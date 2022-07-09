@@ -4,6 +4,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.13] - 2022-07-09
+
+### Added
+
+### Changed
+
+- Fix to the user management page
+- Huddle toggle cleanup
+
+## [0.12] - 2022-07-07
+
+### Added
+
+### Changed
+
+- Audio only huddles by default
+
 ## [0.11] - 2022-07-07
 
 ### Added

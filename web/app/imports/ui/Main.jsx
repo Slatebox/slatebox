@@ -330,9 +330,7 @@ export default function Main() {
         registrationMessage: `Want to create a huddle? It just takes a second to register.`,
         paymentWillBeRequested: true,
       })
-      return
-    }
-    if (
+    } else if (
       (Meteor.user().planType === 'free' ||
         Organizations.findOne()?.planType === 'free') &&
       slate?.options.huddleType === 'video'
@@ -343,19 +341,18 @@ export default function Main() {
         paymentMessage: `Add full video chat huddles! (audio-only huddles are part of the free plan)`,
         paymentFocus: 'video huddles',
       })
-      return
+    } else {
+      dispatch({ type: 'canvas', huddleEnabled: !huddleEnabled })
+      const pkg = {
+        type: 'onSlateHuddleChanged',
+        data: { huddleEnabled: !huddleEnabled },
+      }
+      // invoke updates the local slate
+      slate?.collab.invoke(pkg)
+      pkg.instanceId = collaborator.instanceId
+      pkg.slateId = slate.shareId
+      slate.collab.send(pkg)
     }
-
-    dispatch({ type: 'canvas', huddleEnabled: !huddleEnabled })
-    const pkg = {
-      type: 'onSlateHuddleChanged',
-      data: { huddleEnabled: !huddleEnabled },
-    }
-    // invoke updates the local slate
-    slate?.collab.invoke(pkg)
-    pkg.instanceId = collaborator.instanceId
-    pkg.slateId = slate.shareId
-    slate.collab.send(pkg)
   }
 
   const handleSupport = () => {
@@ -413,6 +410,7 @@ export default function Main() {
         variant="outlined"
         color="secondary"
         icon={getIcon()}
+        onClick={toggleLiveChat}
         label={
           <>
             Huddle

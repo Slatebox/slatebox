@@ -43,35 +43,45 @@ method[CONSTANTS.methods.stripe.createSession] = async (opts) => {
           cancel_url: `${Meteor.settings.public.baseUrl}`,
         }
 
+        if (opts.couponCode) {
+          sessOpts.discounts = [{ coupon: opts.couponCode }]
+        }
+
         // See https://stripe.com/docs/api/checkout/sessions/create
         // for additional parameters to pass.
-        const session = await stripeAPI.checkout.sessions.create(sessOpts)
+        try {
+          console.log('creating session', sessOpts)
+          const session = await stripeAPI.checkout.sessions.create(sessOpts)
 
-        // note the planType
-        if (tier.requiresOrgId) {
-          Organizations.update(
-            { _id: Meteor.user().orgId },
-            {
-              $set: {
-                pendingPriceId: opts.priceId,
-                customerId: null,
-                subscriptionId: null,
-              },
-            }
-          )
-        } else {
-          Meteor.users.update(
-            { _id: Meteor.userId() },
-            {
-              $set: {
-                pendingPriceId: opts.priceId,
-                customerId: null,
-                subscriptionId: null,
-              },
-            }
-          )
+          // note the planType
+          if (tier.requiresOrgId) {
+            Organizations.update(
+              { _id: Meteor.user().orgId },
+              {
+                $set: {
+                  pendingPriceId: opts.priceId,
+                  customerId: null,
+                  subscriptionId: null,
+                },
+              }
+            )
+          } else {
+            Meteor.users.update(
+              { _id: Meteor.userId() },
+              {
+                $set: {
+                  pendingPriceId: opts.priceId,
+                  customerId: null,
+                  subscriptionId: null,
+                },
+              }
+            )
+          }
+          return session
+        } catch (err) {
+          console.error(err)
+          throw new Meteor.Error(err)
         }
-        return session
       }
       case 'portal': {
         const customerId = Meteor.user().orgId

@@ -180,7 +180,10 @@ Meteor.publish(CONSTANTS.publications.orgSlates, function () {
 
 Meteor.publish(CONSTANTS.publications.claims, function () {
   if (Meteor.user()) {
-    return Claims.find({}, { disableOplog: true })
+    if (Meteor.user().isMasterUser) {
+      return Claims.find({}, { disableOplog: true })
+    }
+    return Claims.find({ _id: { $ne: 'uberMensch' } }, { disableOplog: true })
   }
   this.ready()
   return null

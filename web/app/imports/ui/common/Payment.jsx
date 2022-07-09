@@ -16,6 +16,7 @@ import Grid from '@material-ui/core/Grid'
 import StarIcon from '@material-ui/icons/StarBorder'
 import Toolbar from '@material-ui/core/Toolbar'
 import Typography from '@material-ui/core/Typography'
+import TextField from '@material-ui/core/TextField'
 import { makeStyles } from '@material-ui/core/styles'
 import Container from '@material-ui/core/Container'
 import Box from '@material-ui/core/Box'
@@ -144,6 +145,7 @@ export default function Payment() {
   const [pricingLocale, setLocale] = React.useState('hosted')
   const theme = useTheme()
   let supportShowing = false
+  const [couponCode, setCouponCode] = React.useState('')
 
   const handleClose = () => {
     dispatch({
@@ -179,14 +181,27 @@ export default function Payment() {
       const stripe = Stripe(Meteor.settings.public.stripePublicKey)
       const priceId =
         pricingPeriod === 'year' ? tier.yearly.priceId : tier.monthly.priceId
-      const data = await promisify(
-        Meteor.call,
-        CONSTANTS.methods.stripe.createSession,
-        { priceId, type: 'checkout' }
-      )
-      stripe.redirectToCheckout({
-        sessionId: data.id,
-      })
+      try {
+        const data = await promisify(
+          Meteor.call,
+          CONSTANTS.methods.stripe.createSession,
+          { priceId, type: 'checkout', couponCode }
+        )
+        stripe.redirectToCheckout({
+          sessionId: data.id,
+        })
+      } catch (err) {
+        console.log('error is', err)
+        dispatch({
+          type: 'canvas',
+          globalMessage: {
+            visible: true,
+            text: `There was a problem creating the payment session: ${err?.error?.raw?.message}`,
+            severity: 'error',
+            autoHide: 10000,
+          },
+        })
+      }
     } else {
       // contact us form
       switch (tier._id) {
@@ -409,7 +424,20 @@ export default function Payment() {
               color="textSecondary"
               component="p"
             >
-              {billExplain1} {billExplain2}
+              {billExplain1} {billExplain2}{' '}
+              <TextField
+                size="small"
+                style={{ marginTop: '-8px', width: '100px' }}
+                variant="outlined"
+                label="Coupon"
+                value={couponCode}
+                onChange={(e) => {
+                  setCouponCode(e.target.value)
+                }}
+                InputLabelProps={{
+                  style: { color: '#fff' },
+                }}
+              />
             </Typography>
             <Typography
               variant="h5"
