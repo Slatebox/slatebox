@@ -1,8 +1,8 @@
 name: Push to docker hub
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "*"
   workflow_dispatch:
     tags:
       - "*"
