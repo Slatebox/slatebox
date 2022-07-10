@@ -1,8 +1,8 @@
 name: Create prod release when an release tag is pushed
 on:
   push:
-    tags:
-      - "v.release.*"
+    branches:
+      - main
 jobs:
   create-release:
     name: Release

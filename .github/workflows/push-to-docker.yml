@@ -1,8 +1,8 @@
 name: Push to docker hub
 on:
   push:
-    tags:
-      - "v.release.*"
+    branches:
+      - main
   workflow_dispatch:
     tags:
       - "*"
