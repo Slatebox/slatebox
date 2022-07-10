@@ -4,6 +4,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.14] - 2022-07-10
+
+### Added
+
+### Changed
+
+- Added daily api key
+
 ## [0.13] - 2022-07-09
 
 ### Added
