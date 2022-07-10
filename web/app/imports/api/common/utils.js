@@ -19,6 +19,12 @@ const utils = {
       }, millis)
     })
   },
+  extractIdFromWebsocketUrl(url) {
+    return url
+      .split('/sockjs/')[1]
+      .replace('/websocket', '')
+      .replace(/\//gi, '-')
+  },
 }
 
 export default utils

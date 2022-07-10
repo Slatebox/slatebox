@@ -1,3 +1,4 @@
+/* eslint-disable no-shadow */
 import React, { useEffect } from 'react'
 import PropTypes from 'prop-types'
 import { withStyles } from '@material-ui/core/styles'
@@ -87,9 +88,9 @@ export default function NodeBehavior({
       },
     }
     onChange(pkg)
-    const { bsState, dsBehavior } = getBehavior(b, cur)
-    setBehaviorMap(cloneDeep(bsState))
-    onDefaultBehaviorChanged(dsBehavior)
+    const { bState, dBehavior } = getBehavior(b, cur)
+    setBehaviorMap(cloneDeep(bState))
+    onDefaultBehaviorChanged(dBehavior)
     if (tabValue === 2) {
       // 2 is equal to the menu tab
       onTabVisibilityChanged(b, cur)

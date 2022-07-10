@@ -75,6 +75,7 @@ async function createSlate(slateBase, events, collaboration, isNew, isGuest) {
     collaboration: {
       allow: true,
     },
+    huddleType: 'audio',
   }
   if (isNew) {
     opts.isPublic = publicDefault

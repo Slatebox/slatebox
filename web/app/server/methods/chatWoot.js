@@ -6,7 +6,7 @@ import CONSTANTS from '../../imports/api/common/constants'
 
 const method = {}
 
-method[CONSTANTS.methods.chatWoot.identifyUser] = async function () {
+method[CONSTANTS.methods.chatWoot.identifyUser] = async () => {
   // console.log("calling chatwoot identity", Meteor.userId());
   if (Meteor.userId() && Meteor.settings.chatWoot.userIdentityValidationToken) {
     const hash = CryptoJS.HmacSHA256(
@@ -15,6 +15,7 @@ method[CONSTANTS.methods.chatWoot.identifyUser] = async function () {
     ).toString(CryptoJS.enc.Hex)
     return hash
   }
+  return null
 }
 
 Meteor.methods(method)

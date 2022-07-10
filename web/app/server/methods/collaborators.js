@@ -9,6 +9,7 @@ method[CONSTANTS.methods.collaborators.create] = async (opts) => {
   const collaborator = JSON.parse(JSON.stringify(opts))
 
   collaborator.heartbeat = true
+  collaborator.created = new Date().valueOf()
   collaborator.instanceId = opts.id
   collaborator._id = opts.id
 

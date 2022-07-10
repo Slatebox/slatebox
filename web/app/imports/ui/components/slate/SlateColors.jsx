@@ -6,6 +6,11 @@ import Grid from '@material-ui/core/Grid'
 import Tooltip from '@material-ui/core/Tooltip'
 import ToggleButtonGroup from '@material-ui/lab/ToggleButtonGroup'
 import ToggleButton from '@material-ui/lab/ToggleButton'
+import List from '@material-ui/core/List'
+import ListItem from '@material-ui/core/ListItem'
+import ListItemIcon from '@material-ui/core/ListItemIcon'
+import Checkbox from '@material-ui/core/Checkbox'
+import ListItemText from '@material-ui/core/ListItemText'
 import Box from '@material-ui/core/Box'
 import Brightness1Icon from '@material-ui/icons/Brightness1'
 import Typography from '@material-ui/core/Typography'
@@ -54,7 +59,6 @@ export default function SlateColors({ onChange }) {
           { type: bgStrategy, base: selectedColor }
         )
         bgGradientColors.current = palette.slice(0, gradientColorCount)
-        console.log('bgcolors', bgGradientColors)
       }
       const payload = {
         color: selectedColor,
@@ -90,6 +94,14 @@ export default function SlateColors({ onChange }) {
   const genColors = (event, newStrategy) => {
     if (newStrategy) {
       setBgStrategy(newStrategy)
+    }
+  }
+
+  const toggleTransparent = () => {
+    if (selectedColor === 'transparent') {
+      updateColor('#fff')
+    } else {
+      updateColor('transparent')
     }
   }
 
@@ -146,6 +158,28 @@ export default function SlateColors({ onChange }) {
       </Grid>
       {colorType === 'onSlateBackgroundColorChanged' && (
         <Grid container spacing={2} justify="space-evenly">
+          {/* <Grid item xs={12}>
+            <List>
+              <ListItem
+                role={undefined}
+                dense
+                button
+                onClick={(e) => {
+                  toggleTransparent()
+                }}
+              >
+                <ListItemIcon>
+                  <Checkbox
+                    edge="start"
+                    checked={selectedColor === 'transparent'}
+                    tabIndex={-1}
+                    disableRipple
+                  />
+                </ListItemIcon>
+                <ListItemText primary="transparent" />
+              </ListItem>
+            </List>
+          </Grid> */}
           <Grid item xs={12}>
             <ToggleButton
               style={{ width: '100%' }}

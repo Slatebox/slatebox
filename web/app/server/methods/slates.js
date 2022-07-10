@@ -165,8 +165,10 @@ method[CONSTANTS.methods.slates.get] = async (opts) => {
   if (opts.shareId) {
     // first get the slate
     let slate = Slates.findOne({ shareId: opts.shareId })
+    console.log('found slate', slate)
     if (!slate) {
       const getSlate = SlateAccess.findOne({ accessKey: opts.shareId })
+      console.log('found slate access', getSlate)
       if (getSlate) {
         slate = Slates.findOne({ _id: getSlate?.slateId })
         // final check: slate public/private/unlisted options must match the accessKey
@@ -201,6 +203,7 @@ method[CONSTANTS.methods.slates.get] = async (opts) => {
           slateBase: slate,
         }
       }
+      console.log('getting access', slate._id, type)
       const access = SlateAccess.find({
         slateId: slate._id,
         type,
@@ -208,7 +211,7 @@ method[CONSTANTS.methods.slates.get] = async (opts) => {
           $ne: CONSTANTS.slateAccessPermissions.none.id,
         },
       }).fetch()
-      // console.log("got slate access ", access);
+      console.log('got slate access ', access)
       if (access.length > 0) {
         if (
           (slate.options.isUnlisted || slate.options.isPublic) &&
@@ -232,6 +235,13 @@ method[CONSTANTS.methods.slates.get] = async (opts) => {
         }
         // no access
         return null
+      }
+      if (type === 'public') {
+        // they haven't created a team yet, so all public slates are editable by default
+        return {
+          accessLevel: CONSTANTS.slateAccessPermissions.edit.id,
+          slateBase: slate,
+        }
       }
     } else if (Meteor.user()) {
       // new slate

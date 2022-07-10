@@ -1,55 +1,47 @@
-## Welcome to the Slatebox Repository!
+# Slatebox
 
-[Slatebox](https://slatebox.com) is a fair-code licensed, free and open visual collaboration canvas that is an alternative to proprietary apps like Miro.com.
+![License](https://img.shields.io/badge/license-ELv2-green)
+![Twitter Follow](https://img.shields.io/twitter/follow/slatebox?style=social)
 
-![Slatebox Provides Free And Open Visual Collaboration For Remote Teams](https://d33wubrfki0l68.cloudfront.net/399f18bc5d70c92c04bd8af25dc061159dcd02b8/2e0ec/images/sb_mindmap.jpg)
+[Slatebox](https://slatebox.com) is a free and open real-time visual collaboration canvas that allows remote participants to work together on a shared, infinite canvas. It is an alternative to proprietary apps like Miro.com.
 
-## Contents
+Licensed with the Elastic License 2.0, Slatebox is free and open software than can be used for commercial purposes and installed on your own servers free of charge. Additionally, Slatebox Cloud is a SaaS service that makes it easy and affordable to get started.
 
-- [Licensed with ELv2](#licensed-with-elv2)
-- [So...what is Slatebox?](#so-what-is-slatebox)
-- [Is there a cloud hosted version?](#is-there-a-cloud-hosted-version)
-- [Documentation](#documentation)
-- [Discussion Forum](#discussion-forum)
-- [What's the deal? Who built this?](#whats-the-deal-who-built-this)
-- [Want to help development?](#want-to-help-development)
-- [What's the tech stack?](#whats-the-tech-stack)
-- [Indebted to open source](#indebted-to-open-source)
+## Prerequisites
 
-## Licensed with ELv2
+Before you begin, ensure you have met the following requirements:
 
-Licensed with Elastic License v2, Slatebox is a fair-code licensed product that allows all personal and commercial endevours with the exception of [the three limitations listed in the ELv2](https://www.elastic.co/licensing/elastic-license). Basically, you're not allowed to pull an AWS and simply resell Slatebox as a service. Anything else? It's bloodly likely. Host Slatebox on your own servers, extend it, use it, adopt it, contribute back (or don't), and just generally love it as a powerful and free alternative to other proprietary remote tools. Do you hear me? YOU MUST LOVE IT. If you have any questions on the license, please reach out to tim@slatebox.com.
+- You have installed the latest version of [Docker](https://docs.docker.com/engine/install/).
+- You have a Linux machine running a modern OS.
 
-## So...what is Slatebox?
+## Installing Slatebox
 
-Slatebox isn't just one thing. Atop its visual canvas, you can run remote meetings (daily standups, kanban), run brainstorming and ideation workshops (root cause analysis, customer touchpoints, fishbone diagrams) with any of its templates, or you can simply create expressive concept drawing and mind mapping with your classmates or colleagues. Or use it a a solo design tool to mock up ideas with an intuitive drag-and-drop system.
+To install Slatebox, follow the steps outlined here:
 
-## Is there a cloud hosted version?
+https://docs.slatebox.com/installation/install-with-docker/
 
-Yup! If you don't want to deal with the hassle of installing and maintaining Slatebox on prem, [Slatebox Cloud](https://app.slatebox.com) is a simple, light, and affordable way to start using Slatebox immediately. The forever free plans means you'll always have a lightweight version available instantly -- invite unlimited users and start collaborating today. 
+## Using Slatebox
 
-...Otherwise, if you want to run this on your own server, just follow the installation steps in the [docs](https://docs.slatebox.com)! It's a snap, really.
+To use Slatebox, refer to the user guide here:
 
-## Documentation
+https://docs.slatebox.com/using-slatebox/
 
-[Slatebox documentation is available here for all your questions](https://docs.slatebox.com).
+If you have any questions, please use the [discussion forum](https://community.slatebox.com).
 
-## Discussion Forum?
+## Contributing to Slatebox
 
-Yep, we have a great community -- [join us here](https://community.slatebox.com) for a simple way to ask questions and engage.
+Please take a look at the [Contributing Guidelines](CONTRIBUTING.md) to get started.
 
-## What's the deal? Who built this?
+## Contact
 
-My name is [Tim Heckel](https://github.com/TimHeckel), and I'm Slatebox's creator. There's a lot of backstory to this project, but basically it's been a labor of love over many years. If you're interested, check out the [blog](https://blog.slatebox.com) to get all the juicy details.
+If you want to contact me you can reach me at tim@slatebox.com.
 
-## Want to help development?
+## Tech Stack
 
-Please do. Visit the [Contributing Guidelines](CONTRIBUTING.md) to get started.
+Slatebox is built with [Meteor](https://meteor.com) using [React](https://reactjs.org/) and [Material UI](https://mui.com/). Native to Meteor development is Mongo as the backend; Slatebox Cloud extends the real-time performance of Meteor by implementing [the redis oplog caching layer](https://github.com/cult-of-coders/redis-oplog), but this performance improvement is not baked into the Slatebox community edition.
 
-## What's the tech stack?
+[Slateboxjs](https://github.com/slatebox/slateboxjs) is the MIT-licensed diagramming library used.
 
-Slatebox is built with [Meteor](https://meteor.com) using [React](https://reactjs.org/) and [Material UI](https://mui.com/). Native to Meteor development is Mongo as the backend; Slatebox Cloud extends the real-time performance of Meteor by implementing [the redis oplog caching layer](https://github.com/cult-of-coders/redis-oplog).
+## License
 
-## Indebted to open source
-
-Slatebox relies on so many of the above open source toosl, notably Meteor, which has always been a lovely platform and dear to me for many years. In the spirit of sustainability, Slatebox is ELv2 licensed with the hope that ensuring long-term commercial success is balanced with the open source spirit of free and open software.
+This project uses the following license: [ELv2](https://www.elastic.co/licensing/elastic-license).

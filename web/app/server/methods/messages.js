@@ -36,6 +36,7 @@ method[CONSTANTS.methods.messages.recreateMessagesForComment] = async (
           priority: 5,
           slateId: opts.slateId,
           nodeId: opts.nodeId,
+          type: CONSTANTS.messageTypes.system,
           action: {
             type: CONSTANTS.messageActionTypes.slate,
             toolTip: `Go to the slate to reply to this comment`,

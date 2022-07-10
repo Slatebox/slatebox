@@ -3,6 +3,7 @@
 import { Meteor } from 'meteor/meteor'
 import { Random } from 'meteor/random'
 import { useDispatch, useSelector } from 'react-redux'
+import { RecoilRoot } from 'recoil'
 import { useTracker } from 'meteor/react-meteor-data'
 import * as Cookies from 'js-cookie'
 import { useTheme } from '@material-ui/core'
@@ -13,6 +14,7 @@ import createSlate from '../../api/client/createSlate'
 import saveSlate from '../../api/client/saveSlate'
 
 import CONSTANTS from '../../api/common/constants'
+import utils from '../../api/common/utils'
 
 // global models
 import { Collaborators, Comments } from '../../api/common/models'
@@ -29,6 +31,7 @@ import Chat from '../components/Chat'
 import QuickNodeActions from '../components/node/QuickNodeActions'
 import AuthManager from '../../api/common/AuthManager'
 import confirmService from '../common/confirm'
+import getUserName from '../../api/common/getUserName'
 
 export default function Canvas() {
   const history = useHistory()
@@ -275,6 +278,10 @@ export default function Canvas() {
             break
           case 'custom':
             switch (opts.pkg.type) {
+              case 'onSlateHuddleChanged': {
+                await saveSlate(opts)
+                break
+              }
               case 'onSaveRequested':
                 if (!opts.pkg._id) {
                   await saveSlate(opts)
@@ -435,6 +442,7 @@ export default function Canvas() {
         CONSTANTS.methods.slates.get,
         { shareId: id }
       )
+      console.log('got slate', id, getSlate)
       let slateBase = null
       if (getSlate?.exists === false) {
         isNew = true
@@ -478,7 +486,10 @@ export default function Canvas() {
         (!isNew && Meteor.user() && Meteor.user().orgId !== slateBase.orgId)
 
       if (!collaborator.current) {
-        let idx = Random.id()
+        let idx = utils.extractIdFromWebsocketUrl(
+          Meteor.connection._stream.socket._transport.url
+        )
+        console.log('websocket id is', idx)
         if (requiresTracking) {
           if (!Cookies.get(CONSTANTS.guestCollaboratorCookieId)) {
             Cookies.set(CONSTANTS.guestCollaboratorCookieId, idx, {
@@ -490,7 +501,12 @@ export default function Canvas() {
         collaborator.current = await promisify(
           Meteor.call,
           CONSTANTS.methods.collaborators.create,
-          { shareId: slateBase.shareId, userId: Meteor.userId(), id: idx }
+          {
+            shareId: slateBase.shareId,
+            userId: Meteor.userId(),
+            userName: getUserName(Meteor.userId()),
+            id: idx,
+          }
         )
         dispatch({ type: 'collaborator', collaborator: collaborator.current })
       }
@@ -622,7 +638,9 @@ export default function Canvas() {
         }}
       />
       <Chat slate={slate.current} />
-      <CollaborationUsers slate={slate.current} />
+      <RecoilRoot>
+        <CollaborationUsers slate={slate.current} />
+      </RecoilRoot>
     </RemoteCursors>
   )
 }

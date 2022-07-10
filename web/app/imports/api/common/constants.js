@@ -4,6 +4,7 @@ const CONSTANTS = {
   privateSlateLimit: 3,
   guestCollaboratorCookieId: 'slatebox_guestCollaboratorId',
   defaultThemeId: '05e5acd816e2',
+  googleDocsCookieToken: 'slatebox_googleDocsToken',
   methods: {
     users: {
       createAnonymous: 'users.createAnonymous',
@@ -62,6 +63,7 @@ const CONSTANTS = {
       base64StringFromRemoteUrl: 'utils.base64StringFromRemoteUrl',
       optimizeSVG: 'utils.optimizeSVG',
       createImage: 'utils.createImage',
+      getCloudLink: 'utils.getCloudLink',
     },
     organizations: {
       create: 'organizations.create',
@@ -76,6 +78,16 @@ const CONSTANTS = {
     },
     messages: {
       recreateMessagesForComment: 'messages.recreateMessagesForComment',
+    },
+    googleDocs: {
+      createAuthUrl: 'googleDocs.createAuthUrl',
+      getToken: 'googleDocs.getToken',
+      export: 'googleDocs.export',
+      createFolder: 'googleDocs.createFolder',
+    },
+    daily: {
+      createRoom: 'daily.createRoom',
+      generateAccessToken: 'twilio.generateAccessToken',
     },
   },
   publications: {

@@ -230,7 +230,9 @@ method[CONSTANTS.methods.organizations.guestViewReport] = async () => {
 
       const owner = slateOwners.find((so) => so._id === gv.slateOwnerUserId)
       const slateOwner = owner
-        ? owner.profile && owner.profile.firstName.trim() !== ''
+        ? owner.profile &&
+          owner.profile.firstName &&
+          owner.profile.firstName.trim() !== ''
           ? `${owner.profile.firstName} ${owner.profile.lastName}`
           : owner.emails[0].address.split('@')[0]
         : '[Removed]'
