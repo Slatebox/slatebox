@@ -2,7 +2,7 @@ name: Push to docker hub
 on:
   push:
     tags:
-      - "*"
+      - "v.release.*"
   workflow_dispatch:
     tags:
       - "*"
@@ -24,13 +24,3 @@ jobs:
           docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:${{ github.ref_name }}
           docker tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:${{ github.ref_name }} ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:latest
           docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:latest
-  create-release:
-    name: Release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: ncipollo/release-action@v1
-        with:
-          generateReleaseNotes: true
-          name: "v${{ github.ref_name }}"
-          token: ${{ secrets.GITHUB_TOKEN }}
