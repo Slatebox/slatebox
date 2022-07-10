@@ -79,6 +79,9 @@ export default function ManageOrganization() {
     }).fetch()
   })
 
+  // this auto loads ther page when permissions change
+  useTracker(() => Permissions.find().fetch())
+
   async function removeMember(member) {
     const userDetails = await promisify(
       Meteor.call,
@@ -112,7 +115,8 @@ export default function ManageOrganization() {
   }
 
   function isChecked(member, claim) {
-    return AuthManager.userHasClaim(member._id, [claim._id])
+    const ic = AuthManager.userHasClaim(member._id, [claim._id])
+    return ic
   }
 
   async function handleChange(member, prop, val) {
@@ -214,19 +218,20 @@ export default function ManageOrganization() {
   }
 
   async function handlePermission(member, claim, chk) {
+    const pOpts = {
+      users: [
+        {
+          orgId: member.orgId,
+          userId: member._id,
+          claimIds: [claim._id],
+          action: chk ? 'add' : 'delete',
+        },
+      ],
+    }
     const update = await promisify(
       Meteor.call,
       CONSTANTS.methods.users.changeRoles,
-      {
-        users: [
-          {
-            orgId: member.orgId,
-            userId: member._id,
-            claimIds: [claim._id],
-            action: chk ? 'add' : 'delete',
-          },
-        ],
-      }
+      pOpts
     )
     if (!update) {
       dispatch({

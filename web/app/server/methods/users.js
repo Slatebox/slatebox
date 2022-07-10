@@ -1,3 +1,4 @@
+/* eslint-disable default-case */
 /* eslint-disable no-underscore-dangle */
 // methods
 import { Random } from 'meteor/random'
@@ -319,7 +320,7 @@ method[CONSTANTS.methods.users.changeRoles] = async (opts) => {
           )
         } else {
           switch (u.action) {
-            case 'add':
+            case 'add': {
               if (u.claimIds[0] === 'admin') {
                 Permissions.remove({ orgId: opts.orgId, userId: u.userId })
               }
@@ -335,13 +336,17 @@ method[CONSTANTS.methods.users.changeRoles] = async (opts) => {
                 }
               })
               break
-            case 'delete':
-              Permissions.remove({
+            }
+            case 'delete': {
+              const rOpts = {
                 orgId: Meteor.user().orgId,
                 userId: u.userId,
                 claimId: { $in: claims.map((c) => c._id) },
-              })
+              }
+              console.log('rOpts', rOpts)
+              Permissions.remove(rOpts)
               break
+            }
           }
         }
         Meteor.users.update({ _id: u._id }, { $set: { roles: u.claimIds } })

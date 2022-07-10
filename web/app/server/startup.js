@@ -7,6 +7,15 @@ Meteor.startup(() => {
   // setup mail
   setup()
 
+  // swallow debug messages
+  Meteor._debug = (function (superMeteorDebug) {
+    return function (error, info) {
+      if (error !== 'discarding unknown livedata message type') {
+        superMeteorDebug(error, info)
+      }
+    }
+  })(Meteor._debug)
+
   Accounts.onCreateUser((suggested, user) => {
     const muser = user
     muser.isAnonymous = suggested.isAnonymous || false

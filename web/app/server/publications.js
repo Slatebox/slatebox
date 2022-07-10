@@ -1,6 +1,7 @@
 /* eslint-disable no-underscore-dangle */
 /* eslint-disable func-names */
 import { Meteor } from 'meteor/meteor'
+import utils from '../imports/api/common/utils'
 import CONSTANTS from '../imports/api/common/constants'
 import {
   Messages,
@@ -51,15 +52,15 @@ Meteor.publish(CONSTANTS.publications.shareableSlate, (slateId) => {
 
 Meteor.publish(CONSTANTS.publications.messages, function (opts) {
   if (this.userId) {
-    let msearch = { type: opts.type }
+    const msearch = { type: opts.type }
     switch (opts.type) {
       case CONSTANTS.messageTypes.system: {
-        msearch = { ...msearch, userId: this.userId }
+        msearch.userId = this.userId
         break
       }
       case CONSTANTS.messageTypes.chat:
       default: {
-        msearch = { ...msearch, slateShareId: opts.slateShareId }
+        msearch.slateShareId = opts.slateShareId
         break
       }
     }
@@ -94,9 +95,24 @@ Meteor.publish(
     })
 )
 
-Meteor.publish(CONSTANTS.publications.collaborators, (shareIds) =>
-  Collaborators.find({ shareId: { $in: shareIds } })
-)
+Meteor.publish(CONSTANTS.publications.collaborators, function (shareIds) {
+  this._session.socket.on(
+    'close',
+    Meteor.bindEnvironment(() => {
+      // console.log(
+      //   'collaborator has disconnected',
+      //   this._session.socket.url,
+      //   this._session
+      // )
+      const collaboratorId = utils.extractIdFromWebsocketUrl(
+        this._session.socket.url
+      )
+      Collaborators.remove({ _id: collaboratorId })
+    })
+  )
+
+  return Collaborators.find({ shareId: { $in: shareIds } })
+})
 
 Meteor.publish(CONSTANTS.publications.organizations, function () {
   const user = Meteor.users.findOne({ _id: this.userId })
@@ -162,7 +178,10 @@ Meteor.publish(CONSTANTS.publications.orgSlates, function () {
 
 Meteor.publish(CONSTANTS.publications.claims, function () {
   if (Meteor.user()) {
-    return Claims.find({}, { disableOplog: true })
+    if (Meteor.user().isMasterUser) {
+      return Claims.find({}, { disableOplog: true })
+    }
+    return Claims.find({ _id: { $ne: 'uberMensch' } }, { disableOplog: true })
   }
   this.ready()
   return null

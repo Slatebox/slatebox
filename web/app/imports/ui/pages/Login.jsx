@@ -10,6 +10,7 @@ import LockOutlinedIcon from '@material-ui/icons/LockOutlined'
 import Typography from '@material-ui/core/Typography'
 import { makeStyles } from '@material-ui/core/styles'
 import Container from '@material-ui/core/Container'
+import Box from '@material-ui/core/Box'
 import Snackbar from '@material-ui/core/Snackbar'
 import Alert from '@material-ui/lab/Alert'
 import createAnonymousUser from '../../api/client/createAnonymousUser'
@@ -149,6 +150,27 @@ export default function Login() {
         >
           Start now. No Registration required.
         </Button>
+        <Box m={1} p={1}>
+          <Typography variant="caption" style={{ color: '#fff' }}>
+            By registering with Slatebox, you agree to the{' '}
+            <a
+              href="./slatebox_terms_of_use.pdf"
+              style={{ color: '#ccc' }}
+              target="_blank"
+            >
+              Terms of Service
+            </a>{' '}
+            and{' '}
+            <a
+              href="./slatebox_privacy_policy.pdf"
+              style={{ color: '#ccc' }}
+              target="_blank"
+            >
+              Privacy
+            </a>{' '}
+            policies
+          </Typography>
+        </Box>
       </div>
       <Snackbar
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}

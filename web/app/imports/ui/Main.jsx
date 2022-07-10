@@ -1,3 +1,4 @@
+/* eslint-disable react/jsx-no-useless-fragment */
 /* eslint-disable no-underscore-dangle */
 /* eslint-disable no-nested-ternary */
 import React from 'react'
@@ -21,11 +22,16 @@ import List from '@material-ui/core/List'
 import Divider from '@material-ui/core/Divider'
 import IconButton from '@material-ui/core/IconButton'
 import Button from '@material-ui/core/Button'
+import Switch from '@material-ui/core/Switch'
+import FormControlLabel from '@material-ui/core/FormControlLabel'
 import Grid from '@material-ui/core/Grid'
 import Badge from '@material-ui/core/Badge'
 import MenuIcon from '@material-ui/icons/Menu'
 import ChatIcon from '@material-ui/icons/Chat'
 import ChevronLeftIcon from '@material-ui/icons/ChevronLeft'
+import MicIcon from '@material-ui/icons/Mic'
+import VideocamIcon from '@material-ui/icons/Videocam'
+
 import ButtonGroup from '@material-ui/core/ButtonGroup'
 
 import ListItem from '@material-ui/core/ListItem'
@@ -41,6 +47,8 @@ import VpnLockIcon from '@material-ui/icons/VpnLock'
 import SettingsIcon from '@material-ui/icons/Settings'
 import BrushIcon from '@material-ui/icons/Brush'
 import GroupIcon from '@material-ui/icons/Group'
+import VideocamOffIcon from '@material-ui/icons/VideocamOff'
+import MicOffIcon from '@material-ui/icons/MicOff'
 import AccountCircleIcon from '@material-ui/icons/AccountCircle'
 import ContactSupportIcon from '@material-ui/icons/ContactSupport'
 import TableChartIcon from '@material-ui/icons/TableChart'
@@ -49,9 +57,11 @@ import Snackbar from '@material-ui/core/Snackbar'
 import Alert from '@material-ui/lab/Alert'
 import ViewComfy from '@material-ui/icons/ViewComfy'
 import { Chip, Tooltip, useMediaQuery } from '@material-ui/core'
+import CookieConsent from 'react-cookie-consent'
 import Routes from './Routes'
 
 import ChatWootConfig from './components/ChatWootConfig'
+import ConnectionStatus from './components/ConnectionStatus'
 import MessageListener from './components/MessageListener'
 import CONSTANTS from '../api/common/constants'
 import ProfileMenu from './components/ProfileMenu'
@@ -117,6 +127,10 @@ export default function Main() {
     isPrivate: slate?.options.isPrivate,
     isUnlisted: slate?.options.isUnlisted,
   }
+  const slateHuddleType =
+    useSelector((state) => state.slateHuddleType) || slate?.options.huddleType
+  const huddleEnabled =
+    useSelector((state) => state.huddleEnabled) || slate?.options.huddleEnabled
   const embeddedSlate = useSelector((state) => state.embeddedSlate)
   const collaborator = useSelector((state) => state.collaborator)
   const openShareDialog = useSelector((state) => state.openShareDialog)
@@ -141,19 +155,22 @@ export default function Main() {
   // Cohere.init(Meteor.settings.public.cohereKey);
 
   const slateHasMessages = useTracker(() => {
-    Meteor.subscribe(CONSTANTS.publications.messages, {
-      type: CONSTANTS.messageTypes.chat,
-      slateShareId: slate?.shareId,
-    })
-    return (
-      Messages.find({
+    if (slate?.shareId) {
+      Meteor.subscribe(CONSTANTS.publications.messages, {
         type: CONSTANTS.messageTypes.chat,
         slateShareId: slate?.shareId,
-      }).count() > 0
-    )
+      })
+      return (
+        Messages.find({
+          type: CONSTANTS.messageTypes.chat,
+          slateShareId: slate?.shareId,
+        }).count() > 0
+      )
+    }
+    return false
   })
 
-  console.log('slatehasmessages', slateHasMessages)
+  console.log('huddleEnabled', huddleEnabled, slateHuddleType)
 
   const slateAccess = useTracker(() => {
     Meteor.subscribe(CONSTANTS.publications.slateAccess, {})
@@ -256,6 +273,11 @@ export default function Main() {
       logo: {
         maxHeight: '40px',
       },
+      huddling: {
+        '& .MuiChip-label': {
+          paddingRight: 0,
+        },
+      },
     }))
   })
 
@@ -299,6 +321,39 @@ export default function Main() {
     dispatch({ type: 'canvas', chatOpen: !chatIsOpen })
   }
 
+  const toggleLiveChat = () => {
+    if (Meteor.user().isAnonymous) {
+      dispatch({
+        type: 'registration',
+        registrationOpen: true,
+        registrationMessage: `Want to create a huddle? It just takes a second to register.`,
+        paymentWillBeRequested: true,
+      })
+    } else if (
+      (Meteor.user().planType === 'free' ||
+        Organizations.findOne()?.planType === 'free') &&
+      slate?.options.huddleType === 'video'
+    ) {
+      dispatch({
+        type: 'payment',
+        paymentOpen: true,
+        paymentMessage: `Add full video chat huddles! (audio-only huddles are part of the free plan)`,
+        paymentFocus: 'video huddles',
+      })
+    } else {
+      dispatch({ type: 'canvas', huddleEnabled: !huddleEnabled })
+      const pkg = {
+        type: 'onSlateHuddleChanged',
+        data: { huddleEnabled: !huddleEnabled },
+      }
+      // invoke updates the local slate
+      slate?.collab.invoke(pkg)
+      pkg.instanceId = collaborator.instanceId
+      pkg.slateId = slate.shareId
+      slate.collab.send(pkg)
+    }
+  }
+
   const handleSupport = () => {
     window.$chatwoot.toggle()
   }
@@ -327,6 +382,52 @@ export default function Main() {
         autoHide: 10000,
       },
     })
+  }
+
+  function getIcon() {
+    let icon = null
+    if (slateHuddleType === 'video') {
+      if (huddleEnabled) {
+        icon = <VideocamOffIcon />
+      } else {
+        icon = <VideocamIcon />
+      }
+    } else if (slateHuddleType === 'audio') {
+      if (huddleEnabled) {
+        icon = <MicOffIcon />
+      } else {
+        icon = <MicIcon />
+      }
+    }
+    return icon
+  }
+
+  function huddleUp() {
+    return (
+      <Chip
+        className={classes.huddling}
+        variant="outlined"
+        color="secondary"
+        icon={getIcon()}
+        onClick={toggleLiveChat}
+        label={
+          <>
+            Huddle
+            <FormControlLabel
+              style={{ marginRight: 0, marginLeft: '2px' }}
+              control={
+                <Switch
+                  checked={huddleEnabled}
+                  onChange={toggleLiveChat}
+                  name="huddleEnabled"
+                  color="secondary"
+                />
+              }
+            />
+          </>
+        }
+      />
+    )
   }
 
   return (
@@ -646,6 +747,18 @@ export default function Main() {
                             </Button>
                           </Tooltip>
                         )}
+                        {slate &&
+                          slate.userId === Meteor.userId() &&
+                          !slate.options.eligibleForThemeCompilation &&
+                          slateHuddleType !== 'disabled' && (
+                            <Tooltip
+                              title={`Huddle in a ${slateHuddleType} chat`}
+                              placement="top"
+                              aria-label="setHuddle"
+                            >
+                              {huddleUp()}
+                            </Tooltip>
+                          )}
                       </ButtonGroup>
                     </Grid>
                   )}
@@ -798,7 +911,17 @@ export default function Main() {
           onClose={handleClose}
           autoHideDuration={globalMessage.autoHide || 10000}
         >
-          <Alert severity={globalMessage.severity}>{globalMessage.text}</Alert>
+          <Alert severity={globalMessage.severity}>
+            {globalMessage.text}
+            {globalMessage.line2 ? (
+              <>
+                <br />
+                {globalMessage.line2}
+              </>
+            ) : (
+              ''
+            )}
+          </Alert>
         </Snackbar>
         <MessageListener />
         <SlateSnapshots
@@ -812,6 +935,10 @@ export default function Main() {
             setSnapshotOpen(false)
           }}
         />
+        <ConnectionStatus />
+        <CookieConsent>
+          This website uses cookies to enhance the user experience.
+        </CookieConsent>
       </ThemeProvider>
     </>
   )

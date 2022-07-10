@@ -163,7 +163,7 @@ export default function QuickNodeActions({
       nodeOpts.textOpacity = 1
       nodeOpts.foregroundColor = '#000'
       nodeOpts.fontSize = nodeOpts.fontSize < 20 ? 20 : nodeOpts.fontSize
-      dispatch({ type: 'nodedrawer', drawerTab: 1 })
+      dispatch({ type: 'nodedrawer', drawerTab: 0 })
     } else if (shape.key === 'searchCustom') {
       nodeOpts = setDimens(`T${xPos + 100},${yPos}s10,10`)
       nodeOpts.opacity = 0
@@ -190,6 +190,8 @@ export default function QuickNodeActions({
       nodeOpts = setDimens(`T${xPos},${yPos}s6,6`)
     }
 
+    // always assign an id so that collab is consistent
+    nodeOpts.id = Slatebox.utils.guid(12)
     const node = new Slatebox.node(nodeOpts)
 
     slate?.nodes.add(node)
@@ -197,7 +199,7 @@ export default function QuickNodeActions({
     // send collaboration info
     const pkg = {
       type: 'onNodeAdded',
-      data: slate?.exportDifference(snap),
+      data: { nodeOptions: nodeOpts },
     }
     slate?.collab.send(pkg)
 

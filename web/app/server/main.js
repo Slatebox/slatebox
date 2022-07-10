@@ -12,6 +12,8 @@ import './methods/slateAccess'
 import './methods/chatWoot'
 import './methods/comments'
 import './methods/messages'
+import './methods/googleDocs'
+import './methods/daily'
 
 // global models
 import '../imports/api/common/models'
