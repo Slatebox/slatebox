@@ -24,7 +24,7 @@ jobs:
           docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:${{ github.ref_name }}
           docker tag ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:${{ github.ref_name }} ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:latest
           docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_COMMUNITY_REPOSITORY }}:latest
-  Release:
+  create-release:
     name: Release
     runs-on: ubuntu-latest
     steps:

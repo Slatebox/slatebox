@@ -42,7 +42,7 @@ export default function SlateThemes({ slate, onChange }) {
     const mtheme = availableThemes.find((t) => t._id === newThemeId)
     onChange({
       type: 'onSlateThemeChanged',
-      data: { mtheme, syncWithTheme },
+      data: { theme: mtheme, syncWithTheme },
     })
     updateThemeId(newThemeId)
   }
