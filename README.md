@@ -7,6 +7,8 @@
 
 Licensed with the Elastic License 2.0, Slatebox is free and open software than can be used for commercial purposes and installed on your own servers free of charge. Additionally, Slatebox Cloud is a SaaS service that makes it easy and affordable to get started.
 
+![Slatebox Provides Free And Open Visual Collaboration For Remote Teams](https://d33wubrfki0l68.cloudfront.net/399f18bc5d70c92c04bd8af25dc061159dcd02b8/2e0ec/images/sb_mindmap.jpg)
+
 ## Prerequisites
 
 Before you begin, ensure you have met the following requirements:
