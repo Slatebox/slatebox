@@ -36,7 +36,7 @@ Please take a look at the [Contributing Guidelines](CONTRIBUTING.md) to get star
 
 ## Contact
 
-If you want to contact me you can reach me at tim@slatebox.com.
+You can reach me at tim@slatebox.com.
 
 ## Tech Stack
 
