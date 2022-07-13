@@ -47,4 +47,3 @@ Slatebox is built with [Meteor](https://meteor.com) using [React](https://reactj
 ## License
 
 This project uses the following license: [ELv2](https://www.elastic.co/licensing/elastic-license).
-s
