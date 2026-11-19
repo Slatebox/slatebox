@@ -1,7 +1,0 @@
-https://{$SLATEBOX_APP_HOST} {
-	reverse_proxy app:3000
-}
-
-https://{$SLATEBOX_RELAY_HOST} {
-	reverse_proxy collab:3000
-}

@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+# The supervisor of the Slatebox container. tini is PID 1: it reaps orphaned
+# processes and hands SIGTERM to this script, which is its only child.
+#
+#   mongod   the database, a single-member replica set under /data/db
+#   relay    live editing, on loopback
+#   app      the Slatebox app, on loopback
+#   proxy    Caddy, the one published port in front of the app and the relay
+#
+# Every service is required. If one ends by itself, the others are stopped in
+# order and the container exits with status 1 so Docker's restart policy can
+# act. `docker stop` ends with status 0 after MongoDB has closed its files.
+set -Eeuo pipefail
+umask 077
+
+readonly ROOT=/opt/slatebox
+readonly LIB=$ROOT/lib
+readonly RUN=/run/slatebox
+
+declare -A SERVICE=()   # pid -> name, for the services that must stay up
+LOGGERS=()
+signal=''
+ended=''
+status=0
+
+say() { printf '[slatebox] %s\n' "$*"; }
+
+on_signal() { [[ $signal == stop ]] || signal=$1; }
+trap 'on_signal stop' TERM INT
+trap 'on_signal pause' USR1
+trap 'on_signal resume' USR2
+
+# Send a process's output to the container log with its name in front.
+# MongoDB reports every routine event and every host-tuning hint as a JSON
+# line; keep its errors and leave the rest out so the log stays readable.
+logger() {
+  case $1 in
+    mongo) exec sed -u -e '/^{"t":.*"s":"[IWD][0-9]*"/d' -e "s/^/[mongo] /" ;;
+    *) exec sed -u "s/^/[$1] /" ;;
+  esac
+}
+
+# start NAME [LABEL] -- COMMAND...   run a service in the background
+start() {
+  local name=$1 label=$1 fd
+  shift
+  if [[ $1 != -- ]]; then label=$1; shift; fi
+  shift
+  exec {fd}> >(logger "$label")
+  LOGGERS+=("$!")
+  "$@" >&"$fd" 2>&1 &
+  SERVICE[$!]=$name
+  exec {fd}>&-
+}
+
+with_env() {
+  local file=$1 dir=$2
+  shift 2
+  cd "$dir"
+  set -a
+  # shellcheck disable=SC1090
+  . "$file"
+  set +a
+  exec "$@"
+}
+
+# Wait until one of the given processes ends or a signal arrives.
+await() {
+  ended=''
+  status=0
+  wait -n -p ended "$@" || status=$?
+  ended=${ended:-}
+}
+
+# TERM the named services, give them three seconds, then KILL. They hold no
+# state of their own: slates live in MongoDB.
+stop_services() {
+  local pid name alive deadline pids=()
+  for pid in "${!SERVICE[@]}"; do
+    for name in "$@"; do
+      if [[ ${SERVICE[$pid]} == "$name" ]]; then pids+=("$pid"); fi
+    done
+  done
+  ((${#pids[@]})) || return 0
+  for pid in "${pids[@]}"; do unset "SERVICE[$pid]"; done
+  kill -TERM "${pids[@]}" 2>/dev/null || true
+  deadline=$((SECONDS + 3))
+  while ((SECONDS < deadline)); do
+    alive=0
+    for pid in "${pids[@]}"; do
+      if kill -0 "$pid" 2>/dev/null; then alive=1; fi
+    done
+    ((alive)) || break
+    sleep 0.1
+  done
+  kill -KILL "${pids[@]}" 2>/dev/null || true
+  wait "${pids[@]}" 2>/dev/null || true
+}
+
+shutdown() {
+  local pid mongo=()
+  trap '' TERM INT USR1 USR2
+  say 'Stopping.'
+  # The database's clients go first; they end at once.
+  stop_services ready app relay
+  # Then the proxy and MongoDB side by side. MongoDB is waited for, so that it
+  # can close its files inside the time Docker allows a stopping container.
+  for pid in "${!SERVICE[@]}"; do
+    kill -TERM "$pid" 2>/dev/null || true
+    if [[ ${SERVICE[$pid]} == mongo ]]; then mongo+=("$pid"); fi
+  done
+  if ((${#mongo[@]})); then wait "${mongo[@]}" 2>/dev/null || true; fi
+  stop_services proxy
+  SERVICE=()
+  wait "${LOGGERS[@]}" 2>/dev/null || true
+  say 'Stopped.'
+}
+
+# Run a start-up step to completion while staying alert to `docker stop` and
+# to a service that ends underneath it.
+step() {
+  local fd pid rc
+  exec {fd}> >(logger slatebox)
+  LOGGERS+=("$!")
+  "$@" >&"$fd" 2>&1 &
+  pid=$!
+  exec {fd}>&-
+  while :; do
+    await "$pid" "${!SERVICE[@]}"
+    if [[ $ended == "$pid" ]]; then
+      rc=$status
+      break
+    fi
+    if [[ $signal == stop ]]; then
+      kill -TERM "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      shutdown
+      exit 0
+    fi
+    if [[ -n $ended ]]; then
+      say "${SERVICE[$ended]} stopped during start-up (exit $status)."
+      unset "SERVICE[$ended]"
+      kill -TERM "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      shutdown
+      exit 1
+    fi
+  done
+  return "$rc"
+}
+
+start_app() {
+  start relay -- with_env "$RUN/relay.env" "$ROOT/relay" node bin/server.js
+  start app -- with_env "$RUN/app.env" "$ROOT/app/bundle" node main.js
+  # Announce readiness only after a signed live-editing connection works
+  # end to end through the published port. A busy or small machine can take
+  # minutes to boot the app; only after ten is the start given up.
+  start ready slatebox -- node "$LIB/health.mjs" --deep --wait 600
+}
+
+pause() {
+  [[ ! -e $RUN/paused ]] || return 0
+  say 'Pausing the app and the relay.'
+  stop_services ready app relay
+  : > "$RUN/paused"
+}
+
+resume() {
+  [[ -e $RUN/paused ]] || return 0
+  say 'Starting the app and the relay again.'
+  start_app
+  rm -f "$RUN/paused"
+}
+
+supervise() {
+  local name
+  while :; do
+    await "${!SERVICE[@]}"
+    if [[ $signal == stop ]]; then
+      shutdown
+      exit 0
+    fi
+    if [[ -n $ended ]]; then
+      name=${SERVICE[$ended]}
+      unset "SERVICE[$ended]"
+      if [[ $name == ready && $status == 0 ]]; then
+        say "Ready. Open $SLATEBOX_PUBLIC_URL"
+      else
+        if [[ $name == ready ]]; then
+          say 'Slatebox did not become ready. Stopping the container.'
+        else
+          say "$name stopped unexpectedly (exit $status). Stopping the container so that Docker can restart it."
+        fi
+        shutdown
+        exit 1
+      fi
+    fi
+    case $signal in
+      pause) signal=''; pause ;;
+      resume) signal=''; resume ;;
+    esac
+  done
+}
+
+main() {
+  if ! mkdir -p "$RUN" /data/tmp 2>/dev/null || [[ ! -w /data ]]; then
+    say "/data is not writable by this container's user ($(id -u):$(id -g))."
+    say 'Use a Docker volume for /data, for example -v slatebox-data:/data'
+    exit 1
+  fi
+  # Left over only if the container was killed in the middle of a restore.
+  rm -rf "$RUN/paused" "$RUN/restore.lock" /data/tmp/*
+  echo "$$" > "$RUN/init.pid"
+
+  step node "$LIB/configure.mjs" || exit 1
+  # shellcheck disable=SC1091
+  . "$RUN/state.env"
+
+  if [[ $SLATEBOX_BUNDLED_MONGO == 1 ]]; then
+    start mongo -- mongod --dbpath /data/db --replSet rs0 --bind_ip 127.0.0.1 --port 27017 \
+      --keyFile /data/secrets/mongo.key --nounixsocket --quiet \
+      --setParameter shutdownTimeoutMillisForSignaledShutdown=0
+    if ! step node "$LIB/mongo-init.mjs"; then
+      say 'The database could not be prepared. Stopping the container.'
+      shutdown
+      exit 1
+    fi
+  fi
+
+  # The proxy comes up first so a browser sees "Slatebox is starting" rather
+  # than a refused connection while the app boots.
+  start proxy -- caddy run --config "$RUN/Caddyfile" --adapter caddyfile
+  start_app
+  supervise
+}
+
+main "$@"
