@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { createServer as createHttpServer } from 'node:http'
 import { createServer as createTcpServer } from 'node:net'
 import { after, afterEach, test } from 'node:test'
-import { cleanup, docker, freePort, healthy, inspect, logs, name, network, ok, start, waitFor } from './lib.mjs'
+import { adopt, cleanup, docker, freePort, healthy, inspect, logs, name, network, ok, start, waitFor } from './lib.mjs'
 import { closeChrome, createSlate, notes, person, savedNotes, writeNote } from './slate.mjs'
 
 // Each test removes what it started, so only a few containers ever run at once.
@@ -321,7 +321,8 @@ test('an https address turns on built-in HTTPS with an automatically issued cert
 
   const net = await network()
   const host = 'boards.slatebox-one.test'
-  const authority = name('pebble')
+  // Removed by cleanup() with the other containers, before the network it is on.
+  const authority = adopt(name('pebble'))
   writeFileSync(join(work, 'pebble.json'), JSON.stringify({ pebble: {
     listenAddress: '0.0.0.0:14000', managementListenAddress: '0.0.0.0:15000',
     certificate: 'test/certs/localhost/cert.pem', privateKey: 'test/certs/localhost/key.pem',
@@ -330,7 +331,6 @@ test('an https address turns on built-in HTTPS with an automatically issued cert
   await ok(['run', '-d', '--name', authority, '--network', net, '--network-alias', 'pebble',
     '-e', 'PEBBLE_VA_NOSLEEP=1', '-e', 'PEBBLE_WFE_NONCEREJECT=0',
     '-v', `${join(work, 'pebble.json')}:/config.json:ro`, PEBBLE_IMAGE, '-config', '/config.json'])
-  t.after(() => docker(['rm', '-f', '-v', authority]))
   // Slatebox must trust the authority's own API certificate, as it trusts Let's Encrypt's.
   writeFileSync(join(work, 'ca.pem'), await ok(['exec', authority, 'cat', '/test/certs/pebble.minica.pem']).catch(async () =>
     (await ok(['cp', `${authority}:/test/certs/pebble.minica.pem`, '-'], { encoding: 'latin1' })).replace(/^[\s\S]*?(-----BEGIN)/, '$1').replace(/(-----END CERTIFICATE-----)[\s\S]*$/, '$1\n')))

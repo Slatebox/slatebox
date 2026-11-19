@@ -87,6 +87,12 @@ export async function start({ data, port, env = {}, args = [], image = IMAGE, pu
   return { id, port, url, data }
 }
 
+/** Have cleanup() remove a container this test started by other means, before its networks. */
+export function adopt(id) {
+  created.containers.add(id)
+  return id
+}
+
 export async function inspect(id, format) {
   return ok(['inspect', '--format', format, id])
 }
@@ -135,7 +141,7 @@ export async function removeVolume(id) {
 
 /** Remove everything these tests created, and nothing else. */
 export async function cleanup() {
-  for (const id of created.containers) await docker(['rm', '-f', id])
+  for (const id of created.containers) await docker(['rm', '-f', '-v', id])
   for (const id of created.volumes) await docker(['volume', 'rm', '-f', id])
   for (const id of created.networks) await docker(['network', 'rm', id])
   created.containers.clear(); created.volumes.clear(); created.networks.clear()
