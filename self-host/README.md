@@ -63,8 +63,8 @@ Without mail, `password-link` is how someone who forgot their password gets
 back in: give them the link it prints. It works once and expires in three days.
 
 To keep the data in a folder on a Linux host instead of a volume, run the
-container as the folder's owner, for example
-`--user "$(id -u):$(id -g)" -v /srv/slatebox:/data`. If the container cannot
+container as the folder's owner, for example after `mkdir -p ~/slatebox-data`:
+`--user "$(id -u):$(id -g)" -v ~/slatebox-data:/data`. If the container cannot
 write to `/data`, its log names the owner to use.
 
 To upgrade, pull the newer image, remove the container and run your `docker
