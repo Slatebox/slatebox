@@ -136,7 +136,7 @@ Roboto+Condensed \
 Roboto+Mono \
 Roboto+Slab"
 COPY self-host/build/fetch-fonts.mjs /build/fetch-fonts.mjs
-RUN node /build/fetch-fonts.mjs /out $GOOGLE_FONTS
+RUN node /build/fetch-fonts.mjs /out /fonts.md $GOOGLE_FONTS
 
 # --- The image ----------------------------------------------------------------
 FROM base AS runtime
@@ -157,6 +157,7 @@ COPY --from=relay /opt/slatebox/relay /opt/slatebox/relay
 COPY --from=server-dependencies /opt/slatebox/app/bundle /opt/slatebox/app/bundle
 
 COPY self-host/licenses/ /opt/slatebox/licenses/
+COPY --from=fonts /fonts.md /opt/slatebox/licenses/third-party/fonts.md
 COPY app-license/LICENSE.md /opt/slatebox/licenses/slatebox-app-LICENSE.md
 COPY engine/LICENSE /opt/slatebox/licenses/slateboxjs-LICENSE.txt
 COPY relay/LICENSE /opt/slatebox/licenses/slatebox-relay-LICENSE.txt

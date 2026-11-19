@@ -47,8 +47,16 @@ test('license notices say which parts are MIT and which are not', async () => {
     './NOTICE.md', './slatebox-app-LICENSE.md', './slateboxjs-LICENSE.txt', './slatebox-relay-LICENSE.txt',
     './third-party/mongodb-server-SSPL.txt', './third-party/mongodb-database-tools-LICENSE.md',
     './third-party/caddy-LICENSE.txt', './third-party/node-LICENSE.txt', './third-party/meteor-LICENSE.txt',
-    './third-party/tini-LICENSE.txt',
+    './third-party/tini-LICENSE.txt', './third-party/fonts.md', './third-party/fonts-OFL-1.1.txt', './third-party/fonts-Apache-2.0.txt',
   ]) assert.ok(files.includes(file), `${file} is in the image`)
+  // Every bundled Google Fonts family is listed with its copyright and one of the two license texts.
+  const fonts = (await inside('cat /opt/slatebox/licenses/third-party/fonts.md')).stdout
+  const families = (await inside("fc-list : family | tr ',' '\\n' | sort -u")).stdout.trim().split('\n')
+  for (const family of ['Roboto', 'Caveat', 'EB Garamond', 'Permanent Marker', 'IBM Plex Mono']) {
+    assert.ok(families.includes(family), `${family} is installed`)
+    assert.match(fonts, new RegExp(`^\\| ${family} \\| Copyright .+ \\| (SIL Open Font License 1\\.1|Apache License 2\\.0) \\|`, 'm'))
+  }
+  assert.match((await inside('head -c 200 /opt/slatebox/licenses/third-party/fonts-OFL-1.1.txt')).stdout, /SIL OPEN FONT LICENSE Version 1\.1/)
   const heads = (await inside('cd /opt/slatebox/licenses && head -c 200 slatebox-app-LICENSE.md slateboxjs-LICENSE.txt third-party/mongodb-server-SSPL.txt')).stdout
   assert.match(heads, /MIT License[\s\S]*MIT License[\s\S]*Server Side Public License/)
 })
