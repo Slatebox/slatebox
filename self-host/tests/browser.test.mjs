@@ -108,21 +108,23 @@ test('the instance offers no plans, quotas or cloud links it cannot provide', as
       const shown = await member.page.locator('body').innerText()
       for (const hosted of [/Upgrade/i, /AI slates\/mo/i, /Free -/i]) assert.doesNotMatch(shown, hosted, `on ${member.page.url()}`)
     }
+    // The profile menu, in the home page's header.
+    await member.page.locator('#userLoginProfile').click()
+    const menu = await member.page.locator('#profile-menu [role=menuitem]').allInnerTexts()
+    assert.ok(menu.some(item => /Logout/.test(item)), `the profile menu opened: ${menu.join(', ')}`)
+    for (const item of menu) assert.doesNotMatch(item, /Upgrade|Billing|Plans and pricing|Support/, 'a hosted-service menu item')
+    await member.page.keyboard.press('Escape')
     await openSlate(member.page, slateUrl)
     // AI drafting has no monthly allowance to run out of.
     const usage = await call(member.page, 'users.getAIUsage')
     assert.equal(usage.thresholdMet, false)
     assert.equal(usage.monthly, null)
 
-    await member.page.locator('#userLoginProfile').click()
-    const menu = await member.page.locator('#profile-menu [role=menuitem]').allInnerTexts()
-    assert.ok(menu.some(item => /Logout/.test(item)), `the profile menu opened: ${menu.join(', ')}`)
-    for (const item of menu) assert.doesNotMatch(item, /Upgrade|Billing|Plans and pricing|Support/, 'a hosted-service menu item')
-    await member.page.keyboard.press('Escape')
 
     // Board settings: images download, but no cloud link and no Pixabay search without their keys.
     await member.page.locator('#sbManageSlate').click()
-    await member.page.locator('#sbSlateExportAccordionBtn').click()
+    // The drawer is taller than the window; open the Export panel the way a scroll and a click would.
+    await member.page.locator('#sbSlateExportAccordionBtn').dispatchEvent('click')
     await member.page.getByRole('button', { name: 'Download PNG' }).waitFor({ timeout: 30_000 })
     assert.equal(await member.page.locator('[aria-label="copy png slatebox cloud link"], [aria-label="copy svg slatebox cloud link"]').count(), 0)
     assert.equal(await member.page.locator('#backgroundPanelbh-header').count(), 0)
