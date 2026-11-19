@@ -204,8 +204,11 @@ supervise() {
 
 main() {
   if ! mkdir -p "$RUN" /data/tmp 2>/dev/null || [[ ! -w /data ]]; then
-    say "/data is not writable by this container's user ($(id -u):$(id -g))."
-    say 'Use a Docker volume for /data, for example -v slatebox-data:/data'
+    local owner
+    owner=$(stat -c %u:%g /data)
+    say "/data is not writable by this container's user ($(id -u):$(id -g)). It belongs to $owner."
+    say "For a folder on the host, run the container as the folder's owner: add --user $owner to docker run."
+    say 'Or keep the data in a Docker volume, for example -v slatebox-data:/data'
     exit 1
   fi
   # Left over only if the container was killed in the middle of a restore.

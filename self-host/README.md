@@ -40,14 +40,15 @@ Every setting is optional and is given with `-e NAME=value`.
 | `SLATEBOX_URL` | The address people type to reach this Slatebox. Default `http://localhost:7070`. Set it whenever the address is anything else, including another port. |
 | `SLATEBOX_HTTPS` | `off` when your own proxy terminates HTTPS and forwards to port 7070. Otherwise an `https://` address turns on built-in HTTPS on ports 80 and 443. |
 | `SLATEBOX_ACME_CA` | The ACME directory of your own certificate authority, when certificates should not come from Let's Encrypt. |
-| `SLATEBOX_MAIL_URL` | An `smtp://` or `smtps://` URL. Turns on invitations, email verification and password mail. Mail is sent from `Slatebox <info@slatebox.com>`, so use a mail service that accepts that sender. |
+| `SLATEBOX_MAIL_URL` | An `smtp://` or `smtps://` URL, with the user name and password of your mail account. Turns on invitations, email verification and password mail. |
+| `SLATEBOX_MAIL_FROM` | The sender of that mail, for example `Slatebox <boards@example.com>`: an address your mail service accepts. Needed unless the mail account's user name is itself an address, which is then used. |
 | `SLATEBOX_AI_KEY` | A DeepInfra API key. Turns on AI drafts. |
 | `SLATEBOX_AI_URL`, `SLATEBOX_AI_MODEL` | Use your own OpenAI-compatible endpoint and model for AI drafts. `SLATEBOX_AI_KEY` is then its bearer token, if it needs one. |
 | `SLATEBOX_SETTINGS` | A JSON object of further app settings, for example `{"daily":{"apiKey":"…"}}` to turn on calls. |
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use a MongoDB you run elsewhere. The bundled database is then not started. |
 
-A misspelled `SLATEBOX_` setting stops the container with the list of valid
-names, so a setting is never silently ignored.
+A misspelled setting, or one in lower case, stops the container with the list
+of valid names, so a setting is never silently ignored.
 
 ## Everyday commands
 
@@ -55,7 +56,16 @@ names, so a setting is never silently ignored.
 docker logs slatebox                                           # what is happening
 docker exec slatebox slatebox backup > slatebox-backup.gz      # back up while running
 docker exec -i slatebox slatebox restore < slatebox-backup.gz  # restore a backup
+docker exec slatebox slatebox password-link person@example.com # a one-time link to set a new password
 ```
+
+Without mail, `password-link` is how someone who forgot their password gets
+back in: give them the link it prints. It works once and expires in three days.
+
+To keep the data in a folder on a Linux host instead of a volume, run the
+container as the folder's owner, for example
+`--user "$(id -u):$(id -g)" -v /srv/slatebox:/data`. If the container cannot
+write to `/data`, its log names the owner to use.
 
 To upgrade, pull the newer image, remove the container and run your `docker
 run` command again. The volume keeps your data:

@@ -17,9 +17,9 @@
 <main>
   <h1>Slatebox is set up for another address</h1>
   <p>This Slatebox answers at <a href="__SLATEBOX_URL__"><code>__SLATEBOX_URL__</code></a>. You reached it at <code id="here">this address</code>.</p>
-  <p>To use it at this address, start the container again with the address people will type:</p>
+  <p>To use it at this address, remove the container with <code>docker rm -f</code> and run your <code>docker run</code> command again, with the same data volume, adding the address people will type:</p>
   <pre id="fix">-e SLATEBOX_URL=<span id="origin">http://your-address</span></pre>
-  <p>Your slates stay in the data volume when you replace the container.</p>
+  <p><code>docker start</code> cannot add a setting. Your slates stay in the data volume when you replace the container.</p>
 </main>
 <script>
   document.getElementById('here').textContent = location.origin

@@ -3,6 +3,7 @@
 #
 #   docker exec slatebox slatebox backup > slatebox-backup.gz
 #   docker exec -i slatebox slatebox restore < slatebox-backup.gz
+#   docker exec slatebox slatebox password-link person@example.com
 #   docker exec slatebox slatebox health
 #   docker exec slatebox slatebox version
 set -euo pipefail
@@ -97,8 +98,22 @@ restore() {
   note 'Restore complete. Slatebox is ready.'
 }
 
+password_link() {
+  [[ -f $RUN/app.env && -f $RUN/state.env ]] || die 'Slatebox is still starting. Try again in a moment.'
+  (
+    set -a
+    # shellcheck disable=SC1091
+    . "$RUN/app.env"
+    # shellcheck disable=SC1091
+    . "$RUN/state.env"
+    set +a
+    exec node "$LIB/password-link.mjs" "$@"
+  )
+}
+
 case ${1:-} in
   backup) backup ;;
+  password-link) shift; password_link "$@" ;;
   restore) restore ;;
   health) shift; exec node "$LIB/health.mjs" "$@" ;;
   version) cat "$ROOT/identity.json" ;;
@@ -107,6 +122,7 @@ case ${1:-} in
 Usage, from the Docker host:
   docker exec slatebox slatebox backup > slatebox-backup.gz
   docker exec -i slatebox slatebox restore < slatebox-backup.gz
+  docker exec slatebox slatebox password-link person@example.com
   docker exec slatebox slatebox health
   docker exec slatebox slatebox version
 EOF

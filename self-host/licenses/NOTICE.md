@@ -17,14 +17,15 @@ whole is not under a single license, and it is not "MIT" as a whole.**
 
 | Part | License | Text in this image |
 | --- | --- | --- |
-| MongoDB Community Server (`mongod`) | **Server Side Public License, version 1 (SSPL-1.0)**. This is not an MIT-style license. | `third-party/mongodb-server-SSPL.txt` |
-| MongoDB Database Tools (`mongodump`, `mongorestore`) | Apache License 2.0 | `third-party/mongodb-database-tools-LICENSE.md` |
+| MongoDB Community Server (`mongod`) | **Server Side Public License, version 1 (SSPL-1.0)**. This is not an MIT-style license. | `third-party/mongodb-server-SSPL.txt`; the libraries it embeds and their licenses: `third-party/mongodb-server-third-party.md` |
+| MongoDB Database Tools (`mongodump`, `mongorestore`) | Apache License 2.0 | `third-party/mongodb-database-tools-LICENSE.md`; the libraries they embed: `third-party/mongodb-database-tools-THIRD-PARTY-NOTICES.txt` |
 | Caddy, the front proxy | Apache License 2.0 | `third-party/caddy-LICENSE.txt` |
 | Node.js, with the libraries it embeds | MIT, and the licenses listed in its license file | `third-party/node-LICENSE.txt` |
 | Meteor, the app's framework | MIT | `third-party/meteor-LICENSE.txt` |
 | tini, the container's init | MIT | `third-party/tini-LICENSE.txt` |
 | npm packages used by the app and the relay | Each package's own license | In each package's folder under `/opt/slatebox/app/bundle` and `/opt/slatebox/relay/node_modules` |
 | Fonts for rendering slate images (Google Fonts families and Liberation) | SIL Open Font License 1.1 or Apache License 2.0, per family | `third-party/fonts.md` lists each family's copyright and license; `third-party/fonts-OFL-1.1.txt`, `third-party/fonts-Apache-2.0.txt`, `/usr/share/doc/fonts-liberation/copyright` |
+| Interface fonts (Manrope, Readex Pro), served to browsers by the instance | SIL Open Font License 1.1 | `third-party/interface-fonts.md` lists each family's copyright; `third-party/fonts-OFL-1.1.txt` |
 | Ubuntu base system | Each package's own license | `/usr/share/doc/*/copyright` |
 
 ## About MongoDB and the SSPL

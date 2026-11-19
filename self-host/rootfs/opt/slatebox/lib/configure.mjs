@@ -9,18 +9,26 @@ import {
 } from './common.mjs'
 
 const KNOWN = [
-  'SLATEBOX_URL', 'SLATEBOX_HTTPS', 'SLATEBOX_ACME_CA', 'SLATEBOX_MAIL_URL',
+  'SLATEBOX_URL', 'SLATEBOX_HTTPS', 'SLATEBOX_ACME_CA', 'SLATEBOX_MAIL_URL', 'SLATEBOX_MAIL_FROM',
   'SLATEBOX_AI_KEY', 'SLATEBOX_AI_URL', 'SLATEBOX_AI_MODEL', 'SLATEBOX_SETTINGS',
 ]
+// Where the image serves the interface fonts (see the Dockerfile).
+const FONTS_PATH = '/_fonts/'
 
 function setting(name) {
   const value = process.env[name]
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
+// An address as it may be shown in the log: a user name or password in it,
+// such as a mail or database password, is replaced by ***.
+function shown(value) {
+  return value.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/?#]*@/i, '$1***@')
+}
+
 function parseUrl(name, value, protocols) {
   let url
-  try { url = new URL(value) } catch { throw new Plain(`${name} is not a valid address: ${value}`) }
+  try { url = new URL(value) } catch { throw new Plain(`${name} is not a valid address: ${shown(value)}`) }
   if (!protocols.includes(url.protocol)) {
     throw new Plain(`${name} must start with ${protocols.map(p => `${p}//`).join(' or ')}`)
   }
@@ -32,7 +40,7 @@ function publicAddress() {
   const url = parseUrl('SLATEBOX_URL', value, ['http:', 'https:'])
   if (url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
     throw new Plain(
-      `SLATEBOX_URL must be the address people type, with nothing after the host, for example https://boards.example.com (received ${value})`)
+      `SLATEBOX_URL must be the address people type, with nothing after the host, for example https://boards.example.com (received ${shown(value)})`)
   }
   return url
 }
@@ -48,6 +56,27 @@ function httpsMode(url) {
       'If your own proxy terminates HTTPS, add SLATEBOX_HTTPS=off and forward to port 7070.')
   }
   return true
+}
+
+// The sender of every mail. Mail services accept only a sender address
+// their operator has verified, so it is the operator's own: SLATEBOX_MAIL_FROM,
+// or else the mail account's user name when that is an address.
+function mailSender(mailUrl) {
+  const from = setting('SLATEBOX_MAIL_FROM')
+  if (from && !mailUrl) throw new Plain('SLATEBOX_MAIL_FROM only applies together with SLATEBOX_MAIL_URL')
+  if (!mailUrl) return undefined
+  const address = /^(?:[^<>@\s][^<>@]*<[^<>@\s]+@[^<>@\s]+\.[^<>@\s]+>|[^<>@\s]+@[^<>@\s]+\.[^<>@\s]+)$/
+  if (from) {
+    if (!address.test(from)) {
+      throw new Plain(`SLATEBOX_MAIL_FROM must be an address, for example "Slatebox <boards@example.com>" or boards@example.com (received ${from})`)
+    }
+    return from
+  }
+  const user = decodeURIComponent(new URL(mailUrl).username)
+  if (address.test(user)) return `Slatebox <${user}>`
+  throw new Plain(
+    'SLATEBOX_MAIL_URL also needs SLATEBOX_MAIL_FROM, the address mail is sent from, one your mail service accepts, ' +
+    'for example SLATEBOX_MAIL_FROM="Slatebox <boards@example.com>"')
 }
 
 function mergeSettings(base, extra) {
@@ -77,6 +106,11 @@ function caddyfile({ url, builtInHttps, acmeCa }) {
   // point somewhere else.
   const allowed = [...new Set([url.host, `localhost:${FRONT_PORT}`, `127.0.0.1:${FRONT_PORT}`])]
   const routes = indent => `
+handle_path ${FONTS_PATH}* {
+	root * ${join(HOME, 'share/fonts')}
+	header Cache-Control "public, max-age=604800"
+	file_server
+}
 @relay path ${RELAY_PATH} ${RELAY_PATH}/*
 handle @relay {
 	uri strip_prefix ${RELAY_PATH}
@@ -140,9 +174,13 @@ function wrongAddressPage(url) {
 }
 
 function main() {
-  const unknown = Object.keys(process.env).filter(name => name.startsWith('SLATEBOX_') && !KNOWN.includes(name))
+  // Names are matched without regard to case, so that slatebox_url is
+  // reported rather than silently ignored.
+  const exact = [...KNOWN, 'MONGO_URL', 'MONGO_OPLOG_URL']
+  const unknown = Object.keys(process.env).filter(name =>
+    (name.toUpperCase().startsWith('SLATEBOX_') || exact.includes(name.toUpperCase())) && !exact.includes(name))
   if (unknown.length) {
-    throw new Plain(`Unknown setting ${unknown.join(', ')}. The settings are: ${KNOWN.join(', ')}, MONGO_URL, MONGO_OPLOG_URL.`)
+    throw new Plain(`Unknown setting ${unknown.join(', ')}. The settings are: ${exact.join(', ')} (in capitals).`)
   }
 
   const url = publicAddress()
@@ -153,6 +191,7 @@ function main() {
 
   const mailUrl = setting('SLATEBOX_MAIL_URL')
   if (mailUrl) parseUrl('SLATEBOX_MAIL_URL', mailUrl, ['smtp:', 'smtps:'])
+  const mailFrom = mailSender(mailUrl)
 
   const aiKey = setting('SLATEBOX_AI_KEY')
   const aiUrl = setting('SLATEBOX_AI_URL')
@@ -177,9 +216,15 @@ function main() {
   // Generated values come last so SLATEBOX_SETTINGS cannot break the wiring
   // between the browser, the app and the relay.
   const settings = mergeSettings(extra, {
-    public: { env: 'selfhost', baseUrl: url.origin, wsUrl, chatWoot: { enabled: false } },
+    public: {
+      env: 'selfhost', baseUrl: url.origin, wsUrl, chatWoot: { enabled: false },
+      fontStylesheet: `${FONTS_PATH}fonts.css`,
+      // Cloud links store images in S3, offered only when SLATEBOX_SETTINGS configures a bucket.
+      cloudLinks: Boolean(extra.aws?.imageBucket),
+    },
     slateboxAPI: { publicKey: secrets.apiPublicKey, secretKey: secrets.apiSecretKey },
   })
+  if (mailFrom) settings.mailFrom = mailFrom
   settings.mailGun = { server: '', ...settings.mailGun }
   settings.selfHosted = { ...settings.selfHosted }
   if (aiUrl) {
@@ -234,7 +279,7 @@ function main() {
   say(`HTTPS:     ${builtInHttps ? `built in, certificates for ${url.hostname} (publish ports 80 and 443)` : url.protocol === 'https:' ? 'handled by your proxy' : 'off'}`)
   say(`Database:  ${externalMongo ? 'external (MONGO_URL)' : `bundled MongoDB ${identity.mongodb}, stored in ${DB_DIR}`}`)
   say(`Secrets:   ${created === 'all' ? 'created for this new installation' : created ? `kept, ${created} new` : 'kept from earlier starts'} (${join(DATA, 'secrets')})`)
-  say(`Mail:      ${mailUrl ? 'on' : 'off (set SLATEBOX_MAIL_URL to send invitations and sign-in mail)'}`)
+  say(`Mail:      ${mailUrl ? `on, from ${mailFrom}` : 'off (set SLATEBOX_MAIL_URL to send invitations and sign-in mail)'}`)
   say(`AI drafts: ${aiUrl ? `on, using ${new URL(aiUrl).host}` : aiKey ? 'on, using DeepInfra' : settings.selfHosted.workshopAI ? 'on' : 'off (set SLATEBOX_AI_KEY to turn them on)'}`)
 }
 

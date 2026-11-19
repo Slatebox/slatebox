@@ -5,11 +5,18 @@
 // ships with a font silently missing or unaccounted for.
 //
 //   node fetch-fonts.mjs OUTPUT_DIRECTORY LICENSE_LIST FAMILY...
+//   node fetch-fonts.mjs --stylesheet=URL_PREFIX OUTPUT_DIRECTORY LICENSE_LIST FAMILY...
+//
+// With --stylesheet the files are for browsers: OUTPUT_DIRECTORY also gets a
+// fonts.css whose sources point at URL_PREFIX, so pages load the fonts from
+// the instance itself instead of from Google.
 import { mkdir, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
-const [out, list, ...families] = process.argv.slice(2)
-if (!out || !list || !families.length) throw new Error('Usage: fetch-fonts.mjs OUTPUT_DIRECTORY LICENSE_LIST FAMILY...')
+const args = process.argv.slice(2)
+const stylesheet = args[0]?.startsWith('--stylesheet=') ? args.shift().slice('--stylesheet='.length) : null
+const [out, list, ...families] = args
+if (!out || !list || !families.length) throw new Error('Usage: fetch-fonts.mjs [--stylesheet=URL_PREFIX] OUTPUT_DIRECTORY LICENSE_LIST FAMILY...')
 await mkdir(out, { recursive: true })
 
 // The license URL a font records (name ID 14), and the text in this image.
@@ -54,10 +61,12 @@ function names(bytes) {
 }
 
 const rows = []
+const css = []
 for (const family of families) {
   // Without a browser user agent the stylesheet lists TrueType sources.
-  const css = await (await get(`https://fonts.googleapis.com/css2?family=${family}&display=swap`)).text()
-  const urls = [...new Set(css.match(/https:\/\/fonts\.gstatic\.com\/s\/[^)]*\.ttf/g) || [])]
+  const familyCss = await (await get(`https://fonts.googleapis.com/css2?family=${family}&display=swap`)).text()
+  const urls = [...new Set(familyCss.match(/https:\/\/fonts\.gstatic\.com\/s\/[^)]*\.ttf/g) || [])]
+  css.push(familyCss.replace(/https:\/\/fonts\.gstatic\.com\/s\/[^)]*\/([^/)]+\.ttf)/g, (_, file) => `${stylesheet}${file}`))
   if (!urls.length) throw new Error(`No TrueType files listed for ${family}`)
   const seen = new Map()
   for (const url of urls) {
@@ -76,19 +85,33 @@ for (const family of families) {
   console.log(`${family}: ${urls.length} file(s)`)
 }
 
+if (stylesheet) {
+  const local = css.join('\n')
+  if (/https?:\/\//.test(local)) throw new Error('The stylesheet still names an outside address')
+  await writeFile(join(out, 'fonts.css'), local)
+}
+
 const cell = text => text.replaceAll('|', '\\|')
 await writeFile(list, [
-  '# Fonts in this image',
+  stylesheet ? '# Interface fonts in this image' : '# Fonts in this image',
   '',
-  'The font families the server uses to render slate images, from Google Fonts,',
-  'in `/usr/share/fonts/googlefonts`. Each copyright notice is the one the font',
-  'files carry. The license texts are in this folder.',
+  ...(stylesheet ? [
+    'The font families of the Slatebox interface, from Google Fonts, served by',
+    'the instance itself from `/opt/slatebox/share/fonts`. Each copyright notice',
+    'is the one the font files carry. The license texts are in this folder.',
+  ] : [
+    'The font families the server uses to render slate images, from Google Fonts,',
+    'in `/usr/share/fonts/googlefonts`. Each copyright notice is the one the font',
+    'files carry. The license texts are in this folder.',
+  ]),
   '',
   '| Family | Copyright | License | Text |',
   '| --- | --- | --- | --- |',
   ...rows.map(row => `| ${cell(row.name)} | ${cell(row.copyright)} | ${row.license.name} | \`${row.license.text}\` |`),
-  '',
-  'Liberation fonts come from the Ubuntu package `fonts-liberation`; their',
-  'license is in `/usr/share/doc/fonts-liberation/copyright`.',
+  ...(stylesheet ? [] : [
+    '',
+    'Liberation fonts come from the Ubuntu package `fonts-liberation`; their',
+    'license is in `/usr/share/doc/fonts-liberation/copyright`.',
+  ]),
   '',
 ].join('\n'))

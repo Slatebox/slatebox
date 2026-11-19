@@ -144,15 +144,34 @@ Every setting is optional.
 | `SLATEBOX_HTTPS` | `auto` (default): an `https://` address turns on built-in HTTPS on ports 80 and 443. `off`: your own proxy terminates HTTPS and forwards to 7070. |
 | `SLATEBOX_ACME_CA` | ACME directory of a private certificate authority, instead of Let's Encrypt. |
 | `SLATEBOX_MAIL_URL` | `smtp://` or `smtps://` URL for invitations, verification and password mail. |
+| `SLATEBOX_MAIL_FROM` | The sender, an address the operator's mail service accepts (`settings.mailFrom`). Defaults to the SMTP user name when that is an address; otherwise required with `SLATEBOX_MAIL_URL`. |
 | `SLATEBOX_AI_KEY` | DeepInfra key; turns on AI drafts. With `SLATEBOX_AI_URL`, the bearer token for that endpoint. |
 | `SLATEBOX_AI_URL`, `SLATEBOX_AI_MODEL` | An OpenAI-compatible endpoint and model to use for AI drafts instead of DeepInfra. |
 | `SLATEBOX_SETTINGS` | A JSON object merged into the app's settings, for integrations without a variable of their own (`daily.apiKey` for calls, `aws.*` for published images). It cannot change the generated address and key wiring. |
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use an external MongoDB. The bundled `mongod` is not started. |
 
-Parity with the Compose kit's `init.mjs`: the same settings object
-(`public.env = selfhost`, `baseUrl`, `wsUrl`, `chatWoot.enabled = false`,
-`slateboxAPI`, `selfHosted.workshopAI`), the same three database accounts and
-relay role, the same relay environment (`API_KEYS`, `API_GEN_KEY`).
+The app's settings are generated at every start: `public.env = selfhost`,
+`baseUrl`, `wsUrl`, `chatWoot.enabled = false`, `fontStylesheet` (the
+interface fonts, served by Caddy from `/opt/slatebox/share/fonts` at
+`/_fonts/`, so a page view sends nothing to Google), `cloudLinks` (true only
+when `SLATEBOX_SETTINGS` configures an S3 bucket), `mailFrom`, `slateboxAPI`
+and `selfHosted.workshopAI`. With `public.env = selfhost` the app also leaves
+out Heap analytics, plans, AI quotas and billing. The relay gets `API_KEYS` and
+`API_GEN_KEY`; MongoDB has three accounts (root, app, relay).
+
+Setting names are matched in any case, so `slatebox_url` stops the start
+instead of being ignored. An address that fails to parse is shown in the log
+with its user name and password replaced by `***`.
+
+Every process runs as uid 10001 by default. `docker run --user UID:GID` runs
+them all as another user instead, for a host folder that user owns;
+`/run/slatebox` is sticky and open to any user for that reason, and every file
+written there is private to its writer.
+
+**Account recovery:** `docker exec slatebox slatebox password-link EMAIL`
+writes the same reset record Meteor's "forgot password" mail does and prints
+the link, so the app's reset page accepts it once, within three days. It is
+the recovery path when mail is off.
 
 ## Upgrade, backup, restore
 
@@ -192,15 +211,18 @@ committed files of the three repositories and runs one multi-stage
   Third-party source maps, editor folders and the sample keys in packages'
   test suites are left out (about 130 MB).
 - `relay`, `fonts`: production dependencies of the relay; the Google Fonts
-  families the server uses to render slate images.
+  families the server uses to render slate images, and the interface fonts
+  (Manrope, Readex Pro) with a stylesheet that points at the instance.
+- `mongodb-notices`: MongoDB's lists of the third-party libraries in the server
+  and the database tools, fetched at the released versions and pinned by
+  checksum (the official `mongo` image leaves its documentation out).
 - `runtime`: Ubuntu 24.04 (the platform MongoDB 8.0 publishes builds for),
   Node 24.15.0, `mongod`, `mongodump` and `mongorestore` from the official
   `mongo` image, Caddy from the official `caddy` image, tini.
 
 The result is about 360 MB to download and 1.5 GB on disk, of which the
 app's server bundle is 0.94 GB (it carries every npm dependency of the app,
-as the hosted image does) and MongoDB 0.25 GB. The four images of the Compose
-kit came to more than twice that.
+as the hosted image does) and MongoDB 0.25 GB.
 
 Labels and `/opt/slatebox/identity.json` carry the app, engine and relay
 revisions. The base is glibc because MongoDB publishes no musl build; that
@@ -208,17 +230,6 @@ is also why this file does not reuse the Alpine stages of `web/Dockerfile`.
 
 License notices are in `/opt/slatebox/licenses`. The image is not MIT as a
 whole: MongoDB Community Server is SSPL-1.0.
-
-## What was removed, and why
-
-| Removed | Because |
-| --- | --- |
-| `compose.yaml`, `Caddyfile`, `mongo-init.js` | Five containers became one; their roles live in `slatebox-init`, `configure.mjs` and `mongo-init.mjs`. |
-| `run`, `init.mjs` | There is no initialise step and no state directory beside the checkout. Secrets are generated inside the container on first start. |
-| `hostnames.mjs` and the `promote` command | The address is a setting read at every start. Changing it means starting the container with a new `SLATEBOX_URL`. There is one hostname, not two. |
-| `build-images.sh` | Replaced by `build-image.sh`, which builds one image and moves the engine build into the Docker build. |
-| `release-images.py`, its test, the release-archive flow | Two images had to be matched by hand across two architectures. One multi-architecture image needs no matching. |
-| `tests/mongo-restart.sh` | It tested the Compose entrypoint. The image tests cover restart with real data. |
 
 ## Left for later
 
@@ -228,9 +239,11 @@ whole: MongoDB Community Server is SSPL-1.0.
   built or run yet. Nothing in the Dockerfile is specific to one architecture.
 - MongoDB major upgrades (8.0 to a later series) need a
   feature-compatibility step; the image pins 8.0.
-- Two things in the app, outside this directory, show in a self-hosted
-  installation: mail is sent from the fixed address `info@slatebox.com`
-  (`server/email/setup.js`), which many SMTP providers reject for a sender
-  who does not own that domain; and every page requests an analytics script
-  from `cdn.heapanalytics.com` with no key (`imports/ui/components/LoadHeap.jsx`),
-  which fails with a 404 and sends nothing but is a call to a third party.
+- Further plan-gated features: with no plans, some features still check for a
+  paid plan in the app (image search in the note drawer, team creation, AI
+  settings). On a self-hosted instance these need either the plan check
+  lifted for `public.env = selfhost` or the feature hidden; that is an app
+  change outside this directory.
+- The app still logs whole slate documents when it checks write permission
+  (`server/permissions.js`); the branch feat/native-workshops removes that
+  line.

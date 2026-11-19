@@ -83,21 +83,66 @@ test('without mail settings, sign-up still works and says that no mail is sent',
   } finally {
     await guest.close()
   }
+
+  // Without mail an administrator recovers an account with a one-time link.
+  const made = await docker(['exec', box.id, 'slatebox', 'password-link', 'ADA@example.test'])
+  assert.equal(made.code, 0, made.stderr)
+  const link = made.stdout.trim()
+  assert.match(link, new RegExp(`^${box.url}/reset-password/[A-Za-z0-9_-]{40,}$`))
+  assert.match(made.stderr, /Give this link to ada@example\.test only/)
+  assert.ok(!(await logs(box.id)).includes(link.split('/').at(-1)), 'the link is not in the container log')
+  const unknown = await docker(['exec', box.id, 'slatebox', 'password-link', 'nobody@example.test'])
+  assert.equal(unknown.code, 1)
+  assert.match(unknown.stderr, /No account uses nobody@example\.test\./)
+
+  const password = 'a new password 42'
+  const owner = await person()
+  try {
+    await owner.page.goto(link)
+    await owner.page.locator('#password').fill(password)
+    await owner.page.locator('#confirm-password').fill(password)
+    await owner.page.locator('button[type=submit]').click()
+    await owner.page.waitForURL(url => !url.pathname.startsWith('/reset-password'), { timeout: 60_000 })
+  } finally {
+    await owner.close()
+  }
+  const later = await person()
+  try {
+    await later.page.goto(`${box.url}/login`)
+    await later.page.waitForFunction(() => window.Meteor?.loginWithPassword, null, { timeout: 60_000 })
+    const signIn = pw => later.page.evaluate(([pw]) => new Promise(resolve =>
+      window.Meteor.loginWithPassword('ada@example.test', pw, error => resolve(error ? error.reason || 'failed' : 'signed in'))), [pw])
+    assert.equal(await signIn(password), 'signed in', 'the new password signs in')
+    // The link worked once and is gone.
+    const reused = await later.page.evaluate(token => window.Meteor.callAsync('resetPassword', token, { digest: 'a'.repeat(64), algorithm: 'sha-256' })
+      .then(() => 'reset', error => error.reason), link.split('/').at(-1))
+    assert.equal(reused, 'Token expired')
+  } finally {
+    await later.close()
+  }
 })
 
 test('SLATEBOX_MAIL_URL sends verification mail with links to the configured address', async () => {
   const sink = await mailSink()
   try {
-    const box = await start({ env: { SLATEBOX_MAIL_URL: `smtp://host.docker.internal:${sink.port}` }, args: hostAccess })
+    const box = await start({
+      env: { SLATEBOX_MAIL_URL: `smtp://host.docker.internal:${sink.port}`, SLATEBOX_MAIL_FROM: 'Our Boards <boards@example.test>' },
+      args: hostAccess,
+    })
     await healthy(box.id)
-    assert.match(await logs(box.id), /Mail: +on/)
+    assert.match(await logs(box.id), /Mail: +on, from Our Boards <boards@example\.test>/)
     const guest = await person()
     try {
       assert.deepEqual(await registered(guest.page, box.url, 'ada@example.test'), { result: true })
       const mail = await waitFor(() => sink.messages.find(message => /^To: .*ada@example\.test/im.test(message)), { timeout: 60, what: 'the verification mail' })
       const text = mail.replace(/=\r\n/g, '').replace(/=3D/g, '=')
       assert.ok(text.includes(`${box.url}/verify-email/`), 'the link in the mail uses SLATEBOX_URL')
-      console.log(`verification mail was sent from ${mail.match(/^From: (.*)$/im)?.[1]?.trim()}`)
+      // Every mail comes from the operator's own address, which their mail service accepts.
+      assert.match(mail, /^From: Our Boards <boards@example\.test>$/im)
+      assert.deepEqual(await call(guest.page, 'users.resetPassword', { email: 'ada@example.test' }), { result: true })
+      const reset = await waitFor(() => sink.messages.find(message => /reset-password\//.test(message.replace(/=\r\n/g, ''))), { timeout: 60, what: 'the password reset mail' })
+      assert.match(reset, /^From: Our Boards <boards@example\.test>$/im)
+      assert.ok(!sink.messages.some(message => /slatebox\.com/i.test(message.match(/^From: .*$/im)?.[0] || '')), 'no mail claims to come from slatebox.com')
     } finally {
       await guest.close()
     }

@@ -20,6 +20,8 @@ test('the image identifies what it was built from', async () => {
   for (const label of ['org.opencontainers.image.revision', 'com.slatebox.engine.revision', 'com.slatebox.relay.revision']) {
     assert.match(labels[label] || '', /^[0-9a-f]{12}(-dirty)?$/, `${label} names a source revision`)
   }
+  // The version label is Slatebox's own, not the base image's.
+  assert.equal(labels['org.opencontainers.image.version'], labels['org.opencontainers.image.revision'])
   const identity = JSON.parse((await inside('cat /opt/slatebox/identity.json')).stdout)
   assert.equal(identity.app, labels['org.opencontainers.image.revision'])
   assert.equal(identity.engine, labels['com.slatebox.engine.revision'])
@@ -48,7 +50,14 @@ test('license notices say which parts are MIT and which are not', async () => {
     './third-party/mongodb-server-SSPL.txt', './third-party/mongodb-database-tools-LICENSE.md',
     './third-party/caddy-LICENSE.txt', './third-party/node-LICENSE.txt', './third-party/meteor-LICENSE.txt',
     './third-party/tini-LICENSE.txt', './third-party/fonts.md', './third-party/fonts-OFL-1.1.txt', './third-party/fonts-Apache-2.0.txt',
+    './third-party/interface-fonts.md', './third-party/mongodb-server-third-party.md',
+    './third-party/mongodb-database-tools-THIRD-PARTY-NOTICES.txt',
   ]) assert.ok(files.includes(file), `${file} is in the image`)
+  // Every file NOTICE.md names under third-party/ is in the image.
+  for (const named of new Set(notice.match(/third-party\/[\w.-]+/g))) {
+    assert.ok(files.includes(`./${named}`), `NOTICE.md names ${named}, which is in the image`)
+  }
+  assert.match((await inside('head -c 400 /opt/slatebox/licenses/third-party/mongodb-server-third-party.md')).stdout, /MongoDB Third Party Dependencies/)
   // Every bundled Google Fonts family is listed with its copyright and one of the two license texts.
   const fonts = (await inside('cat /opt/slatebox/licenses/third-party/fonts.md')).stdout
   const families = (await inside("fc-list : family | tr ',' '\\n' | sort -u")).stdout.trim().split('\n')
@@ -57,8 +66,24 @@ test('license notices say which parts are MIT and which are not', async () => {
     assert.match(fonts, new RegExp(`^\\| ${family} \\| Copyright .+ \\| (SIL Open Font License 1\\.1|Apache License 2\\.0) \\|`, 'm'))
   }
   assert.match((await inside('head -c 200 /opt/slatebox/licenses/third-party/fonts-OFL-1.1.txt')).stdout, /SIL OPEN FONT LICENSE Version 1\.1/)
+  // The interface fonts browsers load from the instance are listed the same way.
+  const interfaceFonts = (await inside('cat /opt/slatebox/licenses/third-party/interface-fonts.md')).stdout
+  for (const family of ['Manrope', 'Readex Pro']) {
+    assert.match(interfaceFonts, new RegExp(`^\\| ${family} \\| Copyright .+ \\| SIL Open Font License 1\\.1 \\|`, 'm'))
+  }
   const heads = (await inside('cd /opt/slatebox/licenses && head -c 200 slatebox-app-LICENSE.md slateboxjs-LICENSE.txt third-party/mongodb-server-SSPL.txt')).stdout
   assert.match(heads, /MIT License[\s\S]*MIT License[\s\S]*Server Side Public License/)
+})
+
+test('the interface fonts are served from the image, not from Google', async () => {
+  const css = (await inside('cat /opt/slatebox/share/fonts/fonts.css')).stdout
+  assert.match(css, /font-family: 'Manrope'/)
+  assert.match(css, /font-family: 'Readex Pro'/)
+  assert.doesNotMatch(css, /https?:\/\//, 'the stylesheet names no outside address')
+  const sources = [...css.matchAll(/url\(\/_fonts\/([^)]+)\)/g)].map(match => match[1])
+  assert.ok(sources.length >= 10, `${sources.length} font files are named`)
+  const files = (await inside('ls /opt/slatebox/share/fonts')).stdout.trim().split('\n')
+  for (const file of sources) assert.ok(files.includes(file), `${file} is in the image`)
 })
 
 test('no settings file, environment file or private key is in the image', async () => {

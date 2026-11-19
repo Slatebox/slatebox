@@ -15,13 +15,14 @@ export async function closeChrome() {
   shared = undefined
 }
 
-/** A person in their own browser profile. Records every WebSocket the page opens. */
+/** A person in their own browser profile. Records every WebSocket and every request the browser makes. */
 export async function person(options = {}) {
   const context = await (await chrome()).newContext({ viewport: { width: 1300, height: 900 }, ...options })
   const page = await context.newPage()
-  const sockets = []
+  const sockets = [], requests = []
   page.on('websocket', socket => sockets.push(socket.url()))
-  return { context, page, sockets, close: () => context.close() }
+  context.on('request', request => requests.push(request.url()))
+  return { context, page, sockets, requests, close: () => context.close() }
 }
 
 async function dismissWelcome(page) {

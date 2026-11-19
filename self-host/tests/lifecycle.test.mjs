@@ -180,6 +180,9 @@ test('reached at another address, it says which setting to change', async () => 
   assert.match(body, /Slatebox is set up for another address/)
   assert.match(body, /http:\/\/localhost:7070/)
   assert.match(body, /SLATEBOX_URL=/)
+  // The fix it gives is one Docker can carry out: a new container, not a restart.
+  assert.match(body, /docker rm -f/)
+  assert.match(body, /<code>docker start<\/code> cannot add a setting/)
   // The relay path is guarded the same way.
   assert.equal((await get(`http://localhost:${port}/live/`)).status, 421)
   // The same volume, started with its address, serves the app.
@@ -200,6 +203,13 @@ test('a mistaken setting stops the start with a plain message', async () => {
     [{ SLATEBOX_MAIL_URL: 'mail.example.com' }, /SLATEBOX_MAIL_URL is not a valid address/],
     [{ SLATEBOX_AI_URL: 'http://inference.internal:8080/v1' }, /SLATEBOX_AI_URL also needs SLATEBOX_AI_MODEL/],
     [{ SLATEBOX_SETTINGS: '{not json' }, /SLATEBOX_SETTINGS must be a JSON object/],
+    // A name in the wrong case is reported, not silently ignored.
+    [{ slatebox_url: 'http://localhost:9' }, /Unknown setting slatebox_url\. The settings are: SLATEBOX_URL.*\(in capitals\)/],
+    [{ mongo_url: 'mongodb://db.example.com/x' }, /Unknown setting mongo_url\./],
+    // Mail needs a sender the operator's mail service accepts.
+    [{ SLATEBOX_MAIL_URL: 'smtp://apikey:x@mail.example.com:587' }, /SLATEBOX_MAIL_URL also needs SLATEBOX_MAIL_FROM/],
+    [{ SLATEBOX_MAIL_URL: 'smtp://mail.example.com', SLATEBOX_MAIL_FROM: 'boards' }, /SLATEBOX_MAIL_FROM must be an address/],
+    [{ SLATEBOX_MAIL_FROM: 'boards@example.com' }, /SLATEBOX_MAIL_FROM only applies together with SLATEBOX_MAIL_URL/],
   ]
   await Promise.all(cases.map(async ([env, message]) => {
     const mistaken = await start({ env: { SLATEBOX_URL: undefined, ...env } })
@@ -210,6 +220,26 @@ test('a mistaken setting stops the start with a plain message', async () => {
     assert.doesNotMatch(log, /\n\s+at .*:\d+:\d+\)?/, 'no stack trace for an operator mistake')
     assert.equal(await ok(['run', '--rm', '--network', 'none', '-v', `${mistaken.data}:/data`, '--entrypoint', 'sh', IMAGE, '-c', 'ls /data/secrets 2>/dev/null | wc -l']), '0',
       'nothing was created before the mistake was reported')
+    await remove(mistaken.id)
+    await removeVolume(mistaken.data)
+  }))
+})
+
+test('a malformed address never shows the password it carries', async () => {
+  // The password is made up for this test; it must not reach the log.
+  const password = `pw${Date.now()}x`
+  const cases = [
+    [{ SLATEBOX_MAIL_URL: `smtp://mailer:${password}@mail.example.com:notaport` }, /SLATEBOX_MAIL_URL is not a valid address: smtp:\/\/\*\*\*@mail\.example\.com:notaport/],
+    [{ MONGO_URL: `mongodb://app:${password}@db.example.com:99999/x` }, /MONGO_URL is not a valid address: mongodb:\/\/\*\*\*@db\.example\.com:99999\/x/],
+    [{ SLATEBOX_URL: `https://admin:${password}@boards.example.com` }, /nothing after the host.*received https:\/\/\*\*\*@boards\.example\.com/],
+  ]
+  await Promise.all(cases.map(async ([env, message]) => {
+    const mistaken = await start({ env: { SLATEBOX_URL: undefined, ...env } })
+    await exited(mistaken.id)
+    assert.equal(await inspect(mistaken.id, '{{.State.ExitCode}}'), '1')
+    const log = await logs(mistaken.id)
+    assert.match(log, message)
+    assert.ok(!log.includes(password), `the password in ${Object.keys(env)[0]} is not in the log`)
     await remove(mistaken.id)
     await removeVolume(mistaken.data)
   }))
@@ -234,7 +264,31 @@ test('a data volume the container cannot write to is reported plainly', async ()
   const locked = await start({ data })
   await exited(locked.id)
   assert.equal(await inspect(locked.id, '{{.State.ExitCode}}'), '1')
-  assert.match(await logs(locked.id), /\/data is not writable by this container's user \(10001:10001\)/)
+  const log = await logs(locked.id)
+  assert.match(log, /\/data is not writable by this container's user \(10001:10001\)\. It belongs to 0:0\./)
+  assert.match(log, /add --user 0:0 to docker run/)
   await remove(locked.id)
+  await removeVolume(data)
+})
+
+test('a host folder owned by a person runs with --user set to its owner', async () => {
+  // As on a Linux host: a folder made by uid 1000 and mounted at /data.
+  const data = await volume()
+  await ok(['run', '--rm', '--network', 'none', '--user', '0', '-v', `${data}:/data`, '--entrypoint', 'sh', IMAGE, '-c', 'touch /data/.owner && chown -R 1000:1000 /data && chmod 755 /data'])
+  const plain = await start({ data })
+  await exited(plain.id)
+  assert.match(await logs(plain.id), /It belongs to 1000:1000\.[\s\S]*add --user 1000:1000 to docker run/)
+  await remove(plain.id)
+  const owned = await start({ data, args: ['--user', '1000:1000'] })
+  await healthy(owned.id)
+  const processes = (await ok(['exec', owned.id, 'ps', '-eo', 'uid=,comm='])).split('\n').map(line => line.trim().split(/\s+/))
+  for (const [uid, command] of processes) assert.equal(uid, '1000', `${command} runs as the folder's owner`)
+  const owners = (await ok(['exec', owned.id, 'sh', '-c', 'find /data -mindepth 1 -maxdepth 2 ! -user 1000 | head -5'])).trim()
+  assert.equal(owners, '', 'everything Slatebox wrote belongs to the folder\'s owner')
+  assert.equal(await ok(['exec', owned.id, 'stat', '-c', '%a', '/data/secrets/secrets.json']), '600')
+  // A slate can be opened, and the data survives a restart as that user.
+  await ok(['restart', owned.id])
+  await healthy(owned.id)
+  await remove(owned.id)
   await removeVolume(data)
 })

@@ -137,20 +137,38 @@ Roboto+Mono \
 Roboto+Slab"
 COPY self-host/build/fetch-fonts.mjs /build/fetch-fonts.mjs
 RUN node /build/fetch-fonts.mjs /out /fonts.md $GOOGLE_FONTS
+# The interface fonts, served by the instance itself at /_fonts/ so that a page
+# view sends nothing to Google (the app reads public.fontStylesheet).
+RUN node /build/fetch-fonts.mjs --stylesheet=/_fonts/ /web /interface-fonts.md \
+      "Manrope:wght@200..800" "Readex+Pro:wght@160..700"
+
+# --- MongoDB's notices for the libraries its programs embed --------------------
+# The official mongo image leaves its documentation out, so the notices come
+# from MongoDB's sources at the released versions, pinned by checksum.
+FROM scratch AS mongodb-notices
+ADD --checksum=sha256:02aac1f4b8a784e394b49eae23cf10b797e45a7b220145a3b650dcb534d40b77 \
+    https://raw.githubusercontent.com/mongodb/mongo/r8.0.17/README.third_party.md /mongodb-server-third-party.md
+ADD --checksum=sha256:1be50e3f7fa3c3c6b0fdbf2487d29fbeabfb751accf6b58668485252ff3786d7 \
+    https://raw.githubusercontent.com/mongodb/mongo-tools/100.14.0/THIRD-PARTY-NOTICES /mongodb-database-tools-THIRD-PARTY-NOTICES.txt
 
 # --- The image ----------------------------------------------------------------
 FROM base AS runtime
 
 # One unprivileged account runs every process. /data is the only state; the
 # account's home is inside the container so caches never land on the volume.
+# /run/slatebox is open to any user (sticky, like /tmp) so that the container
+# can also run as the owner of a host folder (docker run --user UID:GID); every
+# file in it is private to the user that writes it.
 RUN groupadd --gid 10001 slatebox \
  && useradd --uid 10001 --gid 10001 --home-dir /run/slatebox --no-create-home --shell /usr/sbin/nologin slatebox \
- && install -d -o slatebox -g slatebox -m 0700 /data /run/slatebox
+ && install -d -o slatebox -g slatebox -m 0700 /data \
+ && install -d -m 1777 /run/slatebox
 ENV HOME=/run/slatebox
 
 COPY --from=mongo /usr/bin/mongod /usr/bin/mongodump /usr/bin/mongorestore /usr/local/bin/
 COPY --from=caddy /usr/bin/caddy /usr/local/bin/caddy
 COPY --from=fonts /out/ /usr/share/fonts/googlefonts/
+COPY --from=fonts /web/ /opt/slatebox/share/fonts/
 RUN fc-cache -f
 
 COPY --from=relay /opt/slatebox/relay /opt/slatebox/relay
@@ -158,6 +176,8 @@ COPY --from=server-dependencies /opt/slatebox/app/bundle /opt/slatebox/app/bundl
 
 COPY self-host/licenses/ /opt/slatebox/licenses/
 COPY --from=fonts /fonts.md /opt/slatebox/licenses/third-party/fonts.md
+COPY --from=fonts /interface-fonts.md /opt/slatebox/licenses/third-party/interface-fonts.md
+COPY --from=mongodb-notices / /opt/slatebox/licenses/third-party/
 COPY app-license/LICENSE.md /opt/slatebox/licenses/slatebox-app-LICENSE.md
 COPY engine/LICENSE /opt/slatebox/licenses/slateboxjs-LICENSE.txt
 COPY relay/LICENSE /opt/slatebox/licenses/slatebox-relay-LICENSE.txt
@@ -176,8 +196,11 @@ RUN test -n "$APP_REVISION" && test -n "$ENGINE_REVISION" && test -n "$RELAY_REV
  && printf '{"app":"%s","engine":"%s","relay":"%s","node":"%s","mongodb":"%s","caddy":"%s"}\n' \
       "$APP_REVISION" "$ENGINE_REVISION" "$RELAY_REVISION" "$NODE_VERSION" "$MONGO_VERSION" "$CADDY_VERSION" \
       > /opt/slatebox/identity.json
+# The version label names the app revision; without it the image would show
+# the Ubuntu base image's version.
 LABEL org.opencontainers.image.title="Slatebox" \
       org.opencontainers.image.description="Slatebox with its collaboration relay and database in one container" \
+      org.opencontainers.image.version="${APP_REVISION}" \
       org.opencontainers.image.revision="${APP_REVISION}" \
       com.slatebox.engine.revision="${ENGINE_REVISION}" \
       com.slatebox.relay.revision="${RELAY_REVISION}" \
