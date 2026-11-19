@@ -6,7 +6,9 @@ export default async function setup() {
   // eslint-disable-next-line no-undef
   if (Meteor.settings.mailGun?.server) process.env.MAIL_URL = Meteor.settings.mailGun.server
   Accounts.emailTemplates.siteName = 'Slatebox'
-  Accounts.emailTemplates.from = 'Slatebox <info@slatebox.com>'
+  // A self-hosted instance sends from its operator's own address (mailFrom),
+  // one its mail service accepts.
+  Accounts.emailTemplates.from = Meteor.settings.mailFrom || 'Slatebox <info@slatebox.com>'
 
   async function compileEmail(user, url, type, asText) {
     const address = user.emails?.[0]?.address

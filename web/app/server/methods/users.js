@@ -455,7 +455,7 @@ async function issueLoginToken(opts) {
           token: loginToken.token,
         })
         await Email.sendAsync({
-          from: 'no-reply@slatebox.com',
+          from: Meteor.settings.mailFrom || 'no-reply@slatebox.com',
           to: opts.email,
           subject: `Slatebox - Login Link`,
           text: `Hi! Can't remember your password? No problem. Log back into Slatebox with this one-time link:\n\n${Meteor.settings.public.baseUrl}/login-link/${llId}`,

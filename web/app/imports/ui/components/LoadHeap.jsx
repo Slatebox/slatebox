@@ -8,6 +8,10 @@ import { Meteor } from 'meteor/meteor'
 
 export default function LoadHeap() {
   useEffect(() => {
+    // Analytics are part of the hosted service only. Without a key (every
+    // self-hosted instance) no script is requested from Heap.
+    const key = Meteor.settings.public.heapIOKey
+    if (!key) return
     // load heap.io
     ;(window.heap = window.heap || []),
       (heap.load = function (e, t) {
@@ -41,7 +45,7 @@ export default function LoadHeap() {
         )
           heap[p[o]] = n(p[o])
       })
-    heap.load(Meteor.settings.public.heapIOKey)
+    heap.load(key)
   }, [])
   return null
 }
