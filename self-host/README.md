@@ -40,7 +40,7 @@ Every setting is optional and is given with `-e NAME=value`.
 | `SLATEBOX_URL` | The address people type to reach this Slatebox. Default `http://localhost:7070`. Set it whenever the address is anything else, including another port. |
 | `SLATEBOX_HTTPS` | `off` when your own proxy terminates HTTPS and forwards to port 7070. Otherwise an `https://` address turns on built-in HTTPS on ports 80 and 443. |
 | `SLATEBOX_ACME_CA` | The ACME directory of your own certificate authority, when certificates should not come from Let's Encrypt. |
-| `SLATEBOX_MAIL_URL` | An `smtp://` or `smtps://` URL. Turns on invitations, email verification and password mail. |
+| `SLATEBOX_MAIL_URL` | An `smtp://` or `smtps://` URL. Turns on invitations, email verification and password mail. Mail is sent from `Slatebox <info@slatebox.com>`, so use a mail service that accepts that sender. |
 | `SLATEBOX_AI_KEY` | A DeepInfra API key. Turns on AI drafts. |
 | `SLATEBOX_AI_URL`, `SLATEBOX_AI_MODEL` | Use your own OpenAI-compatible endpoint and model for AI drafts. `SLATEBOX_AI_KEY` is then its bearer token, if it needs one. |
 | `SLATEBOX_SETTINGS` | A JSON object of further app settings, for example `{"daily":{"apiKey":"…"}}` to turn on calls. |
