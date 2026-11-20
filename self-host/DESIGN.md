@@ -249,7 +249,8 @@ committed files of the three repositories and runs one multi-stage
   Node 24.15.0, `mongod`, `mongodump` and `mongorestore` from the official
   `mongo` image, Caddy from the official `caddy` image, tini.
 
-The result is about 360 MB to download and 1.5 GB on disk, of which the
+The result is about 585 MB to download and 1.6 GB on disk, of which Keycloak
+is 0.19 GB and its Java runtime 0.17 GB (225 MB of the download), the
 app's server bundle is 0.94 GB (it carries every npm dependency of the app,
 as the hosted image does) and MongoDB 0.25 GB.
 
@@ -294,8 +295,9 @@ auto-server port is bound to loopback). Caddy sends `/auth` and `/auth/*` to it
 unchanged, so the one published port serves Keycloak too. `KC_HOSTNAME` is the
 public address plus `/auth`; `KC_HOSTNAME_BACKCHANNEL_DYNAMIC` lets the app
 reach the token endpoint on loopback while tokens name the public issuer.
-Keycloak gets a 256 MB heap and the serial collector; idle, it adds about
-0.4 GB of resident memory. When Keycloak stops by itself, the container stops,
+Keycloak gets a 256 MB heap and the serial collector; idle, its Java process
+holds about 0.5 GB resident (the whole container: 946 MiB with single sign-on
+on, 497 MiB off). When Keycloak stops by itself, the container stops,
 like any other service; on `docker stop` it is given the same time as MongoDB
 to close its database.
 
