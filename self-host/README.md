@@ -19,6 +19,15 @@ The operator guide covers a public address and HTTPS, mail, AI drafts,
 upgrades, backup and restore, and troubleshooting:
 <https://docs.slatebox.com/installation/install-with-docker/>
 
+## What you need
+
+Docker, on a 64-bit Intel or AMD processor with AVX (Sandy Bridge or
+Bulldozer, 2011, or newer) or a 64-bit ARM processor with ARMv8.2-A (Apple
+silicon, Graviton 2 or later, Raspberry Pi 5; not a Raspberry Pi 4). Those
+are MongoDB 8.0's requirements; on an older processor the container stops
+and its log says so. Slatebox uses about half a gigabyte of memory with a
+few people at work; allow 1 GB, and 2 GB for a team.
+
 ## The same thing, with the settings most servers want
 
 ```sh
@@ -89,7 +98,10 @@ SlateboxJS, and the Slatebox collaboration relay
 The script builds from committed files only and prints the image name and the
 command to run it. The image is labelled with the three source revisions. It
 targets the Docker host's own architecture; set `TARGET_PLATFORM=linux/amd64`
-or `linux/arm64` to choose. The Meteor build needs about 4 GB of memory.
+or `linux/arm64` to choose, or `TARGET_PLATFORM=linux/amd64,linux/arm64` for
+one tag that holds both (this needs Docker's containerd image store; the
+platform that is not the host's is built under emulation and takes much
+longer). The Meteor build needs about 4 GB of memory.
 
 ## Test an image
 

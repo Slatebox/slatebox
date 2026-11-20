@@ -34,13 +34,29 @@ else
   app_label=$app_sha
 fi
 
+# One platform, or both as one multi-platform image under one tag
+# (TARGET_PLATFORM=linux/amd64,linux/arm64; that needs Docker's containerd
+# image store, and the platform that is not the host's runs under emulation).
 platform=${TARGET_PLATFORM:-${DOCKER_DEFAULT_PLATFORM:-$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}')}}
-case "$platform" in
-  linux/amd64|linux/arm64) ;;
-  *) echo "Choose TARGET_PLATFORM=linux/amd64 or linux/arm64 (received $platform)" >&2; exit 2 ;;
-esac
-arch=${platform#linux/}
-image=${IMAGE:-slatebox:$app_label-$engine_sha-$relay_sha-$arch}
+IFS=, read -r -a platforms <<< "$platform"
+for each in "${platforms[@]}"; do
+  case "$each" in
+    linux/amd64|linux/arm64) ;;
+    *) echo "Choose TARGET_PLATFORM=linux/amd64, linux/arm64 or linux/amd64,linux/arm64 (received $platform)" >&2; exit 2 ;;
+  esac
+done
+if ((${#platforms[@]} == 1)); then
+  image=${IMAGE:-slatebox:$app_label-$engine_sha-$relay_sha-${platform#linux/}}
+else
+  if ((${#platforms[@]} != 2)) || [[ ${platforms[0]} == "${platforms[1]}" ]]; then
+    echo "Choose TARGET_PLATFORM=linux/amd64,linux/arm64 for both (received $platform)" >&2; exit 2
+  fi
+  if [[ $(docker info --format '{{.DriverStatus}}') != *io.containerd.snapshotter* ]]; then
+    echo 'Both platforms under one tag need the containerd image store: in Docker Desktop, Settings > General > "Use containerd for pulling and storing images"; in Docker Engine, "features": {"containerd-snapshotter": true} in daemon.json. Or build each platform on its own.' >&2
+    exit 2
+  fi
+  image=${IMAGE:-slatebox:$app_label-$engine_sha-$relay_sha}
+fi
 
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
@@ -70,8 +86,10 @@ docker build --platform "$platform" \
   --build-arg "RELAY_REVISION=$relay_sha" \
   -f "$stage/self-host/Dockerfile" -t "$image" "$stage"
 
-actual=$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")
-[[ $actual == "$platform" ]] || { echo "Expected $image to be $platform, got $actual" >&2; exit 1; }
+for each in "${platforms[@]}"; do
+  actual=$(docker image inspect --platform "$each" --format '{{.Os}}/{{.Architecture}}' "$image")
+  [[ $actual == "$each" ]] || { echo "Expected $image to hold $each, got $actual" >&2; exit 1; }
+done
 
 cat <<EOF
 
