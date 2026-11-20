@@ -40,8 +40,8 @@ function redirect(res, location, cookie) {
 }
 
 async function accountFor(sso, claims, refreshToken) {
-  const identity = ssoIdentity(claims, sso.issuer)
-  const bySubject = await Meteor.users.findOneAsync({ 'services.sso.issuer': sso.issuer, 'services.sso.subject': identity.subject })
+  const identity = ssoIdentity(claims, sso.provider)
+  const bySubject = await Meteor.users.findOneAsync({ 'services.sso.issuer': sso.provider, 'services.sso.subject': identity.subject })
   const byEmail = !bySubject && identity.email ? await Accounts.findUserByEmail(identity.email) : undefined
   const decision = decideAccount(identity, { bySubject, byEmail })
   if (decision.action === 'refuse') throw new SsoError('account', decision.reason)

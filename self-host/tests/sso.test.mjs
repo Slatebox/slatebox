@@ -215,6 +215,31 @@ test('a restart keeps the realm, its people and its secrets', async () => {
   assert.doesNotMatch(await logs(box.id), /admin console is at[\s\S]*admin console is at/, 'the admin hint is shown once')
 })
 
+test('a backup carries Keycloak: restored into a new installation, the same people sign in to the same accounts', async () => {
+  const bo = await person()
+  let boId
+  try {
+    await ssoSignIn(bo.page, box.url, 'bo', 'bo keycloak password 1')
+    boId = (await waitFor(() => signedInUser(bo.page), { timeout: 60, what: 'the SSO session' })).id
+  } finally { await bo.close() }
+  const backup = await ok(['exec', box.id, 'slatebox', 'backup'], { encoding: null })
+  assert.ok(backup.length > 1000)
+  const fresh = await start({ env: { SLATEBOX_SSO: 'keycloak' } })
+  await healthy(fresh.id)
+  const restored = await docker(['exec', '-i', fresh.id, 'slatebox', 'restore'], { input: backup })
+  assert.equal(restored.code, 0, restored.stderr)
+  assert.match(restored.stderr, /Single sign-on \(Keycloak\) data restored\./)
+  await healthy(fresh.id)
+  const again = await person()
+  try {
+    await ssoSignIn(again.page, fresh.url, 'bo', 'bo keycloak password 1')
+    assert.equal((await waitFor(() => signedInUser(again.page), { timeout: 60, what: 'the SSO session after the restore' })).id, boId)
+  } finally { await again.close() }
+  // The copy of Keycloak's database that travelled in the archive is not left in the restored data.
+  const leftover = await docker(['exec', fresh.id, 'sh', '-c', 'ls /data/tmp'])
+  assert.equal(leftover.stdout.trim(), '')
+})
+
 test('SSO only: no guest, no password, every page leads to "Sign in with SSO"', async () => {
   const strict = await start({ env: { SLATEBOX_SSO: 'keycloak', SLATEBOX_SSO_ONLY: 'true' } })
   await healthy(strict.id)

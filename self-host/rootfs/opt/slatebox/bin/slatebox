@@ -29,13 +29,32 @@ bundled_database() {
     die 'This Slatebox uses an external database (MONGO_URL). Back it up and restore it with that database'"'"'s own tools.'
 }
 
+sso_on() { grep -qx "SLATEBOX_SSO='keycloak'" "$RUN/state.env"; }
+
 dump() { # dump FILE: a complete, verified, compressed archive of the database
-  mongodump --config "$TOOLS" --db slatebox --archive --quiet | gzip > "$1" && gzip -t "$1"
+  # With single sign-on on, Keycloak's database and secrets ride along inside it.
+  if sso_on; then node "$LIB/keycloak-backup.mjs" save || return 1; fi
+  local rc=0
+  mongodump --config "$TOOLS" --db slatebox --archive --quiet | gzip > "$1" && gzip -t "$1" || rc=1
+  if sso_on; then node "$LIB/keycloak-backup.mjs" drop || true; fi
+  return $rc
 }
 
-load() { # load FILE: replace the database with the archive
+load() { # load FILE: replace the database with the archive (Keycloak's too, when it carries one)
   node "$LIB/drop-database.mjs" &&
-    gzip -dc "$1" | mongorestore --config "$TOOLS" --archive --nsInclude 'slatebox.*' --quiet
+    gzip -dc "$1" | mongorestore --config "$TOOLS" --archive --nsInclude 'slatebox.*' --quiet || return 1
+  local rc=0
+  node "$LIB/keycloak-backup.mjs" restore || rc=$?
+  if ((rc == 3)); then
+    if sso_on; then note 'This backup carries no single sign-on data; Keycloak keeps what it has.'; fi
+    return 0
+  fi
+  if ((rc == 0)); then
+    # Keycloak's database came with its own secrets: render the settings again from them.
+    node "$LIB/configure.mjs" > /dev/null || return 1
+    note 'Single sign-on (Keycloak) data restored.'
+  fi
+  return $rc
 }
 
 backup() {

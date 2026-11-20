@@ -8,6 +8,10 @@ import {
 } from './common.mjs'
 
 export const ADMIN_USER = 'admin'
+export const KEYCLOAK_DB_USER = 'keycloak'
+// H2's AUTO_SERVER lets `slatebox backup` open the database while Keycloak runs, for an online
+// backup; with h2.bindAddress its port is on loopback only.
+export const keycloakDbUrl = () => `jdbc:h2:file:${join(KEYCLOAK_DATA, 'h2/keycloakdb')};NON_KEYWORDS=VALUE;AUTO_SERVER=TRUE`
 const JAVA_HOME = '/opt/java/openjdk'
 
 /** SLATEBOX_SSO and SLATEBOX_SSO_ONLY, validated. */
@@ -31,6 +35,8 @@ export function appSettings({ url, secrets, only }) {
     sso: {
       enabled: true,
       only,
+      // Accounts stay linked when SLATEBOX_URL (and with it the issuer) changes.
+      provider: 'bundled-keycloak',
       issuer,
       authorizationEndpoint: `${issuer}/protocol/openid-connect/auth`,
       // The code and the refresh tokens go to Keycloak on loopback, never over the network.
@@ -50,7 +56,7 @@ const JAVA_OPTS = [
   '-XX:MetaspaceSize=96M', '-XX:MaxMetaspaceSize=192m', '-Xms32m', '-Xmx256m', '-Xss512k', '-XX:ReservedCodeCacheSize=64m',
   '-XX:+UseSerialGC', '-XX:+ExitOnOutOfMemoryError', '-Djava.security.egd=file:/dev/urandom', '-Dfile.encoding=UTF-8',
   '-Dsun.stdout.encoding=UTF-8', '-Dsun.err.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8',
-  '-Djdk.tls.rejectClientInitiatedRenegotiation=true', `-Djava.io.tmpdir=${join('/run/slatebox', 'keycloak-tmp')}`,
+  '-Djdk.tls.rejectClientInitiatedRenegotiation=true', '-Dh2.bindAddress=127.0.0.1', `-Djava.io.tmpdir=${join('/run/slatebox', 'keycloak-tmp')}`,
 ].join(' ')
 
 /** The environment kc.sh starts with. The build options (dev-file, /auth, health, local cache) are baked into the image. */
@@ -66,6 +72,9 @@ export function keycloakEnv({ url, secrets }) {
     KC_HTTP_PORT: KEYCLOAK_PORT,
     KC_HTTP_MANAGEMENT_PORT: KEYCLOAK_MANAGEMENT_PORT,
     KC_PROXY_HEADERS: 'xforwarded',
+    KC_DB_URL: keycloakDbUrl(),
+    KC_DB_USERNAME: KEYCLOAK_DB_USER,
+    KC_DB_PASSWORD: secrets.keycloakDbPassword,
     // Keycloak's own log carries user names in its event lines: keep warnings and errors only,
     // and leave the event logger out entirely. Events are kept in the realm instead (see below).
     KC_LOG_LEVEL: 'warn,org.keycloak.events:off',
@@ -79,7 +88,6 @@ export function keycloakEnv({ url, secrets }) {
 }
 
 export const KEYCLOAK_COMMAND = [join(KEYCLOAK_HOME, 'bin/kc.sh'), 'start', '--optimized']
-export const keycloakDatabaseExists = existsSync => existsSync(join(KEYCLOAK_DATA, 'h2/keycloakdb.mv.db'))
 
 /** The app's client: confidential, authorization code with PKCE (S256) only. Rewritten at every start. */
 export function appClient({ url, secrets }) {

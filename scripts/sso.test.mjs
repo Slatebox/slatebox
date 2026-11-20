@@ -185,6 +185,9 @@ test('settings: SSO is off unless configured, and "only" needs SSO on', () => {
     authorizationEndpoint: config.authorizationEndpoint, tokenEndpoint: config.tokenEndpoint, redirectUri: config.redirectUri, stateKey: KEY } })
   assert.equal(on.only, true)
   assert.equal(on.checkSeconds, 60)
+  // Accounts are linked to a provider name that survives a change of address; by default the issuer.
+  assert.equal(on.provider, config.issuer)
+  assert.equal(policy.ssoSettings({ sso: { ...on, provider: 'bundled-keycloak' } }).provider, 'bundled-keycloak')
   assert.throws(() => policy.ssoSettings({ sso: { enabled: true } }), /sso\.issuer/)
 })
 

@@ -13,6 +13,8 @@ export function ssoSettings(settings) {
   return {
     ...sso,
     only: sso.only === true,
+    // The name accounts are linked under. The issuer changes with the address; a provider name need not.
+    provider: typeof sso.provider === 'string' && sso.provider ? sso.provider : sso.issuer,
     label: typeof sso.label === 'string' && sso.label ? sso.label : 'Sign in with SSO',
     checkSeconds,
   }

@@ -84,8 +84,8 @@ await() {
   ended=${ended:-}
 }
 
-# TERM the named services, give them three seconds, then KILL. They hold no
-# state of their own: slates live in MongoDB.
+# TERM the named services, give them three seconds (GRACE), then KILL. The app
+# and the relay hold no state of their own: slates live in MongoDB.
 stop_services() {
   local pid name alive deadline pids=()
   for pid in "${!SERVICE[@]}"; do
@@ -96,7 +96,7 @@ stop_services() {
   ((${#pids[@]})) || return 0
   for pid in "${pids[@]}"; do unset "SERVICE[$pid]"; done
   kill -TERM "${pids[@]}" 2>/dev/null || true
-  deadline=$((SECONDS + 3))
+  deadline=$((SECONDS + ${GRACE:-3}))
   while ((SECONDS < deadline)); do
     alive=0
     for pid in "${pids[@]}"; do
@@ -163,6 +163,13 @@ step() {
   return "$rc"
 }
 
+# Keycloak, and the step that sets up its realm. Only with SLATEBOX_SSO=keycloak.
+start_sso() {
+  [[ $SLATEBOX_SSO == keycloak ]] || return 0
+  start sso -- with_env "$RUN/keycloak.env" /opt/keycloak /opt/keycloak/bin/kc.sh start --optimized
+  start sso-setup slatebox -- node "$LIB/keycloak-init.mjs" 600
+}
+
 start_app() {
   start relay -- with_env "$RUN/relay.env" "$ROOT/relay" node bin/server.js
   start app -- with_env "$RUN/app.env" "$ROOT/app/bundle" node main.js
@@ -175,13 +182,16 @@ start_app() {
 pause() {
   [[ ! -e $RUN/paused ]] || return 0
   say 'Pausing the app and the relay.'
-  stop_services ready app relay
+  stop_services ready sso-setup app relay
+  # Keycloak is given time to close its database: a restore may replace it.
+  GRACE=30 stop_services sso
   : > "$RUN/paused"
 }
 
 resume() {
   [[ -e $RUN/paused ]] || return 0
   say 'Starting the app and the relay again.'
+  start_sso
   start_app
   rm -f "$RUN/paused"
 }
@@ -258,11 +268,8 @@ main() {
   # The proxy comes up first so a browser sees "Slatebox is starting" rather
   # than a refused connection while the app boots.
   start proxy -- caddy run --config "$RUN/Caddyfile" --adapter caddyfile
-  if [[ $SLATEBOX_SSO == keycloak ]]; then
-    # Keycloak boots beside the app; the realm is set up as soon as it answers.
-    start sso -- with_env "$RUN/keycloak.env" /opt/keycloak /opt/keycloak/bin/kc.sh start --optimized
-    start sso-setup slatebox -- node "$LIB/keycloak-init.mjs" 600
-  fi
+  # Keycloak boots beside the app; the realm is set up as soon as it answers.
+  start_sso
   start_app
   supervise
 }

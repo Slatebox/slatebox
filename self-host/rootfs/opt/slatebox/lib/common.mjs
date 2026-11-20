@@ -57,7 +57,7 @@ const SECRET_NAMES = [
 ]
 // Made the first time single sign-on is turned on, and kept after that.
 export const SSO_SECRET_NAMES = [
-  'keycloakAdminPassword', 'keycloakInitSecret', 'ssoClientSecret', 'ssoStateKey', 'scimClientSecret',
+  'keycloakAdminPassword', 'keycloakInitSecret', 'keycloakDbPassword', 'ssoClientSecret', 'ssoStateKey', 'scimClientSecret',
 ]
 
 export function readSecrets() {
