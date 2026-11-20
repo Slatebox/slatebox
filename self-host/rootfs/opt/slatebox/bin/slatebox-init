@@ -265,7 +265,7 @@ main() {
     exit 1
   fi
   # Left over only if the container was killed in the middle of a restore.
-  rm -rf "$RUN/paused" "$RUN/restore.lock" /data/tmp/*
+  rm -rf "$RUN/paused" "$RUN/restore.lock" "$RUN/sso-ready" /data/tmp/*
   echo "$$" > "$RUN/init.pid"
 
   step node "$LIB/configure.mjs" || exit 1

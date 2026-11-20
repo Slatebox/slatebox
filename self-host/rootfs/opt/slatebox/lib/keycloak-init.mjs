@@ -7,7 +7,7 @@
 //   console uses.
 // Everything else in the realm is the operator's: identity providers, LDAP, users, policies. It
 // never prints a secret.
-import { readFileSync } from 'node:fs'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   KEYCLOAK_MANAGEMENT_PORT, KEYCLOAK_PORT, Plain, RUN, SCIM_CLIENT, SSO_INIT_CLIENT, SSO_PATH, SSO_REALM, fail, readSecrets, sleep,
@@ -126,7 +126,13 @@ async function grantScim(call, clientId) {
   await call('POST', `/${SSO_REALM}/users/${user.id}/role-mappings/clients/${management.id}`, [role])
 }
 
+// Health reports single sign-on ready only once this step has finished: until then the clients
+// may still carry an earlier address (the SCIM audience, the redirect).
+const READY = join(RUN, 'sso-ready')
+const done = () => writeFileSync(READY, `${new Date().toISOString()}\n`)
+
 async function main() {
+  rmSync(READY, { force: true })
   const secrets = readSecrets()
   const url = new URL(readFileSync(join(RUN, 'state.env'), 'utf8').match(/^SLATEBOX_PUBLIC_URL='([^']+)'/m)[1])
   await waitUntilReady(Number(process.argv[2] || 300))
@@ -138,6 +144,7 @@ async function main() {
     const realmAnswers = await fetch(`${base}/realms/${SSO_REALM}`).then(response => response.ok, () => false)
     if (!realmAnswers) throw error
     say(`Single sign-on: ${error.message}`)
+    done()
     return
   }
   const call = api(token)
@@ -153,6 +160,7 @@ async function main() {
     say(`Single sign-on: Keycloak's admin console is at ${url.origin}${SSO_PATH}/admin/ (user "${ADMIN_USER}").`)
     say('Single sign-on: show the admin password with: docker exec <container> slatebox sso admin-password')
   }
+  done()
   say(`Single sign-on: realm "${SSO_REALM}" ready${first ? ' (created)' : ''}, client "slatebox" set to ${url.origin}/sso/callback, SCIM client "${SCIM_CLIENT}".`)
 }
 

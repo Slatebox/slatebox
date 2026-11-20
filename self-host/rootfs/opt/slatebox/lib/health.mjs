@@ -51,6 +51,7 @@ async function ssoReady() {
   const response = await fetch(`http://${front}${SSO_PATH}/realms/${SSO_REALM}/.well-known/openid-configuration`, { signal: AbortSignal.timeout(5000) })
   const body = response.ok ? await response.json().catch(() => null) : null
   if (!body?.issuer) throw new Plain(`Single sign-on (Keycloak) is not ready (HTTP ${response.status}).`)
+  if (!existsSync(join(RUN, 'sso-ready'))) throw new Plain('Single sign-on (Keycloak) is still being set up.')
 }
 
 async function check(deep) {
