@@ -102,7 +102,7 @@ async function ensureTrustedEmailFlow(call) {
     }
     if (execution.providerId === 'idp-review-profile') {
       await call('POST', `/${SSO_REALM}/authentication/executions/${execution.id}/config`, {
-        alias: `${TRUSTED_EMAIL_FLOW}: review profile`, config: { 'update.profile.on.first.login': 'missing' },
+        alias: `${TRUSTED_EMAIL_FLOW} review profile`, config: { 'update.profile.on.first.login': 'missing' },
       })
     }
   }

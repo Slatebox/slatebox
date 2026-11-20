@@ -161,7 +161,7 @@ export const scimAudience = url => `${issuerFor(url)}/scim/v2`
  * "First login flow override", only for a provider with Trust Email on (see the guide).
  */
 export const TRUSTED_EMAIL_FLOW = 'link by trusted email'
-export const TRUSTED_EMAIL_STEPS = `${TRUSTED_EMAIL_FLOW}: create or link`
+export const TRUSTED_EMAIL_STEPS = `${TRUSTED_EMAIL_FLOW} create or link`
 
 /** Master-realm settings kept at every start: guessing an administrator's password is slowed and recorded. */
 export const MASTER_REALM = {
