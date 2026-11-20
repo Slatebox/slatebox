@@ -77,11 +77,35 @@ with_env() {
 }
 
 # Wait until one of the given processes ends or a signal arrives.
+# Bash 5.2's wait -n can miss a child that bash has already reaped, and then
+# blocks for good (seen as a start that hung after "Database ready."). A
+# short-lived ticker makes wait -n return every two seconds at the latest, and
+# a process that is gone by then is collected with a plain wait, which knows
+# the status of every reaped child.
 await() {
+  local tick pid
   ended=''
   status=0
-  wait -n -p ended "$@" || status=$?
+  sleep 2 &
+  tick=$!
+  wait -n -p ended "$@" "$tick" || status=$?
   ended=${ended:-}
+  if [[ $ended == "$tick" ]]; then
+    ended=''
+    status=0
+  else
+    kill "$tick" 2>/dev/null || true
+    wait "$tick" 2>/dev/null || true
+  fi
+  [[ -z $ended ]] || return 0
+  for pid in "$@"; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      ended=$pid
+      status=0
+      wait "$pid" 2>/dev/null || status=$?
+      return 0
+    fi
+  done
 }
 
 # TERM the named services, give them three seconds (GRACE), then KILL. The app
