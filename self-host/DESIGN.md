@@ -126,6 +126,21 @@ The supervisor also answers two signals used by `slatebox restore`: SIGUSR1
 stops the app and the relay and leaves MongoDB and Caddy running (the proxy
 shows the starting page), SIGUSR2 starts them again.
 
+## Processors
+
+MongoDB 8.0 sets the floor: x86-64 with AVX (Intel Sandy Bridge, AMD
+Bulldozer, 2011) and arm64 with ARMv8.2-A (Cortex-A76 and later: a Raspberry
+Pi 5, Graviton 2, Ampere Altra, Apple silicon). Run under QEMU's CPU models,
+`mongod --version` dies with SIGILL on Westmere and Nehalem (no AVX) and on
+Cortex-A53 and A72 (a Raspberry Pi 3 and 4), and runs on Sandy Bridge,
+Cortex-A76 and Neoverse-N1. Caddy runs on all of them. Node crashes inside
+QEMU's user-mode emulator on every model, Sandy Bridge included, so its floor
+was not measured that way; Node's Linux builds detect CPU features at run
+time rather than requiring AVX. Before starting MongoDB the supervisor runs
+`mongod --version`; exit 132 (SIGILL) stops the start with a message naming
+the requirement and `MONGO_URL` as the way out. The same message follows if
+MongoDB itself later ends with SIGILL.
+
 ## The log
 
 Every line carries the name of the process that wrote it: `[slatebox]`,
@@ -240,10 +255,13 @@ whole: MongoDB Community Server is SSPL-1.0.
 
 ## Left for later
 
-- Publishing: a `docker buildx` multi-platform build and push to GHCR, with
-  `org.opencontainers.image.source` set to the public repository. The image
-  has been built and tested on linux/arm64 only; the amd64 image has not been
-  built or run yet. Nothing in the Dockerfile is specific to one architecture.
+- Publishing to GHCR, with `org.opencontainers.image.source` set to the
+  public repository. Both platforms are built and tested: linux/arm64
+  natively and linux/amd64 under emulation, with the same suite.
+  `TARGET_PLATFORM=linux/amd64,linux/arm64 ./build-image.sh …` makes one
+  tag that holds both; publishing pushes that tag (or each platform is built
+  on its own runner and the two are joined with `docker buildx imagetools
+  create`).
 - MongoDB major upgrades (8.0 to a later series) need a
   feature-compatibility step; the image pins 8.0.
 - Further plan-gated features: with no plans, some features still check for a
