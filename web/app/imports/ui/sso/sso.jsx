@@ -23,6 +23,21 @@ export function useSso() {
   }
 }
 
+// When the server ends a session (single sign-on access was removed), it closes the connection
+// and refuses the tab's resume on reconnect. Meteor's client can then keep showing the old account
+// with its method queue stalled, so watch for that refusal and sign the tab out with a reload.
+if (Meteor.isClient && Meteor.settings.public?.sso?.enabled) {
+  Meteor.connection._stream.on('message', (raw) => {
+    if (typeof raw !== 'string' || !raw.includes('"error"') || !Meteor.userId()) return
+    let message
+    try { message = JSON.parse(raw) } catch { return }
+    const refused = message?.msg === 'result' && message.error?.error === 403 &&
+      /logged out by the server|no longer has access/i.test(message.error.reason || '')
+    if (!refused) return
+    Accounts.makeClientLoggedOut().finally(() => window.location.reload())
+  })
+}
+
 const samePath = (next) => (typeof next === 'string' && /^\/(?![/\\])/.test(next) ? next : '/')
 
 /** The sign-in button, and the reason the last single sign-on did not work, if it did not. */
