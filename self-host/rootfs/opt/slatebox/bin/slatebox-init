@@ -53,6 +53,17 @@ start() {
   exec {fd}>&-
 }
 
+# MongoDB 8.0 is built for newer processors than Docker itself needs. On an
+# older one it dies at once with SIGILL (exit 132); say what that means.
+cpu_unsupported() {
+  case $(uname -m) in
+    x86_64) say 'This processor cannot run MongoDB 8.0: it needs the AVX instruction set (Intel Sandy Bridge, AMD Bulldozer or newer). In a virtual machine, give the guest the host CPU type so that AVX is passed through.' ;;
+    aarch64) say 'This processor cannot run MongoDB 8.0: it needs ARMv8.2-A or newer (a Raspberry Pi 5 works; a Raspberry Pi 4 or older does not).' ;;
+    *) say 'This processor cannot run MongoDB 8.0.' ;;
+  esac
+  say 'Run Slatebox on a newer machine, or keep the database on a MongoDB server elsewhere and set MONGO_URL.'
+}
+
 with_env() {
   local file=$1 dir=$2
   shift 2
@@ -139,6 +150,7 @@ step() {
     fi
     if [[ -n $ended ]]; then
       say "${SERVICE[$ended]} stopped during start-up (exit $status)."
+      if [[ ${SERVICE[$ended]} == mongo && $status == 132 ]]; then cpu_unsupported; fi
       unset "SERVICE[$ended]"
       kill -TERM "$pid" 2>/dev/null || true
       wait "$pid" 2>/dev/null || true
@@ -190,6 +202,7 @@ supervise() {
           say 'Slatebox did not become ready. Stopping the container.'
         else
           say "$name stopped unexpectedly (exit $status). Stopping the container so that Docker can restart it."
+          if [[ $name == mongo && $status == 132 ]]; then cpu_unsupported; fi
         fi
         shutdown
         exit 1
@@ -220,6 +233,12 @@ main() {
   . "$RUN/state.env"
 
   if [[ $SLATEBOX_BUNDLED_MONGO == 1 ]]; then
+    local probe=0
+    mongod --version >/dev/null 2>&1 || probe=$?
+    if ((probe == 132)); then
+      cpu_unsupported
+      exit 1
+    fi
     start mongo -- mongod --dbpath /data/db --replSet rs0 --bind_ip 127.0.0.1 --port 27017 \
       --keyFile /data/secrets/mongo.key --nounixsocket --quiet \
       --setParameter shutdownTimeoutMillisForSignaledShutdown=0

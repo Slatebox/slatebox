@@ -1,8 +1,11 @@
 // Starting, stopping, failing and replacing the container.
 import assert from 'node:assert/strict'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { after, before, test } from 'node:test'
 import {
-  IMAGE, cleanup, docker, freePort, healthy, inspect, logs, name, ok, remove, removeVolume, secrets, start, volume, waitFor,
+  IMAGE, adopt, cleanup, docker, freePort, healthy, inspect, logs, name, ok, remove, removeVolume, secrets, start, volume, waitFor,
 } from './lib.mjs'
 import { closeChrome, expectSlate, seedSlate } from './slate.mjs'
 
@@ -269,6 +272,30 @@ test('a data volume the container cannot write to is reported plainly', async ()
   assert.match(log, /add --user 0:0 to docker run/)
   await remove(locked.id)
   await removeVolume(data)
+})
+
+test('a processor MongoDB 8.0 cannot run on is named, with what to do instead', async () => {
+  // On such a processor mongod dies at once with SIGILL (exit 132). A stand-in
+  // that does exactly that replaces it in a container created for this test.
+  const id = adopt(name('cpu'))
+  const port = await freePort()
+  await ok(['create', '--name', id, '-p', `${port}:7070`, '-v', `${await volume()}:/data`, '-e', `SLATEBOX_URL=http://localhost:${port}`, IMAGE])
+  const dir = await mkdtemp(join(tmpdir(), 'slatebox-cpu-'))
+  try {
+    await writeFile(join(dir, 'mongod'), '#!/bin/sh\nkill -ILL $$\n', { mode: 0o755 })
+    await ok(['cp', join(dir, 'mongod'), `${id}:/usr/local/bin/mongod`])
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+  await ok(['start', id])
+  await exited(id)
+  assert.equal(await inspect(id, '{{.State.ExitCode}}'), '1')
+  const log = await logs(id)
+  const arch = await inspect(IMAGE, '{{.Architecture}}')
+  assert.match(log, arch === 'amd64' ? /cannot run MongoDB 8\.0: it needs the AVX instruction set/ : /cannot run MongoDB 8\.0: it needs ARMv8\.2-A or newer \(a Raspberry Pi 5 works; a Raspberry Pi 4 or older does not\)/)
+  assert.match(log, /set MONGO_URL/)
+  assert.doesNotMatch(log, /Ready\./)
+  await remove(id)
 })
 
 test('a host folder owned by a person runs with --user set to its owner', async () => {
