@@ -194,7 +194,7 @@ test('SLATEBOX_AI_KEY alone turns drafting on with the default provider', async 
   await healthy(box.id)
   assert.match(await logs(box.id), /AI drafts: +on, using DeepInfra/)
   assert.ok(!(await logs(box.id)).includes('test-provider-key'))
-  const environment = await ok(['exec', box.id, 'sh', '-c', `for p in /proc/[0-9]*; do if tr '\\0' ' ' < $p/cmdline | grep -q '^node main.js'; then tr '\\0' '\\n' < $p/environ | grep -c '^API_KEY_DEEP_INFRA=test-provider-key$'; fi; done`])
+  const environment = await ok(['exec', box.id, 'sh', '-c', `for p in /proc/[0-9]*; do if tr '\\0' ' ' < $p/cmdline | grep -qE 'node (.* )?main[.]js $'; then tr '\\0' '\\n' < $p/environ | grep -c '^API_KEY_DEEP_INFRA=test-provider-key$'; fi; done`])
   assert.equal(environment, '1', 'the app process received the key')
   const guest = await person()
   try {

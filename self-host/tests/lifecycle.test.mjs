@@ -12,9 +12,20 @@ import { closeChrome, expectSlate, seedSlate } from './slate.mjs'
 const get = (url, headers) => fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(30_000) })
 const exited = id => waitFor(async () => (await inspect(id, '{{.State.Status}}')) === 'exited', { timeout: 180, what: `${id} to exit` })
 
-// Kill the process whose command line matches, as a crash would.
+// Kill the process whose command line matches, as a crash would. The
+// patterns allow for an emulator (an amd64 image on an arm64 host) that puts
+// its own path and flags before the program's arguments, and use [.] so that
+// they never match the command line of this search itself.
 const kill = (id, pattern) => ok(['exec', id, 'sh', '-c',
-  `for p in /proc/[0-9]*; do if tr '\\0' ' ' < $p/cmdline 2>/dev/null | grep -q '${pattern}'; then kill -KILL \${p#/proc/}; fi; done`])
+  `for p in /proc/[0-9]*; do if tr '\\0' ' ' < $p/cmdline 2>/dev/null | grep -qE '${pattern}'; then kill -KILL \${p#/proc/}; fi; done`])
+
+// The command line of each of the four services.
+const PROCESSES = {
+  app: 'node (.* )?main[.]js $',
+  relay: 'node (.* )?bin/server[.]js $',
+  proxy: 'caddy (.* )?ru[n] --config',
+  mongo: 'mongod (.* )?--dbpat[h]',
+}
 
 // One installation lives through the first group of tests, in order, the way
 // a real one lives through its first day.
@@ -113,7 +124,7 @@ test('docker stop ends cleanly inside the default ten seconds', async () => {
 
 test('with --restart unless-stopped a dead process means a clean restart with the data intact', async () => {
   const restarts = Number(await inspect(box.id, '{{.RestartCount}}'))
-  await kill(box.id, '^node main.js')
+  await kill(box.id, PROCESSES.app)
   await waitFor(async () => Number(await inspect(box.id, '{{.RestartCount}}')) > restarts, { timeout: 180, what: 'Docker to restart the container' })
   await healthy(box.id)
   assert.equal(Number(await inspect(box.id, '{{.RestartCount}}')), restarts + 1)
@@ -125,7 +136,7 @@ test('with --restart unless-stopped a dead process means a clean restart with th
 })
 
 test('when any one of the four processes dies, the container exits with status 1', async () => {
-  const services = [['app', '^node main.js'], ['relay', '^node bin/server.js'], ['proxy', '^caddy run'], ['mongo', '^mongod --dbpath']]
+  const services = Object.entries(PROCESSES)
   const boxes = await Promise.all(services.map(() => start()))
   await Promise.all(boxes.map(each => healthy(each.id)))
   await Promise.all(services.map(async ([service, pattern], index) => {
@@ -152,7 +163,9 @@ test('upgrade: a new container from another image on the same volume', async () 
 
   // Stand-in for a newer release: the same image with a different identity.
   const next = `${name('image')}:next`
-  const build = await docker(['build', '-t', next, '-'], {
+  // Built for the platform of the image under test, which need not be this host's.
+  const platform = `linux/${await inspect(IMAGE, '{{.Architecture}}')}`
+  const build = await docker(['build', '--platform', platform, '-t', next, '-'], {
     input: `FROM ${IMAGE}\nUSER root\nRUN sed -i 's/"app":"[^"]*"/"app":"nextrelease0"/' /opt/slatebox/identity.json\nUSER slatebox\n`,
   })
   assert.equal(build.code, 0, build.stderr)
