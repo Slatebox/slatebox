@@ -13,6 +13,7 @@ import CONSTANTS from '../../api/common/constants'
 import { globalMessage } from '../jotai/atoms'
 import { loginDestination, rememberLoginReturn } from '../../api/common/login-return.mjs'
 import BrandBar from '../common/BrandBar'
+import { SsoSignIn, useSso } from '../sso/sso'
 import { loginReturn } from '../components/billing/pay/pay-url.mjs'
 import { loginWelcome, rememberSignedIn, signedInBefore } from '../common/accountCopy.mjs'
 
@@ -28,6 +29,7 @@ export default function Login() {
   const setGlobalMessage = useSetAtom(globalMessage)
   // A first visit is greeted as one; a browser that has been signed in before says Welcome back.
   const [welcome] = React.useState(() => loginWelcome(signedInBefore(globalThis.localStorage)))
+  const sso = useSso()
   if (Meteor.user() && !Meteor.user().isAnonymous) return <Navigate replace to={destination} />
 
   async function generateLoginToken(eml) {
@@ -102,6 +104,9 @@ export default function Login() {
         <Typography sx={{ color: 'text.secondary', textAlign: 'center', fontSize: 17, lineHeight: 1.45, mb: 3 }}>
           {welcome.lede}
         </Typography>
+        <SsoSignIn next={destination} />
+        {/* Under "SSO only" there are no guests and no passwords: single sign-on is the way in. */}
+        {sso.only ? null : <>
         <form onSubmit={performLogin} style={{ width: '100%' }} noValidate>
           <TextField
             variant="outlined"
@@ -147,6 +152,7 @@ export default function Login() {
             Start a slate, no account needed
           </Button>
         </Box>
+        </>}
         <Box sx={{ pt: 4, textAlign: 'center' }}>
           <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.6 }}>
             By signing in or creating an account, you agree to the{' '}

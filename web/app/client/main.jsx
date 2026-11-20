@@ -14,6 +14,7 @@ import App from '../imports/ui/App'
 import NewCreativeSlate from '../imports/ui/pages/NewCreativeSlate'
 import GetStarted from '../imports/ui/pages/GetStarted'
 import Login from '../imports/ui/pages/Login'
+import { SsoDone, SsoGate } from '../imports/ui/sso/sso'
 import { globalMessage } from '../imports/ui/jotai/atoms'
 // Loads the enterprise/ browser chunk after start where the server says it is unlocked (Cloud, or a
 // licensed self-hosted install); a locked install loads nothing.
@@ -94,7 +95,7 @@ function AppWrapper() {
         </Alert>
       </Snackbar>
       <Router>
-        <Suspense fallback={null}>
+        <SsoGate />
         <Routes>
           <Route path="/workshops" element={<Workshops />} />
           <Route path="/present/:slateShareId" element={<Present />} />
@@ -103,7 +104,7 @@ function AppWrapper() {
           <Route path="/new/:creativeKind" element={<NewCreativeSlate />} />
           <Route path="/new" element={<CreationEntry />} />
           <Route path="/login/:email?" element={<Login />} />
-          <Route path="/oauth/consent" element={<OAuthConsent />} />
+          <Route path="/sso/done" element={<SsoDone />} />
           <Route path="/*" element={<App />} />
         </Routes>
         </Suspense>
