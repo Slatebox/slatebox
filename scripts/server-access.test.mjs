@@ -120,6 +120,21 @@ test('every method and publication handler refuses such arguments before it runs
   assert.equal(handlers['slates.get'], once, 'a handler is wrapped once')
 })
 
+test('a refused argument is logged by method name and kind of key, never by the key a person typed', () => {
+  const logged = []
+  const handlers = { 'chatIntentions.save': () => 'saved' }
+  guardHandlers(handlers, { refuse: () => new Error('refused'), log: (...parts) => logged.push(parts.join(' ')) })
+  assert.throws(() => handlers['chatIntentions.save']({ name: 'x', 'k.Tuesday plan for Ada': 1 }))
+  assert.throws(() => handlers['chatIntentions.save']({ name: 'x', gather: [{ '$Ada secret': 1 }] }))
+  assert.throws(() => handlers['chatIntentions.save']({ name: 'x', ['Ada\0note']: 1 }))
+  assert.equal(logged.length, 3)
+  for (const line of logged) {
+    assert.match(line, /^chatIntentions\.save /)
+    assert.doesNotMatch(line, /Ada|Tuesday|secret|note/, 'the log carries a key: ' + line)
+  }
+})
+
+
 test('the argument guard is installed first, and the deny rules cover every browser-written collection', () => {
   const main = read('server/main.js')
   assert.ok(main.indexOf("import './argument-guard'") < main.indexOf("import './methods/"), 'argument guard after methods')

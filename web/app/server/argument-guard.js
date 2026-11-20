@@ -7,7 +7,7 @@ import { guardHandlers, skipsArgumentGuard } from './common/document-keys.mjs'
 const options = {
   skip: skipsArgumentGuard,
   refuse: () => new Meteor.Error('invalid-argument', 'That request has a field name the server does not accept.'),
-  log: (name, path) => console.warn(`[argument-guard] refused ${name}: ${path}`),
+  log: (name, kind) => console.warn(`[argument-guard] refused ${name}: ${kind}`),
 }
 
 function guardAll() {
