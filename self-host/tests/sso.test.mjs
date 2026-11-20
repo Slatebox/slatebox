@@ -258,14 +258,25 @@ test('a sign-in ticket works only in the browser that started the sign-in (no lo
   const other = await person()
   try {
     // Eve signs in, but keeps the address /sso/callback sends her to instead of following it.
-    let done
-    await eve.page.route('**/sso/callback**', async route => {
-      const response = await route.fetch({ maxRedirects: 0 })
-      done = response.headers().location
-      await route.fulfill({ status: 204, body: '' })
+    // (Playwright routes only the first request of a redirect chain: stop at Keycloak's answer to
+    // her password, then call /sso/callback with her browser's cookies.)
+    let callback, failed
+    await eve.page.route(/\/login-actions\/authenticate/, async route => {
+      try {
+        const response = await route.fetch({ maxRedirects: 0 })
+        callback = response.headers().location
+        await route.fulfill({ status: 204, body: '' })
+      } catch (error) {
+        failed = error
+        await route.abort().catch(() => {})
+      }
     })
     await ssoSignIn(eve.page, box.url, 'bob', 'bo keycloak password 1')
-    await waitFor(() => done, { timeout: 60, what: 'the /sso/done address' })
+    await waitFor(() => callback || failed, { timeout: 60, what: 'the /sso/callback address' })
+      .catch(async error => { throw new Error(`${error.message} at ${eve.page.url()}`) })
+    if (failed) throw failed
+    assert.match(callback, /\/sso\/callback\?/)
+    const done = (await eve.context.request.get(callback, { maxRedirects: 0 })).headers().location
     assert.match(done, /^\/sso\/done#ticket=/)
     // She sends it to someone else, whose browser opens it: not signed in to Eve's account.
     await other.page.goto(`${box.url}${done}`)
@@ -291,7 +302,7 @@ test('SCIM provisions a person ahead; they sign in through the company provider 
     username: 'cy.corp', email: 'cy@example.test', firstName: 'Cy', lastName: 'Scim', enabled: true, emailVerified: true,
     credentials: [{ type: 'password', value: 'cy corp password 1', temporary: false }],
   })
-  // Added the way the guide says: OpenID Connect, Trust Email on, first login flow "link by trusted email".
+  // Added the way the guide says: OpenID Connect, Trust Email on, sync mode Force, first login flow "link by trusted email".
   await call('POST', '/identity-provider/instances', {
     alias: 'corp', displayName: 'Corp', providerId: 'oidc', enabled: true, trustEmail: true, firstBrokerLoginFlowAlias: 'link by trusted email',
     config: {
@@ -299,7 +310,7 @@ test('SCIM provisions a person ahead; they sign in through the company provider 
       authorizationUrl: `${box.url}/auth/realms/corp/protocol/openid-connect/auth`,
       // The broker reaches this stand-in on the container's loopback, as it would reach a real provider over the network.
       tokenUrl: 'http://127.0.0.1:7080/auth/realms/corp/protocol/openid-connect/token',
-      issuer: `${box.url}/auth/realms/corp`, validateSignature: 'false', defaultScope: 'openid email profile', syncMode: 'IMPORT',
+      issuer: `${box.url}/auth/realms/corp`, validateSignature: 'false', defaultScope: 'openid email profile', syncMode: 'FORCE',
     },
   })
   // The company provisions Cy over SCIM before Cy has ever signed in.
@@ -312,7 +323,10 @@ test('SCIM provisions a person ahead; they sign in through the company provider 
   try {
     await companySignIn(cy.page, box.url, 'corp', 'cy.corp', 'cy corp password 1')
     const user = await waitFor(() => signedInUser(cy.page), { timeout: 60, what: 'the SSO session' })
-      .catch(async error => { throw new Error(`${error.message}: ${cy.page.url()} ${(await cy.page.locator('body').innerText()).slice(0, 300)}`) })
+      .catch(async error => {
+        const refused = (await logs(box.id)).split('\n').filter(line => /sso: sign-in refused/.test(line)).slice(-2).join(' | ')
+        throw new Error(`${error.message}: ${cy.page.url()} ${refused}`)
+      })
     assert.equal(user.email, 'cy@example.test')
     // Linked to the SCIM-provisioned person, not a second one.
     const people = await call('GET', '/users?email=cy@example.test&exact=true')

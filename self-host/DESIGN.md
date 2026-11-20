@@ -318,8 +318,9 @@ the current address, so a new `SLATEBOX_URL` or a restore at another address
 keeps SCIM working). It also keeps the first-login flow `link by trusted email`
 in the realm (review profile if fields are missing, then create the user or
 link the existing one with that address), which operators choose per provider
-with Trust Email on, so people provisioned ahead over SCIM or LDAP can sign in
-through the company provider; and it keeps brute-force protection, sign-in
+with Trust Email on and sync mode Force (which marks the linked user's address
+verified), so people provisioned ahead over SCIM or LDAP can sign in through
+the company provider; and it keeps brute-force protection, sign-in
 events and admin events on in the master realm, whose sign-in the admin console
 uses. The log carries a one-time hint naming the admin console and the
 command that shows the password, never the password. Keycloak's own log is
