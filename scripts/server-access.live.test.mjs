@@ -94,6 +94,22 @@ test('nobody signs in as a guest with the shared guest password', live, async ()
   g.close(); c.close()
 })
 
+// An account saved before saving required a password of one's own kept the guest password
+// (Cloud data): the password itself is refused, whoever the account is.
+test('no account signs up or signs in with the password every early guest shared', live, async () => {
+  const email = `shared-${hex(6)}@probe.invalid`
+  const c = await connect()
+  const made = await errorOf(c.call('createUser', { email, password: digest('ANONYMOUS') }))
+  assert.ok(made.error, 'an account was made with the shared guest password')
+  const d = await connect()
+  const login = await errorOf(d.call('login', { user: { email }, password: digest('ANONYMOUS') }))
+  assert.ok(login.error, 'signed in with the shared guest password')
+  const g = await guestUser()
+  const saved = await errorOf(g.call('users.identify', { email: `saved-${hex(6)}@probe.invalid`, password: 'ANONYMOUS' }))
+  assert.ok(saved.error, 'a guest saved its account with the shared guest password')
+  c.close(); d.close(); g.close()
+})
+
 test('organizations.create cannot name someone else as the owner', live, async () => {
   const g = await registeredUser('orgmaker')
   await g.call('organizations.create', { name: 'Hostile ' + hex(4), createdByUserId: victim.userId })

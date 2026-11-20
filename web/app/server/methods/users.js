@@ -17,6 +17,7 @@ import { check, Match } from 'meteor/check'
 import { DDPRateLimiter } from 'meteor/ddp-rate-limiter'
 import { createGuestAccount, createTrustedUser, guestLoginToken } from '../common/accounts'
 import { resolveSlateRole, slateVisibility } from './slate-role.mjs'
+import { isSharedGuestPassword } from '../common/shared-guest-password.mjs'
 import CONSTANTS from '../../imports/api/common/constants'
 import AuthManager from '../../imports/api/common/AuthManager'
 import { readCreditName } from '../../imports/api/common/library-model.mjs'
@@ -127,6 +128,9 @@ method[CONSTANTS.methods.users.identify] = async (opts) => {
   if (user) {
     if (user.isAnonymous && !(opts.password?.length >= 6)) {
       throw new Meteor.Error('password-required', 'Choose a password to save your account.')
+    }
+    if (user.isAnonymous && isSharedGuestPassword(opts.password)) {
+      throw new Meteor.Error('password-required', 'Choose another password to save your account.')
     }
     const updateUser = {
       isAnonymous: false,

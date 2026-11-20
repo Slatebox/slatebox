@@ -2,6 +2,7 @@
 // app by server-access.live.test.mjs; these keep the shape from drifting back.
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -134,6 +135,25 @@ test('a refused argument is logged by method name and kind of key, never by the 
   }
 })
 
+test('nobody signs in, signs up or saves an account with the password every early guest shared', async () => {
+  const { isSharedGuestPassword, attemptedPassword } = await import('../web/app/server/common/shared-guest-password.mjs')
+  const shared = createHash('sha256').update('ANONYMOUS').digest('hex')
+  assert.equal(isSharedGuestPassword('ANONYMOUS'), true)
+  assert.equal(isSharedGuestPassword({ digest: shared, algorithm: 'sha-256' }), true)
+  assert.equal(isSharedGuestPassword({ digest: shared.toUpperCase(), algorithm: 'sha-256' }), true)
+  assert.equal(isSharedGuestPassword('anonymous1'), false)
+  assert.equal(isSharedGuestPassword({ digest: createHash('sha256').update('Probe-pass-1').digest('hex'), algorithm: 'sha-256' }), false)
+  assert.equal(isSharedGuestPassword(undefined), false)
+  // The password of a sign-in, a sign-up and a reset, as accounts-password hands them to validateLoginAttempt.
+  assert.deepEqual(attemptedPassword({ methodName: 'login', methodArguments: [{ user: { email: 'a@b.c' }, password: 'p1' }] }), 'p1')
+  assert.deepEqual(attemptedPassword({ methodName: 'createUser', methodArguments: [{ email: 'a@b.c', password: 'p2' }] }), 'p2')
+  assert.deepEqual(attemptedPassword({ methodName: 'resetPassword', methodArguments: ['token', 'p3'] }), 'p3')
+  assert.equal(attemptedPassword({ methodName: 'login', methodArguments: [{ resume: 'token' }] }), undefined)
+  const accounts = read('server/common/accounts.js')
+  assert.match(accounts, /attempt\.type === 'password' && isSharedGuestPassword\(attemptedPassword\(attempt\)\)/)
+  assert.match(accounts, /isSharedGuestPassword\(suggested\.password\)/)
+  assert.match(read('server/methods/users.js'), /isSharedGuestPassword\(opts\.password\)/)
+})
 
 test('the argument guard is installed first, and the deny rules cover every browser-written collection', () => {
   const main = read('server/main.js')
