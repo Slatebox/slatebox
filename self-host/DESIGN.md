@@ -15,7 +15,8 @@ tini                     PID 1: reaps orphans, passes SIGTERM on
    ├─ mongod             MongoDB 8.0, single-member replica set    127.0.0.1:27017
    ├─ node bin/server.js collaboration relay (y-websocket fork)    127.0.0.1:7072
    ├─ node main.js       the Slatebox app (Meteor bundle)          127.0.0.1:3000
-   └─ caddy              front proxy                               0.0.0.0:7070 (and :80, :443 with built-in HTTPS)
+   ├─ caddy              front proxy                               0.0.0.0:7070 (and :80, :443 with built-in HTTPS)
+   └─ java (kc.sh)       Keycloak, only with SLATEBOX_SSO=keycloak 127.0.0.1:7080 (management 127.0.0.1:7083)
 ```
 
 Everything runs as the unprivileged user `slatebox` (10001). Nothing in the
@@ -66,6 +67,7 @@ starting" page instead of a refused connection.
 | `/data/secrets/secrets.json` | Generated secrets, mode 0600 in a 0700 directory |
 | `/data/secrets/mongo.key` | Replica-set key file, mode 0400 |
 | `/data/caddy` | Certificates and ACME account, only with built-in HTTPS |
+| `/data/keycloak` | Keycloak's H2 database and transaction log, only with single sign-on (`/opt/keycloak/data` links here) |
 | `/data/tmp` | Working files of a running backup or restore |
 
 Files rendered for the current start (environment for the app and relay, the
@@ -171,6 +173,8 @@ Every setting is optional.
 | `SLATEBOX_AI_URL`, `SLATEBOX_AI_MODEL` | An OpenAI-compatible endpoint and model to use for AI drafts instead of DeepInfra. |
 | `SLATEBOX_SETTINGS` | A JSON object merged into the app's settings, for integrations without a variable of their own (`daily.apiKey` for calls, `aws.*` to keep stored files in an S3 bucket instead of the database). It cannot change the generated address and key wiring. |
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use an external MongoDB. The bundled `mongod` is not started. |
+| `SLATEBOX_SSO` | `off` (default) or `keycloak`: single sign-on through the bundled Keycloak (below). |
+| `SLATEBOX_SSO_ONLY` | `true` with `SLATEBOX_SSO=keycloak`: no passwords and no guests. |
 
 The app's settings are generated at every start: `public.env = selfhost`,
 `baseUrl`, `wsUrl`, `chatWoot.enabled = false`, `fontStylesheet` (the
@@ -272,3 +276,86 @@ whole: MongoDB Community Server is SSPL-1.0.
   settings). On a self-hosted instance these need either the plan check
   lifted for `public.env = selfhost` or the feature hidden; that is an app
   change outside this directory.
+
+## Single sign-on: Keycloak in the same image
+
+`SLATEBOX_SSO=keycloak` turns on single sign-on. Off, nothing below runs: no
+Java process, no Keycloak secret, nothing under `/data/keycloak`, and the
+sign-in page has no SSO button. The image still carries Keycloak 26.8.2 and the
+Eclipse Temurin 21 runtime that runs it (about 357 MB unpacked, 224 MB more to
+download); every installation gets the same image.
+
+**Process and port.** Keycloak is one more supervised service (`sso`), started
+with `kc.sh start --optimized` beside the app. Its build options are fixed in
+the image (`kc.sh build`): the H2 file database, served under `/auth`, health
+endpoints, and the SCIM API. At run time it listens on loopback only
+(`KC_HTTP_HOST=127.0.0.1`, `KC_CACHE=local`, so no cluster port, and H2's
+auto-server port is bound to loopback). Caddy sends `/auth` and `/auth/*` to it
+unchanged, so the one published port serves Keycloak too. `KC_HOSTNAME` is the
+public address plus `/auth`; `KC_HOSTNAME_BACKCHANNEL_DYNAMIC` lets the app
+reach the token endpoint on loopback while tokens name the public issuer.
+Keycloak gets a 256 MB heap and the serial collector; idle, it adds about
+0.4 GB of resident memory. When Keycloak stops by itself, the container stops,
+like any other service; on `docker stop` it is given the same time as MongoDB
+to close its database.
+
+**First start.** `configure.mjs` creates the single sign-on secrets
+(`keycloakAdminPassword`, `keycloakInitSecret`, `keycloakDbPassword`,
+`ssoClientSecret`, `ssoStateKey`, `scimClientSecret`) in `secrets.json`, and
+renders `/run/slatebox/keycloak.env`. Keycloak creates its master realm with
+the temporary administrator `admin` and the service client `slatebox-init`
+(`KC_BOOTSTRAP_ADMIN_*`, honoured only when the master realm is created).
+`keycloak-init.mjs` (service `sso-setup`) waits for readiness, then, through
+`slatebox-init`, creates the `slatebox` realm once (events stored 90 days,
+admin events, SCIM on, registration off, brute-force protection), and at every
+start rewrites the app's client (`slatebox`: confidential, code flow with PKCE
+S256 only, redirect `<address>/sso/callback`) and ensures the SCIM client
+(`scim`: client credentials, `manage-users`, an audience mapper for the SCIM
+endpoint). The log carries a one-time hint naming the admin console and the
+command that shows the password, never the password. Keycloak's own log is
+limited to warnings and its event logger is off, because event lines carry user
+names; events are stored in the realm instead.
+
+**The app.** The app's settings gain `sso` (issuer, endpoints, client secret,
+state key; server only) and `public.sso` (`enabled`, `only`). The app signs in
+with OpenID Connect (authorization code, PKCE S256, state and nonce in an
+HMAC-sealed, HttpOnly, SameSite=Lax cookie on `/sso`), exchanges the code on
+loopback, checks the ID token's issuer, audience, expiry and nonce, and hands
+the browser a one-time ticket in a URL fragment, which the `sso` login handler
+trades for a Meteor session. Accounts: the one linked to the Keycloak subject;
+else the account with the same verified email, which is linked; else a new one.
+Links are kept under the provider name `bundled-keycloak`, so a new
+`SLATEBOX_URL` keeps them. It asks for `offline_access` and keeps the refresh
+token in `services.sso`; every 60 seconds (checked every 30) it refreshes it for
+each SSO user who has a session. A refused refresh (`invalid_grant`: user
+disabled, deleted, deactivated over SCIM, offline session revoked) removes all
+of that user's Meteor sessions; an outage removes none. The browser notices
+the refused resume and reloads signed out. `SLATEBOX_SSO_ONLY=true` adds:
+password sign-in, sign-up, reset and change refused in `validateLoginAttempt`;
+no guest and no self-made account in `validateNewUser`; the password, guest and
+sign-in-link methods closed; every page but `/login` and `/sso/*` sends a
+visitor without an account to `/login`.
+
+**Storage.** Keycloak supports PostgreSQL, MySQL, MariaDB, SQL Server and
+Oracle in production, all separate servers; it cannot embed one, and H2
+(`dev-file`) is supported for development only. Bundling PostgreSQL would add a
+second database server to the image and to every backup and upgrade for a
+feature most installations leave off. Slatebox uses H2 instead: one file under
+`/data/keycloak`, opened with its own generated password. Keycloak applies its
+schema migrations to it at start like to any database. The risk is the H2
+engine's own file format, which changed once (Keycloak 17); every backup
+therefore carries a portable H2 backup. `slatebox backup` makes an online
+H2 `BACKUP TO` through H2's auto-server (loopback), stores it with the single
+sign-on secrets in the GridFS bucket `selfhost_keycloak` for the length of the
+dump, and removes it again. `slatebox restore` pauses Keycloak with the app,
+restores H2 from the archive (keeping the old files until it succeeds), takes
+over those secrets, renders the settings again and starts everything.
+
+**Provisioning and audit.** Just-in-time accounts at first sign-in, Keycloak's
+LDAP and Active Directory sync, and Keycloak's built-in SCIM 2.0 API (supported
+since 26.8, Apache-2.0) provisioning Keycloak. Slatebox accounts are still made
+at first sign-in; SCIM groups do not become Slatebox teams. Audit: Keycloak's
+stored login and admin events (`slatebox sso events [N]`, or the admin
+console); Slatebox logs only account ids when SSO creates, links or signs out
+an account. There is no Slatebox audit log of slate activity.
+

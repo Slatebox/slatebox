@@ -55,6 +55,8 @@ Every setting is optional and is given with `-e NAME=value`.
 | `SLATEBOX_AI_URL`, `SLATEBOX_AI_MODEL` | Use your own OpenAI-compatible endpoint and model for AI drafts. `SLATEBOX_AI_KEY` is then its bearer token, if it needs one. |
 | `SLATEBOX_SETTINGS` | A JSON object of further app settings, for example `{"daily":{"apiKey":"…"}}` to turn on calls. |
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use a MongoDB you run elsewhere. The bundled database is then not started. |
+| `SLATEBOX_SSO` | `keycloak` turns on single sign-on with the Keycloak bundled in the image (off by default). People sign in with Entra ID, Okta, Google Workspace, SAML, OpenID Connect or LDAP through it. Keycloak's admin console is at `/auth/admin/` on the same address. |
+| `SLATEBOX_SSO_ONLY` | `true`, with `SLATEBOX_SSO=keycloak`: single sign-on is the only way in, no passwords and no guests. |
 
 A misspelled setting, or one in lower case, stops the container with the list
 of valid names, so a setting is never silently ignored.
@@ -66,7 +68,12 @@ docker logs slatebox                                           # what is happeni
 docker exec slatebox slatebox backup > slatebox-backup.gz      # back up while running
 docker exec -i slatebox slatebox restore < slatebox-backup.gz  # restore a backup
 docker exec slatebox slatebox password-link person@example.com # a one-time link to set a new password
+docker exec slatebox slatebox sso                              # with SLATEBOX_SSO=keycloak: admin console, issuer, SCIM
+docker exec slatebox slatebox sso admin-password               # Keycloak's first admin password (never in the log)
+docker exec slatebox slatebox sso events 50                    # recent sign-in events
 ```
+
+Single sign-on is described in <https://docs.slatebox.com/installation/single-sign-on/>.
 
 Without mail, `password-link` is how someone who forgot their password gets
 back in: give them the link it prints. It works once and expires in three days.
