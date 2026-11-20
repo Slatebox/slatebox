@@ -98,6 +98,7 @@ export function verifyIdToken(token, { issuer, clientId, nonce, now = Date.now()
 async function tokenRequest(config, fetch, params) {
   const response = await fetch(config.tokenEndpoint, {
     method: 'POST',
+    signal: AbortSignal.timeout(15_000),
     headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
     body: new URLSearchParams({ ...params, client_id: config.clientId, client_secret: config.clientSecret }).toString(),
   })

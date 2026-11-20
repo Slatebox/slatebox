@@ -77,7 +77,10 @@ export function keycloakEnv({ url, secrets }) {
     KC_DB_PASSWORD: secrets.keycloakDbPassword,
     // Keycloak's own log carries user names in its event lines: keep warnings and errors only,
     // and leave the event logger out entirely. Events are kept in the realm instead (see below).
-    KC_LOG_LEVEL: 'warn,org.keycloak.events:off',
+    KC_LOG_LEVEL: 'warn,org.keycloak.events:off,org.keycloak.protocol.oidc.endpoints.TokenEndpoint.full-scope-allowed:error',
+    // One server: no cluster, so nothing listens beyond loopback.
+    KC_CACHE: 'local',
+    KC_SPI_STICKY_SESSION_ENCODER__INFINISPAN__SHOULD_ATTACH_ROUTE: 'false',
     KC_LOG_CONSOLE_COLOR: 'false',
     // Used only when Keycloak creates its master realm, on the first start with SSO on.
     KC_BOOTSTRAP_ADMIN_USERNAME: ADMIN_USER,

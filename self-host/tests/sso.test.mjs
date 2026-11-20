@@ -119,7 +119,8 @@ test('a person made in Keycloak signs in with SSO, gets an account and a slate; 
     // The administrator disables her in Keycloak. Within the session check (60 s) her open tab is signed out.
     const disabledAt = Date.now()
     await call('PUT', `/users/${kcId}`, { enabled: false })
-    await waitFor(async () => (await ada.page.evaluate(() => window.Meteor.userId())) !== user.id, { timeout: 150, every: 2000, what: 'the session to be revoked' })
+    await waitFor(async () => (await ada.page.evaluate(() => window.Meteor?.userId())) !== user.id, { timeout: 150, every: 2000, what: 'the session to be revoked' })
+      .catch(async error => { console.log((await logs(box.id)).split('\n').filter(line => /sso/.test(line)).join('\n')); throw error })
     console.log(`access revoked ${Math.round((Date.now() - disabledAt) / 1000)} s after the user was disabled`)
     await ada.page.reload()
     await ada.page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {})
@@ -148,8 +149,8 @@ test('an existing password account is matched by its verified email and keeps it
     const before = await signedInUser(bo.page)
     await bo.page.evaluate(() => new Promise(resolve => window.Meteor.logout(resolve)))
     const call = await admin(box, adminPassword)
-    await makeUser(call, { username: 'bo', email: 'Bo@Example.test', password: 'bo keycloak password 1' })
-    await ssoSignIn(bo.page, box.url, 'bo', 'bo keycloak password 1')
+    await makeUser(call, { username: 'bob', email: 'Bo@Example.test', password: 'bo keycloak password 1' })
+    await ssoSignIn(bo.page, box.url, 'bob', 'bo keycloak password 1')
     const after = await waitFor(() => signedInUser(bo.page), { timeout: 60, what: 'the SSO session' })
     assert.equal(after.id, before.id, 'the same account')
     assert.equal(after.verified, true)
@@ -173,7 +174,7 @@ test('SCIM provisions a person into Keycloak, who can then sign in; deactivated 
     return response.status === 204 ? null : response.json()
   }
   const made = await scim('POST', '/Users', {
-    schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'], userName: 'cy', active: true,
+    schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'], userName: 'cyd', active: true,
     name: { givenName: 'Cy', familyName: 'Scim' }, emails: [{ value: 'cy@example.test', primary: true }],
   })
   // SCIM cannot carry a password; the person would sign in through a brokered company provider. Here the test sets one.
@@ -182,7 +183,7 @@ test('SCIM provisions a person into Keycloak, who can then sign in; deactivated 
   await call('PUT', `/users/${made.id}/reset-password`, { type: 'password', value: 'cy keycloak password 1', temporary: false })
   const cy = await person()
   try {
-    await ssoSignIn(cy.page, box.url, 'cy', 'cy keycloak password 1')
+    await ssoSignIn(cy.page, box.url, 'cyd', 'cy keycloak password 1')
     const user = await waitFor(() => signedInUser(cy.page), { timeout: 60, what: 'the SSO session' })
     assert.equal(user.email, 'cy@example.test')
     await scim('PATCH', `/Users/${made.id}`, {
@@ -207,7 +208,7 @@ test('a restart keeps the realm, its people and its secrets', async () => {
   assert.equal(await ok(['exec', box.id, 'cat', '/data/secrets/secrets.json']), before)
   const bo = await person()
   try {
-    await ssoSignIn(bo.page, box.url, 'bo', 'bo keycloak password 1')
+    await ssoSignIn(bo.page, box.url, 'bob', 'bo keycloak password 1')
     assert.equal((await waitFor(() => signedInUser(bo.page), { timeout: 60, what: 'the SSO session' })).email, 'bo@example.test')
   } finally {
     await bo.close()
@@ -219,7 +220,7 @@ test('a backup carries Keycloak: restored into a new installation, the same peop
   const bo = await person()
   let boId
   try {
-    await ssoSignIn(bo.page, box.url, 'bo', 'bo keycloak password 1')
+    await ssoSignIn(bo.page, box.url, 'bob', 'bo keycloak password 1')
     boId = (await waitFor(() => signedInUser(bo.page), { timeout: 60, what: 'the SSO session' })).id
   } finally { await bo.close() }
   const backup = await ok(['exec', box.id, 'slatebox', 'backup'], { encoding: null })
@@ -232,7 +233,7 @@ test('a backup carries Keycloak: restored into a new installation, the same peop
   await healthy(fresh.id)
   const again = await person()
   try {
-    await ssoSignIn(again.page, fresh.url, 'bo', 'bo keycloak password 1')
+    await ssoSignIn(again.page, fresh.url, 'bob', 'bo keycloak password 1')
     assert.equal((await waitFor(() => signedInUser(again.page), { timeout: 60, what: 'the SSO session after the restore' })).id, boId)
   } finally { await again.close() }
   // The copy of Keycloak's database that travelled in the archive is not left in the restored data.
