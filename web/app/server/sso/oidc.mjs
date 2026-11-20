@@ -53,8 +53,18 @@ export function openState(key, sealed, now = Date.now()) {
   return data
 }
 
-/** Start a sign-in: the address to send the browser to, and the cookie that remembers it. */
-export function beginSignIn({ config, key, now = Date.now(), next }) {
+/** The hash of the random value the browser tab keeps while it signs in (see tickets.mjs). */
+export const bindingFor = verifier => createHash('sha256').update(String(verifier)).digest('base64url')
+const VERIFIER = /^[A-Za-z0-9_-]{43,128}$/
+
+/**
+ * Start a sign-in: the address to send the browser to, and the cookie that remembers it.
+ * `verifier` is a random value the browser tab made and keeps in its sessionStorage; only its
+ * hash travels in the sealed state, and the one-time ticket can only be redeemed with it. So a
+ * ticket from someone else's sign-in cannot sign this browser in to their account.
+ */
+export function beginSignIn({ config, key, now = Date.now(), next, verifier: tab }) {
+  if (typeof tab !== 'string' || !VERIFIER.test(tab)) throw new SsoError('no-binding', 'the sign-in was not started from the sign-in page')
   const { verifier, challenge } = createPkce()
   const state = random()
   const nonce = random()
@@ -69,7 +79,7 @@ export function beginSignIn({ config, key, now = Date.now(), next }) {
     code_challenge: challenge,
     code_challenge_method: 'S256',
   }).toString()
-  return { url: url.toString(), cookie: sealState(key, { state, nonce, verifier, next: safeNext(next), at: now }) }
+  return { url: url.toString(), cookie: sealState(key, { state, nonce, verifier, binding: bindingFor(tab), next: safeNext(next), at: now }) }
 }
 
 function decodeJwtPayload(token) {
@@ -122,7 +132,8 @@ export async function completeSignIn({ config, key, now = Date.now(), cookie, qu
   })
   if (!reply.ok) throw new SsoError('token', `the token endpoint answered ${reply.status}`)
   const claims = verifyIdToken(reply.body.id_token, { issuer: config.issuer, clientId: config.clientId, nonce: started.nonce, now })
-  return { claims, refreshToken: typeof reply.body.refresh_token === 'string' ? reply.body.refresh_token : undefined, next: started.next }
+  if (typeof started.binding !== 'string' || !started.binding) throw new SsoError('no-sign-in', 'the sign-in was not bound to a browser')
+  return { claims, refreshToken: typeof reply.body.refresh_token === 'string' ? reply.body.refresh_token : undefined, next: started.next, binding: started.binding }
 }
 
 /**

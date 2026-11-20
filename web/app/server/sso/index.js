@@ -2,24 +2,33 @@
 // self-host image sets it with SLATEBOX_SSO=keycloak). The protocol, the account matching and
 // the "SSO only" rules live in the plain modules beside this file and are unit-tested there.
 //
-//   GET /sso/login?next=/path   starts the sign-in (authorization code + PKCE)
+//   GET /sso/login?next=/path&verifier=…
+//                               starts the sign-in (authorization code + PKCE); the verifier is
+//                               a random value the browser tab keeps, and binds the sign-in to it
 //   GET /sso/callback           finishes it and hands the browser a one-time ticket in the
-//                               URL fragment, which the client exchanges for a Meteor session
-//                               with the "sso" login handler
+//                               URL fragment, which the same tab exchanges, with its verifier,
+//                               for a Meteor session through the "sso" login handler
 //
 // Every checkSeconds the server refreshes each signed-in SSO user's offline session at the
 // identity provider. A refused refresh (the user was disabled or deleted, or their sessions were
-// ended there) removes every Slatebox session of that user, which also closes their open tabs.
+// ended there) removes every Slatebox session of that user, which also closes their open tabs,
+// revokes their API tokens and sign-in links, and refuses any later sign-in but SSO.
 import { Meteor } from 'meteor/meteor'
 import { WebApp } from 'meteor/webapp'
 import { Accounts } from 'meteor/accounts-base'
-import { Random } from 'meteor/random'
+import { APILinks, LoginLinks, SlateApiTokens } from '../../imports/api/common/models'
 import { STATE_COOKIE, SsoError, beginSignIn, completeSignIn, refreshSession } from './oidc.mjs'
-import { decideAccount, newUserDocument, ssoIdentity, ssoService } from './accounts.mjs'
-import { METHODS_CLOSED_UNDER_SSO_ONLY, SSO_ONLY_MESSAGE, loginRefusal, mayCreateUser, ssoSettings } from './policy.mjs'
+import {
+  decideAccount, linkModifier, newUserDocument, revokeCredentials, revokedModifier, sessionCheckQuery, ssoIdentity, ssoService,
+} from './accounts.mjs'
+import {
+  METHODS_CLOSED_UNDER_SSO_ONLY, SSO_ONLY_MESSAGE, closedPathUnderSsoOnly, loginRefusal, mayCreateUser, ssoSettings,
+} from './policy.mjs'
+import { createTicketStore } from './tickets.mjs'
+import { gateHandlers } from './gate.mjs'
 
-const TICKET_MS = 60_000
-const tickets = new Map()
+const tickets = createTicketStore()
+const credentials = { apiTokens: SlateApiTokens, loginLinks: LoginLinks, apiLinks: APILinks }
 const log = (line) => console.log(`sso: ${line}`)
 
 function cookieValue(header, name) {
@@ -43,7 +52,8 @@ async function accountFor(sso, claims, refreshToken) {
   const identity = ssoIdentity(claims, sso.provider)
   const bySubject = await Meteor.users.findOneAsync({ 'services.sso.issuer': sso.provider, 'services.sso.subject': identity.subject })
   const byEmail = !bySubject && identity.email ? await Accounts.findUserByEmail(identity.email) : undefined
-  const decision = decideAccount(identity, { bySubject, byEmail })
+  const byEmailApiTokens = byEmail ? await SlateApiTokens.find({ userId: byEmail._id, revokedAt: null }).countAsync() : 0
+  const decision = decideAccount(identity, { bySubject, byEmail, byEmailApiTokens })
   if (decision.action === 'refuse') throw new SsoError('account', decision.reason)
   if (decision.action === 'create') {
     const doc = newUserDocument(identity, refreshToken)
@@ -51,28 +61,34 @@ async function accountFor(sso, claims, refreshToken) {
     log(`account ${userId} created at first sign-in`)
     return userId
   }
-  const user = decision.action === 'login' ? bySubject : byEmail
+  if (decision.action === 'link') {
+    // From here on the account signs in with SSO only: no password, no earlier session, no
+    // earlier API token or sign-in link.
+    await Meteor.users.updateAsync({ _id: byEmail._id }, linkModifier(byEmail, identity, refreshToken))
+    await revokeCredentials(credentials, byEmail._id)
+    log(`account ${byEmail._id} linked to its single sign-on identity; its password, sessions and API tokens ended`)
+    return byEmail._id
+  }
   const set = { 'services.sso': ssoService(identity, refreshToken) }
-  const index = (user.emails || []).findIndex(entry => entry.address?.toLowerCase() === identity.email)
+  const index = (bySubject.emails || []).findIndex(entry => entry.address?.toLowerCase() === identity.email)
   if (index >= 0) set[`emails.${index}.verified`] = true
-  await Meteor.users.updateAsync({ _id: user._id }, { $set: set })
-  if (decision.action === 'link') log(`account ${user._id} linked to its single sign-on identity`)
-  return user._id
-}
-
-function issueTicket(userId) {
-  const ticket = Random.secret(43)
-  tickets.set(ticket, { userId, expires: Date.now() + TICKET_MS })
-  for (const [key, entry] of tickets) if (entry.expires < Date.now()) tickets.delete(key)
-  return ticket
+  await Meteor.users.updateAsync({ _id: bySubject._id }, { $set: set })
+  return bySubject._id
 }
 
 function routes(sso) {
   const handlers = WebApp.handlers || WebApp.connectHandlers
   const secure = new URL(sso.redirectUri).protocol === 'https:'
   handlers.use('/sso/login', (req, res) => {
-    const next = new URL(req.url, 'http://x').searchParams.get('next')
-    const started = beginSignIn({ config: sso, key: sso.stateKey, next })
+    const params = new URL(req.url, 'http://x').searchParams
+    let started
+    try {
+      started = beginSignIn({ config: sso, key: sso.stateKey, next: params.get('next'), verifier: params.get('verifier') })
+    } catch (error) {
+      if (!(error instanceof SsoError)) throw error
+      redirect(res, '/login?sso=no-sign-in')
+      return
+    }
     redirect(res, started.url, stateCookie(started.cookie, { secure, maxAge: 600 }))
   })
   handlers.use('/sso/callback', async (req, res) => {
@@ -81,7 +97,7 @@ function routes(sso) {
     try {
       const result = await completeSignIn({ config: sso, key: sso.stateKey, cookie: cookieValue(req.headers.cookie, STATE_COOKIE), query })
       const userId = await accountFor(sso, result.claims, result.refreshToken)
-      const fragment = new URLSearchParams({ ticket: issueTicket(userId), next: result.next })
+      const fragment = new URLSearchParams({ ticket: tickets.issue(userId, result.binding), next: result.next })
       redirect(res, `/sso/done#${fragment}`, clear)
     } catch (error) {
       const code = error instanceof SsoError ? error.code : 'failed'
@@ -95,52 +111,76 @@ function routes(sso) {
 function accountsHooks(sso) {
   Accounts.registerLoginHandler('sso', async (options) => {
     if (typeof options?.ssoTicket !== 'string') return undefined
-    const entry = tickets.get(options.ssoTicket)
-    tickets.delete(options.ssoTicket)
-    if (!entry || entry.expires < Date.now()) return { error: new Meteor.Error(403, 'The sign-in expired. Try again.') }
-    return { userId: entry.userId }
+    const userId = tickets.redeem(options.ssoTicket, options.ssoVerifier)
+    if (!userId) return { error: new Meteor.Error(403, 'The sign-in expired or was started in another browser. Try again.') }
+    return { userId }
   })
   Accounts.validateLoginAttempt((attempt) => {
     const refusal = loginRefusal(attempt, sso)
     if (refusal) throw new Meteor.Error(403, refusal)
-    if (attempt.type === 'resume' && attempt.user?.services?.sso?.revokedAt) {
-      throw new Meteor.Error(403, 'Your single sign-on account no longer has access. Sign in again.')
-    }
     return attempt.allowed
   })
   Accounts.validateNewUser((user) => {
     if (!mayCreateUser(user, sso)) throw new Meteor.Error(403, SSO_ONLY_MESSAGE)
     return true
   })
-  if (sso.only) {
-    Meteor.startup(() => {
-      for (const name of METHODS_CLOSED_UNDER_SSO_ONLY) {
-        if (!Meteor.server.method_handlers[name]) continue
-        Meteor.server.method_handlers[name] = function closedUnderSsoOnly() {
-          throw new Meteor.Error(403, SSO_ONLY_MESSAGE)
-        }
-      }
-    })
+  if (sso.only) ssoOnlyOnTheServer()
+}
+
+// Under SSO only, the server refuses what the sign-in page no longer offers, and everything else
+// to anyone without a session: the redirect to /login in the browser is not the only guard.
+function ssoOnlyOnTheServer() {
+  const refuse = () => new Meteor.Error(403, SSO_ONLY_MESSAGE)
+  const handlers = WebApp.handlers || WebApp.connectHandlers
+  handlers.use((req, res, next) => {
+    if (!closedPathUnderSsoOnly(req.url)) return next()
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' })
+    res.end(SSO_ONLY_MESSAGE)
+    return undefined
+  })
+  const gateAll = () => {
+    gateHandlers(Meteor.server.method_handlers, { kind: 'method', refuse })
+    gateHandlers(Meteor.server.publish_handlers, { kind: 'publication', refuse })
   }
+  Meteor.startup(() => {
+    for (const name of METHODS_CLOSED_UNDER_SSO_ONLY) {
+      if (!Meteor.server.method_handlers[name]) {
+        console.warn(`sso: "${name}" is not a registered method; nothing to close`)
+        continue
+      }
+      Meteor.server.method_handlers[name] = function closedUnderSsoOnly() { throw refuse() }
+    }
+    gateAll()
+    // A method or publication registered later is gated as it is registered.
+    const methods = Meteor.methods
+    Meteor.methods = function gatedMethods(...args) {
+      const result = methods.apply(this, args)
+      gateAll()
+      return result
+    }
+    const publish = Meteor.publish
+    Meteor.publish = function gatedPublish(...args) {
+      const result = publish.apply(this, args)
+      gateAll()
+      return result
+    }
+  })
 }
 
 // Each SSO user with a Slatebox session is checked at most every checkSeconds.
 async function checkSessions(sso) {
-  const due = new Date(Date.now() - sso.checkSeconds * 1000)
   const users = await Meteor.users.find(
-    { 'services.sso.refreshToken': { $exists: true }, 'services.resume.loginTokens.0': { $exists: true }, 'services.sso.checkedAt': { $lt: due } },
-    { fields: { _id: 1, 'services.sso.refreshToken': 1 }, limit: 500 },
+    sessionCheckQuery(Date.now(), sso.checkSeconds),
+    { fields: { _id: 1, 'services.sso.refreshToken': 1 }, sort: { 'services.sso.checkedAt': 1 }, limit: 500 },
   ).fetchAsync()
   for (const user of users) {
     const outcome = await refreshSession({ config: sso, refreshToken: user.services.sso.refreshToken })
     if (outcome.status === 'active') {
       await Meteor.users.updateAsync({ _id: user._id }, { $set: { 'services.sso.refreshToken': outcome.refreshToken, 'services.sso.checkedAt': new Date() } })
     } else if (outcome.status === 'revoked') {
-      await Meteor.users.updateAsync({ _id: user._id }, {
-        $set: { 'services.resume.loginTokens': [], 'services.sso.revokedAt': new Date(), 'services.sso.checkedAt': new Date() },
-        $unset: { 'services.sso.refreshToken': '' },
-      })
-      log(`account ${user._id} signed out: the identity provider refused its session`)
+      await Meteor.users.updateAsync({ _id: user._id }, revokedModifier())
+      await revokeCredentials(credentials, user._id)
+      log(`account ${user._id} signed out: the identity provider refused its session; its API tokens are revoked`)
     }
   }
 }

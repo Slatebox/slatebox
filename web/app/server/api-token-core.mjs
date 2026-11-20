@@ -69,11 +69,13 @@ export function createApiTokenService({
     const oauth = token.kind === 'oauth'
     if (oauth !== rawToken.startsWith('sbo_')) return null
     if (oauth && (!audience || token.resource !== audience || !(token.expiresAt > now()))) return null
+    // A token is only as good as its account: none for an account that was deleted, disabled,
+    // or whose single sign-on identity provider has removed the person.
     const account = await users.findOneAsync(
       { _id: token.userId },
-      { fields: { _id: 1, isAnonymous: 1 } }
+      { fields: { _id: 1, isAnonymous: 1, isDisabled: 1, 'services.sso.revokedAt': 1 } }
     )
-    if (!account || account.isAnonymous) return null
+    if (!account || account.isAnonymous || account.isDisabled || account.services?.sso?.revokedAt) return null
     await apiTokens.updateAsync(
       { _id: token._id },
       { $set: { lastUsedAt: now() } }
