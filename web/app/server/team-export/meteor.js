@@ -25,7 +25,7 @@ import {
 import { SlateEvents, slateSaveCore } from '../slate-save'
 import { generateSlateShareId } from '../methods/slates'
 import { classifyUpload } from '../common/upload-kinds.mjs'
-import { deleteImageByKey, readS3Object, uploadS3Object } from '../common/s3Utils'
+import { deleteStoredFile, readStoredObject, storeFile, storedFileBase } from '../common/fileStore'
 import { CONNECTION_TYPES } from '../methods/ai/connections.mjs'
 import { enrollmentMailAvailable } from '../instance/meteor'
 import { publicKeyFingerprint } from './archive.mjs'
@@ -60,8 +60,8 @@ const db = {
   importMap: raw(TeamImportMap),
 }
 
-const cloudUrl = () => Meteor.settings.aws?.cloudUrl || ''
-const fileStore = () => Boolean(Meteor.settings.aws?.imageBucket && Meteor.settings.aws?.cloudUrl)
+// Uploads live in the file store: the S3 bucket when one is set, else the database (fileStore.js).
+const cloudUrl = () => storedFileBase()
 const dateFolder = () => {
   const now = new Date()
   return `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`
@@ -101,7 +101,7 @@ function signer() {
 const exporter = createTeamExporter({
   db,
   cloudUrl: cloudUrl(),
-  readFile: (key, maxBytes) => (fileStore() ? readS3Object(key, maxBytes) : null),
+  readFile: (key, maxBytes) => readStoredObject(key, maxBytes),
 })
 
 const teamClaims = Object.values(CONSTANTS.claims)
@@ -117,12 +117,11 @@ const importer = createTeamImporter({
   createSlate: (row, actor) => slateSaveCore.create({ row, actor, source: 'import' }),
   classifyFile: (bytes, ext) => classifyUpload(bytes, 'file.' + ext),
   async storeFile({ body, ext, type, ownerUserId }) {
-    if (!fileStore()) throw Object.assign(new Error('This server has no file store for imported files.'), { status: 422, code: 'file_store_missing' })
     const key = `${dateFolder()}/u_${ownerUserId}_${Random.id()}.${ext}`
-    const url = await uploadS3Object({ body, key, contentType: type })
+    const url = await storeFile({ body, key, contentType: type })
     return { url, key }
   },
-  deleteFile: (key) => (fileStore() ? deleteImageByKey(key) : null),
+  deleteFile: (key) => deleteStoredFile(key),
   validateBoard: validateWorkshop,
   teamClaims,
   aiProviders: Object.keys(CONNECTION_TYPES),

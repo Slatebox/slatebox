@@ -10,6 +10,7 @@ import { slateShareImage, slateShareText } from './common/share-image.mjs'
 import { libraryItemHead, librarySlugOf } from './library/item-meta.mjs'
 import { LibraryItems } from '../imports/api/common/models'
 import setup from './email/setup'
+import { storedFileBase } from './common/fileStore'
 import { onCreateUser } from './common/accounts'
 import { ensureLibraryIndexes, migrateCommunitySlates, seedLibraryBuiltins } from './library/meteor'
 import './bootstrap/all'
@@ -280,7 +281,7 @@ onPageLoad(async (sink) => {
             { fields: { 'options.id': 1, 'options.name': 1, 'options.description': 1, 'options.isPublic': 1, 'options.isPrivate': 1, 'options.isUnlisted': 1, 'options.staticImage': 1 } }
           ).catch(() => null)
         : null
-    const boardImage = shared && slateShareImage(shared, Meteor.settings.aws?.cloudUrl)
+    const boardImage = shared && slateShareImage(shared, storedFileBase())
     const sharedText = shared && slateShareText(shared)
 
     const imageUrl =

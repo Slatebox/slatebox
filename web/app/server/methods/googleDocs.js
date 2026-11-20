@@ -10,7 +10,7 @@ import { google } from 'googleapis'
 import fetch from 'node-fetch'
 import CONSTANTS from '../../imports/api/common/constants'
 import { APILinks, Slates } from '../../imports/api/common/models'
-import { uploadImage, uploadS3Object } from '../common/s3Utils'
+import { storeFile, storeImage } from '../common/fileStore'
 
 const method = {}
 
@@ -154,8 +154,8 @@ method[CONSTANTS.methods.utils.getCloudLink] = async (
       // upload image to s3 for google docs access
       // An SVG is stored to be downloaded, never shown as a page on the bucket's domain.
       const slateImageUrl = isSvg
-        ? await uploadS3Object({ body: Buffer.from(imgBuffer, 'utf8'), key: `${slateId}_${Date.now()}.svg`, contentType: 'image/svg+xml', contentDisposition: 'attachment' })
-        : await uploadImage(imgBuffer, slateId, false, false)
+        ? await storeFile({ body: Buffer.from(imgBuffer, 'utf8'), key: `${slateId}_${Date.now()}.svg`, contentType: 'image/svg+xml', contentDisposition: 'attachment' })
+        : await storeImage(imgBuffer, slateId, false)
       const slateUpdate = {
         'options.staticImage': slateImageUrl,
         'options.staticImageTimestamp': Date.now(),
@@ -213,7 +213,7 @@ method[CONSTANTS.methods.googleDocs.export] = async (
         .catch((err) => console.log('err is', err))
 
       // upload image to s3 for google docs access
-      const slateUrl = await uploadImage(imgBuffer, slateId)
+      const slateUrl = await storeImage(imgBuffer, slateId)
       const createUrl = `https://docs.googleapis.com/v1/documents`
 
       const createOptions = {

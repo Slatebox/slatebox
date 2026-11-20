@@ -4,13 +4,13 @@
 // a self-host or a local server still shows posters without reaching the video host.
 import { Meteor } from 'meteor/meteor'
 import { CachedImages } from '../../imports/api/common/models'
-import { uploadS3Object } from '../common/s3Utils'
+import { storeFile } from '../common/fileStore'
 import { createMediaLookup } from './media-lookup.mjs'
 
 const hasFileStore = () => Boolean(Meteor.settings.aws?.imageBucket && Meteor.settings.aws?.cloudUrl)
 
 async function storePoster({ key, body, contentType }) {
-  if (hasFileStore()) return uploadS3Object({ body, key, contentType })
+  if (hasFileStore()) return storeFile({ body, key, contentType })
   await CachedImages.upsertAsync({ url: key }, { $set: { url: key, bytes: body, contentType, created: Date.now() } })
   const path = `/sbimages/${encodeURIComponent(key)}`
   const base = String(Meteor.settings.public?.baseUrl || '').replace(/\/+$/, '')

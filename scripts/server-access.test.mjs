@@ -233,3 +233,18 @@ test('metering, wallet and key methods need a signed-in person; budget methods n
     assert.ok(constants.includes(`'${name}'`), name)
   }
 })
+
+test('uploads and server-made images go through one file store: the bucket when one is set, else the database', () => {
+  // Two files read aws.cloudUrl without storing uploads: the instance descriptor reports whether a
+  // bucket is set, and video posters keep their own database copy (/sbimages/) without one.
+  const readsBucketOnly = new Set(['server/instance/describe.mjs', 'server/media/meteor.js', 'server/media/media-lookup.mjs'])
+  for (const file of server) {
+    if (file === 'server/common/fileStore.js' || file === 'server/common/s3Utils.js') continue
+    assert.doesNotMatch(read(file), /from '(\.\.\/|\.\/)(common\/)?s3Utils'/, file + ' writes to S3 directly')
+    if (!readsBucketOnly.has(file)) assert.doesNotMatch(read(file).replace(/^\s*\/\/.*$/gm, ''), /settings\.aws\??\.cloudUrl/, file + ' assumes files are in the bucket')
+  }
+  const store = read('server/common/fileStore.js')
+  assert.match(store, /GridFSBucket/)
+  assert.match(store, /Meteor\.settings\.aws\?\.imageBucket/)
+  assert.match(read('server/sbImages.js'), /app\.get\(STORED_FILE_ROUTE/)
+})

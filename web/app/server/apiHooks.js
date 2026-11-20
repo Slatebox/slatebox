@@ -4,6 +4,7 @@ import { createApiLoginLink } from './methods/users'
 /* eslint-disable no-underscore-dangle */
 import { Meteor } from 'meteor/meteor'
 import app from './expressApp'
+import { storedFileBase } from './common/fileStore'
 import {
   APILinks,
   SlatePresentations,
@@ -28,12 +29,13 @@ if (Meteor.settings.public.env === 'selfhost') {
     const presentation = await SlatePresentations.findOneAsync({
       slateShareId: shareId, isPublished: true,
     }, { fields: { imageUrl: 1 } })
-    if (!presentation?.imageUrl || !Meteor.settings.aws?.cloudUrl) return response.sendStatus(404)
+    if (!presentation?.imageUrl) return response.sendStatus(404)
     let image
     try {
+      // The board's image is one of this instance's stored files (fileStore.js).
       image = new URL(presentation.imageUrl)
-      const assets = new URL(Meteor.settings.aws.cloudUrl)
-      if (image.origin !== assets.origin || image.protocol !== 'https:' ||
+      const assets = new URL(`${storedFileBase()}/`)
+      if (image.origin !== assets.origin || !image.pathname.startsWith(assets.pathname) ||
         image.username || image.password || !/\/present_[A-Za-z0-9_-]+\.png$/.test(image.pathname)) {
         return response.sendStatus(404)
       }

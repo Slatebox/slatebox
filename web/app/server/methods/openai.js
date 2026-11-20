@@ -11,6 +11,7 @@
 import { Meteor } from 'meteor/meteor'
 import { check, Match } from 'meteor/check'
 import { safeFetch } from '../common/safe-fetch.mjs'
+import { readStoredFile, storedFileBase } from '../common/fileStore'
 import { canEditSlate, canReadSlate, findSlate } from '../common/slate-access'
 import { Random } from 'meteor/random'
 // import { Configuration, OpenAIApi } from 'openai'
@@ -1276,8 +1277,8 @@ async function checkConversationTarget(user, opts) {
   }
   const docs = opts.isConversation?.uploadedDocs
   if (docs !== undefined && docs !== null) {
-    const ownBucket = `${Meteor.settings.aws?.cloudUrl}/`
-    if (!Array.isArray(docs) || docs.length > 5 || docs.some(d => typeof d?.url !== 'string' || !d.url.startsWith(ownBucket) || typeof d.docType !== 'string')) {
+    const ownFiles = `${storedFileBase()}/`
+    if (!Array.isArray(docs) || docs.length > 5 || docs.some(d => typeof d?.url !== 'string' || !d.url.startsWith(ownFiles) || typeof d.docType !== 'string')) {
       throw new Meteor.Error('documents-denied', 'Only files uploaded to Slatebox can be read in a conversation.')
     }
   }
@@ -1397,7 +1398,7 @@ method[CONSTANTS.methods.openai.chat] = metered({ feature: 'generation' }, async
               if (doc.docType.includes('text')) {
                 shiftedPrompts.push({
                   type: 'text',
-                  text: (await safeFetch(doc.url, { maxBytes: 2 * 1024 * 1024, contentTypes: ['text/plain'] })).bytes.toString('utf8'),
+                  text: ((await readStoredFile(doc.url)) ?? (await safeFetch(doc.url, { maxBytes: 2 * 1024 * 1024, contentTypes: ['text/plain'] }))).bytes.toString('utf8'),
                   cache_control: { type: 'ephemeral' },
                 })
               } else {

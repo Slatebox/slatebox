@@ -16,11 +16,11 @@ import { playWorkshopChanges, readWorkshopChanges, drawingAfter, tradeKey, trade
 import { storeTradePictures, storeWorkshopPictures } from './workshop-pictures.mjs'
 import { recordedUndo, replaceWorkshop } from './workshop-replace.mjs'
 import { moverName } from '../../imports/api/common/mover-name.mjs'
-import { uploadS3Object } from '../common/s3Utils'
+import { storeFile } from '../common/fileStore'
 import { MAIN_BOARD, boardIdPattern, boardRecordId, boardSaveWrite, boardRecords, boardsCounter, boardsCounterRecordId, slateAsBoard, slateBoards } from '../../imports/api/common/slate-boards.mjs'
 
-// The slate's picture store (the file store its images use), or null when this server has none.
-const pictureStore = () => Meteor.settings.aws?.imageBucket && Meteor.settings.aws?.cloudUrl ? uploadS3Object : null
+// The slate's picture store: the file store (the S3 bucket when one is set, else the database).
+const pictureStore = () => storeFile
 
 // An interactive slate is named and described from its model. The save core builds the search
 // fields from that name and description.

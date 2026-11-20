@@ -169,7 +169,7 @@ Every setting is optional.
 | `SLATEBOX_MAIL_FROM` | The sender, an address the operator's mail service accepts (`settings.mailFrom`). Defaults to the SMTP user name when that is an address; otherwise required with `SLATEBOX_MAIL_URL`. |
 | `SLATEBOX_AI_KEY` | DeepInfra key; turns on AI drafts. With `SLATEBOX_AI_URL`, the bearer token for that endpoint. |
 | `SLATEBOX_AI_URL`, `SLATEBOX_AI_MODEL` | An OpenAI-compatible endpoint and model to use for AI drafts instead of DeepInfra. |
-| `SLATEBOX_SETTINGS` | A JSON object merged into the app's settings, for integrations without a variable of their own (`daily.apiKey` for calls, `aws.*` for published images). It cannot change the generated address and key wiring. |
+| `SLATEBOX_SETTINGS` | A JSON object merged into the app's settings, for integrations without a variable of their own (`daily.apiKey` for calls, `aws.*` to keep stored files in an S3 bucket instead of the database). It cannot change the generated address and key wiring. |
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use an external MongoDB. The bundled `mongod` is not started. |
 
 The app's settings are generated at every start: `public.env = selfhost`,
@@ -177,7 +177,10 @@ The app's settings are generated at every start: `public.env = selfhost`,
 interface fonts, served by Caddy from `/opt/slatebox/share/fonts` at
 `/_fonts/`, so a page view sends nothing to Google), `cloudLinks` (true only
 when `SLATEBOX_SETTINGS` configures an S3 bucket), `mailFrom`, `slateboxAPI`
-and `selfHosted.workshopAI`. With `public.env = selfhost` the app also leaves
+and `selfHosted.workshopAI`. Files the app stores (uploads, AI images,
+presentation images) go to the database's `files` GridFS bucket and are served
+by the app at `/files/`, so a backup carries them; only an `aws.imageBucket`
+in `SLATEBOX_SETTINGS` sends them to S3 instead. With `public.env = selfhost` the app also leaves
 out Heap analytics, plans, AI quotas and billing. The relay gets `API_KEYS` and
 `API_GEN_KEY`; MongoDB has three accounts (root, app, relay).
 

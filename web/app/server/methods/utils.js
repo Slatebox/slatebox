@@ -6,6 +6,7 @@ import sharp from 'sharp'
 import LRU from 'lru-cache'
 import CONSTANTS from '../../imports/api/common/constants'
 import { fetchPublicImage, safeFetch } from '../common/safe-fetch.mjs'
+import { readStoredFile } from '../common/fileStore'
 import { isRasterImage } from '../common/upload-kinds.mjs'
 
 // Create an LRU cache with size and memory limits
@@ -45,11 +46,14 @@ method[CONSTANTS.methods.utils.base64StringFromRemoteUrl] = async (opts) => {
   if (cachedResult) return cachedResult
   let base64
   try {
+    // A file this app stored in its database is read from there (fileStore.js).
+    const stored = await readStoredFile(url)
+    if (stored && !(isPdf ? stored.contentType === 'application/pdf' : Object.values(imageTypes).includes(stored.contentType))) throw new Error('That file is not of the type asked for.')
     if (isPdf) {
-      const { bytes } = await safeFetch(url, { contentTypes: ['application/pdf'] })
+      const { bytes } = stored ?? await safeFetch(url, { contentTypes: ['application/pdf'] })
       base64 = `data:application/pdf;base64,${bytes.toString('base64')}`
     } else {
-      const { bytes } = await fetchPublicImage(url)
+      const { bytes } = stored ?? await fetchPublicImage(url)
       if (imgType === 'gif') {
         base64 = `data:image/gif;base64,${bytes.toString('base64')}`
       } else {

@@ -120,7 +120,8 @@ async function deletePriorObjectsWithDateCleanup(bucket, slateId) {
   }
 }
 
-async function uploadS3Object({ body, key, contentType, contentDisposition }) {
+// The S3 side of the file store (fileStore.js): put and delete one object of the image bucket.
+export async function putS3Object({ body, key, contentType, contentDisposition }) {
   const bucket = Meteor.settings.aws.imageBucket
 
   console.log('uploading s3', {
@@ -139,42 +140,10 @@ async function uploadS3Object({ body, key, contentType, contentDisposition }) {
       Body: body,
     })
   )
-
-  const finalUrl = `${Meteor.settings.aws.cloudUrl}/${key}`
-  console.log('uploading s3 success', key, finalUrl)
-  return finalUrl
+  console.log('uploading s3 success', key)
 }
 
-async function uploadImage(
-  imgBuffer,
-  slateId,
-  isSvg,
-  isTemplate,
-  ctype,
-  fileExt,
-  skipTimestamp = false
-) {
-  // Deletion is now handled externally before calling uploadImage
-  // await deletePriorObjects(Meteor.settings.aws.imageBucket, slateId) // REMOVED
-
-  const fileId = skipTimestamp ? '' : `_${new Date().valueOf()}`
-  const baseFileName = isSvg
-    ? `${slateId}${fileId}.svg`
-    : `${slateId}${fileId}.${fileExt || 'png'}`
-  const fullKey = `${getDatePrefix()}/${baseFileName}`
-
-  return uploadS3Object({
-    body: imgBuffer,
-    key: fullKey,
-    contentType: ctype || (isSvg ? 'image/svg+xml' : 'image/png'),
-  })
-}
-
-// Export the new deletion function alongside the upload function
-// The original deletePriorObjects is kept as a helper for the new one, but not exported directly.
-export { deletePriorObjectsWithDateCleanup, uploadImage, uploadS3Object }
-
-export async function deleteImageByKey(key) {
+export async function deleteS3Object(key) {
   await sendS3(new DeleteObjectCommand({ Bucket: Meteor.settings.aws.imageBucket, Key: key }))
 }
 
