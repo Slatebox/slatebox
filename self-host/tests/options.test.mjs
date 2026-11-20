@@ -3,9 +3,8 @@
 // servers in this process; nothing leaves the machine.
 import assert from 'node:assert/strict'
 import { createServer as createHttpServer } from 'node:http'
-import { createServer as createTcpServer } from 'node:net'
 import { after, afterEach, test } from 'node:test'
-import { adopt, cleanup, docker, freePort, healthy, inspect, logs, name, network, ok, start, waitFor } from './lib.mjs'
+import { adopt, cleanup, docker, freePort, healthy, inspect, logs, mailSink, name, network, ok, start, waitFor } from './lib.mjs'
 import { closeChrome, createSlate, notes, person, savedNotes, writeNote } from './slate.mjs'
 
 // Each test removes what it started, so only a few containers ever run at once.
@@ -31,41 +30,6 @@ const call = (page, method, ...args) => page.evaluate(async ([method, args]) => 
 async function registered(page, address, email) {
   await createSlate(page, address)
   return call(page, 'users.identify', { firstName: 'Ada', lastName: 'Lovelace', email, password: 'first password 42' })
-}
-
-/** A mail server that accepts everything and keeps it. */
-async function mailSink() {
-  const messages = []
-  const server = createTcpServer(socket => {
-    let buffer = '', data = null
-    socket.write('220 sink ESMTP\r\n')
-    socket.on('error', () => {})
-    socket.on('data', chunk => {
-      buffer += chunk.toString('utf8')
-      for (;;) {
-        if (data !== null) {
-          const end = buffer.indexOf('\r\n.\r\n')
-          if (end < 0) return
-          messages.push(data + buffer.slice(0, end))
-          buffer = buffer.slice(end + 5)
-          data = null
-          socket.write('250 kept\r\n')
-          continue
-        }
-        const line = buffer.indexOf('\r\n')
-        if (line < 0) return
-        const command = buffer.slice(0, line).toUpperCase()
-        buffer = buffer.slice(line + 2)
-        if (command.startsWith('EHLO') || command.startsWith('HELO')) socket.write('250 sink\r\n')
-        else if (command.startsWith('DATA')) { data = ''; socket.write('354 go on\r\n') }
-        else if (command.startsWith('QUIT')) { socket.write('221 bye\r\n'); socket.end() }
-        else socket.write('250 ok\r\n')
-      }
-    })
-  })
-  const port = await freePort()
-  await new Promise(resolve => server.listen(port, '0.0.0.0', resolve))
-  return { port, messages, close: () => new Promise(resolve => server.close(resolve)) }
 }
 
 test('without mail settings, sign-up still works and says that no mail is sent', async () => {

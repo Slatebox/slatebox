@@ -105,7 +105,8 @@ SLATEBOX_IMAGE=<image name> PLAYWRIGHT_FROM=/path/to/slateboxjs/package.json \
 
 They cover the image's contents (identity, licenses, no settings or keys),
 the first start, restart, stop, a crashed process, upgrade, backup and
-restore, every setting, and two browsers editing one slate. Outside services
+restore, every setting, two browsers editing one slate, and a log that
+carries none of what people wrote. Outside services
 are replaced by local stand-ins: a mail sink, an OpenAI-compatible endpoint,
 a second MongoDB, a proxy in front, and Let's Encrypt's Pebble test server
 as the certificate authority. To also search the image for the values in

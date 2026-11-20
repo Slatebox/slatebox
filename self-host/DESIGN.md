@@ -134,6 +134,13 @@ every routine event and several host-tuning hints at each start; only its
 errors are passed on. Caddy logs errors only. The relay's deprecation notice
 from Node 24 is switched off.
 
+What people write never reaches the log. The app and the relay log ids,
+counts and sizes, never note text, chat, AI prompts or replies, email
+addresses or tokens. `tests/log-content.test.mjs` runs a session of live
+edits, the slate conversation, an AI-drafted workshop and its chat, account
+mail and a refused live connection, then searches the whole log for each of
+those texts and credentials.
+
 ## Settings
 
 Every setting is optional.
@@ -244,6 +251,3 @@ whole: MongoDB Community Server is SSPL-1.0.
   settings). On a self-hosted instance these need either the plan check
   lifted for `public.env = selfhost` or the feature hidden; that is an app
   change outside this directory.
-- The app still logs whole slate documents when it checks write permission
-  (`server/permissions.js`); the branch feat/native-workshops removes that
-  line.

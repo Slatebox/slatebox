@@ -167,3 +167,38 @@ export async function browser(args = ['--host-resolver-rules=MAP *.slatebox-one.
   const { chromium } = playwright()
   return chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome', headless: true, args })
 }
+
+/** A mail server that accepts everything and keeps it. */
+export async function mailSink() {
+  const messages = []
+  const server = createServer(socket => {
+    let buffer = '', data = null
+    socket.write('220 sink ESMTP\r\n')
+    socket.on('error', () => {})
+    socket.on('data', chunk => {
+      buffer += chunk.toString('utf8')
+      for (;;) {
+        if (data !== null) {
+          const end = buffer.indexOf('\r\n.\r\n')
+          if (end < 0) return
+          messages.push(data + buffer.slice(0, end))
+          buffer = buffer.slice(end + 5)
+          data = null
+          socket.write('250 kept\r\n')
+          continue
+        }
+        const line = buffer.indexOf('\r\n')
+        if (line < 0) return
+        const command = buffer.slice(0, line).toUpperCase()
+        buffer = buffer.slice(line + 2)
+        if (command.startsWith('EHLO') || command.startsWith('HELO')) socket.write('250 sink\r\n')
+        else if (command.startsWith('DATA')) { data = ''; socket.write('354 go on\r\n') }
+        else if (command.startsWith('QUIT')) { socket.write('221 bye\r\n'); socket.end() }
+        else socket.write('250 ok\r\n')
+      }
+    })
+  })
+  const port = await freePort()
+  await new Promise(resolve => server.listen(port, '0.0.0.0', resolve))
+  return { port, messages, close: () => new Promise(resolve => server.close(resolve)) }
+}
