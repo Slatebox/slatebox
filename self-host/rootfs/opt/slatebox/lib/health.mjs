@@ -4,9 +4,9 @@
 //   health.mjs            the app answers with its database, and the relay answers
 //   health.mjs --deep     also opens a signed live-editing connection
 //   health.mjs --wait N   keep trying for N seconds before giving up
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { FRONT_PORT, RELAY_PATH, RUN, fail, Plain, readSecrets, relaySignature, sleep } from './common.mjs'
+import { FRONT_PORT, RELAY_PATH, RUN, SSO_PATH, SSO_REALM, fail, Plain, readSecrets, relaySignature, sleep } from './common.mjs'
 
 const front = `127.0.0.1:${FRONT_PORT}`
 
@@ -44,10 +44,20 @@ async function liveEditingReady() {
   }
 }
 
+// With single sign-on on, Keycloak must answer for the realm through the same port.
+async function ssoReady() {
+  const state = existsSync(join(RUN, 'state.env')) ? readFileSync(join(RUN, 'state.env'), 'utf8') : ''
+  if (!/^SLATEBOX_SSO='keycloak'$/m.test(state)) return
+  const response = await fetch(`http://${front}${SSO_PATH}/realms/${SSO_REALM}/.well-known/openid-configuration`, { signal: AbortSignal.timeout(5000) })
+  const body = response.ok ? await response.json().catch(() => null) : null
+  if (!body?.issuer) throw new Plain(`Single sign-on (Keycloak) is not ready (HTTP ${response.status}).`)
+}
+
 async function check(deep) {
   if (existsSync(join(RUN, 'paused'))) throw new Plain('Slatebox is paused while a backup is restored.')
   await appReady()
   await relayReady()
+  await ssoReady()
   if (deep) await liveEditingReady()
 }
 

@@ -4,13 +4,14 @@
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  APP_PORT, DATABASE, DB_DIR, FRONT_PORT, HOME, MONGO_KEY_FILE, MONGO_PORT, Plain, RELAY_PATH, RELAY_PORT, RUN,
-  TMP_DIR, DATA, ensureSecrets, envFile, fail, mongoUrl, writePrivate,
+  APP_PORT, DATABASE, DB_DIR, FRONT_PORT, HOME, KEYCLOAK_DATA, KEYCLOAK_PORT, MONGO_KEY_FILE, MONGO_PORT, Plain, RELAY_PATH,
+  RELAY_PORT, RUN, SSO_PATH, TMP_DIR, DATA, ensureSecrets, envFile, fail, mongoUrl, writePrivate,
 } from './common.mjs'
+import { appSettings as ssoAppSettings, issuerFor, keycloakEnv, ssoMode } from './sso.mjs'
 
 const KNOWN = [
   'SLATEBOX_URL', 'SLATEBOX_HTTPS', 'SLATEBOX_ACME_CA', 'SLATEBOX_MAIL_URL', 'SLATEBOX_MAIL_FROM',
-  'SLATEBOX_AI_KEY', 'SLATEBOX_AI_URL', 'SLATEBOX_AI_MODEL', 'SLATEBOX_SETTINGS',
+  'SLATEBOX_AI_KEY', 'SLATEBOX_AI_URL', 'SLATEBOX_AI_MODEL', 'SLATEBOX_SETTINGS', 'SLATEBOX_SSO', 'SLATEBOX_SSO_ONLY',
 ]
 // Where the image serves the interface fonts (see the Dockerfile).
 const FONTS_PATH = '/_fonts/'
@@ -99,7 +100,7 @@ function extraSettings() {
   return extra
 }
 
-function caddyfile({ url, builtInHttps, acmeCa }) {
+function caddyfile({ url, builtInHttps, acmeCa, sso }) {
   // The published port answers for the configured address and for the
   // container's own loopback checks. Any other address gets a page that says
   // which setting to change, instead of an app whose links and live editing
@@ -115,7 +116,11 @@ handle_path ${FONTS_PATH}* {
 handle @relay {
 	uri strip_prefix ${RELAY_PATH}
 	reverse_proxy 127.0.0.1:${RELAY_PORT}
-}
+}${sso ? `
+@sso path ${SSO_PATH} ${SSO_PATH}/*
+handle @sso {
+	reverse_proxy 127.0.0.1:${KEYCLOAK_PORT}
+}` : ''}
 handle {
 	reverse_proxy 127.0.0.1:${APP_PORT}
 }`.replace(/\n/g, `\n${indent}`)
@@ -208,10 +213,13 @@ function main() {
   if (externalMongo) parseUrl('MONGO_URL', externalMongo, ['mongodb:', 'mongodb+srv:'])
   if (externalOplog && !externalMongo) throw new Plain('MONGO_OPLOG_URL only applies together with MONGO_URL')
   const extra = extraSettings()
+  const sso = ssoMode(setting)
 
   // Every setting is valid. Only now is anything written.
-  for (const dir of [RUN, TMP_DIR, ...(externalMongo ? [] : [DB_DIR])]) mkdirSync(dir, { recursive: true, mode: 0o700 })
-  const { secrets, created } = ensureSecrets()
+  for (const dir of [RUN, TMP_DIR, ...(externalMongo ? [] : [DB_DIR]), ...(sso.enabled ? [KEYCLOAK_DATA, join(RUN, 'keycloak-tmp')] : [])]) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+  }
+  const { secrets, created } = ensureSecrets({ sso: sso.enabled })
 
   // Generated values come last so SLATEBOX_SETTINGS cannot break the wiring
   // between the browser, the app and the relay.
@@ -224,6 +232,10 @@ function main() {
     },
     slateboxAPI: { publicKey: secrets.apiPublicKey, secretKey: secrets.apiSecretKey },
   })
+  // Single sign-on is either wired to the bundled Keycloak or off; SLATEBOX_SETTINGS cannot half-configure it.
+  delete settings.sso
+  if (settings.public) delete settings.public.sso
+  if (sso.enabled) mergeSettings(settings, ssoAppSettings({ url, secrets, only: sso.only }))
   if (mailFrom) settings.mailFrom = mailFrom
   settings.mailGun = { server: '', ...settings.mailGun }
   settings.selfHosted = { ...settings.selfHosted }
@@ -260,11 +272,13 @@ function main() {
     API_GEN_KEY: secrets.apiGenKey,
     API_KEYS: JSON.stringify([{ name: 'slatebox', publicKey: secrets.apiPublicKey, secretKey: secrets.apiSecretKey }]),
   }))
-  writePrivate(join(RUN, 'Caddyfile'), caddyfile({ url, builtInHttps, acmeCa }))
+  if (sso.enabled) writePrivate(join(RUN, 'keycloak.env'), envFile(keycloakEnv({ url, secrets })))
+  writePrivate(join(RUN, 'Caddyfile'), caddyfile({ url, builtInHttps, acmeCa, sso: sso.enabled }))
   writePrivate(join(RUN, 'share/wrong-address.html'), wrongAddressPage(url))
   writePrivate(join(RUN, 'state.env'), envFile({
     SLATEBOX_PUBLIC_URL: url.origin,
     SLATEBOX_BUNDLED_MONGO: externalMongo ? 0 : 1,
+    SLATEBOX_SSO: sso.enabled ? 'keycloak' : 'off',
   }))
   if (!externalMongo) {
     writePrivate(MONGO_KEY_FILE, secrets.mongoKey + '\n', 0o400)
@@ -280,6 +294,7 @@ function main() {
   say(`Database:  ${externalMongo ? 'external (MONGO_URL)' : `bundled MongoDB ${identity.mongodb}, stored in ${DB_DIR}`}`)
   say(`Secrets:   ${created === 'all' ? 'created for this new installation' : created ? `kept, ${created} new` : 'kept from earlier starts'} (${join(DATA, 'secrets')})`)
   say(`Mail:      ${mailUrl ? `on, from ${mailFrom}` : 'off (set SLATEBOX_MAIL_URL to send invitations and sign-in mail)'}`)
+  say(`SSO:       ${sso.enabled ? `on, Keycloak ${identity.keycloak || ''} at ${url.origin}${SSO_PATH}/, issuer ${issuerFor(url)}${sso.only ? ', single sign-on only' : ''}`.replace('  ', ' ') : 'off (set SLATEBOX_SSO=keycloak to turn on single sign-on)'}`)
   say(`AI drafts: ${aiUrl ? `on, using ${new URL(aiUrl).host}` : aiKey ? 'on, using DeepInfra' : settings.selfHosted.workshopAI ? 'on' : 'off (set SLATEBOX_AI_KEY to turn them on)'}`)
 }
 

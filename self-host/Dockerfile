@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 #
 # Slatebox in one image: the app, the collaboration relay, MongoDB and a front
-# proxy, supervised by one init. Build it with ./build-image.sh, which stages
+# proxy, supervised by one init. Keycloak, for single sign-on, is in the image
+# too and starts only with SLATEBOX_SSO=keycloak. Build it with ./build-image.sh, which stages
 # the three committed source trees into the context this file expects:
 #
 #   app/        web/app of the Slatebox app checkout (no settings*.json)
@@ -15,12 +16,30 @@ ARG NODE_VERSION=24.15.0
 ARG MONGO_VERSION=8.0.17
 ARG CADDY_VERSION=2.11.9
 ARG METEOR_BASE=geoffreybooth/meteor-base:3.5
+ARG KEYCLOAK_VERSION=26.8.2
+# The Java runtime Keycloak 26.8 is built and tested on (21), from Eclipse Temurin's Ubuntu 24.04 image.
+ARG TEMURIN_JRE=21.0.13_9-jre-noble
 
 # Meteor 3.5 bundles against Node 24.15.0. Every stage that runs or compiles
 # for the app takes its Node binary from this one image.
 FROM node:${NODE_VERSION}-bookworm-slim AS node
 FROM mongo:${MONGO_VERSION} AS mongo
 FROM caddy:${CADDY_VERSION} AS caddy
+FROM quay.io/keycloak/keycloak:${KEYCLOAK_VERSION} AS keycloak-dist
+
+# --- Keycloak, built once for how Slatebox runs it -----------------------------
+# Build options are fixed here so the container starts it with --optimized:
+# the embedded H2 file database (see DESIGN.md for why), served under /auth,
+# health checks on, no cluster, and the SCIM 2.0 API. Its data directory is the
+# volume's /data/keycloak.
+FROM eclipse-temurin:${TEMURIN_JRE} AS keycloak
+COPY --from=keycloak-dist /opt/keycloak /opt/keycloak
+RUN /opt/keycloak/bin/kc.sh build --db=dev-file --http-relative-path=/auth --health-enabled=true \
+      --cache=local --features=scim-api \
+ && rm -rf /opt/keycloak/data \
+ && chmod -R a+rX,go-w /opt/keycloak \
+ && ln -s /data/keycloak /opt/keycloak/data \
+ && cp /opt/java/openjdk/legal/java.base/LICENSE /openjdk-LICENSE.txt
 
 # --- SlateboxJS: a fresh build for every image, stamped with its revision ----
 FROM node AS engine
@@ -172,6 +191,8 @@ COPY --from=fonts /web/ /opt/slatebox/share/fonts/
 RUN fc-cache -f
 
 COPY --from=relay /opt/slatebox/relay /opt/slatebox/relay
+COPY --from=keycloak --chown=0:0 /opt/java/openjdk /opt/java/openjdk
+COPY --from=keycloak --chown=0:0 /opt/keycloak /opt/keycloak
 COPY --from=server-dependencies /opt/slatebox/app/bundle /opt/slatebox/app/bundle
 
 COPY self-host/licenses/ /opt/slatebox/licenses/
@@ -182,6 +203,8 @@ COPY app-license/LICENSE.md /opt/slatebox/licenses/slatebox-app-LICENSE.md
 COPY engine/LICENSE /opt/slatebox/licenses/slateboxjs-LICENSE.txt
 COPY relay/LICENSE /opt/slatebox/licenses/slatebox-relay-LICENSE.txt
 COPY --from=node /usr/local/LICENSE /opt/slatebox/licenses/third-party/node-LICENSE.txt
+COPY --from=keycloak /opt/keycloak/LICENSE.txt /opt/slatebox/licenses/third-party/keycloak-LICENSE.txt
+COPY --from=keycloak /openjdk-LICENSE.txt /opt/slatebox/licenses/third-party/openjdk-LICENSE.txt
 
 COPY self-host/rootfs/ /
 RUN ln -s /opt/slatebox/bin/slatebox /usr/local/bin/slatebox
@@ -192,14 +215,15 @@ ARG RELAY_REVISION
 ARG NODE_VERSION
 ARG MONGO_VERSION
 ARG CADDY_VERSION
+ARG KEYCLOAK_VERSION
 RUN test -n "$APP_REVISION" && test -n "$ENGINE_REVISION" && test -n "$RELAY_REVISION" \
- && printf '{"app":"%s","engine":"%s","relay":"%s","node":"%s","mongodb":"%s","caddy":"%s"}\n' \
-      "$APP_REVISION" "$ENGINE_REVISION" "$RELAY_REVISION" "$NODE_VERSION" "$MONGO_VERSION" "$CADDY_VERSION" \
+ && printf '{"app":"%s","engine":"%s","relay":"%s","node":"%s","mongodb":"%s","caddy":"%s","keycloak":"%s"}\n' \
+      "$APP_REVISION" "$ENGINE_REVISION" "$RELAY_REVISION" "$NODE_VERSION" "$MONGO_VERSION" "$CADDY_VERSION" "$KEYCLOAK_VERSION" \
       > /opt/slatebox/identity.json
 # The version label names the app revision; without it the image would show
 # the Ubuntu base image's version.
 LABEL org.opencontainers.image.title="Slatebox" \
-      org.opencontainers.image.description="Slatebox with its collaboration relay and database in one container" \
+      org.opencontainers.image.description="Slatebox with its collaboration relay and database in one container, and Keycloak for optional single sign-on" \
       org.opencontainers.image.version="${APP_REVISION}" \
       org.opencontainers.image.revision="${APP_REVISION}" \
       com.slatebox.engine.revision="${ENGINE_REVISION}" \

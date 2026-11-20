@@ -20,6 +20,8 @@ whole is not under a single license, and it is not "MIT" as a whole.**
 | MongoDB Community Server (`mongod`) | **Server Side Public License, version 1 (SSPL-1.0)**. This is not an MIT-style license. | `third-party/mongodb-server-SSPL.txt`; the libraries it embeds and their licenses: `third-party/mongodb-server-third-party.md` |
 | MongoDB Database Tools (`mongodump`, `mongorestore`) | Apache License 2.0 | `third-party/mongodb-database-tools-LICENSE.md`; the libraries they embed: `third-party/mongodb-database-tools-THIRD-PARTY-NOTICES.txt` |
 | Caddy, the front proxy | Apache License 2.0 | `third-party/caddy-LICENSE.txt` |
+| Keycloak, for single sign-on (`/opt/keycloak`; started only with `SLATEBOX_SSO=keycloak`) | Apache License 2.0; the libraries it bundles, such as the H2 database, under their own licenses | `third-party/keycloak-LICENSE.txt`; each library in `/opt/keycloak/lib` |
+| Eclipse Temurin Java runtime, which runs Keycloak (`/opt/java/openjdk`) | GNU General Public License, version 2, with the Classpath Exception | `third-party/openjdk-LICENSE.txt`; every module's notices in `/opt/java/openjdk/legal` |
 | Node.js, with the libraries it embeds | MIT, and the licenses listed in its license file | `third-party/node-LICENSE.txt` |
 | Meteor, the app's framework | MIT | `third-party/meteor-LICENSE.txt` |
 | tini, the container's init | MIT | `third-party/tini-LICENSE.txt` |

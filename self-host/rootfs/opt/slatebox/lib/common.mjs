@@ -20,6 +20,16 @@ export const APP_PORT = 3000
 export const RELAY_PORT = 7072
 export const MONGO_PORT = 27017
 export const RELAY_PATH = '/live'
+// Single sign-on (SLATEBOX_SSO=keycloak): Keycloak on loopback, served under SSO_PATH.
+export const KEYCLOAK_PORT = 7080
+export const KEYCLOAK_MANAGEMENT_PORT = 7083
+export const SSO_PATH = '/auth'
+export const SSO_REALM = 'slatebox'
+export const SSO_CLIENT = 'slatebox'
+export const SCIM_CLIENT = 'scim'
+export const SSO_INIT_CLIENT = 'slatebox-init'
+export const KEYCLOAK_HOME = '/opt/keycloak'
+export const KEYCLOAK_DATA = join(DATA, 'keycloak')
 export const DATABASE = 'slatebox'
 export const REPLICA_SET = 'rs0'
 
@@ -45,6 +55,10 @@ const SECRET_NAMES = [
   'mongoKey', 'mongoRootPassword', 'mongoAppPassword', 'mongoRelayPassword',
   'apiPublicKey', 'apiSecretKey', 'apiGenKey',
 ]
+// Made the first time single sign-on is turned on, and kept after that.
+export const SSO_SECRET_NAMES = [
+  'keycloakAdminPassword', 'keycloakInitSecret', 'ssoClientSecret', 'ssoStateKey', 'scimClientSecret',
+]
 
 export function readSecrets() {
   if (!existsSync(SECRETS_FILE)) return null
@@ -52,7 +66,7 @@ export function readSecrets() {
 }
 
 /** Load this installation's secrets, creating any that do not exist yet. */
-export function ensureSecrets() {
+export function ensureSecrets({ sso = false } = {}) {
   const existing = readSecrets()
   if (!existing && existsSync(join(DB_DIR, 'WiredTiger'))) {
     throw new Plain(
@@ -61,14 +75,14 @@ export function ensureSecrets() {
   }
   const secrets = { ...existing }
   let created = 0
-  for (const name of SECRET_NAMES) {
+  for (const name of [...SECRET_NAMES, ...(sso ? SSO_SECRET_NAMES : [])]) {
     if (typeof secrets[name] === 'string' && secrets[name]) continue
     // apiGenKey is an AES-256 key the relay reads as base64; the rest are hex.
     secrets[name] = randomBytes(32).toString(name === 'apiGenKey' ? 'base64' : 'hex')
     created += 1
   }
   if (created) writePrivate(SECRETS_FILE, JSON.stringify(secrets, null, 2) + '\n')
-  return { secrets, created: created === SECRET_NAMES.length ? 'all' : created }
+  return { secrets, created: !existing && created ? 'all' : created }
 }
 
 export function mongoUrl(user, password, { database = DATABASE, authSource } = {}) {

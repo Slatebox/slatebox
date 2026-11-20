@@ -6,6 +6,7 @@
 #   relay    live editing, on loopback
 #   app      the Slatebox app, on loopback
 #   proxy    Caddy, the one published port in front of the app and the relay
+#   sso      Keycloak, on loopback under /auth; only with SLATEBOX_SSO=keycloak
 #
 # Every service is required. If one ends by itself, the others are stopped in
 # order and the container exits with status 1 so Docker's restart policy can
@@ -113,12 +114,13 @@ shutdown() {
   trap '' TERM INT USR1 USR2
   say 'Stopping.'
   # The database's clients go first; they end at once.
-  stop_services ready app relay
-  # Then the proxy and MongoDB side by side. MongoDB is waited for, so that it
-  # can close its files inside the time Docker allows a stopping container.
+  stop_services ready sso-setup app relay
+  # Then the proxy, Keycloak and MongoDB side by side. The two databases are
+  # waited for, so that they can close their files inside the time Docker
+  # allows a stopping container.
   for pid in "${!SERVICE[@]}"; do
     kill -TERM "$pid" 2>/dev/null || true
-    if [[ ${SERVICE[$pid]} == mongo ]]; then mongo+=("$pid"); fi
+    if [[ ${SERVICE[$pid]} == mongo || ${SERVICE[$pid]} == sso ]]; then mongo+=("$pid"); fi
   done
   if ((${#mongo[@]})); then wait "${mongo[@]}" 2>/dev/null || true; fi
   stop_services proxy
@@ -195,10 +197,14 @@ supervise() {
     if [[ -n $ended ]]; then
       name=${SERVICE[$ended]}
       unset "SERVICE[$ended]"
-      if [[ $name == ready && $status == 0 ]]; then
+      if [[ $name == sso-setup && $status == 0 ]]; then
+        :
+      elif [[ $name == ready && $status == 0 ]]; then
         say "Ready. Open $SLATEBOX_PUBLIC_URL"
       else
-        if [[ $name == ready ]]; then
+        if [[ $name == sso-setup ]]; then
+          say 'Single sign-on could not be set up. Stopping the container.'
+        elif [[ $name == ready ]]; then
           say 'Slatebox did not become ready. Stopping the container.'
         else
           say "$name stopped unexpectedly (exit $status). Stopping the container so that Docker can restart it."
@@ -252,6 +258,11 @@ main() {
   # The proxy comes up first so a browser sees "Slatebox is starting" rather
   # than a refused connection while the app boots.
   start proxy -- caddy run --config "$RUN/Caddyfile" --adapter caddyfile
+  if [[ $SLATEBOX_SSO == keycloak ]]; then
+    # Keycloak boots beside the app; the realm is set up as soon as it answers.
+    start sso -- with_env "$RUN/keycloak.env" /opt/keycloak /opt/keycloak/bin/kc.sh start --optimized
+    start sso-setup slatebox -- node "$LIB/keycloak-init.mjs" 600
+  fi
   start_app
   supervise
 }

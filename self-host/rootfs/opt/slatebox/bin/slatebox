@@ -6,6 +6,7 @@
 #   docker exec slatebox slatebox password-link person@example.com
 #   docker exec slatebox slatebox health
 #   docker exec slatebox slatebox version
+#   docker exec slatebox slatebox sso [admin-password | scim-secret | events [N]]
 set -euo pipefail
 umask 077
 
@@ -117,6 +118,11 @@ case ${1:-} in
   restore) restore ;;
   health) shift; exec node "$LIB/health.mjs" "$@" ;;
   version) cat "$ROOT/identity.json" ;;
+  sso)
+    shift
+    [[ -f $RUN/state.env ]] || die 'Slatebox is still starting. Try again in a moment.'
+    exec node "$LIB/sso-cli.mjs" "$@"
+    ;;
   *)
     cat >&2 <<'EOF'
 Usage, from the Docker host:
@@ -125,6 +131,7 @@ Usage, from the Docker host:
   docker exec slatebox slatebox password-link person@example.com
   docker exec slatebox slatebox health
   docker exec slatebox slatebox version
+  docker exec slatebox slatebox sso [admin-password | scim-secret | events [N]]
 EOF
     exit 2
     ;;
