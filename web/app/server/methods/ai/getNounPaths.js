@@ -20,10 +20,10 @@ export default async function getNounPaths(
         },
         (err, res) => {
           finished += 1
-          console.log('got np res', nouns.length, finished, nn, err, res)
+          console.log('got np res', { nouns: nouns.length, finished, results: res?.data?.length ?? 0, error: err?.message || null })
           if (res) {
             all.push(...res.data.map((d) => d.path))
-            console.log('added to all', all)
+            console.log('added to all', { paths: all.length })
           }
           if (finished === nouns.length) {
             resolve(all)

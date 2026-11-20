@@ -113,11 +113,10 @@ async function initUsage({
         content = [content]
       }
 
-      console.log(
-        'ongoingConversationRider is ->',
-        ongoingConversationRider,
-        currentLayout
-      )
+      console.log('ongoingConversationRider', {
+        riderLength: ongoingConversationRider?.length ?? 0,
+        layout: !!currentLayout,
+      })
 
       let augmentConversation = ongoingConversationRider ?? ''
       if (currentLayout) {
@@ -368,10 +367,11 @@ async function invokeTool({
           function_call: welcomePrompt.function_call,
         })
 
-        console.log(
-          'got resp after sending templates',
-          JSON.stringify(resp, null, 2)
-        )
+        console.log('got resp after sending templates', {
+          aid,
+          tool: resp?.json?.content?.find?.((c) => c?.type === 'tool_use')?.name || null,
+          bytes: JSON.stringify(resp ?? null).length,
+        })
 
         // insert the latest from the system
         const latestAssistantMessage = {
@@ -661,11 +661,10 @@ async function invokeTool({
             }
             technicalInstructions = techInstructions.join(' ').trim()
           }
-          console.log(
-            'custom tech instructions',
-            overrideBackground,
-            technicalInstructions
-          )
+          console.log('custom tech instructions', {
+            background: !!overrideBackground,
+            length: technicalInstructions?.length ?? 0,
+          })
         }
 
         systemResponse = {
@@ -933,7 +932,7 @@ method[CONSTANTS.methods.openai.welcome] = metered({ feature: 'welcome' }, async
 
         const extractedToolAndMessage = extractToolAndMessage(resp)
 
-        console.log('anyToolUsed', extractedToolAndMessage)
+        console.log('anyToolUsed', { aid, tool: extractedToolAndMessage?.anyToolUsed?.name || null })
 
         return invokeTool({
           extractedToolAndMessage,
@@ -1118,7 +1117,7 @@ method[CONSTANTS.methods.openai.welcome] = metered({ feature: 'welcome' }, async
     })
 
     const extractedToolAndMessage = extractToolAndMessage(resp)
-    console.log('check to see if message is inserted', extractedToolAndMessage)
+    console.log('check to see if message is inserted', { aid, tool: extractedToolAndMessage?.anyToolUsed?.name || null })
 
     const nextMessage = {
       aid,

@@ -848,7 +848,7 @@ method[CONSTANTS.methods.presentations.update] = async ({
       if (updatedViewpoint.height) {
         existingViewpoint.height = updatedViewpoint.height
       }
-      console.log('existingViewpoint updated', existingViewpoint)
+      console.log('existingViewpoint updated', { nodes: existingViewpoint.nodeIds?.length ?? 0, narrativeLength: existingViewpoint.narrative?.length ?? 0 })
     } else {
       const newViewpoint = {
         nodeIds: updatedViewpoint.nodeIds,

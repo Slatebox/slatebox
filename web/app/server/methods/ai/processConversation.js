@@ -425,11 +425,7 @@ export default async function processConversation(aiOpts, skynet) {
               is_error: true,
             }
           : { type: 'text', text: pendingErrors[aiOpts.id].join(', ') }
-        console.log(
-          'pendingErrors fired',
-          resp,
-          JSON.stringify(response, null, 2)
-        )
+        console.log('pendingErrors fired', { aid: aiOpts.id, errors: pendingErrors[aiOpts.id].length })
         prompts.push({
           role: 'user',
           content: [resp],
@@ -753,7 +749,7 @@ export default async function processConversation(aiOpts, skynet) {
                 closingTag
             )
 
-            console.log('escapedSvgString is', escapedSvgString)
+            console.log('escapedSvgString', { note: noteId, length: escapedSvgString.length })
             n.image = await svgToPng({
               svg: escapedSvgString,
               fileName: noteId,
@@ -836,11 +832,7 @@ export default async function processConversation(aiOpts, skynet) {
       response.toolCall?.id ||
       response.json?.content?.find((c) => c.type === 'tool_use')?.id
 
-    console.log(
-      'marking tool use id',
-      toolUseId,
-      JSON.stringify(response.json, null, 2)
-    )
+    console.log('marking tool use id', toolUseId, { bytes: JSON.stringify(response.json ?? null).length })
     if (toolUseId) {
       await createNode({
         prompt: {

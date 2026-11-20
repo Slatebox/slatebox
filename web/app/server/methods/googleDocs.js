@@ -44,7 +44,7 @@ method[CONSTANTS.methods.googleDocs.getToken] = async (code) => {
       const token = await oAuth2Client.getToken(code)
       return token
     } catch (err) {
-      console.error('Error retrieving access token', err)
+      console.error('Error retrieving access token', err?.message)
       return null
     }
   }

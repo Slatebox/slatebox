@@ -23,10 +23,7 @@ const runConsumer = async () => {
   })
   await consumer.run({
     eachMessage: async ({ message }) => {
-      console.log(
-        'Data received from the kafka topic ',
-        message.value.toString()
-      )
+      console.log('kafka message received', { bytes: message.value?.length ?? 0 })
       const data = JSON.parse(message.value)
       await createCodeRepositoryDoc(data)
     },

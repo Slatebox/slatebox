@@ -135,7 +135,7 @@ method[CONSTANTS.methods.nounProject.get] = async (input) => {
         'toArray',
         'name'
       )
-      console.log('queried for iconpacks', opts, getIconPacks)
+      console.log('queried for iconpacks', { packs: getIconPacks.length, page: opts.page, limit: opts.limit })
       getIconPacks.forEach((ip) => {
         ip.icons.forEach((i) => {
           // console.log(
@@ -263,7 +263,7 @@ method[CONSTANTS.methods.nounProject.get] = async (input) => {
                 try {
                   initAnalysis = new SVGPathData(initPath)
                 } catch (err) {
-                  console.error('Unable to parse path', initPath, err.message)
+                  console.error('Unable to parse path', { length: initPath.length }, err.message)
                 }
                 const rbbox = initAnalysis.getBounds()
                 const width = rbbox.maxX - rbbox.minX
@@ -323,7 +323,7 @@ method[CONSTANTS.methods.nounProject.get] = async (input) => {
         }
       }
 
-      console.log('all done', all)
+      console.log('all done', { results: all.length })
 
       if (!NO_CACHE) {
         const hasOp =
@@ -354,7 +354,7 @@ method[CONSTANTS.methods.nounProject.get] = async (input) => {
         }
       } else {
         all = uniqBy(all.concat(iconPackIcons), (i) => i.id)
-        console.log('sending results', { data: all, hasMoreData })
+        console.log('sending results', { results: all.length, hasMoreData })
         return { data: all, hasMoreData }
       }
     } else {

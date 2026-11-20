@@ -49,7 +49,7 @@ export default async function processTemplateAugment(aiOpts) {
     slateShareId: aiOpts.shareId,
   })
 
-  console.log('kicking off processing', prompts)
+  console.log('kicking off processing', { aid: aiOpts.id, prompts: prompts.length })
   let nodeError = null
 
   async function kickOff() {
@@ -153,7 +153,7 @@ export default async function processTemplateAugment(aiOpts) {
             }),
           })
           const nextIdea = await req(prompts, aiOpts)
-          console.log('got idea', nextIdea)
+          console.log('got idea', { aid: aiOpts.id, errs: nextIdea?.errs ?? 0 })
           prompts.push({
             role: 'assistant',
             content: JSON.stringify(nextIdea.json),

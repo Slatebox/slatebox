@@ -82,7 +82,7 @@ async function deletePriorObjectsWithDateCleanup(bucket, slateId) {
       new ListObjectsV2Command(listParamsLegacy)
     )
 
-    console.log('listedLegacyObjects', listedLegacyObjects)
+    console.log('listedLegacyObjects', { objects: listedLegacyObjects.Contents?.length ?? 0 })
 
     if (listedLegacyObjects.Contents?.length > 0) {
       const legacyObjectsToDelete = {
