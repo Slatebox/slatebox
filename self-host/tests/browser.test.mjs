@@ -96,7 +96,7 @@ test('the instance offers no plans, quotas or cloud links it cannot provide', as
   const member = await person()
   try {
     await createSlate(member.page, box.url)
-    await call(member.page, 'users.identify', { firstName: 'Mia', lastName: 'Member', email: 'mia@example.test' })
+    await call(member.page, 'users.identify', { firstName: 'Mia', lastName: 'Member', email: 'mia@example.test', password: 'member password 42' })
     const slateUrl = member.page.url()
     await openSlate(member.page, slateUrl)
     // Neither on the slate nor on the home page.

@@ -27,10 +27,10 @@ const call = (page, method, ...args) => page.evaluate(async ([method, args]) => 
   }
 }, [method, args])
 
-/** A guest who has just given a name and an email address. */
+/** A guest who has just given a name, an email address and a password. The app saves a guest's account only with a password of its own. */
 async function registered(page, address, email) {
   await createSlate(page, address)
-  return call(page, 'users.identify', { firstName: 'Ada', lastName: 'Lovelace', email })
+  return call(page, 'users.identify', { firstName: 'Ada', lastName: 'Lovelace', email, password: 'first password 42' })
 }
 
 /** A mail server that accepts everything and keeps it. */
