@@ -59,9 +59,6 @@ import './metering/meteor'
 // AI control: the snapshot of providers, models, bindings and prompts administrators manage at runtime
 import './ai-control/index.mjs'
 
-// single sign-on (off unless settings.sso.enabled; see server/sso)
-import './sso'
-
 // stripe hooks (Slatebox Pro, top-ups, refunds, disputes; with them the Pro methods)
 import './stripeHooks'
 
@@ -97,3 +94,6 @@ import './heartbeats/manage'
 import './methods/presentations'
 // Custom shapes: the AI feature `shape`, the shape library and its methods.
 import './shapes/meteor'
+
+// single sign-on (off unless settings.sso.enabled; see server/sso)
+import './sso'
