@@ -8,7 +8,8 @@ import { closeChrome, createSlate, person } from './slate.mjs'
 afterEach(cleanup)
 after(closeChrome)
 
-const PNG = '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082'
+// A 1x1 red PNG that every decoder reads (the server re-encodes it when it reads it back).
+const PNG = '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c63f8cfc0f01f00050001ff89993d1d0000000049454e44ae426082'
 
 // The upload exactly as the app's upload boxes send it: one file, the login token in a header.
 const upload = (page, { hex, text, type, filename }) => page.evaluate(async ({ hex, text, type, filename }) => {

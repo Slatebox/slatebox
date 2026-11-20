@@ -1396,9 +1396,12 @@ method[CONSTANTS.methods.openai.chat] = metered({ feature: 'generation' }, async
             const shiftedPrompts = []
             for (const doc of opts.isConversation.uploadedDocs) {
               if (doc.docType.includes('text')) {
+                // A file stored in this app's database is read from there (fileStore.js).
+                const stored = await readStoredFile(doc.url)
+                if (stored && !/^text\/plain\b/.test(stored.contentType)) throw new Meteor.Error('documents-denied', 'That file is not text.')
                 shiftedPrompts.push({
                   type: 'text',
-                  text: ((await readStoredFile(doc.url)) ?? (await safeFetch(doc.url, { maxBytes: 2 * 1024 * 1024, contentTypes: ['text/plain'] }))).bytes.toString('utf8'),
+                  text: (stored ?? (await safeFetch(doc.url, { maxBytes: 2 * 1024 * 1024, contentTypes: ['text/plain'] }))).bytes.toString('utf8'),
                   cache_control: { type: 'ephemeral' },
                 })
               } else {

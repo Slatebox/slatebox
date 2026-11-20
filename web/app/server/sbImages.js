@@ -99,7 +99,7 @@ app.get(STORED_FILE_ROUTE, async (req, res) => {
   try {
     const file = await readDatabaseFile(req.params[0])
     if (!file) return res.status(404).type('text/plain').send('Not found.')
-    const type = storedTypes[file.contentType]
+    const type = storedTypes[String(file.contentType).split(';')[0].trim()]
     res.writeHead(200, {
       'Content-Type': type || 'application/octet-stream',
       'Content-Length': file.bytes.length,
