@@ -14,7 +14,7 @@ export const KEYCLOAK_DB_USER = 'keycloak'
 export const keycloakDbUrl = () => `jdbc:h2:file:${join(KEYCLOAK_DATA, 'h2/keycloakdb')};NON_KEYWORDS=VALUE;AUTO_SERVER=TRUE`
 const JAVA_HOME = '/opt/java/openjdk'
 
-/** SLATEBOX_SSO and SLATEBOX_SSO_ONLY, validated. */
+/** SLATEBOX_SSO, SLATEBOX_SSO_ONLY and SLATEBOX_SSO_ADMIN, validated. */
 export function ssoMode(setting) {
   const mode = (setting('SLATEBOX_SSO') || 'off').toLowerCase()
   if (!['off', 'keycloak'].includes(mode)) throw new Plain('SLATEBOX_SSO must be off or keycloak')
@@ -22,7 +22,13 @@ export function ssoMode(setting) {
   if (!['true', 'false'].includes(onlyValue)) throw new Plain('SLATEBOX_SSO_ONLY must be true or false')
   const only = onlyValue === 'true'
   if (only && mode === 'off') throw new Plain('SLATEBOX_SSO_ONLY=true also needs SLATEBOX_SSO=keycloak')
-  return { enabled: mode === 'keycloak', only }
+  // Keycloak's admin console and the master realm on the published port: open (the default, so an
+  // operator can set up the providers), or closed once that is done.
+  const adminValue = setting('SLATEBOX_SSO_ADMIN')
+  const admin = (adminValue || 'open').toLowerCase()
+  if (!['open', 'closed'].includes(admin)) throw new Plain('SLATEBOX_SSO_ADMIN must be open or closed')
+  if (adminValue && mode === 'off') throw new Plain('SLATEBOX_SSO_ADMIN also needs SLATEBOX_SSO=keycloak')
+  return { enabled: mode === 'keycloak', only, adminOpen: admin === 'open' }
 }
 
 export const issuerFor = url => `${url.origin}${SSO_PATH}/realms/${SSO_REALM}`
@@ -139,10 +145,33 @@ export function scimClient({ url, secrets }) {
       name: 'scim-audience',
       protocol: 'openid-connect',
       protocolMapper: 'oidc-audience-mapper',
-      config: { 'included.custom.audience': `${issuerFor(url)}/scim/v2`, 'access.token.claim': 'true', 'id.token.claim': 'false' },
+      config: { 'included.custom.audience': scimAudience(url), 'access.token.claim': 'true', 'id.token.claim': 'false' },
     }],
   }
 }
+
+/** The audience SCIM tokens must carry: SCIM's own address under this installation's issuer. */
+export const scimAudience = url => `${issuerFor(url)}/scim/v2`
+
+/**
+ * The first-login flow for a company provider whose email addresses are trusted: a person who
+ * already exists in the realm with the same address (provisioned over SCIM or synced from the
+ * directory) is linked automatically instead of being asked for a Keycloak password they do not
+ * have; anyone else gets a new user. It is not the realm's default: an operator chooses it, under
+ * "First login flow override", only for a provider with Trust Email on (see the guide).
+ */
+export const TRUSTED_EMAIL_FLOW = 'link by trusted email'
+export const TRUSTED_EMAIL_STEPS = `${TRUSTED_EMAIL_FLOW}: create or link`
+
+/** Master-realm settings kept at every start: guessing an administrator's password is slowed and recorded. */
+export const MASTER_REALM = {
+  bruteForceProtected: true,
+  failureFactor: 10,
+  permanentLockout: false,
+  maxFailureWaitSeconds: 900,
+  waitIncrementSeconds: 60,
+}
+export const MASTER_EVENTS = { eventsEnabled: true, eventsExpiration: 90 * 24 * 3600, adminEventsEnabled: true }
 
 /** The realm, as created on the first start. After that the operator owns its settings. */
 export function realm() {

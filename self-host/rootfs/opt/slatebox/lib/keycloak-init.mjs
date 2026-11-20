@@ -1,13 +1,20 @@
 // Runs at every start with single sign-on on, once Keycloak answers. It creates the "slatebox"
-// realm the first time, and at every start makes the app's client match this installation (its
-// address and its secret) and keeps the SCIM client in place. Everything else in the realm is the
-// operator's: identity providers, LDAP, users, policies. It never prints a secret.
+// realm the first time, and at every start:
+// - makes the app's client and the SCIM client match this installation: address, secret and the
+//   SCIM audience, which follows the address (a new SLATEBOX_URL, or a restore at another one);
+// - keeps the "link by trusted email" first-login flow in place for operators to choose;
+// - keeps brute-force protection and events on in the master realm, whose sign-in the admin
+//   console uses.
+// Everything else in the realm is the operator's: identity providers, LDAP, users, policies. It
+// never prints a secret.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   KEYCLOAK_MANAGEMENT_PORT, KEYCLOAK_PORT, Plain, RUN, SCIM_CLIENT, SSO_INIT_CLIENT, SSO_PATH, SSO_REALM, fail, readSecrets, sleep,
 } from './common.mjs'
-import { ADMIN_USER, appClient, realm, scimClient } from './sso.mjs'
+import {
+  ADMIN_USER, MASTER_EVENTS, MASTER_REALM, TRUSTED_EMAIL_FLOW, TRUSTED_EMAIL_STEPS, appClient, realm, scimClient,
+} from './sso.mjs'
 
 const base = `http://127.0.0.1:${KEYCLOAK_PORT}${SSO_PATH}`
 const say = line => process.stdout.write(`${line}\n`)
@@ -59,7 +66,56 @@ async function ensureClient(call, wanted) {
   }
   const { protocolMappers, defaultClientScopes, optionalClientScopes, ...settings } = wanted
   await call('PUT', `/${SSO_REALM}/clients/${existing.id}`, { ...existing, ...settings, attributes: { ...existing.attributes, ...settings.attributes } })
+  // Mappers that carry the address (the SCIM audience) are rewritten too.
+  if (protocolMappers?.length) {
+    const models = `/${SSO_REALM}/clients/${existing.id}/protocol-mappers/models`
+    const present = await call('GET', models) || []
+    for (const mapper of protocolMappers) {
+      const found = present.find(each => each.name === mapper.name)
+      if (!found) await call('POST', models, mapper)
+      else await call('PUT', `${models}/${found.id}`, { ...found, ...mapper, id: found.id, config: { ...found.config, ...mapper.config } })
+    }
+  }
   return { created: false, id: existing.id }
+}
+
+// The "link by trusted email" first-login flow (see sso.mjs), made once if it is missing.
+async function ensureTrustedEmailFlow(call) {
+  const flows = `/${SSO_REALM}/authentication/flows`
+  if ((await call('GET', flows) || []).some(flow => flow.alias === TRUSTED_EMAIL_FLOW)) return
+  const quoted = alias => encodeURIComponent(alias)
+  await call('POST', flows, {
+    alias: TRUSTED_EMAIL_FLOW, providerId: 'basic-flow', topLevel: true, builtIn: false,
+    description: 'First sign-in through a company provider with Trust Email on: a person who already exists with that address is linked, anyone else is created.',
+  })
+  await call('POST', `${flows}/${quoted(TRUSTED_EMAIL_FLOW)}/executions/execution`, { provider: 'idp-review-profile' })
+  await call('POST', `${flows}/${quoted(TRUSTED_EMAIL_FLOW)}/executions/flow`, {
+    alias: TRUSTED_EMAIL_STEPS, type: 'basic-flow', provider: 'registration-page-form', description: 'Create the user, or link the one with the same address.',
+  })
+  await call('POST', `${flows}/${quoted(TRUSTED_EMAIL_STEPS)}/executions/execution`, { provider: 'idp-create-user-if-unique' })
+  await call('POST', `${flows}/${quoted(TRUSTED_EMAIL_STEPS)}/executions/execution`, { provider: 'idp-auto-link' })
+  const requirement = { 'idp-review-profile': 'REQUIRED', [TRUSTED_EMAIL_STEPS]: 'REQUIRED', 'idp-create-user-if-unique': 'ALTERNATIVE', 'idp-auto-link': 'ALTERNATIVE' }
+  for (const execution of await call('GET', `${flows}/${quoted(TRUSTED_EMAIL_FLOW)}/executions`)) {
+    const wanted = requirement[execution.providerId] || requirement[execution.displayName]
+    if (wanted && execution.requirement !== wanted) {
+      await call('PUT', `${flows}/${quoted(TRUSTED_EMAIL_FLOW)}/executions`, { ...execution, requirement: wanted })
+    }
+    if (execution.providerId === 'idp-review-profile') {
+      await call('POST', `/${SSO_REALM}/authentication/executions/${execution.id}/config`, {
+        alias: `${TRUSTED_EMAIL_FLOW}: review profile`, config: { 'update.profile.on.first.login': 'missing' },
+      })
+    }
+  }
+}
+
+// The admin console signs in through the master realm: slow down and record password guessing there.
+async function hardenMaster(call) {
+  const master = await call('GET', '/master')
+  if (!master.bruteForceProtected) await call('PUT', '/master', { ...master, ...MASTER_REALM })
+  const events = await call('GET', '/master/events/config')
+  if (!events.eventsEnabled || !events.adminEventsEnabled) {
+    await call('PUT', '/master/events/config', { ...events, ...MASTER_EVENTS })
+  }
 }
 
 // The SCIM client's service account may manage users, and nothing else.
@@ -90,6 +146,8 @@ async function main() {
   await ensureClient(call, appClient({ url, secrets }))
   const scim = await ensureClient(call, scimClient({ url, secrets }))
   if (scim.created) await grantScim(call, scim.id)
+  await ensureTrustedEmailFlow(call)
+  await hardenMaster(call)
   if (first) {
     // The one-time hint. The password itself is never printed into the log.
     say(`Single sign-on: Keycloak's admin console is at ${url.origin}${SSO_PATH}/admin/ (user "${ADMIN_USER}").`)

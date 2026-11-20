@@ -52,7 +52,10 @@ async function main() {
   }
   if (command) throw new Plain('Usage: slatebox sso [admin-password | scim-secret | events [N]]')
   const issuer = `${origin}${SSO_PATH}/realms/${SSO_REALM}`
-  out(`Admin console:   ${origin}${SSO_PATH}/admin/  (user "${ADMIN_USER}"; slatebox sso admin-password)`)
+  const closed = /^SLATEBOX_SSO_ADMIN='closed'$/m.test(readFileSync(join(RUN, 'state.env'), 'utf8'))
+  out(closed
+    ? 'Admin console:   closed on this address (SLATEBOX_SSO_ADMIN=closed); start the container without it to use the console'
+    : `Admin console:   ${origin}${SSO_PATH}/admin/  (user "${ADMIN_USER}"; slatebox sso admin-password)`)
   out(`Realm:           ${SSO_REALM}`)
   out(`Issuer:          ${issuer}`)
   out(`App client:      ${SSO_CLIENT}, redirect ${origin}/sso/callback`)

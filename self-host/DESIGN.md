@@ -175,6 +175,7 @@ Every setting is optional.
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use an external MongoDB. The bundled `mongod` is not started. |
 | `SLATEBOX_SSO` | `off` (default) or `keycloak`: single sign-on through the bundled Keycloak (below). |
 | `SLATEBOX_SSO_ONLY` | `true` with `SLATEBOX_SSO=keycloak`: no passwords and no guests. |
+| `SLATEBOX_SSO_ADMIN` | `open` (default) or `closed` with `SLATEBOX_SSO=keycloak`: `closed` answers 404 for `/auth/admin` and `/auth/realms/master` on the published port. |
 
 The app's settings are generated at every start: `public.env = selfhost`,
 `baseUrl`, `wsUrl`, `chatWoot.enabled = false`, `fontStylesheet` (the
@@ -311,9 +312,16 @@ the temporary administrator `admin` and the service client `slatebox-init`
 `slatebox-init`, creates the `slatebox` realm once (events stored 90 days,
 admin events, SCIM on, registration off, brute-force protection), and at every
 start rewrites the app's client (`slatebox`: confidential, code flow with PKCE
-S256 only, redirect `<address>/sso/callback`) and ensures the SCIM client
-(`scim`: client credentials, `manage-users`, an audience mapper for the SCIM
-endpoint). The log carries a one-time hint naming the admin console and the
+S256 only, redirect `<address>/sso/callback`) and the SCIM client (`scim`:
+client credentials, `manage-users`, an audience mapper for the SCIM endpoint at
+the current address, so a new `SLATEBOX_URL` or a restore at another address
+keeps SCIM working). It also keeps the first-login flow `link by trusted email`
+in the realm (review profile if fields are missing, then create the user or
+link the existing one with that address), which operators choose per provider
+with Trust Email on, so people provisioned ahead over SCIM or LDAP can sign in
+through the company provider; and it keeps brute-force protection, sign-in
+events and admin events on in the master realm, whose sign-in the admin console
+uses. The log carries a one-time hint naming the admin console and the
 command that shows the password, never the password. Keycloak's own log is
 limited to warnings and its event logger is off, because event lines carry user
 names; events are stored in the realm instead.
@@ -324,19 +332,31 @@ with OpenID Connect (authorization code, PKCE S256, state and nonce in an
 HMAC-sealed, HttpOnly, SameSite=Lax cookie on `/sso`), exchanges the code on
 loopback, checks the ID token's issuer, audience, expiry and nonce, and hands
 the browser a one-time ticket in a URL fragment, which the `sso` login handler
-trades for a Meteor session. Accounts: the one linked to the Keycloak subject;
-else the account with the same verified email, which is linked; else a new one.
-Links are kept under the provider name `bundled-keycloak`, so a new
-`SLATEBOX_URL` keeps them. It asks for `offline_access` and keeps the refresh
-token in `services.sso`; every 60 seconds (checked every 30) it refreshes it for
-each SSO user who has a session. A refused refresh (`invalid_grant`: user
-disabled, deleted, deactivated over SCIM, offline session revoked) removes all
-of that user's Meteor sessions; an outage removes none. The browser notices
-the refused resume and reloads signed out. `SLATEBOX_SSO_ONLY=true` adds:
-password sign-in, sign-up, reset and change refused in `validateLoginAttempt`;
-no guest and no self-made account in `validateNewUser`; the password, guest and
-sign-in-link methods closed; every page but `/login` and `/sso/*` sends a
-visitor without an account to `/login`.
+trades for a Meteor session. The ticket is bound to the tab that started the
+sign-in: the tab keeps a random verifier in sessionStorage and sends it to
+`/sso/login`, its hash is sealed into the state, and the ticket is redeemed only
+with the verifier (no login CSRF with someone else's ticket). Accounts: the one
+linked to the Keycloak subject; else the account with the same email, when the
+provider verified it and Slatebox verified it too (or the account has no
+password, session or API token yet, such as an invitation), which is linked;
+else a new one. Linking removes the password and ends the account's sessions,
+API tokens and sign-in links. Links are kept under the provider name
+`bundled-keycloak`, so a new `SLATEBOX_URL` keeps them. It asks for
+`offline_access` and keeps the refresh token in `services.sso`; every 60
+seconds (checked every 30) it refreshes it for each SSO account, with a session
+or not. A refused refresh (`invalid_grant`: user disabled, deleted, deactivated
+over SCIM, offline session revoked) removes all of that user's Meteor sessions,
+revokes their API tokens and sign-in links, and marks the account revoked until
+its next SSO sign-in; API tokens of revoked, disabled or deleted accounts are
+refused; an outage changes nothing. An account linked to SSO never signs in
+with a password. The browser notices the refused resume and reloads signed
+out. `SLATEBOX_SSO_ONLY=true` adds: password sign-in, sign-up, reset and change
+refused in `validateLoginAttempt`, and guest sessions too; no guest and no
+self-made account in `validateNewUser`; the password, reset, guest and
+sign-in-link methods closed; every other method and publication refused to a
+connection without a session (except signing in and loading code), and the
+public presentation feed and embeds answer 404; every page but `/login` and
+`/sso/*` sends a visitor without an account to `/login`.
 
 **Storage.** Keycloak supports PostgreSQL, MySQL, MariaDB, SQL Server and
 Oracle in production, all separate servers; it cannot embed one, and H2

@@ -12,6 +12,7 @@ import { appSettings as ssoAppSettings, issuerFor, keycloakEnv, ssoMode } from '
 const KNOWN = [
   'SLATEBOX_URL', 'SLATEBOX_HTTPS', 'SLATEBOX_ACME_CA', 'SLATEBOX_MAIL_URL', 'SLATEBOX_MAIL_FROM',
   'SLATEBOX_AI_KEY', 'SLATEBOX_AI_URL', 'SLATEBOX_AI_MODEL', 'SLATEBOX_SETTINGS', 'SLATEBOX_SSO', 'SLATEBOX_SSO_ONLY',
+  'SLATEBOX_SSO_ADMIN',
 ]
 // Where the image serves the interface fonts (see the Dockerfile).
 const FONTS_PATH = '/_fonts/'
@@ -100,7 +101,7 @@ function extraSettings() {
   return extra
 }
 
-function caddyfile({ url, builtInHttps, acmeCa, sso }) {
+function caddyfile({ url, builtInHttps, acmeCa, sso, ssoAdminOpen = true }) {
   // The published port answers for the configured address and for the
   // container's own loopback checks. Any other address gets a page that says
   // which setting to change, instead of an app whose links and live editing
@@ -116,7 +117,12 @@ handle_path ${FONTS_PATH}* {
 handle @relay {
 	uri strip_prefix ${RELAY_PATH}
 	reverse_proxy 127.0.0.1:${RELAY_PORT}
-}${sso ? `
+}${sso && !ssoAdminOpen ? `
+@ssoAdmin path ${SSO_PATH}/admin ${SSO_PATH}/admin/* ${SSO_PATH}/realms/master ${SSO_PATH}/realms/master/*
+handle @ssoAdmin {
+	header Cache-Control no-store
+	respond "Keycloak's admin console is closed on this address (SLATEBOX_SSO_ADMIN=closed)." 404
+}` : ''}${sso ? `
 @sso path ${SSO_PATH} ${SSO_PATH}/*
 handle @sso {
 	reverse_proxy 127.0.0.1:${KEYCLOAK_PORT}
@@ -273,12 +279,13 @@ function main() {
     API_KEYS: JSON.stringify([{ name: 'slatebox', publicKey: secrets.apiPublicKey, secretKey: secrets.apiSecretKey }]),
   }))
   if (sso.enabled) writePrivate(join(RUN, 'keycloak.env'), envFile(keycloakEnv({ url, secrets })))
-  writePrivate(join(RUN, 'Caddyfile'), caddyfile({ url, builtInHttps, acmeCa, sso: sso.enabled }))
+  writePrivate(join(RUN, 'Caddyfile'), caddyfile({ url, builtInHttps, acmeCa, sso: sso.enabled, ssoAdminOpen: sso.adminOpen }))
   writePrivate(join(RUN, 'share/wrong-address.html'), wrongAddressPage(url))
   writePrivate(join(RUN, 'state.env'), envFile({
     SLATEBOX_PUBLIC_URL: url.origin,
     SLATEBOX_BUNDLED_MONGO: externalMongo ? 0 : 1,
     SLATEBOX_SSO: sso.enabled ? 'keycloak' : 'off',
+    SLATEBOX_SSO_ADMIN: sso.adminOpen ? 'open' : 'closed',
   }))
   if (!externalMongo) {
     writePrivate(MONGO_KEY_FILE, secrets.mongoKey + '\n', 0o400)
@@ -294,7 +301,7 @@ function main() {
   say(`Database:  ${externalMongo ? 'external (MONGO_URL)' : `bundled MongoDB ${identity.mongodb}, stored in ${DB_DIR}`}`)
   say(`Secrets:   ${created === 'all' ? 'created for this new installation' : created ? `kept, ${created} new` : 'kept from earlier starts'} (${join(DATA, 'secrets')})`)
   say(`Mail:      ${mailUrl ? `on, from ${mailFrom}` : 'off (set SLATEBOX_MAIL_URL to send invitations and sign-in mail)'}`)
-  say(`SSO:       ${sso.enabled ? `on, Keycloak ${identity.keycloak || ''} at ${url.origin}${SSO_PATH}/, issuer ${issuerFor(url)}${sso.only ? ', single sign-on only' : ''}`.replace('  ', ' ') : 'off (set SLATEBOX_SSO=keycloak to turn on single sign-on)'}`)
+  say(`SSO:       ${sso.enabled ? `on, Keycloak ${identity.keycloak || ''} at ${url.origin}${SSO_PATH}/, issuer ${issuerFor(url)}${sso.only ? ', single sign-on only' : ''}${sso.adminOpen ? '' : ', admin console closed on this address'}`.replace('  ', ' ') : 'off (set SLATEBOX_SSO=keycloak to turn on single sign-on)'}`)
   say(`AI drafts: ${aiUrl ? `on, using ${new URL(aiUrl).host}` : aiKey ? 'on, using DeepInfra' : settings.selfHosted.workshopAI ? 'on' : 'off (set SLATEBOX_AI_KEY to turn them on)'}`)
 }
 

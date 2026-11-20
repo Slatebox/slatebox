@@ -57,6 +57,7 @@ Every setting is optional and is given with `-e NAME=value`.
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use a MongoDB you run elsewhere. The bundled database is then not started. |
 | `SLATEBOX_SSO` | `keycloak` turns on single sign-on with the Keycloak bundled in the image (off by default). People sign in with Entra ID, Okta, Google Workspace, SAML, OpenID Connect or LDAP through it. Keycloak's admin console is at `/auth/admin/` on the same address. |
 | `SLATEBOX_SSO_ONLY` | `true`, with `SLATEBOX_SSO=keycloak`: single sign-on is the only way in, no passwords and no guests. |
+| `SLATEBOX_SSO_ADMIN` | `closed`, with `SLATEBOX_SSO=keycloak`: Keycloak's admin console and master realm are not served on the published port (default `open`). |
 
 A misspelled setting, or one in lower case, stops the container with the list
 of valid names, so a setting is never silently ignored.
