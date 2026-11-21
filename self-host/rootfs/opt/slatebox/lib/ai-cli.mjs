@@ -19,6 +19,7 @@ async function main() {
       `${name}: ${c.type}${c.baseUrl ? ` at ${c.baseUrl}` : ''}${c.model ? `, model ${c.model}` : ''}${c.apiKey ? ', key set' : ''}`)
     for (const [feature, name] of Object.entries(ai.use || {})) lines.push(`${feature} uses ${name}`)
     lines.push(`People may connect their own AI: ${ai.ownProviders === 'off' ? 'no' : 'yes'}`)
+    if (ai.ownProviders !== 'off') lines.push(`People's own AI may use private network addresses: ${ai.privateEndpoints === 'off' ? 'no, public only' : 'yes'}`)
     process.stdout.write(`${lines.join('\n')}\n`)
     return
   }

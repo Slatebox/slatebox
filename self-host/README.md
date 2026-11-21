@@ -55,6 +55,7 @@ Every setting is optional and is given with `-e NAME=value`.
 | `SLATEBOX_AI_KEY` | Without `SLATEBOX_AI_URL`: a DeepInfra API key for the built-in AI. |
 | `SLATEBOX_AI_CONFIG` | Any mix of AI, as JSON: several connections and which one each feature uses. See [AI](#ai). |
 | `SLATEBOX_AI_OWN_PROVIDERS` | `off` keeps everyone on the AI set here. Default `on`: people and teams may connect their own models and keys in Profile, AI. |
+| `SLATEBOX_AI_PRIVATE_ENDPOINTS` | `off` lets people and teams connect only models at public addresses, so they cannot use the server to reach other machines on your network. Default `on`: they may use your LAN or `host.docker.internal`. Your own connections are not affected. |
 | `SLATEBOX_KEY_ENCRYPTION_KEY` | 32 random bytes in base64, made once with `openssl rand -base64 32`. Lets people and teams save their own AI and call keys on this server, encrypted with it. Without it, own keys are not offered. Keep the same value for the life of the server and store it with your backups, which do not contain it: with a different value, saved keys cannot be read and people add them again. It is never written to the log. |
 | `SLATEBOX_SETTINGS` | A JSON object of further app settings, for example `{"daily":{"apiKey":"…"}}` to turn on calls. |
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use a MongoDB you run elsewhere. The bundled database is then not started. |

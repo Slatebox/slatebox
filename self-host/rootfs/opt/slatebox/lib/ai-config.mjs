@@ -6,12 +6,14 @@
 //   SLATEBOX_AI_KEY alone                                     a DeepInfra key for the built-in AI
 //   SLATEBOX_AI_CONFIG                                        any mix, as JSON (below)
 //   SLATEBOX_AI_OWN_PROVIDERS=on|off                          whether people may connect their own AI (default on)
+//   SLATEBOX_AI_PRIVATE_ENDPOINTS=on|off                      whether people's own AI may use private network
+//                                                             addresses (default on; the operator's are not affected)
 //
 // SLATEBOX_AI_CONFIG = { "connections": { "<name>": { "type": "openai-compatible" | "openai" |
 //   "anthropic" | "deepinfra", "url": "...", "key": "...", "model": "...", "tools": bool,
 //   "vision": bool, "images": bool, "maxTokens": n } }, "use": { "default" | "chat" |
 //   "generation" | "presentation" | "vision" | "images": "<name>" | "builtin" },
-//   "ownProviders": "on" | "off" }
+//   "ownProviders": "on" | "off", "privateEndpoints": "on" | "off" }
 // It becomes settings.ai, which the app reads (web/app/server/methods/ai/connections.mjs). Keys
 // go only into the app's settings in app.env, never into the log.
 import net from 'node:net'
@@ -27,23 +29,39 @@ const USE = ['default', 'chat', 'generation', 'presentation', 'vision', 'images'
 const NAME = /^[a-z0-9][a-z0-9-]{0,39}$/
 const CONNECTION_FIELDS = ['type', 'url', 'key', 'model', 'tools', 'vision', 'images', 'maxTokens', 'toolChoice']
 // Instance metadata services hand out the machine's cloud credentials: no AI request goes there.
-const METADATA_HOSTS = new Set(['169.254.169.254', '169.254.170.2', '169.254.170.23', '100.100.100.200', 'fd00:ec2::254', 'fd00:ec2::23',
-  'metadata', 'metadata.google.internal', 'metadata.goog', 'instance-data', 'instance-data.ec2.internal'])
+// AWS, GCP, Azure, ECS, AWS IPv6, Alibaba, Oracle (192.0.0.192), GCP IPv6 and Azure WireServer.
+const METADATA_V4 = new Set(['169.254.169.254', '169.254.170.2', '169.254.170.23', '100.100.100.200', '192.0.0.192', '168.63.129.16'])
+const METADATA_V6 = new Set(['fd00:ec2:0:0:0:0:0:254', 'fd00:ec2:0:0:0:0:0:23', 'fd20:ce:0:0:0:0:0:254'])
+const METADATA_NAMES = new Set(['metadata', 'metadata.google.internal', 'metadata.goog', 'instance-data', 'instance-data.ec2.internal'])
+
+function v6Words(address) {
+  let a = address.toLowerCase().split('%')[0]
+  if (a.includes('.')) {
+    const i = a.lastIndexOf(':')
+    const n = a.slice(i + 1).split('.').reduce((acc, part) => ((acc << 8) + Number(part)) >>> 0, 0)
+    a = `${a.slice(0, i)}:${(n >>> 16).toString(16)}:${(n & 0xffff).toString(16)}`
+  }
+  const [head, tail] = a.split('::')
+  const h = head ? head.split(':') : []
+  const t = tail !== undefined ? (tail ? tail.split(':') : []) : []
+  const fill = tail !== undefined ? new Array(8 - h.length - t.length).fill('0') : []
+  return [...h, ...fill, ...t].map((x) => parseInt(x || '0', 16))
+}
+
+const v4 = (hi, lo) => `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`
 
 function metadataHost(host) {
-  if (METADATA_HOSTS.has(host.toLowerCase())) return true
-  if (net.isIPv6(host)) {
-    // ::ffff:169.254.169.254 and its hex form
-    const mapped = /^::ffff:(?:(\d+\.\d+\.\d+\.\d+)|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/i.exec(host)
-    if (mapped?.[1]) return METADATA_HOSTS.has(mapped[1])
-    if (mapped?.[2]) {
-      const hi = parseInt(mapped[2], 16), lo = parseInt(mapped[3], 16)
-      return METADATA_HOSTS.has(`${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`)
-    }
-    const words = host.toLowerCase().split('::')
-    return words.length === 2 && words[0] === 'fd00:ec2' && ['254', '23'].includes(words[1])
-  }
-  return false
+  const lower = host.toLowerCase()
+  if (METADATA_NAMES.has(lower) || METADATA_V4.has(lower)) return true
+  if (!net.isIPv6(host)) return false
+  const w = v6Words(host)
+  if (METADATA_V6.has(w.map((x) => x.toString(16)).join(':'))) return true
+  // IPv4 inside IPv6: mapped (::ffff:a.b.c.d), compatible, NAT64 (64:ff9b::/96, 64:ff9b:1::/48) and 6to4 (2002::/16)
+  const embedded = []
+  if (w.slice(0, 5).every((x) => x === 0)) embedded.push(v4(w[6], w[7]))
+  if (w[0] === 0x64 && w[1] === 0xff9b) embedded.push(v4(w[6], w[7]), v4(w[3], ((w[4] & 0xff) << 8) | (w[5] >> 8)))
+  if (w[0] === 0x2002) embedded.push(v4(w[1], w[2]))
+  return embedded.some((address) => METADATA_V4.has(address))
 }
 
 function endpoint(where, value) {
@@ -116,6 +134,7 @@ export function operatorAI(setting) {
   const model = setting('SLATEBOX_AI_MODEL')
   const rawConfig = setting('SLATEBOX_AI_CONFIG')
   const own = switchValue(setting('SLATEBOX_AI_OWN_PROVIDERS'), 'SLATEBOX_AI_OWN_PROVIDERS')
+  const privateEndpoints = switchValue(setting('SLATEBOX_AI_PRIVATE_ENDPOINTS'), 'SLATEBOX_AI_PRIVATE_ENDPOINTS')
 
   const ai = { connections: {}, use: {} }
   let legacy
@@ -134,7 +153,7 @@ export function operatorAI(setting) {
     try { config = JSON.parse(rawConfig) } catch { throw new Plain('SLATEBOX_AI_CONFIG must be a JSON object') }
     if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Plain('SLATEBOX_AI_CONFIG must be a JSON object')
     for (const field of Object.keys(config)) {
-      if (!['connections', 'use', 'ownProviders'].includes(field)) throw new Plain(`SLATEBOX_AI_CONFIG: ${field.slice(0, 40)} is not a field (connections, use, ownProviders)`)
+      if (!['connections', 'use', 'ownProviders', 'privateEndpoints'].includes(field)) throw new Plain(`SLATEBOX_AI_CONFIG: ${field.slice(0, 40)} is not a field (connections, use, ownProviders, privateEndpoints)`)
     }
     const connections = config.connections ?? {}
     if (typeof connections !== 'object' || Array.isArray(connections)) throw new Plain('SLATEBOX_AI_CONFIG connections must be an object of named connections')
@@ -151,11 +170,14 @@ export function operatorAI(setting) {
     }
     const fromConfig = switchValue(config.ownProviders, 'SLATEBOX_AI_CONFIG ownProviders')
     if (fromConfig) ai.ownProviders = fromConfig
+    const privateFromConfig = switchValue(config.privateEndpoints, 'SLATEBOX_AI_CONFIG privateEndpoints')
+    if (privateFromConfig) ai.privateEndpoints = privateFromConfig
   }
   if (own) ai.ownProviders = own
+  if (privateEndpoints) ai.privateEndpoints = privateEndpoints
 
   const names = Object.keys(ai.connections)
-  const settings = names.length || Object.keys(ai.use).length || ai.ownProviders ? ai : null
+  const settings = names.length || Object.keys(ai.use).length || ai.ownProviders || ai.privateEndpoints ? ai : null
   const deepInfraKey = url ? undefined : key
   const on = Boolean(names.length || deepInfraKey)
   const summary = []
@@ -169,6 +191,7 @@ export function operatorAI(setting) {
   summary.push(ai.ownProviders === 'off'
     ? 'Own AI:    off, people use the AI set here (SLATEBOX_AI_OWN_PROVIDERS=off)'
     : 'Own AI:    on, people may connect their own models and keys (SLATEBOX_AI_OWN_PROVIDERS=off turns this off)')
+  if (ai.privateEndpoints === 'off' && ai.ownProviders !== 'off') summary.push('           people\'s own AI may use public addresses only (SLATEBOX_AI_PRIVATE_ENDPOINTS=off)')
   return { settings, deepInfraKey, legacy, on, summary }
 }
 

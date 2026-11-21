@@ -119,3 +119,33 @@ test('slatebox ai check tests every server connection and prints no key', async 
   assert.ok(!text.includes('stub-secret-0001'))
   assert.equal(seen[0].auth, 'Bearer stub-secret-0001')
 })
+
+// ---------- review fixes (2026-11-21) ----------
+
+test('SLATEBOX_AI_PRIVATE_ENDPOINTS=off keeps people\'s own AI on public addresses, separately from the switch', () => {
+  const off = operatorAI(env({ SLATEBOX_AI_PRIVATE_ENDPOINTS: 'off' }))
+  assert.deepEqual(off.settings, { connections: {}, use: {}, privateEndpoints: 'off' })
+  assert.match(off.summary.join('\n'), /people's own AI may use public addresses only \(SLATEBOX_AI_PRIVATE_ENDPOINTS=off\)/)
+  assert.equal(operatorAI(env({})).settings, null, 'on is the default and needs no setting')
+  const fromConfig = operatorAI(env({ SLATEBOX_AI_CONFIG: JSON.stringify({ privateEndpoints: 'off' }) }))
+  assert.equal(fromConfig.settings.privateEndpoints, 'off')
+  assert.equal(operatorAI(env({ SLATEBOX_AI_CONFIG: JSON.stringify({ privateEndpoints: 'off' }), SLATEBOX_AI_PRIVATE_ENDPOINTS: 'on' })).settings.privateEndpoints, 'on', 'the variable wins')
+  assert.throws(() => operatorAI(env({ SLATEBOX_AI_PRIVATE_ENDPOINTS: 'lan' })), /SLATEBOX_AI_PRIVATE_ENDPOINTS must be on or off/)
+})
+
+test('other clouds\' metadata addresses, and metadata wrapped in NAT64 or 6to4, are refused', () => {
+  for (const url of ['http://192.0.0.192/v1', 'http://[fd20:ce::254]/v1', 'http://168.63.129.16/v1', 'http://[64:ff9b::a9fe:a9fe]/v1',
+    'http://[2002:a9fe:a9fe::1]/v1', 'http://[0:0:0:0:0:ffff:a9fe:a9fe]/v1']) {
+    assert.throws(() => operatorAI(env({ SLATEBOX_AI_URL: url, SLATEBOX_AI_MODEL: 'm' })), /metadata/, url)
+  }
+  assert.equal(operatorAI(env({ SLATEBOX_AI_URL: 'http://[64:ff9b::a00:1]/v1', SLATEBOX_AI_MODEL: 'm' })).on, true, 'a NAT64 private address is the operator\'s to use')
+})
+
+test('configure accepts SLATEBOX_AI_PRIVATE_ENDPOINTS, and the docs and slatebox ai name it', async () => {
+  const { readFileSync } = await import('node:fs')
+  const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
+  assert.match(read('rootfs/opt/slatebox/lib/configure.mjs'), /'SLATEBOX_AI_PRIVATE_ENDPOINTS'/)
+  assert.match(read('README.md'), /SLATEBOX_AI_PRIVATE_ENDPOINTS/)
+  assert.match(read('DESIGN.md'), /SLATEBOX_AI_PRIVATE_ENDPOINTS/)
+  assert.match(read('rootfs/opt/slatebox/lib/ai-cli.mjs'), /privateEndpoints/)
+})
