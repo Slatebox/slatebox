@@ -12,7 +12,7 @@ import { appSettings as ssoAppSettings, issuerFor, keycloakEnv, ssoMode } from '
 const KNOWN = [
   'SLATEBOX_URL', 'SLATEBOX_HTTPS', 'SLATEBOX_ACME_CA', 'SLATEBOX_MAIL_URL', 'SLATEBOX_MAIL_FROM',
   'SLATEBOX_AI_KEY', 'SLATEBOX_AI_URL', 'SLATEBOX_AI_MODEL', 'SLATEBOX_SETTINGS', 'SLATEBOX_SSO', 'SLATEBOX_SSO_ONLY',
-  'SLATEBOX_SSO_ADMIN',
+  'SLATEBOX_SSO_ADMIN', 'SLATEBOX_KEY_ENCRYPTION_KEY',
 ]
 // Where the image serves the interface fonts (see the Dockerfile).
 const FONTS_PATH = '/_fonts/'
@@ -79,6 +79,21 @@ function mailSender(mailUrl) {
   throw new Plain(
     'SLATEBOX_MAIL_URL also needs SLATEBOX_MAIL_FROM, the address mail is sent from, one your mail service accepts, ' +
     'for example SLATEBOX_MAIL_FROM="Slatebox <boards@example.com>"')
+}
+
+// The master key for the AI and call keys people save for themselves. The app
+// reads it as 32 bytes in base64 (standard or URL-safe); anything else would
+// silently decode to a different key, so it is refused here. The value is never
+// printed, not even when it is refused.
+function keyEncryptionKey() {
+  const value = setting('SLATEBOX_KEY_ENCRYPTION_KEY')
+  if (!value) return undefined
+  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(value) || Buffer.from(value, 'base64').length !== 32) {
+    throw new Plain(
+      'SLATEBOX_KEY_ENCRYPTION_KEY must be 32 random bytes in base64, for example the output of openssl rand -base64 32 ' +
+      `(received ${value.length} characters, not shown)`)
+  }
+  return value
 }
 
 function mergeSettings(base, extra) {
@@ -220,6 +235,7 @@ function main() {
   if (externalOplog && !externalMongo) throw new Plain('MONGO_OPLOG_URL only applies together with MONGO_URL')
   const extra = extraSettings()
   const sso = ssoMode(setting)
+  const ownKeysKey = keyEncryptionKey()
 
   // Every setting is valid. Only now is anything written.
   for (const dir of [RUN, TMP_DIR, ...(externalMongo ? [] : [DB_DIR]), ...(sso.enabled ? [KEYCLOAK_DATA, join(RUN, 'keycloak-tmp')] : [])]) {
@@ -267,6 +283,8 @@ function main() {
     METEOR_SETTINGS: JSON.stringify(settings),
     MAIL_URL: mailUrl,
     API_KEY_DEEP_INFRA: aiUrl ? undefined : aiKey,
+    // Read from the environment only, never from the settings (server/metering/vault.mjs).
+    SLATEBOX_KEY_ENCRYPTION_KEY: ownKeysKey,
   }))
   writePrivate(join(RUN, 'relay.env'), envFile({
     NODE_ENV: 'production',
@@ -303,6 +321,7 @@ function main() {
   say(`Mail:      ${mailUrl ? `on, from ${mailFrom}` : 'off (set SLATEBOX_MAIL_URL to send invitations and sign-in mail)'}`)
   say(`SSO:       ${sso.enabled ? `on, Keycloak ${identity.keycloak || ''} at ${url.origin}${SSO_PATH}/, issuer ${issuerFor(url)}${sso.only ? ', single sign-on only' : ''}${sso.adminOpen ? '' : ', admin console closed on this address'}`.replace('  ', ' ') : 'off (set SLATEBOX_SSO=keycloak to turn on single sign-on)'}`)
   say(`AI drafts: ${aiUrl ? `on, using ${new URL(aiUrl).host}` : aiKey ? 'on, using DeepInfra' : settings.selfHosted.workshopAI ? 'on' : 'off (set SLATEBOX_AI_KEY to turn them on)'}`)
+  say(`Own keys:  ${ownKeysKey ? 'on, people and teams can save their own AI and call keys, encrypted' : 'off (set SLATEBOX_KEY_ENCRYPTION_KEY to let people save their own AI and call keys)'}`)
 }
 
 try { main() } catch (error) { fail(error) }

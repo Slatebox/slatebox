@@ -79,11 +79,12 @@ test('a session of edits, chat, a workshop and account mail leaves no content or
   const requests = []
   const ai = await aiStub(requests)
   const sink = await mailSink()
-  const secrets = { aiKey: `key-${word('ocelot')}` }
+  const secrets = { aiKey: `key-${word('ocelot')}`, keyEncryptionKey: randomBytes(32).toString('base64') }
   try {
     const box = await start({
       env: {
         SLATEBOX_AI_URL: `http://host.docker.internal:${ai.port}/v1`, SLATEBOX_AI_MODEL: 'slatebox-local', SLATEBOX_AI_KEY: secrets.aiKey,
+        SLATEBOX_KEY_ENCRYPTION_KEY: secrets.keyEncryptionKey,
         SLATEBOX_MAIL_URL: `smtp://host.docker.internal:${sink.port}`, SLATEBOX_MAIL_FROM: 'Boards <boards@example.test>',
       },
       args: ['--add-host', 'host.docker.internal:host-gateway',
@@ -181,6 +182,7 @@ test('a session of edits, chat, a workshop and account mail leaves no content or
       'relay bearer hash': relayHash,
       'password-reset token': secrets.resetToken,
       'AI key': secrets.aiKey,
+      'key encryption key': secrets.keyEncryptionKey,
     }
     const found = Object.entries(searched).filter(([, value]) => value && log.includes(value)).map(([label]) => label)
     assert.ok(log.split('\n').length > 5, 'the log was read')

@@ -53,6 +53,7 @@ Every setting is optional and is given with `-e NAME=value`.
 | `SLATEBOX_MAIL_FROM` | The sender of that mail, for example `Slatebox <boards@example.com>`: an address your mail service accepts. Needed unless the mail account's user name is itself an address, which is then used. |
 | `SLATEBOX_AI_KEY` | A DeepInfra API key. Turns on AI drafts. |
 | `SLATEBOX_AI_URL`, `SLATEBOX_AI_MODEL` | Use your own OpenAI-compatible endpoint and model for AI drafts. `SLATEBOX_AI_KEY` is then its bearer token, if it needs one. |
+| `SLATEBOX_KEY_ENCRYPTION_KEY` | 32 random bytes in base64, made once with `openssl rand -base64 32`. Lets people and teams save their own AI and call keys on this server, encrypted with it. Without it, own keys are not offered. Keep the same value for the life of the server and store it with your backups, which do not contain it: with a different value, saved keys cannot be read and people add them again. It is never written to the log. |
 | `SLATEBOX_SETTINGS` | A JSON object of further app settings, for example `{"daily":{"apiKey":"…"}}` to turn on calls. |
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use a MongoDB you run elsewhere. The bundled database is then not started. |
 | `SLATEBOX_SSO` | `keycloak` turns on single sign-on with the Keycloak bundled in the image (off by default). People sign in with Entra ID, Okta, Google Workspace, SAML, OpenID Connect or LDAP through it. Keycloak's admin console is at `/auth/admin/` on the same address. |
@@ -122,6 +123,10 @@ directory:
 SLATEBOX_IMAGE=<image name> PLAYWRIGHT_FROM=/path/to/slateboxjs/package.json \
   node --test --test-concurrency=1 tests/
 ```
+
+`tests/configure.test.mjs` runs only this checkout's start-up step inside the
+image, in seconds, so a change to the settings can be checked without
+rebuilding the image.
 
 They cover the image's contents (identity, licenses, no settings or keys),
 the first start, restart, stop, a crashed process, upgrade, backup and

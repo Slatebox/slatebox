@@ -219,6 +219,7 @@ test('a mistaken setting stops the start with a plain message', async () => {
     [{ SLATEBOX_MAIL_URL: 'mail.example.com' }, /SLATEBOX_MAIL_URL is not a valid address/],
     [{ SLATEBOX_AI_URL: 'http://inference.internal:8080/v1' }, /SLATEBOX_AI_URL also needs SLATEBOX_AI_MODEL/],
     [{ SLATEBOX_SETTINGS: '{not json' }, /SLATEBOX_SETTINGS must be a JSON object/],
+    [{ SLATEBOX_KEY_ENCRYPTION_KEY: 'not-a-key' }, /SLATEBOX_KEY_ENCRYPTION_KEY must be 32 random bytes in base64/],
     // A name in the wrong case is reported, not silently ignored.
     [{ slatebox_url: 'http://localhost:9' }, /Unknown setting slatebox_url\. The settings are: SLATEBOX_URL.*\(in capitals\)/],
     [{ mongo_url: 'mongodb://db.example.com/x' }, /Unknown setting mongo_url\./],
