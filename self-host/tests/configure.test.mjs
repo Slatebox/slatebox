@@ -73,3 +73,68 @@ test('a SLATEBOX_KEY_ENCRYPTION_KEY that is not 32 bytes of base64 stops the sta
     assert.equal(run.secretFiles, 0, 'nothing was created before the mistake was reported')
   }
 })
+
+// ---------- AI: any mix the operator chooses (lib/ai-config.mjs) ----------
+
+const appSettings = (run) => JSON.parse(run.app.settings)
+
+test('SLATEBOX_AI_URL and SLATEBOX_AI_MODEL wire one endpoint for every feature; the key stays out of the log', async () => {
+  const key = `endpoint-${randomBytes(8).toString('hex')}`
+  const run = await configure({ SLATEBOX_AI_URL: 'http://host.docker.internal:11434/v1', SLATEBOX_AI_MODEL: 'any-model', SLATEBOX_AI_KEY: key })
+  assert.equal(run.code, 0, run.log)
+  const settings = appSettings(run)
+  assert.deepEqual(settings.ai, {
+    connections: { server: { type: 'openai-compatible', baseUrl: 'http://host.docker.internal:11434/v1', model: 'any-model', apiKey: key } },
+    use: { default: 'server' },
+  })
+  assert.equal(settings.selfHosted.workshopAI, true)
+  assert.deepEqual(settings.selfHosted.workshopProvider, { baseUrl: 'http://host.docker.internal:11434/v1', model: 'any-model', apiKey: key }, 'an older app still finds its endpoint')
+  assert.match(run.log, /AI drafts: on, using host\.docker\.internal:11434 \(server, any-model\)/)
+  assert.match(run.log, /Own AI: +on/)
+  assert.ok(!run.log.includes(key))
+})
+
+test('SLATEBOX_AI_CONFIG mixes a model on the host with a cloud provider, and SLATEBOX_AI_OWN_PROVIDERS turns people\'s own AI off', async () => {
+  const key = `sk-${randomBytes(8).toString('hex')}`
+  const config = {
+    connections: {
+      desk: { type: 'openai-compatible', url: 'http://host.docker.internal:11434/v1', model: 'local-model', vision: false },
+      cloud: { type: 'openai', key, model: 'cloud-model', images: true },
+    },
+    use: { default: 'desk', images: 'cloud', vision: 'cloud' },
+  }
+  const run = await configure({ SLATEBOX_AI_CONFIG: JSON.stringify(config), SLATEBOX_AI_OWN_PROVIDERS: 'off' })
+  assert.equal(run.code, 0, run.log)
+  const { ai } = appSettings(run)
+  assert.deepEqual(ai.use, { default: 'desk', images: 'cloud', vision: 'cloud' })
+  assert.equal(ai.connections.cloud.apiKey, key)
+  assert.equal(ai.connections.desk.baseUrl, 'http://host.docker.internal:11434/v1')
+  assert.equal(ai.ownProviders, 'off')
+  assert.match(run.log, /Own AI: +off/)
+  assert.ok(!run.log.includes(key))
+})
+
+test('an AI endpoint at a cloud metadata address stops the start before anything is written', async () => {
+  const run = await configure({ SLATEBOX_AI_URL: 'http://169.254.169.254/latest', SLATEBOX_AI_MODEL: 'm' })
+  assert.equal(run.code, 1)
+  assert.match(run.log, /cloud metadata address/)
+  assert.doesNotMatch(run.log, /\n\s+at .*:\d+:\d+\)?/, 'no stack trace for an operator mistake')
+  assert.equal(run.app, null)
+  assert.equal(run.secretFiles, 0)
+})
+
+test('slatebox ai check tests the server connections from inside the container', async () => {
+  // A stub OpenAI-compatible server inside the same container (the network is off).
+  const stub = `require('http').createServer((q, s) => { s.setHeader('content-type', 'application/json'); q.resume(); q.on('end', () => s.end(q.url.endsWith('/models') ? '{"data":[{"id":"stub-model"}]}' : '{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"c","type":"function","function":{"name":"ping","arguments":"{}"}}]}}]}')) }).listen(4399, '127.0.0.1')`
+  const script = [
+    `node -e '${stub.replace(/'/g, "'\\''")}' & sleep 0.5`,
+    'node /opt/slatebox/lib/configure.mjs > /dev/null',
+    "env -i PATH=\"$PATH\" sh -c 'set -a; . /run/slatebox/app.env; set +a; node /opt/slatebox/lib/ai-cli.mjs check; node /opt/slatebox/lib/ai-cli.mjs'",
+  ].join('; ')
+  const out = await ok(['run', '--rm', '--network', 'none', '--tmpfs', '/data:mode=1777', '--tmpfs', '/run:mode=1777',
+    '-v', `${LIB}:/opt/slatebox/lib:ro`, '-e', 'SLATEBOX_AI_URL=http://127.0.0.1:4399/v1', '-e', 'SLATEBOX_AI_MODEL=stub-model', '-e', 'SLATEBOX_AI_KEY=stub-secret-0001',
+    '--entrypoint', 'sh', IMAGE, '-c', script])
+  assert.match(out, /server: connected, stub-model listed, calls tools/)
+  assert.match(out, /default uses server/)
+  assert.ok(!out.includes('stub-secret-0001'))
+})

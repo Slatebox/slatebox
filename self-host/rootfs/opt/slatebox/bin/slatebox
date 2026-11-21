@@ -7,6 +7,7 @@
 #   docker exec slatebox slatebox health
 #   docker exec slatebox slatebox version
 #   docker exec slatebox slatebox sso [admin-password | scim-secret | events [N]]
+#   docker exec slatebox slatebox ai [check]
 set -euo pipefail
 umask 077
 
@@ -137,6 +138,17 @@ case ${1:-} in
   restore) restore ;;
   health) shift; exec node "$LIB/health.mjs" "$@" ;;
   version) cat "$ROOT/identity.json" ;;
+  ai)
+    shift
+    [[ -f $RUN/app.env ]] || die 'Slatebox is still starting. Try again in a moment.'
+    (
+      set -a
+      # shellcheck disable=SC1091
+      . "$RUN/app.env"
+      set +a
+      exec node "$LIB/ai-cli.mjs" "$@"
+    )
+    ;;
   sso)
     shift
     [[ -f $RUN/state.env ]] || die 'Slatebox is still starting. Try again in a moment.'
@@ -151,6 +163,7 @@ Usage, from the Docker host:
   docker exec slatebox slatebox health
   docker exec slatebox slatebox version
   docker exec slatebox slatebox sso [admin-password | scim-secret | events [N]]
+  docker exec slatebox slatebox ai [check]
 EOF
     exit 2
     ;;

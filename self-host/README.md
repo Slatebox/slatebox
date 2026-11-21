@@ -51,8 +51,10 @@ Every setting is optional and is given with `-e NAME=value`.
 | `SLATEBOX_ACME_CA` | The ACME directory of your own certificate authority, when certificates should not come from Let's Encrypt. |
 | `SLATEBOX_MAIL_URL` | An `smtp://` or `smtps://` URL, with the user name and password of your mail account. Turns on invitations, email verification and password mail. |
 | `SLATEBOX_MAIL_FROM` | The sender of that mail, for example `Slatebox <boards@example.com>`: an address your mail service accepts. Needed unless the mail account's user name is itself an address, which is then used. |
-| `SLATEBOX_AI_KEY` | A DeepInfra API key. Turns on AI drafts. |
-| `SLATEBOX_AI_URL`, `SLATEBOX_AI_MODEL` | Use your own OpenAI-compatible endpoint and model for AI drafts. `SLATEBOX_AI_KEY` is then its bearer token, if it needs one. |
+| `SLATEBOX_AI_URL`, `SLATEBOX_AI_MODEL` | Any OpenAI-compatible endpoint and the model it serves, used for every AI feature: Ollama, llama.cpp, vLLM, LM Studio or a host provider. `SLATEBOX_AI_KEY` is then its bearer token, if it needs one. See [AI](#ai). |
+| `SLATEBOX_AI_KEY` | Without `SLATEBOX_AI_URL`: a DeepInfra API key for the built-in AI. |
+| `SLATEBOX_AI_CONFIG` | Any mix of AI, as JSON: several connections and which one each feature uses. See [AI](#ai). |
+| `SLATEBOX_AI_OWN_PROVIDERS` | `off` keeps everyone on the AI set here. Default `on`: people and teams may connect their own models and keys in Profile, AI. |
 | `SLATEBOX_KEY_ENCRYPTION_KEY` | 32 random bytes in base64, made once with `openssl rand -base64 32`. Lets people and teams save their own AI and call keys on this server, encrypted with it. Without it, own keys are not offered. Keep the same value for the life of the server and store it with your backups, which do not contain it: with a different value, saved keys cannot be read and people add them again. It is never written to the log. |
 | `SLATEBOX_SETTINGS` | A JSON object of further app settings, for example `{"daily":{"apiKey":"…"}}` to turn on calls. |
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use a MongoDB you run elsewhere. The bundled database is then not started. |
@@ -62,6 +64,54 @@ Every setting is optional and is given with `-e NAME=value`.
 
 A misspelled setting, or one in lower case, stops the container with the list
 of valid names, so a setting is never silently ignored.
+
+## AI
+
+Slatebox bundles no model. It uses whatever you connect, and you can mix them:
+a model on this computer or your network, a host provider, or a cloud provider
+with your key. People may add their own too (Profile, AI), unless
+`SLATEBOX_AI_OWN_PROVIDERS=off`. Their choice for a feature wins over yours.
+
+One endpoint for everything:
+
+```sh
+docker run ... -e SLATEBOX_AI_URL=http://host.docker.internal:11434/v1 -e SLATEBOX_AI_MODEL=<model> ...
+```
+
+Inside the container, `localhost` is the container itself. A model server on
+the Docker host is at `host.docker.internal`. Docker Desktop provides that
+name; on Linux, add `--add-host=host.docker.internal:host-gateway`. On a Mac,
+run the model server on the Mac itself, so it can use the Mac's GPU. Docker on
+a Mac cannot.
+
+A mix: a model on the host for conversation and drafts, and a cloud provider for
+reading and making images:
+
+```sh
+-e SLATEBOX_AI_CONFIG='{
+  "connections": {
+    "desk":  { "type": "openai-compatible", "url": "http://host.docker.internal:11434/v1", "model": "<model>" },
+    "cloud": { "type": "openai", "key": "<key>", "model": "<model>", "vision": true, "images": true }
+  },
+  "use": { "default": "desk", "vision": "cloud", "images": "cloud" }
+}'
+```
+
+- **type:** `openai-compatible` (any host, with `url`), `openai`, `anthropic` or `deepinfra`.
+- **use:** keys are `default`, `chat`, `generation`, `presentation`, `vision` and `images`. A value is a connection name, or `builtin` for the built-in AI (`SLATEBOX_AI_KEY`).
+- **What a model can do:** `tools`, `vision` and `images` (`true` or `false`) say what it can do, where you know. An unset capability is tried. Making images needs `"images": true`.
+- **Output length:** `maxTokens` caps each answer. The default is 16384.
+
+If a model can't do what a feature needs, the feature says so and asks for
+another model. Slatebox never sends the request somewhere else instead. Keys go
+only to the app's settings, never to the log. Slatebox never sends AI requests
+to cloud metadata addresses. Requests may go to your network.
+
+`docker exec slatebox slatebox ai check` tests each connection set here. It
+reports whether the endpoint answers and accepts the key, whether it lists the
+model, and whether the model calls tools. People test their own connections in
+Profile, AI. An agent can set and test all of this through the API (`ai`,
+`ai-set`, `ai-check`) with a token that has the `ai:settings` permission.
 
 ## Everyday commands
 
@@ -73,6 +123,7 @@ docker exec slatebox slatebox password-link person@example.com # a one-time link
 docker exec slatebox slatebox sso                              # with SLATEBOX_SSO=keycloak: admin console, issuer, SCIM
 docker exec slatebox slatebox sso admin-password               # Keycloak's first admin password (never in the log)
 docker exec slatebox slatebox sso events 50                    # recent sign-in events
+docker exec slatebox slatebox ai check                         # test the AI connections set here
 ```
 
 Single sign-on is described in <https://docs.slatebox.com/installation/single-sign-on/>.

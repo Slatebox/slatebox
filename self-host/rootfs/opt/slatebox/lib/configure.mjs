@@ -8,11 +8,12 @@ import {
   RELAY_PORT, RUN, SSO_PATH, TMP_DIR, DATA, ensureSecrets, envFile, fail, mongoUrl, writePrivate,
 } from './common.mjs'
 import { appSettings as ssoAppSettings, issuerFor, keycloakEnv, ssoMode } from './sso.mjs'
+import { operatorAI } from './ai-config.mjs'
 
 const KNOWN = [
   'SLATEBOX_URL', 'SLATEBOX_HTTPS', 'SLATEBOX_ACME_CA', 'SLATEBOX_MAIL_URL', 'SLATEBOX_MAIL_FROM',
-  'SLATEBOX_AI_KEY', 'SLATEBOX_AI_URL', 'SLATEBOX_AI_MODEL', 'SLATEBOX_SETTINGS', 'SLATEBOX_SSO', 'SLATEBOX_SSO_ONLY',
-  'SLATEBOX_SSO_ADMIN', 'SLATEBOX_KEY_ENCRYPTION_KEY',
+  'SLATEBOX_AI_KEY', 'SLATEBOX_AI_URL', 'SLATEBOX_AI_MODEL', 'SLATEBOX_AI_CONFIG', 'SLATEBOX_AI_OWN_PROVIDERS',
+  'SLATEBOX_SETTINGS', 'SLATEBOX_SSO', 'SLATEBOX_SSO_ONLY', 'SLATEBOX_SSO_ADMIN', 'SLATEBOX_KEY_ENCRYPTION_KEY',
 ]
 // Where the image serves the interface fonts (see the Dockerfile).
 const FONTS_PATH = '/_fonts/'
@@ -219,15 +220,8 @@ function main() {
   if (mailUrl) parseUrl('SLATEBOX_MAIL_URL', mailUrl, ['smtp:', 'smtps:'])
   const mailFrom = mailSender(mailUrl)
 
-  const aiKey = setting('SLATEBOX_AI_KEY')
-  const aiUrl = setting('SLATEBOX_AI_URL')
-  const aiModel = setting('SLATEBOX_AI_MODEL')
-  if (aiUrl) {
-    parseUrl('SLATEBOX_AI_URL', aiUrl, ['http:', 'https:'])
-    if (!aiModel) throw new Plain('SLATEBOX_AI_URL also needs SLATEBOX_AI_MODEL, the model name your endpoint serves')
-  } else if (aiModel) {
-    throw new Plain('SLATEBOX_AI_MODEL only applies together with SLATEBOX_AI_URL')
-  }
+  // Any mix of AI the operator chooses (ai-config.mjs); nothing bundled, nothing named.
+  const ai = operatorAI(setting)
 
   const externalMongo = setting('MONGO_URL')
   const externalOplog = setting('MONGO_OPLOG_URL')
@@ -261,10 +255,11 @@ function main() {
   if (mailFrom) settings.mailFrom = mailFrom
   settings.mailGun = { server: '', ...settings.mailGun }
   settings.selfHosted = { ...settings.selfHosted }
-  if (aiUrl) {
-    settings.selfHosted.workshopAI = true
-    settings.selfHosted.workshopProvider = { baseUrl: aiUrl, model: aiModel, ...(aiKey ? { apiKey: aiKey } : {}) }
-  } else if (aiKey) {
+  // The AI settings win over the same fields in SLATEBOX_SETTINGS.
+  if (ai.settings) settings.ai = { ...settings.ai, ...ai.settings, connections: { ...settings.ai?.connections, ...ai.settings.connections }, use: { ...settings.ai?.use, ...ai.settings.use } }
+  // An app from before settings.ai reads this one endpoint for workshops.
+  if (ai.legacy) settings.selfHosted.workshopProvider = ai.legacy
+  if (ai.on) {
     settings.selfHosted.workshopAI = true
   } else if (settings.selfHosted.workshopAI !== true) {
     settings.selfHosted.workshopAI = false
@@ -282,7 +277,7 @@ function main() {
       : mongoUrl('app', secrets.mongoAppPassword, { database: 'local', authSource: DATABASE }),
     METEOR_SETTINGS: JSON.stringify(settings),
     MAIL_URL: mailUrl,
-    API_KEY_DEEP_INFRA: aiUrl ? undefined : aiKey,
+    API_KEY_DEEP_INFRA: ai.deepInfraKey,
     // Read from the environment only, never from the settings (server/metering/vault.mjs).
     SLATEBOX_KEY_ENCRYPTION_KEY: ownKeysKey,
   }))
@@ -320,7 +315,7 @@ function main() {
   say(`Secrets:   ${created === 'all' ? 'created for this new installation' : created ? `kept, ${created} new` : 'kept from earlier starts'} (${join(DATA, 'secrets')})`)
   say(`Mail:      ${mailUrl ? `on, from ${mailFrom}` : 'off (set SLATEBOX_MAIL_URL to send invitations and sign-in mail)'}`)
   say(`SSO:       ${sso.enabled ? `on, Keycloak ${identity.keycloak || ''} at ${url.origin}${SSO_PATH}/, issuer ${issuerFor(url)}${sso.only ? ', single sign-on only' : ''}${sso.adminOpen ? '' : ', admin console closed on this address'}`.replace('  ', ' ') : 'off (set SLATEBOX_SSO=keycloak to turn on single sign-on)'}`)
-  say(`AI drafts: ${aiUrl ? `on, using ${new URL(aiUrl).host}` : aiKey ? 'on, using DeepInfra' : settings.selfHosted.workshopAI ? 'on' : 'off (set SLATEBOX_AI_KEY to turn them on)'}`)
+  for (const line of ai.summary) say(line)
   say(`Own keys:  ${ownKeysKey ? 'on, people and teams can save their own AI and call keys, encrypted' : 'off (set SLATEBOX_KEY_ENCRYPTION_KEY to let people save their own AI and call keys)'}`)
 }
 
