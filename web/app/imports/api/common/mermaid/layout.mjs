@@ -28,6 +28,7 @@ const INNER_MAX_HEIGHT = FRAME_MAX - PAD - PAD_TOP
 const ROW_MAX = 4900 // a layer wider than this (notes side by side with no lines) wraps into rows
 const CLEAR = 14 // how far a line keeps from a note it does not join
 const LABEL_CLEAR = 10 // how far a label keeps from a note
+const LABELS_APART = 20 // how far two labels keep from each other (a drawn line is a little shorter than its notes' gap)
 const LANE = 30 // a lane for a line that skips layers, across
 const ROUNDS = 40 // rounds of moving notes out of the way
 const PUSH_MAX = 900 // the furthest one move takes a note
@@ -454,7 +455,7 @@ export function layoutDiagram({ nodes, edges, groups = [], direction = 'TB' }) {
         const mid = { x: p.x + (q.x - p.x) * line.at, y: p.y + (q.y - p.y) * line.at }
         chip = { x: mid.x - s.width / 2, y: mid.y - s.height / 2, width: s.width, height: s.height }
         // Another line's label in the same place.
-        for (const other of chips) if (overlaps(chip, grow(other.chip, 4))) found.push({ id: null, kind: 'labels', chip, line })
+        for (const other of chips) if (overlaps(chip, grow(other.chip, LABELS_APART))) found.push({ id: null, kind: 'labels', chip, line })
         chips.push({ chip, line })
       }
       for (const id of everything) {
