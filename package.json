@@ -26,7 +26,7 @@
     "test:stripe-catalog": "node --test scripts/stripe-catalog.test.mjs",
     "test:pro": "node --test scripts/pro-now-and-credits.test.mjs scripts/pro-billing.test.mjs scripts/meter-pro.test.mjs scripts/stripe-catalog.test.mjs",
     "test:team-export": "node --test scripts/team-export.test.mjs scripts/team-isolation.test.mjs",
-    "test:mermaid": "node --test scripts/mermaid-read.test.mjs scripts/mermaid-export.test.mjs scripts/mermaid-api.test.mjs scripts/mermaid-limits.test.mjs"
+    "test:mermaid": "node --test scripts/mermaid-read.test.mjs scripts/mermaid-export.test.mjs scripts/mermaid-api.test.mjs scripts/mermaid-limits.test.mjs scripts/mermaid-layout.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.30.0"

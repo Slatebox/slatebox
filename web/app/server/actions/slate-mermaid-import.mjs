@@ -6,7 +6,7 @@ import { mermaidProblem } from './slate-mermaid-export.mjs'
 import { sharedSaveConditions } from '../methods/native-slate-save.mjs'
 import { privateSlateDocument } from '../private-slate-document.mjs'
 import { slatePreview } from '../../imports/api/common/slate-preview.mjs'
-import { diagramPlans, importOrigin, parseMermaid, MERMAID_MAX_LENGTH } from '../../imports/api/common/mermaid/index.mjs'
+import { diagramPlans, importOrigin, lastNoteLook, parseMermaid, MERMAID_MAX_LENGTH } from '../../imports/api/common/mermaid/index.mjs'
 
 const USER_MESSAGE = 'Import Mermaid'
 
@@ -63,6 +63,8 @@ async function importInto(principal, input, model, { deps, mode, now, idempotenc
     existingIds: drawnNow.map((node) => node?.options?.id).filter((id) => typeof id === 'string'),
     existingConnectorIds: drawnNow.flatMap((node) => (node?.relationships?.associations || []).map((a) => a.id).filter(Boolean)),
     origin: importOrigin(drawnNow),
+    // The new notes take after the slate's own last note, as a note a person adds does.
+    noteStyle: lastNoteLook(slate.nodes),
   })
   const url = new URL('/canvas/' + slate.shareId, deps.appOrigin()).href
   if (mode === 'preview') {

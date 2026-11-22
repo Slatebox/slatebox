@@ -3,5 +3,5 @@
 // public .mmd address) and the app's Mermaid dialog.
 export { parseMermaid, extractMermaid, MermaidError, MERMAID_MAX_LENGTH, MERMAID_LIMITS } from './parse.mjs'
 export { slateToMermaid, slateGraph, mermaidFormats, inferDirection, MERMAID_FORMATS } from './export.mjs'
-export { diagramPlans, drawingOf, importOrigin, OPERATIONS_PER_PLAN, FRAME_STYLE, SHAPE_TO_SLATE } from './plan.mjs'
+export { diagramPlans, drawingOf, importOrigin, lastNoteLook, OPERATIONS_PER_PLAN, FRAME_STYLE, NOTE_STYLE, SHAPE_TO_SLATE } from './plan.mjs'
 export { encodeLabel, decodeLabel, quoted } from './text.mjs'

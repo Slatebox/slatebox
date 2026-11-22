@@ -512,7 +512,7 @@ function parseFlowchart(text, headLine) {
     }
     const members = block.mentions.filter((id) => id !== block.id && !claimed.has(id))
     members.forEach((id) => claimed.add(id))
-    subgraphs.push({ id: block.id, title: block.title, nodes: members, direction: block.direction })
+    subgraphs.push({ id: block.id, title: block.title, nodes: members, direction: block.direction, line: block.line })
   }
 
   const keyword = (word) => {
@@ -585,8 +585,8 @@ function parseFlowchart(text, headLine) {
   return {
     type: 'flowchart',
     direction,
-    nodes: [...nodes.values()].map(({ id, text, shape, style, link }) => ({
-      id, text, shape, ...(style && { style }), ...(link && { link }),
+    nodes: [...nodes.values()].map(({ id, text, shape, style, link, line }) => ({
+      id, text, shape, ...(style && { style }), ...(link && { link }), line,
     })),
     edges,
     subgraphs,

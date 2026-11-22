@@ -16,6 +16,7 @@ import { mountMermaidFiles } from '../web/app/server/actions/mermaid-file.mjs'
 import { API_TOKEN_SCOPES } from '../web/app/server/api-token-core.mjs'
 import { memoryDriverCollection, memoryMeteorCollection, serve } from './action-test-stores.mjs'
 import { mermaidStructure } from './mermaid-oracle.mjs'
+import { NOTE_STYLE } from '../web/app/imports/api/common/mermaid/plan.mjs'
 
 const { applyPlanToJSON } = createRequire(new URL('../web/app/package.json', import.meta.url))('slateboxjs/operations')
 
@@ -41,7 +42,7 @@ function makeWorld() {
     options: { name: 'Demo', isPrivate: true },
     nodes: [
       { ...note('a', 'Plan', 0, 0), relationships: { associations: [{ id: 'a->b', parentId: 'a', childId: 'b', label: 'then' }] } },
-      note('b', 'Ship "it"', 300, 0),
+      { ...note('b', 'Ship "it"', 300, 0), options: { ...note('b', 'Ship "it"', 300, 0).options, backgroundColor: '#e2f0d9', borderColor: '#38761d' } },
     ],
   })
   const open = add({
@@ -253,6 +254,9 @@ test('import adds real notes and lines beside what a slate holds, and open canva
   assert.equal(byId.s3.shape, 'diamond')
   assert.equal(byId.team.text, 'Team')
   assert.ok(byId.s1.xPos > 480, 'to the right of the slate\'s own notes')
+  // The new notes take after the slate's last note, as a note a person adds does.
+  assert.equal(byId.s1.backgroundColor, '#e2f0d9')
+  assert.equal(byId.s1.borderColor, '#38761d')
   const line = world.demo.nodes.flatMap((n) => n.relationships.associations).find((a) => a.parentId === 's2')
   assert.equal(line.label, 'maybe')
   assert.equal(line.lineDash, 'dotted')
@@ -304,6 +308,8 @@ test('import with no slate makes a new private slate of the caller\'s; a mind ma
   assert.equal(row.options.isPrivate, true)
   assert.equal(row.options.mindMapMode, true)
   assert.equal(row.nodes.length, 3)
+  // On a new slate the notes look like the first note a person adds there.
+  assert.ok(row.nodes.every((n) => n.options.backgroundColor === NOTE_STYLE.backgroundColor), row.nodes.map((n) => n.options.backgroundColor).join(' '))
   assert.equal(made.body.url, `https://app.example/canvas/${made.body.shareId}`)
   assert.equal(made.body.kind, 'mindmap')
   // The front matter title names a slate when no name is given.

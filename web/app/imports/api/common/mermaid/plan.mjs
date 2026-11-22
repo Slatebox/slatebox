@@ -34,6 +34,10 @@ const MIND_TO_SLATE = {
   cloud: 'ellipse',
 }
 
+// A note as the app draws a new one on a slate with no notes yet (ui/components/node/addNote.js
+// noteBase): the import's notes look like the notes a person adds, not the engine's fallback.
+export const NOTE_STYLE = Object.freeze({ backgroundColor: '#23aad6', foregroundColor: '#000000' })
+
 // A subgraph is drawn as a frame: a light note behind its notes, its title at the top.
 export const FRAME_STYLE = {
   backgroundColor: '#f3f6fa',
@@ -41,6 +45,7 @@ export const FRAME_STYLE = {
   borderWidth: 1,
   borderStyle: 'dashed',
   foregroundColor: '#2c3a4b',
+  textXAlign: 'left', // top left, so a line into the frame passes beside its title
   textYAlign: 'top',
   fontSize: 16,
 }
@@ -83,6 +88,33 @@ function lineStyle(edge) {
   return style
 }
 
+/**
+ * The look an imported note starts from: the app's new-note look, or on a slate that already has
+ * notes, its last note's colours (a new note takes after it, as addNote does in the app).
+ */
+export function newNoteStyle(look) {
+  const style = { ...NOTE_STYLE }
+  for (const key of ['backgroundColor', 'borderColor', 'foregroundColor']) if (COLOR.test(look?.[key] ?? '')) style[key] = look[key]
+  // Another fill without its text colour: the canvas picks a text colour that reads on it.
+  if (COLOR.test(look?.backgroundColor ?? '') && !COLOR.test(look?.foregroundColor ?? '')) delete style.foregroundColor
+  return style
+}
+
+/**
+ * The look a slate's next note takes after: its last own note that is drawn as a note (not an
+ * imported frame, not an invisible text note). Undefined when it has none.
+ */
+export function lastNoteLook(nodes = []) {
+  for (let k = nodes.length - 1; k >= 0; k -= 1) {
+    const o = nodes[k]?.options
+    if (!o) continue
+    const frame = o.backgroundColor === FRAME_STYLE.backgroundColor && o.borderStyle === FRAME_STYLE.borderStyle
+    if (frame || o.opacity === 0) continue
+    return { backgroundColor: o.backgroundColor, borderColor: o.borderColor, foregroundColor: o.foregroundColor }
+  }
+  return undefined
+}
+
 function noteStyle(look = {}) {
   const style = {}
   if (COLOR.test(look.fill ?? '')) style.backgroundColor = look.fill
@@ -95,21 +127,24 @@ function noteStyle(look = {}) {
  * A diagram model (parse.mjs) as a drawing: notes, frames and lines with their positions,
  * before any ids are given.
  */
-export function drawingOf(model) {
+export function drawingOf(model, base = NOTE_STYLE) {
   const warnings = [...(model.warnings || [])]
+  // What the source writes first comes first: steps and subgraphs by the line they start on.
+  const sourceOrder = (item, k) => (Number.isFinite(item.line) ? item.line * 100000 : 0) + k
   if (model.type === 'flowchart') {
-    const notes = model.nodes.map((node) => {
+    const notes = model.nodes.map((node, k) => {
       const shape = SHAPE_TO_SLATE[node.shape] || 'rectangle'
       return {
         name: node.id,
         text: node.text,
         shape,
-        style: noteStyle(node.style),
+        order: sourceOrder(node, k),
+        style: { ...base, ...noteStyle(node.style) },
         ...(node.link && { link: node.link }),
         ...noteSize(node.text, shape),
       }
     })
-    const frames = model.subgraphs.map((s) => ({ name: s.id, title: s.title, members: s.nodes, direction: s.direction }))
+    const frames = model.subgraphs.map((s, k) => ({ name: s.id, title: s.title, members: s.nodes, direction: s.direction, order: sourceOrder(s, k) }))
     const lines = model.edges.map((edge) => ({ from: edge.from, to: edge.to, style: lineStyle(edge) }))
     return { kind: 'flowchart', direction: model.direction, notes, frames, lines, warnings }
   }
@@ -118,7 +153,7 @@ export function drawingOf(model) {
     const lines = []
     const walk = (item) => {
       const shape = MIND_TO_SLATE[item.shape] || 'rectangle'
-      notes.push({ name: item.id, text: item.text, shape, style: {}, ...noteSize(item.text, shape) })
+      notes.push({ name: item.id, text: item.text, shape, style: { ...base }, ...noteSize(item.text, shape) })
       for (const child of item.children) {
         lines.push({ from: item.id, to: child.id, style: { showParentArrow: false, showChildArrow: false } })
         walk(child)
@@ -132,7 +167,7 @@ export function drawingOf(model) {
       const length = task.duration ? `\n${task.duration}` : ''
       const text = `${task.name}${length}`
       const shape = task.tags.includes('milestone') ? 'diamond' : 'rectangle'
-      return { name: task.id, text, shape, style: {}, ...noteSize(text, shape) }
+      return { name: task.id, text, shape, style: { ...base }, ...noteSize(text, shape) }
     })
     const frames = model.sections.map((section) => ({
       name: section.id,
@@ -153,18 +188,18 @@ export function drawingOf(model) {
  * options.existingIds: note and connector ids already on the slate.
  * options.origin: where the diagram's top-left corner goes.
  */
-export function diagramPlans(model, { existingIds = [], existingConnectorIds = [], origin = { x: 0, y: 0 } } = {}) {
-  const drawing = drawingOf(model)
+export function diagramPlans(model, { existingIds = [], existingConnectorIds = [], origin = { x: 0, y: 0 }, noteStyle: look } = {}) {
+  const drawing = drawingOf(model, newNoteStyle(look))
   const idFor = noteIds(existingIds)
   const frameIds = new Map(drawing.frames.map((frame) => [frame.name, idFor(frame.name)]))
   const noteId = new Map(drawing.notes.map((note) => [note.name, idFor(note.name)]))
   const endId = (name) => noteId.get(name) ?? frameIds.get(name)
 
   const layout = layoutDiagram({
-    nodes: drawing.notes.map((note) => ({ id: note.name, width: note.width, height: note.height })),
-    edges: drawing.lines,
+    nodes: drawing.notes.map((note) => ({ id: note.name, width: note.width, height: note.height, order: note.order })),
+    edges: drawing.lines.map((line) => ({ from: line.from, to: line.to, label: line.style.label || '' })),
     groups: drawing.frames.map((frame) => ({
-      id: frame.name, title: frame.title, members: frame.members, direction: frame.direction,
+      id: frame.name, title: frame.title, members: frame.members, direction: frame.direction, order: frame.order,
     })),
     direction: drawing.direction,
   })
