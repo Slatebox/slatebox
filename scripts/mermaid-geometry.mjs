@@ -2,11 +2,13 @@
 // and frames (add_nodes) and the lines (connect_nodes), drawn the way the canvas draws them.
 //   - A line runs straight between its two notes' centres and is drawn from border to border
 //     (the canvas's connectors aim each end at the other note's centre).
-//   - Its label sits at the middle of the drawn line, in a 13px chip (svg.connectable setLabel).
+//   - Its label sits at the middle of the drawn line, or as far along it as the line's
+//     labelPosition says, in a 13px chip (svg.connectable setLabel / positionLabel).
 //   - A frame's title sits in the top-left corner, under FRAME_STYLE.
 // problems() lists every way a drawing breaks the import's layout rules:
 //   1. a line passes through a note that is not one of its ends (or a frame holding neither end);
-//   2. a label covers a note, a frame's title, or a frame that holds neither end of its line;
+//   2. a label covers a note, a frame's title, a frame that holds neither end of its line, or
+//      another label;
 //   3. two boxes overlap without one holding the other (a note outside a frame overlaps it).
 import { FRAME_STYLE } from '../web/app/imports/api/common/mermaid/plan.mjs'
 
@@ -25,7 +27,8 @@ export function drawingFromPlans(plans) {
       if (op.kind === 'add_nodes') {
         const frame = op.style?.borderStyle === FRAME_STYLE.borderStyle && op.style?.textYAlign === 'top' && op.style?.backgroundColor === FRAME_STYLE.backgroundColor
         boxes.set(op.ids[0], { id: op.ids[0], x: op.x, y: op.y, width: op.width, height: op.height, text: op.text, frame, style: op.style || {} })
-      } else if (op.kind === 'connect_nodes') lines.push({ from: op.from.ids[0], to: op.to.ids[0], label: op.style?.label || '' })
+      } else if (op.kind === 'connect_nodes')
+        lines.push({ from: op.from.ids[0], to: op.to.ids[0], label: op.style?.label || '', at: op.style?.labelPosition ?? 0.5 })
     }
   }
   return { boxes, lines }
@@ -87,6 +90,7 @@ export function segmentHitsBox(p, q, box) {
 
 export function problems({ boxes, lines }) {
   const found = []
+  const chips = []
   const all = [...boxes.values()]
   const frames = all.filter((b) => b.frame)
   const name = (b) => `"${b.text}"`
@@ -119,9 +123,11 @@ export function problems({ boxes, lines }) {
     }
     // 2. The label.
     if (line.label) {
-      const mid = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }
+      const mid = { x: p.x + (q.x - p.x) * line.at, y: p.y + (q.y - p.y) * line.at }
       const { width, height } = labelSize(line.label)
       const chip = { x: mid.x - width / 2, y: mid.y - height / 2, width, height }
+      for (const other of chips) if (overlap(chip, other.chip)) found.push(`the labels "${other.label}" and "${line.label}" overlap`)
+      chips.push({ chip, label: line.label })
       for (const other of all) {
         if (other.frame) {
           if (overlap(chip, titleBox(other))) found.push(`the label "${line.label}" covers the title of ${name(other)}`)

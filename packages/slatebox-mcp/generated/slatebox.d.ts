@@ -878,6 +878,8 @@ interface CanvasPlan {
       /** (0 to 1) */
       lineCurviness?: number;
       lineDash?: "solid" | "dashed" | "dotted";
+      /** (0.05 to 0.95) */
+      labelPosition?: number;
       showParentArrow?: boolean;
       showChildArrow?: boolean;
     };
@@ -1013,6 +1015,8 @@ interface CanvasPlan {
       /** (0 to 1) */
       lineCurviness?: number;
       lineDash?: "solid" | "dashed" | "dotted";
+      /** (0.05 to 0.95) */
+      labelPosition?: number;
       showParentArrow?: boolean;
       showChildArrow?: boolean;
       ends?: "follow" | "pinned";
@@ -1235,6 +1239,8 @@ interface SlateRead {
     lineCurviness?: unknown;
     /** Solid, dashed or dotted line. */
     lineDash?: unknown;
+    /** Where the label sits along the line, from near its start (0.05) to near its end (0.95); the middle (0.5) when unset. */
+    labelPosition?: unknown;
     /** Arrowhead at the starting note. */
     showParentArrow?: unknown;
     /** Arrowhead at the far end. */

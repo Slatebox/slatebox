@@ -31,6 +31,8 @@ const LABEL_CLEAR = 10 // how far a label keeps from a note
 const LANE = 30 // a lane for a line that skips layers, across
 const ROUNDS = 40 // rounds of moving notes out of the way
 const PUSH_MAX = 900 // the furthest one move takes a note
+// Where a label may sit along its line (labelPosition), tried in turn when the middle is taken.
+const LABEL_PLACES = [0.35, 0.65, 0.25, 0.75, 0.2, 0.8]
 const WORK = 4_000_000 // checks the rounds may spend, so a huge diagram stays quick
 const TOP = Symbol('top')
 
@@ -74,7 +76,8 @@ export function noteSize(text, shape = 'rectangle') {
 /**
  * nodes: [{id, width, height, order}], edges: [{from, to, label}], groups: [{id, title, members:
  * [ids of nodes and groups], direction, order}], direction: TB|BT|LR|RL.
- * Returns {nodes: Map id -> {x, y}, groups: Map id -> {x, y, width, height}, width, height}
+ * Returns {nodes: Map id -> {x, y}, groups: Map id -> {x, y, width, height}, width, height,
+ * labelAt: Map edge index -> place along the line for a label moved off the middle}
  * (top-left corners).
  */
 export function layoutDiagram({ nodes, edges, groups = [], direction = 'TB' }) {
@@ -419,19 +422,26 @@ export function layoutDiagram({ nodes, edges, groups = [], direction = 'TB' }) {
     }
     descendantsOf.set(group.id, all)
   }
-  const drawnLines = edges
-    .filter((e) => e.from !== e.to && (size.has(e.from) || groupById.has(e.from)) && (size.has(e.to) || groupById.has(e.to)))
-    .map((e) => {
-      const ends = new Set([e.from, e.to])
-      const holders = new Set([...ancestorsOf(e.from), ...ancestorsOf(e.to)])
-      const behind = new Set([...(descendantsOf.get(e.from) || []), ...(descendantsOf.get(e.to) || [])])
-      return { ...e, ends, holders, behind }
-    })
+  // The lines the slate will hold: one from a note to another (a repeat is drawn once), none
+  // from a note to itself, as plan.mjs draws them.
+  const pairs = new Set()
+  const drawnLines = []
+  edges.forEach((e, index) => {
+    if (e.from === e.to || !(size.has(e.from) || groupById.has(e.from)) || !(size.has(e.to) || groupById.has(e.to))) return
+    const pair = `${e.from}\u0000${e.to}`
+    if (pairs.has(pair)) return
+    pairs.add(pair)
+    const ends = new Set([e.from, e.to])
+    const holders = new Set([...ancestorsOf(e.from), ...ancestorsOf(e.to)])
+    const behind = new Set([...(descendantsOf.get(e.from) || []), ...(descendantsOf.get(e.to) || [])])
+    drawnLines.push({ ...e, index, ends, holders, behind, at: 0.5, tried: 0 })
+  })
   const everything = [...size.keys(), ...groupById.keys()]
   let work = 0
 
   function findProblems(drawn) {
     const found = []
+    const chips = []
     const boxOf = (id) => drawn.boxes.get(id)
     for (const line of drawnLines) {
       const a = boxOf(line.from)
@@ -441,8 +451,11 @@ export function layoutDiagram({ nodes, edges, groups = [], direction = 'TB' }) {
       let chip = null
       if (line.label) {
         const s = labelSize(line.label)
-        const mid = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }
+        const mid = { x: p.x + (q.x - p.x) * line.at, y: p.y + (q.y - p.y) * line.at }
         chip = { x: mid.x - s.width / 2, y: mid.y - s.height / 2, width: s.width, height: s.height }
+        // Another line's label in the same place.
+        for (const other of chips) if (overlaps(chip, grow(other.chip, 4))) found.push({ id: null, kind: 'labels', chip, line })
+        chips.push({ chip, line })
       }
       for (const id of everything) {
         work += 1
@@ -534,6 +547,32 @@ export function layoutDiagram({ nodes, edges, groups = [], direction = 'TB' }) {
     if (!found.length) break
     const moved = new Set()
     for (const problem of found) {
+      // A label in the way slides along its own line first; notes move only when that fails.
+      if ((problem.kind === 'label' || problem.kind === 'labels' || problem.kind === 'own-label') && !moved.has(`label:${problem.line.index}`)) {
+        const line = problem.line
+        if (line.tried < LABEL_PLACES.length) {
+          line.at = LABEL_PLACES[line.tried]
+          line.tried += 1
+          moved.add(`label:${line.index}`)
+          continue
+        }
+      }
+      if (problem.kind === 'labels') {
+        // Every place along the line is taken: give its layers more room.
+        const a = problem.line.from
+        const b = problem.line.to
+        let block = blockOf.get(a)
+        while (block && memberIn(block, b) === undefined) block = blockOf.get(block.id)
+        if (!block || block.rows) continue
+        const ia = block.layers.findIndex((l) => l.includes(memberIn(block, a)))
+        const ib = block.layers.findIndex((l) => l.includes(memberIn(block, b)))
+        if (ia < 0 || ib < 0 || ia === ib) continue
+        const i = Math.min(ia, ib)
+        if (moved.has(`gap:${String(block.key)}:${i}`)) continue
+        moved.add(`gap:${String(block.key)}:${i}`)
+        block.extraGap[i] += 40
+        continue
+      }
       if (problem.kind === 'title') {
         // A line into a frame across its title: move the frame's contents right of the title.
         const block = blocks.get(problem.id)
@@ -646,7 +685,9 @@ export function layoutDiagram({ nodes, edges, groups = [], direction = 'TB' }) {
     drawn = measure()
   }
 
-  return { nodes: drawn.nodes, groups: drawn.groups, width: drawn.width, height: drawn.height }
+  // Where each line's label sits, by the line's place in `edges`, when not the middle.
+  const labelAt = new Map(drawnLines.filter((l) => l.label && l.at !== 0.5).map((l) => [l.index, l.at]))
+  return { nodes: drawn.nodes, groups: drawn.groups, width: drawn.width, height: drawn.height, labelAt }
 }
 
 // ─── Geometry ──────────────────────────────────────────────────────────────────────────

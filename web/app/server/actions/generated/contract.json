@@ -396,6 +396,9 @@
                 "lineDash": {
                   "description": "Solid, dashed or dotted line."
                 },
+                "labelPosition": {
+                  "description": "Where the label sits along the line, from near its start (0.05) to near its end (0.95); the middle (0.5) when unset."
+                },
                 "showParentArrow": {
                   "description": "Arrowhead at the starting note."
                 },
@@ -2449,6 +2452,11 @@
                                 "dotted"
                               ]
                             },
+                            "labelPosition": {
+                              "type": "number",
+                              "minimum": 0.05,
+                              "maximum": 0.95
+                            },
                             "showParentArrow": {
                               "type": "boolean"
                             },
@@ -3032,6 +3040,11 @@
                                 "dashed",
                                 "dotted"
                               ]
+                            },
+                            "labelPosition": {
+                              "type": "number",
+                              "minimum": 0.05,
+                              "maximum": 0.95
                             },
                             "showParentArrow": {
                               "type": "boolean"

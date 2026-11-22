@@ -258,6 +258,9 @@ export function diagramPlans(model, { existingIds = [], existingConnectorIds = [
   let dropped = 0
   let loops = 0
   let unknown = 0
+  drawing.lines.forEach((line, index) => {
+    if (layout.labelAt.has(index)) line.style = { ...line.style, labelPosition: Math.round(layout.labelAt.get(index) * 100) / 100 }
+  })
   for (const line of drawing.lines) {
     const from = endId(line.from)
     const to = endId(line.to)

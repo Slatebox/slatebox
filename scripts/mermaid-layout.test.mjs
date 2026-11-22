@@ -126,6 +126,11 @@ const HARD = {
   'right to left': `flowchart RL
   a -->|"one"| b -->|"two"| c
   a -->|"over"| c`,
+  'request and response between the same two notes': `flowchart LR
+  client["Client"] -->|"request"| server["Server"]
+  server -->|"response"| client
+  server -->|"query"| db[("Database")]
+  db -->|"rows"| server`,
   'a crossing in the middle': `flowchart TD
   a --> c & d
   b --> c & d
