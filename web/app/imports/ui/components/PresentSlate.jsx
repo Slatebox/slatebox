@@ -18,6 +18,7 @@ import Grid from '@mui/material/Grid2'
 import PublishIcon from '@mui/icons-material/Publish'
 import SettingsIcon from '@mui/icons-material/Settings'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
+import PaletteIcon from '@mui/icons-material/Palette'
 import Popover from '@mui/material/Popover'
 import CircularProgress from '@mui/material/CircularProgress'
 import List from '@mui/material/List'
@@ -51,10 +52,13 @@ import {
 } from './presentations/presentationRuntime.mjs'
 import { completeDeck, isTrivialLayout, planFailureReason } from './presentations/presentationPlan.mjs'
 import { planArrival } from './presentations/presentationSteps.mjs'
+import { composeDeck, deckRecord } from './presentations/presentationCompose.mjs'
+import StyleSheet from './presentations/StyleSheet'
 import PayNotice from './PayNotice'
 
 // How long the presenter waits for the AI's plan before it keeps the automatic one.
-// The server stops at 17 s (PLAN_TIME_LIMIT_MS); this is that and the way back.
+// The server stops at 17 s (PLAN_TIME_LIMIT_MS), and finds the deck's pictures in what is left
+// of 19 s (DECK_TIME_LIMIT_MS); this is that and the way back.
 const PLAN_TIMEOUT_MS = 20_000
 const PLANNING = 'Planning with Slatebox…'
 const noPlan = (why) => `Slatebox's plan is unavailable: ${why}${/[.!?]$/.test(why) ? '' : '.'} Showing an automatic grouping of the slate.`
@@ -63,6 +67,27 @@ const noticeFor = (result) => (result.trivial ? null : result.empty ? result.rea
 // A saved deck played over the slate as it is now: notes that are gone are left out, notes added
 // since it was made are shown (see completeDeck).
 const playDeck = (viewpoints, layout, scenes) => completeDeck(reconcileViewpoints(viewpoints, layout, scenes), layout)
+// A deck with its look (an art direction and a style) is composed from the slate as it is now:
+// its steps are the viewpoints played, its look what the live canvas draws. → { viewpoints, look }
+// or null for a deck without a look.
+function styledDeck(saved, layout) {
+  if (!saved?.direction?.steps || !layout) return null
+  try {
+    const deck = composeDeck(layout, saved.direction, { style: saved.style || saved.direction.style })
+    return { viewpoints: deck.steps, look: { direction: saved.direction, style: deck.style } }
+  } catch (error) {
+    console.error('The styled deck could not be composed:', error)
+    return null
+  }
+}
+// A copy of the slate for the live canvas the presenter plays on (never saved back).
+function slateCopy(slate) {
+  try {
+    return slate?.exportJSON?.() ?? null
+  } catch {
+    return null
+  }
+}
 
 function getDominantColor(image) {
   const canvas = document.createElement('canvas')
@@ -108,6 +133,8 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
   const [slatePresentations, setSlatePresentations] = useState([])
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [refinementAnchorEl, setRefinementAnchorEl] = useState(null)
+  // The style sheet: one-click styles and the chat that refines the deck.
+  const [styleAnchorEl, setStyleAnchorEl] = useState(null)
   const [settingsAnchorEl, setSettingsAnchorEl] = useState(null)
   const [versionAnchorEl, setVersionAnchorEl] = useState(null)
   const [customPromptValue, setCustomPromptValue] = useState('')
@@ -233,7 +260,7 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
   const applyDeck = (deck) => {
     setReadyPlan(null)
     refMethods.current?.handleRestart()
-    setCurPresentation((prev) => ({ ...prev, presentationName: deck.name || prev.presentationName, viewpoints: deck.viewpoints }))
+    setCurPresentation((prev) => ({ ...prev, presentationName: deck.name || prev.presentationName, viewpoints: deck.viewpoints, ...(deck.look ? { deckLook: deck.look } : {}) }))
   }
   // Slatebox's plan has arrived. At the start of the local plan it takes its place unseen; past
   // the start the person is never moved: the plan waits for them to use it ("Use it"). A live
@@ -282,6 +309,13 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
         // rendering must not depend on a provider key or a saved deck, and the local sequence
         // stays playable while the planner works.
         const fallback = buildFallbackPresentation(preziData, slate.options.name, { scenes })
+        // The local deck, styled: the slate's kind picks its style, composed at once (no AI). A
+        // workshop (its lanes are drawn by the host, not notes) and a slate of one or two notes
+        // play over the slate's SVG instead.
+        const styledOK = !scenes.length && !isTrivialLayout(preziData)
+        const local = styledOK ? deckRecord({ layout: preziData, name: slate.options.name, scenes }) : null
+        const localLook = local ? { direction: local.direction, style: local.style } : null
+        const styledDeckOf = (saved) => (styledOK ? styledDeck(saved, preziData) : null)
         // A slate of one or two notes is its overview: there is nothing to plan or wait for.
         const trivial = isTrivialLayout(preziData)
         setPlanning((authoring || livePlanning) && !resume && !trivial)
@@ -293,17 +327,21 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
           isAnalyzing: false,
           orientData: surface.orient,
           slateSVG: surface.svg,
+          slateJSON: styledOK ? slateCopy(slate) : null,
           presentationData: preziData,
           presentationName: fallback.name,
-          viewpoints: processViewpoints(fallback.viewpoints, preziData),
+          deckLook: localLook,
+          viewpoints: local ? local.viewpoints : processViewpoints(fallback.viewpoints, preziData),
         }))
 
         if (resume) {
           // Back in a live session this tab leads: the deck everyone is following, as it is.
+          const resumed = styledDeckOf(resume.deck)
           setCurPresentation((prev) => ({
             ...prev,
             presentationName: resume.deck.name || fallback.name,
-            viewpoints: processViewpoints(reconcileViewpoints(resume.deck.viewpoints, preziData, scenes, { keep: true }), preziData),
+            deckLook: resumed?.look ?? null,
+            viewpoints: resumed?.viewpoints ?? processViewpoints(reconcileViewpoints(resume.deck.viewpoints, preziData, scenes, { keep: true }), preziData),
           }))
           return
         }
@@ -331,7 +369,9 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
           }).catch(() => null)
           if (!isMounted) return
           // An automatic deck is the local sequence of the slate as it was; play it as it is now.
-          let deck = saved?.presentation?.viewpoints && !saved.presentation.automatic
+          const savedStyled = !saved?.presentation?.automatic ? styledDeckOf(saved?.presentation) : null
+          let look = savedStyled?.look ?? localLook
+          let deck = savedStyled ? savedStyled.viewpoints : saved?.presentation?.viewpoints && !saved.presentation.automatic
             ? playDeck(saved.presentation.viewpoints, preziData, scenes) : []
           let name = deck.length ? saved.presentation.name || fallback.name : fallback.name
           if (!deck.length && livePlanning) {
@@ -342,7 +382,9 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
                 setPlanNotice(noticeFor(result))
                 setPlanRefusal(refusalOfPlan(result))
               } else if (result) {
-                deck = playDeck(result.viewpoints, preziData, scenes)
+                const planned = styledDeckOf(result)
+                deck = planned?.viewpoints ?? playDeck(result.viewpoints, preziData, scenes)
+                look = planned?.look ?? look
                 name = result.name || name
               }
             } catch (err) {
@@ -352,13 +394,15 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
             if (!isMounted) return
             setPlanning(false)
           }
-          const viewpoints = deck.length ? deck : fallback.viewpoints
+          const viewpoints = deck.length ? deck : local ? local.viewpoints : fallback.viewpoints
+          if (!deck.length) look = localLook
           if (deck.length) {
             // The deck replaces the local sequence (see arrive).
             setCurPresentation((prev) => ({ ...prev, showNarrative: saved?.presentation?.showNarrative ?? true }))
-            arrive({ name, viewpoints: processViewpoints(viewpoints, preziData) }, { live: Boolean(live) })
+            arrive({ name, viewpoints: look ? viewpoints : processViewpoints(viewpoints, preziData), look }, { live: Boolean(live) })
           }
-          live?.onDeck({ name, viewpoints: viewpoints.map(({ nodeIds, narrative, duration }) => ({ nodeIds, narrative, duration })) })
+          // Followers get the deck with its look, and compose it over their own drawing of the slate.
+          live?.onDeck({ name, viewpoints: viewpoints.map(({ nodeIds, narrative, duration }) => ({ nodeIds, narrative, duration })), ...(look ? { style: look.style, direction: look.direction } : {}) })
           return
         }
 
@@ -371,8 +415,9 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
           }
           // A saved deck plays over the slate as it is now. An automatic one is the local
           // sequence, which is already built from the slate as it is now.
-          const playable = result.automatic ? [] : playDeck(result.viewpoints, preziData, scenes)
-          if (playable.length) arrive({ name: result.name, viewpoints: processViewpoints(playable, preziData) })
+          const styled = result.automatic ? null : styledDeckOf(result)
+          const playable = styled ? styled.viewpoints : result.automatic ? [] : playDeck(result.viewpoints, preziData, scenes)
+          if (playable.length) arrive({ name: result.name, viewpoints: styled ? playable : processViewpoints(playable, preziData), look: styled?.look })
 
           if (result.version) setCurrentVersion(result.version)
           if (result.presentationId) setPresentationId(result.presentationId)
@@ -401,6 +446,8 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
         currentView: -1,
         orientData: null,
         slateSVG: null,
+        slateJSON: null,
+        deckLook: null,
         presentationData: null,
         viewpoints: [],
       }))
@@ -451,6 +498,10 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
         description: slate.options.description,
         orientData: curPresentation.orientData,
         viewpoints: curPresentation.viewpoints,
+        // The deck's look and the slate it plays on: the published page plays it on a live canvas.
+        direction: curPresentation.deckLook?.direction,
+        style: curPresentation.deckLook?.style,
+        slateJSON: curPresentation.slateJSON,
         manualViewpointChanges,
         intentionId:
           slate.options.ai?.isConversation?.intentionInitialData?.intentionId,
@@ -535,7 +586,13 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
         setTimeout(() => setPublishMessage(null), 7000)
       }
 
-      if (result) {
+      const refined = result && curPresentation.deckLook && styledDeck(result, presentationData || curPresentation.presentationData)
+      if (refined) {
+        setPlanNotice(null)
+        setCurrentVersion(result.version)
+        setPresentationId(result.presentationId)
+        setCurPresentation((prev) => ({ ...prev, viewpoints: refined.viewpoints, deckLook: refined.look }))
+      } else if (result) {
         setPlanNotice(null)
         const processedViewpoints = processViewpoints(
           playDeck(result.viewpoints, presentationData || curPresentation.presentationData, workshopScenes(workshop)),
@@ -574,6 +631,30 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
     } else {
       setTimeout(() => setPublishMessage(null), 5000)
     }
+  }
+
+  // One click: the same steps composed in another style, at once, and saved without the AI.
+  const handleStylePick = async (id) => {
+    const look = curPresentation.deckLook
+    if (!look?.direction || !curPresentation.presentationData) return
+    const deck = composeDeck(curPresentation.presentationData, look.direction, { style: { id } })
+    setCurPresentation((prev) => ({ ...prev, deckLook: { direction: look.direction, style: deck.style }, viewpoints: deck.steps }))
+    if (!presentationId) return
+    try {
+      await Meteor.callAsync(CONSTANTS.methods.presentations.update, { presentationId, style: { id } })
+    } catch (err) {
+      setPublishMessage(`The style could not be saved: ${planFailureReason(err)}`)
+      setTimeout(() => setPublishMessage(null), 6000)
+    }
+  }
+  // The chat: Slatebox reworks the deck (words, layouts, pictures, style) in its conversation.
+  const handleStyleRefine = (ask) => {
+    setStyleAnchorEl(null)
+    handleRefinementClose({ customPrompt: ask })
+  }
+  const handleRemix = () => {
+    const id = curPresentation.deckLook?.style?.id
+    handleStyleRefine(`Recompose this deck for the ${id} style: choose layouts, headlines and pictures that suit it, and keep the style ${id}.`)
   }
 
   const handleRefinementClick = (event) => {
@@ -1439,6 +1520,22 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
               </IconButton>
               </span>
             </Tooltip>
+            {curPresentation.deckLook?.direction && (
+              <Tooltip title="Style">
+                <span>
+                  <IconButton
+                    aria-label="Presentation style"
+                    aria-haspopup="dialog"
+                    data-present-style-button
+                    onClick={(event) => setStyleAnchorEl(event.currentTarget)}
+                    disabled={planning}
+                    sx={{ color: curPresentation?.presentationControlsColorKey || 'common.white' }}
+                  >
+                    <PaletteIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )}
             <Tooltip title="Presentation Settings">
               <IconButton
                 onClick={handleSettingsClick}
@@ -1705,6 +1802,16 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
           </List>
         </Box>
       </Popover>
+
+      <StyleSheet
+        anchorEl={styleAnchorEl}
+        onClose={() => setStyleAnchorEl(null)}
+        current={curPresentation.deckLook?.style?.id}
+        onPick={handleStylePick}
+        onRefine={handleStyleRefine}
+        onRemix={handleRemix}
+        busy={planning || Boolean(curPresentation.isAnalyzing)}
+      />
 
       <Popover
         open={Boolean(refinementAnchorEl)}

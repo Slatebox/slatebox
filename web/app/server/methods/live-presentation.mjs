@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { sharedSaveConditions } from './native-slate-save.mjs'
+import { liveDeckLook } from './presentationDeck.mjs'
 
 // Presenting to everyone on a slate. One session per slate, kept on the slate as
 // `livePresentation`: { sessionId, step, revision, expiresAt, deck }. The deck is the sequence the
@@ -37,7 +38,8 @@ export function readDeck(input) {
     viewpoints.push({ nodeIds: [...point.nodeIds], narrative: (point.narrative ?? '').slice(0, maxNarrative),
       duration: Number.isFinite(duration) && duration > 0 && duration <= 600_000 ? duration : 2200 })
   }
-  return { name: (input.name ?? '').slice(0, 200), viewpoints }
+  // Its look (style and art direction), so a follower plays it as the presenter does.
+  return { name: (input.name ?? '').slice(0, 200), viewpoints, ...liveDeckLook(input) }
 }
 
 // The public session ID proves possession only when paired with the unshared key

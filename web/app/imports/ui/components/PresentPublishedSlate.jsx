@@ -19,6 +19,20 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import BasePresent from './presentations/BasePresent'
 import CONSTANTS from '../../api/common/constants'
 import { currentPresentation, isMobileOrTouchDevice } from '../jotai/atoms'
+import { composeDeck } from './presentations/presentationCompose.mjs'
+import { resolveStyle } from './presentations/presentationStyles.mjs'
+
+// A published deck with its look plays on a live canvas: the slate copy it was published with,
+// its art direction composed in its style. → { deck, layout } or null.
+function publishedLook(row) {
+  if (!row?.direction?.steps || !row.slateJSON || !row.presentationData) return null
+  try {
+    const layout = typeof row.presentationData === 'string' ? JSON.parse(row.presentationData) : row.presentationData
+    return { deck: composeDeck(layout, row.direction, { style: row.style }), layout }
+  } catch {
+    return null
+  }
+}
 
 export default function PresentPublishedSlate({ slateShareId, surfaceId = 'presentMain' }) {
   const refMethods = useRef(null)
@@ -48,8 +62,9 @@ export default function PresentPublishedSlate({ slateShareId, surfaceId = 'prese
       console.log('ms taken to fetch presentation', Date.now() - startTime)
       if (!active) return
       const pinnedPrezi = pinned?.presentation
-      // Only a deck (its viewpoints and the drawing they frame) can be played.
-      if (!Array.isArray(pinnedPrezi?.viewpoints) || !pinnedPrezi.svg) { setUnavailable(true); return }
+      // Only a deck (its viewpoints and the drawing or the slate they frame) can be played.
+      const styled = publishedLook(pinnedPrezi)
+      if (!Array.isArray(pinnedPrezi?.viewpoints) || (!pinnedPrezi.svg && !styled)) { setUnavailable(true); return }
       // set the background color of the Container to match the background color of the slate
       let bg = pinnedPrezi.background || '#19241e'
       if (mobileOrTouch && bg.match(/linear-|radial-/)) {
@@ -62,7 +77,8 @@ export default function PresentPublishedSlate({ slateShareId, surfaceId = 'prese
           }
         }
       }
-      document.getElementById(surfaceId).style.background = bg
+      // A styled deck's page is its style's colour, not a forced dark theme.
+      document.getElementById(surfaceId).style.background = styled ? resolveStyle(styled.deck.style).bg : bg
 
       console.log(
         'got control controls',
@@ -75,16 +91,19 @@ export default function PresentPublishedSlate({ slateShareId, surfaceId = 'prese
         isAnalyzing: false,
         slateSVG: pinnedPrezi.svg,
         orientData: pinnedPrezi.orientData,
-        presentationData: pinnedPrezi.presentationData,
+        presentationData: styled ? styled.layout : pinnedPrezi.presentationData,
         presentationName: pinnedPrezi.name,
-        viewpoints: pinnedPrezi.viewpoints,
+        slateJSON: styled ? pinnedPrezi.slateJSON : null,
+        deckLook: styled ? { direction: pinnedPrezi.direction, style: styled.deck.style } : null,
+        viewpoints: styled ? styled.deck.steps : pinnedPrezi.viewpoints,
         autoplayOnPublish: pinnedPrezi.autoplayOnPublish ?? false,
         isEmbedded: pinnedPrezi.isEmbedded ?? false,
         showControls: !pinnedPrezi.isEmbedded,
         playOnHover: pinnedPrezi.playOnHover ?? false,
         isPublic: pinnedPrezi.isPublic ?? false,
         isFeatured: pinnedPrezi.isFeatured ?? false,
-        showNarrative: pinnedPrezi.showNarrative ?? true,
+        // The deck's own setting: a dynamic deck saved without narrative stays without it.
+        showNarrative: pinnedPrezi.showNarrative ?? false,
         presentationMenuBgColorKey: pinned.presentationMenuBgColorKey,
         presentationControlsColorKey: pinned.presentationControlsColorKey,
         logoUrl: pinned.logoUrl,

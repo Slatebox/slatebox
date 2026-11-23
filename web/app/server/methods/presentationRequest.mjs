@@ -8,6 +8,9 @@ import {
   isTrivialLayout, normalizePresentationPlan, planFailureReason, planHints, PLAN_VERSION,
 } from '../../imports/ui/components/presentations/presentationPlan.mjs'
 import { refusalOf } from '../metering/refusal-pay.mjs'
+import { STEP_LAYOUTS, normalizeDirection, CAPTION_WORDS } from '../../imports/ui/components/presentations/presentationCompose.mjs'
+import { STYLES, STYLE_IDS } from '../../imports/ui/components/presentations/presentationStyles.mjs'
+import { MASK_NAMES } from '../../imports/ui/components/presentations/presentationPaths.mjs'
 
 /** The most notes a slate may have for the AI to plan it. A larger slate gets the automatic plan. */
 export const MAX_PLAN_NOTES = 300
@@ -92,23 +95,43 @@ const NARRATIVE_WORDS = 15
 
 const SEGMENT_PROMPT = `You plan presentations of a slate, a canvas of notes. The presenter's camera moves from segment to segment: each segment frames a set of notes together and shows a short narrative line. The presenter opens and closes with the whole slate itself: you write only the opening and closing narratives, never their notes. You receive the notes as [id, text, x, y, width, height] (a seventh number is a rotation), the connections between them as [from, to], and suggested groups: notes that are connected or close to each other. Rules: 1) Plan meaningful segments, never one note at a time: a cluster of related notes, a branch, a lane or column, or a note with its connected neighbours. Start from the suggested groups, and merge or split them when the meaning calls for it. A segment usually has two to six notes; a single note only when it stands on its own. Use at most 24 segments. 2) Order the segments so the story flows: from the main idea to its parts, following the connections, otherwise in reading order (top to bottom, left to right). 3) Every note is in at least one segment. 4) The opening narrative says what the slate is about; the closing narrative sums it up. 5) Each narrative is plain and specific, at most ${NARRATIVE_WORDS} words, and says what the segment means rather than listing its notes. 6) Durations in milliseconds: a segment 2500 to 4500 (longer for more notes). Use only ids from the input. When asked to refine, give exactly the number of segments asked for, and keep each segment a meaningful group.`
 
+const STYLE_GUIDE = STYLE_IDS.map((id) => `${id} (${STYLES[id].blurb})`).join('; ')
+// Art direction: the deck is played on the live canvas in a style, with Prezi-style camera moves.
+// The AI chooses the style, the layout of each step, the words and the pictures; the composer
+// places everything in free canvas space (the AI never does geometry).
+const ART_DIRECTION = ` You also art-direct the deck, which plays on the live canvas with Prezi-style camera flights: zoom out, travel, zoom in, roll, deep zooms into small details. Make it bold, varied and delightful, never a slideshow. 1) Pick the style that fits the slate's content: ${STYLE_GUIDE}. A mind map or tree suits voyage, a process blueprint, a timeline journey, a brainstorm sketch, numbers stage, a comparison or narrative editorial, a short launch neon. 2) Write a title (at most 8 words, specific to the slate, not its name repeated), a kicker (at most 5 words), a call to action (at most 4 words) and a closing caption. 3) Give every segment a layout from: ${STEP_LAYOUTS.join(', ')}. overview frames the whole slate; dive flies into a group with a picture and a headline; hero holds on one idea with a speech bubble; treeBuild builds a branch with a brace; trace follows a ribbon from a branch back to the centre; sweep shows two groups side by side, each with a picture; compare sets two groups against each other with headings; bigNumber shows one number in huge type; quote pulls a note's own words; split pairs a picture with a headline; group frames notes plainly. Rules: start with overview; never the same layout three times in a row; alternate wide and close shots; include at least one surprising beat (bigNumber, quote, compare, trace, or a detail). A bigNumber's number must be written on the slate (or 0 for something free, or a count of the slate's notes); never invent numbers. 4) Give one dive a detail: a tiny sticker label (at most 4 characters, like $0 or MIT) and its fine print (at most 12 words from the slate), revealed only when the camera zooms deep into it. 5) Captions (the narrative) are at most ${CAPTION_WORDS} words, say what the step means, never repeat a note's text, and never use all-caps placeholder words. Headlines are at most 6 words. 6) Pictures: for dive, split, hero and sweep, ask for an image with a search query, a generation prompt and a one-line why that ties the picture to the notes' meaning (a bridge for connecting tools, a workshop for building); choose a mask from ${MASK_NAMES.join(', ')}. A picture without a why is dropped.`
+const withArt = (prompt) => `${prompt}${ART_DIRECTION}`
+
 // The intentions a slate can be made for. Each plans segments; they differ in how the published
 // deck plays and in the tone asked for.
 const INTENTIONS = {
   dynamic: {
-    prompt: `${SEGMENT_PROMPT} This slate is a dynamic, visual piece: keep the pace quick (segments 2000 to 3000), and let the narratives build on each other like one sentence told across the segments.`,
+    prompt: withArt(`${SEGMENT_PROMPT} This slate is a dynamic, visual piece: keep the pace quick (segments 2000 to 3000), and let the narratives build on each other like one sentence told across the segments.`),
     showNarrative: false,
     hideMenuOnPublish: true,
     autoplayOnPublish: true,
   },
   slideDeck: {
-    prompt: `${SEGMENT_PROMPT} This slate is laid out like slides: a segment is usually one slide's notes together, in the slides' order.`,
+    prompt: withArt(`${SEGMENT_PROMPT} This slate is laid out like slides: a segment is usually one slide's notes together, in the slides' order.`),
     showNarrative: false,
     hideMenuOnPublish: true,
     autoplayOnPublish: true,
   },
 }
-const TEMPLATE_PROMPT = `${SEGMENT_PROMPT} The notes were added to a template by a group of collaborators: find the themes in what they wrote and build the segments around those themes.`
+const TEMPLATE_PROMPT = withArt(`${SEGMENT_PROMPT} The notes were added to a template by a group of collaborators: find the themes in what they wrote and build the segments around those themes.`)
+const ART_PROMPT = withArt(SEGMENT_PROMPT)
+
+const imageSchema = {
+  type: 'object',
+  description: 'A picture for this step: searched for, else generated, else drawn from the style',
+  properties: {
+    query: { type: 'string', description: 'An image search query, 2 to 6 words' },
+    prompt: { type: 'string', description: 'A prompt to generate the picture, one sentence' },
+    why: { type: 'string', description: 'One line: how the picture shows what these notes mean' },
+    mask: { type: 'string', enum: MASK_NAMES },
+  },
+  required: ['query', 'why'],
+}
 
 /**
  * The function the AI answers with: the plan's segments and the words for its opening and closing
@@ -130,15 +153,36 @@ export const PLAN_FUNCTIONS = [
             type: 'object',
             properties: {
               nodeIds: { type: 'array', description: 'The ids of the notes this segment frames together', items: { type: 'string' } },
-              narrative: { type: 'string', description: `What this segment means, ${NARRATIVE_WORDS} words or less` },
+              narrative: { type: 'string', description: `The caption: what this segment means, ${CAPTION_WORDS} words or less` },
               duration: { type: 'number', description: 'How long the segment is shown, in milliseconds' },
+              layout: { type: 'string', enum: STEP_LAYOUTS, description: 'How the camera and stage show this segment' },
+              kicker: { type: 'string', description: 'A short label over the caption, like "01 · Free and open"' },
+              headline: { type: 'string', description: 'Big words placed beside the notes, 6 words or less' },
+              headlines: { type: 'array', items: { type: 'string' }, description: 'compare: the two sides\' headings' },
+              number: { type: 'string', description: 'bigNumber: the number, as written on the slate' },
+              numberLabel: { type: 'string', description: 'bigNumber: what the number counts' },
+              quote: { type: 'string', description: 'quote: a note\'s own words' },
+              detail: {
+                type: 'object',
+                description: 'dive: a tiny sticker the camera zooms deep into',
+                properties: { label: { type: 'string' }, fine: { type: 'string' }, caption: { type: 'string' } },
+              },
+              image: imageSchema,
+              images: { type: 'array', items: imageSchema, description: 'sweep: one picture per group' },
+              roll: { type: 'number', description: 'Camera roll in degrees, -12 to 12; 0 for level' },
             },
-            required: ['nodeIds', 'narrative', 'duration'],
+            required: ['nodeIds', 'narrative', 'duration', 'layout'],
           },
         },
         closing: { type: 'string', description: `The closing narrative over the whole slate, ${NARRATIVE_WORDS} words or less` },
+        style: { type: 'string', enum: STYLE_IDS, description: 'The style that fits this slate' },
+        title: { type: 'string', description: 'The title card, 8 words or less' },
+        kicker: { type: 'string', description: 'A kicker over the title, 5 words or less' },
+        subtitle: { type: 'string', description: 'One line under the title, 14 words or less' },
+        cta: { type: 'string', description: 'The call to action on the finale, 4 words or less' },
+        cover: imageSchema,
       },
-      required: ['name', 'description', 'opening', 'segments', 'closing'],
+      required: ['name', 'description', 'opening', 'segments', 'closing', 'style', 'title'],
     },
   },
 ]
@@ -183,7 +227,7 @@ export function slateForPrompt(layout) {
  * settingsFor(intentionId), user }
  */
 export function presentationPrompts({ layout, scenes = [], isTemplate = false }) {
-  const systemFor = ({ intentionId, isTemplate: template = false } = {}) => (template ? TEMPLATE_PROMPT : INTENTIONS[intentionId]?.prompt ?? SEGMENT_PROMPT)
+  const systemFor = ({ intentionId, isTemplate: template = false } = {}) => (template ? TEMPLATE_PROMPT : INTENTIONS[intentionId]?.prompt ?? ART_PROMPT)
   let user = `Please plan the presentation of this slate. ${slateForPrompt(layout)}`
   if (isTemplate) user += '. This slate is based on a template, so the notes\' texts give the themes, fewer than the notes under them.'
   if (scenes.length) {
@@ -191,7 +235,7 @@ export function presentationPrompts({ layout, scenes = [], isTemplate = false })
       .map((scene) => scene.nodeIds.join(' + ')).join(', then ')}. Present one segment per lane in that order, then the segments of the other notes.`
   }
   return {
-    system: SEGMENT_PROMPT,
+    system: ART_PROMPT,
     systemFor,
     settingsFor: (intentionId) => INTENTIONS[intentionId] ?? {},
     user,
@@ -283,6 +327,8 @@ export async function planWithAI({ run, request, layout, name = '', scenes = [],
       if (!onSlate) throw new Error('The provider returned no viewpoints.')
       const plan = { ...raw, ...normalizePresentationPlan({ ...raw, viewpoints: answerViewpoints(raw, layout) }, layout, { name, scenes }) }
       if (!plan.viewpoints?.length) throw new Error('The provider returned no viewpoints.')
+      // The AI's art direction, made safe (a plan in the older shape is directed from its segments).
+      plan.direction = normalizeDirection(raw, layout, { name })
       return { plan, automatic: false, response, toolUse }
     })
   } catch (error) {

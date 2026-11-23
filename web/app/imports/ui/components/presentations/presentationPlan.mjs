@@ -5,10 +5,11 @@ import { layoutNotes, rotatedBounds } from './presentationFraming.mjs'
 import { presentationNodeParts } from './presentationRuntime.mjs'
 
 /**
- * Decks planned by this planner. An older deck is planned again: one note per step (1), or an AI
- * plan whose workshop lanes were placed and named as the AI liked (2).
+ * Decks planned by this planner. An older deck is planned again: one note per step (1), an AI
+ * plan whose workshop lanes were placed and named as the AI liked (2), or a deck with no style and
+ * no art direction, played as grey notes under one caption bar (3).
  */
-export const PLAN_VERSION = 3
+export const PLAN_VERSION = 4
 
 /** The most notes one segment frames; a larger group is split into its branches. */
 export const MAX_SEGMENT = 6

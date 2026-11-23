@@ -111,6 +111,8 @@ export default function Present() {
       <ThemeProvider theme={theme}>
         <Container
           maxWidth={false}
+          // Full bleed: a presentation's own canvas reaches every edge of the screen.
+          disableGutters
           component="main"
           id="presentMain"
           sx={{

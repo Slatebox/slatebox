@@ -73,6 +73,9 @@ export const currentPresentation = atom({
   currentView: -1,
   isAnalyzing: false,
   slateSVG: null,
+  // A styled deck: the slate copy its live canvas plays and its look ({ direction, style }).
+  slateJSON: null,
+  deckLook: null,
   orientData: null,
   presentationData: null,
   presentationName: '',

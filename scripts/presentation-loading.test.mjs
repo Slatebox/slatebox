@@ -3,6 +3,7 @@
 // planned, planning stops at a hard time limit with the meter's hold given back, the prompt is
 // compact, and a plan is kept for the slate version it was made for.
 import test from 'node:test'
+import { STYLE_IDS } from '../web/app/imports/ui/components/presentations/presentationStyles.mjs'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import buildFallbackPresentation from '../web/app/imports/ui/components/presentations/buildFallbackPresentation.mjs'
@@ -143,11 +144,15 @@ test('the AI answers with segments only; the overviews are added around them', a
     ['What we want and what could stop us', 'What we want', 'What could stop us', 'What happens next', 'Grow, carefully'])
   assert.deepEqual(sorted(out.plan.viewpoints[0].nodeIds), sorted(ALL))
   assert.deepEqual(sorted(out.plan.viewpoints.at(-1).nodeIds), sorted(ALL))
-  // The function asks for segments and the overviews' words, not the overviews' notes.
+  // The function asks for segments and the overviews' words, not the overviews' notes, and for
+  // the deck's art direction (its style and title card); the answer stays bounded.
   const shape = PLAN_FUNCTIONS[0].parameters
-  assert.deepEqual(shape.required, ['name', 'description', 'opening', 'segments', 'closing'])
+  assert.deepEqual(shape.required, ['name', 'description', 'opening', 'segments', 'closing', 'style', 'title'])
   assert.equal(shape.properties.viewpoints, undefined)
   assert.ok(PLAN_OUTPUT_TOKENS <= 4000)
+  // An answer without art direction is still directed: from its segments, in the slate's style.
+  assert.ok(STYLE_IDS.includes(out.plan.direction.style.id))
+  assert.deepEqual(out.plan.direction.steps.slice(1).map((step) => step.caption).slice(0, 2), ['What we want', 'What could stop us'])
 })
 
 test('the prompt is compact: the slate as rows of numbers and words, far smaller than the layout', () => {

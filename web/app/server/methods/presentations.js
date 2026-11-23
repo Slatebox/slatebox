@@ -13,7 +13,7 @@ import {
   Slates,
   OrganizationSettings,
 } from '../../imports/api/common/models'
-import { PLAN_VERSION, needsPlan, planFailureReason, planKey } from '../../imports/ui/components/presentations/presentationPlan.mjs'
+import { PLAN_VERSION, isTrivialLayout, needsPlan, planFailureReason, planKey } from '../../imports/ui/components/presentations/presentationPlan.mjs'
 import {
   EMPTY_SLATE, MAX_REFINEMENT_CHARS, PLAN_FUNCTIONS, TOO_MANY_NOTES,
   PLAN_OUTPUT_TOKENS, planEstimateMicros, planModels, planWithAI, presentationPrompts, reusableDeck, sanitizeLayout, singleFlight, slateForPrompt,
@@ -24,6 +24,11 @@ import req from './ai/req'
 import { runAIAction } from '../metering/context.mjs'
 import { resolveAIFeatureConfig } from './ai/feature-config.mjs'
 import { resolveRequestConnection } from './ai/ai-settings'
+import { deckRecord, ogCardSvg, pictureTime, resolveDirectionImages, styleChange } from './presentationDeck.mjs'
+import { composeDeck } from '../../imports/ui/components/presentations/presentationCompose.mjs'
+
+// The largest slate copy a published deck keeps for its live player (characters of JSON).
+const MAX_SLATE_JSON = 5_000_000
 
 const method = {}
 
@@ -237,10 +242,16 @@ method[CONSTANTS.methods.presentations.publish] = async ({
   viewpoints,
   manualViewpointChanges,
   intentionId,
+  direction,
+  style,
+  slateJSON,
 }) => {
   const user = await Meteor.userAsync()
   if (!user) return null
   await guardPresentation(slateShareId, user._id)
+  // The published deck plays on a live canvas: it keeps a copy of the slate as it was published
+  // (its notes are the deck's notes) and its look.
+  const slateCopy = typeof slateJSON === 'string' && slateJSON.length <= MAX_SLATE_JSON ? slateJSON : null
   const presentation = await SlatePresentations.findOneAsync({
     slateShareId,
     version,
@@ -274,6 +285,9 @@ method[CONSTANTS.methods.presentations.publish] = async ({
         orientData,
         presentationData,
         viewpoints,
+        ...(direction && typeof direction === 'object' ? { direction } : {}),
+        ...(style ? { style } : {}),
+        ...(slateCopy ? { slateJSON: slateCopy } : {}),
         url: presentationUrl,
         viewpointsManuallyChanged: manualViewpointChanges, // carry any changes forward
       },
@@ -290,7 +304,8 @@ method[CONSTANTS.methods.presentations.publish] = async ({
     try {
       await finishSnapshot(
         () => svgToPng({
-          svg: rawSVG,
+          // A styled deck's preview is its title card in its style, not a grey snapshot.
+          svg: direction?.steps ? ogCardSvg({ direction, style }) : rawSVG,
           fileName: `present_${presentation._id}_${snapshotGeneration}`,
           skipTimestamp: true,
           includeWidthHeight: true,
@@ -342,6 +357,9 @@ async function loadPresentation({ slate, selectVersion }) {
     version: existingPresentation.version,
     viewpoints: existingPresentation.viewpoints,
     automatic: existingPresentation.automatic === true,
+    // Its look: the art direction and style the presenter composes it in.
+    direction: existingPresentation.direction ?? null,
+    style: existingPresentation.style ?? null,
   }
 }
 
@@ -375,6 +393,7 @@ const userNameOf = (user) => {
 // given back, and the person gets the grouped automatic plan with the reason. `counted(estimate)`
 // is the method's runAIAction for that request.
 async function analyzePresentation(args, user, stored, layout, counted) {
+  const started = Date.now()
   const {
     slate, refinementMessage, slateChanged, showNarrative, hideMenuOnPublish, autoplayOnPublish, isPublic = false,
   } = args
@@ -446,10 +465,29 @@ async function analyzePresentation(args, user, stored, layout, counted) {
   })
 
   const { automatic, plan } = planned
-  const viewpoints = plan?.viewpoints
-  if (!Array.isArray(viewpoints) || viewpoints.length === 0) {
+  if (!Array.isArray(plan?.viewpoints) || plan.viewpoints.length === 0) {
     throw new Meteor.Error('invalid-presentation-plan', 'There is nothing on this slate to present yet.')
   }
+  // The deck: the AI's art direction (or the local one when the AI could not plan), the
+  // workshop's lanes first, composed in its style. Its pictures are searched for, else generated,
+  // within a few seconds; a picture neither finds is the style's own art (a guest, no credits, no
+  // key, no network). The model and the image connections come from settings, never from here.
+  // A workshop (its lanes are drawn by the host) and a slate of one or two notes play over the
+  // slate's SVG: their plan is kept as planned, with no style.
+  const styled = !scenes.length && !isTrivialLayout(layout)
+  let record = styled
+    ? deckRecord({ layout, direction: automatic ? null : plan.direction, name: slate.name, scenes })
+    : { viewpoints: plan.viewpoints, direction: null, style: null }
+  const imageTime = pictureTime(Date.now() - started)
+  if (styled && !automatic && !user.isAnonymous && imageTime) {
+    const direction = await resolveDirectionImages(record.direction, {
+      timeLimitMs: imageTime,
+      search: (query) => Meteor.callAsync(CONSTANTS.methods.images.search, { query }),
+      generate: (prompt) => Meteor.callAsync(CONSTANTS.methods.stabilityai.generate, { prompts: [prompt], width: 768, height: 512 }),
+    }).catch(() => record.direction)
+    record = { ...record, direction, viewpoints: composeDeck(layout, direction, { style: record.style }).steps }
+  }
+  const { viewpoints, direction, style } = record
   const name = String(plan?.name || '').trim() || `${slate.name || 'Slate'} presentation`
   const description = String(plan?.description || '').trim()
   const saveShowNarrative = showNarrative ?? intention.showNarrative ?? true
@@ -467,7 +505,7 @@ async function analyzePresentation(args, user, stored, layout, counted) {
     presentationId = replace._id
     version = replace.version
     await SlatePresentations.updateAsync({ _id: replace._id }, {
-      $set: { timestamp: Date.now(), presentationData, name, description, viewpoints, automatic: true, planVersion: PLAN_VERSION, layoutKey: planKey(layout), updated: now },
+      $set: { timestamp: Date.now(), presentationData, name, description, viewpoints, direction, style, automatic: true, planVersion: PLAN_VERSION, layoutKey: planKey(layout), updated: now },
     })
   } else {
     version = (latestDeck?.version || 0) + 1
@@ -484,6 +522,8 @@ async function analyzePresentation(args, user, stored, layout, counted) {
       name,
       description,
       viewpoints,
+      direction,
+      style,
       // Made without the AI (no provider key, no allowance): the presenter rebuilds it from the
       // slate as it is, and Present plans the slate again next time.
       automatic,
@@ -530,6 +570,8 @@ async function analyzePresentation(args, user, stored, layout, counted) {
     name,
     description,
     viewpoints,
+    direction,
+    style,
     automatic,
     // a refusal by the meter says which, with the pay sheet's action (the banner offers it)
     ...(automatic && { reason: planned.reason, ...(planned.pay && { code: planned.code, pay: planned.pay }) }),
@@ -567,6 +609,7 @@ method[CONSTANTS.methods.presentations.update] = async ({
   playOnHover,
   isPublic,
   isFeatured,
+  style,
 }) => {
   const user = await Meteor.userAsync()
   if (!user) return null
@@ -658,6 +701,13 @@ method[CONSTANTS.methods.presentations.update] = async ({
 
   if (showNarrative != null) {
     updateFields.showNarrative = showNarrative
+  }
+  // A one-click style switch: the same direction composed in the new style. The steps stay the
+  // same notes in the same order; no AI is asked and nothing is counted.
+  if (style != null) {
+    const change = styleChange(existingPresentation, style)
+    if (!change) throw new Meteor.Error('presentation-unstyled', 'This presentation has no art direction to restyle. Press Present to plan it again.')
+    Object.assign(updateFields, change)
   }
   if (viewpoints) {
     updateFields.viewpoints = viewpoints

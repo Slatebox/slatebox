@@ -46,7 +46,7 @@ export function useLivePresentation({ enabled = true, shareId, title, workshop, 
   const controlKey = active && canLead && ticket.controlKey
   // The deck does not change during a session; keep one object so the follower draws once.
   const deckSession = session && liveDeck?.sessionId === session.sessionId ? session.sessionId : null
-  const deck = useMemo(() => deckSession ? { name: liveDeck.name, viewpoints: liveDeck.viewpoints } : null, [deckSession])
+  const deck = useMemo(() => deckSession ? { name: liveDeck.name, viewpoints: liveDeck.viewpoints, style: liveDeck.style, direction: liveDeck.direction } : null, [deckSession])
   const seen = useRef(null)
   // Where the presenter has asked to be, and what the server has: a quick run of steps is sent
   // one after another, each with the revision the previous one returned.

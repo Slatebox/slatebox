@@ -3,6 +3,7 @@ import React, {
   useState,
   useEffect,
   useLayoutEffect,
+  useMemo,
   forwardRef,
   useImperativeHandle,
   useRef,
@@ -33,6 +34,9 @@ import {
 import { cameraTransform, fitFrame, inSvgPixels, unionFrame, wholeSlateFrame } from './presentationFraming.mjs'
 import { isOverviewAt, startView, stepOf } from './presentationSteps.mjs'
 import { currentPresentation, isMobileOrTouchDevice } from '../../jotai/atoms'
+import LiveStage from './LiveStage'
+import { composeDeck } from './presentationCompose.mjs'
+import { resolveStyle } from './presentationStyles.mjs'
 
 const BasePresent = forwardRef(
   (
@@ -57,6 +61,31 @@ const BasePresent = forwardRef(
     const [baseUrl, setBaseUrl] = useState(Meteor.settings.public.baseUrl)
     const [curPresentation, setCurPresentation] = useAtom(currentPresentation)
     const isMobile = useAtomValue(isMobileOrTouchDevice)
+    // A styled deck plays on a live canvas (LiveStage): its look (art direction and style), the
+    // slate's layout and a copy of the slate. Without them, the slate's SVG snapshot.
+    const liveRef = useRef(null)
+    const look = curPresentation.deckLook
+    const liveDeck = useMemo(() => {
+      if (!look?.direction?.steps || !curPresentation.slateJSON || !curPresentation.presentationData) return null
+      try {
+        const layout = typeof curPresentation.presentationData === 'string' ? JSON.parse(curPresentation.presentationData) : curPresentation.presentationData
+        return composeDeck(layout, look.direction, { style: look.style })
+      } catch (error) {
+        console.error('The styled deck could not be composed:', error)
+        return null
+      }
+    }, [look, curPresentation.slateJSON, curPresentation.presentationData])
+    const isLive = Boolean(liveDeck)
+    // The controls' height: the live stage keeps its captions and framing above them.
+    const [controlsHeight, setControlsHeight] = useState(0)
+    useEffect(() => {
+      const bar = controlsRef.current
+      if (!isLive || !bar || typeof ResizeObserver === 'undefined') return undefined
+      const observer = new ResizeObserver(() => setControlsHeight(bar.getBoundingClientRect().height))
+      observer.observe(bar)
+      return () => observer.disconnect()
+    }, [isLive, showControls])
+    const chrome = isLive ? resolveStyle(liveDeck.style).chrome : null
     const resizeObserver = useRef(null)
     const controlsRef = useRef(null)
     const narrativeRef = useRef(null)
@@ -104,6 +133,7 @@ const BasePresent = forwardRef(
 
     function setInitTransform() {
       // The whole slate: every note, in the room the controls leave.
+      if (isLive) return
       if (containerRef.current && curPresentation.orientData) {
         const { width, height } = curPresentation.orientData
         const frame = unionFrame(wholeSlateFrame(curPresentation.presentationData), drawnBox()) ||
@@ -133,6 +163,11 @@ const BasePresent = forwardRef(
         currentView: -1,
         isPlaying: false,
       }))
+      // The live deck's start is its title card.
+      if (isLive) {
+        liveRef.current?.goTo(0)
+        return
+      }
       setTransform(initialTransform)
 
       // Reset all node styles including glow effects
@@ -190,6 +225,12 @@ const BasePresent = forwardRef(
     const goToView = (targetView) => {
       const point = curPresentation.viewpoints[targetView]
       if (!point) return
+      if (isLive) {
+        // The camera flies on the live canvas; the stage lights and reveals the step's notes.
+        liveRef.current?.goTo(targetView)
+        setCurPresentation((prev) => ({ ...prev, currentView: targetView }))
+        return
+      }
 
       // A transition keeps the line that connects it to the previous viewpoint in frame.
       const previousPoint =
@@ -271,6 +312,11 @@ const BasePresent = forwardRef(
 
     const startPresentation = () => {
       setCurPresentation((prev) => ({ ...prev, currentView: -1 }))
+      if (isLive && curPresentation.viewpoints.length > 0) {
+        setCurPresentation((prev) => ({ ...prev, isPlaying: true }))
+        setTimeout(() => goToView(0), 50)
+        return
+      }
       if (curPresentation.viewpoints.length > 0) {
         const point = curPresentation.viewpoints[0]
         setTransform(
@@ -314,12 +360,12 @@ const BasePresent = forwardRef(
       }
     }, [curPresentation])
 
-    // stop loading once the SVG has loaded
+    // stop loading once the SVG has loaded (a live deck: once its stage is ready)
     useEffect(() => {
-      if (curPresentation.slateSVG) {
+      if (curPresentation.slateSVG && !isLive) {
         setSVGHasLoaded(true)
       }
-    }, [curPresentation.slateSVG])
+    }, [curPresentation.slateSVG, isLive])
 
     // this will init the transform and restart the presentation
     // useEffect(() => {
@@ -706,8 +752,9 @@ const BasePresent = forwardRef(
               alignItems: 'center',
               gap: (theme) => theme.spacing(1),
               bgcolor:
-                curPresentation?.presentationMenuBgColorKey || 'shell.main',
-              color: curPresentation?.presentationControlsColorKey || '',
+                curPresentation?.presentationMenuBgColorKey || (chrome ? 'rgba(0,0,0,0.38)' : 'shell.main'),
+              color: curPresentation?.presentationControlsColorKey || (chrome ? chrome.ink : ''),
+              ...(chrome && { backdropFilter: 'blur(10px)', '& .MuiIconButton-root': { color: curPresentation?.presentationControlsColorKey || '#fff' } }),
               px: 1,
               pr: 1.5,
               pt: 1,
@@ -765,7 +812,7 @@ const BasePresent = forwardRef(
                       height: 48,
                       borderRadius: '50%',
                       p: 0,
-                      bgcoor:
+                      bgcolor:
                         curPresentation?.presentationControlsColorKey ||
                         'primary.main',
                       color: curPresentation?.presentationMenuBgColorKey || '',
@@ -909,7 +956,7 @@ const BasePresent = forwardRef(
           </Box>
         )}
 
-        {/* SVG Container */}
+        {/* The live canvas (a styled deck) or the SVG container */}
         <div
           ref={containerRef}
           onTouchStart={onTouchStart}
@@ -926,6 +973,17 @@ const BasePresent = forwardRef(
             alignItems: 'center',
           }}
         >
+          {isLive ? (
+            <LiveStage
+              ref={liveRef}
+              deck={liveDeck}
+              slateJSON={curPresentation.slateJSON}
+              name={curPresentation.presentationName}
+              onReady={() => setSVGHasLoaded(true)}
+              bottomInset={showControls ? controlsHeight : 0}
+              onTap={() => { if (showControls) handleNavigate('next') }}
+            />
+          ) : (
           <div
             className="sb-presentation-camera"
             dangerouslySetInnerHTML={{ __html: curPresentation.slateSVG }}
@@ -937,6 +995,7 @@ const BasePresent = forwardRef(
               transform: `${transform}`,
             }}
           />
+          )}
         </div>
         {/* What changed, for a screen reader: the step and its narrative. */}
         <Box aria-live="polite" sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
@@ -944,7 +1003,7 @@ const BasePresent = forwardRef(
             ? (total > 0 ? `${step} of ${total}${narrative ? ': ' + narrative : ''}` : narrative) : ''}
         </Box>
         {/* The viewpoint's narrative, over the top of the presenter, on every screen size. */}
-        {curPresentation.showNarrative && narrative && (
+        {!isLive && curPresentation.showNarrative && narrative && (
           <Box
             ref={narrativeRef}
             sx={{

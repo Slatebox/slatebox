@@ -6,6 +6,7 @@ import prepareSlateSurface from './prepareSlateSurface'
 import { reconcileViewpoints } from './buildFallbackPresentation.mjs'
 import { workshopScenes } from './workshopScenes.mjs'
 import { currentPresentation } from '../../jotai/atoms'
+import { composeDeck } from './presentationCompose.mjs'
 
 /**
  * Following a live presentation: the presenter's sequence (`deck`), played over this person's own
@@ -27,19 +28,28 @@ export default function FollowPresentation({ slate, deck, step, workshop }) {
         containerRef.current.style.backgroundImage = `url(${surface.backgroundImage})`
         containerRef.current.style.backgroundSize = 'cover'
       }
+      // A styled deck is composed over this person's drawing of the slate, as the presenter's is.
+      let styled = null
+      if (deck.direction?.steps) {
+        try { styled = composeDeck(surface.layout, deck.direction, { style: deck.style }) } catch { styled = null }
+      }
+      let copy = null
+      try { copy = styled ? slate.exportJSON?.() : null } catch { copy = null }
       setPresentation(previous => ({
         ...previous,
         isAnalyzing: false, isPlaying: false, currentView: -1,
         autoplayOnPublish: false, isEmbedded: false, playOnHover: false, isFeatured: false, showNarrative: true,
         slateSVG: surface.svg, orientData: surface.orient, presentationData: surface.layout,
         presentationName: deck.name,
+        slateJSON: copy,
+        deckLook: styled && copy ? { direction: deck.direction, style: styled.style } : null,
         // The deck as the presenter plays it; cards that moved since are framed where they are now.
-        viewpoints: reconcileViewpoints(deck.viewpoints, surface.layout, scenes, { keep: true }),
+        viewpoints: styled && copy ? styled.steps : reconcileViewpoints(deck.viewpoints, surface.layout, scenes, { keep: true }),
       }))
     }, () => { if (active) setFailed(true) })
     return () => {
       active = false
-      setPresentation(previous => ({ ...previous, slateSVG: null, orientData: null, presentationData: null, viewpoints: [], currentView: -1 }))
+      setPresentation(previous => ({ ...previous, slateSVG: null, slateJSON: null, deckLook: null, orientData: null, presentationData: null, viewpoints: [], currentView: -1 }))
     }
   }, [slate, deck])
 
