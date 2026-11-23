@@ -762,6 +762,11 @@ const BasePresent = forwardRef(
               borderTopLeftRadius: '12px',
               borderTopRightRadius: '12px',
               boxShadow: (theme) => theme.shadows[2],
+              // A styled deck is full bleed: its controls are one small floating pill.
+              ...(chrome && {
+                bottom: { xs: 10, sm: 16 }, py: 0.5, pl: 0.75, pr: 0.75, gap: 0.5, flexWrap: 'nowrap', borderRadius: '999px',
+                maxWidth: 'calc(100% - 20px)', boxShadow: 'none', '& .MuiIconButton-root': { color: curPresentation?.presentationControlsColorKey || '#fff', p: 1 },
+              }),
             }}
           >
             {!svgHasLoaded || curPresentation.isAnalyzing ? (
@@ -780,7 +785,7 @@ const BasePresent = forwardRef(
               </>
             ) : (
               <>
-                {!isMobile && (
+                {!isMobile && !chrome && (
                   <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center' }}>
                     <Typography
                       variant="h6"
@@ -808,8 +813,8 @@ const BasePresent = forwardRef(
                     variant="contained"
                     sx={{
                       minWidth: 'auto',
-                      width: 48,
-                      height: 48,
+                      width: chrome ? 40 : 48,
+                      height: chrome ? 40 : 48,
                       borderRadius: '50%',
                       p: 0,
                       bgcolor:
@@ -915,9 +920,13 @@ const BasePresent = forwardRef(
                 <Tooltip title="Presentation steps">
                   <Box
                     sx={{
-                      width: 56,
-                      height: 56,
-                      borderRadius: '50%',
+                      width: chrome ? 'auto' : 56,
+                      minWidth: chrome ? 52 : undefined,
+                      px: chrome ? 1.25 : 0,
+                      height: chrome ? 32 : 56,
+                      fontSize: chrome ? 13 : undefined,
+                      fontWeight: chrome ? 700 : undefined,
+                      borderRadius: chrome ? '999px' : '50%',
                       bgcolor:
                         curPresentation?.presentationControlsColorKey ||
                         'common.white',
@@ -997,8 +1006,9 @@ const BasePresent = forwardRef(
           />
           )}
         </div>
-        {/* What changed, for a screen reader: the step and its narrative. */}
-        <Box aria-live="polite" sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
+        {/* What changed, for a screen reader: the step and its narrative (a live deck says its own,
+            with the notes it lights). */}
+        <Box aria-live={isLive ? 'off' : 'polite'} aria-hidden={isLive || undefined} sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
           {curPresentation.currentView >= 0 && curPresentation.viewpoints?.length
             ? (total > 0 ? `${step} of ${total}${narrative ? ': ' + narrative : ''}` : narrative) : ''}
         </Box>

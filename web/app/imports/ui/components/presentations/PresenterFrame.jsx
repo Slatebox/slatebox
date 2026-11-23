@@ -16,7 +16,7 @@ import CloseIcon from '@mui/icons-material/Close'
  * button, not a second press of the key that left full screen).
  */
 export default function PresenterFrame({ open, label = 'Presentation', title, status, exitLabel = 'Exit presentation', onExit,
-  keepOutOfFullScreen = false, escapeExits = true, background, error, children }) {
+  keepOutOfFullScreen = false, escapeExits = true, background, error, immersive = false, children }) {
   const exit = useRef(onExit)
   exit.current = onExit
   useEffect(() => {
@@ -46,16 +46,21 @@ export default function PresenterFrame({ open, label = 'Presentation', title, st
 
   return <Dialog fullScreen open={Boolean(open)} disableEscapeKeyDown={!escapeExits} onClose={() => onExit?.()}
     slotProps={{ paper: { 'aria-label': label, sx: { background: background || 'background.default', display: 'flex', flexDirection: 'column' } } }}>
-    <Box component="header" className="sb-presenter-bar" sx={{ display: 'flex', alignItems: 'center', gap: 1, px: { xs: 1, sm: 2 }, minHeight: 48,
+    {/* A styled deck is full bleed: the bar floats over its corner (the slate's name stays for a
+        screen reader), so the deck's own colour fills the screen. */}
+    <Box component="header" className={`sb-presenter-bar${immersive ? ' sb-presenter-bar-immersive' : ''}`} sx={immersive ? {
+      position: 'absolute', top: { xs: 8, sm: 12 }, right: { xs: 8, sm: 12 }, zIndex: 20, display: 'flex', alignItems: 'center', gap: 1,
+      pl: status ? 1.5 : 0.5, pr: 0.5, minHeight: 36, borderRadius: '999px', bgcolor: 'rgba(0,0,0,.42)', color: '#fff', backdropFilter: 'blur(10px)', maxWidth: 'calc(100% - 16px)',
+    } : { display: 'flex', alignItems: 'center', gap: 1, px: { xs: 1, sm: 2 }, minHeight: 48,
       bgcolor: 'shell.main', color: '#fff', flex: '0 0 auto', minWidth: 0 }}>
       {/* On a phone the status (which viewpoint) wins over the slate's name. */}
-      <Typography component="h2" noWrap sx={{ fontWeight: 700, fontSize: 16, minWidth: 0, flex: '0 1 auto',
+      <Typography component="h2" noWrap sx={immersive ? { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' } : { fontWeight: 700, fontSize: 16, minWidth: 0, flex: '0 1 auto',
         display: status ? { xs: 'none', sm: 'block' } : 'block' }}>{title}</Typography>
       {status && <Typography role="status" noWrap variant="body2" sx={{ opacity: .85, minWidth: 0, flex: '1 1 auto' }}>{status}</Typography>}
-      <Box sx={{ flex: status ? '0 0 auto' : '1 1 auto' }} />
+      {!immersive && <Box sx={{ flex: status ? '0 0 auto' : '1 1 auto' }} />}
       <Button color="inherit" size="small" aria-label={exitLabel} startIcon={<CloseIcon />} onClick={() => onExit?.()}
-        sx={{ flex: '0 0 auto', minWidth: 0, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 } } }}>
-        <Box component="span" sx={{ display: { xs: status ? 'none' : 'inline', sm: 'inline' } }}>{exitLabel}</Box>
+        sx={{ flex: '0 0 auto', minWidth: 0, borderRadius: immersive ? '999px' : undefined, '& .MuiButton-startIcon': { mr: immersive ? 0 : { xs: 0, sm: 1 } } }}>
+        <Box component="span" sx={{ display: immersive ? 'none' : { xs: status ? 'none' : 'inline', sm: 'inline' } }}>{exitLabel}</Box>
       </Button>
     </Box>
     {error && <Typography role="alert" variant="body2" sx={{ px: 2, py: .5, bgcolor: 'error.main', color: 'error.contrastText' }}>{error}</Typography>}

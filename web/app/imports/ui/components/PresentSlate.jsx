@@ -19,6 +19,8 @@ import PublishIcon from '@mui/icons-material/Publish'
 import SettingsIcon from '@mui/icons-material/Settings'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import PaletteIcon from '@mui/icons-material/Palette'
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
+import Chip from '@mui/material/Chip'
 import Popover from '@mui/material/Popover'
 import CircularProgress from '@mui/material/CircularProgress'
 import List from '@mui/material/List'
@@ -52,7 +54,7 @@ import {
 } from './presentations/presentationRuntime.mjs'
 import { completeDeck, isTrivialLayout, planFailureReason } from './presentations/presentationPlan.mjs'
 import { planArrival } from './presentations/presentationSteps.mjs'
-import { composeDeck, deckRecord } from './presentations/presentationCompose.mjs'
+import { carryImages, composeDeck, deckRecord, pictureSlots, remixDirection } from './presentations/presentationCompose.mjs'
 import StyleSheet from './presentations/StyleSheet'
 import PayNotice from './PayNotice'
 
@@ -135,6 +137,8 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
   const [refinementAnchorEl, setRefinementAnchorEl] = useState(null)
   // The style sheet: one-click styles and the chat that refines the deck.
   const [styleAnchorEl, setStyleAnchorEl] = useState(null)
+  // A styled deck's "More" sheet: versions, settings, publishing and sharing.
+  const [moreAnchorEl, setMoreAnchorEl] = useState(null)
   const [settingsAnchorEl, setSettingsAnchorEl] = useState(null)
   const [versionAnchorEl, setVersionAnchorEl] = useState(null)
   const [customPromptValue, setCustomPromptValue] = useState('')
@@ -412,6 +416,13 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
           if (result.automatic) {
             setPlanNotice(noticeFor(result))
             setPlanRefusal(refusalOfPlan(result))
+            // Slatebox's own direction is already playing; the pictures the server found for it
+            // come into it (matched by what they picture), from the start if the person is there.
+            const pictured = local && result.direction ? carryImages(local.direction, [result.direction]) : null
+            if (pictured && JSON.stringify(pictured) !== JSON.stringify(local.direction)) {
+              const deck = composeDeck(preziData, pictured, { style: local.style })
+              arrive({ name: result.name, viewpoints: deck.steps, look: { direction: pictured, style: deck.style } })
+            }
           }
           // A saved deck plays over the slate as it is now. An automatic one is the local
           // sequence, which is already built from the slate as it is now.
@@ -498,10 +509,9 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
         description: slate.options.description,
         orientData: curPresentation.orientData,
         viewpoints: curPresentation.viewpoints,
-        // The deck's look and the slate it plays on: the published page plays it on a live canvas.
+        // The deck's look: the server checks it and builds the slate copy the published page plays.
         direction: curPresentation.deckLook?.direction,
         style: curPresentation.deckLook?.style,
-        slateJSON: curPresentation.slateJSON,
         manualViewpointChanges,
         intentionId:
           slate.options.ai?.isConversation?.intentionInitialData?.intentionId,
@@ -633,12 +643,14 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
     }
   }
 
-  // One click: the same steps composed in another style, at once, and saved without the AI.
+  // One click: the same steps remixed for another style, at once, and saved without the AI.
   const handleStylePick = async (id) => {
     const look = curPresentation.deckLook
     if (!look?.direction || !curPresentation.presentationData) return
-    const deck = composeDeck(curPresentation.presentationData, look.direction, { style: { id } })
-    setCurPresentation((prev) => ({ ...prev, deckLook: { direction: look.direction, style: deck.style }, viewpoints: deck.steps }))
+    // The same steps in the new style's beats (its layouts; Slatebox's own words in its voice).
+    const direction = remixDirection(look.direction, curPresentation.presentationData, { id }, { name: slate.options.name })
+    const deck = composeDeck(curPresentation.presentationData, direction, { style: { id } })
+    setCurPresentation((prev) => ({ ...prev, deckLook: { direction, style: deck.style }, viewpoints: deck.steps }))
     if (!presentationId) return
     try {
       await Meteor.callAsync(CONSTANTS.methods.presentations.update, { presentationId, style: { id } })
@@ -651,6 +663,28 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
   const handleStyleRefine = (ask) => {
     setStyleAnchorEl(null)
     handleRefinementClose({ customPrompt: ask })
+  }
+  // The deck's found pictures (not the style's drawn art), for the sheet: see them, swap them.
+  const deckPictures = pictureSlots(JSON.parse(JSON.stringify(curPresentation.deckLook?.direction || {})))
+    .map(({ image }, slot) => ({ slot, url: image.url, why: image.why || '', query: image.query || '', source: image.source || 'search', credit: image.credit || '' }))
+    .filter((picture) => picture.url && /^https:/.test(picture.url))
+  const [pictureBusy, setPictureBusy] = useState(false)
+  const handlePicture = async (slot, action) => {
+    if (!presentationId || pictureBusy) return
+    setPictureBusy(true)
+    try {
+      const result = await Meteor.callAsync(CONSTANTS.methods.presentations.update, { presentationId, picture: { slot, action } })
+      const look = curPresentation.deckLook
+      if (result?.direction && look) {
+        const deck = composeDeck(curPresentation.presentationData, result.direction, { style: look.style })
+        setCurPresentation((prev) => ({ ...prev, deckLook: { direction: result.direction, style: deck.style }, viewpoints: deck.steps }))
+      }
+    } catch (err) {
+      setPublishMessage(err?.reason || 'The picture could not be changed.')
+      setTimeout(() => setPublishMessage(null), 6000)
+    } finally {
+      setPictureBusy(false)
+    }
   }
   const handleRemix = () => {
     const id = curPresentation.deckLook?.style?.id
@@ -1422,7 +1456,16 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
           </Button>
         </Box>
       )}
-      {planNotice && !planning && (
+      {planNotice && !planning && curPresentation.deckLook && (
+        // A styled deck is already Slatebox's own direction: the reason the AI did not plan it is
+        // a chip (its words in the tooltip and in the More sheet), not a warning across the bar.
+        <Tooltip title={planNotice}>
+          <Chip size="small" label="Directed by Slatebox" aria-label={planNotice} className="sb-presentation-plan-chip"
+            onClick={(event) => setMoreAnchorEl(event.currentTarget)}
+            sx={{ color: curPresentation?.presentationControlsColorKey || 'common.white', bgcolor: 'rgba(255,255,255,.14)', flexShrink: 0 }} />
+        </Tooltip>
+      )}
+      {planNotice && !planning && !curPresentation.deckLook && (
         <Typography variant="caption" aria-live="polite" className="sb-presentation-plan-notice"
           sx={{ maxWidth: { xs: '100%', sm: 360 }, flexBasis: { xs: '100%', sm: 'auto' }, textAlign: 'center', lineHeight: 1.3,
             color: curPresentation?.presentationControlsColorKey || 'common.white' }}>
@@ -1433,66 +1476,12 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
     </>
   )
 
-  return (
+  // The presenter's own tools: refine with Slatebox, the style sheet, and the deck's versions,
+  // settings, publishing and sharing. A styled deck keeps its bar small (the deck is full bleed):
+  // its versions, settings, publishing and sharing open in a sheet from "More".
+  const liveDeck = Boolean(curPresentation.deckLook)
+  const refineButton = (
     <>
-      {surfaceFailed && (
-        <Typography role="alert" sx={{ position: 'absolute', top: '70px', left: '50%', transform: 'translateX(-50%)',
-          zIndex: 1000, bgcolor: 'background.paper', color: 'text.primary', px: 2, py: 1, borderRadius: 1, boxShadow: 2 }}>
-          This slate could not be drawn for the presentation. Close the presenter and try again.
-        </Typography>
-      )}
-      {publishMessage && (
-        <Box
-          sx={{
-            position: 'absolute',
-            top: '70px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 1000,
-            color: '#000',
-            bgcolor: 'background.paper',
-            padding: '8px 16px',
-            borderRadius: '4px',
-            boxShadow: 2,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            mt: 2,
-          }}
-        >
-          <Typography variant="body2">{publishMessage}</Typography>
-        </Box>
-      )}
-      <BasePresent
-        ref={refMethods}
-        // Presenting to everyone starts once its deck is planned (at most PLAN_TIMEOUT_MS): the
-        // presenter waits at the start, so the plan never moves them back.
-        holdAtStart={livePlanning && planning}
-        containerRef={containerRef}
-        slateSVG={curPresentation.slateSVG}
-        orientData={curPresentation.orientData}
-        showNarrative={curPresentation.showNarrative}
-        viewpoints={curPresentation.viewpoints}
-        presentationName={curPresentation.presentationName}
-        presentationData={curPresentation.presentationData}
-        presentationMenuBgColorKey={curPresentation.presentationMenuBgColorKey}
-        presentationControlsColorKey={
-          curPresentation.presentationControlsColorKey
-        }
-        playOnHover={curPresentation.playOnHover}
-        intentionId={
-          slate.options.ai?.isConversation?.intentionInitialData?.intentionId
-        }
-        showControls
-        isEmbedded={false}
-        isEditable
-        onViewChange={live?.onViewChange}
-        startAt={resume?.step}
-        showFooter={showFooter}
-        baseUrl={baseUrl}
-        renderCustomControls={authoring ? () => (
-          <>
-            {planStatus}
             <Tooltip
               title={
                 slateHasChangedSincePresentationWasCreated
@@ -1520,6 +1509,10 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
               </IconButton>
               </span>
             </Tooltip>
+    </>
+  )
+  const styleButton = (
+    <>
             {curPresentation.deckLook?.direction && (
               <Tooltip title="Style">
                 <span>
@@ -1536,6 +1529,10 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
                 </span>
               </Tooltip>
             )}
+    </>
+  )
+  const deckTools = (
+    <>
             <Tooltip title="Presentation Settings">
               <IconButton
                 onClick={handleSettingsClick}
@@ -1643,7 +1640,92 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
                 )
               })}
             </Box>
+    </>
+  )
+
+  return (
+    <>
+      {surfaceFailed && (
+        <Typography role="alert" sx={{ position: 'absolute', top: '70px', left: '50%', transform: 'translateX(-50%)',
+          zIndex: 1000, bgcolor: 'background.paper', color: 'text.primary', px: 2, py: 1, borderRadius: 1, boxShadow: 2 }}>
+          This slate could not be drawn for the presentation. Close the presenter and try again.
+        </Typography>
+      )}
+      {publishMessage && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '70px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1000,
+            color: '#000',
+            bgcolor: 'background.paper',
+            padding: '8px 16px',
+            borderRadius: '4px',
+            boxShadow: 2,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            mt: 2,
+          }}
+        >
+          <Typography variant="body2">{publishMessage}</Typography>
+        </Box>
+      )}
+      <BasePresent
+        ref={refMethods}
+        // Presenting to everyone starts once its deck is planned (at most PLAN_TIMEOUT_MS): the
+        // presenter waits at the start, so the plan never moves them back.
+        holdAtStart={livePlanning && planning}
+        containerRef={containerRef}
+        slateSVG={curPresentation.slateSVG}
+        orientData={curPresentation.orientData}
+        showNarrative={curPresentation.showNarrative}
+        viewpoints={curPresentation.viewpoints}
+        presentationName={curPresentation.presentationName}
+        presentationData={curPresentation.presentationData}
+        presentationMenuBgColorKey={curPresentation.presentationMenuBgColorKey}
+        presentationControlsColorKey={
+          curPresentation.presentationControlsColorKey
+        }
+        playOnHover={curPresentation.playOnHover}
+        intentionId={
+          slate.options.ai?.isConversation?.intentionInitialData?.intentionId
+        }
+        showControls
+        isEmbedded={false}
+        isEditable
+        onViewChange={live?.onViewChange}
+        startAt={resume?.step}
+        showFooter={showFooter}
+        baseUrl={baseUrl}
+        renderCustomControls={authoring ? () => (
+          liveDeck ? (
+            <>
+              {planStatus}
+              {refineButton}
+              {styleButton}
+              <Tooltip title="Publish, share, versions and settings">
+                <IconButton
+                  aria-label="More presenter options"
+                  aria-haspopup="dialog"
+                  data-present-more
+                  onClick={(event) => setMoreAnchorEl(event.currentTarget)}
+                  sx={{ color: curPresentation?.presentationControlsColorKey || 'common.white' }}
+                >
+                  <MoreHorizIcon />
+                </IconButton>
+              </Tooltip>
+            </>
+          ) : (
+          <>
+            {planStatus}
+            {refineButton}
+            {styleButton}
+            {deckTools}
           </>
+          )
         ) : (livePlanning || readyPlan) ? () => planStatus : undefined}
       />
 
@@ -1803,6 +1885,25 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
         </Box>
       </Popover>
 
+      <Popover
+        open={Boolean(moreAnchorEl)}
+        anchorEl={moreAnchorEl}
+        onClose={() => setMoreAnchorEl(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        slotProps={{ paper: { 'aria-label': 'More presenter options', sx: { bgcolor: 'rgba(18,18,24,.94)', color: '#fff', backdropFilter: 'blur(14px)', borderRadius: '18px', p: 1.5, maxWidth: 'min(560px, calc(100vw - 24px))' } } }}
+      >
+        {planNotice && (
+          <Typography variant="caption" component="p" className="sb-presentation-plan-notice" sx={{ opacity: 0.85, mb: 1, mx: 0.5, lineHeight: 1.35 }}>
+            {planNotice}
+            {planRefusal && <>{' '}<PayNotice plain refusal={planRefusal} from="plan" retry={() => setPlanAgain(n => n + 1)} /></>}
+          </Typography>
+        )}
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+          {deckTools}
+        </Box>
+      </Popover>
+
       <StyleSheet
         anchorEl={styleAnchorEl}
         onClose={() => setStyleAnchorEl(null)}
@@ -1810,7 +1911,9 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
         onPick={handleStylePick}
         onRefine={handleStyleRefine}
         onRemix={handleRemix}
-        busy={planning || Boolean(curPresentation.isAnalyzing)}
+        busy={planning || Boolean(curPresentation.isAnalyzing) || pictureBusy}
+        pictures={deckPictures}
+        onPicture={presentationId ? handlePicture : null}
       />
 
       <Popover

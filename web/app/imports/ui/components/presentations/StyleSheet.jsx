@@ -23,7 +23,7 @@ export const REFINE_PILLS = [
  * The style sheet: one click restyles the deck (the same steps composed in another style, no AI),
  * and the chat refines it with Slatebox (`onRefine`, the planner's conversation).
  */
-export default function StyleSheet({ anchorEl, onClose, current, onPick, onRefine, onRemix, busy = false }) {
+export default function StyleSheet({ anchorEl, onClose, current, onPick, onRefine, onRemix, busy = false, pictures = [], onPicture = null }) {
   const [text, setText] = useState('')
   const send = (ask) => {
     const said = String(ask || '').trim()
@@ -72,6 +72,29 @@ export default function StyleSheet({ anchorEl, onClose, current, onPick, onRefin
           )
         })}
       </Box>
+      {pictures.length > 0 && (
+        // The deck's pictures, each with why it is there and where it came from: the person sees
+        // them (and can swap one) before the deck is published.
+        <Box sx={{ mt: 1.5 }}>
+          <Typography variant="overline" sx={{ letterSpacing: '.12em', opacity: 0.75, lineHeight: 1.6, mx: 0.5 }}>Pictures</Typography>
+          <Box role="list" aria-label="Presentation pictures" sx={{ display: 'flex', gap: 1.25, overflowX: 'auto', pb: 0.5, scrollbarWidth: 'none' }}>
+            {pictures.map((picture) => (
+              <Box role="listitem" key={picture.slot} data-presentation-picture={picture.slot} sx={{ flex: '0 0 auto', width: { xs: 140, sm: 168 }, bgcolor: 'rgba(255,255,255,.06)', borderRadius: '12px', p: 0.75 }}>
+                <Box component="img" src={picture.url} alt={picture.why || picture.query || 'Presentation picture'} loading="lazy"
+                  sx={{ width: '100%', height: 84, objectFit: 'cover', borderRadius: '8px', display: 'block', bgcolor: 'rgba(255,255,255,.08)' }} />
+                <Typography variant="caption" component="p" sx={{ mt: 0.5, lineHeight: 1.25, opacity: 0.9, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{picture.why}</Typography>
+                <Typography variant="caption" component="p" sx={{ opacity: 0.6, fontSize: 10.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {picture.source === 'generated' ? 'Generated for this deck' : picture.credit ? `From ${picture.credit.split(' · ')[0]}` : 'Searched (licensed for reuse)'}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
+                  <Chip size="small" label="Another" disabled={busy || !onPicture || picture.source === 'generated'} onClick={() => onPicture?.(picture.slot, 'next')} sx={{ color: '#fff', bgcolor: 'rgba(255,255,255,.14)' }} />
+                  <Chip size="small" label="Drawn art" disabled={busy || !onPicture} onClick={() => onPicture?.(picture.slot, 'art')} sx={{ color: '#fff', bgcolor: 'rgba(255,255,255,.14)' }} />
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, mt: 1.5 }}>
         <Box sx={{ flex: '1 1 260px', minWidth: 0, display: 'flex', alignItems: 'center', bgcolor: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.18)', borderRadius: '999px', pl: 2 }}>
           <InputBase
@@ -104,4 +127,6 @@ StyleSheet.propTypes = {
   onRefine: PropTypes.func.isRequired,
   onRemix: PropTypes.func.isRequired,
   busy: PropTypes.bool,
+  pictures: PropTypes.arrayOf(PropTypes.shape({ slot: PropTypes.number, url: PropTypes.string, why: PropTypes.string, query: PropTypes.string, source: PropTypes.string, credit: PropTypes.string })),
+  onPicture: PropTypes.func,
 }

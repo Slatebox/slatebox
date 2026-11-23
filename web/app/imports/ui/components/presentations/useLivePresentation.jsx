@@ -199,7 +199,7 @@ export function useLivePresentation({ enabled = true, shareId, title, workshop, 
     // A presenter back in a session it leads (this tab reloaded) plays the session's deck from
     // where everyone is.
     const resume = active && !opening && deck ? { deck, step: session.step } : null
-    view = <PresenterFrame open keepOutOfFullScreen escapeExits={false} label="Live presentation" title={title} background={background} error={error}
+    view = <PresenterFrame open keepOutOfFullScreen escapeExits={false} label="Live presentation" title={title} background={background} error={error} immersive={Boolean(playing?.deckLook)}
       status={!connected ? 'Reconnecting…' : active ? 'Presenting to everyone here · ' + where(playing.currentView, playing.viewpoints) : 'Starting…'}
       exitLabel={active ? 'End presentation' : 'Exit presentation'} onExit={leave}>
       <PresentSlate slate={window.slate} workshop={workshop} live={{ onDeck: begin, onViewChange: moveTo, onFail: fail, resume }} />

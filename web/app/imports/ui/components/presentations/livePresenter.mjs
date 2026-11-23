@@ -96,6 +96,7 @@ const CSS = `
 .sbp-route svg{width:100%;height:100%;overflow:visible}
 @media (max-width:600px){.sbp-cap{right:18px;max-width:none}.sbp-cap .t{font-size:26px}.sbp-big .sbp-cap .t{font-size:34px}}
 .sbp-reduced .sbp-cap .t span{animation:none}
+.sbp-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
 .sbp-reduced .sbp-canvas g[data-node-id],.sbp-reduced .sbp-canvas [data-source-node-id]{transition:none}
 `
 
@@ -162,6 +163,14 @@ export async function mountLiveDeck({
   cap.setAttribute('aria-hidden', 'true')
   const route = doc.createElement('div')
   route.className = 'sbp-route'
+  // What a screen reader hears on each step (the animated words above are hidden from it): the
+  // step's place, its kicker and caption, and the words of the notes it lights.
+  const spoken = doc.createElement('div')
+  spoken.className = 'sbp-sr'
+  spoken.setAttribute('aria-live', 'polite')
+  spoken.setAttribute('aria-atomic', 'true')
+  spoken.setAttribute('data-presentation-spoken', '')
+  root.append(spoken)
   if (captions) root.append(cap, route)
   host.appendChild(root)
 
@@ -213,20 +222,32 @@ export async function mountLiveDeck({
     }
   }
 
+  // Each note's and line's opacity as last written: a step writes only what changes, so a flight
+  // repaints a few notes, not every one on the slate.
+  const shown = new Map()
+  let lines = null
+  const setOpacity = (el, key, value) => {
+    const text = String(value)
+    if (shown.get(key) === text) return
+    shown.set(key, text)
+    el.style.opacity = text
+  }
   function paint(index, { hideOwn = false } = {}) {
     const levels = emphasis(deck, index)
     const own = new Set(deck.stageNotes.filter((note) => Array.isArray(note.steps) && note.steps.includes(index) && note.steps.length === 1).map((note) => note.id))
     levels.forEach((level, id) => {
       const el = nodeEl(id)
       if (!el) return
-      el.style.transitionDelay = '0ms'
-      el.style.opacity = String(hideOwn && own.has(id) ? 0 : level)
+      const value = hideOwn && own.has(id) ? 0 : level
+      if (shown.get(id) !== String(value)) el.style.transitionDelay = '0ms'
+      setOpacity(el, id, value)
     })
     const lit = deck.steps[index]?.lit
     const set = lit === 'all' ? null : new Set(lit)
-    canvas.querySelectorAll('[data-source-node-id]').forEach((line) => {
+    lines = lines || [...canvas.querySelectorAll('[data-source-node-id]')]
+    lines.forEach((line, k) => {
       const on = !set || (set.has(line.getAttribute('data-source-node-id')) && set.has(line.getAttribute('data-target-node-id')))
-      line.style.opacity = String(on ? 1 : deck.steps[index]?.dim ?? style.dim)
+      setOpacity(line, `line:${k}`, on ? 1 : deck.steps[index]?.dim ?? style.dim)
     })
     return own
   }
@@ -239,11 +260,26 @@ export async function mountLiveDeck({
       const el = nodeEl(id)
       if (!el) return
       el.style.transitionDelay = calm ? '0ms' : `${k * (style.motion.reveal === 'pop' ? 70 : 120)}ms`
-      el.style.opacity = String(levels.get(id))
+      setOpacity(el, id, levels.get(id))
     })
   }
 
+  // The words of the notes a step lights (the slate's own notes and its stage words), for the
+  // screen reader: the canvas itself is inert.
+  const textOf = new Map(deck.stageNotes.filter((note) => note.text && !note.deco).map((note) => [note.id, note.text]))
+  ;(typeof slateJSON === 'string' ? JSON.parse(slateJSON) : slateJSON || {}).nodes?.forEach((node) => {
+    if (node?.options?.id != null && node.options.text) textOf.set(String(node.options.id), String(node.options.text))
+  })
+  function speak(index) {
+    const step = deck.steps[index]
+    if (!step) return
+    const lit = step.lit === 'all' ? [] : step.lit
+    const said = [...new Set(lit.map((id) => textOf.get(id)).filter(Boolean))].slice(0, 12)
+    spoken.textContent = [`Step ${index + 1} of ${deck.steps.length}.`, step.kicker, step.narrative, said.length ? `On screen: ${said.join('; ')}.` : ''].filter(Boolean).join(' ')
+  }
+
   function showCaption(index, flying) {
+    if (!flying) speak(index)
     if (!captions) return
     const step = deck.steps[index]
     root.classList.toggle('sbp-flying', flying)
