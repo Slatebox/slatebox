@@ -89,7 +89,6 @@ export default defineAction({
     required: ['slates'],
   },
   tool: { name: 'list_slates', title: 'List your slates', description: 'List the person\'s slates, or their team\'s, newest first, with each one\'s link. Filter by name.' },
-  cli: { command: 'list' },
   async handler(principal, input, { deps }) {
     const user = await deps.loadUser(principal.userId)
     if (!user) throw problem(404, 'not_found', 'This account no longer exists.')

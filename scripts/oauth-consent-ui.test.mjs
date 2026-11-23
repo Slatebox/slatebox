@@ -70,6 +70,7 @@ test("each permission is explained in plain words on the consent page and the to
   const { tokenPermissions } = await import("../web/app/imports/api/common/token-permissions.mjs");
   const { API_TOKEN_SCOPES } = await import("../web/app/server/api-token-core.mjs");
   assert.deepEqual(tokenPermissions.map(({ scope }) => scope), API_TOKEN_SCOPES);
+  assert.match(tokenPermissions.find(({ scope }) => scope === "slates:delete").explain, /delete/i);
   for (const { scope, label, explain } of tokenPermissions) {
     assert.ok(label, scope);
     assert.equal(typeof explain, "string", scope);

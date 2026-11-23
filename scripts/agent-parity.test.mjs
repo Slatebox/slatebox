@@ -76,7 +76,7 @@ function makeWorld(overrides = {}) {
   };
   Object.assign(deps, overrides);
   const registry = createAppRegistry({ deps, now: () => 7000 });
-  const agent = (userId, scopes = ["slates:read", "slates:write"]) => ({ kind: "agent", userId, tokenId: `t-${userId}`, tokenName: "Agent", scopes });
+  const agent = (userId, scopes = ["slates:read", "slates:write", "slates:delete"]) => ({ kind: "agent", userId, tokenId: `t-${userId}`, tokenName: "Agent", scopes });
   return { slates, comments, deleted, grants, registry, agent };
 }
 
@@ -95,7 +95,7 @@ test("every action a token may call is on every surface: an HTTP route in OpenAP
     assert.equal(route?.["x-slatebox"].action, action.id, `${action.id}: OpenAPI`);
     assert.ok(methods.has(action.id), `${action.id}: exec client`);
     assert.ok(typed.has(action.id), `${action.id}: typed MCP tool`);
-    assert.ok(action.cli?.command, `${action.id}: CLI name`);
+    assert.equal("cli" in action, false, `${action.id}: no CLI name (the CLI reaches it through slatebox exec)`);
   }
   // Every method is listed in exec's own description, within its budget.
   for (const method of manifest.methods) assert.ok(tools.exec.description.includes(method.index), method.name);
@@ -107,11 +107,11 @@ test("the parity actions are declared on the token surfaces with the app's scope
   const want = {
     "slates.list": ["GET", "/slates", "slates:read", "list_slates"],
     "slates.copy": ["POST", "/slates/{shareId}/copy", "slates:write", "copy_slate"],
-    "slates.delete": ["DELETE", "/slates/{shareId}", "slates:write", "delete_slate"],
+    "slates.delete": ["DELETE", "/slates/{shareId}", "slates:delete", "delete_slate"],
     "comments.list": ["GET", "/slates/{shareId}/comments", "slates:read", "list_comments"],
     "comments.add": ["POST", "/slates/{shareId}/comments", "slates:write", "add_comment"],
     "comments.resolve": ["POST", "/slates/{shareId}/comments/resolve", "slates:write", "resolve_comments"],
-    "comments.remove": ["DELETE", "/slates/{shareId}/comments/{commentId}", "slates:write", "remove_comment"],
+    "comments.remove": ["DELETE", "/slates/{shareId}/comments/{commentId}", "slates:delete", "remove_comment"],
   };
   for (const [id, [method, path, scope, tool]] of Object.entries(want)) {
     const action = registry.get(id);
@@ -268,4 +268,16 @@ test("the Slatebox agent's replies can be removed by whoever may edit the slate"
   comments.push({ _id: "c-agent", slateId: "s-own", nodeId: "n1", createdByUserId: "slatebox-agent", createdByUserName: "Slatebox agent", text: "Done", fromAgent: true });
   assert.deepEqual(body(await registry.run(agent("ana"), "comments.remove", { shareId: "own", commentId: "c-agent" })), { commentId: "c-agent", removed: true });
   assert.equal(comments.length, 0);
+});
+
+// Owner decision (2026-11-23): deleting is its own permission, slates:delete.
+test("deleting a slate or a comment needs slates:delete; slates:write alone is refused with the scope to ask for", async () => {
+  const { registry, agent, comments } = makeWorld();
+  const writer = agent("ana", ["slates:read", "slates:write"]);
+  await assert.rejects(registry.run(writer, "slates.delete", { shareId: "own" }), (error) => error.code === "insufficient_scope" && /slates:delete/.test(JSON.stringify(error.details ?? error.message)));
+  const added = body(await registry.run(writer, "comments.add", { shareId: "own", noteId: "n1", text: "Mine" }));
+  await assert.rejects(registry.run(writer, "comments.remove", { shareId: "own", commentId: added.commentId }), (error) => error.code === "insufficient_scope");
+  assert.equal(comments.length, 1);
+  const deleter = agent("ana", ["slates:read", "slates:write", "slates:delete"]);
+  assert.equal(body(await registry.run(deleter, "comments.remove", { shareId: "own", commentId: added.commentId })).removed, true);
 });

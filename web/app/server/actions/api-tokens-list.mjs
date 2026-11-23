@@ -16,7 +16,6 @@ export default defineAction({
     properties: { tokens: { type: 'array', items: tokenRecord } },
     required: ['tokens'],
   },
-  cli: { command: 'tokens' },
   async handler(principal, _input, { deps }) {
     const onlyTokenId = principal.kind === 'agent' ? principal.tokenId : undefined
     return { tokens: await deps.apiTokens.listApiTokens(principal.userId, { onlyTokenId }) }

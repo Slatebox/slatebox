@@ -2826,7 +2826,7 @@
         "operationId": "deleteSlate",
         "summary": "Delete slate",
         "description": "Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, and a theme other slates are built on cannot be deleted. This cannot be undone.",
-        "x-required-scope": "slates:write",
+        "x-required-scope": "slates:delete",
         "x-slatebox": {
           "action": "slates.delete",
           "toolset": "slates",
@@ -4396,7 +4396,7 @@
         "operationId": "removeComment",
         "summary": "Uncomment",
         "description": "Remove a comment you wrote on a slate (or, if you may edit it, a Slatebox agent reply).",
-        "x-required-scope": "slates:write",
+        "x-required-scope": "slates:delete",
         "x-slatebox": {
           "action": "comments.remove",
           "toolset": "slates",

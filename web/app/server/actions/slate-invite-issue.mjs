@@ -28,7 +28,6 @@ export default defineAction({
   output: ref('Invitation'),
   failure: { code: 'invite_update_failed', message: 'The request could not be completed. Retry with the same key.' },
   tool: { name: 'create_slate_invite', title: 'Share a slate by invitation link', description: 'Turn on an unlisted invitation link to a slate, or change the role it gives. Anyone holding the link gets that role.' },
-  cli: { command: 'share' },
   handler: (principal, input, { deps, idempotencyKey }) =>
     deps.manageInvite({
       token: tokenLike(principal),

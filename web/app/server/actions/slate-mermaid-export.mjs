@@ -58,7 +58,6 @@ export default defineAction({
   },
   load: loadSlate(false),
   tool: { name: 'export_mermaid', title: 'Read a slate as Mermaid', description: 'Read a slate as Mermaid text: a mind map as mindmap, a project plan as a Gantt chart, anything else as a flowchart.' },
-  cli: { command: 'mermaid' },
   handler(_principal, input, { deps, resource: slate }) {
     let out
     try {

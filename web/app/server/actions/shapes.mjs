@@ -74,7 +74,6 @@ export const shapesGenerate = defineAction({
     required: ['candidates'],
   },
   tool: { name: 'generate_shape', title: 'Draw a custom shape', description: 'Draw custom outlines for notes from a description, such as a rocket or a speech bubble.' },
-  cli: { command: 'shape-draw' },
   async handler(principal, input, { deps }) {
     const who = await shapePrincipal(principal, deps)
     const { requestId, candidates, cached } = await service(deps).generate(who, { describe: input.describe, count: input.count ?? 3, fresh: Boolean(input.fresh) })
@@ -103,7 +102,6 @@ export const shapesList = defineAction({
   },
   output: { type: 'object', properties: { shapes: { type: 'array', items: shapeOut } }, required: ['shapes'] },
   tool: { name: 'list_shapes', title: 'List custom shapes', description: 'List the custom note shapes saved by the person and their team.' },
-  cli: { command: 'shapes' },
   async handler(principal, input, { deps }) {
     const who = await shapePrincipal(principal, deps)
     return service(deps).library.list(who, { q: input.q, scope: input.scope ?? 'all', limit: input.limit ?? 24 })
@@ -148,7 +146,6 @@ export const shapesApply = defineAction({
   },
   load: loadSlate(true),
   tool: { name: 'apply_shape', title: 'Give notes a shape', description: 'Give notes on a slate a built-in or custom shape, such as one from the shape library or one just drawn.' },
-  cli: { command: 'shape' },
   async handler(principal, input, ctx) {
     const { deps, resource: slate } = ctx
     const who = await shapePrincipal(principal, deps)

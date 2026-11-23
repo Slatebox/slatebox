@@ -318,7 +318,7 @@ declare namespace slatebox.comments {
 }
 
 declare namespace slatebox.comments {
-  /** Uncomment. Remove a comment you wrote on a slate (or, if you may edit it, a Slatebox agent reply). @scope slates:write @destructive */
+  /** Uncomment. Remove a comment you wrote on a slate (or, if you may edit it, a Slatebox agent reply). @scope slates:delete @destructive */
   function remove(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
@@ -725,7 +725,7 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.slates {
-  /** Delete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, and a theme other slates are built on cannot be deleted. This cannot be undone. @scope slates:write @destructive */
+  /** Delete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, and a theme other slates are built on cannot be deleted. This cannot be undone. @scope slates:delete @destructive */
   function delete(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;

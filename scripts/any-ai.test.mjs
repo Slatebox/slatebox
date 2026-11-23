@@ -460,7 +460,7 @@ test('exec, MCP and the CLI read, change and test the AI setup through registry 
   assert.equal(byId['ai.update'].confirm, true, 'exec holds a change of where AI requests go for confirmation')
   for (const id of ['ai.get', 'ai.update', 'ai.check']) {
     assert.equal(byId[id].scope, 'ai:settings')
-    assert.ok(byId[id].cli?.command, id + ' has a CLI command')
+    assert.equal('cli' in byId[id], false, id + ' has no CLI name: the CLI reaches it through slatebox exec')
     assert.ok(byId[id].mounts.ddp, id + ' is what the settings page calls')
   }
   assert.ok(API_TOKEN_SCOPES.includes('ai:settings'))

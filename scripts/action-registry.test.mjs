@@ -561,6 +561,8 @@ test("the scopes a token may need are derived from the actions: every scope any 
   const registry = world.build();
   // ai:admin is checked by ai.update and ai.check for level team or server, so they declare it.
   assert.deepEqual(registry.neededScopes(), API_TOKEN_SCOPES);
+  assert.ok(registry.neededScopes().includes("slates:delete"), "deleting is its own permission");
+  assert.deepEqual(["slates.delete", "comments.remove"].map((id) => registry.get(id).scope), ["slates:delete", "slates:delete"]);
   for (const id of ["agentTasks.list", "agentTasks.create", "agentTasks.update", "comments.list", "comments.add", "comments.resolve", "comments.remove"]) {
     const action = registry.get(id);
     assert.ok(action, id);

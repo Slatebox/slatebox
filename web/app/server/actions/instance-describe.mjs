@@ -39,6 +39,5 @@ export default defineAction({
     required: ['view', 'instance', 'contract', 'api', 'signIn', 'connect', 'link'],
   },
   tool: { name: 'describe_instance', title: 'Describe this instance', description: 'Describe the Slatebox server these tools talk to: its name, version, what it can do and where its API is.' },
-  cli: { command: 'instance' },
   handler: (principal, _input, { deps }) => deps.instance.describe(principal),
 })

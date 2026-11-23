@@ -65,7 +65,6 @@ export default defineAction({
   output: { type: 'object', properties: { catalogVersion: { type: 'string' }, components: { type: 'array', items: { type: 'object' } } }, required: ['catalogVersion', 'components'] },
   load: (principal, input, ctx) => (input.shareId ? loadSlate(false)(principal, input, ctx) : null),
   tool: { name: 'list_components', title: 'List boards and starters', description: 'List the boards and starters a person can add to a slate (such as pipeline, budget, hiring plan, launch plan and release plan boards), with what each one is for. A slate holds up to 8 boards side by side.' },
-  cli: { command: 'components' },
   handler: (_principal, _input, { resource: slate }) => listComponents(slate ?? null),
 })
 
@@ -88,6 +87,5 @@ export const componentsGet = defineAction({
   output: { type: 'object', properties: { catalogVersion: { type: 'string' }, component: { type: 'object' } }, required: ['catalogVersion', 'component'] },
   load: (principal, input, ctx) => (input.shareId ? loadSlate(false)(principal, input, ctx) : null),
   tool: { name: 'get_component', title: 'Read a board or starter', description: 'Read one board or starter from the library in full, by the id list_components gives.' },
-  cli: { command: 'component' },
   handler: (_principal, input, { resource: slate }) => getComponent(input.id, slate ?? null),
 })

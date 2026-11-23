@@ -38,7 +38,6 @@ export default defineAction({
     additionalProperties: false,
   },
   output: settingsOutput,
-  cli: { command: 'ai-set' },
   precheck: (principal, input) => requireLevelScope(principal, input.level),
   handler: (principal, input, { deps }) => {
     requireLevelScope(principal, input.level)

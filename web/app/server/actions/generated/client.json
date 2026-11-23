@@ -1035,7 +1035,7 @@
       "destructive": true,
       "openWorld": false,
       "confirm": false,
-      "scope": "slates:write",
+      "scope": "slates:delete",
       "modes": [
         "save"
       ],
@@ -1052,7 +1052,7 @@
       },
       "index": "comments.remove({shareId,commentId}): Uncomment",
       "types": [],
-      "dts": "declare namespace slatebox.comments {\n  /** Uncomment. Remove a comment you wrote on a slate (or, if you may edit it, a Slatebox agent reply). @scope slates:write @destructive */\n  function remove(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    /** (1–64 characters) */\n    commentId: string;\n  }): Promise<({\n    commentId: string;\n    removed: boolean;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.comments {\n  /** Uncomment. Remove a comment you wrote on a slate (or, if you may edit it, a Slatebox agent reply). @scope slates:delete @destructive */\n  function remove(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    /** (1–64 characters) */\n    commentId: string;\n  }): Promise<({\n    commentId: string;\n    removed: boolean;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "remove_comment",
         "title": "Remove your comment",
@@ -2279,7 +2279,7 @@
       "destructive": true,
       "openWorld": false,
       "confirm": false,
-      "scope": "slates:write",
+      "scope": "slates:delete",
       "modes": [
         "save"
       ],
@@ -2295,7 +2295,7 @@
       },
       "index": "slates.delete({shareId}): Delete slate",
       "types": [],
-      "dts": "declare namespace slatebox.slates {\n  /** Delete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, and a theme other slates are built on cannot be deleted. This cannot be undone. @scope slates:write @destructive */\n  function delete(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n  }): Promise<({\n    shareId: string;\n    deleted: boolean;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.slates {\n  /** Delete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, and a theme other slates are built on cannot be deleted. This cannot be undone. @scope slates:delete @destructive */\n  function delete(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n  }): Promise<({\n    shareId: string;\n    deleted: boolean;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "delete_slate",
         "title": "Delete a slate",

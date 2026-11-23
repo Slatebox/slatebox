@@ -238,7 +238,7 @@ async function instance(t) {
   mountHttp(server, gatedRegistry(registry, gate), {
     express,
     authenticate: async (req) => (req.get("authorization") === "Bearer probe-token"
-      ? { kind: "agent", tokenId: "token", userId: "owner", scopes: ["slates:read", "slates:write", "slates:share", "ai:settings", "team:export", "team:import"] } : null),
+      ? { kind: "agent", tokenId: "token", userId: "owner", scopes: ["slates:read", "slates:write", "slates:share", "slates:delete", "ai:settings", "team:export", "team:import"] } : null),
   });
   const listener = server.listen(0, "127.0.0.1");
   await new Promise((resolve) => listener.once("listening", resolve));

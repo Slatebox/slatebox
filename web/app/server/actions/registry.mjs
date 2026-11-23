@@ -115,7 +115,7 @@ export function defineAction(definition) {
     fail(id, 'a visitor only reads what a token may also read, and the read has an HTTP route')
   if (mounts.ddp && !principals.some((p) => p !== 'agent' && p !== 'visitor'))
     fail(id, 'a Meteor method is called by a signed-in session')
-  if (!http && (definition.tool || definition.cli))
+  if (!http && definition.tool)
     fail(id, 'tools and commands call the HTTP route, so the action needs one')
   if (definition.tool) {
     const { name, title: toolTitle, description: toolDescription, ...rest } = definition.tool
@@ -156,7 +156,6 @@ export function defineAction(definition) {
     successStatus: definition.successStatus || (kind === 'write' ? 201 : 200),
     bodyLimit: definition.bodyLimit || '100kb',
     tool: definition.tool || null,
-    cli: definition.cli || null,
   })
 }
 

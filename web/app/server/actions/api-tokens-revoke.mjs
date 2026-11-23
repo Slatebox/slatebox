@@ -27,7 +27,6 @@ export default defineAction({
     properties: { tokenId: { type: 'string' }, revoked: { const: true }, mode: { const: 'save' } },
     required: ['tokenId', 'revoked'],
   },
-  cli: { command: 'logout' },
   async handler(principal, input, { deps }) {
     const tokenId =
       principal.kind === 'agent' && input.tokenId === 'current' ? principal.tokenId : input.tokenId

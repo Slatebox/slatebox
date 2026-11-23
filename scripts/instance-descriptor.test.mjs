@@ -185,7 +185,7 @@ test("with a token, GET /instance adds build, capabilities, limits, kinds, actio
   const edit = body.actions.find((a) => a.id === "slates.applyOperations");
   assert.deepEqual(edit, {
     id: "slates.applyOperations", method: "POST", path: "/api/v1/slates/{shareId}/operations", scope: "slates:write",
-    readOnly: false, destructive: true, openWorld: false, modes: ["save", "preview"], tool: "edit_slate", cli: "apply",
+    readOnly: false, destructive: true, openWorld: false, modes: ["save", "preview"], tool: "edit_slate",
   });
   // Slatebox has no plans, so the description has no plans field.
   assert.equal("plans" in body, false);
@@ -357,8 +357,8 @@ test("only a read may be open to a visitor; OpenAPI says the token is optional t
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   });
   assert.equal(contract.actions.find((a) => a.id === "account.get").tool.name, "get_account");
-  assert.equal(contract.actions.find((a) => a.id === "account.get").cli.command, "whoami");
-  assert.equal(contract.actions.find((a) => a.id === "instance.describe").cli.command, "instance");
+  // The registry's draft CLI names are gone: the CLI reaches every action through slatebox exec.
+  assert.ok(contract.actions.every((a) => !("cli" in a)), "no action in the contract carries a cli field");
 });
 
 // Restated (exec): the MCP server and the CLI reach these reads through the generated client

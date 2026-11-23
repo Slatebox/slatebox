@@ -99,7 +99,6 @@ export const commentsList = defineAction({
   output: { type: 'object', properties: { comments: { type: 'array', items: comment } }, required: ['comments'] },
   load: loadSlate(false),
   tool: { name: 'list_comments', title: 'Read comments', description: 'Read the comments people left on a slate\'s notes, or on one note.' },
-  cli: { command: 'comments' },
   async handler(principal, input, { deps, resource: slate }) {
     const rows = await deps.comments.list({ slateId: slate._id, nodeId: input.noteId, unresolved: input.unresolved })
     return { comments: rows.map((row) => commentEntry(row, principal.userId)) }
@@ -134,7 +133,6 @@ export const commentsAdd = defineAction({
   },
   load: loadCommenter,
   tool: { name: 'add_comment', title: 'Comment on a note', description: 'Leave a comment on a note of a slate, under the person\'s name.' },
-  cli: { command: 'comment' },
   async handler(principal, input, { deps, now, resource: slate, access }) {
     if (!hasNote(slate, input.noteId)) throw noNote()
     const text = input.text.trim()
@@ -184,7 +182,6 @@ export const commentsResolve = defineAction({
   successStatus: 200,
   load: loadCommenter,
   tool: { name: 'resolve_comments', title: 'Resolve a note\'s comments', description: 'Mark the comments on a note resolved, or open them again.' },
-  cli: { command: 'resolve' },
   async handler(_principal, input, { deps, resource: slate }) {
     if (!hasNote(slate, input.noteId)) throw noNote()
     const comments = await deps.comments.resolve({ slateId: slate._id, nodeId: input.noteId, resolved: input.resolved })
@@ -198,7 +195,7 @@ export const commentsRemove = defineAction({
   description: 'Remove a comment you wrote on a slate (or, if you may edit it, a Slatebox agent reply).',
   toolset: 'slates',
   kind: 'write',
-  scope: 'slates:write',
+  scope: 'slates:delete',
   principals: ['agent'],
   destructive: true,
   idempotency: 'optional',
@@ -208,7 +205,6 @@ export const commentsRemove = defineAction({
   successStatus: 200,
   load: loadSlate(false),
   tool: { name: 'remove_comment', title: 'Remove your comment', description: 'Remove a comment the person wrote on a slate.' },
-  cli: { command: 'uncomment' },
   async handler(principal, input, { deps, resource: slate, access }) {
     const row = await deps.comments.get({ slateId: slate._id, commentId: input.commentId })
     if (!row) throw problem(404, 'not_found', 'There is no such comment on this slate.')

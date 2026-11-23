@@ -77,7 +77,6 @@ export function createInstanceDescriber({
       openWorld: action.openWorld,
       ...(action.kind === 'write' && { modes: action.modes }),
       tool: action.tool?.name ?? null,
-      cli: action.cli?.command ?? null,
     })),
     limits: {
       rate: { perToken: rateLimits.perToken, perAccount: rateLimits.perAccount, windowSeconds: rateLimits.windowSeconds },

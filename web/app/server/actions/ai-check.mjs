@@ -44,7 +44,6 @@ export default defineAction({
     },
     required: ['ok', 'reachable', 'tools', 'message'],
   },
-  cli: { command: 'ai-check' },
   precheck: (principal, input) => requireLevelScope(principal, input.level),
   handler: (principal, input, { deps }) => {
     requireLevelScope(principal, input.level)

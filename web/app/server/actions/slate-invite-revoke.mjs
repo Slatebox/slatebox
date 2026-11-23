@@ -31,7 +31,6 @@ export default defineAction({
   },
   failure: { code: 'invite_update_failed', message: 'The request could not be completed. Retry with the same key.' },
   tool: { name: 'revoke_slate_invite', title: 'Withdraw a slate\'s invitation link', description: 'Withdraw a slate\'s unlisted invitation link and make the slate private again.' },
-  cli: { command: 'unshare' },
   handler: (principal, input, { deps, idempotencyKey }) =>
     deps.manageInvite({
       token: tokenLike(principal),

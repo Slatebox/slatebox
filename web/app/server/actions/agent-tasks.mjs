@@ -90,7 +90,6 @@ export const agentTasksList = defineAction({
   output: { type: 'object', properties: { shareId: { type: 'string' }, tasks: { type: 'array', items: taskOutput } }, required: ['shareId', 'tasks'] },
   load: loadFor(true),
   tool: { name: 'list_agent_tasks', title: 'List agent tasks on a slate', description: 'See the tasks people and agents asked agents to do on a slate: open ones to claim, who is on each, what waits for a person, and each task\'s shared log.' },
-  cli: { command: 'agent-tasks' },
   async handler(principal, input, { deps, resource: slate }) {
     const { store } = tasksOf(deps)
     const actor = { key: principal.kind === 'agent' ? 'token:' + principal.tokenId : 'user:' + principal.userId }
@@ -127,7 +126,6 @@ export const agentTasksCreate = defineAction({
   load: loadFor(true),
   failure: { code: 'agent_task_failed', message: 'The task could not be created. Retry with the same key.' },
   tool: { name: 'ask_agent', title: 'Ask an agent to do something on a slate', description: 'Give the Slatebox agent (or any agent) a task on a slate. It works visibly and holds removals for a person.' },
-  cli: { command: 'ask' },
   async handler(principal, input, { deps, mode, resource: slate }) {
     const tasks = tasksOf(deps)
     const actor = await actorOf(principal, deps, slate)
@@ -174,7 +172,6 @@ export const agentTasksUpdate = defineAction({
   load: loadFor(true),
   failure: { code: 'agent_task_failed', message: 'The task could not be updated. Read it again and retry.' },
   tool: { name: 'update_agent_task', title: 'Claim, note, hand off or finish an agent task', description: 'Claim an open agent task, add to its shared log, hand it to the Slatebox agent or any agent, or complete, fail or cancel it.' },
-  cli: { command: 'task' },
   precheck(principal, input) {
     if (input.action === 'approve' && principal.kind === 'agent')
       throw problem(403, 'person_required', 'Only a person can approve what an agent held.')

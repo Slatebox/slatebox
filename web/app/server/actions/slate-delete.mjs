@@ -13,7 +13,7 @@ export default defineAction({
     'Delete one of your own slates, with its sharing, comments and messages. Only the slate\'s owner can, and a theme other slates are built on cannot be deleted. This cannot be undone.',
   toolset: 'slates',
   kind: 'write',
-  scope: 'slates:write',
+  scope: 'slates:delete',
   principals: ['agent'],
   destructive: true,
   // A retried delete answers what the first one did.
@@ -32,7 +32,6 @@ export default defineAction({
     return slate
   },
   tool: { name: 'delete_slate', title: 'Delete a slate', description: 'Delete one of the person\'s own slates. This cannot be undone.' },
-  cli: { command: 'delete' },
   async handler(_principal, input, { deps, resource: slate }) {
     const result = await deps.deleteSlate(slate)
     if (result?.themeInUse)

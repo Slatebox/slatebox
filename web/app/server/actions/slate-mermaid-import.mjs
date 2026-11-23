@@ -180,7 +180,6 @@ export default defineAction({
   },
   failure: { code: 'mermaid_import_failed', message: 'The diagram could not be drawn. Retry with the same key.' },
   tool: { name: 'import_mermaid', title: 'Draw a mind map, flowchart or project plan', description: 'Draw a mind map, flowchart or project plan (Gantt chart) written in Mermaid as editable notes and lines, on a new slate or beside what an existing slate holds. Returns the slate link.' },
-  cli: { command: 'import-mermaid' },
   handler(principal, input, ctx) {
     let model
     try {

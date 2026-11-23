@@ -31,7 +31,6 @@ export default defineAction({
   load: loadSlate(true),
   failure: { code: 'presence_failed', message: 'The step could not be shown. Retry with the same key.' },
   tool: { name: 'tick_plan_step', title: 'Tick a step of your plan', description: 'Mark a step of the plan shown with show_plan as doing, done or skipped.' },
-  cli: { command: 'step' },
   async handler(principal, input, { deps, mode, resource: slate }) {
     if (mode === 'preview') return { ok: true, shareId: slate.shareId, plan: { steps: [], current: input.index } }
     const plan = await presenceOf(deps).step(principal, slate, input.index, input.status)

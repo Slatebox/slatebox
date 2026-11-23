@@ -95,7 +95,6 @@ export default defineAction({
   // A token copies by its account's rule, the one the app applies (resolveSlateForUser).
   mounts: { ddp: true, http: { method: 'POST', path: '/slates/{shareId}/copy', operationId: 'copySlate' } },
   tool: { name: 'copy_slate', title: 'Copy a slate', description: 'Make a private copy of a slate the person may edit, or of a public slate or template, and return the copy\'s id.' },
-  cli: { command: 'copy' },
   input: {
     type: 'object',
     properties: {

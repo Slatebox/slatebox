@@ -6,8 +6,9 @@ import { createHash, randomBytes } from 'node:crypto'
 // ai:admin: on top of ai:settings, change or test a team's or this server's AI (the person must
 // also be that team's admin or an administrator).
 // team:export: download everything the team owns (the person must be a team admin).
+// slates:delete: delete slates the account owns and remove comments (separate from editing).
 // team:import: import a team export as a new team, and confirm or discard it (administrators).
-export const API_TOKEN_SCOPES = ['slates:read', 'slates:write', 'slates:share', 'ai:settings', 'ai:admin', 'team:export', 'team:import']
+export const API_TOKEN_SCOPES = ['slates:read', 'slates:write', 'slates:share', 'slates:delete', 'ai:settings', 'ai:admin', 'team:export', 'team:import']
 export const ACTIVE_TOKEN_LIMIT = 10
 
 export function hashApiToken(token) {

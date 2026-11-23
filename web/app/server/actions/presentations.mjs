@@ -75,7 +75,6 @@ export const presentationsGet = defineAction({
   output: deckOutput,
   load: loadSlate(false),
   tool: { name: 'get_presentation', title: 'Read a presentation', description: 'Read a slate\'s presentation: its style and each step\'s layout and caption.' },
-  cli: { command: 'presentation' },
   async handler(principal, input, { deps }) {
     return deckSummary(await deckOf(deps, input.shareId, principal))
   },
@@ -108,7 +107,6 @@ export const presentationsSetStyle = defineAction({
   output: deckOutput,
   load: loadSlate(true),
   tool: { name: 'style_presentation', title: 'Restyle a presentation', description: 'Switch a slate\'s presentation to another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), keeping its steps.' },
-  cli: { command: 'present-style' },
   async handler(principal, input, { deps }) {
     const row = await deckOf(deps, input.shareId, principal)
     const overrides = input.palette ? { palette: input.palette } : {}

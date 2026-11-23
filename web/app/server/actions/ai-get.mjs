@@ -14,6 +14,5 @@ export default defineAction({
   tool: { name: 'get_ai_settings', title: 'Read your AI settings', description: 'Read which AI connections the person, their team and this server have, and which one each Slatebox feature uses. Keys are never returned.' },
   input: { type: 'object', properties: {}, additionalProperties: false },
   output: settingsOutput,
-  cli: { command: 'ai' },
   handler: (principal, _input, { deps }) => deps.ai.view(principal.userId),
 })

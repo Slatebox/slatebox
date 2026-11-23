@@ -93,7 +93,6 @@ export const teamExport = defineAction({
     required: ['downloadUrl', 'method', 'expiresAt'],
   },
   tool: { name: 'export_team', title: 'Export your team', description: 'For a team admin: get a one-time download address (15 minutes) for everything the team owns as one archive (slates, boards, comments, presentations, files, people and roles; never keys or token secrets), to move the team to another Slatebox server or keep a copy. The person agrees first.' },
-  cli: { command: 'team-export' },
   handler: (principal, _input, { deps }) => deps.teamTransfer.startExport(principal.userId),
 })
 
@@ -125,7 +124,6 @@ export const teamImportsStart = defineAction({
     required: ['uploadUrl', 'method', 'expiresAt'],
   },
   tool: { name: 'start_team_import', title: 'Import a team', description: 'For an administrator of this server: get a one-time address (1 hour) to upload a team export to. The upload becomes a hidden team to check, then confirm_team_import or discard_team_import.' },
-  cli: { command: 'team-import-start' },
   handler: (principal, _input, { deps }) => deps.teamTransfer.startImport(principal.userId),
 })
 
@@ -141,7 +139,6 @@ export const teamImportsList = defineAction({
   input: { type: 'object', properties: {}, additionalProperties: false },
   output: { type: 'object', properties: { imports: { type: 'array', items: importSummary } }, required: ['imports'] },
   tool: { name: 'list_team_imports', title: 'List team imports', description: 'For an administrator of this server: list recent team imports, pending ones first.' },
-  cli: { command: 'team-imports' },
   handler: (principal, _input, { deps }) =>
     deps.teamTransfer.listImports(principal.userId).then((records) => ({ imports: records.map(summarize) })),
 })
@@ -158,7 +155,6 @@ export const teamImportsGet = defineAction({
   input: { type: 'object', properties: { importId }, required: ['importId'], additionalProperties: false },
   output: { type: 'object', properties: { ...importSummary.properties, report }, required: ['importId', 'state'] },
   tool: { name: 'get_team_import', title: 'Read a team import', description: 'For an administrator of this server: read one team import and its report.' },
-  cli: { command: 'team-import' },
   async handler(principal, input, { deps }) {
     const record = await deps.teamTransfer.getImport(principal.userId, input.importId)
     return { ...summarize(record), ...(record.report && { report: record.report }) }
@@ -191,7 +187,6 @@ export const teamImportsConfirm = defineAction({
     required: ['importId', 'state', 'teamId'],
   },
   tool: { name: 'confirm_team_import', title: 'Make an imported team live', description: 'For an administrator of this server: make a pending imported team live, and optionally email its people to claim their accounts. The person agrees first.' },
-  cli: { command: 'team-import-confirm' },
   handler: (principal, input, { deps }) => deps.teamTransfer.confirmImport(principal.userId, input.importId, { invite: input.invite }),
 })
 
@@ -226,7 +221,6 @@ export const teamImportsInvite = defineAction({
     required: ['importId', 'email', 'outcome'],
   },
   tool: { name: 'invite_team_import_person', title: 'Invite one imported person', description: 'For an administrator of this server: email one person from a confirmed team import whose address you have checked, so they can claim their account. The person agrees first.' },
-  cli: { command: 'team-import-invite' },
   handler: (principal, input, { deps }) => deps.teamTransfer.inviteImported(principal.userId, input.importId, input.email),
 })
 
@@ -246,7 +240,6 @@ export const teamImportsDiscard = defineAction({
   input: { type: 'object', properties: { importId }, required: ['importId'], additionalProperties: false },
   output: { type: 'object', properties: { importId: { type: 'string' }, state: { type: 'string', enum: ['discarded'] } }, required: ['importId', 'state'] },
   tool: { name: 'discard_team_import', title: 'Discard a team import', description: 'For an administrator of this server: delete a pending imported team and everything the import wrote.' },
-  cli: { command: 'team-import-discard' },
   handler: (principal, input, { deps }) => deps.teamTransfer.discardImport(principal.userId, input.importId),
 })
 

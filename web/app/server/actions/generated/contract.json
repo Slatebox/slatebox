@@ -5,6 +5,7 @@
     "slates:read",
     "slates:write",
     "slates:share",
+    "slates:delete",
     "ai:settings",
     "ai:admin",
     "team:export",
@@ -1132,9 +1133,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "read"
       }
     },
     {
@@ -1928,9 +1926,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "create"
       }
     },
     {
@@ -7577,9 +7572,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "apply"
       }
     },
     {
@@ -7678,9 +7670,6 @@
           "idempotentHint": true,
           "openWorldHint": true
         }
-      },
-      "cli": {
-        "command": "share"
       }
     },
     {
@@ -7767,9 +7756,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "unshare"
       }
     },
     {
@@ -7868,9 +7854,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "copy"
       }
     },
     {
@@ -8016,9 +7999,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "mermaid"
       }
     },
     {
@@ -8174,9 +8154,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "import-mermaid"
       }
     },
     {
@@ -8267,10 +8244,7 @@
           "tokens"
         ]
       },
-      "tool": null,
-      "cli": {
-        "command": "tokens"
-      }
+      "tool": null
     },
     {
       "id": "apiTokens.revoke",
@@ -8336,10 +8310,7 @@
           "revoked"
         ]
       },
-      "tool": null,
-      "cli": {
-        "command": "logout"
-      }
+      "tool": null
     },
     {
       "id": "instance.describe",
@@ -8480,9 +8451,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "instance"
       }
     },
     {
@@ -8580,9 +8548,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "whoami"
       }
     },
     {
@@ -8871,8 +8836,7 @@
           "usage"
         ]
       },
-      "tool": null,
-      "cli": null
+      "tool": null
     },
     {
       "id": "exec.get",
@@ -8977,8 +8941,7 @@
           "calls"
         ]
       },
-      "tool": null,
-      "cli": null
+      "tool": null
     },
     {
       "id": "ai.get",
@@ -9069,9 +9032,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "ai"
       }
     },
     {
@@ -9339,9 +9299,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "ai-set"
       }
     },
     {
@@ -9526,9 +9483,6 @@
           "idempotentHint": true,
           "openWorldHint": true
         }
-      },
-      "cli": {
-        "command": "ai-check"
       }
     },
     {
@@ -9673,9 +9627,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "plan"
       }
     },
     {
@@ -9824,9 +9775,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "step"
       }
     },
     {
@@ -9896,9 +9844,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "components"
       }
     },
     {
@@ -9976,9 +9921,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "component"
       }
     },
     {
@@ -10088,9 +10030,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "check-move"
       }
     },
     {
@@ -10178,9 +10117,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "team-export"
       }
     },
     {
@@ -10260,9 +10196,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "team-import-start"
       }
     },
     {
@@ -10385,9 +10318,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "team-imports"
       }
     },
     {
@@ -10571,9 +10501,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "team-import"
       }
     },
     {
@@ -10680,9 +10607,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "team-import-confirm"
       }
     },
     {
@@ -10771,9 +10695,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "team-import-invite"
       }
     },
     {
@@ -10847,9 +10768,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "team-import-discard"
       }
     },
     {
@@ -10992,9 +10910,6 @@
           "idempotentHint": false,
           "openWorldHint": true
         }
-      },
-      "cli": {
-        "command": "shape-draw"
       }
     },
     {
@@ -11117,9 +11032,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "shapes"
       }
     },
     {
@@ -11256,9 +11168,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "shape"
       }
     },
     {
@@ -11404,9 +11313,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "presentation"
       }
     },
     {
@@ -11583,9 +11489,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "present-style"
       }
     },
     {
@@ -11707,9 +11610,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "list"
       }
     },
     {
@@ -11730,7 +11630,7 @@
         "save"
       ],
       "idempotency": "optional",
-      "scope": "slates:write",
+      "scope": "slates:delete",
       "http": {
         "method": "DELETE",
         "path": "/api/v1/slates/{shareId}",
@@ -11782,9 +11682,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "delete"
       }
     },
     {
@@ -11899,9 +11796,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "comments"
       }
     },
     {
@@ -12020,9 +11914,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "comment"
       }
     },
     {
@@ -12113,9 +12004,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "resolve"
       }
     },
     {
@@ -12136,7 +12024,7 @@
         "save"
       ],
       "idempotency": "optional",
-      "scope": "slates:write",
+      "scope": "slates:delete",
       "http": {
         "method": "DELETE",
         "path": "/api/v1/slates/{shareId}/comments/{commentId}",
@@ -12196,9 +12084,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "uncomment"
       }
     },
     {
@@ -12372,9 +12257,6 @@
           "idempotentHint": true,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "agent-tasks"
       }
     },
     {
@@ -12581,9 +12463,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "ask"
       }
     },
     {
@@ -12804,9 +12683,6 @@
           "idempotentHint": false,
           "openWorldHint": false
         }
-      },
-      "cli": {
-        "command": "task"
       }
     }
   ]
