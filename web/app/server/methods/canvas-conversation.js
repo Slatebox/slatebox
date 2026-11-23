@@ -76,8 +76,9 @@ async function resolve(shareId, uid) {
 }
 
 // The model, through the app's provider plumbing: provider choice, a self-hosted model, usage
-// accounting and response validation all stay in req().
-function modelFor(shareId) {
+// accounting and response validation all stay in req(). The Slatebox agent (server/agents) drafts
+// through it too.
+export function modelFor(shareId) {
   // req chooses the model: the person's, their team's or the operator's connection, or the built-in AI
   const config = resolveAIFeatureConfig('generation', Meteor.settings)
   return async ({ system, prompts, tool }) => {

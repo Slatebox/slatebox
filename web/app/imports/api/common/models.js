@@ -56,6 +56,8 @@ const SlateOperationRuns = new Mongo.Collection('slateOperationRuns')
 // Agents on the canvas: one record per agent run and slate, written by the server only
 // (server/presence/agentPresence.mjs) and published to whoever may read the slate.
 const AgentPresence = new Mongo.Collection('agentPresence')
+// Agent tasks: the work people and agents hand to agents on a slate (server/agents).
+const AgentTasks = new Mongo.Collection('agentTasks')
 
 export {
   Organizations,
@@ -102,6 +104,7 @@ export {
   SlateApiTokens,
   SlateOperationRuns,
   AgentPresence,
+  AgentTasks,
 }
 
 // Metering, wallets, own keys and calls (server/metering). ProviderKeys is never published.

@@ -39,6 +39,7 @@ const { resolveInstanceIdentity } = await import(new URL("server/instance/identi
 const { actions } = await import(new URL("server/actions/index.mjs", app));
 const { RATE_LIMITS } = await import(new URL("server/actions/rate-limit.mjs", app));
 const { createAISettings } = await import(new URL("server/methods/ai/ai-settings-core.mjs", app));
+const { createAgentTasks } = await import(new URL("server/agents/agentTasks.mjs", app));
 const { createAgentPresence } = await import(new URL("server/presence/agentPresence.mjs", app));
 const { deckRecord } = await import(new URL("imports/ui/components/presentations/presentationCompose.mjs", app));
 
@@ -103,6 +104,7 @@ async function instance(t) {
   const stores = { slates, runs, saveCore, withTransaction: (action) => action({}) };
   const invites = [];
   const transfers = [];
+  const handedOff = [];
   // Wave 2 (P08): the instance description and the account, on in-memory stores.
   const settings = { public: { env: "selfhost", baseUrl: "http://127.0.0.1" }, selfHosted: { workshopAI: false } };
   const accounts = createAccounts({
@@ -194,6 +196,13 @@ async function instance(t) {
     // Agents on the canvas: the real store, in memory.
     presence: createAgentPresence({ collection: memoryCollection(), secret: "probe",
       findUser: async () => ({ _id: "owner", profile: { firstName: "Owner" } }) }),
+    // Agent tasks: the real store, in memory (the Slatebox agent has its own tests,
+    // scripts/agent-tasks.test.mjs). Here: an open task asked, claimed, noted and handed on.
+    agentTasks: {
+      store: createAgentTasks({ collection: memoryCollection(), newId: () => "task" + (handedOff.length + 1) }),
+      labelOf: async (principal) => (principal.kind === "agent" ? "Owner's agent" : "Owner"),
+      onAssigned: (task) => handedOff.push(task.assignee),
+    },
     // Team export and import: the archive, its addresses and who may use them have their own
     // tests (scripts/team-export.test.mjs). Here: the routes and the calls.
     teamTransfer: {
@@ -269,7 +278,7 @@ async function instance(t) {
   };
   const stored = async (shareId) => slates.findOne({ shareId });
   const texts = async () => (await stored("canvas")).nodes.map((n) => n.options.text);
-  return { client, exec, ok, confirmed, called, stored, texts, invites, transfers, deckRow, restyles, comments, deletedSlates };
+  return { client, exec, ok, confirmed, called, stored, texts, invites, transfers, deckRow, restyles, comments, deletedSlates, handedOff };
 }
 
 // Every canvas edit names the revision it was made on (required since release/agentic): the
@@ -321,7 +330,7 @@ test("canvas edits change exactly the notes they name, and only when saved", asy
 });
 
 test("every client method succeeds against the app, and refusals keep status, code and details", async (t) => {
-  const { ok, exec, confirmed, called, stored, texts, invites, transfers, deckRow, restyles, comments, deletedSlates } = await instance(t);
+  const { ok, exec, confirmed, called, stored, texts, invites, transfers, deckRow, restyles, comments, deletedSlates, handedOff } = await instance(t);
 
   const created = await ok(`return slatebox.slates.create({ brief: "Request -> Review", kind: "diagram" })`);
   assert.equal(created.shareId, "created");
@@ -472,6 +481,20 @@ return slatebox.presence.step({ shareId: "canvas", index: 0, status: "done" })`)
   assert.equal((await ok(`return slatebox.comments.resolve({ shareId: "canvas", noteId: "a" })`)).comments, 1);
   await confirmed(`return slatebox.comments.remove({ shareId: "canvas", commentId: ${JSON.stringify(comment.commentId)} })`, ["removes"]);
   assert.equal(comments.length, 0);
+
+  // Agent tasks (agent teammates): ask for any agent, find it, claim it, note it, hand it to the
+  // Slatebox agent; a second claim of a held task is refused with the gate's code.
+  const asked = await ok(`return slatebox.agentTasks.create({ shareId: "canvas", text: "Group the notes", assignee: "any" })`);
+  assert.deepEqual([asked.task.status, asked.task.askedBy], ["submitted", "Owner's agent"]);
+  const open = await ok(`return slatebox.agentTasks.list({ shareId: "canvas" })`);
+  assert.deepEqual(open.tasks.map((task) => task.text), ["Group the notes"]);
+  const worked = await ok(`await slatebox.agentTasks.update({ shareId: "canvas", taskId: ${JSON.stringify(asked.task.id)}, action: "claim" })
+await slatebox.agentTasks.update({ shareId: "canvas", taskId: ${JSON.stringify(asked.task.id)}, action: "note", text: "Two themes" })
+return slatebox.agentTasks.update({ shareId: "canvas", taskId: ${JSON.stringify(asked.task.id)}, action: "handoff", to: "slatebox" })`);
+  assert.deepEqual([worked.task.status, worked.task.assignee, worked.task.log.map((e) => e.kind)], ["submitted", "slatebox", ["asked", "claimed", "note", "handoff"]]);
+  assert.deepEqual(handedOff, ["slatebox"]);
+  const notYours = await exec(`return slatebox.agentTasks.update({ shareId: "canvas", taskId: ${JSON.stringify(asked.task.id)}, action: "claim" })`);
+  assert.deepEqual([notYours.error.status, notYours.error.code], [409, "task_assigned"]);
 
   assert.deepEqual([...called].sort(), [...defaultGenerated().methods.keys()].sort(), "every client method was called");
 });

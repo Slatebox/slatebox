@@ -57,7 +57,9 @@ test("an action added later appears in the client without touching the renderer"
   const method = next.methods.find((m) => m.name === "things.write");
   assert.ok(method);
   assert.deepEqual(method.modes, ["save", "preview"]);
-  assert.match(method.index, /^things\.write\(\{name\?, mode\?\}\) — Write a thing$/);
+  // Restated (agent teammates): the index is compact so every method fits the budget. mode is
+  // not listed per method; the rules say any write previews with mode "preview".
+  assert.match(method.index, /^things\.write\(\{name\?\}\): Write a thing$/);
   assert.match(method.dts, /declare namespace slatebox\.things \{/);
   assert.match(method.dts, /function write\(input: \{/);
 });
@@ -99,7 +101,10 @@ test("the declarations keep the registry's named types and put mode in the input
   assert.equal(/idempotencyKey/i.test(dts), false, "keys are derived; no idempotencyKey in the guest API");
   const get = manifest.methods.find((m) => m.name === "slates.get");
   // Restated (wave 2, P07): the read takes note selection and paging.
-  assert.equal(get.index, "slates.get({shareId, include?, fields?, ids?, within?, groupId?, q?, match?, limit?, cursor?}) — Read a slate");
+  // Restated (agent teammates): past four optional fields the index shows "…"; the declaration
+  // keeps every one, paging included.
+  assert.equal(get.index, "slates.get({shareId,include?,fields?,ids?,…}): Read a slate");
+  for (const field of ["within", "groupId", "q", "match", "limit", "cursor"]) assert.match(get.dts, new RegExp(`\\b${field}\\?:`), field);
   assert.deepEqual(get.modes, []);
   // Every type a method names is declared.
   for (const method of manifest.methods) for (const name of method.types) assert.ok(manifest.types[name], name);

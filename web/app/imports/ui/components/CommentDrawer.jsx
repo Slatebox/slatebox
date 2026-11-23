@@ -30,6 +30,7 @@ import AuthManager from '../../api/common/AuthManager'
 import CONSTANTS from '../../api/common/constants'
 import { Messages, Comments } from '../../api/common/models'
 import promisify from '../../api/client/promisify'
+import { slateboxRequest } from '../../api/common/agent-mention.mjs'
 
 import { globalMessage } from '../jotai/atoms'
 
@@ -57,6 +58,7 @@ const StyledMentionsInput = styled(MentionsInput)(({ theme }) => ({
 }))
 
 export default function CommentDrawer({
+  shareId,
   orgId,
   slateId,
   slateName,
@@ -229,6 +231,12 @@ export default function CommentDrawer({
         resolved: false,
       }
       const commId = await Comments.insertAsync(comm)
+      // "@Slatebox …" asks the Slatebox agent: it works on the slate and replies in this thread.
+      const forAgent = slateboxRequest(comment)
+      if (forAgent && shareId) {
+        Meteor.callAsync('agentTasks.create', { shareId, text: forAgent, nodeId, assignee: 'slatebox' })
+          .catch((e) => setMessage({ visible: true, text: e.reason || 'The Slatebox agent could not take that.', severity: 'error' }))
+      }
       const note = `[${slateName}] from ${getUserName()}: ${cleanTextForDisplay(
         comment
       )}`
@@ -302,6 +310,7 @@ export default function CommentDrawer({
   CommentDrawer.propTypes = {
     orgId: PropTypes.string,
     slateId: PropTypes.string,
+    shareId: PropTypes.string,
     nodeId: PropTypes.string,
     closeDrawer: PropTypes.func,
     open: PropTypes.bool.isRequired,

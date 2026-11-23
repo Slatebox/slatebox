@@ -179,12 +179,19 @@ const flagsOf = (action) =>
     action.idempotent && action.kind === 'write' && 'idempotent',
   ].filter(Boolean)
 
+// One method in the exec description's index: its fields (optional ones marked ?) and title.
+// Compact, so every method fits the budget: "name({fields}): Title", no space after commas; mode is left out (the rules
+// say any write previews with mode "preview"); past four optional fields, "…" (describe has all).
+const INDEX_OPTIONAL = 4
 function indexLine(action, name) {
   const input = action.input
   const required = new Set(input.required || [])
-  const fields = Object.keys(input.properties).map((field) => (required.has(field) ? field : field + '?'))
-  if (action.kind === 'write' && action.modes.length > 1) fields.push('mode?')
-  return `${name}({${fields.join(', ')}}) — ${action.title}`
+  const names = Object.keys(input.properties)
+  const optional = names.filter((field) => !required.has(field))
+  const shown = names.filter((field) => required.has(field) || optional.indexOf(field) < INDEX_OPTIONAL - 1 || optional.length <= INDEX_OPTIONAL)
+  const fields = shown.map((field) => (required.has(field) ? field : field + '?'))
+  if (shown.length < names.length) fields.push('…')
+  return `${name}({${fields.join(',')}}): ${action.title}`
 }
 
 function renderMethod(action, components) {

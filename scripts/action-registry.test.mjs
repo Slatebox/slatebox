@@ -362,7 +362,9 @@ test("the Developer tab and the API run one handler for list, create and revoke"
   // Restated (Mermaid): the app's Mermaid dialog imports through slates.importMermaid, the action tokens call.
   // Restated (team export): Team settings › Export everything calls team.export, and Admin tools ›
   // Import a team export calls teamImports.start, list, get, confirm, invite and discard.
-  assert.deepEqual(names.sort(), ["account.get", "ai.check", "ai.get", "ai.update", "apiTokens.create", "apiTokens.list", "apiTokens.revoke", "instance.describe", "slates.copy", "slates.importMermaid", "slates.updateSettings", "team.export", "teamImports.confirm", "teamImports.discard", "teamImports.get", "teamImports.invite", "teamImports.list", "teamImports.start"]);
+  // Restated (agent teammates): the canvas's Agent tasks panel lists, asks and approves through
+  // agentTasks.list, agentTasks.create and agentTasks.update, the actions tokens call.
+  assert.deepEqual(names.sort(), ["account.get", "agentTasks.create", "agentTasks.list", "agentTasks.update", "ai.check", "ai.get", "ai.update", "apiTokens.create", "apiTokens.list", "apiTokens.revoke", "instance.describe", "slates.copy", "slates.importMermaid", "slates.updateSettings", "team.export", "teamImports.confirm", "teamImports.discard", "teamImports.get", "teamImports.invite", "teamImports.list", "teamImports.start"]);
   const asOwner = { userId: "owner" };
   const created = await methods["apiTokens.create"].call(asOwner, { name: "From the tab", scopes: ["slates:read"] });
   assert.match(created.token, /^sbx_/);

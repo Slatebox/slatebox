@@ -28,6 +28,7 @@ export const PRESENCE_LIMITS = Object.freeze({
 })
 
 export const PALETTE_SIZE = 6
+export const SLATEBOX_AGENT_LABEL = 'Slatebox agent'
 // publicId: the id a screen knows the record by (an HMAC of the record's own id), so two runs of
 // one token on one slate are two pointers, and neither id can be followed back to the token.
 export const PUBLIC_FIELDS = Object.freeze([
@@ -84,6 +85,10 @@ export function createAgentPresence({
   const pacing = new Map()
 
   async function identity(principal, slate) {
+    // The Slatebox agent (server/agents/teammate.mjs) is named by the server alone: no client can
+    // wear the name (sanitizeClientName refuses "Slatebox"), and it keeps one colour on every slate.
+    if (principal.builtin === 'slatebox')
+      return { agentKey: agentKeyFor(await keyOf(), principal.tokenId, slate._id), label: SLATEBOX_AGENT_LABEL, initial: 'S', colorIndex: 0 }
     const [user, token] = await Promise.all([
       findUser(principal.userId).catch(() => null),
       principal.tokenId && !String(principal.tokenId).startsWith('session:') ? findToken(principal.tokenId).catch(() => null) : null,

@@ -101,6 +101,7 @@ import PresentSlateDialogue from '../components/PresentSlateDialogue'
 import SlateOperationListener from '../components/SlateOperationListener'
 import LineToolStatus from '../components/stylebar/LineToolStatus'
 import AgentPresenceListener from '../components/AgentPresenceListener'
+import AgentTasksPanel from '../components/AgentTasksPanel'
 import { CreativeStates, livePresentationTicket, NativePresentationStates } from '../../api/client/creativeSlateStates'
 import { presentPeople } from '../../api/common/presence.mjs'
 import { sidePanels } from '../../api/common/side-panels.mjs'
@@ -305,6 +306,7 @@ export default function Canvas() {
     setCommentDrawer({
       nodeId: node.options.id,
       slateId: slate.current.options.id,
+      shareId: slate.current.shareId,
       slateName: slate.current.options.name,
       orgId: slateOrgId.current,
       open: true,
@@ -1525,6 +1527,9 @@ export default function Canvas() {
       )}
       {slate.current && <SlateOperationListener slate={slate.current} revision={loadedRevision.current} />}
       {slate.current && <AgentPresenceListener slate={slate.current} />}
+      {slate.current && !asEmbed && Meteor.userId() && (
+        <AgentTasksPanel shareId={slate.current.shareId} canEdit={!accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly && !Meteor.user()?.isAnonymous} />
+      )}
       {/* {currentAIContext?.aid &&
         slate.current &&
         currentAIContext?.isConversation?.showWelcome && (
