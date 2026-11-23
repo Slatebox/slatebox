@@ -37,7 +37,8 @@ import { presentTarget } from './presentations/presentTarget.mjs'
 import { CreativeStates } from '../../api/client/creativeSlateStates'
 import copySlate from '../../api/client/copySlate'
 import confirmService from '../common/confirm'
-import { collaborationUsers, conversationAvailable, conversationOpen, isPresentOpen, mermaidDialog } from '../jotai/atoms'
+import { collaborationUsers, conversationArrival, conversationAvailable, conversationOpen, isPresentOpen, mermaidDialog } from '../jotai/atoms'
+import { toggledConversation } from '../../api/common/conversation-toggle.mjs'
 import { presentedBoards } from './presentations/workshopScenes.mjs'
 
 // One entry per person (presentPeople), named as every viewer and their pointer name them.
@@ -64,6 +65,8 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
   const openMermaid = useSetAtom(mermaidDialog)
   const afterSlateMenu = useRef(null)
   const [askOpen, setAskOpen] = useAtom(conversationOpen)
+  // Pressed as soon as it is in sight, even while the conversation is still on its way (conversation-toggle.mjs).
+  const [askArrival, setAskArrival] = useAtom(conversationArrival)
   const canAsk = useAtomValue(conversationAvailable)
   const people = useAtomValue(collaborationUsers)
   const unread = useUnreadNotifications()
@@ -253,7 +256,7 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
 
     {!narrow && slate && !themeSlate && huddle !== 'disabled' && <HuddleUp />}
     {!narrow && canAsk && <Button className="sb-ask" data-conversation-toggle color="inherit" variant="outlined" aria-pressed={Boolean(askOpen)}
-      startIcon={<AutoAwesome />} onClick={() => setAskOpen(!askOpen)}>Ask Slatebox</Button>}
+      startIcon={<AutoAwesome />} onClick={() => { setAskOpen(toggledConversation({ open: askOpen, arrival: askArrival, now: performance.now() })); setAskArrival(null) }}>Ask Slatebox</Button>}
     {presentButton}
     {owner && !themeSlate && <Button className="sb-board-share" variant="contained" color="primary" disableElevation onClick={onShare}>Share</Button>}
     {!narrow && !owner && slate && (privacy.isPublic || privacy.isUnlisted) &&

@@ -13,10 +13,15 @@ export const conversationAvailable = atom(false)
 // canvas (sheet-drag.mjs): still open (what it holds is kept, a board stays in focus), out of sight.
 // Opening it in any way (the bar, "Ask about this", "Change this board", Review proposal) brings it back.
 export const conversationMinimised = atom(false)
+// The conversation a slate opened by itself as it loaded, until a tap or a close: { shownAt }, null
+// until it first shows. Its button opens it, not closes it, until then (conversation-toggle.mjs).
+export const conversationArrival = atom(null)
 const conversationOpenBase = atom(false)
 export const conversationOpen = atom((get) => get(conversationOpenBase), (get, set, next) => {
   set(conversationMinimised, false)
-  set(conversationOpenBase, typeof next === 'function' ? next(get(conversationOpenBase)) : next)
+  const open = typeof next === 'function' ? next(get(conversationOpenBase)) : next
+  if (!open) set(conversationArrival, null)
+  set(conversationOpenBase, open)
 })
 
 export const isPresentOpen = atom(false)

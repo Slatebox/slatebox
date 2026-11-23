@@ -45,6 +45,7 @@ import {
   autoInvokeConversation,
   currentSlateAudioUrl,
   conversationOpen,
+  conversationArrival,
   conversationMinimised,
   conversationAvailable,
   globalMessage,
@@ -151,6 +152,7 @@ export default function Canvas() {
     return () => window.removeEventListener(LIBRARY_EVENT, hear)
   }, [])
   const setConversationAvailable = useSetAtom(conversationAvailable)
+  const setConversationArrival = useSetAtom(conversationArrival)
   const pendingConversationFit = React.useRef(null)
   const drawingState = useTracker(()=>{
     if(!nativeBoard || asEmbed || nativeBoard.creative && !nativeBoard.nativeCanvasDrawing) return null
@@ -749,6 +751,8 @@ export default function Canvas() {
       : !sBase.creative && Boolean(isNew || sBase.options?.creationBrief || sBase.nativeConversationRevision || !(sBase.nodes||[]).length)
     pendingConversationFit.current = openConversation && !sBase.creative ? slate.current : null
     setNativeChatOpen(openConversation)
+    // Opened by the slate itself: its button opens it, not closes it, until it is in sight (conversation-toggle.mjs).
+    setConversationArrival(openConversation ? { shownAt: null } : null)
     setCreativeKind(slate.current.creativeKind || null)
 
     // for outside access

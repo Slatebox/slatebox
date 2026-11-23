@@ -2,6 +2,9 @@ import React, { useEffect, useId, useLayoutEffect, useRef } from 'react'
 import { Box, Button, IconButton, Paper, TextField, Tooltip, Typography, useMediaQuery } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import { newestTop } from '../common/newestTurn.mjs'
+import { useSetAtom } from 'jotai'
+import { conversationArrival } from '../jotai/atoms'
+import { arrivalShown } from '../../api/common/conversation-toggle.mjs'
 
 // A short screen: a phone held sideways.
 const short = '@media (max-height:500px)'
@@ -33,6 +36,9 @@ function takeFocusAfterReload(shareId) {
 export default function ConversationPanel({ onClose, children, composer, anchor = 'bottom' }) {
   const history = useRef(null)
   const grown = useRef(0)
+  // In sight: a conversation the slate opened by itself is here now (its button closes it after a moment).
+  const setArrival = useSetAtom(conversationArrival)
+  useLayoutEffect(() => { setArrival(arrival => arrivalShown(arrival, performance.now())) }, [])
   // The newest of the conversation is at its foot, just above the message box: keep it in sight
   // as the conversation grows (and leave alone someone reading further up while nothing is added).
   useLayoutEffect(() => {
@@ -122,7 +128,21 @@ export function ConversationComposer({ shareId, inputRef, value, onChange, onSub
   useEffect(() => {
     if (shareId && takeFocusAfterReload(shareId)) requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }))
   }, [shareId, inputRef])
-  const submit = event => { event.preventDefault(); if (!held && canSubmit) onSubmit() }
+  // Sent while the conversation is still getting ready (checking what this account can do, the board
+  // still saving): it goes as soon as it is ready, never dropped with its words left in the box.
+  // Typing again first takes it back; the next Enter sends what is there then.
+  const waiting = useRef(false)
+  useEffect(() => {
+    if (!waiting.current || held || !canSubmit) return
+    waiting.current = false
+    onSubmit()
+  }, [canSubmit, held])
+  const submit = event => {
+    event.preventDefault()
+    if (held) return
+    if (canSubmit) onSubmit()
+    else if (value?.trim()) waiting.current = true
+  }
   return <Box component="form" aria-label="Message Slatebox" onSubmit={submit}
     onFocus={() => { focusInForm.current = true }}
     onBlur={event => {
@@ -145,7 +165,7 @@ export function ConversationComposer({ shareId, inputRef, value, onChange, onSub
       sx={held ? {[short]:{display:'none'}} : undefined}
       disabled={held} placeholder={placeholder} helperText={held ? undefined : helperText}
       slotProps={{ htmlInput: { maxLength, 'aria-describedby': held ? reasonId : undefined } }}
-      onChange={event => onChange(event.target.value)}
+      onChange={event => { waiting.current = false; onChange(event.target.value) }}
       onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.target.form?.requestSubmit() } }} />
     {error && <Typography role="alert" color="error" variant="body2" sx={{mt:.5}}>{error}</Typography>}
     {!held && <Box sx={{display:'flex',justifyContent:'flex-end',mt:.5}}>
