@@ -192,8 +192,9 @@ body:has(.sb-cookie) .sb-canvas-page{box-sizing:border-box;padding-bottom:calc(m
 #slateCanvas[data-sb-mode=dark] .slateboxjs-birdseye-viewport{fill:rgb(242 206 139 / 10%);stroke:#f2ce8b}
 #slateCanvas[data-sb-canvas=dark] .slateboxjs-birdseye-zoom-controls button{background:var(--sb-offset,#2c4338)!important}
 #slateCanvas[data-sb-canvas=dark] .slatebox-zoom-slider{box-shadow:0 2px 12px rgb(0 0 0 / 35%)}
-/* From a tablet up the zoom controls sit beside the add button, centred on it, not under it. */
-@media(min-width:600px){#slateCanvas .slatebox-zoom-slider{right:76px!important;bottom:21px!important}}
+/* From a tablet up the zoom controls sit beside the add button, centred on it, not under it. (left:auto: the engine's
+   own wide layout pins the pill to the left edge; with both edges set it would stretch across the canvas.) */
+@media(min-width:600px){#slateCanvas .slatebox-zoom-slider{left:auto!important;right:76px!important;bottom:21px!important}}
 /* A note drawn with no fill (a text note) stays clear while it is presented: the presenter's highlight sets every
    shape's opacity, which would otherwise show its hidden white box. */
 .sb-presentation-camera [data-node-background-path][opacity="0"]{opacity:0!important}

@@ -140,3 +140,8 @@ test('on the dark canvas the chrome reads: the title in light ink, the focus fra
   const css = readFileSync(new URL('../web/app/imports/ui/common/main.css', import.meta.url), 'utf8')
   assert.match(css, /\[data-sb-canvas=dark\] g\[data-node-id\*=":column-"\] \[data-node-background-path\],/)
 })
+
+test('from a tablet up the zoom pill stays beside the add button: the engine\'s left edge is undone, so it never stretches across the canvas', () => {
+  const css = readFileSync(new URL('../web/app/imports/ui/common/main.css', import.meta.url), 'utf8')
+  assert.match(css, /@media\(min-width:600px\)\{#slateCanvas \.slatebox-zoom-slider\{left:auto!important;right:76px!important;/)
+})
