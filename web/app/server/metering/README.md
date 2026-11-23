@@ -20,7 +20,7 @@ The included amount ("Pro credits") is sized by one number, `free.creditCostMicr
 | `context.mjs` | `runAIAction` (AsyncLocalStorage). `req.js` refuses to send anything when the meter is on and no action is running, or after it ended. Work a request starts without waiting (`keepActionOpen`) keeps it open. Attempts that got no usage back are charged the feature estimate. |
 | `meter-core.mjs` | The meter itself: route, hold, record, release. Tests run it with an in-memory store. |
 | `holds.mjs` | Before a request is sent, its most possible spend is set aside with conditional updates (person's day and month, the global month up to 110%, or the wallet), so parallel requests cannot pass a cap. |
-| `limits.mjs` | Per-person and per-address rate limits on every metered method. The per-person rule counts signed-in people only; the per-address rule never counts a Cloudflare edge address. |
+| `limits.mjs` | Per-person and per-address rate limits on every metered method. The per-person rule counts signed-in people only; the per-address rule never counts a Cloudflare edge address or a private one (the cluster's own: the ingress, a node, a pod). |
 | `client-address.mjs` | The caller's address behind Cloudflare and the ingress (walks X-Forwarded-For left past Cloudflare's own ranges). `meteor.js` sets it on each connection. |
 | `refusal-notice.mjs` | The meter's refusal goes into a slate's chat only for a signed-in caller who may change that saved slate. |
 | `own-endpoint.mjs` | A person's own model endpoint: public https only, checked on save and on every connection. |
@@ -64,7 +64,7 @@ Every Stripe subscription was cancelled on 2026-11-20, with no refund and nothin
 
 ## Behind Cloudflare
 
-Per-address limits need the caller's address. `HTTP_FORWARDED_COUNT=1` makes the ingress's own X-Forwarded-For entry the trusted one, and `client-address.mjs` walks left past Cloudflare's ranges to the visitor. That only works if the ingress keeps the entry Cloudflare sends: configure the ingress to trust X-Forwarded-For from Cloudflare's ranges (Traefik `forwardedHeaders.trustedIPs`). Until then the only address seen is Cloudflare's, and the per-address rules skip it (per-person limits, the confirmed-address rule and the caps still apply).
+Per-address limits need the caller's address. `HTTP_FORWARDED_COUNT=1` makes the ingress's own X-Forwarded-For entry the trusted one, and `client-address.mjs` walks left past Cloudflare's ranges to the visitor. That only works if the ingress keeps the entry Cloudflare sends: configure the ingress to trust X-Forwarded-For from Cloudflare's ranges (Traefik `forwardedHeaders.trustedIPs`). Until then the only address seen is Cloudflare's or the ingress's own private one, and the per-address rules skip both (per-person limits, the confirmed-address rule and the caps still apply), so guests behind the ingress are never put in one count.
 
 ## Daily behaviour to confirm on the first test-cluster deploy
 

@@ -75,8 +75,9 @@ export const DEFAULT_METERING = Object.freeze({
     perPersonMicrosPerDay: 500_000, // $0.50, all included spend except a call already running
     // A presentation plan for a guest on their own slate, or an account whose email is not
     // confirmed yet: per person, and per network address (many guest accounts, one machine).
-    guestPresentationsPerDay: 5,
-    guestPresentationsPerAddressPerDay: 20,
+    // Generous, for adoption: spend stays capped per person and by the month's budget.
+    guestPresentationsPerDay: 10,
+    guestPresentationsPerAddressPerDay: 100,
     // From this moment the amounts above come with Slatebox Pro, and a signed-in person without
     // Pro pays from a balance (or, self-hosted only, their own key) (PRO_SWITCH).
     proRequiredFrom: PRO_SWITCH.never,

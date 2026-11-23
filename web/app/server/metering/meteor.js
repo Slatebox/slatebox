@@ -20,7 +20,7 @@ import { emptyWallet, spendableMicros } from './ledger.mjs'
 import { createMeter } from './meter-core.mjs'
 import { debitWithRelease, guardFilter } from './holds.mjs'
 import { METER_RATE_LIMITS, ddpRule } from './limits.mjs'
-import { isCloudflareAddress, resolveClientAddress } from './client-address.mjs'
+import { isProxyAddress, resolveClientAddress } from './client-address.mjs'
 import { assertPublicHost, checkOwnEndpoint, ownEndpointAgent } from './own-endpoint.mjs'
 import { describeKey, keyDocument, loadMasterKey, open as openKey, PROVIDERS } from './vault.mjs'
 import { minutesLeftFor, roomRequest, tick, transcriptionAllowed } from './calls.mjs'
@@ -329,11 +329,12 @@ export async function checkAlerts(now) {
 }
 
 // The calling connection's real address (set by onConnection below), for the guest route's
-// count per address. A Cloudflare edge stands for many people, so it is not counted (limits.mjs).
+// count per address. A Cloudflare edge stands for many people, and the cluster's own address (the
+// ingress, when no forwarded address is read) for everyone, so neither is counted (limits.mjs).
 function callerAddress() {
   // eslint-disable-next-line no-underscore-dangle
   const address = DDP._CurrentMethodInvocation.get()?.connection?.clientAddress
-  return address && !isCloudflareAddress(address) ? address : null
+  return address && !isProxyAddress(address) ? address : null
 }
 
 // ---------- the AI meter ----------

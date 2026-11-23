@@ -95,11 +95,13 @@ test('past due: credits are paused with the card message, and the balance still 
 
 test('without Pro the presentation plan stays free at the guest caps, and guestPresentationsPerDay: 0 turns it off', () => {
   const plan = ask({ feature: 'presentation' })
-  assert.deepEqual([plan.ok, plan.route, plan.draftsPerDay, plan.perAddressPerDay], [true, 'free', 5, 20])
-  const used = ask({ feature: 'presentation', usage: { aiActionsToday: 5 } })
+  // Generous for adoption (2026-11-23): 10 a day per guest, 100 per address.
+  assert.deepEqual([plan.ok, plan.route, plan.draftsPerDay, plan.perAddressPerDay], [true, 'free', 10, 100])
+  assert.equal(ask({ feature: 'presentation', usage: { aiActionsToday: 9 } }).ok, true)
+  const used = ask({ feature: 'presentation', usage: { aiActionsToday: 10 } })
   assert.equal(used.code, 'pro')
   // a balance pays once the plans are used
-  assert.equal(ask({ feature: 'presentation', usage: { aiActionsToday: 5 }, wallets: { personal: { balanceMicros: 1_000_000 } } }).route, 'balance')
+  assert.equal(ask({ feature: 'presentation', usage: { aiActionsToday: 10 }, wallets: { personal: { balanceMicros: 1_000_000 } } }).route, 'balance')
   const off = { ...switched, free: { ...switched.free, guestPresentationsPerDay: 0 } }
   assert.equal(ask({ feature: 'presentation', settings: off }).code, 'pro')
   assert.equal(route({ kind: 'ai', feature: 'presentation', person: { id: 'g', anonymous: true }, usage: {}, global: quiet, settings: off, now: NOW }).code, 'presentations-today')

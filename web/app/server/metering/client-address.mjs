@@ -20,6 +20,15 @@ const cloudflare = new BlockList()
 for (const range of CLOUDFLARE_V4) { const [net, bits] = range.split('/'); cloudflare.addSubnet(net, Number(bits), 'ipv4') }
 for (const range of CLOUDFLARE_V6) { const [net, bits] = range.split('/'); cloudflare.addSubnet(net, Number(bits), 'ipv6') }
 
+// The cluster's own addresses: the ingress, a node, a pod, this machine. With no forwarded count (or a
+// hop that rewrote it), Meteor's address for every visitor is the ingress's, so one of these would put
+// every guest in one per-address count: it is not a caller's address, and is not counted (as an edge's).
+const PRIVATE_V4 = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '127.0.0.0/8', '169.254.0.0/16', '100.64.0.0/10', '0.0.0.0/8']
+const PRIVATE_V6 = ['::1/128', 'fc00::/7', 'fe80::/10', '::/128']
+const privateRanges = new BlockList()
+for (const range of PRIVATE_V4) { const [net, bits] = range.split('/'); privateRanges.addSubnet(net, Number(bits), 'ipv4') }
+for (const range of PRIVATE_V6) { const [net, bits] = range.split('/'); privateRanges.addSubnet(net, Number(bits), 'ipv6') }
+
 // "::ffff:1.2.3.4" is an IPv4 address
 const plain = address => {
   const text = String(address || '').trim()
@@ -33,6 +42,17 @@ export function isCloudflareAddress(address) {
   if (!family) return false
   return cloudflare.check(ip, family === 4 ? 'ipv4' : 'ipv6')
 }
+
+/** Whether an address is a private, loopback or link-local one: the cluster's, never a caller's. */
+export function isPrivateAddress(address) {
+  const ip = plain(address)
+  const family = isIP(ip)
+  if (!family) return false
+  return privateRanges.check(ip, family === 4 ? 'ipv4' : 'ipv6')
+}
+
+/** Whether an address stands for many callers or none (a Cloudflare edge, the cluster's own): per-address counts skip it. */
+export const isProxyAddress = address => isCloudflareAddress(address) || isPrivateAddress(address)
 
 /**
  * forwardedFor: the X-Forwarded-For header; forwardedCount: HTTP_FORWARDED_COUNT; fallback: the

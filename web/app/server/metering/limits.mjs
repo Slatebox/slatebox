@@ -1,7 +1,7 @@
 // Rate limits on every metered method, per signed-in person and per network address, so one
 // account or one machine with many accounts cannot drain the month's shared budget or their own Pro credits in a burst.
 // Counts are per minute. meteor.js installs them with DDPRateLimiter (ddpRule).
-import { isCloudflareAddress } from './client-address.mjs'
+import { isProxyAddress } from './client-address.mjs'
 
 const AI = ['openai.chat', 'openai.welcome', 'openai.routeSlateMessage', 'workshops.draft', 'workshops.laneChat', 'workshops.mapChat',
   'nativeCanvas.preview', 'canvasConversation.preview', 'presentations.analyze', 'images.search', 'stabilityai.generate']
@@ -43,10 +43,11 @@ export const METER_RATE_LIMITS = Object.freeze([
 // The DDPRateLimiter matcher for one rule. The per-person rule counts signed-in people only:
 // Meteor keys it on the user id, so every signed-out caller would otherwise share one bucket
 // (one public call's listeners refusing each other). The per-address rule counts real
-// addresses only (client-address.mjs): a Cloudflare edge stands for many people, not one.
+// addresses only (client-address.mjs): a Cloudflare edge stands for many people, not one, and the
+// cluster's own private address (the ingress, seen when no forwarded address is read) for everyone.
 const LOCAL = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 export function ddpRule(rule) {
   return rule.per === 'user'
     ? { type: 'method', name: rule.method, userId: userId => Boolean(userId) }
-    : { type: 'method', name: rule.method, clientAddress: address => Boolean(address) && !isCloudflareAddress(address) && !(rule.exceptLocal && LOCAL.has(address)) }
+    : { type: 'method', name: rule.method, clientAddress: address => Boolean(address) && !isProxyAddress(address) && !(rule.exceptLocal && LOCAL.has(address)) }
 }

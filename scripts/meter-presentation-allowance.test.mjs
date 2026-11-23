@@ -3,6 +3,7 @@
 // per person and per network address. Every other AI use stays as it was for them.
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { meterWorld, NOW } from './fixtures/meter-world.mjs'
 import { runAIAction, installMeter } from '../web/app/server/metering/context.mjs'
 import { DEFAULT_METERING, route, dayKey } from '../web/app/server/metering/policy.mjs'
@@ -146,4 +147,23 @@ test('guest accounts are limited per network address, not only per connection', 
   assert.equal(matches('203.0.113.5'), true)
   assert.equal(matches('104.16.0.1'), false)
   assert.equal(matches('127.0.0.1'), false)
+})
+
+test('the cluster\'s own address (the ingress, a node, a pod) is never one caller: every guest behind it is not put in one count', async () => {
+  const { isPrivateAddress, isProxyAddress } = await import('../web/app/server/metering/client-address.mjs')
+  const { METER_RATE_LIMITS, ddpRule } = await import('../web/app/server/metering/limits.mjs')
+  for (const address of ['10.42.0.5', '::ffff:10.42.1.9', '172.16.3.4', '172.31.255.1', '192.168.1.20', '127.0.0.1', '169.254.1.1', '100.64.0.7', '::1', 'fd00::1', 'fe80::1']) {
+    assert.equal(isPrivateAddress(address), true, address)
+    assert.equal(isProxyAddress(address), true, address)
+  }
+  for (const address of ['203.0.113.7', '172.32.0.1', '8.8.8.8', '2001:db8::1']) assert.equal(isPrivateAddress(address), false, address)
+  assert.equal(isProxyAddress('162.158.1.2'), true, 'a Cloudflare edge too')
+  // Every per-address rule (createAnonymous's included) skips it; a real address is still counted.
+  for (const rule of METER_RATE_LIMITS.filter(item => item.per === 'address')) {
+    assert.equal(ddpRule(rule).clientAddress('10.42.0.5'), false, rule.method)
+    assert.equal(ddpRule(rule).clientAddress('203.0.113.7'), true, rule.method)
+  }
+  // The guest route's per-address count reads the same test (callerAddress in meteor.js).
+  const meteor = readFileSync(new URL('../web/app/server/metering/meteor.js', import.meta.url), 'utf8')
+  assert.match(meteor, /return address && !isProxyAddress\(address\) \? address : null/)
 })
