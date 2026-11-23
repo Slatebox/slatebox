@@ -48,6 +48,9 @@ function Presence({ localCollaborator, slate }) {
         position: 'fixed', left: 0, right: 'var(--sb-canvas-right, 0px)', bottom: 'var(--sb-canvas-bottom, 0px)', width: 'auto',
         boxSizing: 'border-box', paddingLeft: '10px', marginBottom: huddleType === 'video' ? '100px' : '68px',
         height: '68px', borderTop: '1px solid black', paddingTop: '5px', backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        // Over the canvas, only the people take the pointer: the strip's empty room leaves the notes under it
+        // to be held and dragged (as CollaborationHuddle draws it).
+        pointerEvents: 'none', '& > *': { pointerEvents: 'auto' },
       }}>
       {[{ key: 'you', userName: 'You', color: localCollaborator?.color }, ...currentCollaborators].map((person) => (
         <Chip key={person.key} label={person.userName}

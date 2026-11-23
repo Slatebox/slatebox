@@ -98,6 +98,10 @@ export default function CollaborationHuddle({
       boxSizing: 'border-box',
       paddingLeft: '10px',
       marginBottom: huddleType === 'video' ? '100px' : '68px',
+      // Over the canvas, only the people (and their controls) take the pointer: the strip's empty room
+      // between and beside them leaves the notes under it to be held and dragged.
+      pointerEvents: 'none',
+      '& > *': { pointerEvents: 'auto' },
     },
     liveVideoChat: {
       height: '100px',
