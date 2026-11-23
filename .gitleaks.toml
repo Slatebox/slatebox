@@ -1,0 +1,24 @@
+# gitleaks configuration for the public Slatebox app repository.
+#
+# The default rules apply. The allowlists below cover only values that are
+# proven fake (test fixtures); each one says why.
+# A real key never belongs in this repository: settings live in git-ignored
+# settings files locally and in METEOR_SETTINGS when deployed. The ship's public-tree
+# gate runs gitleaks with this file and refuses a tree with any other finding.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test fixtures: made-up API keys built from the digits 0123456789 (e.g. 'k-0123456789', 'sk-test-0123456789', 'desk-key-0123456789', 'di-0123456789abcdef4f2a') and 'secret-key-123456'. They exercise key handling in the AI connection, settings and key-vault tests and never reach a provider."
+condition = "AND"
+paths = ['''(^|/)scripts/[^/]+\.test\.mjs$''']
+regexTarget = "secret"
+regexes = ['''0123456789''', '''^secret-key-123456$''']
+
+[[allowlists]]
+description = "Test fixture: an idempotency key header value ('plain-remove-2') in the exec API integration test, not a credential."
+condition = "AND"
+paths = ['''(^|/)scripts/exec-api\.integration\.test\.mjs$''']
+regexTarget = "secret"
+regexes = ['''^plain-remove-\d+$''']

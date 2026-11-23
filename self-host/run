@@ -1,0 +1,63 @@
+#!/usr/bin/env sh
+set -eu
+cd "$(dirname "$0")"
+state=${SLATEBOX_STATE:-.state}
+command=${1:-}
+if [ "$command" = init ] || [ "$command" = promote ]; then
+  if [ "$command" = promote ]; then
+    if [ "$#" -ne 2 ] || [ -z "$2" ]; then
+      echo "Usage: ROOT_URL=https://boards.example.com WS_URL=wss://live.example.com ./run promote NEW_STATE_DIRECTORY" >&2
+      exit 1
+    fi
+    : "${ROOT_URL:?Set the new https:// app origin}" "${WS_URL:?Set the new wss:// relay origin}"
+    source_state=$(cd "$state" && pwd -P)
+    app=$(./run ps -q app)
+    if [ -z "$app" ]; then echo "Start the existing app in this Compose project first." >&2; exit 1; fi
+    image=$(docker inspect --format '{{.Image}}' "$app")
+    state=$2
+    script=hostnames.mjs
+    set -- --mount "type=bind,source=$source_state,target=/opt/slatebox-source,readonly"
+  else
+    case "$#:${2:-}" in
+      1:) SLATEBOX_HTTPS=0 ;;
+      2:--https) SLATEBOX_HTTPS=1 ;;
+      *) echo "Usage: ./run init [--https]" >&2; exit 1 ;;
+    esac
+    export SLATEBOX_HTTPS
+    : "${APP_IMAGE:?Set APP_IMAGE to the release or local app image}"
+    : "${COLLAB_IMAGE:?Set COLLAB_IMAGE to the matching relay image}"
+    image=$APP_IMAGE
+    script=init.mjs
+    set --
+  fi
+  if [ -e "$state" ] || [ -L "$state" ]; then
+    echo "Instance path already exists: $state. Existing settings were preserved." >&2
+    exit 1
+  fi
+  umask 077
+  # Use an absolute operator path in the generated Compose env, even when the
+  # Docker daemon runs in another VM. Stream the setup script into the release image.
+  state_parent=$(cd "$(dirname "$state")" && pwd -P)
+  state="$state_parent/$(basename "$state")"
+  temp=$(mktemp -d "$state_parent/.slatebox-init.XXXXXXXX")
+  trap 'rm -rf "$temp"' EXIT
+  trap 'exit 1' HUP INT TERM
+  docker run --rm -i --network none --read-only --tmpfs /tmp "$@" \
+    -e "SLATEBOX_STATE=$state" -e SLATEBOX_HTTPS -e APP_PORT -e COLLAB_PORT -e ROOT_URL -e WS_URL \
+    -e APP_IMAGE -e COLLAB_IMAGE --entrypoint sh "$image" -ec '
+      node --input-type=module - /tmp/instance >&2
+      tar -C /tmp/instance -cf - settings.json instance.env
+    ' < "$script" > "$temp/settings.tar"
+  tar -C "$temp" -xf "$temp/settings.tar" settings.json instance.env
+  # Atomic reservation prevents concurrent initializers replacing credentials.
+  mkdir -m 700 "$state"
+  mv "$temp/settings.json" "$state/settings.json"
+  mv "$temp/instance.env" "$state/instance.env"
+  echo "Created private settings in $state."
+  exit 0
+fi
+if [ ! -f "$state/instance.env" ]; then echo "Initialize this instance with ./run init first." >&2; exit 1; fi
+if docker compose version >/dev/null 2>&1; then
+  exec docker compose --env-file "$state/instance.env" -p "${COMPOSE_PROJECT_NAME:-slatebox}" -f compose.yaml "$@"
+fi
+exec docker-compose --env-file "$state/instance.env" -p "${COMPOSE_PROJECT_NAME:-slatebox}" -f compose.yaml "$@"

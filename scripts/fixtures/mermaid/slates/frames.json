@@ -1,0 +1,15 @@
+{
+  "shareId": "frames",
+  "options": { "name": "Team map" },
+  "nodes": [
+    { "options": { "id": "teamA", "text": "Team A [platform]", "xPos": 0, "yPos": 0, "width": 600, "height": 500 }, "relationships": { "associations": [] } },
+    { "options": { "id": "inner", "text": "Inner squad", "xPos": 20, "yPos": 200, "width": 300, "height": 260 }, "relationships": { "associations": [] } },
+    { "options": { "id": "a1", "text": "API", "xPos": 40, "yPos": 60, "width": 140, "height": 70 },
+      "relationships": { "associations": [ { "id": "a1->a2", "parentId": "a1", "childId": "a2" } ] } },
+    { "options": { "id": "a2", "text": "Gateway", "xPos": 40, "yPos": 260, "width": 140, "height": 70 },
+      "relationships": { "associations": [ { "id": "a2->b1", "parentId": "a2", "childId": "b1", "label": "calls" } ] } },
+    { "options": { "id": "b1", "text": "Billing", "xPos": 40, "yPos": 700, "width": 140, "height": 70 },
+      "relationships": { "associations": [ { "id": "b1->inner", "parentId": "b1", "childId": "inner", "label": "reports to" } ] } },
+    { "options": { "id": "on-top", "text": "Sticker over the team", "xPos": 360, "yPos": 40, "width": 160, "height": 80 }, "relationships": { "associations": [] } }
+  ]
+}

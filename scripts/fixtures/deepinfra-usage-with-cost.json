@@ -1,0 +1,20 @@
+{
+  "_note": "Shape of a DeepInfra OpenAI-compatible chat completion with usage.estimated_cost, written from DeepInfra's documented response format. Not recorded from a live call (builders do not call DeepInfra). Replace with a recorded response on the first test-cluster deploy.",
+  "id": "chatcmpl-fixture",
+  "object": "chat.completion",
+  "created": 1763553600,
+  "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+  "choices": [
+    {
+      "index": 0,
+      "message": { "role": "assistant", "content": "{ \"text\": \"fixture\" }" },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1240,
+    "completion_tokens": 880,
+    "total_tokens": 2120,
+    "estimated_cost": 0.0005956
+  }
+}

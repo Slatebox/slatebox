@@ -1,0 +1,18 @@
+---
+title: "Checkout \"v2\": flow"
+---
+flowchart LR
+  start(["Customer opens cart"])
+  check{"Card valid?<br>(Luhn #amp; expiry)"}
+  pay("Charge #35;1 #lt;b#gt;now#lt;/b#gt;; send #96;receipt#96;")
+  retry[/"Ask again — Émile 東京 🎉"/]
+  n_end((" "))
+  done{{"Done"}}
+  start -->|"clicks #quot;Pay#quot;"| check
+  check ==>|"yes"| pay
+  check -.->|"no #124; try again"| retry
+  pay <--> done
+  retry --- start
+  pay ~~~ n_end
+  click pay "https://example.com/pay?a=1&b=%222%22" _blank
+  style pay fill:#d1f2d9,stroke:#2e7d32,color:#102010

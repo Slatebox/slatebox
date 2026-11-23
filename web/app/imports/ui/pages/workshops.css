@@ -1,0 +1,102 @@
+.workshops{--paper:#f8f7ef;--ink:#163c32;--field:#fff;--line:#bdc7b9;--action:#1d4436;--on-action:white;min-height:100vh;background:var(--paper);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
+.workshops a{color:var(--ink);text-underline-offset:.22em}
+.workshop-content{max-width:88rem;margin:auto;padding:clamp(1.5rem,5vw,5rem) clamp(1rem,6vw,6rem)}
+.workshops h1,.workshops h2{color:var(--ink);font-family:"Archivo Narrow",Arial,sans-serif;font-weight:700;line-height:1.08;letter-spacing:-.025em;margin:.3em 0}
+.workshops h1{font-size:clamp(2.6rem,6vw,5rem);max-width:18ch}
+.workshops h2{font-size:clamp(1.8rem,3vw,2.6rem);margin-bottom:1rem}
+.workshop-kicker,.workshops label{display:block;font-size:.82rem;letter-spacing:.025em;font-weight:650}
+.workshop-intro{max-width:58ch;font-size:1.09rem;margin:.8rem 0 2rem}
+.workshop-brief,.workshop-review,.workshop-recent{padding:1.35rem 0;border-top:1px solid var(--line)}
+.workshops :is(input,textarea){font:inherit;color:inherit;background:var(--field);border:1px solid #989e91;border-radius:5px;padding:.48rem .6rem;width:100%;box-sizing:border-box}
+.workshop-brief textarea,.workshop-review>input{display:block;max-width:46rem;margin:.4rem 0 .8rem}
+.workshops :is(button,a,input,select,textarea):focus-visible{outline:3px solid #bb601f;outline-offset:3px}
+.workshop-actions,.workshop-recent{display:flex;flex-wrap:wrap;gap:.65rem}
+.workshop-actions{margin:1.25rem 0}
+.workshop-actions button,.workshop-review>button,.workshop-brief button,.workshop-recent button{color:var(--ink);border:1px solid #617466;background:transparent;border-radius:2rem;padding:.65rem 1.1rem;font:inherit;cursor:pointer}
+.workshops .workshop-primary,.workshop-brief button{background:var(--action);color:var(--on-action)}
+.workshops button:disabled{opacity:.5;cursor:default}
+.workshop-lanes{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(13rem,100%),1fr));gap:1.35rem;margin:1.3rem 0}
+.workshop-lanes p{font-size:.83rem;margin:.38rem 0}
+.workshop-lanes ul{list-style:none;margin:.6rem 0;padding:0}
+.workshop-lanes li+li{margin-top:.38rem}
+.workshop-lanes li input{font-size:.91rem}
+.workshop-surface{min-height:13rem}
+.workshop-recent h2{flex-basis:100%}
+.workshops [role=alert]{color:#903e25}
+
+.workshop-review label.workshop-capacity{display:flex;gap:.45rem;align-items:center;font-weight:400;margin:.5rem 0}
+.workshop-capacity input{width:6.5rem;font-size:.8rem}
+.workshops[data-mode=dark]{--paper:#17271f;--ink:#f1f3e7;--field:#22392e;--line:#5e7869;--action:#ecc580;--on-action:#182b20}
+.workshops[data-mode=dark] [role=alert]{color:#ffb5a5}
+.workshop-content footer{margin-top:2rem;border-top:1px solid var(--line);padding-top:1rem}
+
+.workshops[data-mode=dark]{color-scheme:dark}
+.workshops[data-mode=light]{color-scheme:light}
+.workshop-surface select{color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:4px;padding:.3rem}
+
+.workshop-format {display:inline-block;margin:-.75rem 0 1.25rem}
+.station-fields,.station-routes {border:0;margin:.8rem 0;padding:0;min-width:0}
+.station-fields legend {font-weight:600;font-size:.9rem}
+.station-fields textarea {font-weight:400;margin-top:.2rem}
+.station-position {display:flex;gap:.65rem;margin:.5rem 0}
+.station-position select {display:block;background:var(--field);color:var(--ink);padding:.25rem .5rem;border:1px solid var(--line);border-radius:4px}
+.station-routes label {display:flex;align-items:center;gap:.5rem;margin:.2rem 0}
+.station-routes input {width:auto}
+.map-document {margin:1rem 0}
+.map-document textarea {font: .84rem/1.5 ui-monospace,monospace;tab-size:2}
+.map-document>button {color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:5px;padding:.5rem .8rem;font:inherit;cursor:pointer}
+
+.map-document dialog {color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:8px;width:min(48rem,calc(100% - 2rem));box-sizing:border-box;max-height:90dvh;overflow:auto;padding:1.4rem}
+.map-document dialog::backdrop {background:#14281ed9}
+.workshop-outcomes button {color:var(--ink);background:var(--field);border:1px solid var(--line);padding:.5rem .75rem;margin:0 .5rem .5rem 0;cursor:pointer;border-radius:5px}
+.workshop-review form {max-width:32rem}
+.workshop-review form label+label {margin-top:.65rem}
+.workshop-review form select {display:block;color:var(--ink);background:var(--field);border:1px solid var(--line);padding:.5rem}
+.workshop-readonly dt {font-weight:bold}
+.workshop-readonly dd {margin:0 0 .55rem}
+
+.workshop-formats {display:flex;flex-wrap:wrap;gap:.5rem 1.4rem;margin:-.7rem 0 1.2rem}
+.workshop-lanes .station-routes legend {font-size:.82rem;font-weight:600}
+
+.workshop-surface .release-plan-readout {margin:1.15rem 0;padding:1.1rem 0;border-block:1px solid var(--line)}
+.release-plan-readout h3 {margin:0 0 .65rem;font:700 1.55rem/1.1 "Archivo Narrow",Arial,sans-serif}
+.release-plan-readout ul {margin:.2rem 0;padding-left:1.2rem}
+.workshop-surface:has(.release-plan-readout) fieldset {border:0;margin:.8rem 0;padding:0}
+.workshop-surface:has(.release-plan-readout) fieldset legend {font-weight:650;margin-bottom:.5rem}
+.workshop-surface:has(.release-plan-readout) select {margin-left:.5rem}
+.workshop-surface:has(.release-plan-readout) button {color:var(--ink);background:var(--field);border:1px solid var(--line);padding:.45rem .8rem;margin:.4rem .4rem .15rem 0;cursor:pointer;border-radius:.3rem}
+
+.constraint-proposal {margin:1rem 0;padding:1rem 0;border-block:1px solid var(--line);max-width:46rem}
+.constraint-proposal .proposal-toggle {background:none;color:var(--ink);font:inherit;border:0;text-decoration:underline;text-underline-offset:.2em;cursor:pointer;padding:.3rem 0}
+.constraint-proposal form {margin-top:.6rem}
+.constraint-proposal textarea {margin:.35rem 0}
+.constraint-proposal h3 {font-family:"Archivo Narrow",Arial,sans-serif;font-size:1.55rem}
+.proposal-changes {list-style:none;padding:0}
+.proposal-changes li {border-top:1px solid var(--line);padding:.6rem 0}
+.proposal-changes li span {font-size:.8rem;font-weight:600;display:inline-block;min-width:4.8rem}
+
+.workshop-content:has(.workshop-board-header){max-width:78rem;padding:clamp(1rem,4vw,3rem)}
+.workshop-board-header{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.workshop-board-header h1{max-width:24ch;margin:0;font-size:clamp(2rem,4vw,3.6rem)}
+.workshop-board-header .workshop-actions,.workshop-board-tools{margin:.45rem 0}
+.workshop-board-hint{margin:.65rem 0 1rem}
+.workshop-paper{padding:clamp(.6rem,2vw,1.5rem);border:1px solid var(--line);border-radius:8px;background:var(--field);min-width:0}
+.workshop-paper section>div:first-child{overscroll-behavior-x:contain}
+.workshop-paper summary,.workshop-more summary,.workshop-assistant summary{cursor:pointer}
+.workshop-inspector,.workshop-assistant{max-width:36rem;border-left:3px solid var(--line);padding:.6rem 1.1rem;margin:1rem 0}
+.workshop-inspector label{margin:.5rem 0}
+.workshop-inspector select{display:block;max-width:100%;padding:.5rem;background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:4px}
+.workshop-inspector .station-routes input{width:auto}
+.workshop-inspector .workshop-actions{margin-bottom:0}
+.workshop-more{margin:1.1rem 0}
+.workshop-more nav{margin:.6rem 0}
+@media(max-width:600px){.workshop-board-header{gap:.3rem}.workshop-board-header h1{font-size:2.05rem}.workshop-actions button{padding:.5rem .8rem}.workshop-paper{padding:.5rem}}
+.workshop-drawing>section>div:first-child>svg{zoom:var(--board-scale,1);display:block}
+
+.workshop-placement-fields { min-width: 0; border: 1px solid currentColor; border-radius: .5rem; padding: .75rem; }
+.workshop-placement-fields > div { display: grid; gap: .5rem; margin: .65rem 0; }
+.workshop-placement-fields button { white-space: normal; overflow-wrap: anywhere; }
+.workshop-placement-fields input, .workshop-placement-fields select { width: 100%; min-width: 0; box-sizing: border-box; }
+
+.workshop-actions .workshop-copy { margin-right: auto; color: var(--ink); font-weight: 650; text-underline-offset: .18em; }
+.workshop-actions .workshop-copy:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

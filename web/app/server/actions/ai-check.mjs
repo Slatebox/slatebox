@@ -1,0 +1,52 @@
+import { defineAction } from './registry.mjs'
+import { connectionInput, level, requireLevelScope } from './ai-schemas.mjs'
+
+// Test connection. It changes nothing (readOnly), but it reaches an outside address (openWorld)
+// and may carry a key, so it is a POST.
+export default defineAction({
+  id: 'ai.check',
+  title: 'Test AI',
+  description:
+    'Tests a saved connection (name) or one not yet saved (connection): whether Slatebox can reach it, whether it accepts the key, which models it lists where it lists them, whether the model answers and whether it calls tools (which conversation, drafts and presentations need). Saves nothing. A saved key is only sent to the address it was saved for. A token needs ai:admin as well for level team or server. On a self-hosted server a model on the host is at host.docker.internal, not localhost.',
+  toolset: 'account',
+  kind: 'write',
+  scope: 'ai:settings',
+  principals: ['person', 'agent'],
+  mounts: { ddp: true, http: { method: 'POST', path: '/ai/check', operationId: 'checkAIConnection' } },
+  tool: { name: 'check_ai_connection', title: 'Test an AI connection', description: 'Test whether Slatebox can reach an AI connection (a provider key, or an OpenAI-compatible endpoint) before it is used for drafting.' },
+  readOnly: true,
+  openWorld: true,
+  idempotent: true,
+  // exec derives a key per call; a replay runs again (no stored answer to go stale)
+  idempotency: 'optional',
+  replay: 'rerun',
+  successStatus: 200,
+  input: {
+    type: 'object',
+    properties: {
+      level,
+      name: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,39}$' },
+      connection: connectionInput,
+    },
+    additionalProperties: false,
+  },
+  output: {
+    type: 'object',
+    properties: {
+      ok: { type: 'boolean' },
+      reachable: { type: 'boolean' },
+      models: { type: ['array', 'null'], items: { type: 'string' } },
+      modelListed: { type: ['boolean', 'null'] },
+      chat: { type: 'string', enum: ['ok', 'failed'] },
+      tools: { type: 'string', enum: ['yes', 'no', 'unknown'] },
+      message: { type: 'string' },
+    },
+    required: ['ok', 'reachable', 'tools', 'message'],
+  },
+  cli: { command: 'ai-check' },
+  precheck: (principal, input) => requireLevelScope(principal, input.level),
+  handler: (principal, input, { deps }) => {
+    requireLevelScope(principal, input.level)
+    return deps.ai.check(principal.userId, input)
+  },
+})

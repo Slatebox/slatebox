@@ -1,0 +1,17 @@
+flowchart TB
+  c1-->a2
+  subgraph one ["Team #quot;One#quot;"]
+    a1-->a2
+  end
+  subgraph two
+    direction LR
+    b1-->b2
+    subgraph inner["Inner box"]
+      i1 --> i2
+    end
+  end
+  subgraph "Quoted title"
+    q1
+  end
+  one --> two
+  c1 --> inner

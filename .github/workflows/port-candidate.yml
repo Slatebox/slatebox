@@ -1,0 +1,74 @@
+name: Slatebox v3 candidate
+
+on:
+  pull_request:
+    branches:
+      - test
+      - main
+    paths:
+      - .github/workflows/port-candidate.yml
+      - package.json
+      - scripts/**
+      - web/**
+  workflow_dispatch:
+
+concurrency:
+  group: slatebox-v3-candidate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  package-source:
+    runs-on: ubuntu-latest
+    outputs:
+      registry: ${{ steps.source.outputs.registry }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: source
+        name: Detect immutable registry dependency
+        run: |
+          dependency=$(node --print "require('./web/app/package.json').dependencies.slateboxjs")
+          if [[ "$dependency" == file:* ]]; then
+            echo "registry=false" >> "$GITHUB_OUTPUT"
+            echo "Pre-publication file dependency detected; registry candidate remains intentionally gated."
+          else
+            echo "registry=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  registry-candidate:
+    needs: package-source
+    if: needs.package-source.outputs.registry == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SLATEBOX_LIBRARY_SOURCE: registry
+      SLATEBOX_LIBRARY_VERSION: 3.1.2
+      SLATEBOX_LIBRARY_INTEGRITY: sha512-l1S/19dQpEUc1nFF+1oQ17haCitOceAaovu75EVrsULDaimwN3sazW2E1UJuVaK54u1BhNOk3k2wxKhDud9u0Q==
+      SLATEBOX_LIBRARY_REVISION: e7ffd5948317ed201c217cb282f285a16cb68133
+      SLATEBOX_PORT_PLATFORM: linux/amd64
+      SLATEBOX_PORT_IMAGE: slatebox-port:registry-candidate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: web/app/package-lock.json
+      - name: Use the candidate npm runtime
+        run: npm install --global npm@11.12.1
+      - name: Install the immutable app dependency
+        run: npm ci --prefix web/app --legacy-peer-deps=false --no-audit --no-fund
+      - name: Verify the declared package source
+        run: npm run test:port-package-source
+      - name: Verify release version
+        run: npm run test:release-version
+      - name: Verify AI provider contracts
+        run: |
+          npm --prefix web/app run test:deepinfra-provider
+          npm --prefix web/app run test:welcome-template-routing
+          npm --prefix web/app run test:procon-template-seed
+          npm --prefix web/app run test:presentation-fallback
+      - name: Build and inspect the production image
+        run: npm run test:port-container -- --build-only

@@ -1,0 +1,86 @@
+# Slatebox web application
+
+The Meteor application behind [app.slatebox.com](https://app.slatebox.com) (Slatebox Cloud) and self-hosted installations.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Project Structure](#project-structure)
+- [Quick Start](#quick-start)
+- [Development](#development)
+- [Deployment](#deployment)
+- [Technologies](#technologies)
+
+## Overview
+
+The MIT-licensed app powers Slatebox Cloud and self-hosted installations. Follow the [self-hosting guide](../self-host/README.md) to install the app, collaboration service and database.
+
+## Project Structure
+
+- `/app` - The main Meteor application
+- `/Dockerfile` - Docker configuration for containerization
+- `/docker-compose.yml` - Docker Compose configuration for local development
+
+## Quick Start
+
+To run the application locally:
+
+1. Navigate to the `/web/app` directory
+
+```bash
+cd web/app
+```
+
+2. Install dependencies
+
+The app uses SlateboxJS, the canvas engine, from a checkout of [Slatebox/slateboxjs-v2](https://github.com/Slatebox/slateboxjs-v2) next to this repository (`web/app/package.json` links `../../../slateboxjs-v2`). Clone and build it once, then install the app:
+
+```bash
+# from the folder that holds this repository
+git clone https://github.com/Slatebox/slateboxjs-v2.git
+(cd slateboxjs-v2 && npm install && npm run build)
+
+cd slatebox/web/app
+meteor npm install
+```
+
+3. Create your local settings
+
+```bash
+cp settings.example.json settings.dev.json
+```
+
+`settings.example.json` lists every setting the app reads, with empty values and a `"//"` note per section. Fill in only the keys for the features you use (mail, picture search, icons, AI providers, calls); an empty value leaves that feature off. Settings files other than the example are git-ignored: never commit one with real keys. Anything under `public` reaches every browser, so only keys that are meant to be public belong there.
+
+4. Start the development server
+
+```bash
+meteor npm run start
+```
+
+This command runs the application using development settings and also starts the Stripe webhook listener and Testim for testing.
+
+## Development
+
+The main application is built with Meteor and React. The `package.json` in the `/web/app` directory contains several useful scripts:
+
+- `start` - Run the application with development settings
+- `startMin` - Run a minified version with development settings
+- `startProd` - Run with a local `settings.prod.json` (git-ignored)
+- `visualize` - Analyze the bundle size
+
+## Deployment
+
+The application can be deployed using Docker and Kubernetes. The `/k3` manifests are templates: their `*_SECRET` and `DOCKER_CONFIG` values are placeholders filled from your own secret store at deploy time. A deployed app reads its settings from the `METEOR_SETTINGS` environment variable, never from a file in the image.
+
+### Metering and top-ups
+
+Slatebox is free and open source. On Slatebox Cloud (`metering.enabled` and `metering.proRequiredFrom: "now"` in settings) AI and calls on Slatebox's own providers come with Slatebox Pro, one optional personal subscription ($5 a month or $50 a year, plus tax where applicable), whose monthly credits are sized to about $3.75 of provider cost (`metering.creditCostMicrosPerMonth`), and counted per calendar month with the month Pro starts in prorated. For a team, Slatebox Business ($6 per person a month or $60 a year, inside Cloud) is sold by talking to us (an email) until its billing is built. Cloud takes no own keys: past the credits, or without Pro, a person uses a prepaid balance topped up through Stripe Checkout at provider cost plus 5%. Own AI and call keys are a self-hosted feature (`public.env: "selfhost"`, `imports/api/common/own-keys.mjs`), where they are free. A self-hosted server has no meter unless its operator turns one on, and a self-hosted meter keeps the amount free (`proRequiredFrom` is `"never"` by default: self-host has no Pro). How it works, the settings document and the owner's switch-day steps: [`server/metering/README.md`](app/server/metering/README.md).
+
+## Technologies
+
+- [Meteor](https://meteor.com) - Full-stack JavaScript platform
+- [React](https://reactjs.org/) - UI library
+- [Material UI](https://mui.com/) - Component library
+- [Stripe](https://stripe.com) - Top-up payments
+- [MongoDB](https://mongodb.com) - Database (native to Meteor)

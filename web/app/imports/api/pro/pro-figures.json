@@ -1,0 +1,24 @@
+{
+  "pro": {
+    "monthCents": 500,
+    "yearCents": 5000,
+    "taxExclusive": true,
+    "credits": {
+      "costDollars": 3.75,
+      "draftsPerMonth": 180,
+      "draftsPerDay": 30,
+      "voiceHours": 5.5,
+      "videoHours": 1,
+      "voiceMinutes": 1380,
+      "videoMinutes": 330,
+      "sentence": "Each month: about 180 AI drafts (up to 30 a day), about 5½ hours of four-person voice calls and about 1 hour of four-person video calls."
+    }
+  },
+  "business": {
+    "monthCentsPerSeat": 600,
+    "yearCentsPerSeat": 6000,
+    "billingBuilt": false,
+    "contactLabel": "Talk to us about Business",
+    "contactUrl": "https://slatebox.com/contact/?topic=business"
+  }
+}

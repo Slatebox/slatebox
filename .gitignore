@@ -1,0 +1,26 @@
+node_modules
+.DS_STORE
+.history
+.ssl-cert
+.env
+.env.*
+!.env.example
+
+# Meteor settings hold real keys: never commit them. Copy
+# web/app/settings.example.json to web/app/settings.dev.json for a local run.
+settings*
+!settings.example.json
+!.vscode/settings.json
+
+# Slatebox Cloud's legal documents are added to the hosted build from private
+# storage at ship time; they are not part of the public repository.
+web/app/public/slatebox_terms_of_use.pdf
+web/app/public/slatebox_privacy_policy.pdf
+
+# Private notes and data exports
+internal/
+
+testim-headless.zip
+/test-results/
+/playwright-report/
+/playwright/.cache/

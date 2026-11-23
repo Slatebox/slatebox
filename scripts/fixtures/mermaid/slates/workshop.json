@@ -1,0 +1,15 @@
+{
+  "shareId": "plan",
+  "options": { "name": "Spring launch" },
+  "nodes": [
+    { "options": { "id": "own1", "text": "Goal: ship by May", "xPos": -400, "yPos": 0, "width": 200, "height": 80 }, "relationships": { "associations": [] } }
+  ],
+  "creative": { "revision": 3, "model": { "kind": "workshop", "version": 1, "workshop": {
+    "version": 1, "kind": "release-plan", "title": "Spring launch",
+    "lanes": [ { "id": "now", "label": "Sprint 1: build", "capacity": 8 }, { "id": "next", "label": "Sprint 2", "capacity": 8 } ],
+    "cards": [
+      { "id": "api", "label": "Public API", "laneId": "now", "points": 5 },
+      { "id": "docs", "label": "Docs: quick start", "laneId": "now", "points": 2 },
+      { "id": "beta", "label": "Beta invite #1", "laneId": "next", "points": 3, "dependsOn": ["api"] }
+    ] } } }
+}

@@ -1,0 +1,52 @@
+.unicorn-wrapper {
+  /* position: flex;
+  justify-content: "center"; */
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  background-color: transparent;
+  z-index: 1;
+}
+.unicorn-container {
+  display: flex;
+  justify-content: center;
+}
+.scale-up-center {
+  background-color: #b76c0e;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  margin-top: 200px;
+  -webkit-animation: scale-up-center 1s cubic-bezier(0.55, 0.085, 0.68, 0.53)
+    infinite alternate-reverse both;
+  animation: scale-up-center 1s cubic-bezier(0.55, 0.085, 0.68, 0.53) infinite
+    alternate-reverse both;
+}
+
+/**
+ * ----------------------------------------
+ * animation scale-up-center
+ * ----------------------------------------
+ */
+@-webkit-keyframes scale-up-center {
+  0% {
+    -webkit-transform: scale(0.5);
+    transform: scale(0.5);
+  }
+  100% {
+    -webkit-transform: scale(1);
+    transform: scale(1);
+  }
+}
+@keyframes scale-up-center {
+  0% {
+    -webkit-transform: scale(0.5);
+    transform: scale(0.5);
+  }
+  100% {
+    -webkit-transform: scale(1);
+    transform: scale(1);
+  }
+}

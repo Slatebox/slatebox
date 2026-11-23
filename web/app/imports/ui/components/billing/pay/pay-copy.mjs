@@ -1,0 +1,86 @@
+// The pay sheet's words (design §5, §8). Pure, so the copy rules are tested (scripts/pay-sheet.test.mjs).
+// Never the processor's name, and none of the words the no-plans and no-conversion guards ban.
+import { billingDate } from '../billing-date.mjs'
+
+// The Pro choices; scripts/pay-sheet.test.mjs checks the amounts against imports/api/pro/catalog.mjs.
+export const PRO_FIGURES = Object.freeze({
+  month: Object.freeze({ cents: 500, label: '$5 a month', sub: 'Cancel any time', line: 'Slatebox Pro, monthly', tag: null }),
+  year: Object.freeze({ cents: 5000, label: '$50 a year', sub: 'One payment a year', line: 'Slatebox Pro, yearly', tag: '2 months free' }),
+})
+
+export const money = cents => `$${((cents || 0) / 100).toFixed(2)}`
+const wholeMoney = cents => (cents % 100 ? money(cents) : `$${cents / 100}`)
+const halves = hours => (hours % 1 ? `${Math.floor(hours) || ''}½` : String(hours))
+const hoursOf = hours => `${halves(hours)} ${hours === 1 ? 'hour' : 'hours'}`
+
+/** "What Pro brings" and "Now included each month": three rows from meter.summary credits. */
+export function proBrings(credits, { perMonth = true } = {}) {
+  if (!credits) return []
+  return [
+    { icon: 'ai', text: `About ${credits.draftsPerMonth} AI drafts${perMonth ? ' a month' : ''}, up to ${credits.draftsPerDay} a day` },
+    { icon: 'picture', text: 'Image search and image generation' },
+    { icon: 'video', text: `About ${hoursOf(credits.voiceHours)} of four-person voice calls and ${hoursOf(credits.videoHours)} of video` },
+  ]
+}
+
+// What the person was doing when the sheet opened (usePaySheet().open({ from })).
+const GOALS = {
+  draft: { title: 'Keep drafting with Slatebox AI', back: 'Back to your draft', again: 'your draft is ready to go again' },
+  call: { title: 'Start your call', back: 'Back to your call', again: 'your call is ready to start again' },
+  pictures: { title: 'Search for pictures', back: 'Back to your slate', again: 'your picture search is ready to run again' },
+  image: { title: 'Make your image', back: 'Back to your slate', again: 'your image is ready to make again' },
+  plan: { title: 'Plan your presentation', back: 'Back to your slate', again: 'your plan is ready to make again' },
+}
+
+/** The sheet's eyebrow and heading. */
+export function sheetHeader({ action, from, wallet, balanceCents = 0 } = {}) {
+  if (action === 'topup') {
+    const team = wallet === 'team'
+    return { eyebrow: `${team ? 'Team balance' : 'Your balance'} · ${money(balanceCents)}`, title: team ? 'Top up the team balance' : 'Top up your balance' }
+  }
+  if (action === 'manage') return { eyebrow: 'Slatebox Pro', title: 'Your Pro' }
+  if (action === 'card') return { eyebrow: 'Slatebox Pro', title: 'Update your card' }
+  if (action === 'pro') return { eyebrow: 'Slatebox Pro', title: GOALS[from]?.title || 'Get Slatebox Pro' }
+  return { eyebrow: 'Slatebox', title: 'Before you pay' }
+}
+
+/** A refusal's reason as the top-up "why" note: the sheet is already where to top up. */
+export const whyText = reason => String(reason || '').replace(/\s+in your profile(?=[.!]?\s*$)/i, '').trim()
+
+/**
+ * The Welcome's words. kind: 'pro' | 'topup' | 'card' | 'switch'. confirmed: meter.summary shows it
+ * (until then the finalizing words). variant: 'pending' (15 s and not confirmed) | 'processing'.
+ * → { title, lead, button, burst, announce, included, countUp }
+ */
+export function welcomeCopy({ kind = 'pro', from = 'profile', firstPro = false, confirmed = false, variant = null, amountCents = 0, pastDueCleared = false, interval = 'year', nextDate = null } = {}) {
+  const goal = GOALS[from]
+  const button = goal?.back || 'Done'
+  const out = { title: '', lead: '', button, burst: false, announce: '', included: false, countUp: null }
+  if (variant === 'pending') {
+    return { ...out, title: kind === 'topup' ? 'Payment received' : 'Welcome to Slatebox Pro', lead: kind === 'topup' ? 'Payment received. Your balance updates in a moment.' : 'Payment received. Pro switches on in a moment.', button: 'Close', announce: 'Payment received' }
+  }
+  if (variant === 'processing') {
+    return { ...out, title: 'Payment on its way', lead: "Thank you. Your bank is still processing the payment. We'll tell you when it clears.", button: 'Close', announce: 'Payment is processing' }
+  }
+  if (kind === 'topup') {
+    const lead = goal ? `Thank you. ${goal.again[0].toUpperCase()}${goal.again.slice(1)}.` : 'Thank you. It never expires, and what is left can be refunded from your profile.'
+    return { ...out, title: `${wholeMoney(amountCents)} is in your balance`, lead: confirmed ? lead : 'Thank you. Your payment went through. Adding it to your balance…', button: confirmed ? button : 'Getting things ready…', countUp: amountCents, announce: confirmed ? `${wholeMoney(amountCents)} is in your balance.` : 'Payment went through' }
+  }
+  if (kind === 'card') {
+    return { ...out, title: 'Your card is updated', lead: pastDueCleared ? 'Thank you. Pro is back on, and your next payment uses this card.' : 'Your next payment uses this card.', button: confirmed ? button : 'Getting things ready…', announce: confirmed ? 'Your card is updated.' : 'Card saved' }
+  }
+  if (kind === 'switch') {
+    const yearly = interval === 'year'
+    const when = billingDate(nextDate) || null
+    return { ...out, title: yearly ? "You're on yearly now" : "You're on monthly now", lead: when ? `Pro next renews on ${when}.` : 'Thank you.', button, announce: yearly ? "You're on yearly now." : "You're on monthly now." }
+  }
+  return {
+    ...out,
+    title: 'Welcome to Slatebox Pro',
+    lead: confirmed ? `Thank you. Pro is on for your account${goal ? `, and ${goal.again}` : ''}.` : 'Thank you. Your payment went through. Switching Pro on for your account…',
+    button: confirmed ? button : 'Getting things ready…',
+    burst: Boolean(firstPro),
+    announce: confirmed ? 'Welcome to Slatebox Pro. Pro is on.' : 'Payment went through',
+    included: true,
+  }
+}

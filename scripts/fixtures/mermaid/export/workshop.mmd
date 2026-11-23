@@ -1,0 +1,13 @@
+---
+title: "Spring launch"
+---
+flowchart TD
+  own1["Goal: ship by May"]
+  subgraph lane-now["Sprint 1: build"]
+    card-api["Public API<br>5 points"]
+    card-docs["Docs: quick start<br>2 points"]
+  end
+  subgraph lane-next["Sprint 2"]
+    card-beta["Beta invite #35;1<br>3 points"]
+  end
+  card-api --> card-beta

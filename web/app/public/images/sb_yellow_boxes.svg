@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="625.886 -21.412 151.562 136.888" xmlns:bx="https://boxy-svg.com">
+  <defs>
+    <bx:export>
+      <bx:file format="svg"/>
+    </bx:export>
+  </defs>
+  <desc>Created with Fabric.js 2.3.6</desc>
+  <g id="text-1" transform="matrix(1.117066, 0, 0, 1.117066, 1154.030884, 151.216248)"/>
+  <g id="group-1" transform="matrix(2.427425, 0, 0, 2.356704, 742.611389, 123.436256)" style="">
+    <g>
+      <g transform="matrix(1, 0, 0, 1, -17.03735, -31.59182)">
+        <path d="M 16.489 15.372 L 1.596 15.372 L 1.596 22.819 L 16.489 22.819 L 16.489 15.372 Z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 4; fill-rule: nonzero; opacity: 1; fill: rgb(251, 204, 136);" stroke-linecap="round"/>
+        <path d="M -1.596 -18.032 L -16.489 -18.032 L -16.489 -10.585 L -1.596 -10.585 L -1.596 -18.032 Z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 4; fill-rule: nonzero; opacity: 1; fill: rgb(251, 204, 136);" stroke-linecap="round"/>
+        <path d="M 16.489 -2.606 L 1.596 -2.606 L 1.596 12.287 L 16.489 12.287 L 16.489 -2.606 Z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 4; fill-rule: nonzero; opacity: 1; fill: rgb(251, 204, 136);" stroke-linecap="round"/>
+        <path d="M -1.596 -7.394 L -25 -7.394 L -25 13.883 L -1.596 13.883 L -1.596 -7.394 Z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 4; fill-rule: nonzero; opacity: 1; fill: rgb(251, 204, 136);" stroke-linecap="round"/>
+        <path d="M 25 -22.819 L 1.596 -22.819 L 1.596 -5.798 L 25 -5.798 L 25 -22.819 Z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 4; fill-rule: nonzero; opacity: 1; fill: rgb(251, 204, 136);" stroke-linecap="round"/>
+      </g>
+    </g>
+  </g>
+</svg>

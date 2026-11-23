@@ -1,0 +1,9 @@
+{
+  "_namespace": "profile",
+  "header": "Hi there. You can manage your profile below.",
+  "reVerificationNote": "Note: You will need to re-verify your email once changed.",
+  "alreadyRequestedEducationCertified": "You have already requested education certification. We will notify you when this is approved.",
+  "alreadyEducationCertified": "Your account is education certified, so your teams are called classrooms.",
+  "requestEducationCertification": "Request education certification for FREE Slatebox access.",
+  "alreadyRequestedEducationCertification": "Education certifiation request is pending...if this is taking too long, write to us at https://slatebox.com/contact/?topic=education"
+}

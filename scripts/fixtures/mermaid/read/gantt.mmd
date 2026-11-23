@@ -1,0 +1,13 @@
+gantt
+  title Release plan
+  dateFormat YYYY-MM-DD
+  axisFormat %b %d
+  section Design
+  Research        :done, r1, 2026-01-05, 5d
+  Wireframes      :w1, after r1, 3d
+  section Build
+  API             :crit, api, after w1, 10d
+  Front end       :fe, after w1, 8d
+  Integrate       :after api fe, 4d
+  section Launch
+  Release         :milestone, rel, after api, 0d

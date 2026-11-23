@@ -1,0 +1,287 @@
+import React, { useRef, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useAtom, useAtomValue, useSetAtom } from 'jotai'
+import { Meteor } from 'meteor/meteor'
+import { useTracker } from 'meteor/react-meteor-data'
+import CONSTANTS from '../../api/common/constants'
+import { Box, Button, ButtonBase, ButtonGroup, Dialog, Divider, IconButton, InputBase, ListItemIcon, ListItemText,
+  MenuItem, Popover, Snackbar, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material'
+import MenuIcon from '@mui/icons-material/Menu'
+import PlayArrow from '@mui/icons-material/PlayArrow'
+import ArrowDropDown from '@mui/icons-material/ArrowDropDown'
+import ExpandMore from '@mui/icons-material/ExpandMore'
+import AutoAwesome from '@mui/icons-material/AutoAwesome'
+import Lock from '@mui/icons-material/Lock'
+import LinkIcon from '@mui/icons-material/Link'
+import Public from '@mui/icons-material/Public'
+import Edit from '@mui/icons-material/Edit'
+import Sliders from '@mui/icons-material/Tune'
+import Brush from '@mui/icons-material/Brush'
+import History from '@mui/icons-material/History'
+import Download from '@mui/icons-material/Download'
+import Code from '@mui/icons-material/Code'
+import AccountTree from '@mui/icons-material/AccountTree'
+import ContentCopy from '@mui/icons-material/ContentCopy'
+import Delete from '@mui/icons-material/Delete'
+import CastIcon from '@mui/icons-material/Cast'
+import GroupAdd from '@mui/icons-material/GroupAdd'
+import Save from '@mui/icons-material/Save'
+import Login from '@mui/icons-material/Login'
+import HuddleUp from './HuddleUp'
+import CreativeSlate from './CreativeSlate'
+import AccountMenu, { Avatar, displayName, useSaveYourWork } from './AccountMenu'
+import MessagesMenu, { useUnreadNotifications, unreadColor } from './MessagesMenu'
+import HeaderMenu from './HeaderMenu'
+import { useLivePresentation } from './presentations/useLivePresentation'
+import { presentTarget } from './presentations/presentTarget.mjs'
+import { CreativeStates } from '../../api/client/creativeSlateStates'
+import copySlate from '../../api/client/copySlate'
+import confirmService from '../common/confirm'
+import { collaborationUsers, conversationAvailable, conversationOpen, isPresentOpen, mermaidDialog } from '../jotai/atoms'
+
+// One entry per person (presentPeople), named as every viewer and their pointer name them.
+const peerName = p => p.userName
+
+// The header on a canvas. Left: the app's menu (≡), the logo (My Slates), and this slate's name, which
+// opens the slate's own menu. Right: who is here, Huddle, Ask Slatebox, Present ▾ (or Follow
+// presentation while someone else presents) and Share. Far right: notifications (or, for a guest,
+// Save your work) and the account. Below 1000px it is one row — ≡, name, Present, Share, account —
+// and the canvas page puts Ask Slatebox and Huddle in a bar under the canvas.
+export default function CanvasToolbar({ slate, title, privacy, user, manage, busy, huddle, navOpen, onOpenNav, onSettings, onOutput, onHistory, onShare, onRename }) {
+  const route = useLocation().pathname.match(/^\/canvas\/([a-zA-Z0-9]{1,40})\/?$/)?.[1]
+  const navigate = useNavigate()
+  const theme = useTheme()
+  const narrow = useMediaQuery('(max-width:999.98px)')
+  const [projection, setProjection] = useState(null)
+  const setPresentOpen = useSetAtom(isPresentOpen)
+  const [told, setTold] = useState('')
+  const [slateMenu, setSlateMenu] = useState(null)
+  const [presentMenu, setPresentMenu] = useState(null)
+  const [peopleAnchor, setPeopleAnchor] = useState(null)
+  const [renaming, setRenaming] = useState(false)
+  const titleButton = useRef(null)
+  const openMermaid = useSetAtom(mermaidDialog)
+  const afterSlateMenu = useRef(null)
+  const [askOpen, setAskOpen] = useAtom(conversationOpen)
+  const canAsk = useAtomValue(conversationAvailable)
+  const people = useAtomValue(collaborationUsers)
+  const unread = useUnreadNotifications()
+  const saveYourWork = useSaveYourWork()
+
+  // A workshop slate's saved workshop, as the canvas page has subscribed to it.
+  const onWorkshop = Boolean(route && slate?.creativeKind === 'workshop')
+  const workshop = useTracker(() => onWorkshop ? CreativeStates.findOne(route, { fields: { model: 1 } }) : null, [route, onWorkshop])
+  const draft = workshop?.model?.kind === 'workshop' ? workshop.model.workshop : null
+  const themeSlate = slate?.options?.eligibleForThemeCompilation
+  const overlayKind = presentTarget(slate) === 'overlay'
+  const live = useLivePresentation({ enabled: Boolean(route && slate && !overlayKind && !themeSlate), shareId: route,
+    title: title || slate?.options?.name, workshop: draft, mayLead: Boolean(manage) })
+
+  const guest = Boolean(user?.isAnonymous)
+  const owner = Boolean(user && user._id === slate?.userId)
+  const visibility = privacy.isPrivate ? 'Private' : privacy.isUnlisted ? 'Unlisted' : privacy.isPublic ? 'Public' : ''
+  const name = title || 'Untitled slate'
+  const others = people.length
+  const presence = others ? `${others} other${others > 1 ? 's' : ''} here` : visibility
+
+  // Present opens the presenter on every slate drawn on the canvas; a board drawn by its own
+  // renderer shows its own read-only view.
+  function startPresentation() {
+    if (presentTarget(slate) === 'overlay') setProjection(slate)
+    else setPresentOpen(true)
+  }
+
+  async function copyLink() {
+    try { await navigator.clipboard.writeText(window.location.href); setTold('Link copied') }
+    catch { setTold('Copy the link from the address bar') }
+  }
+
+  async function makeCopy() {
+    try {
+      // The server makes the copy from the stored slate (slates.copy); no browser writes slates.
+      const shareId = await copySlate(slate.shareId, { keepTemplate: true, fromTemplate: true, name: `${name} (copy)`.slice(0, 200) })
+      navigate(`/canvas/${shareId}`)
+    } catch { setTold('This slate could not be copied. Try again.') }
+  }
+
+  async function deleteSlate() {
+    const sure = await confirmService.show({
+      theme, title: `Delete ${name}?`,
+      message: 'The slate and its notes are removed for everyone it is shared with. This cannot be undone.',
+      actionItems: [{ key: 'delete', label: 'Delete slate', return: true }, { key: 'keep', label: 'Keep it', return: false }],
+    })
+    if (!sure) return
+    try {
+      await Meteor.callAsync(CONSTANTS.methods.slates.remove, { slateIds: [slate.options?.id ?? slate._id] })
+      navigate('/')
+    } catch (err) { setTold(`The slate could not be deleted: ${err.reason || err.message}`) }
+  }
+
+  // Enter saves, Escape keeps the old name, and leaving the field saves. Each ends the edit once.
+  const renameDone = useRef(false)
+  const startRename = () => { renameDone.current = false; setRenaming(true) }
+  const cancelRename = () => {
+    if (renameDone.current) return
+    renameDone.current = true
+    setRenaming(false)
+    requestAnimationFrame(() => titleButton.current?.focus())
+  }
+  const commitRename = value => {
+    if (renameDone.current) return
+    renameDone.current = true
+    setRenaming(false)
+    const next = value.trim()
+    if (next && next !== title) onRename(next)
+    requestAnimationFrame(() => titleButton.current?.focus())
+  }
+
+  const closeSlateMenu = () => setSlateMenu(null)
+  const settingsSection = onWorkshop || themeSlate ? 'colorPanel' : 'themePanel'
+  const slateItems = [
+    manage && { key: 'rename', label: 'Rename', icon: <Edit />, run: () => { afterSlateMenu.current = startRename } },
+    manage && { key: 'settings', label: 'Slate settings', icon: <Sliders />, run: () => onSettings('settingsPanel'), disabled: busy },
+    manage && { key: 'theme', label: 'Theme and colors', icon: <Brush />, run: () => onSettings(settingsSection), disabled: busy },
+    manage && !themeSlate && !onWorkshop && { key: 'history', label: 'Version history', icon: <History />, run: onHistory, disabled: busy },
+    'divider',
+    { key: 'link', label: 'Copy link', icon: <LinkIcon />, run: copyLink },
+    // Mermaid: any slate as Mermaid text, and Mermaid drawn as notes. Free; a guest saves their work first, as for exports.
+    manage && !themeSlate && { key: 'mermaid', label: 'Mermaid', hint: 'Export or import a diagram, free', icon: <AccountTree />,
+      run: () => (user?.isAnonymous ? onOutput('export') : openMermaid('export')) },
+    manage && !themeSlate && { key: 'export', label: 'Export', icon: <Download />, run: () => onOutput('export') },
+    manage && !themeSlate && { key: 'embed', label: 'Embed', icon: <Code />, run: () => onOutput('embed') },
+    'divider',
+    // A copy goes into your own account: for people who can edit this slate, or anyone on a public one.
+    // A read-only link is for looking; it does not hand over the owner's slate.
+    user && (manage || privacy.isPublic) && !overlayKind && !themeSlate && { key: 'copy', label: 'Make a copy', icon: <ContentCopy />, run: makeCopy },
+    owner && manage && { key: 'delete', label: 'Delete slate…', icon: <Delete />, run: deleteSlate, danger: true },
+  ].filter(Boolean).filter((item, i, list) => item !== 'divider' || (i > 0 && list[i - 1] !== 'divider' && i < list.length - 1))
+
+  const presentItems = [
+    { key: 'here', label: 'Present on this screen', icon: <PlayArrow />, run: startPresentation },
+    live.canStart && { key: 'everyone', label: 'Present to everyone here',
+      hint: 'Everyone on this slate follows your presentation', icon: <CastIcon />, run: live.start, disabled: live.disabled },
+  ].filter(Boolean)
+
+  const menuItem = (item, close) => <MenuItem key={item.key} disabled={item.disabled} onClick={() => { close(); item.run() }}
+    sx={item.danger ? { color: 'error.main' } : undefined}>
+    <ListItemIcon sx={{ color: 'inherit', '& svg': { fontSize: 20 } }}>{item.icon}</ListItemIcon>
+    <ListItemText primary={item.label} secondary={item.hint} secondaryTypographyProps={{ variant: 'caption' }} />
+  </MenuItem>
+
+  const peerList = <>
+    {[{ key: 'you', you: true }, ...people].map(p => <Box component="li" key={p.key}
+      sx={{ display: 'flex', alignItems: 'center', gap: 1.25, py: .75 }}>
+      <Avatar name={p.you ? displayName(user) : peerName(p)} colour={p.color} size={28} />
+      <span>{p.you ? 'You' : peerName(p)}</span>
+    </Box>)}
+  </>
+
+  const slateLabel = <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, alignItems: 'flex-start' }}>
+    <strong title={name}>{name}</strong>
+    {narrow && presence && <small className="sb-board-presence">{presence}</small>}
+  </Box>
+
+  const presentButton = live.live
+    ? <Button className="sb-follow" variant="outlined" color="inherit" onClick={live.follow} disabled={live.disabled}
+        aria-label="Follow presentation" startIcon={<Box component="span" aria-hidden="true" className="sb-live-dot" />}>
+        <span className="sb-follow-long">Follow presentation</span><span className="sb-follow-short" aria-hidden="true">Follow</span>
+      </Button>
+    : narrow
+      ? <Button variant="outlined" color="inherit" disabled={!slate}
+          aria-haspopup={presentItems.length > 1 ? 'menu' : undefined}
+          onClick={e => presentItems.length > 1 ? setPresentMenu(e.currentTarget) : startPresentation()}>Present</Button>
+      : <ButtonGroup variant="outlined" color="inherit" className="sb-present">
+          <Button startIcon={<PlayArrow />} onClick={startPresentation} disabled={!slate}>Present</Button>
+          {presentItems.length > 1 && <Button size="small" aria-label="Presentation options" aria-haspopup="menu"
+            aria-expanded={Boolean(presentMenu)} onClick={e => setPresentMenu(e.currentTarget)}><ArrowDropDown /></Button>}
+        </ButtonGroup>
+
+  const shell = theme.palette.shell
+  const tokens = { '--sb-surface': shell.surface, '--sb-border': shell.border, '--sb-offset': shell.offset,
+    '--sb-ink2': shell.secondaryInk, '--sb-selected': shell.selected, '--sb-selected-ink': shell.selectedInk }
+  return <div className={'sb-board-toolbar' + (narrow ? ' sb-board-toolbar-narrow' : '')} style={tokens}>
+    <Tooltip title="Menu">
+      <IconButton color="inherit" onClick={onOpenNav} className="sb-board-nav" aria-haspopup="dialog" aria-expanded={Boolean(navOpen)}
+        aria-label={narrow && unread && !guest ? `Open menu, ${unread} unread notification${unread > 1 ? 's' : ''}` : 'Open menu'}>
+        <MenuIcon />
+        {narrow && unread > 0 && !guest && <Box component="span" aria-hidden="true" className="sb-unread-dot" sx={{ bgcolor: unreadColor }} />}
+      </IconButton>
+    </Tooltip>
+    <Tooltip title="My Slates">
+      <Link className="sb-board-brand" to={user ? '/' : '/start'} aria-label="My Slates"><img src="/brand/slatebox.svg" alt="" /></Link>
+    </Tooltip>
+    <div className="sb-board-name">
+      {renaming
+        ? <InputBase autoFocus defaultValue={title} className="sb-board-rename"
+            inputProps={{ 'aria-label': 'Slate name', maxLength: slate?.workshopTitled ? 120 : 200 }}
+            onFocus={e => e.target.select()}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); commitRename(e.currentTarget.value) }
+              if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelRename() }
+            }}
+            onBlur={e => commitRename(e.currentTarget.value)} />
+        : <ButtonBase ref={titleButton} className="sb-board-title" aria-label={`${name}${narrow && presence ? `, ${presence}` : ''}, slate menu`} aria-haspopup="menu"
+            aria-expanded={Boolean(slateMenu)} onClick={e => setSlateMenu(e.currentTarget)} disabled={!slate}>
+            {slateLabel}<ExpandMore fontSize="small" aria-hidden="true" />
+          </ButtonBase>}
+      {!narrow && visibility && (owner && !themeSlate
+        ? <ButtonBase className="sb-board-privacy" onClick={onShare} aria-label={`${visibility}. Change who can see this slate`}>
+            {privacy.isPublic ? <Public /> : <Lock />}{visibility}</ButtonBase>
+        : <span className="sb-board-privacy">{privacy.isPublic ? <Public /> : <Lock />}{visibility}</span>)}
+    </div>
+
+    {!narrow && others > 0 && <ButtonBase className="sb-board-peers" aria-haspopup="dialog" aria-expanded={Boolean(peopleAnchor)}
+      aria-label={`People on this slate: you and ${others} other${others > 1 ? 's' : ''}`} onClick={e => setPeopleAnchor(e.currentTarget)}>
+      {people.slice(0, 3).map(p => <Avatar key={p.key} name={peerName(p)} colour={p.color} size={28} />)}
+      {others > 3 && <span className="sb-board-more">+{others - 3}</span>}
+    </ButtonBase>}
+    <Popover open={Boolean(peopleAnchor)} anchorEl={peopleAnchor} onClose={() => setPeopleAnchor(null)}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} transformOrigin={{ vertical: 'top', horizontal: 'center' }}
+      slotProps={{ paper: { role: 'dialog', 'aria-label': 'On this slate', sx: { width: 280, mt: 1, p: 2, pb: 1 } } }}>
+      <Typography variant="overline" component="h2" sx={{ fontWeight: 700, lineHeight: 1.5 }}>On this slate</Typography>
+      <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>{peerList}</Box>
+      {owner && !themeSlate && <><Divider sx={{ my: 1 }} />
+        <Button fullWidth color="inherit" startIcon={<GroupAdd />} sx={{ justifyContent: 'flex-start' }}
+          onClick={() => { setPeopleAnchor(null); onShare() }}>Invite people</Button></>}
+    </Popover>
+
+    {!narrow && slate && !themeSlate && huddle !== 'disabled' && <HuddleUp />}
+    {!narrow && canAsk && <Button className="sb-ask" data-conversation-toggle color="inherit" variant="outlined" aria-pressed={Boolean(askOpen)}
+      startIcon={<AutoAwesome />} onClick={() => setAskOpen(!askOpen)}>Ask Slatebox</Button>}
+    {presentButton}
+    {owner && !themeSlate && <Button className="sb-board-share" variant="contained" color="primary" disableElevation onClick={onShare}>Share</Button>}
+    {!narrow && !owner && slate && (privacy.isPublic || privacy.isUnlisted) &&
+      <Button color="inherit" variant="outlined" startIcon={<LinkIcon />} onClick={copyLink}>Copy link</Button>}
+    {!narrow && <span className="sb-board-divider" aria-hidden="true" />}
+    {!narrow && user && !guest && <MessagesMenu />}
+    {!narrow && guest && <Button className="sb-save-work" variant="outlined" color="inherit" startIcon={<Save />} onClick={saveYourWork}
+      aria-label="Save your work"><span className="sb-save-long">Save your work</span><span className="sb-save-short" aria-hidden="true">Save</span></Button>}
+    {!user && <Button color="inherit" variant="outlined" startIcon={narrow ? undefined : <Login />} onClick={() => navigate('/login')}>Sign in</Button>}
+    <AccountMenu sheet={narrow} />
+
+    <HeaderMenu label="Slate" sheet={narrow} anchorEl={slateMenu} open={Boolean(slateMenu)} onClose={closeSlateMenu} width={240}
+      onExited={() => { const next = afterSlateMenu.current; afterSlateMenu.current = null; next?.() }}
+      heading={narrow ? <Box sx={{ pb: .5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          <Typography component="h2" sx={{ fontWeight: 800, fontSize: 18 }}>{name}</Typography>
+          {visibility && <span className="sb-board-privacy">{privacy.isPublic ? <Public /> : <Lock />}{visibility}</span>}
+        </Box>
+        <Typography variant="body2" sx={{ color: 'shell.secondaryInk', mt: .5 }}>
+          On this slate: {['you', ...people.map(peerName)].join(', ')}</Typography>
+      </Box> : null}>
+      {slateItems.map((item, i) => item === 'divider' ? <Divider key={'d' + i} /> : menuItem(item, closeSlateMenu))}
+    </HeaderMenu>
+    <HeaderMenu label="Present" sheet={narrow} anchorEl={presentMenu} open={Boolean(presentMenu)} onClose={() => setPresentMenu(null)}
+      align="right" width={290} heading={narrow ? <Typography component="h2" sx={{ fontWeight: 800, fontSize: 18 }}>Present</Typography> : null}>
+      {presentItems.map(item => menuItem(item, () => setPresentMenu(null)))}
+    </HeaderMenu>
+
+    {live.view}
+    <Snackbar open={Boolean(told)} autoHideDuration={4000} onClose={() => setTold('')} message={told}
+      anchorOrigin={{ vertical: 'top', horizontal: 'center' }} ContentProps={{ role: 'status' }} />
+    {projection && <Dialog fullScreen open onClose={() => setProjection(null)} slotProps={{ paper: { 'aria-label': 'Slate presentation' } }}>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}><Button onClick={() => setProjection(null)}>Exit presentation</Button></Box>
+      <CreativeSlate shareId={projection.shareId} readOnly onExitPresentation={() => setProjection(null)} />
+    </Dialog>}
+  </div>
+}

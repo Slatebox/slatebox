@@ -1,0 +1,48 @@
+FROM node:22.11.0-alpine
+
+# Define fonts to install
+ENV GOOGLE_FONTS="\
+Roboto:wght@400;700 \
+Courier+Prime \
+Indie+Flower \
+Abril+Fatface \
+Bangers \
+Caveat \
+EB+Garamond \
+IBM+Plex+Mono \
+IBM+Plex+Sans \
+IBM+Plex+Serif \
+PT+Sans \
+PT+Sans+Narrow \
+PT+Serif \
+Permanent+Marker \
+Roboto+Condensed \
+Roboto+Mono \
+Roboto+Slab"
+ENV GOOGLE_FONTS=${GOOGLE_FONTS}
+
+# Install font dependencies
+RUN apk --no-cache add \
+    fontconfig \
+    wget \
+    unzip \
+    ttf-liberation \
+    curl
+
+# Create fonts directory and install fonts
+RUN mkdir -p /usr/share/fonts/googlefonts && \
+    echo '#!/bin/sh' > /install-fonts.sh && \
+    echo 'for font in $GOOGLE_FONTS; do' >> /install-fonts.sh && \
+    echo '  echo "Downloading $font..."' >> /install-fonts.sh && \
+    echo '  curl -o font.css "https://fonts.googleapis.com/css2?family=$font&display=swap"' >> /install-fonts.sh && \
+    echo '  grep -o "https://fonts.gstatic.com/s/[^)]*.ttf" font.css | while read url; do' >> /install-fonts.sh && \
+    echo '    wget -P /usr/share/fonts/googlefonts "$url"' >> /install-fonts.sh && \
+    echo '  done' >> /install-fonts.sh && \
+    echo '  rm font.css' >> /install-fonts.sh && \
+    echo 'done' >> /install-fonts.sh && \
+    chmod +x /install-fonts.sh && \
+    /install-fonts.sh && \
+    fc-cache -f -v
+
+# Keep container running for testing
+CMD ["tail", "-f", "/dev/null"]

@@ -1,0 +1,15 @@
+{
+  "measured": {
+    "eager": 1570708,
+    "boards": 10069,
+    "rules": 7043,
+    "engine": {
+      "version": "3.1.3",
+      "commit": "2b26dd737eb219a33debb067b7a9d22150977b82"
+    }
+  },
+  "allowance": {
+    "eager": 10200
+  },
+  "recordedAt": "2026-11-21T21:16:28.487Z"
+}

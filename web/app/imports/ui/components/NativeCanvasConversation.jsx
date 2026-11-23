@@ -1,0 +1,235 @@
+import React,{Suspense,lazy,useEffect,useRef,useState} from 'react'
+import {Meteor} from 'meteor/meteor'
+import {Box,Button,Typography} from '@mui/material'
+import ConversationPanel,{ConversationComposer,focusMessageAfterReload} from './ConversationPanel'
+import PayNotice, { isCreditRefusal } from './PayNotice'
+import {canvasStarters,nativeRequestKind} from '../../api/common/native-canvas-conversation.mjs'
+import {agentLabel,firstNameOf} from '../../api/common/agent-label.mjs'
+import AddStrip,{AddShort} from './library/AddStrip'
+import {loadLibrary} from './library/libraryBus'
+
+// The library (a view inside this conversation) and its cards: the library chunk, loaded on demand.
+const LibraryView=lazy(loadLibrary)
+const LibraryCards=lazy(()=>loadLibrary().then(m=>({default:m.LibraryCards})))
+const FirstTurn=lazy(()=>loadLibrary().then(m=>({default:m.FirstTurn})))
+const libraryModule=()=>import('../../api/common/library.mjs')
+
+// Drawing requests run on exec (canvasConversation.*); workshop and interactive-route requests
+// keep their own methods (nativeCanvas.*) until the registry has actions for them.
+const methodsFor=message=>nativeRequestKind(message)==='draw' ? 'canvasConversation' : 'nativeCanvas'
+const BOARD_FORMATS=['launch-plan','pipeline','budget']
+const BOARD_NAMES={'launch-plan':'Launch plan',pipeline:'Sales pipeline',budget:'Budget'}
+const WARNINGS={
+  removes:count=>`This removes ${count===1?'a note or connection':(count||'some')+' notes or connections'}.`,
+  rewrites_text:count=>`This rewrites the text of ${count} notes.`,
+  others_notes:()=>'This changes notes someone else wrote.',
+  widens_audience:()=>'This puts content where more people can see it.',
+  widens_access:()=>'This gives more people access.',
+}
+
+export default function NativeCanvasConversation({shareId,board,onClose,onKeep,onPreview,readNodes,readSelection=null,about=null,library=null}) {
+  // The library view, when it is open in place of the conversation (Back returns to the chat).
+  const [view,setView]=useState(null)
+  const [text,setText]=useState(''), [draft,setDraft]=useState(null), [error,setError]=useState('')
+  // What is in flight: 'asking' while a preview is prepared, 'keeping' while it is saved.
+  const [busy,setBusy]=useState(null)
+  // A refusal the pay sheet answers (Get Pro, top up…), with the message it refused, to send again after.
+  const [refusal,setRefusal]=useState(null)
+  const inFlight=useRef(false), asked=useRef(0), before=useRef(''), input=useRef(null)
+  const historyKey = 'slatebox:native-chat:' + Meteor.userId() + ':' + shareId
+  const [history,setHistory] = useState(() => {
+    try {
+      const rows = JSON.parse(localStorage.getItem(historyKey) || '[]')
+      return Array.isArray(rows) ? rows.filter(turn => typeof turn?.message === 'string' && typeof turn?.reply === 'string')
+        .map(({id,message,reply,attach}) => ({id,message,reply,...(attach?.type==='catalog' && Array.isArray(attach.entries) && {attach:{type:'catalog',entries:attach.entries.filter(e=>typeof e==='string').slice(0,10)}})})).slice(-6) : []
+    } catch {return []}
+  })
+  const brief=board.options?.creationBrief
+  // A preview is made against the drawing as it was asked about. Once the drawing has moved on
+  // (a note moved, renamed or deleted, by this person or a teammate) Keep would be refused, so it
+  // is not offered, and the preview, drawn against the old drawing, leaves the canvas.
+  const [stale,setStale]=useState(false)
+  useEffect(() => {
+    setStale(false)
+    if(!draft) return undefined
+    const check=()=>{try {if(readNodes()!==before.current) setStale(true)} catch {}}
+    check()
+    const timer=setInterval(check,600)
+    return () => clearInterval(timer)
+  }, [draft])
+  // The draft is drawn on the canvas while it waits for Keep or Discard.
+  useEffect(() => { onPreview?.(draft?.canvas && !stale ? {canvas:draft.canvas} : null) }, [draft,stale])
+  useEffect(() => () => onPreview?.(null), [])
+  // A turn kept in the conversation (and on this device), with what it shows.
+  function remember(entry) {
+    const next=[...history.filter(turn=>turn.id!==entry.id),entry].slice(-6)
+    setHistory(next)
+    try {localStorage.setItem(historyKey,JSON.stringify(next))} catch {}
+  }
+  async function ask(message) {
+    if(inFlight.current || !message.trim()) return
+    inFlight.current=true;setBusy('asking');setError('');setRefusal(null)
+    const turn=++asked.current
+    before.current=readNodes()
+    try {
+      // The library reads "Add a retro" and answers "what can I add?" here, with no AI call.
+      const lib=await libraryModule().catch(()=>null)
+      if(turn!==asked.current) return
+      const local=lib?.libraryTurn(message)
+      if(local) {
+        remember({id:'catalog-'+Date.now(),message,reply:local.all?'Here is everything you can add to this slate.':'These fit what you described.',attach:{type:'catalog',entries:local.entries}})
+        setText('')
+        return
+      }
+      const via=methodsFor(message)
+      // The line selected on the canvas is what “this line” means.
+      const selection=via==='canvasConversation' ? (readSelection?.() ?? null) : null
+      const res=await Meteor.callAsync(via+'.preview',shareId,message,history.map(({message,reply})=>({message,reply})),...(selection ? [selection] : []))
+      if(turn!==asked.current) return
+      if(res.reply) {
+        // A question answered in words: nothing to keep, so it joins the conversation.
+        const next=[...history,{id:res.id,message,reply:res.reply}].slice(-6)
+        setHistory(next)
+        try {localStorage.setItem(historyKey,JSON.stringify(next))} catch {}
+        setText('')
+      } else {
+        // A launch plan, pipeline or budget is previewed by its own rules, loaded only now.
+        if(BOARD_FORMATS.includes(res.format)) await import('slateboxjs/workshops/rules')
+        if(turn!==asked.current) return
+        setDraft({...res,message,via})
+      }
+    } catch(e) {if(turn===asked.current) {setError(e.reason || e.message);setRefusal(isCreditRefusal(e.error) || e.details?.pay ? {error:e.error,reason:e.reason,details:e.details,message} : null)}}
+    finally {if(turn===asked.current) {inFlight.current=false;setBusy(null)}}
+  }
+  // Leaving a preview that is still being prepared: its answer, when it comes, is dropped.
+  function cancel() {
+    asked.current++
+    inFlight.current=false;setBusy(null)
+  }
+  async function keep() {
+    if(inFlight.current) return
+    if(readNodes()!==before.current) {setError('Your drawing changed. Discard this preview and ask again.');return}
+    inFlight.current=true;setBusy('keeping');setError('')
+    try {
+      const kept=await Meteor.callAsync(draft.via+'.keep',shareId,draft.id)
+      const reply = draft.component ? 'Added ' + draft.title + (draft.rules?.length ? ' · ' + draft.rules.join(' ') : '') : draft.said || (draft.format==='lanes'?'Added a workshop':draft.mode==='play'?'Added a playable route':'Drew') + ' · ' + draft.labels.join(' → ') + (draft.format==='lanes' ? ' · '+draft.capacities.map(l=>l.label+' holds '+l.capacity).join(', ') : ' · ' + draft.links + (draft.links===1?' connection':' connections'))
+      const next = [...history.filter(turn=>turn.id!==draft.id), {id:draft.id,message:draft.message,reply}].slice(-6)
+      setHistory(next)
+      try {localStorage.setItem(historyKey,JSON.stringify(next))} catch {}
+      setText('')
+      // A board kept here is drawn on this page as it is (no reload): the board's own chat takes over.
+      if(draft.mode==='play' && kept?.kept) {
+        setDraft(null);inFlight.current=false;setBusy(null)
+        onKeep({board:true,origin:kept.origin,nativeConversationRevision:kept.nativeConversationRevision})
+        return
+      }
+      focusMessageAfterReload(shareId)
+      onKeep(null)
+    }
+    catch(e){setError(e.reason || e.message);inFlight.current=false;setBusy(null)}
+  }
+  function discard() {setDraft(null);setError('')}
+  // A starter fills the message with something that can be previewed as it stands. The part
+  // a person is most likely to replace is selected, so typing over it is one gesture. The list
+  // is the one every read of this slate returns, worked out from the drawing as it is now.
+  const suggest = ({text:value, select=[value.length,value.length]}) => {
+    setText(value)
+    requestAnimationFrame(() => {input.current?.focus();input.current?.setSelectionRange(select[0],select[1])})
+  }
+  const liveNodes = () => {try {return JSON.parse(readNodes())} catch {return []}}
+  // A change that removes anything waits for a yes, as an agent's held plan does: Yes keeps
+  // exactly this preview (its id is the confirmation), No discards it.
+  const removing = draft && !stale && busy!=='keeping' && draft.warnings?.find(w=>w.rule==='removes')
+  const removeCount = draft?.removed?.length || removing?.count || 0
+  const removeWhat = draft?.removed?.length ? (removeCount===1?'1 note':removeCount+' notes') : (removeCount===1?'a note or connection':(removeCount||'some')+' notes or connections')
+  const hold = busy==='asking' ? {reason:'Preparing the preview…',actions:<Button size="small" onClick={cancel}>Cancel</Button>}
+    : removing ? {reason:agentLabel(firstNameOf(Meteor.user()))+' wants to remove '+removeWhat+'. Remove '+(removeCount===1?'it':'them')+'?',actions:<>
+      <Button variant="contained" size="small" disabled={Boolean(busy)} onClick={keep}>Yes</Button>
+      <Button size="small" disabled={Boolean(busy)} onClick={discard}>No</Button>
+    </>}
+    : draft ? {reason:busy==='keeping' ? 'Adding the preview to the slate…' : stale ? 'Your drawing changed after this preview. Discard it and ask again.' : 'Keep or discard the preview to write again.',actions:<>
+      <Button variant="contained" size="small" disabled={Boolean(busy) || stale} onClick={keep}>Keep changes</Button>
+      <Button size="small" disabled={Boolean(busy)} onClick={discard}>Discard preview</Button>
+    </>} : null
+  // An empty slate opens with the library's first turn ("What are you working on?") instead of starters.
+  const empty = !(board.nodes||[]).some(node=>!node?.options?.isComment) && !brief
+  const firstTurn = empty && !history.length && !draft && !view
+  // Add from the library, the strip or the + menu: the entry's own add message, previewed, then kept.
+  async function addEntry(entry) {
+    const lib=await libraryModule()
+    const found=typeof entry==='string' ? lib.catalogEntry(entry) : entry
+    if(!found) return
+    setView(null)
+    ask(found.addSay[0])
+  }
+  const browse = (start={}) => setView({start})
+  const say = value => { setView(null); suggest({text:value}) }
+  useEffect(() => {
+    if(!library) return
+    if(library.add) addEntry(library.add)
+    else browse(library.start ?? {})
+  }, [library?.nonce])
+  const composer = <ConversationComposer shareId={shareId} inputRef={input} value={text} onChange={setText} onSubmit={()=>ask(text)}
+    hold={hold} canSubmit={Boolean(text.trim())} placeholder={empty ? 'What are you working on?' : 'Ask anything'} maxLength={1200} error={error}
+    extra={!hold && <>
+      {refusal && <PayNotice refusal={refusal} from="draft" retry={() => ask(refusal.message)} />}
+      <AddStrip empty={empty} hasBoard={false} onAdd={addEntry} onBrowse={()=>browse()} compact={history.length>0 || Boolean(draft)} />
+    </>}
+    prompt={empty ? null : 'What should happen on this slate?'}
+    starters={!empty && <Box aria-label="Starter messages" sx={{display:'flex',flexWrap:'wrap',gap:.5,my:1}}>
+      {canvasStarters(board.nodes).map(({label},i)=><Button key={label} size="small" onClick={()=>suggest(canvasStarters(liveNodes())[i])}>{label}</Button>)}
+      <AddShort onBrowse={()=>browse()} />
+    </Box>} />
+  if(view) return <ConversationPanel onClose={onClose} composer={composer}>
+    <Suspense fallback={<Typography variant="body2" sx={{my:2}}>Opening the library…</Typography>}>
+      <LibraryView start={view.start} onBack={()=>setView(null)} onAdd={addEntry} onSay={say} onSend={value=>{setView(null);ask(value)}} />
+    </Suspense>
+  </ConversationPanel>
+  return <ConversationPanel onClose={onClose} composer={composer}>
+    {about}
+    {brief && <Box aria-label="Opening message" sx={{my:2}}><Typography variant="caption">You</Typography>
+      <Typography sx={{whiteSpace:'pre-wrap'}}>{brief}</Typography>
+      {!draft && !history.some(turn=>turn.message===brief) && <Button size="small" disabled={Boolean(busy)} onClick={()=>ask(brief)}>Draft from this brief</Button>}</Box>}
+    {firstTurn && <Suspense fallback={null}><FirstTurn onAdd={addEntry} onOpen={entry=>browse({entry:entry.id})} onBrowse={browse} onGoal={value=>suggest({text:value})} /></Suspense>}
+    {history.length>0 && <Box component="ol" aria-label="Kept conversation" sx={{listStyle:'none',p:0}}>
+      {history.map(turn=><Box component="li" key={turn.id} sx={{my:2}}>
+        {turn.message!==brief && <><Typography variant="caption">You</Typography><Typography>{turn.message}</Typography></>}
+        <Typography variant="caption">Slatebox</Typography><Typography variant="body2">{turn.reply}</Typography>
+        {turn.attach?.type==='catalog' && <Suspense fallback={null}><CatalogTurn ids={turn.attach.entries} onAdd={addEntry} onOpen={entry=>browse({entry:entry.id})} onBrowse={()=>browse()} /></Suspense>}
+      </Box>)}
+    </Box>}
+    {draft && <Box aria-label="Review the preview" aria-live="polite" sx={{my:2}}>
+      <Typography variant="caption">You</Typography><Typography sx={{overflowWrap:'anywhere'}}>{draft.message}</Typography>
+      <Typography sx={{my:1,fontWeight:600}}>{draft.provider==='ai'?'AI preview':'Preview'} · {draft.component ? draft.title : BOARD_NAMES[draft.format] ?? (draft.format==='lanes'?'Workshop':draft.mode==='play'?'Interactive route':'Drawing')}{!draft.component && draft.format!=='lanes' && !BOARD_NAMES[draft.format] && ' · '+draft.links+' '+(draft.links===1?'connection':'connections')}</Typography>
+      <Typography variant="body2">{stale ? 'Your drawing changed after this preview, so it is no longer shown. Discard it and ask again on the drawing as it is now.'
+        : 'Shown on the canvas with dashed outlines. Nothing is added until you keep it.'}</Typography>
+      <ul>{draft.labels.map((label,i)=><li key={i}>{label}</li>)}</ul>
+      {draft.changes?.length>0 && <Box component="section" aria-label="Notes this rewrites">
+        <Typography variant="body2">Rewrites {draft.changes.length===1?'1 note':draft.changes.length+' notes'}:</Typography>
+        <ul>{draft.changes.map(c=><li key={c.id}><s>{c.before}</s> → {c.after}</li>)}</ul>
+      </Box>}
+      {draft.removed?.length>0 && <Box component="section" aria-label="Notes this removes">
+        <Typography variant="body2">Removes {draft.removed.length===1?'1 note':draft.removed.length+' notes'}:</Typography>
+        <ul>{draft.removed.map(r=><li key={r.id}>{r.text}</li>)}</ul>
+      </Box>}
+      {!draft.component && draft.capacities?.map(l=><Typography key={l.label}>{l.label} holds up to {l.capacity} cards.</Typography>)}
+      {draft.rules?.length>0 && <Box component="section" aria-label="How this board behaves">
+        <Typography variant="body2" sx={{fontWeight:600}}>How this board behaves</Typography>
+        <ul>{draft.rules.map(line=><li key={line}>{line}</li>)}</ul>
+      </Box>}
+      {draft.format==='lanes' && <Typography>{draft.component ? 'Drag notes onto it after Keep: each becomes a card.' : 'Add your cards in the workshop after Keep.'}</Typography>}
+      {draft.said && <Typography variant="body2">{draft.said.replace(/^Added /,'Keep this to add ')}.</Typography>}
+      {draft.mode==='play' && draft.format!=='lanes' && !draft.said && <Typography variant="body2">Keep this to play the route alongside your original drawing.</Typography>}
+      {draft.warnings?.map(w=><Typography key={w.rule} role="note" color="warning.main">{WARNINGS[w.rule]?.(w.count)}</Typography>)}
+    </Box>}
+  </ConversationPanel>
+}
+
+/** A catalogue turn: the entries the conversation answered with, as cards (the library chunk). */
+function CatalogTurn({ids,onAdd,onOpen,onBrowse}) {
+  const [entries,setEntries]=useState(null)
+  useEffect(()=>{let gone=false;import('../../api/common/library.mjs').then(lib=>{if(!gone) setEntries(ids.map(lib.catalogEntry).filter(Boolean))});return()=>{gone=true}},[ids.join()])
+  if(!entries) return null
+  return <><LibraryCards entries={entries} onOpen={onOpen} onAdd={onAdd} />
+    {entries.length<10 && <Button size="small" onClick={onBrowse}>See everything</Button>}</>
+}

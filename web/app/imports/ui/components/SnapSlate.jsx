@@ -1,0 +1,240 @@
+/* eslint-disable new-cap */
+import React, { useEffect } from 'react'
+import PropTypes from 'prop-types'
+import { Meteor } from 'meteor/meteor'
+import Box from '@mui/material/Box'
+import { useTracker } from 'meteor/react-meteor-data'
+import { Slatebox } from 'slateboxjs'
+import CONSTANTS from '../../api/common/constants'
+import { Collaboration } from '../../api/common/models'
+import slateProps from '../propTypes/slateProps'
+import promisify from '../../api/client/promisify'
+import { slatePreview } from '../../api/common/slate-preview.mjs'
+
+export default function SnapSlate({
+  slate,
+  onSlateClicked = () => {},
+  overrideContainer,
+  allowDrag = false,
+  allowZoom = false,
+  disableCollab = false,
+  index,
+}) {
+  const [isVisible, setVisible] = React.useState(null)
+
+  async function create(ss) {
+    const snap = await new Slatebox.slate(
+      {
+        container: overrideContainer
+          ? `slatePreviewContainer`
+          : `slate_${ss.shareId}`,
+        containerStyle: {
+          backgroundColor: ss.options.containerStyle.backgroundColor,
+        },
+        defaultLineColor: ss.options.defaultLineColor,
+        viewPort: {
+          allowDrag: !!allowDrag,
+          useInertiaScrolling: !!allowDrag,
+        },
+        name: ss.options.name,
+        description: ss.options.description,
+        showbirdsEye: false,
+        showMultiSelect: false,
+        showUndoRedo: false,
+        showZoom: !!allowZoom,
+        showLocks: false,
+        showAddNodes: false,
+        allowCollaboration: !disableCollab,
+      },
+      {
+        onSlateChanged: async (pkg) => {
+          const doc = { ...pkg }
+          if (doc.type === 'onZoom') return
+          let scaleAfter = true
+          if (doc.type === 'onCanvasMove') {
+            const orient = snap.getOrientation()
+            const ratio =
+              Math.max(orient.width, orient.height) /
+              Math.max(doc.data.orient.width, doc.data.orient.height)
+            doc.data.left = doc.data.relative.x * ratio
+            doc.data.top = doc.data.relative.y * ratio
+            doc.isRelative = true
+            scaleAfter = false
+          }
+          if (!overrideContainer) {
+            // snap?.collab.invoke(doc)
+            if (scaleAfter) {
+              setTimeout(() => {
+                window.requestAnimationFrame(() => {
+                  snap.controller.scaleToFitAndCenter()
+                })
+              }, 250)
+            }
+          }
+        },
+        onInitCollaboration: async (clientID) => {
+          const collaboratorDetails = await Meteor.callAsync(
+            CONSTANTS.methods.collaborators.init,
+            {
+              id: clientID,
+              shareId: ss.shareId,
+            }
+          )
+
+          // The same person as on the slate itself: their key, name and colour there.
+          return {
+            websocketUrl: collaboratorDetails.wsUrl,
+            websocketParams: collaboratorDetails.wsParams,
+            color: collaboratorDetails.color,
+            userName: collaboratorDetails.userName,
+            personKey: collaboratorDetails.personKey,
+            x: 0,
+            y: 0,
+            suppressCursor: true,
+          }
+        },
+        onCanvasClicked: () => {
+          if (onSlateClicked) onSlateClicked()
+        },
+      }
+    ).init()
+    ss.options.showLocks = false
+    ss.nodes?.forEach((n) => {
+      const nn = n
+      nn.options.allowResize = false
+      nn.options.allowContext = false
+      nn.options.allowMenu = false
+      nn.options.allowDrag = false
+      nn.relationships?.associations?.forEach((a) => {
+        const aa = a
+        aa.lineWidth = 2
+      })
+    })
+
+    window.setTimeout(() => {
+      window.requestAnimationFrame(() => {
+        snap.loadJSON(JSON.stringify(ss))
+        if (ss.nodes.length < 25 || ss.options.templateApproved || ss.drawnFromModel) {
+          // if (!overrideContainer) {
+          snap.controller.scaleToFitAndCenter(() => {
+            setVisible(true)
+          })
+          // } else {
+          //   snap.canvas.zoom({
+          //     dur: 0,
+          //     zoomPercent: 100,
+          //   })
+          // }
+        } else {
+          setVisible(true)
+        }
+      })
+    }, 0 * index || 1)
+
+    if (!disableCollab) {
+      // snap.collabPackages.observe((event) => {
+      //   let scaleAfter = true
+      //   const pkgs = snap.collabPackages.get('last')
+      //   pkgs.forEach((p) => {
+      //     switch (p.type) {
+      //       case 'onZoom': {
+      //         break
+      //       }
+      //       case 'onCanvasMove': {
+      //         const orient = snap.getOrientation()
+      //         const ratio =
+      //           Math.max(orient.width, orient.height) /
+      //           Math.max(p.data.orient.width, p.data.orient.height)
+      //         p.data.left = p.data.relative.x * ratio
+      //         p.data.top = p.data.relative.y * ratio
+      //         p.isRelative = true
+      //         scaleAfter = false
+      //         break
+      //       }
+      //       default: {
+      //         break
+      //       }
+      //     }
+      //     if (!overrideContainer) {
+      //       snap?.collab.invoke(p)
+      //       if (scaleAfter) {
+      //         setTimeout(() => {
+      //           window.requestAnimationFrame(() => {
+      //             snap.controller.scaleToFitAndCenter()
+      //           })
+      //         }, 250)
+      //       }
+      //     }
+      //   })
+      // })
+    }
+    // Collaboration.find({ slateId: ss.shareId }).observe({
+    //   added(doc) {
+    //     const ddoc = doc
+    //     if (ddoc.type === 'onZoom') return
+
+    //     let scaleAfter = true
+    //     if (ddoc.type === 'onCanvasMove') {
+    //       const orient = snap.getOrientation()
+    //       const ratio =
+    //         Math.max(orient.width, orient.height) /
+    //         Math.max(ddoc.data.orient.width, ddoc.data.orient.height)
+    //       ddoc.data.left = ddoc.data.relative.x * ratio
+    //       ddoc.data.top = ddoc.data.relative.y * ratio
+    //       ddoc.isRelative = true
+    //       scaleAfter = false
+    //     }
+    //     if (!overrideContainer) {
+    //       snap?.collab.invoke(doc)
+    //       if (scaleAfter) {
+    //         setTimeout(() => {
+    //           window.requestAnimationFrame(() => {
+    //             snap.controller.scaleToFitAndCenter()
+    //           })
+    //         }, 250)
+    //       }
+    //     }
+    //   },
+    // })
+  }
+
+  useEffect(() => {
+    if (slate) {
+      create(slatePreview(JSON.parse(JSON.stringify(slate))))
+    }
+  }, [])
+
+  if (!disableCollab) {
+    useTracker(() => {
+      Meteor.subscribe(
+        CONSTANTS.publications.collaboration,
+        [slate?.shareId],
+        [], // all collaborators
+        new Date().valueOf()
+      )
+    })
+  }
+
+  // return null;
+  return (
+    <Box
+      sx={{
+        visibility: isVisible ? 'visible' : 'hidden',
+        width: 'inherit',
+        height: 'inherit',
+        overflow: 'hidden',
+        ...(allowDrag
+          ? {}
+          : {
+              transition: 'all 200ms',
+              '&:hover': {
+                transform: 'scale(1.3)',
+              },
+            }),
+      }}
+      id={
+        overrideContainer ? `slatePreviewContainer` : `slate_${slate?.shareId}`
+      }
+    />
+  )
+}

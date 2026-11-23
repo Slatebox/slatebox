@@ -1,0 +1,423 @@
+/* eslint-disable react/jsx-boolean-value */
+/* eslint-disable new-cap */
+/* eslint-disable no-underscore-dangle */
+import React from 'react'
+import PropTypes from 'prop-types'
+import { Meteor } from 'meteor/meteor'
+import { useTracker } from 'meteor/react-meteor-data'
+import Grid from '@mui/material/Grid2'
+import Tooltip from '@mui/material/Tooltip'
+import SvgIcon from '@mui/material/SvgIcon'
+import SpeedDial from '@mui/material/SpeedDial'
+import SpeedDialIcon from '@mui/material/SpeedDialIcon'
+import SpeedDialAction from '@mui/material/SpeedDialAction'
+import chunk from 'lodash.chunk'
+import Button from '@mui/material/Button'
+import ButtonGroup from '@mui/material/ButtonGroup'
+import Typography from '@mui/material/Typography'
+import { Slatebox } from 'slateboxjs'
+import IconButton from '@mui/material/IconButton'
+import ClearIcon from '@mui/icons-material/Clear'
+import defaultShapes from './defaultShapes'
+import slateProps from '../../propTypes/slateProps'
+import NodeShape from './NodeShape'
+import addNote, { noteBase } from './addNote'
+import { loadBoardsRows } from '../library/libraryBus'
+import ShapeMaker from '../shapes/ShapeMaker'
+
+// The dock's Boards and starters row: its own chunk, fetched when the dock first draws.
+const BoardsDock = React.lazy(() => loadBoardsRows().then((m) => ({ default: m.BoardsDock })))
+
+export default function QuickNodeActions({
+  commentAccessOnly,
+  slate,
+  onNodeCreated,
+  isMU,
+  selectedNotes,
+  onShapeNotes,
+}) {
+
+  const sendSlateBgColor = slate?.options?.containerStyle?.backgroundColor
+  const contrastColor = Slatebox.utils.whiteOrBlack(sendSlateBgColor)
+  const [actionMenuOpen, setActionMenuOpen] = React.useState(false)
+  const [actionMenuPinned, setActionMenuPinned] = React.useState(false)
+  const [actionMenuExpanded, setActionMenuExpanded] = React.useState(false)
+  // Custom Shape opens the shape maker: describe a shape, or reuse one from your library.
+  const [shapeMakerOpen, setShapeMakerOpen] = React.useState(false)
+  const [shapeTargets, setShapeTargets] = React.useState([])
+  const [currentWindowHeight, setWindowHeight] = React.useState(
+    window.innerHeight
+  )
+
+  // A new note takes after the slate's last note of its own, never after a note a workshop draws there.
+  const ownNotes = (slate?.nodes?.allNodes ?? []).filter(
+    (n) => !slate.v2?.governanceOf?.(n.v2)
+  )
+
+  const baseOpts = noteBase(ownNotes)
+
+  const handleActionMenuOpen = () => {
+    setActionMenuOpen(true)
+  }
+
+  const handleActionMenuClose = () => {
+    if (!actionMenuPinned) {
+      setActionMenuOpen(false)
+    }
+  }
+
+  const createNode = (shape) => addNote(slate, shape)
+
+  const addNode = (shape) => {
+    if (shape.key === 'searchCustom' && !shape.icons) {
+      setShapeTargets(selectedNotes?.() ?? [])
+      setShapeMakerOpen(true)
+      setActionMenuPinned(false)
+      setActionMenuOpen(false)
+      return
+    }
+    if (shape.key === 'searchCustom') {
+      setActionMenuExpanded(!actionMenuExpanded)
+      // When expanding, ensure menu stays open
+      if (!actionMenuExpanded) {
+        setActionMenuPinned(true)
+      } else {
+        setActionMenuPinned(false)
+        setActionMenuOpen(false)
+      }
+      return
+    }
+    const node = createNode(shape)
+
+    // The new note is selected; its style bar is where it is styled.
+    onNodeCreated(node, shape)
+    setActionMenuOpen(false)
+    setActionMenuPinned(false)
+  }
+
+  let customActions = [
+    {
+      key: 'searchCustom',
+      text: 'Custom Shape',
+      type: 'button',
+    },
+    {
+      key: 'addText',
+      text: 'Add Text',
+      type: 'button',
+    },
+  ]
+
+  if (Meteor.user()?.orgId) {
+    customActions.push({
+      key: 'comment',
+      text: 'Comment',
+      type: 'button',
+    })
+  }
+
+  if (commentAccessOnly) {
+    customActions = [
+      {
+        key: 'comment',
+        text: 'Add Comment',
+        type: 'button',
+      },
+    ]
+  }
+
+  // Define the reusable styles
+  const speedDialActionStyles = {
+    cursor: 'pointer',
+    '&:hover': {
+      backgroundColor: 'transparent',
+    },
+  }
+
+  const fabSlotProps = {
+    fab: {
+      sx: {
+        backgroundColor: 'transparent',
+        '&:hover': {
+          backgroundColor: 'transparent',
+        },
+      },
+    },
+  }
+
+  const actionPaths = chunk(defaultShapes, 10).map((ds, i) => ({
+    row: i,
+    shapes: ds,
+  }))
+  let actionMenuStyle = actionMenuOpen
+    ? {
+        // backgroundColor: sendSlateBgColor || '#000',
+        backgroundColor: '#112c44',
+        opacity: 0.9,
+        // border: '2px solid #fff',
+        // padding: '10px',
+        borderBottomRightRadius: '30px',
+        borderTopLeftRadius: '10px',
+        width: '420px',
+      }
+    : {}
+
+  if (commentAccessOnly) {
+    actionMenuStyle = { marginRight: '-50px' }
+  }
+
+  // eslint-disable-next-line react/no-unstable-nested-components
+  function MappedShapes(row) {
+    return (
+      <Grid container justifyContent="space-between" spacing={0}>
+        {row.shapes.map((shape) => (
+          <Grid key={shape.key} size={1}>
+            <Tooltip title={shape.name} placement="top" aria-label={shape.key}>
+              <SvgIcon
+                sx={{ color: baseOpts.backgroundColor, fontSize: 42 }}
+                onClick={() => {
+                  addNode(shape)
+                }}
+              >
+                <path strokeWidth="1px" stroke="#efefef" d={shape.path} />
+              </SvgIcon>
+            </Tooltip>
+          </Grid>
+        ))}
+      </Grid>
+    )
+  }
+
+  QuickNodeActions.propTypes = {
+    slate: slateProps,
+    commentAccessOnly: PropTypes.bool,
+    onNodeCreated: PropTypes.func.isRequired,
+    selectedNotes: PropTypes.func,
+    onShapeNotes: PropTypes.func,
+  }
+
+  window.onresize = () => {
+    setWindowHeight(window.innerHeight)
+  }
+
+  const onNodeShapeChanged = (pkg) => {
+    createNode({ path: pkg.data.shape, key: 'searchCustom' })
+  }
+
+  // A shape picked in the shape maker: a new note in that shape, selected for its text.
+  const addCustomShape = (shape) => {
+    if (shapeTargets.length && onShapeNotes) {
+      onShapeNotes(shapeTargets, shape)
+      return
+    }
+    const node = createNode({ key: 'customShape', path: shape.d, ...shape })
+    onNodeCreated(node, { key: 'customShape' })
+  }
+
+  // The icon search, still one click away from the shape maker.
+  const searchIcons = () => {
+    setShapeMakerOpen(false)
+    setActionMenuOpen(true)
+    addNode({ key: 'searchCustom', icons: true })
+  }
+
+  return (
+    <div>
+      <ShapeMaker
+        open={shapeMakerOpen}
+        onClose={() => setShapeMakerOpen(false)}
+        onApply={addCustomShape}
+        onSearchIcons={searchIcons}
+        target={shapeTargets.length || 'new'}
+        fill={shapeTargets[0]?.options?.backgroundColor ?? baseOpts.backgroundColor}
+        stroke={baseOpts.borderColor || '#333'}
+      />
+      <SpeedDial
+        ariaLabel={
+          commentAccessOnly
+            ? 'Slatebox - comment'
+            : 'Slatebox - quickly add a node'
+        }
+        sx={(theme) => ({
+          position: 'fixed',
+          // Kept in the canvas's own corner: clear of the "Ask Slatebox" panel beside it and of
+          // the phone's bottom bar under it (the canvas page sets these two distances).
+          bottom: `calc(var(--sb-canvas-bottom, 0px) + ${theme.spacing(1)})`,
+          right: `calc(var(--sb-canvas-right, 0px) + ${theme.spacing(1)})`,
+          alignItems: 'flex-end',
+          '& .MuiSpeedDialAction-fab': {
+            backgroundColor: 'transparent',
+            cursor: 'pointer',
+            '&:hover': {
+              backgroundColor: 'transparent',
+            },
+            '& .MuiSvgIcon-root': {
+              transition: 'transform .1s',
+              '&:hover': {
+                transform: 'scale(1.1)',
+              },
+            },
+          },
+          '& .MuiSpeedDial-fab': {
+            opacity: commentAccessOnly ? 0 : 1,
+          },
+          '& .MuiFab-root': {
+            boxShadow: 'none',
+          },
+          '& .MuiFab-sizeSmall': {
+            width: '400px',
+            height: '50px',
+          },
+          '& .MuiSpeedDial-actions': {
+            paddingBottom: '24px',
+          },
+        })}
+        slotProps={{
+          fab: {
+            sx: {
+              backgroundColor: 'transparent',
+              '&:hover': {
+                backgroundColor: 'transparent',
+                transform: 'none',
+                boxShadow: 'none',
+              },
+            },
+            disableRipple: true,
+          },
+        }}
+        FabProps={{
+          // Dismissing a notice can reveal the button under the pointer.
+          // Firefox then sends movement inside it without a new mouseenter.
+          onPointerMove: (event) => {
+            if (!actionMenuOpen && event.buttons === 0 && event.pointerType !== 'touch') {
+              handleActionMenuOpen()
+            }
+          },
+        }}
+        hidden={false}
+        icon={<SpeedDialIcon />}
+        onClose={handleActionMenuClose}
+        onOpen={handleActionMenuOpen}
+        open={commentAccessOnly ? true : actionMenuOpen}
+        style={actionMenuStyle}
+        direction="up"
+      >
+        {!commentAccessOnly &&
+          !actionMenuExpanded &&
+          actionPaths.map((action) => (
+            <SpeedDialAction
+              key={action.row}
+              tooltipTitle=""
+              // eslint-disable-next-line react/jsx-props-no-spreading
+              icon={
+                <MappedShapes
+                  sx={{ backgroundColor: 'transparent' }}
+                  {...action}
+                />
+              }
+              sx={speedDialActionStyles}
+              slotProps={{ fab: fabSlotProps }}
+            />
+          ))}
+        {actionMenuExpanded && actionMenuOpen && (
+          <div
+            style={{
+              height: `${currentWindowHeight - 190}px`,
+              paddingTop: '10px',
+              backgroundColor: sendSlateBgColor || '#000',
+              // backgroundColor: 'aliceblue',
+              position: 'relative',
+            }}
+          >
+            <IconButton
+              onClick={() => {
+                setActionMenuExpanded(false)
+                setActionMenuPinned(false)
+                setActionMenuOpen(false)
+              }}
+              sx={{
+                position: 'absolute',
+                top: -62,
+                left: 8,
+                zIndex: 1,
+                padding: '4px',
+                backgroundColor: 'rgba(0,0,0,0.2)',
+                '&:hover': {
+                  backgroundColor: 'rgba(0,0,0,0.4)',
+                },
+                color: (theme) => theme.palette.secondary.main,
+              }}
+            >
+              <ClearIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+            <NodeShape
+              node={null}
+              iconDiscoveryMode={true}
+              shapeSearchLimit={21}
+              sendSlateBgColor={sendSlateBgColor}
+              contrastColor={contrastColor}
+              sendNodeBgColor={baseOpts.backgroundColor}
+              height="100%"
+              onChange={onNodeShapeChanged}
+              isMU={isMU}
+            />
+          </div>
+        )}
+        <SpeedDialAction
+          key="buttons"
+          tooltipTitle=""
+          icon={
+            <ButtonGroup variant="text" aria-label="split button">
+              {customActions.map((c) => (
+                <Button
+                  key={c.key}
+                  size="small"
+                  disableRipple={true}
+                  sx={{
+                    // color: contrastColor,
+                    height: '30px',
+                    // backgroundColor: (theme) =>
+                    //   actionMenuExpanded && c.key === 'searchCustom'
+                    //     ? theme.palette.secondary.main
+                    //     : 'transparent',
+                    // '&:hover': {
+                    //   backgroundColor: (theme) =>
+                    //     actionMenuExpanded && c.key === 'searchCustom'
+                    //       ? theme.palette.secondary.dark
+                    //       : 'rgba(255, 255, 255, 0.08)',
+                    // },
+                  }}
+                  variant={
+                    c.text
+                      ? actionMenuExpanded && c.key === 'searchCustom'
+                        ? 'contained'
+                        : 'outlined'
+                      : ''
+                  }
+                  size="small"
+                  onClick={() => {
+                    addNode(c)
+                  }}
+                >
+                  <Typography variant="caption">{c.text}</Typography>
+                </Button>
+              ))}
+            </ButtonGroup>
+          }
+        />
+        {/* The top row: boards and starters from the library (it opens in Ask Slatebox). */}
+        {!commentAccessOnly && !actionMenuExpanded && (
+          <SpeedDialAction
+            key="boards"
+            tooltipTitle=""
+            icon={<React.Suspense fallback={null}><BoardsDock onDone={handleActionMenuClose} /></React.Suspense>}
+            sx={speedDialActionStyles}
+            // A group of real buttons, not a button holding buttons: the action's own Fab is drawn as a plain group.
+            slotProps={{ fab: { component: 'div', role: 'group', tabIndex: -1, 'aria-label': 'Boards and starters', disableRipple: true, disableFocusRipple: true,
+              sx: { backgroundColor: 'transparent', boxShadow: 'none', width: 'auto', borderRadius: 1, cursor: 'default', '&:hover': { backgroundColor: 'transparent' } } } }}
+          />
+        )}
+      </SpeedDial>
+    </div>
+  )
+}

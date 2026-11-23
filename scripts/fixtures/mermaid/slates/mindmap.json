@@ -1,0 +1,16 @@
+{
+  "shareId": "mind",
+  "options": { "name": "Launch ideas", "mindMapMode": true },
+  "nodes": [
+    { "options": { "id": "root", "text": "Launch", "shape": "circle", "xPos": 0, "yPos": 200, "width": 120, "height": 120 },
+      "relationships": { "associations": [
+        { "id": "root->mk", "parentId": "root", "childId": "mk", "showChildArrow": false },
+        { "id": "root->eng", "parentId": "root", "childId": "eng", "showChildArrow": false } ] } },
+    { "options": { "id": "mk", "text": "Marketing (paid + \"organic\")", "shape": "roundedrectangle", "xPos": 250, "yPos": 100, "width": 200, "height": 70 },
+      "relationships": { "associations": [ { "id": "mk->blog", "parentId": "mk", "childId": "blog", "showChildArrow": false } ] } },
+    { "options": { "id": "eng", "text": "Engineering", "shape": "hexagon", "xPos": 250, "yPos": 300, "width": 180, "height": 70 },
+      "relationships": { "associations": [] } },
+    { "options": { "id": "blog", "text": "Blog post\nwith [links]", "xPos": 500, "yPos": 100, "width": 160, "height": 70 },
+      "relationships": { "associations": [] } }
+  ]
+}

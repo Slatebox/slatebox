@@ -1,0 +1,54 @@
+{
+  "_comment": "Built-in AI feature defaults: the provider and model each feature uses, and the model a temporary failure retries, when settings.ai.features names none (feature-config.mjs resolveAIFeatureConfig). Operators override any of them in settings.ai.features.<feature> or choose a connection in settings.ai.use; keys starting with _ are notes and are not read.",
+  "presentation": {
+    "_comment": "A presentation plan is one forced tool call. Measured on DeepInfra 2026-11-22: Qwen3-235B took 59 s and more for the forced tool call, DeepSeek-V3.1 answered 429 busy, google/gemini-3.5-flash answered in 3.8 to 5.8 s with a valid plan 3 times of 3.",
+    "provider": "deepinfra",
+    "engine": "google/gemini-3.5-flash",
+    "fallback": {
+      "provider": "deepinfra",
+      "engine": "google/gemini-3.7-flash"
+    }
+  },
+  "layout": {
+    "provider": "deepinfra",
+    "engine": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "fallback": {
+      "provider": "deepinfra",
+      "engine": "deepseek-ai/DeepSeek-V3.1-Terminus"
+    }
+  },
+  "vision": {
+    "_comment": "Vision flows (e.g. Diagram-To-Slate) resolve this feature. Qwen3-235B-Instruct is the shape-verified default (tool_use and flattening proven on the generation path); anthropic/claude-sonnet-4-6 is served by DeepInfra too: try it via settings.ai.features.vision once the kickoff payload is verified for it.",
+    "provider": "deepinfra",
+    "engine": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "fallback": {
+      "provider": "deepinfra",
+      "engine": "deepseek-ai/DeepSeek-V3.1-Terminus"
+    }
+  },
+  "welcome": {
+    "provider": "deepinfra",
+    "engine": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "fallback": {
+      "provider": "deepinfra",
+      "engine": "deepseek-ai/DeepSeek-V3.1-Terminus"
+    }
+  },
+  "generation": {
+    "provider": "deepinfra",
+    "engine": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "fallback": {
+      "provider": "deepinfra",
+      "engine": "deepseek-ai/DeepSeek-V3.1-Terminus"
+    }
+  },
+  "shape": {
+    "_comment": "Custom shapes (server/shapes): one forced tool call (propose_shapes) answering up to 4 SVG paths, checked by slateboxjs/shapes, with one retry for any that fail. Starts on the presentation default (a forced-tool model already proven); operators choose any tools-capable connection with settings.ai.use.shape.",
+    "provider": "deepinfra",
+    "engine": "google/gemini-3.5-flash",
+    "fallback": {
+      "provider": "deepinfra",
+      "engine": "google/gemini-3.7-flash"
+    }
+  }
+}

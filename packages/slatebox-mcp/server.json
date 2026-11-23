@@ -1,0 +1,61 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.slatebox/slatebox",
+  "title": "Slatebox",
+  "description": "Mind maps, diagrams, project plans and presentations on a free, open-source team canvas.",
+  "version": "0.3.1",
+  "websiteUrl": "https://slatebox.com",
+  "repository": {
+    "url": "https://github.com/Slatebox/slatebox",
+    "source": "github",
+    "subfolder": "packages/slatebox-mcp"
+  },
+  "icons": [
+    {
+      "src": "https://app.slatebox.com/brand/slatebox.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": [
+        "any"
+      ]
+    },
+    {
+      "src": "https://app.slatebox.com/images/white_favicon_152x152.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "152x152"
+      ]
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "slatebox-mcp",
+      "version": "0.3.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SLATEBOX_API_TOKEN",
+          "description": "A Slatebox API token from Profile → Developer access",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "SLATEBOX_BASE_URL",
+          "description": "Your Slatebox origin; Slatebox Cloud by default, or your own instance",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "https://app.slatebox.com"
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://app.slatebox.com/mcp"
+    }
+  ]
+}

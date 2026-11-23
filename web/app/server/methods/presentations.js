@@ -1,0 +1,707 @@
+/* eslint-disable no-underscore-dangle */
+import { Meteor } from 'meteor/meteor'
+import { check, Match } from 'meteor/check'
+import { canEditSlate } from '../common/slate-access'
+import { svgToPng } from './images'
+import { Random } from 'meteor/random'
+import { deleteImageByKey } from '../common/s3Utils'
+import { finishSnapshot, ownedSnapshotKey } from '../common/presentationSnapshot.mjs'
+import CONSTANTS from '../../imports/api/common/constants'
+import {
+  SlatePresentations,
+  SlatePresentationConversations,
+  Slates,
+  OrganizationSettings,
+} from '../../imports/api/common/models'
+import { PLAN_VERSION, needsPlan, planFailureReason, planKey } from '../../imports/ui/components/presentations/presentationPlan.mjs'
+import {
+  EMPTY_SLATE, MAX_REFINEMENT_CHARS, PLAN_FUNCTIONS, TOO_MANY_NOTES,
+  PLAN_OUTPUT_TOKENS, planEstimateMicros, planModels, planWithAI, presentationPrompts, reusableDeck, sanitizeLayout, singleFlight, slateForPrompt,
+} from './presentationRequest.mjs'
+import { actionCeilingMicros, aiPrice } from '../metering/prices.mjs'
+import { workshopScenes } from '../../imports/ui/components/presentations/workshopScenes.mjs'
+import req from './ai/req'
+import { runAIAction } from '../metering/context.mjs'
+import { resolveAIFeatureConfig } from './ai/feature-config.mjs'
+import { resolveRequestConnection } from './ai/ai-settings'
+
+const method = {}
+
+const publicationChanged = () => new Meteor.Error('stale', 'The published version changed. Reopen this dialog to see the current version.')
+
+// A presentation is made and published only by someone who may edit the slate it presents.
+// A slate with a workshop is presented like any other: its lanes open the presentation.
+async function guardPresentation(shareId, userId) {
+  if (typeof shareId !== 'string' || !shareId) throw new Meteor.Error('invalid-presentation', 'Choose a slate to present.')
+  const slate = await Slates.findOneAsync({ shareId }, { fields: { _id: 1, userId: 1, orgId: 1, shareId: 1, options: 1, 'creative.model': 1 } })
+  if (!slate || !await canEditSlate(userId, slate)) throw new Meteor.Error('slate-denied', 'You do not have permission to present this slate.')
+  return slate
+}
+
+const slateWorkshop = slate => slate?.creative?.model?.kind === 'workshop' ? slate.creative.model.workshop : null
+
+// A presentation row is a deck: it has the viewpoints a presenter plays.
+const deck = { viewpoints: { $type: 'array' } }
+
+// Rows left by the removed workshop-only publication (`workshop-presentation-<shareId>`) hold no
+// deck. They are removed once, at startup; until a deck is published, the slate's /present link
+// says the presentation is unavailable.
+Meteor.startup(async () => {
+  try {
+    await SlatePresentations.rawCollection().deleteMany({ _id: { $regex: '^workshop-presentation-' } })
+  } catch {
+    console.warn('Unable to remove the retired workshop publications')
+  }
+})
+
+method[CONSTANTS.methods.presentations.get] = async ({
+  slateShareId,
+  asPublished,
+  forPlayback = false,
+}) => {
+  if (typeof slateShareId !== 'string' || !slateShareId) return null
+  let presentationMenuBgColorKey = null
+  let presentationControlsColorKey = null
+  let logoUrl = null
+  if (asPublished) {
+    const slateDetails = await Slates.findOneAsync(
+      { shareId: slateShareId },
+      {
+        fields: {
+          lastSaved: 1,
+          userId: 1,
+          orgId: 1,
+          shareId: 1,
+          options: 1,
+        },
+      }
+    )
+
+    if (slateDetails?.userId) {
+      const intentionId =
+        slateDetails?.options?.ai?.isConversation?.intentionInitialData
+          ?.intentionId || 'default'
+
+      const author = await Meteor.users.findOneAsync(slateDetails.userId, { fields: { orgId: 1 } })
+      const orgId = author?.orgId
+      const orgSettings = orgId ? await OrganizationSettings.find(
+        {
+          $and: [
+            { orgId },
+            {
+              $or: [
+                { intentionId },
+                { $and: [{ type: 'logo', 'value.logoType': 'squareLogo' }] },
+              ],
+            },
+          ],
+        },
+        {
+          type: 1,
+          presentationMenuBgColorKey: 1,
+          presentationControlsColorKey: 1,
+        }
+      ).fetchAsync() : []
+      if (orgSettings) {
+        const colorSettings = orgSettings.find(
+          (o) => o.type === 'preset'
+        )?.value
+        const logoSettings = orgSettings.find((o) => o.type === 'logo')?.value
+        presentationMenuBgColorKey = colorSettings?.presentationMenuBgColorKey
+        presentationControlsColorKey =
+          colorSettings?.presentationControlsColorKey
+        logoUrl = logoSettings?.url
+      }
+    }
+
+    // The published presentation of a slate is one made by someone who may edit that slate.
+    let presentation = null
+    if (slateDetails?.userId) {
+      const published = await SlatePresentations.find({
+        slateShareId,
+        isPublished: true,
+        ...deck,
+      }, { sort: { updated: -1, timestamp: -1 } }).fetchAsync()
+      for (const row of published) {
+        if (row.userId === slateDetails.userId || await canEditSlate(row.userId, slateDetails)) {
+          presentation = row
+          break
+        }
+      }
+    }
+
+    if (!presentation && forPlayback && Meteor.userId()) {
+      presentation = await SlatePresentations.findOneAsync({ slateShareId, userId: Meteor.userId(), ...deck }, { sort: { version: -1 } })
+    }
+
+    const ret = {
+      presentation,
+      presentationMenuBgColorKey,
+      presentationControlsColorKey,
+      logoUrl,
+    }
+
+    return ret
+  }
+
+  const user = await Meteor.userAsync()
+  if (!user) return null
+  const presentations = await SlatePresentations.find(
+    { slateShareId, userId: user._id, ...deck },
+    { sort: { version: -1 } }
+  ).fetchAsync()
+
+  const slateDetails = await Slates.findOneAsync(
+    { shareId: slateShareId },
+    {
+      fields: {
+        lastSaved: 1,
+        'options.ai.isConversation.intentionInitialData.intentionId': 1,
+      },
+    }
+  )
+
+  const slateHasChangedSincePresentationWasCreated =
+    presentations[0]?.timestamp <= slateDetails?.lastSaved
+
+  if (user?.orgId) {
+    const intentionId =
+      slateDetails?.options?.ai?.isConversation?.intentionInitialData
+        ?.intentionId || 'default'
+
+    const orgSettings = await OrganizationSettings.findOneAsync(
+      {
+        orgId: user?.orgId,
+        intentionId,
+      },
+      {
+        'value.presentationMenuBgColorKey': 1,
+        'value.presentationControlsColorKey': 1,
+      }
+    )
+
+    if (orgSettings) {
+      presentationMenuBgColorKey = orgSettings.value.presentationMenuBgColorKey
+      presentationControlsColorKey =
+        orgSettings.value.presentationControlsColorKey
+    }
+  }
+
+  return {
+    presentations,
+    presentationMenuBgColorKey,
+    presentationControlsColorKey,
+    slateHasChangedSincePresentationWasCreated,
+  }
+}
+
+async function discardSnapshot(presentation, url) {
+  const key = ownedSnapshotKey(url, Meteor.settings.aws?.cloudUrl, presentation._id, presentation.snapshotGeneration)
+  if (!key) return
+  // A previously remixed presentation may still use the same image.
+  if (await SlatePresentations.findOneAsync({ isPublished: true, imageUrl: url }, { fields: { _id: 1 } })) return
+  try {
+    await deleteImageByKey(key)
+  } catch {
+    // Viewer access is independent of the storage provider's availability.
+    console.warn('Unable to remove a withdrawn presentation snapshot from storage')
+  }
+}
+
+async function withdrawVersion(query) {
+  // Atomically detach the image and invalidate every outstanding renderer for this version.
+  const previous = await SlatePresentations.rawCollection().findOneAndUpdate(
+    query,
+    { $unset: { isPublished: '', snapshotGeneration: '', imageUrl: '', imageWidth: '', imageHeight: '' } },
+    { returnDocument: 'before', includeResultMetadata: false }
+  )
+  if (previous?.imageUrl) await discardSnapshot(previous, previous.imageUrl)
+}
+
+method[CONSTANTS.methods.presentations.unpublish] = async ({ presentationId }) => {
+  const user = await Meteor.userAsync()
+  if (!user) return null
+  if (typeof presentationId !== 'string') throw publicationChanged()
+  await withdrawVersion({ _id: presentationId, userId: user._id, isPublished: true })
+  return true
+}
+
+method[CONSTANTS.methods.presentations.publish] = async ({
+  slateShareId,
+  version,
+  svg,
+  rawSVG,
+  background,
+  orientData,
+  presentationData,
+  viewpoints,
+  manualViewpointChanges,
+  intentionId,
+}) => {
+  const user = await Meteor.userAsync()
+  if (!user) return null
+  await guardPresentation(slateShareId, user._id)
+  const presentation = await SlatePresentations.findOneAsync({
+    slateShareId,
+    version,
+    userId: user._id,
+  })
+  // console.log('got prezi', presentation)
+  if (!presentation) {
+    throw new Meteor.Error('presentation-not-found', 'Presentation not found')
+  }
+
+  const previousVersions = await SlatePresentations.find(
+    { slateShareId, userId: user._id, isPublished: true }, { fields: { _id: 1 } }
+  ).fetchAsync()
+  for (const previous of previousVersions) {
+    await withdrawVersion({ _id: previous._id, userId: user._id, isPublished: true })
+  }
+  const snapshotGeneration = Random.id()
+  const presentationUrl = `${Meteor.settings.public.baseUrl}/present/${slateShareId}`
+
+  // now set the isPublished flag on this one
+  await SlatePresentations.updateAsync(
+    { _id: presentation._id },
+    {
+      $unset: { imageUrl: '', imageWidth: '', imageHeight: '' },
+      $set: {
+        isPublished: true,
+        snapshotGeneration,
+        svg,
+        intentionId,
+        background,
+        orientData,
+        presentationData,
+        viewpoints,
+        url: presentationUrl,
+        viewpointsManuallyChanged: manualViewpointChanges, // carry any changes forward
+      },
+    }
+  )
+
+  // Older withdrawn versions kept their image URL until the version was published again.
+  if (!presentation.isPublished && presentation.imageUrl) {
+    await discardSnapshot(presentation, presentation.imageUrl)
+  }
+
+  // async produce the image so it doesn't hold up the publish
+  setTimeout(async () => {
+    try {
+      await finishSnapshot(
+        () => svgToPng({
+          svg: rawSVG,
+          fileName: `present_${presentation._id}_${snapshotGeneration}`,
+          skipTimestamp: true,
+          includeWidthHeight: true,
+        }),
+        ({ url, width, height }) => SlatePresentations.updateAsync(
+          { _id: presentation._id, isPublished: true, snapshotGeneration },
+          { $set: { imageUrl: url, imageWidth: width, imageHeight: height } }
+        ),
+        (url) => discardSnapshot({ _id: presentation._id, snapshotGeneration }, url)
+      )
+    } catch {
+      console.warn('Unable to finish a presentation snapshot')
+    }
+  }, 100)
+
+  return presentationUrl
+}
+
+// The deck Present opens for this person: the version asked for, else their published one, else
+// their latest.
+async function findDeck({ slate, selectVersion }, user) {
+  const query = { slateShareId: slate.shareId, userId: user._id, ...deck }
+  if (selectVersion) {
+    query.version = selectVersion
+  } else {
+    query.isPublished = true
+  }
+  let existingPresentation = await SlatePresentations.findOneAsync(query)
+  if (!existingPresentation && !selectVersion) {
+    // no published versions yet, so we need to return the most recent version
+    existingPresentation = await SlatePresentations.findOneAsync(
+      { slateShareId: slate.shareId, userId: user._id, ...deck },
+      {
+        sort: { version: -1 },
+      }
+    )
+  }
+  return existingPresentation
+}
+
+async function loadPresentation({ slate, selectVersion }) {
+  const user = await Meteor.userAsync()
+  if (!user) return null
+  const existingPresentation = await findDeck({ slate, selectVersion }, user)
+  // Another editor's decks are theirs: this person has none to load yet.
+  if (!existingPresentation) return null
+  return {
+    presentationId: existingPresentation._id,
+    version: existingPresentation.version,
+    viewpoints: existingPresentation.viewpoints,
+    automatic: existingPresentation.automatic === true,
+  }
+}
+
+method[CONSTANTS.methods.presentations.load] = async ({
+  slate,
+  selectVersion,
+}) => {
+  const user = await Meteor.userAsync()
+  if (!user) return null
+  return loadPresentation({ slate, selectVersion })
+}
+
+// The deck this person already has, when Present should open it as it is (a current AI plan of
+// the slate as it is now, a published deck, one they edited): opening it runs no model, so it is
+// not counted. Null when Present plans the slate (see needsPlan).
+async function keptDeck(args, user, layout) {
+  if (args?.refinementMessage) return null
+  const current = await findDeck(args, user)
+  return needsPlan(current, layout) ? null : loadPresentation(args)
+}
+
+const userNameOf = (user) => {
+  if (user?.isAnonymous) return 'Guest'
+  const name = `${user?.profile?.firstName} ${user?.profile?.lastName}`.replace(/undefined/gi, '').trim()
+  return name || user?.emails?.[0]?.address?.split('@')[0] || 'Someone'
+}
+
+// Plan the slate (or refine this person's plan) with the AI, and save the deck. `layout` is the
+// kept layout (presentationRequest.mjs): it is what the AI is sent and what its plan is checked
+// against. The AI's request is the only counted part (runAIAction): a plan it could not make is
+// given back, and the person gets the grouped automatic plan with the reason. `counted(estimate)`
+// is the method's runAIAction for that request.
+async function analyzePresentation(args, user, stored, layout, counted) {
+  const {
+    slate, refinementMessage, slateChanged, showNarrative, hideMenuOnPublish, autoplayOnPublish, isPublic = false,
+  } = args
+  const scenes = workshopScenes(slateWorkshop(stored))
+  const refining = Boolean(refinementMessage)
+  // This person's decks: a new plan is their next version (an automatic one replaces their
+  // automatic deck, see reusableDeck).
+  const latestDeck = await SlatePresentations.findOneAsync(
+    { slateShareId: slate.shareId, userId: user._id, ...deck },
+    { sort: { version: -1 }, fields: { version: 1, automatic: 1, isPublished: 1, viewpointsManuallyChanged: 1 } }
+  )
+  // A person's conversation with the model about their plan: a new plan starts a new one, a
+  // refinement continues it. Another editor's conversation is theirs.
+  const conversation = { slateShareId: slate.shareId, userId: user._id }
+  const history = refining ? await SlatePresentationConversations.find(conversation).fetchAsync() : []
+
+  const prompts = presentationPrompts({ layout, scenes, isTemplate: Boolean(slate.isTemplate) })
+  const intention = prompts.settingsFor(slate.intentionId)
+  const systemPrompt = history.find((row) => row.systemPrompt)?.systemPrompt ??
+    prompts.systemFor({ intentionId: slate.intentionId, isTemplate: Boolean(slate.isTemplate) })
+  const initPrompt = { role: 'user', content: [{ type: 'text', text: prompts.user, cache_control: { type: 'ephemeral' } }] }
+  const refinePrompt = refining && {
+    role: 'user',
+    content: [{
+      type: 'text',
+      text: String(refinementMessage).slice(0, MAX_REFINEMENT_CHARS) +
+        (slateChanged ? ` The slate is now: ${slateForPrompt(layout)}` : ''),
+    }],
+  }
+  const earlier = history.filter((row) => row.prompt).map((row) => row.prompt)
+  const promptsToSend = refining ? [...(earlier.length ? earlier : [initPrompt]), refinePrompt] : [initPrompt]
+
+  const feature = resolveAIFeatureConfig('presentation', Meteor.settings)
+  // Priced at the model that will serve the plan: the connection settings.ai.use picks for this
+  // person, or the built-in default and its fallback when none does. A connection that cannot be
+  // resolved is priced as the built-in AI; req.js resolves it again and says what is wrong.
+  const chosen = await resolveRequestConnection({ feature: 'presentation', request: { tools: true } }).catch(() => null)
+  const estimateMicros = planEstimateMicros(
+    systemPrompt.length + JSON.stringify(promptsToSend).length,
+    planModels({ feature, chosen }).map(aiPrice)
+  )
+  const tooLong = estimateMicros > actionCeilingMicros('presentation')
+  if (tooLong && refining) {
+    throw new Meteor.Error('presentation-too-long', 'This presentation\'s conversation is too long to refine. Close the presenter and press Present to plan it again.')
+  }
+
+  // One model, within the plan's time: no second model after the first (there is no time for
+  // it), every attempt stopped at the deadline, and the answer capped at what a plan needs.
+  const reqOpts = {
+    system: systemPrompt,
+    prompts: promptsToSend,
+    functions: PLAN_FUNCTIONS,
+    function_call: { name: 'createPresentation' },
+    ...feature,
+    fallback: undefined,
+    maxTokens: PLAN_OUTPUT_TOKENS,
+  }
+  const planned = await planWithAI({
+    run: tooLong
+      ? async () => { throw new Error(TOO_MANY_NOTES) }
+      : counted(estimateMicros),
+    request: ({ deadline } = {}) => req({ ...reqOpts, deadline, timeoutMs: deadline ? Math.max(1000, deadline - Date.now()) : undefined }),
+    layout,
+    name: slate.name,
+    scenes,
+    refining,
+  }).catch((error) => {
+    throw new Meteor.Error(error.error || 'analyze-presentation-failed', planFailureReason(error), error.details)
+  })
+
+  const { automatic, plan } = planned
+  const viewpoints = plan?.viewpoints
+  if (!Array.isArray(viewpoints) || viewpoints.length === 0) {
+    throw new Meteor.Error('invalid-presentation-plan', 'There is nothing on this slate to present yet.')
+  }
+  const name = String(plan?.name || '').trim() || `${slate.name || 'Slate'} presentation`
+  const description = String(plan?.description || '').trim()
+  const saveShowNarrative = showNarrative ?? intention.showNarrative ?? true
+  const saveHideMenuOnPublish = hideMenuOnPublish ?? intention.hideMenuOnPublish ?? false
+  const saveAutoplayOnPublish = autoplayOnPublish ?? intention.autoplayOnPublish ?? false
+  const presentationData = JSON.stringify(layout)
+  const now = new Date()
+
+  // Presses while the AI is unavailable replace the person's automatic deck instead of adding
+  // versions; a plan the AI made is a new version.
+  const replace = automatic ? reusableDeck(latestDeck) : null
+  let presentationId
+  let version
+  if (replace) {
+    presentationId = replace._id
+    version = replace.version
+    await SlatePresentations.updateAsync({ _id: replace._id }, {
+      $set: { timestamp: Date.now(), presentationData, name, description, viewpoints, automatic: true, planVersion: PLAN_VERSION, layoutKey: planKey(layout), updated: now },
+    })
+  } else {
+    version = (latestDeck?.version || 0) + 1
+    presentationId = await SlatePresentations.insertAsync({
+      slateShareId: slate.shareId,
+      timestamp: Date.now(),
+      version,
+      showNarrative: saveShowNarrative,
+      hideMenuOnPublish: saveHideMenuOnPublish,
+      autoplayOnPublish: saveAutoplayOnPublish,
+      isPublic: isPublic ?? false,
+      playOnHover: false,
+      presentationData,
+      name,
+      description,
+      viewpoints,
+      // Made without the AI (no provider key, no allowance): the presenter rebuilds it from the
+      // slate as it is, and Present plans the slate again next time.
+      automatic,
+      planVersion: PLAN_VERSION,
+      // The slate this plan was made for: Present on the same slate opens it at once (needsPlan).
+      layoutKey: planKey(layout),
+      userId: user._id,
+      orgId: user.orgId,
+      author: userNameOf(user),
+      created: now,
+      updated: now,
+    })
+  }
+
+  // The conversation is kept only for a plan the AI made, so it can be refined.
+  if (!automatic) {
+    const { response, toolUse } = planned
+    const answer = toolUse
+      ? [
+          { role: 'assistant', content: response.json.content },
+          { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: 'Viewpoints received.' }] },
+        ]
+      : [
+          { role: 'assistant', content: JSON.stringify(plan) },
+          { role: 'user', content: 'Viewpoints received.' },
+        ]
+    if (!refining) {
+      await SlatePresentationConversations.removeAsync(conversation)
+      await SlatePresentationConversations.insertAsync({
+        ...conversation, version, systemPrompt,
+        showNarrative: saveShowNarrative, hideMenuOnPublish: saveHideMenuOnPublish, autoplayOnPublish: saveAutoplayOnPublish, playOnHover: false,
+      })
+    }
+    // What was asked this time: the opening request, and the refinement when there is one.
+    const asked = promptsToSend.slice(earlier.length)
+    await SlatePresentationConversations.rawCollection().insertMany(
+      [...asked, ...answer].map((prompt) => ({ ...conversation, version, prompt }))
+    )
+  }
+
+  return {
+    presentationId,
+    version,
+    name,
+    description,
+    viewpoints,
+    automatic,
+    // a refusal by the meter says which, with the pay sheet's action (the banner offers it)
+    ...(automatic && { reason: planned.reason, ...(planned.pay && { code: planned.code, pay: planned.pay }) }),
+    ...(planned.trivial && { trivial: true }),
+  }
+}
+
+// Present: the deck this person keeps, or a new plan. The layout is checked and capped before
+// anything else (presentationRequest.mjs): an empty slate is not planned or counted, a slate too
+// large for the AI gets the automatic plan, and two presses at once share one plan.
+method[CONSTANTS.methods.presentations.analyze] = async (args) => {
+  const user = await Meteor.userAsync()
+  if (!user) return null
+  check(args?.slate, Match.ObjectIncluding({ shareId: String }))
+  check(args.refinementMessage, Match.Maybe(String))
+  const stored = await guardPresentation(args.slate.shareId, user._id)
+  const { layout, count, tooMany } = sanitizeLayout(args.presentationData)
+  if (tooMany) return { automatic: true, viewpoints: [], reason: TOO_MANY_NOTES }
+  if (!count) return { empty: true, automatic: true, viewpoints: [], reason: EMPTY_SLATE }
+  const kept = await keptDeck(args, user, layout)
+  if (kept) return kept
+  // The AI's request is counted like any other (its estimate worked out from its prompt).
+  const counted = (estimateMicros) => (fn) => runAIAction({ feature: 'presentation', estimateMicros }, fn)
+  return singleFlight(`${user._id}:${args.slate.shareId}`, () => analyzePresentation(args, user, stored, layout, counted))
+}
+
+method[CONSTANTS.methods.presentations.update] = async ({
+  presentationId,
+  showNarrative,
+  viewpoints,
+  updatedViewpoint,
+  deletedViewpoint,
+  autoplayOnPublish,
+  isEmbedded,
+  playOnHover,
+  isPublic,
+  isFeatured,
+}) => {
+  const user = await Meteor.userAsync()
+  if (!user) return null
+
+  // first check to see if any SlatePresentations exist for this slate
+  const existingPresentation = await SlatePresentations.findOneAsync({
+    _id: presentationId,
+    userId: user._id,
+  })
+
+  if (!existingPresentation) {
+    throw new Meteor.Error('presentation-not-found', 'Presentation not found')
+  }
+
+  const viewpointsManuallyChanged =
+    existingPresentation.viewpointsManuallyChanged || {
+      deleted: [],
+      updated: [],
+    }
+
+  // console.log(
+  //   'got presentation',
+  //   JSON.stringify(existingPresentation, null, 2),
+  //   viewpointsManuallyChanged
+  // )
+
+  if (updatedViewpoint) {
+    // if the updatedviewpoint nodeIds matches what is already saved in the manually changed viewpoints,
+    // then we should update the existing viewpoint
+    const existingViewpoint = viewpointsManuallyChanged.updated.find((ee) =>
+      ee.nodeIds.every((nodeId) => updatedViewpoint.nodeIds.includes(nodeId))
+    )
+    if (existingViewpoint) {
+      existingViewpoint.duration = updatedViewpoint.duration
+      existingViewpoint.narrative = updatedViewpoint.narrative
+      if (Number.isFinite(updatedViewpoint.x)) {
+        existingViewpoint.x = updatedViewpoint.x
+      }
+      if (Number.isFinite(updatedViewpoint.y)) {
+        existingViewpoint.y = updatedViewpoint.y
+      }
+      if (updatedViewpoint.width) {
+        existingViewpoint.width = updatedViewpoint.width
+      }
+      if (updatedViewpoint.height) {
+        existingViewpoint.height = updatedViewpoint.height
+      }
+      console.log('existingViewpoint updated', existingViewpoint)
+    } else {
+      const newViewpoint = {
+        nodeIds: updatedViewpoint.nodeIds,
+        duration: updatedViewpoint.duration,
+        narrative: updatedViewpoint.narrative,
+      }
+      if (Number.isFinite(updatedViewpoint.x)) {
+        newViewpoint.x = updatedViewpoint.x
+      }
+      if (Number.isFinite(updatedViewpoint.y)) {
+        newViewpoint.y = updatedViewpoint.y
+      }
+      if (updatedViewpoint.width) {
+        newViewpoint.width = updatedViewpoint.width
+      }
+      if (updatedViewpoint.height) {
+        newViewpoint.height = updatedViewpoint.height
+      }
+      viewpointsManuallyChanged.updated.push(newViewpoint)
+    }
+  }
+  if (deletedViewpoint) {
+    // if the deletedViewpoint nodeIds matches what is already saved in the manually changed viewpoints,
+    // then we should remove the existing viewpoint
+    const viewpointAlreadyDeleted = viewpointsManuallyChanged.deleted.find(
+      (ee) =>
+        ee.nodeIds.every((nodeId) => deletedViewpoint.nodeIds.includes(nodeId))
+    )
+    if (!viewpointAlreadyDeleted) {
+      viewpointsManuallyChanged.deleted.push({
+        nodeIds: deletedViewpoint.nodeIds,
+      })
+    }
+  }
+
+  const updateFields = {}
+
+  if (isFeatured === true && user.isMasterUser !== true) {
+    throw new Meteor.Error('not-authorized', 'Only an editor of the public gallery can feature presentations.')
+  }
+
+  if (showNarrative != null) {
+    updateFields.showNarrative = showNarrative
+  }
+  if (viewpoints) {
+    updateFields.viewpoints = viewpoints
+    // A sequence someone has edited is theirs, no longer the automatic one.
+    updateFields.automatic = false
+  }
+  if (isFeatured != null) {
+    updateFields.isFeatured = isFeatured === true
+  }
+  if (isEmbedded != null) {
+    updateFields.isEmbedded = isEmbedded
+  }
+  if (playOnHover != null) {
+    updateFields.playOnHover = playOnHover
+  }
+  if (autoplayOnPublish != null) {
+    updateFields.autoplayOnPublish = autoplayOnPublish
+  }
+  if (isPublic != null) {
+    updateFields.isPublic = isPublic
+    if (!isPublic) updateFields.isFeatured = false
+  }
+  if (playOnHover != null) {
+    updateFields.playOnHover = playOnHover
+  }
+  if (autoplayOnPublish != null) {
+    updateFields.autoplayOnPublish = autoplayOnPublish
+  }
+
+  if (
+    viewpointsManuallyChanged.deleted.length > 0 ||
+    viewpointsManuallyChanged.updated.length > 0
+  ) {
+    updateFields.viewpointsManuallyChanged = viewpointsManuallyChanged
+  }
+
+  if (Object.keys(updateFields).length > 0) {
+    await SlatePresentations.updateAsync(
+      { _id: presentationId },
+      { $set: updateFields }
+    )
+  }
+
+  return viewpointsManuallyChanged
+}
+
+Meteor.methods(method)

@@ -1,0 +1,15 @@
+---
+title: "Team map"
+---
+flowchart TD
+  subgraph teamA["Team A [platform]"]
+    on-top["Sticker over the team"]
+    a1["API"]
+    subgraph inner["Inner squad"]
+      a2["Gateway"]
+    end
+  end
+  b1["Billing"]
+  a1 --> a2
+  a2 -->|"calls"| b1
+  b1 -->|"reports to"| inner

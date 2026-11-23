@@ -1,0 +1,158 @@
+#rcc-confirm-button {
+  background-color: #fbcc88 !important;
+  border-radius: 4px !important;
+  padding: 6px 16px !important;
+  font-family: 'Manrope', sans-serif !important;
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+#rcc-confirm-button:hover {
+  background-color: #f7c073 !important;
+}
+
+
+div > input[type='range'] {
+  border: none !important;
+  background: none !important;
+}
+
+div:has(> input[type='range']) {
+  border: none !important;
+  background: none !important;
+}
+
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 2px;
+  accent-color: #f7c073 !important;
+  color: #f7c073 !important;
+  background-color: transparent !important;
+  border-radius: 4px;
+  outline: none;
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+  border-radius: 4px;
+  width: 8px;
+  outline: none;
+  background-color: #f2e0c6 !important;
+  /* -webkit-appearance: none; */
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 8px;
+  height: 8px;
+  background-color: #f7c073 !important;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transform: translateX(4px) scale(1.5); /* Makes the thumb 2x larger than track */
+  transition: box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms;
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms;
+}
+
+input[type='range']::-webkit-slider-thumb:hover {
+  box-shadow: 0px 0px 0px 8px rgba(247, 192, 115, 0.16);
+}
+
+input[type='range']::-moz-range-thumb:hover {
+  box-shadow: 0px 0px 0px 8px rgba(247, 192, 115, 0.16);
+}
+
+input[type='range']:active::-webkit-slider-thumb {
+  box-shadow: 0px 0px 0px 8px rgba(247, 192, 115, 0.16);
+}
+
+input[type='range']:active::-moz-range-thumb {
+  box-shadow: 0px 0px 0px 8px rgba(247, 192, 115, 0.16);
+}
+
+.slateMultiSelect {
+  background-color: #e7e7e7 !important;
+  box-shadow: 1px 2px 3px rgba(0, 0, 0, 0.4);
+  color: #000 !important;
+  padding: 5px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: 'Manrope', sans-serif;
+  border: none;
+  outline: none;
+  cursor: pointer;
+}
+
+.slateMultiSelect:hover {
+  background-color: #d7d7d7 !important;
+}
+
+.slateMultiSelect:focus {
+  background-color: #d7d7d7 !important;
+}
+
+.slateMultiSelect:active {
+  background-color: #d7d7d7 !important;
+}
+
+
+/* The canvas header. One row at every width: ≡, logo, slate name ▾ and privacy on the left; people,
+   Huddle, Ask Slatebox, Present ▾ (or Follow) and Share on the right; notifications and the account at
+   the far right. Below 1180px the logo leaves (≡ has My Slates); below 1000px the row is ≡, name,
+   Present, Share and the account, and Huddle and Ask Slatebox move to the bar under the canvas. */
+.sb-board-toolbar{display:flex;align-items:center;gap:10px;min-height:64px;padding:0 16px 0 10px;box-sizing:border-box;min-width:0}
+.sb-board-nav{position:relative;flex:none}
+.sb-unread-dot{position:absolute;top:8px;right:6px;width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 2px var(--sb-surface)}
+.sb-board-brand{display:grid;place-items:center;flex:none;padding-right:14px;border-right:1px solid var(--sb-border)}
+.sb-board-brand img{width:29px;height:29px}
+.sb-board-name{display:flex;align-items:center;gap:10px;min-width:120px;flex:1 1 auto}
+.sb-board-title{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:100%;padding:4px 8px;border-radius:8px;color:inherit;text-align:left}
+.sb-board-title>div{min-width:0}
+.sb-board-title:hover,.sb-board-title[aria-expanded=true]{background:var(--sb-offset)}
+.sb-board-toolbar .Mui-focusVisible{outline:2px solid #f2cf87;outline-offset:2px}
+.sb-board-name strong{display:block;max-width:100%;font:700 clamp(17px,1.6vw,23px)/1.2 "Archivo Narrow",Arial,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-board-presence{font-size:12.5px;line-height:1.2;color:var(--sb-ink2);white-space:nowrap}
+.sb-board-rename{flex:1 1 auto;max-width:420px;min-width:0;color:inherit!important;font:700 20px/1.2 "Archivo Narrow",Arial,sans-serif!important;border:2px solid #f2cf87;border-radius:8px;padding:0 8px}
+.sb-board-privacy{display:inline-flex;align-items:center;gap:4px;flex:none;font-size:12px;line-height:1;padding:4px 9px;border:1px solid var(--sb-border,rgba(127,127,127,.5));border-radius:12px;color:var(--sb-ink2,inherit)}
+.sb-board-privacy svg{font-size:14px}
+.sb-board-peers{display:flex;align-items:center;flex:none;padding:3px;border-radius:20px}
+.sb-board-peers>span{box-shadow:0 0 0 2px var(--sb-surface)}.sb-board-peers>span+span{margin-left:-6px}
+.sb-board-peers[aria-expanded=true]{box-shadow:0 0 0 2px #f2cf87}
+.sb-board-more{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;font-size:12px;font-weight:700;background:var(--sb-offset)}
+.sb-board-divider{width:1px;height:28px;flex:none;background:var(--sb-border)}
+.sb-board-toolbar .MuiButton-root{flex:none;white-space:nowrap;text-transform:none;font-weight:700;border-radius:18px;min-height:36px}
+.sb-board-toolbar .MuiButtonGroup-root{flex:none}
+.sb-board-toolbar .MuiButtonGroup-grouped:first-of-type{border-radius:18px 0 0 18px}.sb-board-toolbar .MuiButtonGroup-grouped:last-of-type:not(:first-of-type){border-radius:0 18px 18px 0;min-width:34px;padding-inline:4px}
+.sb-board-toolbar .MuiButton-outlined{border-color:var(--sb-border)}
+.sb-ask[aria-pressed=true]{background:var(--sb-selected);color:var(--sb-selected-ink)}
+.sb-live-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#e04a3a}
+@media (prefers-reduced-motion:no-preference){.sb-live-dot{animation:sb-live 1.6s ease-in-out infinite}}
+@keyframes sb-live{50%{opacity:.35}}
+.sb-follow-short,.sb-save-short{display:none}
+/* The presentation's notice (it ended, or could not start): said once, under the header's start, so it
+   covers no header control and not the conversation beside the canvas (which is at the end). */
+.sb-board-toolbar .sb-live-notice{position:absolute;inset-inline-start:8px;top:calc(100% + 8px);margin:0;padding:5px 10px;border-radius:18px;font-size:13px;line-height:1.2;white-space:nowrap;max-width:calc(100vw - 16px);overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;background:var(--mui-palette-background-paper,Canvas);color:var(--mui-palette-text-primary);box-shadow:0 2px 8px rgb(0 0 0 / 12%)}
+@media(max-width:1179.98px){.sb-board-brand{display:none}.sb-follow-long,.sb-save-long{display:none}.sb-follow-short,.sb-save-short{display:inline}.sb-board-toolbar{gap:8px}}
+@media(max-width:999.98px){.sb-board-toolbar{gap:6px;padding:0 10px 0 4px}.sb-board-name{min-width:0}.sb-board-title{padding:2px 4px}.sb-board-name strong{font-size:19px}.sb-board-toolbar .MuiButton-root{padding-inline:12px}}
+@media(max-width:374.98px){.sb-board-toolbar .MuiButton-root{padding-inline:9px}.sb-board-name strong{font-size:17px}}
+/* Phones: the minimap would cover notes on a canvas this small. */
+@media(max-width:700px){body:has(.sb-board-toolbar) .slateboxjs-birdseye{display:none}}
+/* A workshop slate: no minimap while the whole slate is on screen (it would only sit over a lane), and on a phone the canvas, the strip under it and the conversation end above a cookie notice not yet answered, so the notice covers none of them. */
+[data-whole-in-view]>.slateboxjs-birdseye{display:none}
+@media(max-width:599.95px){body:has(.sb-cookie) .sb-workshop-page{box-sizing:border-box;padding-bottom:calc(max(12px,env(safe-area-inset-bottom)) + 68px)}}
+/* An unanswered cookie notice sits under the canvas page, not over it: under the bar below 1000px, and under the canvas
+   and the conversation's message box beside it from 1000px. */
+body:has(.sb-cookie) .sb-canvas-page{box-sizing:border-box;padding-bottom:calc(max(12px,env(safe-area-inset-bottom)) + 68px)}
+body:has(.sb-cookie){--sb-cookie-room:80px}
+
+/* A line a workshop draws between its stations is part of the workshop. It has no ends to drag. */
+#slateCanvas [data-governed="line"] ~ .connector-handle { display: none; }

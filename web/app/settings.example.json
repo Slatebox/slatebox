@@ -1,0 +1,103 @@
+{
+  "//": "Example Meteor settings for a local run. Copy this file to settings.dev.json (git-ignored) and fill in only the keys for the features you use; an empty value leaves that feature off. Never commit a settings file with real values. Production and test read their settings from METEOR_SETTINGS (a Kubernetes Secret), and a self-hosted install writes its own .state/settings.json (see self-host/README.md).",
+  "env": "dev",
+  "packages": {
+    "mongo": {
+      "reactivity": ["changeStreams", "oplog", "polling"]
+    }
+  },
+  "googleImageSearch": {
+    "//": "Picture search (Google Programmable Search). Server only: never move these into public.",
+    "engineKey": "",
+    "apiKey": ""
+  },
+  "aws": {
+    "//": "S3 bucket for uploaded images.",
+    "accessKey": "",
+    "secretKey": "",
+    "imageBucket": "",
+    "cloudUrl": ""
+  },
+  "nounProject": {
+    "//": "Icon search (The Noun Project API key and secret).",
+    "key": "",
+    "secret": ""
+  },
+  "deepgram": {
+    "secret": ""
+  },
+  "mailGun": {
+    "//": "SMTP URL for login links, invitations and password resets, e.g. smtps://user:password@smtp.example.com:465",
+    "server": ""
+  },
+  "chatWoot": {
+    "//": "HMAC token Chatwoot uses to verify a signed-in user. The widget itself is configured under public.chatWoot.",
+    "userIdentityValidationToken": ""
+  },
+  "daily": {
+    "//": "Daily.co audio and video huddles.",
+    "apiKey": "",
+    "apiBase": "https://api.daily.co/v1"
+  },
+  "vectorizerai": {
+    "apiKey": ""
+  },
+  "anthropic": {
+    "apiKey": ""
+  },
+  "openai": {
+    "apiKey": ""
+  },
+  "openrouter": {
+    "apiKey": ""
+  },
+  "stabilityai": {
+    "apiKey": ""
+  },
+  "cloudFlare": {
+    "cacheClearToken": "",
+    "zoneIdForCacheToClear": ""
+  },
+  "googleDocs": {
+    "//": "OAuth client for Google Docs import (Google Cloud console, web application client).",
+    "web": {
+      "client_id": "",
+      "client_secret": "",
+      "redirect_uris": ["http://localhost:3000"]
+    }
+  },
+  "stripePrivateKey": "",
+  "stripe": {
+    "//": "Server only. apiBase overrides the Stripe API host (tests); apiVersion pins a dated Stripe API release (empty keeps the built-in one).",
+    "apiBase": "",
+    "apiVersion": ""
+  },
+  "metering": {
+    "//": "Slatebox Cloud's AI and call meter. Leave off for local development and self-hosting; see server/metering/README.md.",
+    "enabled": false,
+    "alertEmail": ""
+  },
+  "public": {
+    "//": "Everything under public reaches every browser. Only keys that are meant to be public belong here.",
+    "env": "dev",
+    "baseUrl": "http://localhost:3000",
+    "wsUrl": "ws://localhost:1122",
+    "dailyBaseUrl": "",
+    "heapIOKey": "",
+    "pixabayAPIKey": "",
+    "stripe": {
+      "//": "In-app payments (Stripe Payment Element). Set the publishable key (pk_...) that pairs with stripePrivateKey; without one, payments use the hosted Stripe page. inApp: false turns the in-app sheet off. At startup the app checks the pair and sets inApp itself.",
+      "publishableKey": "",
+      "inApp": true
+    },
+    "chatWoot": {
+      "//": "Chatwoot support widget. It loads only when websiteToken is set; enabled: false turns it off.",
+      "enabled": false,
+      "websiteToken": ""
+    },
+    "analytics": {
+      "//": "Google Analytics. The gtag config is served only when gaId (a G- measurement id) is set.",
+      "gaId": ""
+    }
+  }
+}

@@ -1,0 +1,9 @@
+flowchart LR
+  classDef hot fill:#f96,stroke:#333,color:#fff
+  A:::hot --> B
+  B --> C
+  class C hot
+  style B fill:#bbf,stroke:#f66,color:#000
+  click A "https://slatebox.com" _blank
+  linkStyle 0 stroke:#ff3,stroke-width:4px
+  A@{ shape: cyl, label: "Named shape" }

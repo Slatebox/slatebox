@@ -1,0 +1,77 @@
+import { configureGeneralLink } from './general-slate-link.mjs'
+// methods.js
+import CONSTANTS from '../../imports/api/common/constants'
+import { SlateAccess, Slates } from '../../imports/api/common/models'
+import { Random } from 'meteor/random'
+import { MongoInternals } from 'meteor/mongo'
+import { Meteor } from 'meteor/meteor'
+
+const method = {}
+
+method[CONSTANTS.methods.slateAccess.get] = async (opts) => {
+  const user = await Meteor.userAsync()
+  if (user && await Slates.findOneAsync({ _id: opts.id, userId: user._id }, {fields:{_id:1}})) {
+    const access = await SlateAccess.find({ slateId: opts.id }).fetchAsync()
+    return access
+  }
+  return []
+}
+
+method[CONSTANTS.methods.slateAccess.recipients] = async function (slateId) {
+  if (!this.userId || typeof slateId !== 'string') return []
+  const owner = await Meteor.users.findOneAsync(this.userId, { fields: { orgId: 1 } })
+  if (!owner?.orgId) return []
+  const board = await Slates.findOneAsync({ _id: slateId, userId: this.userId }, { fields: { orgId: 1 } })
+  if (!board || (board.orgId && board.orgId !== owner.orgId)) return []
+  return Meteor.users.find({ orgId: owner.orgId, _id: { $ne: this.userId } }, {
+    fields: { 'profile.firstName': 1, 'profile.lastName': 1 },
+    sort: { 'profile.firstName': 1, 'profile.lastName': 1 },
+  }).fetchAsync()
+}
+
+async function changeSharing(slateId, userId, change) {
+  const boards = Slates.rawCollection()
+  const grants = SlateAccess.rawCollection()
+  const client = MongoInternals.defaultRemoteCollectionDriver().mongo.client
+  await client.withSession(session => session.withTransaction(async () => {
+    // Serialize changes across owner tabs, including first-time link initialization.
+    const owner = { _id: slateId, userId }
+    const board = await boards.findOneAndUpdate(owner, { $inc: { sharingRevision: 1 } }, {
+      session, includeResultMetadata: false, projection: { orgId: 1, options: 1 },
+    })
+    if (!board) throw new Meteor.Error('unavailable', 'Only the owner can change sharing.')
+    await change({ board, boards, grants, owner, session })
+  }))
+}
+
+method[CONSTANTS.methods.slateAccess.configureLink] = async function ({ slateId, type, permission, initialize = false }) {
+  if (!this.userId || typeof slateId !== 'string' || !['private', 'unlisted', 'public'].includes(type) ||
+      !['READ', 'COMMENT', 'EDIT'].includes(permission)) throw new Meteor.Error('invalid-link', 'Choose a valid sharing option.')
+  await changeSharing(slateId, this.userId, store => configureGeneralLink(store, {
+    type, permission, initialize, generateKey: () => Random.id(8),
+  }))
+}
+
+method[CONSTANTS.methods.slateAccess.configureMember] = async function ({ slateId, memberId, permission }) {
+  const ownerId = this.userId
+  if (!ownerId || typeof slateId !== 'string' || typeof memberId !== 'string' || memberId === ownerId ||
+      !Object.values(CONSTANTS.slateAccessPermissions).some(entry => entry.id === permission)) {
+    throw new Meteor.Error('invalid-member', 'Choose a teammate and an access level.')
+  }
+  await changeSharing(slateId, ownerId, async ({ board, grants, session }) => {
+    const users = Meteor.users.rawCollection()
+    const account = await users.findOne({ _id: ownerId }, { projection: { orgId: 1 }, session })
+    const orgId = account?.orgId
+    if (!orgId || (board.orgId && board.orgId !== orgId) ||
+        !await users.findOne({ _id: memberId, orgId }, { projection: { _id: 1 }, session })) {
+      throw new Meteor.Error('unavailable', 'Choose a member of your team.')
+    }
+    const identity = { slateId, type: 'private', userId: memberId }
+    await grants.updateOne(identity, {
+      $set: { slateAccessPermissionId: permission },
+      $setOnInsert: { _id: 'private_' + memberId + '_' + slateId, owningUserId: ownerId, orgId, accessKey: Random.id(8) },
+    }, { upsert: true, session })
+  })
+}
+
+Meteor.methods(method)

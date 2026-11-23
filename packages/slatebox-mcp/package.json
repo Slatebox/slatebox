@@ -1,0 +1,61 @@
+{
+  "name": "slatebox-mcp",
+  "version": "0.3.1",
+  "mcpName": "com.slatebox/slatebox",
+  "description": "Slatebox for AI assistants: create and edit mind maps, diagrams, project plans and presentations on a shared canvas.",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "modelcontextprotocol",
+    "mind-map",
+    "mindmap",
+    "diagram",
+    "flowchart",
+    "whiteboard",
+    "project-planning",
+    "gantt",
+    "timeline",
+    "presentation",
+    "mermaid",
+    "collaboration",
+    "open-source",
+    "miro-alternative"
+  ],
+  "homepage": "https://docs.slatebox.com/developers/slateboxapi/mcp/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Slatebox/slatebox.git",
+    "directory": "packages/slatebox-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/Slatebox/slatebox/issues"
+  },
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "slatebox-mcp": "src/cli.js",
+    "slatebox": "src/slatebox.js"
+  },
+  "exports": {
+    "./client": {
+      "types": "./generated/slatebox.d.ts",
+      "default": "./src/client/index.js"
+    },
+    "./exec": "./src/exec/index.js"
+  },
+  "files": [
+    "src",
+    "generated",
+    "README.md",
+    "LICENSE.md"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  }
+}

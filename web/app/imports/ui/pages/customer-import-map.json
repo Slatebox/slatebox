@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "title": "First customer import",
+  "lanes": [
+    {
+      "id": "file",
+      "label": "Customer CSV",
+      "station": {
+        "column": 0,
+        "row": 0,
+        "next": [
+          "import",
+          "review"
+        ],
+        "outcome": "The customer sent 50 rows. Three are missing an owner."
+      }
+    },
+    {
+      "id": "import",
+      "label": "Import 47 rows",
+      "station": {
+        "column": 1,
+        "row": 0,
+        "next": [],
+        "outcome": "47 records are ready today. Return the other three to the customer for an owner."
+      }
+    },
+    {
+      "id": "review",
+      "label": "Review 3 rows",
+      "station": {
+        "column": 0,
+        "row": 1,
+        "next": [
+          "complete"
+        ],
+        "outcome": "The customer supplies the three missing owners. All rows can now be imported together."
+      }
+    },
+    {
+      "id": "complete",
+      "label": "Import all 50",
+      "station": {
+        "column": 1,
+        "row": 1,
+        "next": [],
+        "outcome": "All 50 records are imported with an owner assigned."
+      }
+    }
+  ],
+  "cards": [
+    {
+      "id": "batch",
+      "label": "Customer file",
+      "laneId": "file"
+    }
+  ]
+}

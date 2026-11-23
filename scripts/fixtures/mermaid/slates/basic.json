@@ -1,0 +1,28 @@
+{
+  "shareId": "basic",
+  "options": { "name": "Checkout \"v2\": flow" },
+  "nodes": [
+    { "options": { "id": "start", "text": "Customer opens cart", "shape": "ellipse", "xPos": 0, "yPos": 100, "width": 180, "height": 80 },
+      "relationships": { "associations": [
+        { "id": "start->check", "parentId": "start", "childId": "check", "label": "clicks \"Pay\"", "showChildArrow": true } ] } },
+    { "options": { "id": "check", "text": "Card valid?\n(Luhn & expiry)", "shape": "diamond", "xPos": 300, "yPos": 80, "width": 200, "height": 120 },
+      "relationships": { "associations": [
+        { "id": "check->pay", "parentId": "check", "childId": "pay", "label": "yes", "lineWidth": 6 },
+        { "id": "check->retry", "parentId": "check", "childId": "retry", "label": "no | try again", "lineDash": "dashed" } ] } },
+    { "options": { "id": "pay", "text": "Charge #1 <b>now</b>; send `receipt`", "shapeHint": "roundedrectangle", "vectorPath": "M 10 0 H 90 Q 100 0 100 10 V 50 Z", "xPos": 600, "yPos": 60, "width": 220, "height": 90,
+        "backgroundColor": "#d1f2d9", "borderColor": "#2e7d32", "foregroundColor": "#102010", "link": { "show": true, "type": "url", "data": "https://example.com/pay?a=1&b=\"2\"" } },
+      "relationships": { "associations": [
+        { "id": "pay->done", "parentId": "pay", "childId": "done", "showChildArrow": true, "showParentArrow": true } ] } },
+    { "options": { "id": "retry", "text": "Ask again — Émile 東京 🎉", "shape": "parallelogram", "xPos": 600, "yPos": 260, "width": 220, "height": 90 },
+      "relationships": { "associations": [
+        { "id": "retry->start", "parentId": "retry", "childId": "start", "showChildArrow": false, "showParentArrow": false },
+        { "id": "retry->__free_ab12", "parentId": "retry", "childId": "__free_ab12", "targetPoint": { "x": 900, "y": 400 } } ] } },
+    { "options": { "id": "end", "text": "", "shape": "circle", "xPos": 900, "yPos": 60, "width": 100, "height": 100 },
+      "relationships": { "associations": [
+        { "id": "end->pay", "parentId": "end", "childId": "pay", "showChildArrow": false, "showParentArrow": true, "lineOpacity": 0 } ] } },
+    { "options": { "id": "done", "text": "Done", "shape": "hexagon", "xPos": 900, "yPos": 200, "width": 140, "height": 80 },
+      "relationships": { "associations": [] } },
+    { "options": { "id": "note1", "text": "a comment", "isComment": true, "xPos": 50, "yPos": 50, "width": 30, "height": 30 },
+      "relationships": { "associations": [] } }
+  ]
+}
