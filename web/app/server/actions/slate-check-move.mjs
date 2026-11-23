@@ -34,7 +34,7 @@ export function checkMove(stored, input) {
 
 export default defineAction({
   id: 'slates.checkMove',
-  title: 'Check a move',
+  title: 'Check move',
   description:
     'Whether a card may move to a lane on one of the slate\'s boards (boardId; required on a slate of several boards, 400 board_required lists them), without moving it: the same verdict a drag gets. On a nested board (piles, a tree) name the card it goes under instead (under), or the area it goes to (lane). Answers {ok: true, warnings} or {refused: {sentence, ruleId, nearest, set}}: the one rule that refuses it (ruleId null for the board\'s own kind rule), who set it, and the nearest lane (or card) it may go to. rev is the rulebook\'s revision. Name cards and lanes by id or by name.',
   toolset: 'slates',

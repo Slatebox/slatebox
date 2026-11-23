@@ -14,7 +14,7 @@ export const mermaidFileUrl = (origin, shareId) => new URL(`/slates/${shareId}.m
 // Any slate the caller may read, as Mermaid text. Free on every slate: no renderer, no AI.
 export default defineAction({
   id: 'slates.exportMermaid',
-  title: 'Read as Mermaid',
+  title: 'To Mermaid',
   description:
     'Write a slate you can open as Mermaid text: notes and lines as a flowchart (direction from the layout; shapes, labels, arrow ends and dashed, thick or hidden lines kept; a note drawn behind notes it holds becomes a subgraph of them; a workshop\'s lanes become subgraphs of cards), a mind map as a mindmap, a launch plan as a Gantt chart (format gantt, start is its first day). Returns the text, the same as a Markdown code block, and for a public slate its plain-text address (/slates/<id>.mmd). A public slate reads without a token. What Mermaid cannot say is named in warnings: dashed lines are written as Mermaid\'s one broken style (dotted), a line with an arrow only at its start is written from its other end, and a line with an end on the open canvas is left out.',
   toolset: 'slates',

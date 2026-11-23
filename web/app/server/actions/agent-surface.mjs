@@ -250,10 +250,12 @@ export const PROMPTS = [
     arguments: [
       { name: 'topic', description: 'What the presentation is about.', required: true },
       { name: 'slides', description: 'How many slides, such as "6 slides" (optional).', required: false },
+      { name: 'style', description: 'A look: voyage, stage, editorial, neon, sketch, blueprint, journey or calm (optional).', required: false },
     ],
     template:
-      'Draft a presentation about {topic} with {slides} on a new Slatebox slate. Write it as a Mermaid flowchart running left to right with one subgraph per slide, in order: the subgraph is the slide title and holds 2 to 4 short notes, its points. Draw it with import_mermaid (or slatebox.slates.importMermaid in an exec script). Reply with the slate link and tell the person to open the slate and choose Present to show it as a presentation.',
-    defaults: { slides: '5 to 8 slides' },
+      'Draft a presentation about {topic} with {slides} on a new Slatebox slate. Write it as a Mermaid flowchart running left to right with one subgraph per slide, in order: the subgraph is the slide title and holds 2 to 4 short notes, its points. Draw it with import_mermaid (or slatebox.slates.importMermaid in an exec script). Reply with the slate link and tell the person to open the slate and choose Present: Slatebox composes a styled deck that flies the camera across the slate.{style}',
+    defaults: { slides: '5 to 8 slides', style: '' },
+    given: { style: ' Once they have pressed Present, play it in the {value} style with style_presentation (or slatebox.presentations.setStyle).' },
   },
 ]
 

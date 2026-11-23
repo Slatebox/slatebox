@@ -53,7 +53,7 @@ export function getComponent(id, slate = null) {
 
 export default defineAction({
   id: 'components.list',
-  title: 'List the library',
+  title: 'Library',
   description:
     'Everything a person can add to a slate from the library (boards and starters): each entry with its group, one line, the message that adds it ("Add a retro"), the edits it takes (joined to the workshop_edits table), the rule kinds it can be given by chat, its limits and its looping picture. The phrases that make each change (moves) and the picture\'s steps come with components.get for one entry. With shareId, whether each fits that slate: a slate holds up to 8 boards, side by side. Add one to a slate with slates.applyOperations (plan operation add_component, with the slate revision), the same door as the chat\'s Add; it goes beside the boards already there.',
   toolset: 'slates',
@@ -71,7 +71,7 @@ export default defineAction({
 
 export const componentsGet = defineAction({
   id: 'components.get',
-  title: 'Read a library entry',
+  title: 'Library entry',
   description:
     'One entry of the library (an id from components.list) with everything components.list gives plus the phrases that make each change (moves: the words a person says, what the board answers and the edit it makes) and the looping picture\'s steps. With shareId, whether it fits that slate.',
   toolset: 'slates',

@@ -7571,7 +7571,7 @@
     },
     {
       "id": "slates.issueInvite",
-      "title": "Share by invitation",
+      "title": "Send invitation",
       "description": "The registered owner turns on an unlisted link. Changing its role keeps the address. Public slates are changed in the Share dialog. Anyone holding the address gets the role.",
       "action": "slates.issueInvite",
       "toolset": "sharing",
@@ -7761,7 +7761,7 @@
     },
     {
       "id": "slates.exportMermaid",
-      "title": "Read as Mermaid",
+      "title": "To Mermaid",
       "description": "Write a slate you can open as Mermaid text: notes and lines as a flowchart (direction from the layout; shapes, labels, arrow ends and dashed, thick or hidden lines kept; a note drawn behind notes it holds becomes a subgraph of them; a workshop's lanes become subgraphs of cards), a mind map as a mindmap, a launch plan as a Gantt chart (format gantt, start is its first day). Returns the text, the same as a Markdown code block, and for a public slate its plain-text address (/slates/<id>.mmd). A public slate reads without a token. What Mermaid cannot say is named in warnings: dashed lines are written as Mermaid's one broken style (dotted), a line with an arrow only at its start is written from its other end, and a line with an end on the open canvas is left out.",
       "action": "slates.exportMermaid",
       "toolset": "slates",
@@ -8229,7 +8229,7 @@
     },
     {
       "id": "instance.describe",
-      "title": "Describe",
+      "title": "Server",
       "description": "What this Slatebox instance is and can do. Without a token: its id, name, contract version and where to sign in. With a token: also the build, capability flags, limits, the canvas and workshop vocabularies, the routes it serves and your account.",
       "action": "instance.describe",
       "toolset": "instance",
@@ -8373,7 +8373,7 @@
     },
     {
       "id": "account.get",
-      "title": "Read account",
+      "title": "Account",
       "description": "Your name, address and whether it is verified, team and claims, AI drafting access, what is included this month (ai.included, null on a server with no meter) and whether you have Slatebox Pro (ai.pro, null without it), the token you called with, and the addresses where you change what a token may not (profile, and Credits for Slatebox Pro and top-ups). Getting Pro or topping up is done by a person in the profile, never through a token: give them links.pay (Get Pro, or Your Pro once they have it) or links.topUp, which open the payment in the app. Education is null on a self-hosted instance.",
       "action": "account.get",
       "toolset": "account",
@@ -8868,7 +8868,7 @@
     },
     {
       "id": "ai.get",
-      "title": "Read AI settings",
+      "title": "AI settings",
       "description": "The AI connections you, your team and this server have (never their keys), which one each feature uses (chat, generation, presentation, vision, images, shape, and the default), and which connection serves each feature for you now (effective), with what it cannot do. ownProviders false means this server uses only the AI its operator set up.",
       "action": "ai.get",
       "toolset": "account",
@@ -8962,7 +8962,7 @@
     },
     {
       "id": "ai.update",
-      "title": "Change AI settings",
+      "title": "Set AI",
       "description": "Adds or changes AI connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins), server this server's (administrators; ownProviders on or off lets people use their own). Mix freely: a choice names me:<name>, team:<name>, server:<name> or builtin. Keys are stored encrypted and never returned, and a run's record keeps its code with the apiKey replaced; still, send a key through this route, the CLI or the update_ai_settings tool rather than building it inside an exec script. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI (levels me and team) is for self-hosted Slatebox: Slatebox Cloud refuses it, as AI there comes with Slatebox Pro credits and top-ups.",
       "action": "ai.update",
       "toolset": "account",
@@ -9566,7 +9566,7 @@
     },
     {
       "id": "presence.step",
-      "title": "Tick a plan step",
+      "title": "Tick step",
       "description": "Mark a step of the plan set with presence.plan as doing, done or skipped. When a step is done and none is under way, the next one starts; a step under way is done when another starts or the run ends. At most 40 per run. A preview run changes nothing.",
       "action": "presence.step",
       "toolset": "presence",
@@ -9717,7 +9717,7 @@
     },
     {
       "id": "components.list",
-      "title": "List the library",
+      "title": "Library",
       "description": "Everything a person can add to a slate from the library (boards and starters): each entry with its group, one line, the message that adds it (\"Add a retro\"), the edits it takes (joined to the workshop_edits table), the rule kinds it can be given by chat, its limits and its looping picture. The phrases that make each change (moves) and the picture's steps come with components.get for one entry. With shareId, whether each fits that slate: a slate holds up to 8 boards, side by side. Add one to a slate with slates.applyOperations (plan operation add_component, with the slate revision), the same door as the chat's Add; it goes beside the boards already there.",
       "action": "components.list",
       "toolset": "slates",
@@ -9789,7 +9789,7 @@
     },
     {
       "id": "components.get",
-      "title": "Read a library entry",
+      "title": "Library entry",
       "description": "One entry of the library (an id from components.list) with everything components.list gives plus the phrases that make each change (moves: the words a person says, what the board answers and the edit it makes) and the looping picture's steps. With shareId, whether it fits that slate.",
       "action": "components.get",
       "toolset": "slates",
@@ -9869,7 +9869,7 @@
     },
     {
       "id": "slates.checkMove",
-      "title": "Check a move",
+      "title": "Check move",
       "description": "Whether a card may move to a lane on one of the slate's boards (boardId; required on a slate of several boards, 400 board_required lists them), without moving it: the same verdict a drag gets. On a nested board (piles, a tree) name the card it goes under instead (under), or the area it goes to (lane). Answers {ok: true, warnings} or {refused: {sentence, ruleId, nearest, set}}: the one rule that refuses it (ruleId null for the board's own kind rule), who set it, and the nearest lane (or card) it may go to. rev is the rulebook's revision. Name cards and lanes by id or by name.",
       "action": "slates.checkMove",
       "toolset": "slates",
@@ -9981,7 +9981,7 @@
     },
     {
       "id": "team.export",
-      "title": "Export your team",
+      "title": "Export team",
       "description": "For a team admin: a one-time address (15 minutes) to download everything the team owns as one archive, in the open team export format: slates with their boards and smart components, recent versions and events, comments, presentations, files, people and roles, published-link settings, AI connections (never keys) and the names and scopes of API tokens (never secrets). POST to downloadUrl to download; send a passphrase (form or JSON field \"passphrase\", the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or the Slatebox-Export-Passphrase header when it is plain ASCII; at least 12 characters, not starting or ending with a space) to encrypt the archive. The archive is signed and checked; import it with teamImports.start on any Slatebox server.",
       "action": "team.export",
       "toolset": "team",
@@ -10071,7 +10071,7 @@
     },
     {
       "id": "teamImports.start",
-      "title": "Start an import",
+      "title": "Start import",
       "description": "For an administrator of this server: a one-time address (1 hour) to upload a team export to. POST the archive to uploadUrl as application/octet-stream, with its passphrase when it is encrypted: in the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes (any passphrase), or in the Slatebox-Export-Passphrase header when it is plain ASCII. The upload becomes a new hidden team, with new ids for everything, people as placeholders who cannot sign in, slates private, board rules switched off, no keys and no tokens; the answer is the report. Confirm or discard it with teamImports.confirm or teamImports.discard; a pending import is discarded after 14 days.",
       "action": "teamImports.start",
       "toolset": "team",
@@ -10153,7 +10153,7 @@
     },
     {
       "id": "teamImports.list",
-      "title": "List imports",
+      "title": "Imports",
       "description": "For an administrator of this server: recent team imports, pending ones first to confirm or discard.",
       "action": "teamImports.list",
       "toolset": "team",
@@ -10278,7 +10278,7 @@
     },
     {
       "id": "teamImports.get",
-      "title": "Read an import",
+      "title": "Import",
       "description": "For an administrator of this server: one import, with its report while it is pending or confirmed.",
       "action": "teamImports.get",
       "toolset": "team",
@@ -10464,7 +10464,7 @@
     },
     {
       "id": "teamImports.confirm",
-      "title": "Confirm an import",
+      "title": "Confirm import",
       "description": "For an administrator of this server: makes a pending import's team live. Its slates and presentations get back the visibility they had (public, unlisted or private). With invite true, each person whose address the source had verified, and no account here uses in any letter case, gets an email to claim their placeholder; the answer lists addresses that already have an account (they must agree to move) and addresses the source had not verified (invite each with teamImports.invite once you have checked it). Board rules stay switched off until a team admin reviews them.",
       "action": "teamImports.confirm",
       "toolset": "team",
@@ -10573,7 +10573,7 @@
     },
     {
       "id": "teamImports.invite",
-      "title": "Invite a person",
+      "title": "Invite person",
       "description": "For an administrator of this server: after you have checked an address that a confirmed import listed as unverified (the source had not verified it), sends that person the email to claim their placeholder. An address any account here already uses, in any letter case, is not invited: that person must agree to move.",
       "action": "teamImports.invite",
       "toolset": "team",
@@ -10664,7 +10664,7 @@
     },
     {
       "id": "teamImports.discard",
-      "title": "Discard an import",
+      "title": "Discard import",
       "description": "For an administrator of this server: deletes a pending import's hidden team and everything the import wrote (slates, files, people, settings).",
       "action": "teamImports.discard",
       "toolset": "team",
@@ -11146,6 +11146,329 @@
       "cli": {
         "command": "shape"
       }
+    },
+    {
+      "id": "presentations.get",
+      "title": "Deck",
+      "description": "Read your latest presentation of a slate: its style, and each step's layout (title, overview, dive, hero, treeBuild, trace, sweep, group, bigNumber, quote, split, compare, cover, finale), kicker and caption. The deck plays on the live canvas with Prezi-style camera moves.",
+      "action": "presentations.get",
+      "toolset": "slates",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "agent"
+      ],
+      "scope": "slates:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/slates/{shareId}/presentation",
+        "pathParams": [
+          "shareId"
+        ],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "shareId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The slate ID from its address: /canvas/<shareId>."
+          }
+        },
+        "required": [
+          "shareId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "presentationId": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "published": {
+            "type": "boolean"
+          },
+          "style": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "voyage",
+              "stage",
+              "editorial",
+              "neon",
+              "sketch",
+              "blueprint",
+              "journey",
+              "calm",
+              null
+            ],
+            "description": "The style it plays in."
+          },
+          "styles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every style it can play in."
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "step": {
+                  "type": "integer"
+                },
+                "layout": {
+                  "type": "string",
+                  "enum": [
+                    "title",
+                    "overview",
+                    "dive",
+                    "hero",
+                    "treeBuild",
+                    "trace",
+                    "sweep",
+                    "group",
+                    "bigNumber",
+                    "quote",
+                    "split",
+                    "compare",
+                    "cover",
+                    "finale"
+                  ]
+                },
+                "kicker": {
+                  "type": "string"
+                },
+                "caption": {
+                  "type": "string"
+                },
+                "notes": {
+                  "type": "integer",
+                  "description": "How many of the slate's notes the step shows."
+                }
+              },
+              "required": [
+                "step",
+                "layout",
+                "caption"
+              ]
+            }
+          }
+        },
+        "required": [
+          "presentationId",
+          "style",
+          "steps"
+        ]
+      },
+      "tool": {
+        "name": "get_presentation",
+        "title": "Read a presentation",
+        "description": "Read a slate's presentation: its style and each step's layout and caption.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      "cli": null
+    },
+    {
+      "id": "presentations.setStyle",
+      "title": "Restyle",
+      "description": "Play your latest presentation of a slate in another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), optionally with your own palette (3 to 6 colours). The same steps in the same order: no AI is asked and nothing is counted.",
+      "action": "presentations.setStyle",
+      "toolset": "slates",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "slates:write",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/slates/{shareId}/presentation/style",
+        "pathParams": [
+          "shareId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "style",
+          "palette"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "shareId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The slate ID from its address: /canvas/<shareId>."
+          },
+          "style": {
+            "type": "string",
+            "enum": [
+              "voyage",
+              "stage",
+              "editorial",
+              "neon",
+              "sketch",
+              "blueprint",
+              "journey",
+              "calm"
+            ]
+          },
+          "palette": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 6,
+            "items": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "description": "Your own colours: the first three lead, the background stays the style's."
+          }
+        },
+        "required": [
+          "shareId",
+          "style"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "presentationId": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "published": {
+            "type": "boolean"
+          },
+          "style": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "voyage",
+              "stage",
+              "editorial",
+              "neon",
+              "sketch",
+              "blueprint",
+              "journey",
+              "calm",
+              null
+            ],
+            "description": "The style it plays in."
+          },
+          "styles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every style it can play in."
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "step": {
+                  "type": "integer"
+                },
+                "layout": {
+                  "type": "string",
+                  "enum": [
+                    "title",
+                    "overview",
+                    "dive",
+                    "hero",
+                    "treeBuild",
+                    "trace",
+                    "sweep",
+                    "group",
+                    "bigNumber",
+                    "quote",
+                    "split",
+                    "compare",
+                    "cover",
+                    "finale"
+                  ]
+                },
+                "kicker": {
+                  "type": "string"
+                },
+                "caption": {
+                  "type": "string"
+                },
+                "notes": {
+                  "type": "integer",
+                  "description": "How many of the slate's notes the step shows."
+                }
+              },
+              "required": [
+                "step",
+                "layout",
+                "caption"
+              ]
+            }
+          }
+        },
+        "required": [
+          "presentationId",
+          "style",
+          "steps"
+        ]
+      },
+      "tool": {
+        "name": "style_presentation",
+        "title": "Restyle a presentation",
+        "description": "Switch a slate's presentation to another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), keeping its steps.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      "cli": null
     }
   ]
 }

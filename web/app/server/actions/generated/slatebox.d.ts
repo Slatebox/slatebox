@@ -3,7 +3,7 @@
 // The global `slatebox` inside an exec script. Every method takes one object.
 
 declare namespace slatebox.account {
-  /** Read account. Your name, address and whether it is verified, team and claims, AI drafting access, what is included this month (ai.included, null on a server with no meter) and whether you have Slatebox Pro (ai.pro, null without it), the token you called with, and the addresses where you change what a token may not (profile, and Credits for Slatebox Pro and top-ups). Getting Pro or topping up is done by a person in the profile, never through a token: give them links.pay (Get Pro, or Your Pro once they have it) or links.topUp, which open the payment in the app. Education is null on a self-hosted instance. */
+  /** Account. Your name, address and whether it is verified, team and claims, AI drafting access, what is included this month (ai.included, null on a server with no meter) and whether you have Slatebox Pro (ai.pro, null without it), the token you called with, and the addresses where you change what a token may not (profile, and Credits for Slatebox Pro and top-ups). Getting Pro or topping up is done by a person in the profile, never through a token: give them links.pay (Get Pro, or Your Pro once they have it) or links.topUp, which open the payment in the app. Education is null on a self-hosted instance. */
   function get(input: Record<string, unknown>): Promise<{
     id: string;
     name: string;
@@ -59,7 +59,7 @@ declare namespace slatebox.ai {
 }
 
 declare namespace slatebox.ai {
-  /** Read AI settings. The AI connections you, your team and this server have (never their keys), which one each feature uses (chat, generation, presentation, vision, images, shape, and the default), and which connection serves each feature for you now (effective), with what it cannot do. ownProviders false means this server uses only the AI its operator set up. @scope ai:settings */
+  /** AI settings. The AI connections you, your team and this server have (never their keys), which one each feature uses (chat, generation, presentation, vision, images, shape, and the default), and which connection serves each feature for you now (effective), with what it cannot do. ownProviders false means this server uses only the AI its operator set up. @scope ai:settings */
   function get(input: Record<string, unknown>): Promise<{
     features: Array<Record<string, unknown>>;
     useKeys?: string[];
@@ -75,7 +75,7 @@ declare namespace slatebox.ai {
 }
 
 declare namespace slatebox.ai {
-  /** Change AI settings. Adds or changes AI connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins), server this server's (administrators; ownProviders on or off lets people use their own). Mix freely: a choice names me:<name>, team:<name>, server:<name> or builtin. Keys are stored encrypted and never returned, and a run's record keeps its code with the apiKey replaced; still, send a key through this route, the CLI or the update_ai_settings tool rather than building it inside an exec script. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI (levels me and team) is for self-hosted Slatebox: Slatebox Cloud refuses it, as AI there comes with Slatebox Pro credits and top-ups. @scope ai:settings @destructive @confirm @idempotent */
+  /** Set AI. Adds or changes AI connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins), server this server's (administrators; ownProviders on or off lets people use their own). Mix freely: a choice names me:<name>, team:<name>, server:<name> or builtin. Keys are stored encrypted and never returned, and a run's record keeps its code with the apiKey replaced; still, send a key through this route, the CLI or the update_ai_settings tool rather than building it inside an exec script. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI (levels me and team) is for self-hosted Slatebox: Slatebox Cloud refuses it, as AI there comes with Slatebox Pro credits and top-ups. @scope ai:settings @destructive @confirm @idempotent */
   function update(input: {
     /** me (yours), team (team admins) or server (administrators). */
     level: "me" | "team" | "server";
@@ -137,7 +137,7 @@ declare namespace slatebox.ai {
 }
 
 declare namespace slatebox.components {
-  /** Read a library entry. One entry of the library (an id from components.list) with everything components.list gives plus the phrases that make each change (moves: the words a person says, what the board answers and the edit it makes) and the looping picture's steps. With shareId, whether it fits that slate. @scope slates:read */
+  /** Library entry. One entry of the library (an id from components.list) with everything components.list gives plus the phrases that make each change (moves: the words a person says, what the board answers and the edit it makes) and the looping picture's steps. With shareId, whether it fits that slate. @scope slates:read */
   function get(input: {
     /** The library entry (components.list ids). (1–100 characters) */
     id: string;
@@ -151,7 +151,7 @@ declare namespace slatebox.components {
 }
 
 declare namespace slatebox.components {
-  /** List the library. Everything a person can add to a slate from the library (boards and starters): each entry with its group, one line, the message that adds it ("Add a retro"), the edits it takes (joined to the workshop_edits table), the rule kinds it can be given by chat, its limits and its looping picture. The phrases that make each change (moves) and the picture's steps come with components.get for one entry. With shareId, whether each fits that slate: a slate holds up to 8 boards, side by side. Add one to a slate with slates.applyOperations (plan operation add_component, with the slate revision), the same door as the chat's Add; it goes beside the boards already there. @scope slates:read */
+  /** Library. Everything a person can add to a slate from the library (boards and starters): each entry with its group, one line, the message that adds it ("Add a retro"), the edits it takes (joined to the workshop_edits table), the rule kinds it can be given by chat, its limits and its looping picture. The phrases that make each change (moves) and the picture's steps come with components.get for one entry. With shareId, whether each fits that slate: a slate holds up to 8 boards, side by side. Add one to a slate with slates.applyOperations (plan operation add_component, with the slate revision), the same door as the chat's Add; it goes beside the boards already there. @scope slates:read */
   function list(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId?: string;
@@ -163,7 +163,7 @@ declare namespace slatebox.components {
 }
 
 declare namespace slatebox.instance {
-  /** Describe. What this Slatebox instance is and can do. Without a token: its id, name, contract version and where to sign in. With a token: also the build, capability flags, limits, the canvas and workshop vocabularies, the routes it serves and your account. */
+  /** Server. What this Slatebox instance is and can do. Without a token: its id, name, contract version and where to sign in. With a token: also the build, capability flags, limits, the canvas and workshop vocabularies, the routes it serves and your account. */
   function describe(input: Record<string, unknown>): Promise<{
     view: "public" | "account";
     instance: {
@@ -222,7 +222,7 @@ declare namespace slatebox.presence {
 }
 
 declare namespace slatebox.presence {
-  /** Tick a plan step. Mark a step of the plan set with presence.plan as doing, done or skipped. When a step is done and none is under way, the next one starts; a step under way is done when another starts or the run ends. At most 40 per run. A preview run changes nothing. @scope slates:write @modes save|preview */
+  /** Tick step. Mark a step of the plan set with presence.plan as doing, done or skipped. When a step is done and none is under way, the next one starts; a step under way is done when another starts or the run ends. At most 40 per run. A preview run changes nothing. @scope slates:write @modes save|preview */
   function step(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
@@ -247,6 +247,63 @@ declare namespace slatebox.presence {
     };
     [key: string]: unknown;
   }) & { mode: "save" | "preview" }>;
+}
+
+declare namespace slatebox.presentations {
+  /** Deck. Read your latest presentation of a slate: its style, and each step's layout (title, overview, dive, hero, treeBuild, trace, sweep, group, bigNumber, quote, split, compare, cover, finale), kicker and caption. The deck plays on the live canvas with Prezi-style camera moves. @scope slates:read */
+  function get(input: {
+    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
+    shareId: string;
+  }): Promise<{
+    presentationId: string;
+    version?: number;
+    name?: string;
+    published?: boolean;
+    /** The style it plays in. */
+    style: "voyage" | "stage" | "editorial" | "neon" | "sketch" | "blueprint" | "journey" | "calm" | null;
+    /** Every style it can play in. */
+    styles?: string[];
+    steps: Array<{
+      step: number;
+      layout: "title" | "overview" | "dive" | "hero" | "treeBuild" | "trace" | "sweep" | "group" | "bigNumber" | "quote" | "split" | "compare" | "cover" | "finale";
+      kicker?: string;
+      caption: string;
+      /** How many of the slate's notes the step shows. */
+      notes?: number;
+      [key: string]: unknown;
+    }>;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.presentations {
+  /** Restyle. Play your latest presentation of a slate in another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), optionally with your own palette (3 to 6 colours). The same steps in the same order: no AI is asked and nothing is counted. @scope slates:write @idempotent */
+  function setStyle(input: {
+    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
+    shareId: string;
+    style: "voyage" | "stage" | "editorial" | "neon" | "sketch" | "blueprint" | "journey" | "calm";
+    /** Your own colours: the first three lead, the background stays the style's. (3–6 items) */
+    palette?: string[];
+  }): Promise<({
+    presentationId: string;
+    version?: number;
+    name?: string;
+    published?: boolean;
+    /** The style it plays in. */
+    style: "voyage" | "stage" | "editorial" | "neon" | "sketch" | "blueprint" | "journey" | "calm" | null;
+    /** Every style it can play in. */
+    styles?: string[];
+    steps: Array<{
+      step: number;
+      layout: "title" | "overview" | "dive" | "hero" | "treeBuild" | "trace" | "sweep" | "group" | "bigNumber" | "quote" | "split" | "compare" | "cover" | "finale";
+      kicker?: string;
+      caption: string;
+      /** How many of the slate's notes the step shows. */
+      notes?: number;
+      [key: string]: unknown;
+    }>;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
 }
 
 declare namespace slatebox.shapes {
@@ -388,7 +445,7 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.slates {
-  /** Check a move. Whether a card may move to a lane on one of the slate's boards (boardId; required on a slate of several boards, 400 board_required lists them), without moving it: the same verdict a drag gets. On a nested board (piles, a tree) name the card it goes under instead (under), or the area it goes to (lane). Answers {ok: true, warnings} or {refused: {sentence, ruleId, nearest, set}}: the one rule that refuses it (ruleId null for the board's own kind rule), who set it, and the nearest lane (or card) it may go to. rev is the rulebook's revision. Name cards and lanes by id or by name. @scope slates:read */
+  /** Check move. Whether a card may move to a lane on one of the slate's boards (boardId; required on a slate of several boards, 400 board_required lists them), without moving it: the same verdict a drag gets. On a nested board (piles, a tree) name the card it goes under instead (under), or the area it goes to (lane). Answers {ok: true, warnings} or {refused: {sentence, ruleId, nearest, set}}: the one rule that refuses it (ruleId null for the board's own kind rule), who set it, and the nearest lane (or card) it may go to. rev is the rulebook's revision. Name cards and lanes by id or by name. @scope slates:read */
   function checkMove(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
@@ -435,7 +492,7 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.slates {
-  /** Read as Mermaid. Write a slate you can open as Mermaid text: notes and lines as a flowchart (direction from the layout; shapes, labels, arrow ends and dashed, thick or hidden lines kept; a note drawn behind notes it holds becomes a subgraph of them; a workshop's lanes become subgraphs of cards), a mind map as a mindmap, a launch plan as a Gantt chart (format gantt, start is its first day). Returns the text, the same as a Markdown code block, and for a public slate its plain-text address (/slates/<id>.mmd). A public slate reads without a token. What Mermaid cannot say is named in warnings: dashed lines are written as Mermaid's one broken style (dotted), a line with an arrow only at its start is written from its other end, and a line with an end on the open canvas is left out. @scope slates:read */
+  /** To Mermaid. Write a slate you can open as Mermaid text: notes and lines as a flowchart (direction from the layout; shapes, labels, arrow ends and dashed, thick or hidden lines kept; a note drawn behind notes it holds becomes a subgraph of them; a workshop's lanes become subgraphs of cards), a mind map as a mindmap, a launch plan as a Gantt chart (format gantt, start is its first day). Returns the text, the same as a Markdown code block, and for a public slate its plain-text address (/slates/<id>.mmd). A public slate reads without a token. What Mermaid cannot say is named in warnings: dashed lines are written as Mermaid's one broken style (dotted), a line with an arrow only at its start is written from its other end, and a line with an end on the open canvas is left out. @scope slates:read */
   function exportMermaid(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
@@ -522,7 +579,7 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.slates {
-  /** Share by invitation. The registered owner turns on an unlisted link. Changing its role keeps the address. Public slates are changed in the Share dialog. Anyone holding the address gets the role. @scope slates:share @openWorld @confirm @idempotent */
+  /** Send invitation. The registered owner turns on an unlisted link. Changing its role keeps the address. Public slates are changed in the Share dialog. Anyone holding the address gets the role. @scope slates:share @openWorld @confirm @idempotent */
   function issueInvite(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
@@ -546,7 +603,7 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.team {
-  /** Export your team. For a team admin: a one-time address (15 minutes) to download everything the team owns as one archive, in the open team export format: slates with their boards and smart components, recent versions and events, comments, presentations, files, people and roles, published-link settings, AI connections (never keys) and the names and scopes of API tokens (never secrets). POST to downloadUrl to download; send a passphrase (form or JSON field "passphrase", the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or the Slatebox-Export-Passphrase header when it is plain ASCII; at least 12 characters, not starting or ending with a space) to encrypt the archive. The archive is signed and checked; import it with teamImports.start on any Slatebox server. @scope team:export @confirm */
+  /** Export team. For a team admin: a one-time address (15 minutes) to download everything the team owns as one archive, in the open team export format: slates with their boards and smart components, recent versions and events, comments, presentations, files, people and roles, published-link settings, AI connections (never keys) and the names and scopes of API tokens (never secrets). POST to downloadUrl to download; send a passphrase (form or JSON field "passphrase", the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or the Slatebox-Export-Passphrase header when it is plain ASCII; at least 12 characters, not starting or ending with a space) to encrypt the archive. The archive is signed and checked; import it with teamImports.start on any Slatebox server. @scope team:export @confirm */
   function export(input: Record<string, unknown>): Promise<({
     downloadUrl: string;
     method: "POST";
@@ -564,7 +621,7 @@ declare namespace slatebox.team {
 }
 
 declare namespace slatebox.teamImports {
-  /** Confirm an import. For an administrator of this server: makes a pending import's team live. Its slates and presentations get back the visibility they had (public, unlisted or private). With invite true, each person whose address the source had verified, and no account here uses in any letter case, gets an email to claim their placeholder; the answer lists addresses that already have an account (they must agree to move) and addresses the source had not verified (invite each with teamImports.invite once you have checked it). Board rules stay switched off until a team admin reviews them. @scope team:import @confirm */
+  /** Confirm import. For an administrator of this server: makes a pending import's team live. Its slates and presentations get back the visibility they had (public, unlisted or private). With invite true, each person whose address the source had verified, and no account here uses in any letter case, gets an email to claim their placeholder; the answer lists addresses that already have an account (they must agree to move) and addresses the source had not verified (invite each with teamImports.invite once you have checked it). Board rules stay switched off until a team admin reviews them. @scope team:import @confirm */
   function confirm(input: {
     importId: string;
     /** (default false) */
@@ -585,7 +642,7 @@ declare namespace slatebox.teamImports {
 }
 
 declare namespace slatebox.teamImports {
-  /** Discard an import. For an administrator of this server: deletes a pending import's hidden team and everything the import wrote (slates, files, people, settings). @scope team:import @destructive */
+  /** Discard import. For an administrator of this server: deletes a pending import's hidden team and everything the import wrote (slates, files, people, settings). @scope team:import @destructive */
   function discard(input: {
     importId: string;
   }): Promise<({
@@ -596,7 +653,7 @@ declare namespace slatebox.teamImports {
 }
 
 declare namespace slatebox.teamImports {
-  /** Read an import. For an administrator of this server: one import, with its report while it is pending or confirmed. @scope team:import */
+  /** Import. For an administrator of this server: one import, with its report while it is pending or confirmed. @scope team:import */
   function get(input: {
     importId: string;
   }): Promise<{
@@ -642,7 +699,7 @@ declare namespace slatebox.teamImports {
 }
 
 declare namespace slatebox.teamImports {
-  /** Invite a person. For an administrator of this server: after you have checked an address that a confirmed import listed as unverified (the source had not verified it), sends that person the email to claim their placeholder. An address any account here already uses, in any letter case, is not invited: that person must agree to move. @scope team:import @confirm */
+  /** Invite person. For an administrator of this server: after you have checked an address that a confirmed import listed as unverified (the source had not verified it), sends that person the email to claim their placeholder. An address any account here already uses, in any letter case, is not invited: that person must agree to move. @scope team:import @confirm */
   function invite(input: {
     importId: string;
     /** (3–320 characters) */
@@ -656,7 +713,7 @@ declare namespace slatebox.teamImports {
 }
 
 declare namespace slatebox.teamImports {
-  /** List imports. For an administrator of this server: recent team imports, pending ones first to confirm or discard. @scope team:import */
+  /** Imports. For an administrator of this server: recent team imports, pending ones first to confirm or discard. @scope team:import */
   function list(input: Record<string, unknown>): Promise<{
     imports: Array<{
       importId: string;
@@ -684,7 +741,7 @@ declare namespace slatebox.teamImports {
 }
 
 declare namespace slatebox.teamImports {
-  /** Start an import. For an administrator of this server: a one-time address (1 hour) to upload a team export to. POST the archive to uploadUrl as application/octet-stream, with its passphrase when it is encrypted: in the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes (any passphrase), or in the Slatebox-Export-Passphrase header when it is plain ASCII. The upload becomes a new hidden team, with new ids for everything, people as placeholders who cannot sign in, slates private, board rules switched off, no keys and no tokens; the answer is the report. Confirm or discard it with teamImports.confirm or teamImports.discard; a pending import is discarded after 14 days. @scope team:import */
+  /** Start import. For an administrator of this server: a one-time address (1 hour) to upload a team export to. POST the archive to uploadUrl as application/octet-stream, with its passphrase when it is encrypted: in the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes (any passphrase), or in the Slatebox-Export-Passphrase header when it is plain ASCII. The upload becomes a new hidden team, with new ids for everything, people as placeholders who cannot sign in, slates private, board rules switched off, no keys and no tokens; the answer is the report. Confirm or discard it with teamImports.confirm or teamImports.discard; a pending import is discarded after 14 days. @scope team:import */
   function start(input: Record<string, unknown>): Promise<({
     uploadUrl: string;
     method: "POST";

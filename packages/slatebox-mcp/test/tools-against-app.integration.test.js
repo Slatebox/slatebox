@@ -40,6 +40,7 @@ const { actions } = await import(new URL("server/actions/index.mjs", app));
 const { RATE_LIMITS } = await import(new URL("server/actions/rate-limit.mjs", app));
 const { createAISettings } = await import(new URL("server/methods/ai/ai-settings-core.mjs", app));
 const { createAgentPresence } = await import(new URL("server/presence/agentPresence.mjs", app));
+const { deckRecord } = await import(new URL("imports/ui/components/presentations/presentationCompose.mjs", app));
 
 const at = (doc, path) => path.split(".").reduce((value, key) => value?.[key], doc);
 function put(doc, path, value) {
@@ -135,8 +136,17 @@ async function instance(t) {
     isAdmin: async () => false, isTeamAdmin: async () => false,
     check: async (connection) => ({ ok: true, reachable: true, models: [connection.model], modelListed: true, chat: "ok", tools: "yes", message: "Connected." }),
   });
+  // The probe's deck of its canvas slate: a styled presentation, as Present saves one.
+  const box = (x) => ({ rotation: 0, bbox: { x, y: 0, width: 120, height: 60 } });
+  const deckLayout = { nodes: [{ nodeId: "a", description: "Plan", metrics: box(0), childrenNodes: [
+    { nodeId: "b", description: "Beta", metrics: box(300), childrenNodes: [] },
+    { nodeId: "c", description: "Gamma", metrics: box(600), childrenNodes: [] }] }] };
+  const deckRow = { _id: "deck1", version: 1, name: "Probe deck", presentationData: JSON.stringify(deckLayout), ...deckRecord({ layout: deckLayout, name: "Probe" }) };
+  const restyles = [];
   const registry = createAppRegistry({ deps: {
     ai,
+    latestPresentation: async (shareId, userId) => (shareId === "canvas" && userId === "owner" ? deckRow : null),
+    savePresentation: async (id, set) => { restyles.push([id, set.style]); Object.assign(deckRow, set); },
     instance: describer,
     accounts,
     // Wave 2 (P07): the service also says what the caller may do; the probe owns every slate.
@@ -238,7 +248,7 @@ async function instance(t) {
   };
   const stored = async (shareId) => slates.findOne({ shareId });
   const texts = async () => (await stored("canvas")).nodes.map((n) => n.options.text);
-  return { client, exec, ok, confirmed, called, stored, texts, invites, transfers };
+  return { client, exec, ok, confirmed, called, stored, texts, invites, transfers, deckRow, restyles };
 }
 
 // Every canvas edit names the revision it was made on (required since release/agentic): the
@@ -290,7 +300,7 @@ test("canvas edits change exactly the notes they name, and only when saved", asy
 });
 
 test("every client method succeeds against the app, and refusals keep status, code and details", async (t) => {
-  const { ok, exec, confirmed, called, stored, texts, invites, transfers } = await instance(t);
+  const { ok, exec, confirmed, called, stored, texts, invites, transfers, deckRow, restyles } = await instance(t);
 
   const created = await ok(`return slatebox.slates.create({ brief: "Request -> Review", kind: "diagram" })`);
   assert.equal(created.shareId, "created");
@@ -416,6 +426,14 @@ return slatebox.presence.step({ shareId: "canvas", index: 0, status: "done" })`)
   assert.deepEqual([shaped.mode, shaped.shape.name], ["save", "Box"]);
   const boxed = (await stored("canvas")).nodes.find((n) => n.options.id === "b").options;
   assert.deepEqual([boxed.shape, boxed.shapeRef], ["custom", { id: "s1", name: "Box" }]);
+  // Presentations (new): read a slate's deck, and restyle it in one call (the same steps, no AI).
+  const deck = await ok(`return slatebox.presentations.get({ shareId: "canvas" })`);
+  assert.equal(deck.style, deckRow.style.id);
+  assert.equal(deck.steps[0].layout, "title");
+  const restyled = await ok(`return slatebox.presentations.setStyle({ shareId: "canvas", style: "neon" })`);
+  assert.equal(restyled.style, "neon");
+  assert.deepEqual(restyled.steps.map((step) => step.layout), deck.steps.map((step) => step.layout));
+  assert.deepEqual(restyles, [["deck1", { id: "neon" }]]);
 
   assert.deepEqual([...called].sort(), [...defaultGenerated().methods.keys()].sort(), "every client method was called");
 });

@@ -27,6 +27,7 @@ import componentsList, { componentsGet } from './components-list.mjs'
 import slatesCheckMove from './slate-check-move.mjs'
 import teamTransfer from './team-transfer.mjs'
 import shapeActions from './shapes.mjs'
+import presentationActions from './presentations.mjs'
 
 export const actions = [
   slatesGet,
@@ -55,6 +56,7 @@ export const actions = [
   slatesCheckMove,
   ...teamTransfer,
   ...shapeActions,
+  ...presentationActions,
 ]
 
 export const components = { ...slateComponents }

@@ -159,7 +159,7 @@
     {
       "name": "account.get",
       "id": "account.get",
-      "title": "Read account",
+      "title": "Account",
       "summary": "Your name, address and whether it is verified, team and claims, AI drafting access, what is included this month (ai.included, null on a server with no meter) and whether you have Slatebox Pro (ai.pro, null without it), the token you called with, and the addresses where you change what a token may not (profile, and Credits for Slatebox Pro and top-ups). Getting Pro or topping up is done by a person in the profile, never through a token: give them links.pay (Get Pro, or Your Pro once they have it) or links.topUp, which open the payment in the app. Education is null on a self-hosted instance.",
       "kind": "read",
       "readOnly": true,
@@ -176,13 +176,13 @@
         "queryParams": [],
         "bodyParams": []
       },
-      "index": "account.get({}) — Read account",
+      "index": "account.get({}) — Account",
       "types": [],
-      "dts": "declare namespace slatebox.account {\n  /** Read account. Your name, address and whether it is verified, team and claims, AI drafting access, what is included this month (ai.included, null on a server with no meter) and whether you have Slatebox Pro (ai.pro, null without it), the token you called with, and the addresses where you change what a token may not (profile, and Credits for Slatebox Pro and top-ups). Getting Pro or topping up is done by a person in the profile, never through a token: give them links.pay (Get Pro, or Your Pro once they have it) or links.topUp, which open the payment in the app. Education is null on a self-hosted instance. */\n  function get(input: Record<string, unknown>): Promise<{\n    id: string;\n    name: string;\n    email?: string | null;\n    emailVerified?: boolean;\n    team?: Record<string, unknown> | null;\n    education?: \"none\" | \"requested\" | \"certified\" | null;\n    ai: Record<string, unknown>;\n    token?: Record<string, unknown> | null;\n    links: Record<string, unknown>;\n    [key: string]: unknown;\n  }>;\n}",
+      "dts": "declare namespace slatebox.account {\n  /** Account. Your name, address and whether it is verified, team and claims, AI drafting access, what is included this month (ai.included, null on a server with no meter) and whether you have Slatebox Pro (ai.pro, null without it), the token you called with, and the addresses where you change what a token may not (profile, and Credits for Slatebox Pro and top-ups). Getting Pro or topping up is done by a person in the profile, never through a token: give them links.pay (Get Pro, or Your Pro once they have it) or links.topUp, which open the payment in the app. Education is null on a self-hosted instance. */\n  function get(input: Record<string, unknown>): Promise<{\n    id: string;\n    name: string;\n    email?: string | null;\n    emailVerified?: boolean;\n    team?: Record<string, unknown> | null;\n    education?: \"none\" | \"requested\" | \"certified\" | null;\n    ai: Record<string, unknown>;\n    token?: Record<string, unknown> | null;\n    links: Record<string, unknown>;\n    [key: string]: unknown;\n  }>;\n}",
       "tool": {
         "name": "get_account",
         "title": "Read your account",
-        "description": "Read the person's Slatebox account: name, team, what they can use and their AI drafting access. Use when they ask about their account or what they can do.\n\nRead account. Your name, address and whether it is verified, team and claims, AI drafting access, what is included this month (ai.included, null on a server with no meter) and whether you have Slatebox Pro (ai.pro, null without it), the token you called with, and the addresses where you change what a token may not (profile, and Credits for Slatebox Pro and top-ups). Getting Pro or topping up is done by a person in the profile, never through a token: give them links.pay (Get Pro, or Your Pro once they have it) or links.topUp, which open the payment in the app. Education is null on a self-hosted instance.",
+        "description": "Read the person's Slatebox account: name, team, what they can use and their AI drafting access. Use when they ask about their account or what they can do.\n\nAccount. Your name, address and whether it is verified, team and claims, AI drafting access, what is included this month (ai.included, null on a server with no meter) and whether you have Slatebox Pro (ai.pro, null without it), the token you called with, and the addresses where you change what a token may not (profile, and Credits for Slatebox Pro and top-ups). Getting Pro or topping up is done by a person in the profile, never through a token: give them links.pay (Get Pro, or Your Pro once they have it) or links.topUp, which open the payment in the app. Education is null on a self-hosted instance.",
         "inputSchema": {
           "type": "object",
           "properties": {},
@@ -340,7 +340,7 @@
     {
       "name": "ai.get",
       "id": "ai.get",
-      "title": "Read AI settings",
+      "title": "AI settings",
       "summary": "The AI connections you, your team and this server have (never their keys), which one each feature uses (chat, generation, presentation, vision, images, shape, and the default), and which connection serves each feature for you now (effective), with what it cannot do. ownProviders false means this server uses only the AI its operator set up.",
       "kind": "read",
       "readOnly": true,
@@ -357,13 +357,13 @@
         "queryParams": [],
         "bodyParams": []
       },
-      "index": "ai.get({}) — Read AI settings",
+      "index": "ai.get({}) — AI settings",
       "types": [],
-      "dts": "declare namespace slatebox.ai {\n  /** Read AI settings. The AI connections you, your team and this server have (never their keys), which one each feature uses (chat, generation, presentation, vision, images, shape, and the default), and which connection serves each feature for you now (effective), with what it cannot do. ownProviders false means this server uses only the AI its operator set up. @scope ai:settings */\n  function get(input: Record<string, unknown>): Promise<{\n    features: Array<Record<string, unknown>>;\n    useKeys?: string[];\n    ownProviders: boolean;\n    keysAvailable?: boolean;\n    hosted?: boolean;\n    mine?: Record<string, unknown> | null;\n    team?: Record<string, unknown> | null;\n    server: Record<string, unknown>;\n    effective: Record<string, unknown>;\n    [key: string]: unknown;\n  }>;\n}",
+      "dts": "declare namespace slatebox.ai {\n  /** AI settings. The AI connections you, your team and this server have (never their keys), which one each feature uses (chat, generation, presentation, vision, images, shape, and the default), and which connection serves each feature for you now (effective), with what it cannot do. ownProviders false means this server uses only the AI its operator set up. @scope ai:settings */\n  function get(input: Record<string, unknown>): Promise<{\n    features: Array<Record<string, unknown>>;\n    useKeys?: string[];\n    ownProviders: boolean;\n    keysAvailable?: boolean;\n    hosted?: boolean;\n    mine?: Record<string, unknown> | null;\n    team?: Record<string, unknown> | null;\n    server: Record<string, unknown>;\n    effective: Record<string, unknown>;\n    [key: string]: unknown;\n  }>;\n}",
       "tool": {
         "name": "get_ai_settings",
         "title": "Read your AI settings",
-        "description": "Read which AI connections the person, their team and this server have, and which one each Slatebox feature uses. Keys are never returned.\n\nRead AI settings. The AI connections you, your team and this server have (never their keys), which one each feature uses (chat, generation, presentation, vision, images, shape, and the default), and which connection serves each feature for you now (effective), with what it cannot do. ownProviders false means this server uses only the AI its operator set up.",
+        "description": "Read which AI connections the person, their team and this server have, and which one each Slatebox feature uses. Keys are never returned.\n\nAI settings. The AI connections you, your team and this server have (never their keys), which one each feature uses (chat, generation, presentation, vision, images, shape, and the default), and which connection serves each feature for you now (effective), with what it cannot do. ownProviders false means this server uses only the AI its operator set up.",
         "inputSchema": {
           "type": "object",
           "properties": {},
@@ -380,7 +380,7 @@
     {
       "name": "ai.update",
       "id": "ai.update",
-      "title": "Change AI settings",
+      "title": "Set AI",
       "summary": "Adds or changes AI connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins), server this server's (administrators; ownProviders on or off lets people use their own). Mix freely: a choice names me:<name>, team:<name>, server:<name> or builtin. Keys are stored encrypted and never returned, and a run's record keeps its code with the apiKey replaced; still, send a key through this route, the CLI or the update_ai_settings tool rather than building it inside an exec script. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI (levels me and team) is for self-hosted Slatebox: Slatebox Cloud refuses it, as AI there comes with Slatebox Pro credits and top-ups.",
       "kind": "write",
       "readOnly": false,
@@ -405,13 +405,13 @@
           "ownProviders"
         ]
       },
-      "index": "ai.update({level, connections?, remove?, use?, ownProviders?}) — Change AI settings",
+      "index": "ai.update({level, connections?, remove?, use?, ownProviders?}) — Set AI",
       "types": [],
-      "dts": "declare namespace slatebox.ai {\n  /** Change AI settings. Adds or changes AI connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins), server this server's (administrators; ownProviders on or off lets people use their own). Mix freely: a choice names me:<name>, team:<name>, server:<name> or builtin. Keys are stored encrypted and never returned, and a run's record keeps its code with the apiKey replaced; still, send a key through this route, the CLI or the update_ai_settings tool rather than building it inside an exec script. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI (levels me and team) is for self-hosted Slatebox: Slatebox Cloud refuses it, as AI there comes with Slatebox Pro credits and top-ups. @scope ai:settings @destructive @confirm @idempotent */\n  function update(input: {\n    /** me (yours), team (team admins) or server (administrators). */\n    level: \"me\" | \"team\" | \"server\";\n    /** (at most 20 items) */\n    connections?: Array<{\n      /** Your name for it, for example desk-model. */\n      name: string;\n      /** openai-compatible covers any host or local server (Ollama, llama.cpp, vLLM, LM Studio and others). */\n      type: \"openai-compatible\" | \"openai\" | \"anthropic\" | \"deepinfra\";\n      /** For openai-compatible: the address up to /v1, for example http://host.docker.internal:11434/v1. (at most 500 characters) */\n      baseUrl?: string;\n      /** The model name the endpoint serves. (at most 200 characters) */\n      model?: string;\n      /** Stored encrypted and never shown again. Leave it out to keep the saved key; send an empty string to remove it. (at most 400 characters) */\n      apiKey?: string;\n      /** What the model can do, where you know it. Unset means try it; making images needs images: true. */\n      capabilities?: {\n        tools?: boolean;\n        vision?: boolean;\n        images?: boolean;\n      };\n      /** (256 to 200000) */\n      maxTokens?: number;\n      /** How the endpoint takes a forced tool call: named (the function by name), required (any tool, for an endpoint with no named form) or auto (the model decides, for an endpoint that refuses the others). */\n      toolChoice?: \"auto\" | \"named\" | \"required\";\n    }>;\n    /** (at most 20 items) */\n    remove?: string[];\n    /** Which connection each feature uses. default serves every feature not named. */\n    use?: {\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      default?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      chat?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      generation?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      presentation?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      vision?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      images?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      shape?: string | null;\n    };\n    ownProviders?: \"on\" | \"off\";\n  }): Promise<({\n    features: Array<Record<string, unknown>>;\n    useKeys?: string[];\n    ownProviders: boolean;\n    keysAvailable?: boolean;\n    hosted?: boolean;\n    mine?: Record<string, unknown> | null;\n    team?: Record<string, unknown> | null;\n    server: Record<string, unknown>;\n    effective: Record<string, unknown>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.ai {\n  /** Set AI. Adds or changes AI connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins), server this server's (administrators; ownProviders on or off lets people use their own). Mix freely: a choice names me:<name>, team:<name>, server:<name> or builtin. Keys are stored encrypted and never returned, and a run's record keeps its code with the apiKey replaced; still, send a key through this route, the CLI or the update_ai_settings tool rather than building it inside an exec script. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI (levels me and team) is for self-hosted Slatebox: Slatebox Cloud refuses it, as AI there comes with Slatebox Pro credits and top-ups. @scope ai:settings @destructive @confirm @idempotent */\n  function update(input: {\n    /** me (yours), team (team admins) or server (administrators). */\n    level: \"me\" | \"team\" | \"server\";\n    /** (at most 20 items) */\n    connections?: Array<{\n      /** Your name for it, for example desk-model. */\n      name: string;\n      /** openai-compatible covers any host or local server (Ollama, llama.cpp, vLLM, LM Studio and others). */\n      type: \"openai-compatible\" | \"openai\" | \"anthropic\" | \"deepinfra\";\n      /** For openai-compatible: the address up to /v1, for example http://host.docker.internal:11434/v1. (at most 500 characters) */\n      baseUrl?: string;\n      /** The model name the endpoint serves. (at most 200 characters) */\n      model?: string;\n      /** Stored encrypted and never shown again. Leave it out to keep the saved key; send an empty string to remove it. (at most 400 characters) */\n      apiKey?: string;\n      /** What the model can do, where you know it. Unset means try it; making images needs images: true. */\n      capabilities?: {\n        tools?: boolean;\n        vision?: boolean;\n        images?: boolean;\n      };\n      /** (256 to 200000) */\n      maxTokens?: number;\n      /** How the endpoint takes a forced tool call: named (the function by name), required (any tool, for an endpoint with no named form) or auto (the model decides, for an endpoint that refuses the others). */\n      toolChoice?: \"auto\" | \"named\" | \"required\";\n    }>;\n    /** (at most 20 items) */\n    remove?: string[];\n    /** Which connection each feature uses. default serves every feature not named. */\n    use?: {\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      default?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      chat?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      generation?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      presentation?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      vision?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      images?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      shape?: string | null;\n    };\n    ownProviders?: \"on\" | \"off\";\n  }): Promise<({\n    features: Array<Record<string, unknown>>;\n    useKeys?: string[];\n    ownProviders: boolean;\n    keysAvailable?: boolean;\n    hosted?: boolean;\n    mine?: Record<string, unknown> | null;\n    team?: Record<string, unknown> | null;\n    server: Record<string, unknown>;\n    effective: Record<string, unknown>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "update_ai_settings",
         "title": "Change AI connections and choices",
-        "description": "Add, change or remove the AI connections Slatebox drafts with, and choose which connection each feature uses.\n\nChange AI settings. Adds or changes AI connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins), server this server's (administrators; ownProviders on or off lets people use their own). Mix freely: a choice names me:<name>, team:<name>, server:<name> or builtin. Keys are stored encrypted and never returned, and a run's record keeps its code with the apiKey replaced; still, send a key through this route, the CLI or the update_ai_settings tool rather than building it inside an exec script. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI (levels me and team) is for self-hosted Slatebox: Slatebox Cloud refuses it, as AI there comes with Slatebox Pro credits and top-ups.",
+        "description": "Add, change or remove the AI connections Slatebox drafts with, and choose which connection each feature uses.\n\nSet AI. Adds or changes AI connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins), server this server's (administrators; ownProviders on or off lets people use their own). Mix freely: a choice names me:<name>, team:<name>, server:<name> or builtin. Keys are stored encrypted and never returned, and a run's record keeps its code with the apiKey replaced; still, send a key through this route, the CLI or the update_ai_settings tool rather than building it inside an exec script. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI (levels me and team) is for self-hosted Slatebox: Slatebox Cloud refuses it, as AI there comes with Slatebox Pro credits and top-ups.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -604,7 +604,7 @@
     {
       "name": "components.get",
       "id": "components.get",
-      "title": "Read a library entry",
+      "title": "Library entry",
       "summary": "One entry of the library (an id from components.list) with everything components.list gives plus the phrases that make each change (moves: the words a person says, what the board answers and the edit it makes) and the looping picture's steps. With shareId, whether it fits that slate.",
       "kind": "read",
       "readOnly": true,
@@ -625,13 +625,13 @@
         ],
         "bodyParams": []
       },
-      "index": "components.get({id, shareId?}) — Read a library entry",
+      "index": "components.get({id, shareId?}) — Library entry",
       "types": [],
-      "dts": "declare namespace slatebox.components {\n  /** Read a library entry. One entry of the library (an id from components.list) with everything components.list gives plus the phrases that make each change (moves: the words a person says, what the board answers and the edit it makes) and the looping picture's steps. With shareId, whether it fits that slate. @scope slates:read */\n  function get(input: {\n    /** The library entry (components.list ids). (1–100 characters) */\n    id: string;\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId?: string;\n  }): Promise<{\n    catalogVersion: string;\n    component: Record<string, unknown>;\n    [key: string]: unknown;\n  }>;\n}",
+      "dts": "declare namespace slatebox.components {\n  /** Library entry. One entry of the library (an id from components.list) with everything components.list gives plus the phrases that make each change (moves: the words a person says, what the board answers and the edit it makes) and the looping picture's steps. With shareId, whether it fits that slate. @scope slates:read */\n  function get(input: {\n    /** The library entry (components.list ids). (1–100 characters) */\n    id: string;\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId?: string;\n  }): Promise<{\n    catalogVersion: string;\n    component: Record<string, unknown>;\n    [key: string]: unknown;\n  }>;\n}",
       "tool": {
         "name": "get_component",
         "title": "Read a board or starter",
-        "description": "Read one board or starter from the library in full, by the id list_components gives.\n\nRead a library entry. One entry of the library (an id from components.list) with everything components.list gives plus the phrases that make each change (moves: the words a person says, what the board answers and the edit it makes) and the looping picture's steps. With shareId, whether it fits that slate.",
+        "description": "Read one board or starter from the library in full, by the id list_components gives.\n\nLibrary entry. One entry of the library (an id from components.list) with everything components.list gives plus the phrases that make each change (moves: the words a person says, what the board answers and the edit it makes) and the looping picture's steps. With shareId, whether it fits that slate.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -665,7 +665,7 @@
     {
       "name": "components.list",
       "id": "components.list",
-      "title": "List the library",
+      "title": "Library",
       "summary": "Everything a person can add to a slate from the library (boards and starters): each entry with its group, one line, the message that adds it (\"Add a retro\"), the edits it takes (joined to the workshop_edits table), the rule kinds it can be given by chat, its limits and its looping picture. The phrases that make each change (moves) and the picture's steps come with components.get for one entry. With shareId, whether each fits that slate: a slate holds up to 8 boards, side by side. Add one to a slate with slates.applyOperations (plan operation add_component, with the slate revision), the same door as the chat's Add; it goes beside the boards already there.",
       "kind": "read",
       "readOnly": true,
@@ -684,13 +684,13 @@
         ],
         "bodyParams": []
       },
-      "index": "components.list({shareId?}) — List the library",
+      "index": "components.list({shareId?}) — Library",
       "types": [],
-      "dts": "declare namespace slatebox.components {\n  /** List the library. Everything a person can add to a slate from the library (boards and starters): each entry with its group, one line, the message that adds it (\"Add a retro\"), the edits it takes (joined to the workshop_edits table), the rule kinds it can be given by chat, its limits and its looping picture. The phrases that make each change (moves) and the picture's steps come with components.get for one entry. With shareId, whether each fits that slate: a slate holds up to 8 boards, side by side. Add one to a slate with slates.applyOperations (plan operation add_component, with the slate revision), the same door as the chat's Add; it goes beside the boards already there. @scope slates:read */\n  function list(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId?: string;\n  }): Promise<{\n    catalogVersion: string;\n    components: Array<Record<string, unknown>>;\n    [key: string]: unknown;\n  }>;\n}",
+      "dts": "declare namespace slatebox.components {\n  /** Library. Everything a person can add to a slate from the library (boards and starters): each entry with its group, one line, the message that adds it (\"Add a retro\"), the edits it takes (joined to the workshop_edits table), the rule kinds it can be given by chat, its limits and its looping picture. The phrases that make each change (moves) and the picture's steps come with components.get for one entry. With shareId, whether each fits that slate: a slate holds up to 8 boards, side by side. Add one to a slate with slates.applyOperations (plan operation add_component, with the slate revision), the same door as the chat's Add; it goes beside the boards already there. @scope slates:read */\n  function list(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId?: string;\n  }): Promise<{\n    catalogVersion: string;\n    components: Array<Record<string, unknown>>;\n    [key: string]: unknown;\n  }>;\n}",
       "tool": {
         "name": "list_components",
         "title": "List boards and starters",
-        "description": "List the boards and starters a person can add to a slate (such as pipeline, budget, hiring plan, launch plan and release plan boards), with what each one is for. A slate holds up to 8 boards side by side.\n\nList the library. Everything a person can add to a slate from the library (boards and starters): each entry with its group, one line, the message that adds it (\"Add a retro\"), the edits it takes (joined to the workshop_edits table), the rule kinds it can be given by chat, its limits and its looping picture. The phrases that make each change (moves) and the picture's steps come with components.get for one entry. With shareId, whether each fits that slate: a slate holds up to 8 boards, side by side. Add one to a slate with slates.applyOperations (plan operation add_component, with the slate revision), the same door as the chat's Add; it goes beside the boards already there.",
+        "description": "List the boards and starters a person can add to a slate (such as pipeline, budget, hiring plan, launch plan and release plan boards), with what each one is for. A slate holds up to 8 boards side by side.\n\nLibrary. Everything a person can add to a slate from the library (boards and starters): each entry with its group, one line, the message that adds it (\"Add a retro\"), the edits it takes (joined to the workshop_edits table), the rule kinds it can be given by chat, its limits and its looping picture. The phrases that make each change (moves) and the picture's steps come with components.get for one entry. With shareId, whether each fits that slate: a slate holds up to 8 boards, side by side. Add one to a slate with slates.applyOperations (plan operation add_component, with the slate revision), the same door as the chat's Add; it goes beside the boards already there.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -715,7 +715,7 @@
     {
       "name": "instance.describe",
       "id": "instance.describe",
-      "title": "Describe",
+      "title": "Server",
       "summary": "What this Slatebox instance is and can do. Without a token: its id, name, contract version and where to sign in. With a token: also the build, capability flags, limits, the canvas and workshop vocabularies, the routes it serves and your account.",
       "kind": "read",
       "readOnly": true,
@@ -732,13 +732,13 @@
         "queryParams": [],
         "bodyParams": []
       },
-      "index": "instance.describe({}) — Describe",
+      "index": "instance.describe({}) — Server",
       "types": [],
-      "dts": "declare namespace slatebox.instance {\n  /** Describe. What this Slatebox instance is and can do. Without a token: its id, name, contract version and where to sign in. With a token: also the build, capability flags, limits, the canvas and workshop vocabularies, the routes it serves and your account. */\n  function describe(input: Record<string, unknown>): Promise<{\n    view: \"public\" | \"account\";\n    instance: {\n      id: string;\n      name: string;\n      origin: string;\n      lineage?: string;\n      [key: string]: unknown;\n    };\n    contract: {\n      version: string;\n      major: number;\n      minor: number;\n      [key: string]: unknown;\n    };\n    api: Record<string, unknown>;\n    signIn: Record<string, unknown>;\n    connect: Record<string, unknown>;\n    link: Record<string, unknown>;\n    build?: Record<string, unknown>;\n    capabilities?: Record<string, unknown>;\n    limits?: Record<string, unknown>;\n    canvas?: Record<string, unknown>;\n    workshops?: Record<string, unknown>;\n    actions?: Array<Record<string, unknown>>;\n    account?: Record<string, unknown>;\n    [key: string]: unknown;\n  }>;\n}",
+      "dts": "declare namespace slatebox.instance {\n  /** Server. What this Slatebox instance is and can do. Without a token: its id, name, contract version and where to sign in. With a token: also the build, capability flags, limits, the canvas and workshop vocabularies, the routes it serves and your account. */\n  function describe(input: Record<string, unknown>): Promise<{\n    view: \"public\" | \"account\";\n    instance: {\n      id: string;\n      name: string;\n      origin: string;\n      lineage?: string;\n      [key: string]: unknown;\n    };\n    contract: {\n      version: string;\n      major: number;\n      minor: number;\n      [key: string]: unknown;\n    };\n    api: Record<string, unknown>;\n    signIn: Record<string, unknown>;\n    connect: Record<string, unknown>;\n    link: Record<string, unknown>;\n    build?: Record<string, unknown>;\n    capabilities?: Record<string, unknown>;\n    limits?: Record<string, unknown>;\n    canvas?: Record<string, unknown>;\n    workshops?: Record<string, unknown>;\n    actions?: Array<Record<string, unknown>>;\n    account?: Record<string, unknown>;\n    [key: string]: unknown;\n  }>;\n}",
       "tool": {
         "name": "describe_instance",
         "title": "Describe this instance",
-        "description": "Describe the Slatebox server these tools talk to: its name, version, what it can do and where its API is.\n\nDescribe. What this Slatebox instance is and can do. Without a token: its id, name, contract version and where to sign in. With a token: also the build, capability flags, limits, the canvas and workshop vocabularies, the routes it serves and your account.",
+        "description": "Describe the Slatebox server these tools talk to: its name, version, what it can do and where its API is.\n\nServer. What this Slatebox instance is and can do. Without a token: its id, name, contract version and where to sign in. With a token: also the build, capability flags, limits, the canvas and workshop vocabularies, the routes it serves and your account.",
         "inputSchema": {
           "type": "object",
           "properties": {},
@@ -845,7 +845,7 @@
     {
       "name": "presence.step",
       "id": "presence.step",
-      "title": "Tick a plan step",
+      "title": "Tick step",
       "summary": "Mark a step of the plan set with presence.plan as doing, done or skipped. When a step is done and none is under way, the next one starts; a step under way is done when another starts or the run ends. At most 40 per run. A preview run changes nothing.",
       "kind": "write",
       "readOnly": false,
@@ -870,13 +870,13 @@
           "status"
         ]
       },
-      "index": "presence.step({shareId, index, status, mode?}) — Tick a plan step",
+      "index": "presence.step({shareId, index, status, mode?}) — Tick step",
       "types": [],
-      "dts": "declare namespace slatebox.presence {\n  /** Tick a plan step. Mark a step of the plan set with presence.plan as doing, done or skipped. When a step is done and none is under way, the next one starts; a step under way is done when another starts or the run ends. At most 40 per run. A preview run changes nothing. @scope slates:write @modes save|preview */\n  function step(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    /** The step, from 0. (0 to 7) */\n    index: number;\n    status: \"doing\" | \"done\" | \"skipped\";\n    /** preview returns what would change and saves nothing. (default \"save\") */\n    mode?: \"save\" | \"preview\";\n  }): Promise<({\n    ok: boolean;\n    mode?: \"save\" | \"preview\";\n    shareId: string;\n    plan: {\n      steps: Array<{\n        text: string;\n        status: \"todo\" | \"doing\" | \"done\" | \"skipped\" | \"stopped\";\n        [key: string]: unknown;\n      }>;\n      /** The step under way. (at least 0) */\n      current: number;\n      [key: string]: unknown;\n    };\n    [key: string]: unknown;\n  }) & { mode: \"save\" | \"preview\" }>;\n}",
+      "dts": "declare namespace slatebox.presence {\n  /** Tick step. Mark a step of the plan set with presence.plan as doing, done or skipped. When a step is done and none is under way, the next one starts; a step under way is done when another starts or the run ends. At most 40 per run. A preview run changes nothing. @scope slates:write @modes save|preview */\n  function step(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    /** The step, from 0. (0 to 7) */\n    index: number;\n    status: \"doing\" | \"done\" | \"skipped\";\n    /** preview returns what would change and saves nothing. (default \"save\") */\n    mode?: \"save\" | \"preview\";\n  }): Promise<({\n    ok: boolean;\n    mode?: \"save\" | \"preview\";\n    shareId: string;\n    plan: {\n      steps: Array<{\n        text: string;\n        status: \"todo\" | \"doing\" | \"done\" | \"skipped\" | \"stopped\";\n        [key: string]: unknown;\n      }>;\n      /** The step under way. (at least 0) */\n      current: number;\n      [key: string]: unknown;\n    };\n    [key: string]: unknown;\n  }) & { mode: \"save\" | \"preview\" }>;\n}",
       "tool": {
         "name": "tick_plan_step",
         "title": "Tick a step of your plan",
-        "description": "Mark a step of the plan shown with show_plan as doing, done or skipped.\n\nTick a plan step. Mark a step of the plan set with presence.plan as doing, done or skipped. When a step is done and none is under way, the next one starts; a step under way is done when another starts or the run ends. At most 40 per run. A preview run changes nothing.",
+        "description": "Mark a step of the plan shown with show_plan as doing, done or skipped.\n\nTick step. Mark a step of the plan set with presence.plan as doing, done or skipped. When a step is done and none is under way, the next one starts; a step under way is done when another starts or the run ends. At most 40 per run. A preview run changes nothing.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -932,6 +932,151 @@
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "presentations.get",
+      "id": "presentations.get",
+      "title": "Deck",
+      "summary": "Read your latest presentation of a slate: its style, and each step's layout (title, overview, dive, hero, treeBuild, trace, sweep, group, bigNumber, quote, split, compare, cover, finale), kicker and caption. The deck plays on the live canvas with Prezi-style camera moves.",
+      "kind": "read",
+      "readOnly": true,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "slates:read",
+      "modes": [],
+      "idempotency": "none",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/slates/{shareId}/presentation",
+        "pathParams": [
+          "shareId"
+        ],
+        "queryParams": [],
+        "bodyParams": []
+      },
+      "index": "presentations.get({shareId}) — Deck",
+      "types": [],
+      "dts": "declare namespace slatebox.presentations {\n  /** Deck. Read your latest presentation of a slate: its style, and each step's layout (title, overview, dive, hero, treeBuild, trace, sweep, group, bigNumber, quote, split, compare, cover, finale), kicker and caption. The deck plays on the live canvas with Prezi-style camera moves. @scope slates:read */\n  function get(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n  }): Promise<{\n    presentationId: string;\n    version?: number;\n    name?: string;\n    published?: boolean;\n    /** The style it plays in. */\n    style: \"voyage\" | \"stage\" | \"editorial\" | \"neon\" | \"sketch\" | \"blueprint\" | \"journey\" | \"calm\" | null;\n    /** Every style it can play in. */\n    styles?: string[];\n    steps: Array<{\n      step: number;\n      layout: \"title\" | \"overview\" | \"dive\" | \"hero\" | \"treeBuild\" | \"trace\" | \"sweep\" | \"group\" | \"bigNumber\" | \"quote\" | \"split\" | \"compare\" | \"cover\" | \"finale\";\n      kicker?: string;\n      caption: string;\n      /** How many of the slate's notes the step shows. */\n      notes?: number;\n      [key: string]: unknown;\n    }>;\n    [key: string]: unknown;\n  }>;\n}",
+      "tool": {
+        "name": "get_presentation",
+        "title": "Read a presentation",
+        "description": "Read a slate's presentation: its style and each step's layout and caption.\n\nDeck. Read your latest presentation of a slate: its style, and each step's layout (title, overview, dive, hero, treeBuild, trace, sweep, group, bigNumber, quote, split, compare, cover, finale), kicker and caption. The deck plays on the live canvas with Prezi-style camera moves.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "shareId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "The slate ID from its address: /canvas/<shareId>."
+            }
+          },
+          "required": [
+            "shareId"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "presentations.setStyle",
+      "id": "presentations.setStyle",
+      "title": "Restyle",
+      "summary": "Play your latest presentation of a slate in another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), optionally with your own palette (3 to 6 colours). The same steps in the same order: no AI is asked and nothing is counted.",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "slates:write",
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/slates/{shareId}/presentation/style",
+        "pathParams": [
+          "shareId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "style",
+          "palette"
+        ]
+      },
+      "index": "presentations.setStyle({shareId, style, palette?}) — Restyle",
+      "types": [],
+      "dts": "declare namespace slatebox.presentations {\n  /** Restyle. Play your latest presentation of a slate in another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), optionally with your own palette (3 to 6 colours). The same steps in the same order: no AI is asked and nothing is counted. @scope slates:write @idempotent */\n  function setStyle(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    style: \"voyage\" | \"stage\" | \"editorial\" | \"neon\" | \"sketch\" | \"blueprint\" | \"journey\" | \"calm\";\n    /** Your own colours: the first three lead, the background stays the style's. (3–6 items) */\n    palette?: string[];\n  }): Promise<({\n    presentationId: string;\n    version?: number;\n    name?: string;\n    published?: boolean;\n    /** The style it plays in. */\n    style: \"voyage\" | \"stage\" | \"editorial\" | \"neon\" | \"sketch\" | \"blueprint\" | \"journey\" | \"calm\" | null;\n    /** Every style it can play in. */\n    styles?: string[];\n    steps: Array<{\n      step: number;\n      layout: \"title\" | \"overview\" | \"dive\" | \"hero\" | \"treeBuild\" | \"trace\" | \"sweep\" | \"group\" | \"bigNumber\" | \"quote\" | \"split\" | \"compare\" | \"cover\" | \"finale\";\n      kicker?: string;\n      caption: string;\n      /** How many of the slate's notes the step shows. */\n      notes?: number;\n      [key: string]: unknown;\n    }>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "tool": {
+        "name": "style_presentation",
+        "title": "Restyle a presentation",
+        "description": "Switch a slate's presentation to another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), keeping its steps.\n\nRestyle. Play your latest presentation of a slate in another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), optionally with your own palette (3 to 6 colours). The same steps in the same order: no AI is asked and nothing is counted.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "shareId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "The slate ID from its address: /canvas/<shareId>."
+            },
+            "style": {
+              "type": "string",
+              "enum": [
+                "voyage",
+                "stage",
+                "editorial",
+                "neon",
+                "sketch",
+                "blueprint",
+                "journey",
+                "calm"
+              ]
+            },
+            "palette": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 6,
+              "items": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "description": "Your own colours: the first three lead, the background stays the style's."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "required": [
+            "shareId",
+            "style"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": true,
           "openWorldHint": false
         }
       }
@@ -1297,7 +1442,7 @@
     {
       "name": "slates.checkMove",
       "id": "slates.checkMove",
-      "title": "Check a move",
+      "title": "Check move",
       "summary": "Whether a card may move to a lane on one of the slate's boards (boardId; required on a slate of several boards, 400 board_required lists them), without moving it: the same verdict a drag gets. On a nested board (piles, a tree) name the card it goes under instead (under), or the area it goes to (lane). Answers {ok: true, warnings} or {refused: {sentence, ruleId, nearest, set}}: the one rule that refuses it (ruleId null for the board's own kind rule), who set it, and the nearest lane (or card) it may go to. rev is the rulebook's revision. Name cards and lanes by id or by name.",
       "kind": "read",
       "readOnly": true,
@@ -1321,13 +1466,13 @@
         ],
         "bodyParams": []
       },
-      "index": "slates.checkMove({shareId, boardId?, card, lane?, under?}) — Check a move",
+      "index": "slates.checkMove({shareId, boardId?, card, lane?, under?}) — Check move",
       "types": [],
-      "dts": "declare namespace slatebox.slates {\n  /** Check a move. Whether a card may move to a lane on one of the slate's boards (boardId; required on a slate of several boards, 400 board_required lists them), without moving it: the same verdict a drag gets. On a nested board (piles, a tree) name the card it goes under instead (under), or the area it goes to (lane). Answers {ok: true, warnings} or {refused: {sentence, ruleId, nearest, set}}: the one rule that refuses it (ruleId null for the board's own kind rule), who set it, and the nearest lane (or card) it may go to. rev is the rulebook's revision. Name cards and lanes by id or by name. @scope slates:read */\n  function checkMove(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    /** The board (slates.get boards[].id; main is the first). Required when the slate holds several boards. */\n    boardId?: string;\n    /** An id, or what a person calls it. (1–200 characters) */\n    card: string;\n    /** An id, or what a person calls it. (1–200 characters) */\n    lane?: string;\n    /** Nested board: the card it goes under (an id, or what a person calls it). (1–200 characters) */\n    under?: string;\n  }): Promise<{\n    revision: number;\n    rev: number;\n    ok?: boolean;\n    warnings?: string[];\n    refused?: Record<string, unknown>;\n    [key: string]: unknown;\n  }>;\n}",
+      "dts": "declare namespace slatebox.slates {\n  /** Check move. Whether a card may move to a lane on one of the slate's boards (boardId; required on a slate of several boards, 400 board_required lists them), without moving it: the same verdict a drag gets. On a nested board (piles, a tree) name the card it goes under instead (under), or the area it goes to (lane). Answers {ok: true, warnings} or {refused: {sentence, ruleId, nearest, set}}: the one rule that refuses it (ruleId null for the board's own kind rule), who set it, and the nearest lane (or card) it may go to. rev is the rulebook's revision. Name cards and lanes by id or by name. @scope slates:read */\n  function checkMove(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    /** The board (slates.get boards[].id; main is the first). Required when the slate holds several boards. */\n    boardId?: string;\n    /** An id, or what a person calls it. (1–200 characters) */\n    card: string;\n    /** An id, or what a person calls it. (1–200 characters) */\n    lane?: string;\n    /** Nested board: the card it goes under (an id, or what a person calls it). (1–200 characters) */\n    under?: string;\n  }): Promise<{\n    revision: number;\n    rev: number;\n    ok?: boolean;\n    warnings?: string[];\n    refused?: Record<string, unknown>;\n    [key: string]: unknown;\n  }>;\n}",
       "tool": {
         "name": "check_board_move",
         "title": "Check a move on a board",
-        "description": "Check whether a card may move to a lane on a slate's board (pipeline, budget, hiring plan and others), without moving it, and why not. On a slate with several boards, name the board.\n\nCheck a move. Whether a card may move to a lane on one of the slate's boards (boardId; required on a slate of several boards, 400 board_required lists them), without moving it: the same verdict a drag gets. On a nested board (piles, a tree) name the card it goes under instead (under), or the area it goes to (lane). Answers {ok: true, warnings} or {refused: {sentence, ruleId, nearest, set}}: the one rule that refuses it (ruleId null for the board's own kind rule), who set it, and the nearest lane (or card) it may go to. rev is the rulebook's revision. Name cards and lanes by id or by name.",
+        "description": "Check whether a card may move to a lane on a slate's board (pipeline, budget, hiring plan and others), without moving it, and why not. On a slate with several boards, name the board.\n\nCheck move. Whether a card may move to a lane on one of the slate's boards (boardId; required on a slate of several boards, 400 board_required lists them), without moving it: the same verdict a drag gets. On a nested board (piles, a tree) name the card it goes under instead (under), or the area it goes to (lane). Answers {ok: true, warnings} or {refused: {sentence, ruleId, nearest, set}}: the one rule that refuses it (ruleId null for the board's own kind rule), who set it, and the nearest lane (or card) it may go to. rev is the rulebook's revision. Name cards and lanes by id or by name.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -1463,7 +1608,7 @@
     {
       "name": "slates.exportMermaid",
       "id": "slates.exportMermaid",
-      "title": "Read as Mermaid",
+      "title": "To Mermaid",
       "summary": "Write a slate you can open as Mermaid text: notes and lines as a flowchart (direction from the layout; shapes, labels, arrow ends and dashed, thick or hidden lines kept; a note drawn behind notes it holds becomes a subgraph of them; a workshop's lanes become subgraphs of cards), a mind map as a mindmap, a launch plan as a Gantt chart (format gantt, start is its first day). Returns the text, the same as a Markdown code block, and for a public slate its plain-text address (/slates/<id>.mmd). A public slate reads without a token. What Mermaid cannot say is named in warnings: dashed lines are written as Mermaid's one broken style (dotted), a line with an arrow only at its start is written from its other end, and a line with an end on the open canvas is left out.",
       "kind": "read",
       "readOnly": true,
@@ -1486,13 +1631,13 @@
         ],
         "bodyParams": []
       },
-      "index": "slates.exportMermaid({shareId, format?, styles?, start?}) — Read as Mermaid",
+      "index": "slates.exportMermaid({shareId, format?, styles?, start?}) — To Mermaid",
       "types": [],
-      "dts": "declare namespace slatebox.slates {\n  /** Read as Mermaid. Write a slate you can open as Mermaid text: notes and lines as a flowchart (direction from the layout; shapes, labels, arrow ends and dashed, thick or hidden lines kept; a note drawn behind notes it holds becomes a subgraph of them; a workshop's lanes become subgraphs of cards), a mind map as a mindmap, a launch plan as a Gantt chart (format gantt, start is its first day). Returns the text, the same as a Markdown code block, and for a public slate its plain-text address (/slates/<id>.mmd). A public slate reads without a token. What Mermaid cannot say is named in warnings: dashed lines are written as Mermaid's one broken style (dotted), a line with an arrow only at its start is written from its other end, and a line with an end on the open canvas is left out. @scope slates:read */\n  function exportMermaid(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    /** auto: a mind map that is one tree as mindmap, anything else as flowchart. (default \"auto\") */\n    format?: \"auto\" | \"flowchart\" | \"mindmap\" | \"gantt\";\n    /** Also write each note's colours (style lines). (default false) */\n    styles?: boolean;\n    /** A Gantt chart's first day, YYYY-MM-DD (default today). */\n    start?: string;\n  }): Promise<{\n    shareId: string;\n    /** (at least 0) */\n    revision: number;\n    name?: string;\n    format: \"flowchart\" | \"mindmap\" | \"gantt\";\n    /** The formats this slate can be written as. */\n    formats?: string[];\n    mermaid: string;\n    /** The Mermaid in a ```mermaid code block. */\n    markdown: string;\n    notes?: number;\n    lines?: number;\n    subgraphs?: number;\n    warnings?: string[];\n    /** The plain-text address of a public slate's Mermaid; null otherwise. */\n    publicUrl?: string | null;\n    [key: string]: unknown;\n  }>;\n}",
+      "dts": "declare namespace slatebox.slates {\n  /** To Mermaid. Write a slate you can open as Mermaid text: notes and lines as a flowchart (direction from the layout; shapes, labels, arrow ends and dashed, thick or hidden lines kept; a note drawn behind notes it holds becomes a subgraph of them; a workshop's lanes become subgraphs of cards), a mind map as a mindmap, a launch plan as a Gantt chart (format gantt, start is its first day). Returns the text, the same as a Markdown code block, and for a public slate its plain-text address (/slates/<id>.mmd). A public slate reads without a token. What Mermaid cannot say is named in warnings: dashed lines are written as Mermaid's one broken style (dotted), a line with an arrow only at its start is written from its other end, and a line with an end on the open canvas is left out. @scope slates:read */\n  function exportMermaid(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    /** auto: a mind map that is one tree as mindmap, anything else as flowchart. (default \"auto\") */\n    format?: \"auto\" | \"flowchart\" | \"mindmap\" | \"gantt\";\n    /** Also write each note's colours (style lines). (default false) */\n    styles?: boolean;\n    /** A Gantt chart's first day, YYYY-MM-DD (default today). */\n    start?: string;\n  }): Promise<{\n    shareId: string;\n    /** (at least 0) */\n    revision: number;\n    name?: string;\n    format: \"flowchart\" | \"mindmap\" | \"gantt\";\n    /** The formats this slate can be written as. */\n    formats?: string[];\n    mermaid: string;\n    /** The Mermaid in a ```mermaid code block. */\n    markdown: string;\n    notes?: number;\n    lines?: number;\n    subgraphs?: number;\n    warnings?: string[];\n    /** The plain-text address of a public slate's Mermaid; null otherwise. */\n    publicUrl?: string | null;\n    [key: string]: unknown;\n  }>;\n}",
       "tool": {
         "name": "export_mermaid",
         "title": "Read a slate as Mermaid",
-        "description": "Read a slate as Mermaid text: a mind map as mindmap, a project plan as a Gantt chart, anything else as a flowchart.\n\nRead as Mermaid. Write a slate you can open as Mermaid text: notes and lines as a flowchart (direction from the layout; shapes, labels, arrow ends and dashed, thick or hidden lines kept; a note drawn behind notes it holds becomes a subgraph of them; a workshop's lanes become subgraphs of cards), a mind map as a mindmap, a launch plan as a Gantt chart (format gantt, start is its first day). Returns the text, the same as a Markdown code block, and for a public slate its plain-text address (/slates/<id>.mmd). A public slate reads without a token. What Mermaid cannot say is named in warnings: dashed lines are written as Mermaid's one broken style (dotted), a line with an arrow only at its start is written from its other end, and a line with an end on the open canvas is left out.",
+        "description": "Read a slate as Mermaid text: a mind map as mindmap, a project plan as a Gantt chart, anything else as a flowchart.\n\nTo Mermaid. Write a slate you can open as Mermaid text: notes and lines as a flowchart (direction from the layout; shapes, labels, arrow ends and dashed, thick or hidden lines kept; a note drawn behind notes it holds becomes a subgraph of them; a workshop's lanes become subgraphs of cards), a mind map as a mindmap, a launch plan as a Gantt chart (format gantt, start is its first day). Returns the text, the same as a Markdown code block, and for a public slate its plain-text address (/slates/<id>.mmd). A public slate reads without a token. What Mermaid cannot say is named in warnings: dashed lines are written as Mermaid's one broken style (dotted), a line with an arrow only at its start is written from its other end, and a line with an end on the open canvas is left out.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -1748,7 +1893,7 @@
     {
       "name": "slates.issueInvite",
       "id": "slates.issueInvite",
-      "title": "Share by invitation",
+      "title": "Send invitation",
       "summary": "The registered owner turns on an unlisted link. Changing its role keeps the address. Public slates are changed in the Share dialog. Anyone holding the address gets the role.",
       "kind": "write",
       "readOnly": false,
@@ -1771,15 +1916,15 @@
           "role"
         ]
       },
-      "index": "slates.issueInvite({shareId, role}) — Share by invitation",
+      "index": "slates.issueInvite({shareId, role}) — Send invitation",
       "types": [
         "Invitation"
       ],
-      "dts": "declare namespace slatebox.slates {\n  /** Share by invitation. The registered owner turns on an unlisted link. Changing its role keeps the address. Public slates are changed in the Share dialog. Anyone holding the address gets the role. @scope slates:share @openWorld @confirm @idempotent */\n  function issueInvite(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    role: \"read\" | \"comment\" | \"edit\";\n  }): Promise<(Invitation) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.slates {\n  /** Send invitation. The registered owner turns on an unlisted link. Changing its role keeps the address. Public slates are changed in the Share dialog. Anyone holding the address gets the role. @scope slates:share @openWorld @confirm @idempotent */\n  function issueInvite(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    role: \"read\" | \"comment\" | \"edit\";\n  }): Promise<(Invitation) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "create_slate_invite",
         "title": "Share a slate by invitation link",
-        "description": "Turn on an unlisted invitation link to a slate, or change the role it gives. Anyone holding the link gets that role.\n\nShare by invitation. The registered owner turns on an unlisted link. Changing its role keeps the address. Public slates are changed in the Share dialog. Anyone holding the address gets the role.",
+        "description": "Turn on an unlisted invitation link to a slate, or change the role it gives. Anyone holding the link gets that role.\n\nSend invitation. The registered owner turns on an unlisted link. Changing its role keeps the address. Public slates are changed in the Share dialog. Anyone holding the address gets the role.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -1897,7 +2042,7 @@
     {
       "name": "team.export",
       "id": "team.export",
-      "title": "Export your team",
+      "title": "Export team",
       "summary": "For a team admin: a one-time address (15 minutes) to download everything the team owns as one archive, in the open team export format: slates with their boards and smart components, recent versions and events, comments, presentations, files, people and roles, published-link settings, AI connections (never keys) and the names and scopes of API tokens (never secrets). POST to downloadUrl to download; send a passphrase (form or JSON field \"passphrase\", the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or the Slatebox-Export-Passphrase header when it is plain ASCII; at least 12 characters, not starting or ending with a space) to encrypt the archive. The archive is signed and checked; import it with teamImports.start on any Slatebox server.",
       "kind": "write",
       "readOnly": false,
@@ -1916,13 +2061,13 @@
         "queryParams": [],
         "bodyParams": []
       },
-      "index": "team.export({}) — Export your team",
+      "index": "team.export({}) — Export team",
       "types": [],
-      "dts": "declare namespace slatebox.team {\n  /** Export your team. For a team admin: a one-time address (15 minutes) to download everything the team owns as one archive, in the open team export format: slates with their boards and smart components, recent versions and events, comments, presentations, files, people and roles, published-link settings, AI connections (never keys) and the names and scopes of API tokens (never secrets). POST to downloadUrl to download; send a passphrase (form or JSON field \"passphrase\", the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or the Slatebox-Export-Passphrase header when it is plain ASCII; at least 12 characters, not starting or ending with a space) to encrypt the archive. The archive is signed and checked; import it with teamImports.start on any Slatebox server. @scope team:export @confirm */\n  function export(input: Record<string, unknown>): Promise<({\n    downloadUrl: string;\n    method: \"POST\";\n    expiresAt: string;\n    team?: {\n      name?: string;\n      [key: string]: unknown;\n    };\n    members?: number;\n    slates?: number;\n    passphrase?: Record<string, unknown>;\n    limits?: Record<string, unknown>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.team {\n  /** Export team. For a team admin: a one-time address (15 minutes) to download everything the team owns as one archive, in the open team export format: slates with their boards and smart components, recent versions and events, comments, presentations, files, people and roles, published-link settings, AI connections (never keys) and the names and scopes of API tokens (never secrets). POST to downloadUrl to download; send a passphrase (form or JSON field \"passphrase\", the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or the Slatebox-Export-Passphrase header when it is plain ASCII; at least 12 characters, not starting or ending with a space) to encrypt the archive. The archive is signed and checked; import it with teamImports.start on any Slatebox server. @scope team:export @confirm */\n  function export(input: Record<string, unknown>): Promise<({\n    downloadUrl: string;\n    method: \"POST\";\n    expiresAt: string;\n    team?: {\n      name?: string;\n      [key: string]: unknown;\n    };\n    members?: number;\n    slates?: number;\n    passphrase?: Record<string, unknown>;\n    limits?: Record<string, unknown>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "export_team",
         "title": "Export your team",
-        "description": "For a team admin: get a one-time download address (15 minutes) for everything the team owns as one archive (slates, boards, comments, presentations, files, people and roles; never keys or token secrets), to move the team to another Slatebox server or keep a copy. The person agrees first.\n\nExport your team. For a team admin: a one-time address (15 minutes) to download everything the team owns as one archive, in the open team export format: slates with their boards and smart components, recent versions and events, comments, presentations, files, people and roles, published-link settings, AI connections (never keys) and the names and scopes of API tokens (never secrets). POST to downloadUrl to download; send a passphrase (form or JSON field \"passphrase\", the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or the Slatebox-Export-Passphrase header when it is plain ASCII; at least 12 characters, not starting or ending with a space) to encrypt the archive. The archive is signed and checked; import it with teamImports.start on any Slatebox server.",
+        "description": "For a team admin: get a one-time download address (15 minutes) for everything the team owns as one archive (slates, boards, comments, presentations, files, people and roles; never keys or token secrets), to move the team to another Slatebox server or keep a copy. The person agrees first.\n\nExport team. For a team admin: a one-time address (15 minutes) to download everything the team owns as one archive, in the open team export format: slates with their boards and smart components, recent versions and events, comments, presentations, files, people and roles, published-link settings, AI connections (never keys) and the names and scopes of API tokens (never secrets). POST to downloadUrl to download; send a passphrase (form or JSON field \"passphrase\", the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or the Slatebox-Export-Passphrase header when it is plain ASCII; at least 12 characters, not starting or ending with a space) to encrypt the archive. The archive is signed and checked; import it with teamImports.start on any Slatebox server.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -1950,7 +2095,7 @@
     {
       "name": "teamImports.confirm",
       "id": "teamImports.confirm",
-      "title": "Confirm an import",
+      "title": "Confirm import",
       "summary": "For an administrator of this server: makes a pending import's team live. Its slates and presentations get back the visibility they had (public, unlisted or private). With invite true, each person whose address the source had verified, and no account here uses in any letter case, gets an email to claim their placeholder; the answer lists addresses that already have an account (they must agree to move) and addresses the source had not verified (invite each with teamImports.invite once you have checked it). Board rules stay switched off until a team admin reviews them.",
       "kind": "write",
       "readOnly": false,
@@ -1973,13 +2118,13 @@
           "invite"
         ]
       },
-      "index": "teamImports.confirm({importId, invite?}) — Confirm an import",
+      "index": "teamImports.confirm({importId, invite?}) — Confirm import",
       "types": [],
-      "dts": "declare namespace slatebox.teamImports {\n  /** Confirm an import. For an administrator of this server: makes a pending import's team live. Its slates and presentations get back the visibility they had (public, unlisted or private). With invite true, each person whose address the source had verified, and no account here uses in any letter case, gets an email to claim their placeholder; the answer lists addresses that already have an account (they must agree to move) and addresses the source had not verified (invite each with teamImports.invite once you have checked it). Board rules stay switched off until a team admin reviews them. @scope team:import @confirm */\n  function confirm(input: {\n    importId: string;\n    /** (default false) */\n    invite?: boolean;\n  }): Promise<({\n    importId: string;\n    state: \"confirmed\";\n    teamId: string;\n    invited?: {\n      sent?: number;\n      needsConsent?: string[];\n      mailDisabled?: number;\n      unverified?: string[];\n      [key: string]: unknown;\n    };\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.teamImports {\n  /** Confirm import. For an administrator of this server: makes a pending import's team live. Its slates and presentations get back the visibility they had (public, unlisted or private). With invite true, each person whose address the source had verified, and no account here uses in any letter case, gets an email to claim their placeholder; the answer lists addresses that already have an account (they must agree to move) and addresses the source had not verified (invite each with teamImports.invite once you have checked it). Board rules stay switched off until a team admin reviews them. @scope team:import @confirm */\n  function confirm(input: {\n    importId: string;\n    /** (default false) */\n    invite?: boolean;\n  }): Promise<({\n    importId: string;\n    state: \"confirmed\";\n    teamId: string;\n    invited?: {\n      sent?: number;\n      needsConsent?: string[];\n      mailDisabled?: number;\n      unverified?: string[];\n      [key: string]: unknown;\n    };\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "confirm_team_import",
         "title": "Make an imported team live",
-        "description": "For an administrator of this server: make a pending imported team live, and optionally email its people to claim their accounts. The person agrees first.\n\nConfirm an import. For an administrator of this server: makes a pending import's team live. Its slates and presentations get back the visibility they had (public, unlisted or private). With invite true, each person whose address the source had verified, and no account here uses in any letter case, gets an email to claim their placeholder; the answer lists addresses that already have an account (they must agree to move) and addresses the source had not verified (invite each with teamImports.invite once you have checked it). Board rules stay switched off until a team admin reviews them.",
+        "description": "For an administrator of this server: make a pending imported team live, and optionally email its people to claim their accounts. The person agrees first.\n\nConfirm import. For an administrator of this server: makes a pending import's team live. Its slates and presentations get back the visibility they had (public, unlisted or private). With invite true, each person whose address the source had verified, and no account here uses in any letter case, gets an email to claim their placeholder; the answer lists addresses that already have an account (they must agree to move) and addresses the source had not verified (invite each with teamImports.invite once you have checked it). Board rules stay switched off until a team admin reviews them.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -2018,7 +2163,7 @@
     {
       "name": "teamImports.discard",
       "id": "teamImports.discard",
-      "title": "Discard an import",
+      "title": "Discard import",
       "summary": "For an administrator of this server: deletes a pending import's hidden team and everything the import wrote (slates, files, people, settings).",
       "kind": "write",
       "readOnly": false,
@@ -2039,13 +2184,13 @@
         "queryParams": [],
         "bodyParams": []
       },
-      "index": "teamImports.discard({importId}) — Discard an import",
+      "index": "teamImports.discard({importId}) — Discard import",
       "types": [],
-      "dts": "declare namespace slatebox.teamImports {\n  /** Discard an import. For an administrator of this server: deletes a pending import's hidden team and everything the import wrote (slates, files, people, settings). @scope team:import @destructive */\n  function discard(input: {\n    importId: string;\n  }): Promise<({\n    importId: string;\n    state: \"discarded\";\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.teamImports {\n  /** Discard import. For an administrator of this server: deletes a pending import's hidden team and everything the import wrote (slates, files, people, settings). @scope team:import @destructive */\n  function discard(input: {\n    importId: string;\n  }): Promise<({\n    importId: string;\n    state: \"discarded\";\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "discard_team_import",
         "title": "Discard a team import",
-        "description": "For an administrator of this server: delete a pending imported team and everything the import wrote.\n\nDiscard an import. For an administrator of this server: deletes a pending import's hidden team and everything the import wrote (slates, files, people, settings).",
+        "description": "For an administrator of this server: delete a pending imported team and everything the import wrote.\n\nDiscard import. For an administrator of this server: deletes a pending import's hidden team and everything the import wrote (slates, files, people, settings).",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -2080,7 +2225,7 @@
     {
       "name": "teamImports.get",
       "id": "teamImports.get",
-      "title": "Read an import",
+      "title": "Import",
       "summary": "For an administrator of this server: one import, with its report while it is pending or confirmed.",
       "kind": "read",
       "readOnly": true,
@@ -2099,13 +2244,13 @@
         "queryParams": [],
         "bodyParams": []
       },
-      "index": "teamImports.get({importId}) — Read an import",
+      "index": "teamImports.get({importId}) — Import",
       "types": [],
-      "dts": "declare namespace slatebox.teamImports {\n  /** Read an import. For an administrator of this server: one import, with its report while it is pending or confirmed. @scope team:import */\n  function get(input: {\n    importId: string;\n  }): Promise<{\n    importId: string;\n    state: \"running\" | \"pending\" | \"confirming\" | \"confirmed\" | \"discarding\" | \"discarded\" | \"failed\";\n    teamId?: string;\n    teamName?: string;\n    createdAt?: string;\n    expiresAt?: string;\n    failure?: {\n      code?: string;\n      message?: string;\n      [key: string]: unknown;\n    };\n    invited?: {\n      sent?: number;\n      needsConsent?: string[];\n      mailDisabled?: number;\n      unverified?: string[];\n      [key: string]: unknown;\n    };\n    /** What the import made: the team, the source (instance, team, when, and whether a key this server knows signed it), counts per section with each skip and its reason, the people (placeholders until invited), the slates with their content hashes, the files, rewritten links, board rules switched off, AI connections (without keys) and the tokens to make again. */\n    report?: {\n      team?: Record<string, unknown>;\n      source?: Record<string, unknown>;\n      sections?: Record<string, {\n        created?: number;\n        skipped?: number;\n        [key: string]: unknown;\n      }>;\n      people?: Array<Record<string, unknown>>;\n      slates?: Array<Record<string, unknown>>;\n      files?: Record<string, unknown>;\n      links?: Record<string, unknown>;\n      rulesSwitchedOff?: number;\n      ai?: Record<string, unknown>;\n      tokens?: Array<Record<string, unknown>>;\n      skipped?: Array<Record<string, unknown>>;\n      [key: string]: unknown;\n    };\n    [key: string]: unknown;\n  }>;\n}",
+      "dts": "declare namespace slatebox.teamImports {\n  /** Import. For an administrator of this server: one import, with its report while it is pending or confirmed. @scope team:import */\n  function get(input: {\n    importId: string;\n  }): Promise<{\n    importId: string;\n    state: \"running\" | \"pending\" | \"confirming\" | \"confirmed\" | \"discarding\" | \"discarded\" | \"failed\";\n    teamId?: string;\n    teamName?: string;\n    createdAt?: string;\n    expiresAt?: string;\n    failure?: {\n      code?: string;\n      message?: string;\n      [key: string]: unknown;\n    };\n    invited?: {\n      sent?: number;\n      needsConsent?: string[];\n      mailDisabled?: number;\n      unverified?: string[];\n      [key: string]: unknown;\n    };\n    /** What the import made: the team, the source (instance, team, when, and whether a key this server knows signed it), counts per section with each skip and its reason, the people (placeholders until invited), the slates with their content hashes, the files, rewritten links, board rules switched off, AI connections (without keys) and the tokens to make again. */\n    report?: {\n      team?: Record<string, unknown>;\n      source?: Record<string, unknown>;\n      sections?: Record<string, {\n        created?: number;\n        skipped?: number;\n        [key: string]: unknown;\n      }>;\n      people?: Array<Record<string, unknown>>;\n      slates?: Array<Record<string, unknown>>;\n      files?: Record<string, unknown>;\n      links?: Record<string, unknown>;\n      rulesSwitchedOff?: number;\n      ai?: Record<string, unknown>;\n      tokens?: Array<Record<string, unknown>>;\n      skipped?: Array<Record<string, unknown>>;\n      [key: string]: unknown;\n    };\n    [key: string]: unknown;\n  }>;\n}",
       "tool": {
         "name": "get_team_import",
         "title": "Read a team import",
-        "description": "For an administrator of this server: read one team import and its report.\n\nRead an import. For an administrator of this server: one import, with its report while it is pending or confirmed.",
+        "description": "For an administrator of this server: read one team import and its report.\n\nImport. For an administrator of this server: one import, with its report while it is pending or confirmed.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -2130,7 +2275,7 @@
     {
       "name": "teamImports.invite",
       "id": "teamImports.invite",
-      "title": "Invite a person",
+      "title": "Invite person",
       "summary": "For an administrator of this server: after you have checked an address that a confirmed import listed as unverified (the source had not verified it), sends that person the email to claim their placeholder. An address any account here already uses, in any letter case, is not invited: that person must agree to move.",
       "kind": "write",
       "readOnly": false,
@@ -2153,13 +2298,13 @@
           "email"
         ]
       },
-      "index": "teamImports.invite({importId, email}) — Invite a person",
+      "index": "teamImports.invite({importId, email}) — Invite person",
       "types": [],
-      "dts": "declare namespace slatebox.teamImports {\n  /** Invite a person. For an administrator of this server: after you have checked an address that a confirmed import listed as unverified (the source had not verified it), sends that person the email to claim their placeholder. An address any account here already uses, in any letter case, is not invited: that person must agree to move. @scope team:import @confirm */\n  function invite(input: {\n    importId: string;\n    /** (3–320 characters) */\n    email: string;\n  }): Promise<({\n    importId: string;\n    email: string;\n    outcome: \"sent\" | \"needs_consent\" | \"mail_disabled\" | \"already_invited\";\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.teamImports {\n  /** Invite person. For an administrator of this server: after you have checked an address that a confirmed import listed as unverified (the source had not verified it), sends that person the email to claim their placeholder. An address any account here already uses, in any letter case, is not invited: that person must agree to move. @scope team:import @confirm */\n  function invite(input: {\n    importId: string;\n    /** (3–320 characters) */\n    email: string;\n  }): Promise<({\n    importId: string;\n    email: string;\n    outcome: \"sent\" | \"needs_consent\" | \"mail_disabled\" | \"already_invited\";\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "invite_team_import_person",
         "title": "Invite one imported person",
-        "description": "For an administrator of this server: email one person from a confirmed team import whose address you have checked, so they can claim their account. The person agrees first.\n\nInvite a person. For an administrator of this server: after you have checked an address that a confirmed import listed as unverified (the source had not verified it), sends that person the email to claim their placeholder. An address any account here already uses, in any letter case, is not invited: that person must agree to move.",
+        "description": "For an administrator of this server: email one person from a confirmed team import whose address you have checked, so they can claim their account. The person agrees first.\n\nInvite person. For an administrator of this server: after you have checked an address that a confirmed import listed as unverified (the source had not verified it), sends that person the email to claim their placeholder. An address any account here already uses, in any letter case, is not invited: that person must agree to move.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -2200,7 +2345,7 @@
     {
       "name": "teamImports.list",
       "id": "teamImports.list",
-      "title": "List imports",
+      "title": "Imports",
       "summary": "For an administrator of this server: recent team imports, pending ones first to confirm or discard.",
       "kind": "read",
       "readOnly": true,
@@ -2217,13 +2362,13 @@
         "queryParams": [],
         "bodyParams": []
       },
-      "index": "teamImports.list({}) — List imports",
+      "index": "teamImports.list({}) — Imports",
       "types": [],
-      "dts": "declare namespace slatebox.teamImports {\n  /** List imports. For an administrator of this server: recent team imports, pending ones first to confirm or discard. @scope team:import */\n  function list(input: Record<string, unknown>): Promise<{\n    imports: Array<{\n      importId: string;\n      state: \"running\" | \"pending\" | \"confirming\" | \"confirmed\" | \"discarding\" | \"discarded\" | \"failed\";\n      teamId?: string;\n      teamName?: string;\n      createdAt?: string;\n      expiresAt?: string;\n      failure?: {\n        code?: string;\n        message?: string;\n        [key: string]: unknown;\n      };\n      invited?: {\n        sent?: number;\n        needsConsent?: string[];\n        mailDisabled?: number;\n        unverified?: string[];\n        [key: string]: unknown;\n      };\n      [key: string]: unknown;\n    }>;\n    [key: string]: unknown;\n  }>;\n}",
+      "dts": "declare namespace slatebox.teamImports {\n  /** Imports. For an administrator of this server: recent team imports, pending ones first to confirm or discard. @scope team:import */\n  function list(input: Record<string, unknown>): Promise<{\n    imports: Array<{\n      importId: string;\n      state: \"running\" | \"pending\" | \"confirming\" | \"confirmed\" | \"discarding\" | \"discarded\" | \"failed\";\n      teamId?: string;\n      teamName?: string;\n      createdAt?: string;\n      expiresAt?: string;\n      failure?: {\n        code?: string;\n        message?: string;\n        [key: string]: unknown;\n      };\n      invited?: {\n        sent?: number;\n        needsConsent?: string[];\n        mailDisabled?: number;\n        unverified?: string[];\n        [key: string]: unknown;\n      };\n      [key: string]: unknown;\n    }>;\n    [key: string]: unknown;\n  }>;\n}",
       "tool": {
         "name": "list_team_imports",
         "title": "List team imports",
-        "description": "For an administrator of this server: list recent team imports, pending ones first.\n\nList imports. For an administrator of this server: recent team imports, pending ones first to confirm or discard.",
+        "description": "For an administrator of this server: list recent team imports, pending ones first.\n\nImports. For an administrator of this server: recent team imports, pending ones first to confirm or discard.",
         "inputSchema": {
           "type": "object",
           "properties": {},
@@ -2240,7 +2385,7 @@
     {
       "name": "teamImports.start",
       "id": "teamImports.start",
-      "title": "Start an import",
+      "title": "Start import",
       "summary": "For an administrator of this server: a one-time address (1 hour) to upload a team export to. POST the archive to uploadUrl as application/octet-stream, with its passphrase when it is encrypted: in the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes (any passphrase), or in the Slatebox-Export-Passphrase header when it is plain ASCII. The upload becomes a new hidden team, with new ids for everything, people as placeholders who cannot sign in, slates private, board rules switched off, no keys and no tokens; the answer is the report. Confirm or discard it with teamImports.confirm or teamImports.discard; a pending import is discarded after 14 days.",
       "kind": "write",
       "readOnly": false,
@@ -2259,13 +2404,13 @@
         "queryParams": [],
         "bodyParams": []
       },
-      "index": "teamImports.start({}) — Start an import",
+      "index": "teamImports.start({}) — Start import",
       "types": [],
-      "dts": "declare namespace slatebox.teamImports {\n  /** Start an import. For an administrator of this server: a one-time address (1 hour) to upload a team export to. POST the archive to uploadUrl as application/octet-stream, with its passphrase when it is encrypted: in the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes (any passphrase), or in the Slatebox-Export-Passphrase header when it is plain ASCII. The upload becomes a new hidden team, with new ids for everything, people as placeholders who cannot sign in, slates private, board rules switched off, no keys and no tokens; the answer is the report. Confirm or discard it with teamImports.confirm or teamImports.discard; a pending import is discarded after 14 days. @scope team:import */\n  function start(input: Record<string, unknown>): Promise<({\n    uploadUrl: string;\n    method: \"POST\";\n    contentType?: string;\n    passphraseHeader?: string;\n    passphraseHeaderBase64?: string;\n    expiresAt: string;\n    maxBytes?: number;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.teamImports {\n  /** Start import. For an administrator of this server: a one-time address (1 hour) to upload a team export to. POST the archive to uploadUrl as application/octet-stream, with its passphrase when it is encrypted: in the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes (any passphrase), or in the Slatebox-Export-Passphrase header when it is plain ASCII. The upload becomes a new hidden team, with new ids for everything, people as placeholders who cannot sign in, slates private, board rules switched off, no keys and no tokens; the answer is the report. Confirm or discard it with teamImports.confirm or teamImports.discard; a pending import is discarded after 14 days. @scope team:import */\n  function start(input: Record<string, unknown>): Promise<({\n    uploadUrl: string;\n    method: \"POST\";\n    contentType?: string;\n    passphraseHeader?: string;\n    passphraseHeaderBase64?: string;\n    expiresAt: string;\n    maxBytes?: number;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "start_team_import",
         "title": "Import a team",
-        "description": "For an administrator of this server: get a one-time address (1 hour) to upload a team export to. The upload becomes a hidden team to check, then confirm_team_import or discard_team_import.\n\nStart an import. For an administrator of this server: a one-time address (1 hour) to upload a team export to. POST the archive to uploadUrl as application/octet-stream, with its passphrase when it is encrypted: in the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes (any passphrase), or in the Slatebox-Export-Passphrase header when it is plain ASCII. The upload becomes a new hidden team, with new ids for everything, people as placeholders who cannot sign in, slates private, board rules switched off, no keys and no tokens; the answer is the report. Confirm or discard it with teamImports.confirm or teamImports.discard; a pending import is discarded after 14 days.",
+        "description": "For an administrator of this server: get a one-time address (1 hour) to upload a team export to. The upload becomes a hidden team to check, then confirm_team_import or discard_team_import.\n\nStart import. For an administrator of this server: a one-time address (1 hour) to upload a team export to. POST the archive to uploadUrl as application/octet-stream, with its passphrase when it is encrypted: in the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes (any passphrase), or in the Slatebox-Export-Passphrase header when it is plain ASCII. The upload becomes a new hidden team, with new ids for everything, people as placeholders who cannot sign in, slates private, board rules switched off, no keys and no tokens; the answer is the report. Confirm or discard it with teamImports.confirm or teamImports.discard; a pending import is discarded after 14 days.",
         "inputSchema": {
           "type": "object",
           "properties": {

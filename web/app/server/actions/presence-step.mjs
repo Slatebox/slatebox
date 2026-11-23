@@ -6,7 +6,7 @@ import { planOutput, presenceOf } from './presence-schemas.mjs'
 // presence.step: tick a step of this run's checklist.
 export default defineAction({
   id: 'presence.step',
-  title: 'Tick a plan step',
+  title: 'Tick step',
   description:
     'Mark a step of the plan set with presence.plan as doing, done or skipped. When a step is done and none is under way, the next one starts; a step under way is done when another starts or the run ends. At most 40 per run. A preview run changes nothing.',
   toolset: 'presence',

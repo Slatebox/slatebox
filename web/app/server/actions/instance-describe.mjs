@@ -2,7 +2,7 @@ import { defineAction } from './registry.mjs'
 
 export default defineAction({
   id: 'instance.describe',
-  title: 'Describe',
+  title: 'Server',
   description:
     'What this Slatebox instance is and can do. Without a token: its id, name, contract version and where to sign in. With a token: also the build, capability flags, limits, the canvas and workshop vocabularies, the routes it serves and your account.',
   toolset: 'instance',

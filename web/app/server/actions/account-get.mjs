@@ -3,7 +3,7 @@ import { problem } from './errors.mjs'
 
 export default defineAction({
   id: 'account.get',
-  title: 'Read account',
+  title: 'Account',
   description:
     'Your name, address and whether it is verified, team and claims, AI drafting access, what is included this month (ai.included, null on a server with no meter) and whether you have Slatebox Pro (ai.pro, null without it), the token you called with, and the addresses where you change what a token may not (profile, and Credits for Slatebox Pro and top-ups). Getting Pro or topping up is done by a person in the profile, never through a token: give them links.pay (Get Pro, or Your Pro once they have it) or links.topUp, which open the payment in the app. Education is null on a self-hosted instance.',
   toolset: 'account',

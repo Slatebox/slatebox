@@ -3,7 +3,7 @@ import { settingsOutput } from './ai-schemas.mjs'
 
 export default defineAction({
   id: 'ai.get',
-  title: 'Read AI settings',
+  title: 'AI settings',
   description:
     'The AI connections you, your team and this server have (never their keys), which one each feature uses (chat, generation, presentation, vision, images, shape, and the default), and which connection serves each feature for you now (effective), with what it cannot do. ownProviders false means this server uses only the AI its operator set up.',
   toolset: 'account',

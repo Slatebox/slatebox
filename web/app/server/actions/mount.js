@@ -90,6 +90,12 @@ export const deps = {
     },
     newId: () => Random.id(),
     publishedPresentation: (shareId) => SlatePresentations.findOneAsync({ slateShareId: shareId, isPublished: true }),
+    // presentations.get and presentations.setStyle: the caller's latest deck of a slate.
+    latestPresentation: (shareId, userId) => SlatePresentations.findOneAsync(
+      { slateShareId: shareId, userId, viewpoints: { $type: 'array' } },
+      { sort: { version: -1 } }
+    ),
+    savePresentation: (id, set) => SlatePresentations.updateAsync({ _id: id }, { $set: set }),
     async copyPresentation(presentation, { shareId, sourceShareId, user, now }) {
       await SlatePresentations.insertAsync({
         ...structuredClone(presentation),

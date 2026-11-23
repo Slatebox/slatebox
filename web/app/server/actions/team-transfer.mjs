@@ -64,7 +64,7 @@ const summarize = (record) => ({
 
 export const teamExport = defineAction({
   id: 'team.export',
-  title: 'Export your team',
+  title: 'Export team',
   description:
     'For a team admin: a one-time address (15 minutes) to download everything the team owns as one archive, in the open team export format: slates with their boards and smart components, recent versions and events, comments, presentations, files, people and roles, published-link settings, AI connections (never keys) and the names and scopes of API tokens (never secrets). POST to downloadUrl to download; send a passphrase (form or JSON field "passphrase", the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or the Slatebox-Export-Passphrase header when it is plain ASCII; at least 12 characters, not starting or ending with a space) to encrypt the archive. The archive is signed and checked; import it with teamImports.start on any Slatebox server.',
   toolset: 'team',
@@ -99,7 +99,7 @@ export const teamExport = defineAction({
 
 export const teamImportsStart = defineAction({
   id: 'teamImports.start',
-  title: 'Start an import',
+  title: 'Start import',
   description:
     'For an administrator of this server: a one-time address (1 hour) to upload a team export to. POST the archive to uploadUrl as application/octet-stream, with its passphrase when it is encrypted: in the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes (any passphrase), or in the Slatebox-Export-Passphrase header when it is plain ASCII. The upload becomes a new hidden team, with new ids for everything, people as placeholders who cannot sign in, slates private, board rules switched off, no keys and no tokens; the answer is the report. Confirm or discard it with teamImports.confirm or teamImports.discard; a pending import is discarded after 14 days.',
   toolset: 'team',
@@ -131,7 +131,7 @@ export const teamImportsStart = defineAction({
 
 export const teamImportsList = defineAction({
   id: 'teamImports.list',
-  title: 'List imports',
+  title: 'Imports',
   description: 'For an administrator of this server: recent team imports, pending ones first to confirm or discard.',
   toolset: 'team',
   kind: 'read',
@@ -148,7 +148,7 @@ export const teamImportsList = defineAction({
 
 export const teamImportsGet = defineAction({
   id: 'teamImports.get',
-  title: 'Read an import',
+  title: 'Import',
   description: 'For an administrator of this server: one import, with its report while it is pending or confirmed.',
   toolset: 'team',
   kind: 'read',
@@ -167,7 +167,7 @@ export const teamImportsGet = defineAction({
 
 export const teamImportsConfirm = defineAction({
   id: 'teamImports.confirm',
-  title: 'Confirm an import',
+  title: 'Confirm import',
   description:
     'For an administrator of this server: makes a pending import\'s team live. Its slates and presentations get back the visibility they had (public, unlisted or private). With invite true, each person whose address the source had verified, and no account here uses in any letter case, gets an email to claim their placeholder; the answer lists addresses that already have an account (they must agree to move) and addresses the source had not verified (invite each with teamImports.invite once you have checked it). Board rules stay switched off until a team admin reviews them.',
   toolset: 'team',
@@ -197,7 +197,7 @@ export const teamImportsConfirm = defineAction({
 
 export const teamImportsInvite = defineAction({
   id: 'teamImports.invite',
-  title: 'Invite a person',
+  title: 'Invite person',
   description:
     'For an administrator of this server: after you have checked an address that a confirmed import listed as unverified (the source had not verified it), sends that person the email to claim their placeholder. An address any account here already uses, in any letter case, is not invited: that person must agree to move.',
   toolset: 'team',
@@ -232,7 +232,7 @@ export const teamImportsInvite = defineAction({
 
 export const teamImportsDiscard = defineAction({
   id: 'teamImports.discard',
-  title: 'Discard an import',
+  title: 'Discard import',
   description: 'For an administrator of this server: deletes a pending import\'s hidden team and everything the import wrote (slates, files, people, settings).',
   toolset: 'team',
   kind: 'write',
