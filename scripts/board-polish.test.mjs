@@ -11,7 +11,7 @@ import { catalogPreset } from 'slateboxjs/catalog'
 import { catalogSamples } from 'slateboxjs/workshops/samples'
 import 'slateboxjs/workshops/behaviour'
 import 'slateboxjs/workshops/rules'
-import { KIT_KINDS, PREVIEW_CAPTION_TEXT, previewBoardOf, previewCaption, previewCanvasOf, previewKeepSentence } from '../web/app/imports/api/common/conversation-preview.mjs'
+import { KIT_KINDS, PREVIEW_CAPTION_TEXT, draftShownBox, previewBoardOf, previewCaption, previewCanvasOf, previewKeepSentence } from '../web/app/imports/api/common/conversation-preview.mjs'
 import { boardRuleChips } from '../web/app/imports/api/common/board-rules.mjs'
 import { proposeLaneEdit, proposeLaneReply } from '../web/app/imports/api/common/lane-conversation.mjs'
 import { workshopStarters } from '../web/app/imports/api/common/workshop-starters.mjs'
@@ -89,4 +89,18 @@ test('9. what a person reads says "column"; the chat still reads "lane"', () => 
   // Both words are read.
   assert.match(proposeLaneReply(validateWorkshop({ ...board, behaviour: undefined, lanes: board.lanes.slice(0, 4) }), 'Add a lane called Later', null).reply, /Added the column “Later”/)
   assert.match(proposeLaneReply(validateWorkshop({ ...board, behaviour: undefined, lanes: board.lanes.slice(0, 4) }), 'Add a column called Later', null).reply, /Added the column “Later”/)
+})
+
+test('a board draft brought into view includes its tag at the size it is drawn, and the room a phone\'s toolbar takes (review)', () => {
+  const frame = { x: 100, y: 50, width: 800, height: 400 }
+  // At 100% on a laptop the engine's frame already holds the tag.
+  assert.deepEqual(draftShownBox(frame, { zoom: 1 }), frame)
+  // Zoomed out, the tag keeps its size on screen, so it stands further above the frame in world units.
+  const out = draftShownBox(frame, { zoom: 0.5 })
+  assert.equal(out.y, 50 - 12)
+  assert.equal(out.y + out.height, 450)
+  // On a phone at 80%: the tag keeps its 24px (it is no button), and 52px of toolbar lie over the canvas's top.
+  const phone = draftShownBox(frame, { zoom: 0.8, above: 52 })
+  const tagGrowth = 12 / 0.8 - 12
+  assert.ok(Math.abs(phone.y - (50 - tagGrowth - 52 / 0.8)) < 1e-9)
 })

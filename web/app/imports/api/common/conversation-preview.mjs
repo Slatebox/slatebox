@@ -1,4 +1,4 @@
-import { workshopToSlate } from 'slateboxjs/workshops/model'
+import { chromeScaleAt, chromeTagScaleAt, workshopToSlate } from 'slateboxjs/workshops/model'
 
 /*
  * What a conversation preview draws on the canvas, before anything is kept.
@@ -169,6 +169,19 @@ export function previewView(box, view, { margin = 24, readable = READABLE_ZOOM }
   const x = needW <= width ? box.x + box.width / 2 - width / 2 : box.x - margin
   const y = needH <= height ? box.y + box.height / 2 - height / 2 : box.y - margin
   return { x, y, width, height }
+}
+
+/**
+ * The box to bring into view for a board draft: its frame (`frame`, the engine's board.frame, which takes the draft's
+ * tag at its size at 100%), grown upward by what the tag gains at the zoom it is shown at (a tag keeps its size on
+ * screen) and by `above` screen pixels the page lays over the canvas's top (a phone's
+ * floating toolbar buttons). So the tag "Preview · not added yet" is never under the page's header.
+ */
+export function draftShownBox(frame, { zoom = 1, above = 0 } = {}) {
+  if (!frame || !(zoom > 0)) return frame
+  const tag = (z) => 12 * chromeTagScaleAt(z, false, chromeScaleAt(z))
+  const grow = Math.max(0, tag(zoom) - tag(1)) + above / zoom
+  return { x: frame.x, y: frame.y - grow, width: frame.width, height: frame.height + grow }
 }
 
 /**

@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { compat } from 'slateboxjs'
 import { attachWorkshop, rulebookLoaded } from 'slateboxjs/workshops/model'
-import { KIT_KINDS, PREVIEW_CAPTION, boundsOf, previewArtwork, previewBoardOf, previewCaption, previewShown, previewView } from '../../api/common/conversation-preview.mjs'
+import { KIT_KINDS, PREVIEW_CAPTION, boundsOf, draftShownBox, previewArtwork, previewBoardOf, previewCaption, previewShown, previewView } from '../../api/common/conversation-preview.mjs'
 import { lanesPerRow, workshopNoteStyle, workshopStyle } from '../../api/common/workshop-look.mjs'
 import { ensureBoardChromeStyles } from './workshop/boardChromeStyles'
 
@@ -184,7 +184,10 @@ function drawBoardDraft(engine, { workshop, origin }, preview) {
       // Into view at a size that can be read, the dashed frame and its tag included; the person's view comes back after.
       const view = viewOf(engine)
       if (!view) return
-      const next = previewView(previewShown(board.frame, preview.focus ?? null, view), view)
+      // On a phone the toolbar's floating buttons lie over the canvas's top (52px, as for a board's own fit).
+      const narrow = view.rect.width < 600
+      const whole = draftShownBox(board.frame, { zoom: view.zoom, above: narrow ? 52 : 0 })
+      const next = previewView(previewShown(whole, preview.focus ?? null, view), view)
       if (!next) return
       before = { cx: view.cx, cy: view.cy, zoom: view.zoom }
       engine.canvas.viewbox(next.x, next.y, next.width, next.height)

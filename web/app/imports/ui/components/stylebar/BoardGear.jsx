@@ -17,8 +17,8 @@ export function inGearZone(frame, point) {
 /**
  * The gear over a board on a laptop: a small chip just above the board's top-right corner, shown
  * while the pointer is over the board (or the band above it, on the way to the chip), while the
- * pointer is on the chip itself, and while the board is in focus. It goes 600ms after the pointer
- * leaves, while a card is held, and on touch (a phone has the bar of a selected lane and the chat's
+ * pointer is on the chip itself. A board in focus has none: its frame's "Done" tag stands at that corner
+ * and says what a person can do there. It goes 600ms after the pointer leaves, while a card is held, and on touch (a phone has the bar of a selected lane and the chat's
  * starter instead). HTML chrome over the board's native notes, in the style bar's layer, so it steps
  * aside during a pan or zoom as the bar does.
  */
@@ -64,7 +64,7 @@ export default function BoardGear({ v2, frame, focused, layer, onChangeBoard }) 
     }
   }, [v2])
 
-  if (!frame || !layer || !v2?.worldToClient || !(near || onChip || focused)) return null
+  if (focused || !frame || !layer || !v2?.worldToClient || !(near || onChip)) return null
   const box = layer.getBoundingClientRect()
   const corner = v2.worldToClient({ x: frame.x + frame.width, y: frame.y })
   const left = Math.round(Math.min(corner.x - box.left - SIZE, box.width - SIZE - 4))
