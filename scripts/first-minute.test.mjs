@@ -9,6 +9,11 @@ import { readFileSync } from 'node:fs'
 import { catalog } from 'slateboxjs/catalog'
 import { searchEntries, inGroup } from '../web/app/imports/api/common/library.mjs'
 import { keptReply, asSentence, listWords } from '../web/app/imports/api/common/chat-words.mjs'
+import { presetNoteStyle, dockNoteStyle } from '../web/app/imports/ui/common/noteStyle.mjs'
+import { addNoteAt, addNoteInView } from '../web/app/imports/ui/common/newNote.mjs'
+import { DEFAULT_NOTE } from '../web/app/imports/ui/common/canvasTheme.mjs'
+import { newestTop } from '../web/app/imports/ui/common/newestTurn.mjs'
+import { sizeChoice } from '../web/app/imports/api/common/note-style.mjs'
 
 const app = (path) => readFileSync(new URL('../web/app/' + path, import.meta.url), 'utf8')
 const ui = (path) => app('imports/ui/' + path)
@@ -54,6 +59,25 @@ test('#14 the Map chip lists the map; every other chip is the catalogue group', 
   assert.match(view, /aria-label="Groups" sx=\{\{[^}]*flexWrap: 'wrap'/)
   assert.doesNotMatch(view, /aria-label="Groups" sx=\{\{[^}]*overflowX/)
   assert.match(view, /searchEntries\(query, group\)/)
+})
+
+test('#14 review: a singular finds its group, everyday words find a board, and the Map chip agrees with a "map" search', () => {
+  // "meeting" finds both boards in the Meetings group, as "meetings" does.
+  for (const q of ['meeting', 'meetings']) {
+    const found = ids(q)
+    assert.ok(found.includes('retro') && found.includes('incident-review'), `${q}: ${found.join()}`)
+  }
+  assert.equal(ids('todo')[0], 'team-board')
+  assert.equal(ids('to-do')[0], 'team-board')
+  assert.equal(ids('standup')[0], 'team-board')
+  assert.ok(ids('brainstorm').includes('discovery-tree'))
+  assert.ok(ids('risk').includes('pros-cons'))
+  assert.ok(ids('swot').includes('pros-cons'))
+  // A "map" search leads with what the Map chip lists, map first (a part of a word, "roadmap", comes after).
+  const chip = ids('', 'map')
+  assert.deepEqual(ids('map').slice(0, chip.length).sort(), [...chip].sort())
+  assert.equal(ids('', 'map')[0], 'decision-path')
+  assert.ok(!ids('map').includes('reorg-sandbox'))
 })
 
 test('#17 a kept board is said in a sentence, not a log line', () => {
@@ -120,6 +144,45 @@ test('#17 the conversation is anchored at its foot; the first turn and the libra
   }
 })
 
+/** A stand-in for the conversation's scrolling area: turns at given tops and heights (px). */
+function history(clientHeight, turns) {
+  const els = turns.map(([who, top]) => ({ dataset: { chatTurn: who }, getBoundingClientRect: () => ({ top }) }))
+  const [, lastTop, lastHeight] = turns[turns.length - 1]
+  return { clientHeight, scrollTop: 0, scrollHeight: lastTop + lastHeight, querySelectorAll: () => els, getBoundingClientRect: () => ({ top: 0 }) }
+}
+
+test('#17 review: a reply taller than a phone\'s conversation opens at the question it answers, not its foot', () => {
+  const panel = ui('components/ConversationPanel.jsx')
+  assert.match(panel, /el\.scrollTop = newestTop\(el\) \?\? el\.scrollHeight/)
+  assert.match(ui('components/ChatTurn.jsx'), /data-chat-turn=\{who\}/)
+  // 200px of history: "Add a retro" at 300, a 400px preview reply under it: scroll to the question.
+  assert.equal(newestTop(history(200, [['slatebox', 0, 280], ['you', 300, 40], ['slatebox', 350, 400]])), 292)
+  // A short reply: the foot, as before.
+  assert.equal(newestTop(history(200, [['you', 300, 40], ['slatebox', 350, 60]])), null)
+  // Just sent: the foot.
+  assert.equal(newestTop(history(200, [['slatebox', 0, 280], ['you', 300, 40]])), null)
+})
+
+test('#17 review: in dark mode your bubble is the chrome\'s selected green, not amber over green', () => {
+  const turn = ui('components/ChatTurn.jsx')
+  assert.match(turn, /theme\.palette\.mode === 'dark' \? theme\.palette\.shell\.selected/)
+  assert.doesNotMatch(turn, /'dark' \? \.22/)
+})
+
+test('#6 review: one spacing scale, theme type, and the loading moment wherever a slate opens', () => {
+  const welcome = ui('components/SlateWelcome.jsx')
+  const turn = ui('components/ChatTurn.jsx')
+  // No hand-set steps off the scale (1.75, 2.25, 3.5, 2.75; 1.25, 4.25, 1.4) and no hand-set type.
+  for (const src of [welcome, turn]) assert.doesNotMatch(src, /\b(?:m|mt|mb|my|p|px|py|pl|gap): (?:1\.75|2\.25|3\.5|2\.75|1\.25|4\.25|1\.4|\.25)\b/)
+  assert.doesNotMatch(welcome, /fontWeight: 750|fontSize: (?:28|22|20|14\.5)\b/)
+  assert.match(welcome, /variant=\{phone \? 'h6' : 'h5'\}/)
+  // Opening a saved workshop, and reopening any slate, show the same calm moment as /new.
+  assert.match(ui('pages/DecisionWorkshopPage.jsx'), /if \(loggingIn\) return <SlateLoading \/>/)
+  assert.match(ui('pages/Canvas.jsx'), /\{!boardLoaded && !asEmbed && <SlateLoading fill=\{false\} \/>\}/)
+  // The loop starts part way in, so its first frame already shows a placed tile.
+  assert.match(ui('components/SlateLoading.jsx'), /\(i \* \.18 - \.55\)\.toFixed\(2\)/)
+})
+
 test('#15 one way to browse at a time: no strip under the library or under the first turn\'s cards', () => {
   const native = ui('components/NativeCanvasConversation.jsx')
   assert.match(native, /\{!view && !firstTurn && <AddStrip/)
@@ -147,8 +210,87 @@ test('#6 a new slate starts with no note; a designed welcome invites the first a
   assert.doesNotMatch(welcome, /\b[A-Z]{4,}\b(?![a-z])/)
   const canvas = ui('pages/Canvas.jsx')
   assert.match(canvas, /<SlateWelcome /)
-  // The note it adds is the shared default: AA text in both modes.
-  assert.match(welcome, /DEFAULT_NOTE/)
+  // The note it adds is the slate's new note (common/newNote.mjs), the one a double-click makes.
+  assert.match(welcome, /addNoteInView\(slate, canvasId\)/)
+})
+
+test('#6 a new note takes the organisation\'s default preset: colours, font and size', () => {
+  const preset = {
+    categoryStyles: [{ backgroundColor: '#ffd23f', foregroundColor: null }, { backgroundColor: '#123456', foregroundColor: '#ffffff' }],
+    categoryFont: 'House', categoryFontSize: 18,
+  }
+  const style = presetNoteStyle(preset, { House: 'Lora, serif' })
+  // The first category style; no foreground chosen, so whichever of black and white reads on it.
+  assert.deepEqual(style, { backgroundColor: '#ffd23f', foregroundColor: '#000000', fontFamily: 'Lora, serif', fontSize: 18 })
+  assert.equal(presetNoteStyle({ categoryStyles: [{ backgroundColor: '#1d2b2a' }] }).foregroundColor, '#ffffff')
+  // A font name with no typography setting is used as it is.
+  assert.equal(presetNoteStyle({ categoryFont: 'Georgia' }).fontFamily, 'Georgia')
+  // Without a preset: the default note, white on a calm blue, Manrope at the style bar's M (18px).
+  assert.deepEqual(presetNoteStyle(null), { ...DEFAULT_NOTE, fontFamily: 'Manrope', fontSize: 13.5 })
+  assert.deepEqual(sizeChoice(`${presetNoteStyle(null).fontSize}pt`), { key: 'M' })
+  assert.equal(dockNoteStyle(null).fontSize, 18)
+  // The tool dock's first note on an empty slate is the same look (its sizes are pixels).
+  assert.deepEqual(dockNoteStyle(style), { backgroundColor: '#ffd23f', foregroundColor: '#000000', fontFamily: 'Lora, serif', fontSize: 24, lineColor: '#333', lineWidth: 3 })
+  const addNote = ui('components/node/addNote.js')
+  assert.match(addNote, /noteBase\(ownNotes, slate\?\.noteStyle\)/)
+  assert.doesNotMatch(addNote, /#23aad6/)
+  // createSlate resolves it once, from the preset it loads, onto the slate the canvas holds.
+  const create = app('imports/api/client/createSlate.js')
+  assert.match(create, /slate\.noteStyle = presetNoteStyle\(defaultPreset\?\.value, fonts\)/)
+  assert.match(create, /type: 'typography'/)
+})
+
+/** A stand-in for the engine's slate: records the notes it is asked for. */
+function fakeSlate(noteStyle) {
+  const added = []
+  const v2 = {
+    addNode: (opts) => { const node = { opts, ready: Promise.resolve(), editor: { startInline() { node.typing = true } } }; added.push(node); return node },
+    selectNodes: (nodes) => { v2.selected = nodes },
+    canvas: { point: (x, y) => ({ x: x * 2, y: y * 2 }), node: { tagName: 'svg', contains: () => false } },
+    isReadOnly: () => false,
+  }
+  return { slate: { v2, noteStyle }, added, v2 }
+}
+
+test('#6 a preset\'s style reaches the welcome\'s note, which opens for typing', async () => {
+  const style = presetNoteStyle({ categoryStyles: [{ backgroundColor: '#ffd23f' }], categoryFont: 'Lora', categoryFontSize: 18 })
+  const { slate, added, v2 } = fakeSlate(style)
+  globalThis.document = { getElementById: () => ({ getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 200 }) }) }
+  try {
+    addNoteInView(slate, 'slateCanvas')
+  } finally {
+    delete globalThis.document
+  }
+  assert.equal(added.length, 1)
+  const { opts } = added[0]
+  assert.equal(opts.backgroundColor, '#ffd23f')
+  assert.equal(opts.fontColor, '#000000')
+  assert.equal(opts.fontFamily, 'Lora')
+  assert.equal(opts.fontSize, '18pt')
+  assert.equal(opts.shape, 'roundedrectangle')
+  // Centred on the middle of the view (400 by 200 on screen is 400, 200 on the slate here).
+  assert.equal(opts.x + opts.width / 2, 400)
+  assert.equal(opts.y + opts.height / 2, 200)
+  await new Promise((resolve) => setTimeout(resolve))
+  assert.deepEqual(v2.selected, [added[0]])
+  assert.equal(added[0].typing, true)
+  // Without a preset it is the default note at 13.5pt (18px, the bar's M), 160 by 68.
+  const plain = fakeSlate(undefined)
+  addNoteAt(plain.slate, { x: 100, y: 100 })
+  assert.deepEqual(plain.added[0].opts, { x: 20, y: 66, width: 160, height: 68, text: '', shape: 'roundedrectangle',
+    backgroundColor: DEFAULT_NOTE.backgroundColor, fontColor: DEFAULT_NOTE.foregroundColor, fontFamily: 'Manrope', fontSize: '13.5pt', borderWidth: 0 })
+})
+
+test('#6 a double-click on empty canvas makes the welcome\'s note, where it landed, before the engine\'s grey one', () => {
+  const src = ui('common/newNote.mjs')
+  // Taken in the capture phase and stopped, so the engine's own double-click note is not made too.
+  assert.match(src, /addEventListener\('dblclick', onDoubleClick, true\)/)
+  assert.match(src, /event\.stopPropagation\(\)/)
+  assert.match(src, /isReadOnly\?\.\(\)/)
+  assert.match(src, /addNoteAt\(slate, v2\.canvas\.point\(event\.clientX, event\.clientY\)\)/)
+  assert.match(ui('pages/Canvas.jsx'), /useNoteOnDoubleClick\(/)
+  // The welcome may promise it: both ways make the same note.
+  assert.match(ui('components/SlateWelcome.jsx'), /Or double-click anywhere on the canvas\./)
 })
 
 test('#6 the minimap shows only when the slate is bigger than the screen', () => {

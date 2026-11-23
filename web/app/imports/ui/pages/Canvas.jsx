@@ -105,7 +105,9 @@ import { presentPeople } from '../../api/common/presence.mjs'
 import { sidePanels } from '../../api/common/side-panels.mjs'
 import SlateOutputDialog from '../components/slate/SlateOutputDialog'
 import SlateWelcome from '../components/SlateWelcome'
+import SlateLoading from '../components/SlateLoading'
 import useMinimapWhenNeeded from '../common/useMinimapWhenNeeded'
+import { useNoteOnDoubleClick } from '../common/newNote.mjs'
 import '../common/main.css'
 import { noteSelection } from '../../api/common/chat-selection.mjs'
 
@@ -1228,6 +1230,8 @@ export default function Canvas() {
   const proposing = Boolean(drawingPreview) || Boolean(workshopSlate && workshop.previewing)
   // A plain slate shows its minimap only while some of it is off screen (a workshop slate decides its own).
   useMinimapWhenNeeded(boardLoaded && !creativeKind && !asEmbed ? slate.current?.v2 : null, canvasRef.current, boardLoaded && !creativeKind && !asEmbed)
+  // A double-click on empty canvas makes the note Add a note makes, open for typing.
+  useNoteOnDoubleClick(boardLoaded && !creativeKind && !asEmbed ? slate.current : null, containerId)
   // Heard while the chat is open, minimised or not: the drop that may bring it back comes after it went down.
   const sheetOpen = canShowConversation && nativeChatOpen
   React.useEffect(() => {
@@ -1346,6 +1350,8 @@ export default function Canvas() {
             <SlateWelcome slate={slate.current} canvasId={containerId} phone={phone} askOpen={conversationVisible} canPick={canShowConversation}
               active={Boolean(boardLoaded && slate.current && !creativeKind && !overlayKind && !asEmbed && !proposing &&
                 !accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly)} />
+            {/* While the slate opens (a new one, or one reopened), the same calm moment as /new, over the canvas. */}
+            {!boardLoaded && !asEmbed && <SlateLoading fill={false} />}
             {/* The bar over the selection, inside the canvas's own area: never under the panel beside it. */}
             {boardLoaded && !overlayKind && !asEmbed && slate.current && (
               <StyleBar slate={slate.current} frame={selectionFrame} editable={barEditable}

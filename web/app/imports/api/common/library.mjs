@@ -29,20 +29,31 @@ const KIND_WORDS = {
   pipeline: ['board', 'stages', 'funnel'],
   budget: ['plan', 'money', 'split'],
 }
-// And for one entry: a tree that maps a problem or a choice is found as a map.
+// And for one entry: a tree that maps a problem or a choice is found as a map (and is under the
+// Map chip, so the chip and a "map" search agree), and the everyday words for a to-do board, a
+// brainstorm or a risk.
 const ENTRY_WORDS = {
-  'discovery-tree': ['map', 'mind map'],
-  'break-down-problem': ['map', 'mind map'],
-  'reorg-sandbox': ['org map', 'org tree'],
+  'discovery-tree': ['map', 'mind map', 'brainstorm', 'ideas'],
+  'break-down-problem': ['map', 'mind map', 'brainstorm'],
+  'reorg-sandbox': ['org tree', 'org diagram'],
+  'team-board': ['todo', 'to do', 'to do list', 'tasks', 'standup', 'stand up', 'sprint board'],
+  triage: ['tasks'],
+  'pros-cons': ['risk', 'swot', 'compare'],
+  'impact-effort': ['risk'],
 }
 const GROUP_LABELS = Object.fromEntries(catalogGroups.map(group => [group.id, group.label.toLowerCase()]))
 const plainWords = text => String(text ?? '').toLowerCase().replace(/[^\p{L}\p{N}×&]+/gu, ' ').trim()
-const hasWord = (text, word) => ` ${plainWords(text)} `.includes(` ${word} `)
+// A word's singular, for matching on both sides: "meetings" finds the Meetings group from "meeting"
+// as well as the other way round ("process", "pros" and short words are left alone).
+const singular = word => (word.length > 4 && word.endsWith('s') && !word.endsWith('ss') ? word.slice(0, -1) : word)
+const singularWords = text => plainWords(text).split(' ').map(singular).join(' ')
+const hasWord = (text, word) => ` ${plainWords(text)} `.includes(` ${word} `) || ` ${singularWords(text)} `.includes(` ${singular(word)} `)
 const startsWord = (text, word) => ` ${plainWords(text)}`.includes(` ${word}`)
+const isMap = entry => entry.build?.kind === 'map' || (ENTRY_WORDS[entry.id] ?? []).some(term => hasWord(term, 'map'))
 
-/** Whether an entry belongs under a group chip. The Map chip holds the boards that are maps. */
+/** Whether an entry belongs under a group chip. The Map chip holds the boards that are maps, and the trees that map a problem. */
 export function inGroup(entry, group) {
-  return group === 'all' || entry.group === group || (group === 'map' && entry.build?.kind === 'map')
+  return group === 'all' || entry.group === group || (group === 'map' && isMap(entry))
 }
 
 // How well one searched word fits an entry: its name, then its group, then its synonyms and the words
@@ -50,7 +61,7 @@ export function inGroup(entry, group) {
 function wordScore(entry, word) {
   const groups = [GROUP_LABELS[entry.group], ...(entry.build?.kind === 'map' ? ['map'] : [])]
   if (startsWord(entry.name, word)) return 8
-  if (groups.includes(word)) return 6
+  if (groups.some(label => hasWord(label, word))) return 6
   if (entry.synonyms.some(syn => hasWord(syn, word))) return 5
   if ([...(KIND_WORDS[entry.build?.kind] ?? []), ...(ENTRY_WORDS[entry.id] ?? [])].some(term => hasWord(term, word))) return 4
   if (hasWord(entry.line, word)) return 3

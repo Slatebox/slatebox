@@ -3,6 +3,7 @@ import { Meteor } from 'meteor/meteor'
 import { useTracker } from 'meteor/react-meteor-data'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import BrandBar from '../common/BrandBar'
+import SlateLoading from '../components/SlateLoading'
 import SharedWorkshopRoom from './SharedWorkshopRoom.jsx'
 import { validateWorkshop } from 'slateboxjs/workshops/model'
 import { legacyWorkshopEntry, legacyWorkshopKeys, storedWorkshopData } from '../../api/common/legacy-workshop-entry.mjs'
@@ -17,7 +18,7 @@ export default function Workshops() {
   const requested = params.get('format')
   const format = ['lanes','map','release-plan'].includes(requested) ? requested : 'lanes'
   const sample = format === 'map' && params.get('example') === 'customer-import' ? 'customer-import' : null
-  if (loggingIn) return <p role="status">Opening your slate…</p>
+  if (loggingIn) return <SlateLoading />
   if (params.get('view') === 'saved') return <SavedWorkshops key={(userId || 'guest') + format} userId={userId} format={format} params={params} />
   const entry = legacyWorkshopEntry({format,sample,userId,storage:{getItem:key=>sessionStorage.getItem(key)},customerImport})
   return <Navigate to={entry.to} state={entry.state} replace />

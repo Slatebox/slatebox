@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useLayoutEffect, useRef } from 'react'
 import { Box, Button, IconButton, Paper, TextField, Tooltip, Typography, useMediaQuery } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
+import { newestTop } from '../common/newestTurn.mjs'
 
 // A short screen: a phone held sideways.
 const short = '@media (max-height:500px)'
@@ -25,7 +26,8 @@ function takeFocusAfterReload(shareId) {
  * panel whatever the conversation holds.
  *
  * `anchor`: a conversation ('bottom') sits on the message box and grows up from it, as chat does,
- * and keeps its newest turn in sight. What is read from the top (the empty slate's first turn, the
+ * and keeps its newest turn in sight (a reply taller than the area opens at the question it answers:
+ * common/newestTurn.mjs). What is read from the top (the empty slate's first turn, the
  * library) is anchored at the 'top' and opens there, never scrolled to its foot.
  */
 export default function ConversationPanel({ onClose, children, composer, anchor = 'bottom' }) {
@@ -44,7 +46,7 @@ export default function ConversationPanel({ onClose, children, composer, anchor 
     }
     if (el.scrollHeight === grown.current) return
     grown.current = el.scrollHeight
-    el.scrollTop = el.scrollHeight
+    el.scrollTop = newestTop(el) ?? el.scrollHeight
   })
   const wide = '@media (min-width:1000px)'
   // Closed with ×: focus goes back to the "Ask Slatebox" button that opens it (the header's, or the

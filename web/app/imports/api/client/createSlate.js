@@ -7,6 +7,7 @@ import CONSTANTS from '../common/constants'
 import { createAINodes } from '../common/ai'
 import defaultShapes from '../../ui/components/node/defaultShapes'
 import { DEFAULT_NOTE } from '../../ui/common/canvasTheme.mjs'
+import { presetNoteStyle } from '../../ui/common/noteStyle.mjs'
 
 async function createSlate(
   slateBase,
@@ -39,6 +40,7 @@ async function createSlate(
   await ensureDeps()
 
   let defaultPreset = null
+  const fonts = {}
 
   if (Meteor.user() && Meteor.user().orgId) {
     // Fetch the default preset setting via specific query method
@@ -57,6 +59,22 @@ async function createSlate(
     } catch (error) {
       console.error('Error fetching default organization preset:', error)
       defaultPreset = null // Ensure it's null on error
+    }
+
+    // A preset names its note font by a typography setting's name: find that font's family (the
+    // name itself is used when it can't be found).
+    if (defaultPreset?.value?.categoryFont) {
+      try {
+        const typography = await Meteor.callAsync(
+          CONSTANTS.methods.organizationSettings.getByQuery,
+          { type: 'typography' }
+        )
+        ;(typography ?? []).forEach((setting) => {
+          if (setting?.value?.name && setting.value.value) fonts[setting.value.name] = setting.value.value
+        })
+      } catch {
+        // The preset's font name stands.
+      }
     }
 
     // New slates are private for everyone.
@@ -214,6 +232,9 @@ async function createSlate(
   }
 
   const slate = await new Slatebox.slate(opts, events).init()
+  // How a new note looks on this slate (the welcome's note, a double-click, the tool dock): the
+  // organisation's default preset, or the default note.
+  slate.noteStyle = presetNoteStyle(defaultPreset?.value, fonts)
 
   slate.shareId = newSlate.shareId
 

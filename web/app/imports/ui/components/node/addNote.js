@@ -3,15 +3,14 @@
 import cloneDeep from 'lodash.clonedeep'
 import { Slatebox } from 'slateboxjs'
 import defaultShapes from './defaultShapes'
+import { dockNoteStyle } from '../../common/noteStyle.mjs'
 
-/** The style a new note starts from: the slate's last note of its own, or the default. */
-export function noteBase(ownNotes) {
-  return cloneDeep(ownNotes[ownNotes.length - 1]?.options) || {
-    backgroundColor: '#23aad6',
-    foregroundColor: '#000000',
-    lineColor: '#333',
-    lineWidth: 3,
-  }
+/**
+ * The style a new note starts from: the slate's last note of its own or, on a slate without one,
+ * its new-note look (the organisation's default preset, or the default note: common/noteStyle.mjs).
+ */
+export function noteBase(ownNotes, noteStyle) {
+  return cloneDeep(ownNotes[ownNotes.length - 1]?.options) || dockNoteStyle(noteStyle)
 }
 
 /**
@@ -24,7 +23,7 @@ export default function addNote(slate, shape) {
   const ownNotes = (slate?.nodes?.allNodes ?? []).filter(
     (n) => !slate.v2?.governanceOf?.(n.v2)
   )
-  const baseOpts = noteBase(ownNotes)
+  const baseOpts = noteBase(ownNotes, slate?.noteStyle)
 
   let { path } = shape
   if (shape.key === 'addText') {

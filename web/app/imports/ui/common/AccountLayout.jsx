@@ -16,6 +16,9 @@ export const SPACE = {
   section: 4, // 32px: tabs to content; section to section
   page: 6, // 48px: the page's own top and side margin on a wide screen
 }
+// The same scale by a lower-case name, for components whose source keeps clear of capitals
+// (the welcome is checked for all-caps words: scripts/first-minute.test.mjs).
+export const space = SPACE
 
 // commands and code to copy: monospace, so flags such as --no-install read as typed
 export const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace'

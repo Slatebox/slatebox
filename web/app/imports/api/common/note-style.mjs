@@ -13,7 +13,7 @@ export const MIN_SIZE = 6
 export const MAX_SIZE = 400
 
 // A size is drawn in the unit it is stored with: a number or "18px" in pixels, "14pt" in points
-// (a new slate's notes are "14pt", drawn at 18.7px). The bar works in pixels.
+// (a new slate's first note is "13.5pt", drawn at 18px, the M chip). The bar works in pixels.
 const sizeNumber = (value) => {
   const raw = String(value ?? '').trim().toLowerCase()
   let n = typeof value === 'number' ? value : parseFloat(raw)
