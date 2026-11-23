@@ -23,15 +23,26 @@ function takeFocusAfterReload(shareId) {
  * below that. The header's "Ask Slatebox" toggle (the bottom bar's on a narrow screen) and this ×
  * both close it. The conversation scrolls; the message box (`composer`) stays at the foot of the
  * panel whatever the conversation holds.
+ *
+ * `anchor`: a conversation ('bottom') sits on the message box and grows up from it, as chat does,
+ * and keeps its newest turn in sight. What is read from the top (the empty slate's first turn, the
+ * library) is anchored at the 'top' and opens there, never scrolled to its foot.
  */
-export default function ConversationPanel({ onClose, children, composer }) {
+export default function ConversationPanel({ onClose, children, composer, anchor = 'bottom' }) {
   const history = useRef(null)
   const grown = useRef(0)
   // The newest of the conversation is at its foot, just above the message box: keep it in sight
   // as the conversation grows (and leave alone someone reading further up while nothing is added).
   useLayoutEffect(() => {
     const el = history.current
-    if (!el || el.scrollHeight === grown.current) return
+    if (!el) return
+    if (anchor !== 'bottom') {
+      // Read from the top: opened (or switched to) at its top; the next conversation scrolls afresh.
+      if (grown.current !== -1) el.scrollTop = 0
+      grown.current = -1
+      return
+    }
+    if (el.scrollHeight === grown.current) return
     grown.current = el.scrollHeight
     el.scrollTop = el.scrollHeight
   })
@@ -56,7 +67,11 @@ export default function ConversationPanel({ onClose, children, composer }) {
       <Tooltip title="Close"><IconButton aria-label="Close conversation" onClick={close} sx={{mr:-1}}><CloseIcon /></IconButton></Tooltip>
     </Box>
     {/* On a short screen the message box and its Keep and Discard come first; the conversation has what is left. */}
-    <Box ref={history} sx={{flex:'1 1 auto',minHeight:0,overflowY:'auto',overscrollBehavior:'contain',px:2.5,[short]:{flexBasis:0}}}>{children}</Box>
+    {/* A column, so a short conversation can sit at its foot (an auto top margin, which never hides what overflows). */}
+    <Box ref={history} data-conversation-history={anchor} sx={{flex:'1 1 auto',minHeight:0,overflowY:'auto',overscrollBehavior:'contain',px:2.5,
+      display:'flex',flexDirection:'column',[short]:{flexBasis:0}}}>
+      <Box sx={{ mt: anchor === 'bottom' ? 'auto' : 0, flex: 'none', minWidth: 0 }}>{children}</Box>
+    </Box>
     {composer && <Box sx={{flex:'none',borderTop:1,borderColor:'divider',px:2.5,pt:1.5,pb:'max(12px, env(safe-area-inset-bottom))',[wide]:{pb:2},
       // On a short screen (a phone held sideways) the message box scrolls rather than push the panel past its height.
       [short]:{flex:'0 1 auto',minHeight:0,overflowY:'auto',pt:1,pb:'max(8px, env(safe-area-inset-bottom))'}}}>{composer}</Box>}

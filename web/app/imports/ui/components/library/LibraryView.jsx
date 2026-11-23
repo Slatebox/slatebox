@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Button, ButtonBase, Chip, IconButton, InputBase, Typography } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import ChatTurn from '../ChatTurn'
 import { catalogGroups } from 'slateboxjs/catalog'
-import { catalogEntry, catalogSample, entryOfBoard, listedEntries, startersFor } from '../../../api/common/library.mjs'
+import { catalogEntry, catalogSample, entryOfBoard, listedEntries, searchEntries, startersFor } from '../../../api/common/library.mjs'
 
 // The library (library final.md §2.3): a view inside Ask Slatebox's conversation, in the panel's
 // 344px column and in the phone's sheet. Cards two to a row with a looping picture, a detail view
@@ -137,11 +138,8 @@ export default function LibraryView({ onBack, onAdd, onSay, onSend, onWhatCanItD
   const [open, setOpen] = useState(start.entry ? catalogEntry(start.entry) : null)
   const heading = useRef(null)
   useEffect(() => { heading.current?.focus() }, [open])
-  const entries = useMemo(() => {
-    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
-    return listedEntries().filter(entry => (group === 'all' || entry.group === group) &&
-      words.every(word => [entry.name, entry.line, ...entry.synonyms].join(' ').toLowerCase().includes(word)))
-  }, [group, query])
+  // Ranked by how each fits: a name above a group above a synonym ("map" finds the maps, "plans" the plans).
+  const entries = useMemo(() => searchEntries(query, group), [group, query])
   const here = board ? entryOfBoard(board) : null
   const back = () => (open ? setOpen(null) : onBack())
   return <Box component="section" aria-label="Add to this slate" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); back() } }} sx={{ my: 1 }}>
@@ -154,7 +152,8 @@ export default function LibraryView({ onBack, onAdd, onSay, onSend, onWhatCanItD
         inputProps={{ 'aria-label': 'Search the library or describe what you need' }}
         onKeyDown={event => { if (event.key === 'Enter' && query.trim() && !entries.length) { event.preventDefault(); onSend(query.trim()) } }}
         sx={{ border: 1, borderColor: 'divider', borderRadius: 1, px: 1, py: .25, my: 1, fontSize: 14 }} />
-      <Box role="group" aria-label="Groups" sx={{ display: 'flex', gap: .5, overflowX: 'auto', pb: .5 }}>
+      {/* The chips wrap to a second row rather than run off the panel's edge. */}
+      <Box role="group" aria-label="Groups" sx={{ display: 'flex', flexWrap: 'wrap', gap: .5, pb: .5 }}>
         {catalogGroups.map(item => <Chip key={item.id} label={item.label} size="small" clickable color={group === item.id ? 'primary' : 'default'}
           variant={group === item.id ? 'filled' : 'outlined'} aria-pressed={group === item.id} onClick={() => setGroup(item.id)} />)}
       </Box>
@@ -174,12 +173,11 @@ export function FirstTurn({ onAdd, onOpen, onBrowse, onGoal }) {
   const firsts = ['retro', 'now-next-later', 'pros-cons', 'team-board'].map(catalogEntry).filter(Boolean)
   const goals = [['Plan work', () => onBrowse({ group: 'plan' })], ['Run a retro', () => onOpen(catalogEntry('retro'))],
     ['Weigh a decision', () => onBrowse({ group: 'decide' })], ['Draw a flow', () => onGoal('Intake → Review → Send a reply')]]
-  return <Box component="section" aria-label="Opening message" sx={{ my: 2 }}>
-    <Typography variant="caption">Slatebox</Typography>
-    <Typography sx={{ fontWeight: 600 }}>What are you working on?</Typography>
-    <Box role="group" aria-label="Goals" sx={{ display: 'flex', flexWrap: 'wrap', gap: .5, my: 1 }}>
+  return <Box component="section" aria-label="Opening message" sx={{ my: 1 }}>
+    <ChatTurn who="slatebox" as="div" after={<Box role="group" aria-label="Goals" sx={{ display: 'flex', flexWrap: 'wrap', gap: .5 }}>
       {goals.map(([label, go]) => <Chip key={label} label={label} size="small" clickable variant="outlined" onClick={go} />)}
-    </Box>
+    </Box>}><Typography variant="body2" component="span" sx={{ display: 'block', fontWeight: 600 }}>What are you working on?</Typography>
+      <Typography variant="body2" component="span" sx={{ display: 'block', color: 'text.secondary' }}>Pick a goal, start from a board, or just say it.</Typography></ChatTurn>
     <LibraryCards entries={firsts} onOpen={onOpen} onAdd={onAdd} label="Start with one of these" />
     <Button size="small" onClick={() => onBrowse({})}>See all {listedEntries().length}</Button>
   </Box>

@@ -7,6 +7,7 @@ import { Box, Button, Typography } from '@mui/material'
 import CONSTANTS from '../../api/common/constants'
 import createAnonymousUser from '../../api/client/createAnonymousUser'
 import { initialPrompt, createSlateWithAIContent } from '../jotai/atoms'
+import SlateLoading from '../components/SlateLoading'
 
 export default function GetStarted() {
   const navigate = useNavigate()
@@ -35,12 +36,15 @@ export default function GetStarted() {
     return () => { active = false }
   }, [loggingIn, navigate, retry, setPrompt, setAIContext])
 
-  return <Box component="main" sx={{ minHeight: '100svh', bgcolor: 'background.default', color: 'text.primary', p: 3 }}>
-    {error ? <><Typography role="alert">{error}</Typography><Button onClick={() => {
+  if (!error) return <Box component="main"><SlateLoading /></Box>
+  return <Box component="main" sx={{ minHeight: '100svh', bgcolor: 'background.default', color: 'text.primary', p: 3,
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, textAlign: 'center' }}>
+    <Typography role="alert" sx={{ fontSize: 17 }}>{error}</Typography>
+    <Button variant="contained" disableElevation sx={{ borderRadius: 6, px: 3 }} onClick={() => {
       creation.current = null
       setError('')
       setRetry(attempt => attempt + 1)
-    }}>Try again</Button></> : <Typography role="status">Opening your slate…</Typography>}
+    }}>Try again</Button>
   </Box>
 
 }

@@ -7,14 +7,14 @@ import { Link } from 'react-router-dom'
 import { Box, Button, Typography } from '@mui/material'
 
 // The mark's five tiles (public/brand/slatebox.svg), as rectangles.
-const TILES = [
+export const TILES = [
   { x: 1.596, y: 15.372, w: 14.893, h: 7.447 },
   { x: -16.489, y: -18.032, w: 14.893, h: 7.447 },
   { x: 1.596, y: -2.606, w: 14.893, h: 14.893 },
   { x: -25, y: -7.394, w: 23.404, h: 21.277 },
   { x: 1.596, y: -22.819, w: 23.404, h: 17.021 },
 ]
-const AMBER = '#fbcc88'
+export const AMBER = '#fbcc88'
 
 // 'lost': one tile has wandered off and left its outline behind. 'empty': outlines waiting for
 // their tiles, the first one placed.

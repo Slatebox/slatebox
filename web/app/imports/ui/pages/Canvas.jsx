@@ -104,6 +104,8 @@ import { CreativeStates, livePresentationTicket, NativePresentationStates } from
 import { presentPeople } from '../../api/common/presence.mjs'
 import { sidePanels } from '../../api/common/side-panels.mjs'
 import SlateOutputDialog from '../components/slate/SlateOutputDialog'
+import SlateWelcome from '../components/SlateWelcome'
+import useMinimapWhenNeeded from '../common/useMinimapWhenNeeded'
 import '../common/main.css'
 import { noteSelection } from '../../api/common/chat-selection.mjs'
 
@@ -1224,6 +1226,8 @@ export default function Canvas() {
   const minimised = narrow && chatMinimised
   const conversationVisible = canShowConversation && nativeChatOpen && !minimised
   const proposing = Boolean(drawingPreview) || Boolean(workshopSlate && workshop.previewing)
+  // A plain slate shows its minimap only while some of it is off screen (a workshop slate decides its own).
+  useMinimapWhenNeeded(boardLoaded && !creativeKind && !asEmbed ? slate.current?.v2 : null, canvasRef.current, boardLoaded && !creativeKind && !asEmbed)
   // Heard while the chat is open, minimised or not: the drop that may bring it back comes after it went down.
   const sheetOpen = canShowConversation && nativeChatOpen
   React.useEffect(() => {
@@ -1338,6 +1342,10 @@ export default function Canvas() {
           <div style={{ position: 'relative', flex: '1 1 0', minWidth: 0, minHeight: 0, display: 'flex' }}>
             <div id={containerId} ref={canvasRef} style={{ position: 'relative', flex: '1 1 0', minWidth: 0, minHeight: 0, overflow: 'hidden',
               ...(overlayKind && { visibility: 'hidden', pointerEvents: 'none' }) }} />
+            {/* An empty slate's welcome, in the middle of the canvas, until its first note or board. */}
+            <SlateWelcome slate={slate.current} canvasId={containerId} phone={phone} askOpen={conversationVisible} canPick={canShowConversation}
+              active={Boolean(boardLoaded && slate.current && !creativeKind && !overlayKind && !asEmbed && !proposing &&
+                !accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly)} />
             {/* The bar over the selection, inside the canvas's own area: never under the panel beside it. */}
             {boardLoaded && !overlayKind && !asEmbed && slate.current && (
               <StyleBar slate={slate.current} frame={selectionFrame} editable={barEditable}

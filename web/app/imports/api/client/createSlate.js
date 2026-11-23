@@ -228,109 +228,43 @@ async function createSlate(
         Slatebox.utils.whiteOrBlack(bgColors[0]), // Use calculated bgColor
         [defaultShapes.find((vx) => vx.key === 'star').path]
       )
-    } else {
-      // --- Keep original height logic ---
-      const height = opts.autoResizeNodesBasedOnText
-        ? createWithTheme.styles.parent.height
-        : 100
-      let nodeHeight = height
-      // --- Removed original width logic ---
-      // const width = opts.autoResizeNodesBasedOnText
-      //   ? createWithTheme.styles.parent.width
-      //   : 175
-      // let nodeWidth = width
-
-      // this is a new slate -- create a first node
-      const gid = Slatebox.utils.guid(8)
-
-      // Initialize node dimensions with defaults or theme-based sizes - Height only now
-      // let nodeWidth = width // Removed
-      // let nodeHeight = height // Kept
-
-      // --- Start Default Node Style Logic ---
-      let initialNodeStyle = {
+    } else if (createWithTheme) {
+      // A theme is applied to a first note (Canvas.jsx applyTheme), so a themed slate starts with one.
+      // A plain new slate starts empty: the canvas shows its welcome (ui/components/SlateWelcome.jsx)
+      // until the first note or board, so every slate is not one more lone note.
+      const initialNodeStyle = {
         // White on a calm blue, AA in both modes (canvasTheme.mjs).
         backgroundColor: DEFAULT_NOTE.backgroundColor,
         opacity: 1,
         borderOpacity: 0,
-        fontFamily: createWithTheme?.styles?.parent?.fontFamily || 'Manrope',
+        fontFamily: createWithTheme.styles?.parent?.fontFamily || 'Manrope',
         foregroundColor: DEFAULT_NOTE.foregroundColor,
         lineColor: '#000',
         lineWidth: 5,
         vectorPath: 'roundedrectangle',
-        fontSize: createWithTheme?.styles?.parent?.fontSize
+        fontSize: createWithTheme.styles?.parent?.fontSize
           ? `${createWithTheme.styles.parent.fontSize}pt`
-          : '14pt', // Add a default base fontSize with units
+          : '14pt',
       }
-
-      if (!createWithTheme) {
-        // Check if default preset has styles and apply the first one
-        const firstCategoryStyle = defaultPreset?.value?.categoryStyles?.[0]
-        const presetValues = defaultPreset?.value // Keep for font access
-
-        if (firstCategoryStyle) {
-          // --- Use explicit HEX colors from the saved preset ---
-          const bgColor = firstCategoryStyle.backgroundColor // Should be hex
-          const fgColor = firstCategoryStyle.foregroundColor // Should be hex
-
-          initialNodeStyle = {
-            ...initialNodeStyle, // Keep defaults unless overridden
-            // Apply explicit colors if they exist in the preset
-            ...(bgColor && { backgroundColor: bgColor }),
-            ...(fgColor && { foregroundColor: fgColor }),
-
-            // Apply font/size if they exist
-            ...(presetValues?.categoryFont && {
-              fontFamily: presetValues.categoryFont,
-            }),
-            ...(presetValues?.categoryFontSize && {
-              fontSize: `${presetValues.categoryFontSize}pt`, // Ensure units
-            }),
-
-            // If foreground wasn't in preset, calculate it based on background
-            ...(!fgColor &&
-              bgColor && {
-                foregroundColor: Slatebox.utils.whiteOrBlack(bgColor),
-              }),
-          }
-        } else if (
-          presetValues?.categoryFont ||
-          presetValues?.categoryFontSize
-        ) {
-          // Apply font/size even if no colors defined
-          initialNodeStyle = {
-            ...initialNodeStyle,
-            ...(presetValues.categoryFont && {
-              fontFamily: presetValues.categoryFont,
-            }),
-            ...(presetValues.categoryFontSize && {
-              fontSize: `${presetValues.categoryFontSize}pt`, // Ensure units
-            }),
-          }
-        }
-      }
-
-      const textForWidthCalc = 'Welcome!'
-      const calculatedDimensions = Slatebox.utils.getTextWidth(
-        textForWidthCalc,
+      const text = 'Start here'
+      const measured = Slatebox.utils.getTextWidth(
+        text,
         `${initialNodeStyle.fontSize} ${initialNodeStyle.fontFamily}`
       )
-      // Add some horizontal padding (e.g., 20px each side)
-      const nodeWidth = calculatedDimensions.width + 40
-      nodeHeight = calculatedDimensions.height + 40
-
-      const defaultNodeOpts = {
+      const gid = Slatebox.utils.guid(8)
+      const node = new Slatebox.node({
         id: gid,
         name: gid,
-        text: textForWidthCalc, // Use the same text used for calculation
+        text,
         xPos: 10000,
         yPos: 10000,
-        height: nodeHeight, // Use potentially updated height
-        width: nodeWidth, // Use calculated width + padding
-        ...initialNodeStyle, // Spread the determined style
-      }
-      // Removed Object.assign as it's redundant now
-      const node = new Slatebox.node(defaultNodeOpts)
+        // Room around the words: 20px each side.
+        height: opts.autoResizeNodesBasedOnText
+          ? createWithTheme.styles.parent.height
+          : measured.height + 40,
+        width: measured.width + 40,
+        ...initialNodeStyle,
+      })
       slate.nodes.add(node)
     }
 

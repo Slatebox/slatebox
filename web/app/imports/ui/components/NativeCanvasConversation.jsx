@@ -6,6 +6,8 @@ import PayNotice, { isCreditRefusal } from './PayNotice'
 import {canvasStarters,nativeRequestKind} from '../../api/common/native-canvas-conversation.mjs'
 import {agentLabel,firstNameOf} from '../../api/common/agent-label.mjs'
 import AddStrip,{AddShort} from './library/AddStrip'
+import ChatTurn,{ChatThinking} from './ChatTurn'
+import {keptReply} from '../../api/common/chat-words.mjs'
 import {loadLibrary} from './library/libraryBus'
 
 // The library (a view inside this conversation) and its cards: the library chunk, loaded on demand.
@@ -112,7 +114,10 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     inFlight.current=true;setBusy('keeping');setError('')
     try {
       const kept=await Meteor.callAsync(draft.via+'.keep',shareId,draft.id)
-      const reply = draft.component ? 'Added ' + draft.title + (draft.rules?.length ? ' · ' + draft.rules.join(' ') : '') : draft.said || (draft.format==='lanes'?'Added a workshop':draft.mode==='play'?'Added a playable route':'Drew') + ' · ' + draft.labels.join(' → ') + (draft.format==='lanes' ? ' · '+draft.capacities.map(l=>l.label+' holds '+l.capacity).join(', ') : ' · ' + draft.links + (draft.links===1?' connection':' connections'))
+      // Said as a sentence ("Added a retro: Went well, Change and Try, up to three cards each."), naming
+      // a library board the way its own add message does.
+      const lib=draft.component ? await libraryModule().catch(()=>null) : null
+      const reply = keptReply(draft,{addSay:lib?.catalogEntry(draft.component)?.addSay?.[0] ?? null})
       const next = [...history.filter(turn=>turn.id!==draft.id), {id:draft.id,message:draft.message,reply}].slice(-6)
       setHistory(next)
       try {localStorage.setItem(historyKey,JSON.stringify(next))} catch {}
@@ -173,34 +178,36 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     hold={hold} canSubmit={Boolean(text.trim())} placeholder={empty ? 'What are you working on?' : 'Ask anything'} maxLength={1200} error={error}
     extra={!hold && <>
       {refusal && <PayNotice refusal={refusal} from="draft" retry={() => ask(refusal.message)} />}
-      <AddStrip empty={empty} hasBoard={false} onAdd={addEntry} onBrowse={()=>browse()} compact={history.length>0 || Boolean(draft)} />
+      {/* One way to browse at a time: not under the library, nor under the first turn's own cards. */}
+      {!view && !firstTurn && <AddStrip empty={empty} hasBoard={false} onAdd={addEntry} onBrowse={()=>browse()} compact={history.length>0 || Boolean(draft)} />}
     </>}
     prompt={empty ? null : 'What should happen on this slate?'}
     starters={!empty && <Box aria-label="Starter messages" sx={{display:'flex',flexWrap:'wrap',gap:.5,my:1}}>
       {canvasStarters(board.nodes).map(({label},i)=><Button key={label} size="small" onClick={()=>suggest(canvasStarters(liveNodes())[i])}>{label}</Button>)}
       <AddShort onBrowse={()=>browse()} />
     </Box>} />
-  if(view) return <ConversationPanel onClose={onClose} composer={composer}>
+  if(view) return <ConversationPanel anchor="top" onClose={onClose} composer={composer}>
     <Suspense fallback={<Typography variant="body2" sx={{my:2}}>Opening the library…</Typography>}>
       <LibraryView start={view.start} onBack={()=>setView(null)} onAdd={addEntry} onSay={say} onSend={value=>{setView(null);ask(value)}} />
     </Suspense>
   </ConversationPanel>
-  return <ConversationPanel onClose={onClose} composer={composer}>
+  return <ConversationPanel anchor={firstTurn ? 'top' : 'bottom'} onClose={onClose} composer={composer}>
     {about}
-    {brief && <Box aria-label="Opening message" sx={{my:2}}><Typography variant="caption">You</Typography>
-      <Typography sx={{whiteSpace:'pre-wrap'}}>{brief}</Typography>
-      {!draft && !history.some(turn=>turn.message===brief) && <Button size="small" disabled={Boolean(busy)} onClick={()=>ask(brief)}>Draft from this brief</Button>}</Box>}
+    {brief && <Box aria-label="Opening message" sx={{my:1}}>
+      <ChatTurn who="you" as="div" after={!draft && !history.some(turn=>turn.message===brief) &&
+        <Button size="small" disabled={Boolean(busy)} onClick={()=>ask(brief)}>Draft from this brief</Button>}>{brief}</ChatTurn></Box>}
     {firstTurn && <Suspense fallback={null}><FirstTurn onAdd={addEntry} onOpen={entry=>browse({entry:entry.id})} onBrowse={browse} onGoal={value=>suggest({text:value})} /></Suspense>}
-    {history.length>0 && <Box component="ol" aria-label="Kept conversation" sx={{listStyle:'none',p:0}}>
-      {history.map(turn=><Box component="li" key={turn.id} sx={{my:2}}>
-        {turn.message!==brief && <><Typography variant="caption">You</Typography><Typography>{turn.message}</Typography></>}
-        <Typography variant="caption">Slatebox</Typography><Typography variant="body2">{turn.reply}</Typography>
-        {turn.attach?.type==='catalog' && <Suspense fallback={null}><CatalogTurn ids={turn.attach.entries} onAdd={addEntry} onOpen={entry=>browse({entry:entry.id})} onBrowse={()=>browse()} /></Suspense>}
+    {history.length>0 && <Box component="ol" aria-label="Kept conversation" sx={{listStyle:'none',p:0,my:1}}>
+      {history.map(turn=><Box component="li" key={turn.id}>
+        {turn.message!==brief && <ChatTurn who="you" as="div">{turn.message}</ChatTurn>}
+        <ChatTurn who="slatebox" as="div" after={turn.attach?.type==='catalog' && <Suspense fallback={null}><CatalogTurn ids={turn.attach.entries} onAdd={addEntry} onOpen={entry=>browse({entry:entry.id})} onBrowse={()=>browse()} /></Suspense>}>{turn.reply}</ChatTurn>
       </Box>)}
     </Box>}
-    {draft && <Box aria-label="Review the preview" aria-live="polite" sx={{my:2}}>
-      <Typography variant="caption">You</Typography><Typography sx={{overflowWrap:'anywhere'}}>{draft.message}</Typography>
-      <Typography sx={{my:1,fontWeight:600}}>{draft.provider==='ai'?'AI preview':'Preview'} · {draft.component ? draft.title : BOARD_NAMES[draft.format] ?? (draft.format==='lanes'?'Workshop':draft.mode==='play'?'Interactive route':'Drawing')}{!draft.component && draft.format!=='lanes' && !BOARD_NAMES[draft.format] && ' · '+draft.links+' '+(draft.links===1?'connection':'connections')}</Typography>
+    {busy==='asking' && !draft && <ChatThinking as="div" />}
+    {draft && <Box aria-label="Review the preview" aria-live="polite" sx={{my:1}}>
+      <ChatTurn who="you" as="div">{draft.message}</ChatTurn>
+      <ChatTurn who="slatebox" as="div"><Box sx={{typography:'body2','& ul':{my:.5,pl:2.5}}}>
+      <Typography variant="body2" sx={{mb:.5,fontWeight:700}}>{draft.provider==='ai'?'AI preview':'Preview'} · {draft.component ? draft.title : BOARD_NAMES[draft.format] ?? (draft.format==='lanes'?'Workshop':draft.mode==='play'?'Interactive route':'Drawing')}{!draft.component && draft.format!=='lanes' && !BOARD_NAMES[draft.format] && ' · '+draft.links+' '+(draft.links===1?'connection':'connections')}</Typography>
       <Typography variant="body2">{stale ? 'Your drawing changed after this preview, so it is no longer shown. Discard it and ask again on the drawing as it is now.'
         : 'Shown on the canvas with dashed outlines. Nothing is added until you keep it.'}</Typography>
       <ul>{draft.labels.map((label,i)=><li key={i}>{label}</li>)}</ul>
@@ -212,15 +219,16 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
         <Typography variant="body2">Removes {draft.removed.length===1?'1 note':draft.removed.length+' notes'}:</Typography>
         <ul>{draft.removed.map(r=><li key={r.id}>{r.text}</li>)}</ul>
       </Box>}
-      {!draft.component && draft.capacities?.map(l=><Typography key={l.label}>{l.label} holds up to {l.capacity} cards.</Typography>)}
+      {!draft.component && draft.capacities?.map(l=><Typography variant="body2" key={l.label}>{l.label} holds up to {l.capacity} cards.</Typography>)}
       {draft.rules?.length>0 && <Box component="section" aria-label="How this board behaves">
         <Typography variant="body2" sx={{fontWeight:600}}>How this board behaves</Typography>
         <ul>{draft.rules.map(line=><li key={line}>{line}</li>)}</ul>
       </Box>}
-      {draft.format==='lanes' && <Typography>{draft.component ? 'Drag notes onto it after Keep: each becomes a card.' : 'Add your cards in the workshop after Keep.'}</Typography>}
+      {draft.format==='lanes' && <Typography variant="body2">{draft.component ? 'Drag notes onto it after Keep: each becomes a card.' : 'Add your cards in the workshop after Keep.'}</Typography>}
       {draft.said && <Typography variant="body2">{draft.said.replace(/^Added /,'Keep this to add ')}.</Typography>}
       {draft.mode==='play' && draft.format!=='lanes' && !draft.said && <Typography variant="body2">Keep this to play the route alongside your original drawing.</Typography>}
-      {draft.warnings?.map(w=><Typography key={w.rule} role="note" color="warning.main">{WARNINGS[w.rule]?.(w.count)}</Typography>)}
+      {draft.warnings?.map(w=><Typography variant="body2" key={w.rule} role="note" color="warning.main">{WARNINGS[w.rule]?.(w.count)}</Typography>)}
+      </Box></ChatTurn>
     </Box>}
   </ConversationPanel>
 }

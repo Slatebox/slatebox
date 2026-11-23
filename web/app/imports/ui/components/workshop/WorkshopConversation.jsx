@@ -11,6 +11,7 @@ import { asksWhatElse, boardSuggestions, editingLabel, focusContext, focusPlaceh
 import PayNotice, { isCreditRefusal } from '../PayNotice'
 import { nativeRequestKind } from '../../../api/common/native-canvas-conversation.mjs'
 import AddStrip, { AddShort } from '../library/AddStrip'
+import ChatTurn, { ChatThinking } from '../ChatTurn'
 import { loadLibrary } from '../library/libraryBus'
 import { pickBoard, whichBoard } from '../../../api/common/board-pick.mjs'
 import { MAX_BOARDS } from '../../../api/common/slate-boards.mjs'
@@ -441,7 +442,7 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
         <Typography role="status" variant="body2" sx={{ overflowWrap: 'anywhere' }}>Selected {context.kind} · {selected.label}</Typography>
         <IconButton size="small" aria-label="Clear selection" onClick={board.clearSelection}><Close fontSize="inherit" /></IconButton>
       </Box>}
-      {!hold && <AddStrip hasBoard onAdd={addEntry} onBrowse={() => browse()} compact={history.length > 0 || Boolean(moves)} />}
+      {!hold && !view && <AddStrip hasBoard onAdd={addEntry} onBrowse={() => browse()} compact={history.length > 0 || Boolean(moves)} />}
     </>}
     starters={<Box role="group" aria-label="Starter messages" sx={{ display: 'flex', flexWrap: 'wrap', gap: .5, my: 1 }}>
       {/* Where a phone (no hover, no gear) finds "Change this board": first, unless a lane or card is
@@ -450,7 +451,7 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
       {!moves && starterButtons}
       {!focus && context && changeBoard}
       {!focus && <Button size="small" sx={{ textTransform: 'none' }} onClick={() => whatCanItDo()}>What can this do?</Button>}<AddShort onBrowse={() => browse()} /></Box>} />
-  if (view) return <ConversationPanel onClose={onClose} composer={composer}>
+  if (view) return <ConversationPanel anchor="top" onClose={onClose} composer={composer}>
     <Suspense fallback={<Typography variant="body2" sx={{ my: 2 }}>Opening the library…</Typography>}>
       <LibraryView start={view.start} board={model} hasBoard full={full} onBack={() => setView(null)} onAdd={addEntry} onSay={say}
         onSend={text => { setView(null); setRequest(text) }} onWhatCanItDo={() => whatCanItDo()} />
@@ -459,32 +460,38 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
 
   return <ConversationPanel onClose={onClose} composer={composer}>
     <Box component="ol" role="log" aria-label="Conversation" sx={{ listStyle: 'none', p: 0, my: 1 }}>
-      {history.map((turn, index) => <Box component="li" key={index} sx={{ my: 1.5 }}>
-        <Typography variant="caption">{turn.role === 'user' ? 'You' : 'Slatebox'}</Typography>
-        <Typography variant={turn.role === 'user' ? 'body1' : 'body2'} sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{turn.content}</Typography>
-        {turn.opens && <Button size="small" variant="outlined" sx={{ mt: .5 }} onClick={() => openNewSlate(turn.opens)}>Open on a new slate</Button>}
-        {turn.adds && index === history.length - 1 && <Box sx={{ display: 'flex', gap: .5, mt: .5 }}>
-          <Button size="small" variant="outlined" onClick={() => submit(turn.adds)}>Add it beside this board</Button>
-          <Button size="small" onClick={() => append({ role: 'user', content: 'Not now' }, { role: 'assistant', content: 'Alright. The board stays as it is.' })}>Not now</Button>
-        </Box>}
-        {/* "Which board?": one chip per board; the message goes to the board picked. */}
-        {turn.boards && index === history.length - 1 && <Box role="group" aria-label="Which board" sx={{ display: 'flex', flexWrap: 'wrap', gap: .5, mt: .5 }}>
-          {turn.boards.map(item => <Button key={item.id} size="small" variant="outlined" data-pick-board={item.id} sx={{ textTransform: 'none' }}
-            onClick={() => submit(turn.again, item.id)}>{item.title}</Button>)}
-        </Box>}
-        {turn.catalog && <Suspense fallback={null}><CatalogCards ids={turn.catalog} onAdd={addEntry} full={full} onOpen={entry => browse({ entry: entry.id })} /></Suspense>}
-      </Box>)}
+      {history.map((turn, index) => {
+        const last = index === history.length - 1
+        return turn.role === 'user'
+          ? <ChatTurn who="you" key={index}>{turn.content}</ChatTurn>
+          : <ChatTurn who="slatebox" key={index} after={(turn.opens || turn.catalog || (last && (turn.adds || turn.boards))) && <>
+            {turn.opens && <Button size="small" variant="outlined" onClick={() => openNewSlate(turn.opens)}>Open on a new slate</Button>}
+            {turn.adds && last && <Box sx={{ display: 'flex', gap: .5 }}>
+              <Button size="small" variant="outlined" onClick={() => submit(turn.adds)}>Add it beside this board</Button>
+              <Button size="small" onClick={() => append({ role: 'user', content: 'Not now' }, { role: 'assistant', content: 'Alright. The board stays as it is.' })}>Not now</Button>
+            </Box>}
+            {/* "Which board?": one chip per board; the message goes to the board picked. */}
+            {turn.boards && last && <Box role="group" aria-label="Which board" sx={{ display: 'flex', flexWrap: 'wrap', gap: .5 }}>
+              {turn.boards.map(item => <Button key={item.id} size="small" variant="outlined" data-pick-board={item.id} sx={{ textTransform: 'none' }}
+                onClick={() => submit(turn.again, item.id)}>{item.title}</Button>)}
+            </Box>}
+            {turn.catalog && <Suspense fallback={null}><CatalogCards ids={turn.catalog} onAdd={addEntry} full={full} onOpen={entry => browse({ entry: entry.id })} /></Suspense>}
+          </>}>{turn.content}</ChatTurn>
+      })}
+      {busy && !preview && !drawing && <ChatThinking />}
     </Box>
     {moves && <Suspense fallback={null}><BoardMoves moves={moves} onSay={text => suggest({ text })} /></Suspense>}
-    {drawing ? <Box aria-label="Review proposed drawing" aria-live="polite" sx={{ my: 2 }}>
-      <Typography variant="caption">You</Typography><Typography sx={{ overflowWrap: 'anywhere' }}>{drawing.message}</Typography>
-      <Typography sx={{ fontWeight: 600, my: 1 }}>{drawing.provider === 'ai' ? 'AI preview' : 'Preview'} · {drawing.component ? drawing.title + ', beside the board'
+    {drawing ? <Box aria-label="Review proposed drawing" aria-live="polite" sx={{ my: 1 }}>
+      <ChatTurn who="you" as="div">{drawing.message}</ChatTurn>
+      <ChatTurn who="slatebox" as="div"><Box sx={{ typography: 'body2', '& ul': { my: .5, pl: 2.5 } }}>
+      <Typography variant="body2" sx={{ fontWeight: 700, mb: .5 }}>{drawing.provider === 'ai' ? 'AI preview' : 'Preview'} · {drawing.component ? drawing.title + ', beside the board'
         : drawing.mode === 'play' ? 'Interactive route' : drawing.labels.length === 1 ? '1 note for the slate' : drawing.labels.length + ' notes for the slate'}</Typography>
       <Typography variant="body2">{drawingStale ? 'Your drawing changed after this preview, so it is no longer shown. Discard it and ask again on the drawing as it is now.'
         : 'Shown on the canvas with dashed outlines. Nothing is added until you keep it.'}</Typography>
       {drawing.component ? drawing.rules?.length > 0 && <Box component="section" aria-label="How this board behaves">
         {drawing.rules.map(line => <Typography key={line} variant="body2">{line}</Typography>)}</Box>
         : <ul>{drawing.labels.map((label, i) => <li key={i}>{label}</li>)}</ul>}
+      </Box></ChatTurn>
     </Box> : preview && <Box aria-label={map ? 'Review proposed map' : 'Review proposed workshop'} aria-live="polite" sx={{ my: 2 }}>
       <Typography sx={{ fontWeight: 600 }}>{stale ? map ? 'A teammate changed this map.' : 'A teammate changed the workshop.' : orderChanged ? 'Proposed presentation order' : 'Preview · shown on the canvas'}</Typography>
       {stale ? <Typography variant="body2">Discard this preview and ask again on the latest {map ? 'map' : 'workshop'}.</Typography> : <>

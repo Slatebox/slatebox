@@ -3,7 +3,7 @@
 // phrases a board offers ("Say it like this", chips, "What can this do?"), each filled from the live
 // board and checked against the parser before it is offered. Loaded on demand in the browser (the
 // library chunk); the server imports it to read an add request.
-import { catalog, catalogAddRequest, catalogEntry, catalogMatch, catalogPreset } from 'slateboxjs/catalog'
+import { catalog, catalogAddRequest, catalogEntry, catalogGroups, catalogMatch, catalogPreset } from 'slateboxjs/catalog'
 import { businessKind, validateWorkshop, workshopBoardKind, workshopCandidate, workshopRules, workshopRulesLoaded } from 'slateboxjs/workshops/model'
 import { proposeLaneReply } from './lane-conversation.mjs'
 import './board-chat.mjs'
@@ -16,6 +16,63 @@ useLibrary({ catalogAddRequest, catalogPreset })
 /** The entries the library lists: every catalogue entry passes the listing gate (scripts/library-rulebook.test.mjs). */
 export function listedEntries() {
   return [...catalog]
+}
+
+// Words people search with for a kind of board that are no entry's own name or synonym: a map is
+// a route or a flow, a nest is a tree, a launch plan is a timeline. Whole words only.
+const KIND_WORDS = {
+  map: ['map', 'maps', 'route', 'flow', 'flowchart', 'flow chart', 'path', 'journey', 'steps', 'process'],
+  nest: ['tree', 'outline', 'hierarchy'],
+  lanes: ['board', 'lanes', 'columns', 'cards', 'kanban'],
+  'launch-plan': ['plan', 'timeline', 'schedule', 'roadmap', 'dates', 'gantt'],
+  'hiring-plan': ['plan', 'timeline', 'headcount'],
+  pipeline: ['board', 'stages', 'funnel'],
+  budget: ['plan', 'money', 'split'],
+}
+// And for one entry: a tree that maps a problem or a choice is found as a map.
+const ENTRY_WORDS = {
+  'discovery-tree': ['map', 'mind map'],
+  'break-down-problem': ['map', 'mind map'],
+  'reorg-sandbox': ['org map', 'org tree'],
+}
+const GROUP_LABELS = Object.fromEntries(catalogGroups.map(group => [group.id, group.label.toLowerCase()]))
+const plainWords = text => String(text ?? '').toLowerCase().replace(/[^\p{L}\p{N}×&]+/gu, ' ').trim()
+const hasWord = (text, word) => ` ${plainWords(text)} `.includes(` ${word} `)
+const startsWord = (text, word) => ` ${plainWords(text)}`.includes(` ${word}`)
+
+/** Whether an entry belongs under a group chip. The Map chip holds the boards that are maps. */
+export function inGroup(entry, group) {
+  return group === 'all' || entry.group === group || (group === 'map' && entry.build?.kind === 'map')
+}
+
+// How well one searched word fits an entry: its name, then its group, then its synonyms and the words
+// for its kind, then its line, then any part of a word. 0 when it does not fit at all.
+function wordScore(entry, word) {
+  const groups = [GROUP_LABELS[entry.group], ...(entry.build?.kind === 'map' ? ['map'] : [])]
+  if (startsWord(entry.name, word)) return 8
+  if (groups.includes(word)) return 6
+  if (entry.synonyms.some(syn => hasWord(syn, word))) return 5
+  if ([...(KIND_WORDS[entry.build?.kind] ?? []), ...(ENTRY_WORDS[entry.id] ?? [])].some(term => hasWord(term, word))) return 4
+  if (hasWord(entry.line, word)) return 3
+  return [entry.name, entry.line, ...entry.synonyms].some(text => plainWords(text).includes(word)) ? 1 : 0
+}
+
+/**
+ * The library's search: every word must fit (a plural finds its singular: "maps", "plans"), and
+ * entries are ranked by how they fit, a name above a group above a synonym, then in catalogue order.
+ * No words lists the group as the catalogue orders it.
+ */
+export function searchEntries(query, group = 'all') {
+  const words = plainWords(query).split(' ').filter(Boolean)
+  const listed = listedEntries().filter(entry => inGroup(entry, group))
+  if (!words.length) return listed
+  return listed.map((entry, order) => {
+    const scores = words.map(word => {
+      const forms = [word, ...(word.length > 3 && word.endsWith('s') ? [word.slice(0, -1)] : [])]
+      return Math.max(...forms.map(form => wordScore(entry, form)))
+    })
+    return scores.every(Boolean) ? { entry, total: scores.reduce((sum, score) => sum + score, 0), order } : null
+  }).filter(Boolean).sort((a, b) => b.total - a.total || a.order - b.order).map(item => item.entry)
 }
 
 /** A question about what can be added: a catalogue turn `{ kind: 'catalog', all, entries }`, or null. */
