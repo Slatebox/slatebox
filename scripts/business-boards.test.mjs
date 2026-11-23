@@ -254,3 +254,19 @@ test("the server names the engine build it runs, from the dist's identity stamp 
   assert.equal(engineIdentity(() => { throw new Error("missing"); }), "slateboxjs: no identity stamp (built before dist/BUILD.json).");
   assert.match(app("server/main.js"), /console\.log\(engineIdentity\(\(\) => require\('slateboxjs\/dist\/BUILD\.json'\)\)\)/);
 });
+
+test("a note let go on a launch plan's days is made into a task starting that day, on the server as on the canvas", () => {
+  const plan = validateWorkshop(sampleLaunchPlan());
+  const drop = (day) => ({ cardId: "n7", laneId: "product", noteToCard: { noteId: "n7", label: "New task", ...(day === undefined ? {} : { day }) } });
+  const [read] = readWorkshopChanges([drop(5.6)]);
+  assert.equal(read.noteToCard.day, 5.6);
+  const played = playWorkshopChanges(plan, [read], ["n7"]);
+  assert.equal(played.refused, undefined);
+  assert.equal(scheduleLaunch(played.workshop).get("n7").from, 5);
+  // Without a day (a phone, the team names, an older canvas): at the start, as before.
+  assert.equal(scheduleLaunch(playWorkshopChanges(plan, readWorkshopChanges([drop()]), ["n7"]).workshop).get("n7").from, 0);
+  // Past launch: the last day the line lets a two-day task start.
+  assert.equal(scheduleLaunch(playWorkshopChanges(plan, readWorkshopChanges([drop(40)]), ["n7"]).workshop).get("n7").to, 14);
+  // A day is a calendar offset: nothing else is read.
+  for (const day of [-1, "5", Infinity, 5000]) assert.throws(() => readWorkshopChanges([drop(day)]), /Expected a move or a rename/);
+});

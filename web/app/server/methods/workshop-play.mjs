@@ -27,6 +27,8 @@ const savedNote = (value, id) => plain(value) && plain(value.options) && value.o
 const lineKey = value => typeof value === 'string' && /^[A-Za-z0-9_][A-Za-z0-9_.:~>-]{0,159}$/.test(value)
 const savedLine = value => plain(value) && lineKey(value.id) && noteKey(value.parentId) && noteKey(value.childId) && !unsafeKeyPath(value) &&
   JSON.stringify(value).length <= 2000
+// A plan's day: a calendar offset from its first day (a hiring plan runs up to two years).
+const planDay = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1000
 const savedLines = value => Array.isArray(value) && value.length <= 96 && value.every(savedLine)
 
 /** The changes of one request, in the order they were made. Throws on anything else. */
@@ -54,14 +56,15 @@ export function readWorkshopChanges(input) {
       // `asNote`: what the note had that the card does not show. `before`: the card it goes back in front of (an undo).
       // `lines`: the note's lines, which stay joined to the card.
       // `under`: on a nested board, the card it was dropped on, to sit under.
+      // `day`: on a plan, the calendar day it was let go on, where its task starts (the plan snaps it by its rules).
       const note = change.noteToCard
-      const { look, asNote, before, lines, under } = note ?? {}
+      const { look, asNote, before, lines, under, day } = note ?? {}
       if (key(change.cardId) && key(change.laneId) && noteKey(note?.noteId) && words(note.label) &&
           (look === undefined || plain(look)) && (asNote === undefined || plain(asNote)) && (before === undefined || key(before)) &&
-          (lines === undefined || savedLines(lines)) && (under === undefined || key(under))) {
+          (lines === undefined || savedLines(lines)) && (under === undefined || key(under)) && (day === undefined || planDay(day))) {
         return { cardId: change.cardId, laneId: change.laneId, noteToCard: { noteId: note.noteId, label: note.label,
           ...(look === undefined ? {} : { look }), ...(asNote === undefined ? {} : { asNote }), ...(before === undefined ? {} : { before }),
-          ...(lines === undefined ? {} : { lines }), ...(under === undefined ? {} : { under }) } }
+          ...(lines === undefined ? {} : { lines }), ...(under === undefined ? {} : { under }), ...(day === undefined ? {} : { day }) } }
       }
     } else if (change?.line !== undefined) {
       // A line drawn, restyled or taken away with a card at one end.
@@ -166,7 +169,7 @@ export function playWorkshopChanges(workshop, changes, noteIds, trades) {
       continue
     }
     if (change.noteToCard) {
-      const { noteId, label, look, asNote, before, under, lines: noteLines } = change.noteToCard
+      const { noteId, label, look, asNote, before, under, day, lines: noteLines } = change.noteToCard
       const text = label.replace(/\s+/g, ' ').trim()
       const there = board.cards.find(item => item.id === change.cardId)
       const leaves = () => { add.delete(noteId); remove.add(noteId) }
@@ -178,7 +181,7 @@ export function playWorkshopChanges(workshop, changes, noteIds, trades) {
       if (same) return refuse(at, { reason: `Someone else put ${there.label} on the board first.`, laneId: there.laneId }, true)
       if (there) return refuse(at, { reason: 'That card is already on the board.', laneId: there.laneId })
       // The card is made under the card id the canvas chose; the note it came from is remembered when that differs.
-      const offer = { id: change.cardId, label, ...(look ? { look } : {}), ...(asNote ? { asNote } : {}), ...(under ? { under } : {}),
+      const offer = { id: change.cardId, label, ...(look ? { look } : {}), ...(asNote ? { asNote } : {}), ...(under ? { under } : {}), ...(day !== undefined ? { day } : {}),
         ...(noteLines ? { lines: noteLines.map(line => ({ ...line, ...(line.parentId === noteId ? { parentId: change.cardId } : {}),
           ...(line.childId === noteId ? { childId: change.cardId } : {}) })) } : {}) }
       const refusal = workshopNoteRefusal(board, change.laneId, offer)
