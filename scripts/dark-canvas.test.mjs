@@ -228,3 +228,20 @@ test('a plan\'s white task bars take the dark card surface; its weekends stay th
   const weekend = mix(BOARD_INK.dark['--slatebox-board-track'], CANVAS.dark.background, 0.7)
   assert.ok(contrast(weekend, '#000000') < contrast(CANVAS.dark.background, '#000000'), toHex(weekend))
 })
+
+// Presentation styles: a styled deck keeps its own style's backdrop and ink in both modes, in the
+// presenter and on the share page. A style's backdrop is never the default white, and a styled
+// deck is never themed at all (a custom style may set its own white).
+test('a styled deck keeps its style\'s backdrop in both modes, in the presenter and on the share page', async () => {
+  const { STYLES, resolveStyle } = await import('../web/app/imports/ui/components/presentations/presentationStyles.mjs')
+  for (const [id, style] of Object.entries(STYLES)) {
+    assert.equal(followsTheme(style.bg), false, `${id}'s backdrop is its own`)
+    assert.equal(canvasMode('dark', resolveStyle(id).bg), null, `${id} is not darkened`)
+  }
+  const frame = ui('components/presentations/PresenterFrame.jsx')
+  assert.match(frame, /useCanvasTheme\(\(\) => \(immersive \? null : stage\)/, 'the presenter does not theme an immersive (styled) deck')
+  assert.match(frame, /const surface = !immersive && canvasMode\(/, 'nor swap its backdrop for the dark canvas')
+  const share = ui('components/PresentPublishedSlate.jsx')
+  assert.match(share, /published && !published\.styled \? document\.getElementById\(surfaceId\) : null/, 'the share page does not theme a styled deck')
+  assert.match(share, /styled \? resolveStyle\(styled\.deck\.style\)\.bg : bg/, 'the share page paints a styled deck in its style\'s colour')
+})
