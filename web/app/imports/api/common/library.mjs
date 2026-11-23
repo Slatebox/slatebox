@@ -13,9 +13,45 @@ import { useLibrary } from './native-canvas-conversation.mjs'
 // A catalogue add is read locally wherever this module has loaded.
 useLibrary({ catalogAddRequest, catalogPreset })
 
-/** The entries the library lists: every catalogue entry passes the listing gate (scripts/library-rulebook.test.mjs). */
+/**
+ * The entries the library lists: every catalogue entry (each passes the listing gate, scripts/library-rulebook.test.mjs),
+ * then the published community components (approved through the review queue, whose approve runs the same gate),
+ * after the built-ins. The person's own items are listed apart, under "Yours" (ownEntries).
+ */
 export function listedEntries() {
-  return [...catalog]
+  return [...catalog, ...libraryItems.community]
+}
+
+// The shared library's items, as the browser last read them (library.list and library.mine, once a session):
+// published community components, and the person's own (drafts and items waiting included).
+const libraryItems = { community: [], own: [] }
+
+/**
+ * A library item as an entry of the panel (library spec §4.5): its name and line, its category as its group, its
+ * search words, and the plain words that add it ("Add <title>"). An item entry has no looping picture and no
+ * catalogue phrases: it is added through library.fork (preview, then Keep), never by a chat message.
+ */
+export function entryOfItem(item, { own = false } = {}) {
+  const name = String(item?.title ?? '').trim() || 'Untitled'
+  return {
+    id: 'item:' + item.id, itemId: item.id, slug: item.slug, item: true, own,
+    name, line: String(item.summary ?? ''), group: item.category ?? null, synonyms: Array.isArray(item.synonyms) ? item.synonyms : [],
+    addSay: ['Add ' + name], authorName: item.authorName ?? '', status: item.reviewStatus || item.status || 'published',
+    preview: item.preview ?? null, branchedFrom: item.provenance?.branchedFrom?.title ?? null,
+    build: item.preview?.boardKind ? { kind: item.preview.boardKind } : undefined,
+  }
+}
+
+/** Keep the items the browser read: community components (published, by others) and the person's own. */
+export function setLibraryItems({ community = [], own = [] } = {}) {
+  const ownIds = new Set(own.map(item => item.id))
+  libraryItems.own = own.filter(item => item.kind === 'component').map(item => entryOfItem(item, { own: true }))
+  libraryItems.community = community.filter(item => item.kind === 'component' && item.origin !== 'builtin' && !ownIds.has(item.id)).map(item => entryOfItem(item))
+}
+
+/** The person's own components ("Yours"): drafts first saved a moment ago included, newest first. */
+export function ownEntries(group = 'all') {
+  return libraryItems.own.filter(entry => inGroup(entry, group))
 }
 
 // Words people search with for a kind of board that are no entry's own name or synonym: a map is
