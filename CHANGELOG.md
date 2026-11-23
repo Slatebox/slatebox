@@ -6,6 +6,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- A presentation's words are fitted in the faces they are drawn in (measured, once the styles'
+  fonts have loaded): a title too wide for its frame gets a smaller size, and a word is never broken
+  across lines. A restyle of a published presentation renders its share card again. A board kept
+  during a visit presents with its lanes, live too, and a slate of many boards presents each
+  board's lanes in turn.
+
 - A presentation's silhouettes (blobs, chevrons, bubbles, pins, masks) are custom shapes from the
   shapes service (slateboxjs/shapes: checked, normalised, stored with their text box and name), the
   same as any drawn or library shape; only line art (open ribbons, hairline rings) stays a plain
