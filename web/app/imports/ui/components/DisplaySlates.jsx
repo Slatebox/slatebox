@@ -479,8 +479,11 @@ export default function DisplaySlates({
               return (
                 <Box component="li" key={slate.shareId} sx={{ minWidth: 0, listStyle: 'none', px: 0.75, pb: 1 }}>
                   <Box sx={{ position: 'relative', height: cellHeight || 210, overflow: 'hidden', border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                    <Box aria-hidden="true" inert="" sx={{ width: '100%', height: '100%' }}>
-                      <SnapSlate slate={slate} allowDrag={false} allowZoom={false} disableCollab={type === 'community'} index={i} />
+                    {/* The thumbnail is one picture, named after the slate; its parts say nothing and take no focus or clicks. */}
+                    <Box role="img" aria-label={name} sx={{ width: '100%', height: '100%' }}>
+                      <Box inert="" sx={{ width: '100%', height: '100%' }}>
+                        <SnapSlate slate={slate} allowDrag={false} allowZoom={false} disableCollab={type === 'community'} index={i} />
+                      </Box>
                     </Box>
                     <Box component="button" type="button" onClick={openSlate} aria-label={`Open ${name}`}
                       sx={{ position: 'absolute', inset: 0, border: 0, background: 'transparent', cursor: 'pointer',

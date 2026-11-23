@@ -11,6 +11,7 @@ import slateProps from '../propTypes/slateProps'
 import promisify from '../../api/client/promisify'
 import { drawSlateBoards } from './workshop/boardRender'
 import useCanvasTheme from '../common/useCanvasTheme'
+import { stillPicture } from './stillPicture.mjs'
 
 /** Whether a saved slate holds a board (its first in creative, any further in boards). */
 const holdsBoards = (ss) => ss?.creative?.model?.kind === 'workshop' || Object.values(ss?.boards ?? {}).some((b) => b?.model?.kind === 'workshop')
@@ -208,6 +209,8 @@ export default function SnapSlate({
 
   const gone = React.useRef(false)
   const drawn = React.useRef([])
+  // A thumbnail (not the preview you can pan) is a still picture: none of the canvas's controls are said on it.
+  useEffect(() => (allowDrag ? undefined : stillPicture(box.current)), [])
   useEffect(() => {
     if (slate) {
       const copy = JSON.parse(JSON.stringify(slate))
