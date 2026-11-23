@@ -6,6 +6,19 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- Presentations look like their slate and their style, not a template. Captions, kickers and the
+  closing line are written from the slate's own words in each style's voice (a keynote is terse, a
+  magazine reads in chapters, a road trip counts stops); a style switch gives the same steps that
+  style's own beats; a quote is always a note's own words. Every styled deck a signed-in person
+  makes asks for pictures (licensed for reuse, copied into Slatebox's storage, else generated, else
+  the style's art), counted up front, reused across refines and capped per day; the style sheet
+  shows each picture, why it is there and where it came from, with Another and Drawn art. While
+  presenting, a styled deck is full bleed with one small control pill (publishing, versions and
+  settings in More), screen readers hear each step and the notes it shows, a phone frames every
+  note a step lights, and labels stay inside their shapes. Publishing builds the published slate
+  copy on the server and checks the deck's direction; the share card renders its title in the
+  style's kind of type with its cover.
+
 - Three more smart components in Ask Slatebox's library, each with a looping picture, "Say it like this" phrases and
   "What can this do?" on the board: Impact × effort (a 2 by 2; "Do now holds 4", "Move Exports to Later", "Rename
   the axes Reach and Confidence", "Is Exports harder than Search?"), Reorg & hiring sandbox (an org chart; "No manager

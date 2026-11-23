@@ -191,6 +191,8 @@ export async function mountLiveDeck({
     allowCollaboration: false, autoResizeNodesBasedOnText: false,
   }, { onInitCollaboration: async () => null, onCanvasClicked: () => {} }).init()
   const slate = facade.v2 || facade
+  // The engine behind the stage, for checks that read the notes as drawn (never enumerable).
+  Object.defineProperty(root, 'sbpSlate', { value: slate, configurable: true })
   await slate.loadJSON(presentedSlate(slateJSON, deck, { portrait: isPortrait }), false, true)
   try { slate.disablePanZoom?.() } catch { /* already off */ }
   try { await slate.loadAllFonts?.() } catch { /* fonts are a nicety */ }

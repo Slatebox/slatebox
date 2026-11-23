@@ -50,7 +50,7 @@ export default function PresenterFrame({ open, label = 'Presentation', title, st
         screen reader), so the deck's own colour fills the screen. */}
     <Box component="header" className={`sb-presenter-bar${immersive ? ' sb-presenter-bar-immersive' : ''}`} sx={immersive ? {
       position: 'absolute', top: { xs: 8, sm: 12 }, right: { xs: 8, sm: 12 }, zIndex: 20, display: 'flex', alignItems: 'center', gap: 1,
-      pl: status ? 1.5 : 0.5, pr: 0.5, minHeight: 36, borderRadius: '999px', bgcolor: 'rgba(0,0,0,.42)', color: '#fff', backdropFilter: 'blur(10px)', maxWidth: 'calc(100% - 16px)',
+      pl: status ? 1.5 : 0.5, pr: 0.5, minHeight: 36, borderRadius: '999px', bgcolor: 'rgba(0,0,0,.42)', color: '#fff', backdropFilter: 'blur(10px)',
     } : { display: 'flex', alignItems: 'center', gap: 1, px: { xs: 1, sm: 2 }, minHeight: 48,
       bgcolor: 'shell.main', color: '#fff', flex: '0 0 auto', minWidth: 0 }}>
       {/* On a phone the status (which viewpoint) wins over the slate's name. */}
