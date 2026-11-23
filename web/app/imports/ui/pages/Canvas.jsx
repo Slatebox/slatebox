@@ -1185,7 +1185,9 @@ export default function Canvas() {
   const rooms = React.useRef({})
   const avoidFor = React.useCallback(boardId => () => Object.entries(rooms.current).filter(([other, box]) => other !== boardId && box).map(([, box]) => box), [])
   const boardOptions = boardId => ({ engine: workshopSlate && boardId ? slate.current?.v2 : null, shareId: id, enabled: Boolean(workshopSlate && boardId),
-    embedded: Boolean(asEmbed), guestAdmitted: guestEditLink === id, boardId: boardId ?? 'main', serial, avoid: avoidFor(boardId), frames: boardId === framer })
+    embedded: Boolean(asEmbed), guestAdmitted: guestEditLink === id, boardId: boardId ?? 'main', serial, avoid: avoidFor(boardId), frames: boardId === framer,
+    // A builder slate of the shared library shows its board's rule controls at all times; any other, on a selected board.
+    controls: nativeBoard?.library?.mode === 'build' ? 'always' : 'selected' })
   const workshop = useWorkshopOnCanvas({
     ...boardOptions('main'),
     engine: workshopSlate ? slate.current?.v2 : null, shareId: id, enabled: workshopSlate, embedded: Boolean(asEmbed),

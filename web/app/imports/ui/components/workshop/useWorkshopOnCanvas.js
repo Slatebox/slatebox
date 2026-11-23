@@ -26,6 +26,16 @@ const alone = task => task()
 // A launch plan, a hiring plan, a sales pipeline or a budget: drawn and played by its kit, which brings its rules.
 const BOARD_KINDS = KIT_KINDS
 
+// The edits a rule control makes (library spec §4.3; slateboxjs/workshops/controls RULE_CONTROL_EDITS): a change of
+// these alone is a change of the rules, saved in a request of its own (the server never takes one mixed with a move).
+const RULE_EDITS = ['add_rule', 'set_rule', 'remove_rule', 'set_lane_capacity', 'add_lane']
+const isRuleChange = change => Array.isArray(change?.edits) && change.edits.length > 0 && change.edits.every(edit => RULE_EDITS.includes(edit?.kind))
+// When a board shows its rule controls: always on a builder slate, while selected or in focus for someone who can edit it.
+const CONTROL_MODES = ['off', 'selected', 'always']
+// The controls' chunk (slateboxjs/workshops/controls), loaded once, the first time a board that can be edited may show them.
+let controlsChunk = null
+const loadControls = () => (controlsChunk ??= import('slateboxjs/workshops/controls').catch(err => { controlsChunk = null; throw err }))
+
 // The lane a change that was turned down should show its reason on.
 function changedLane(change, workshop) {
   if (change?.laneId) return change.laneId
@@ -61,7 +71,7 @@ function changedLane(change, workshop) {
  * boards keep, which a note put "beside the board" goes past.
  */
 export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded, guestAdmitted, namesSlate, onTitle, origin, onPlaced,
-  boardId = MAIN, serial = alone, avoid, frames = true }) {
+  boardId = MAIN, serial = alone, avoid, frames = true, controls = 'selected' }) {
   const main = boardId === MAIN
   const { state, subscribed, connected } = useTracker(() => {
     if (!enabled || !shareId || !boardId) return { state: null, subscribed: false, connected: true }
@@ -105,6 +115,11 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
   const roundCards = useRef(false)
   // What a change of this person's own would say of a shape, said once the server has saved it.
   const shapeSaid = useRef(new WeakMap())
+  // What a rule control said it does ("Doing holds 2"), said once its change is saved.
+  const ruleSaid = useRef(new WeakMap())
+  const controlsMode = CONTROL_MODES.includes(controls) ? controls : 'off'
+  const controlsRef = useRef(controlsMode)
+  controlsRef.current = controlsMode
   const [preview, setPreview] = useState(null)
   const [selection, setSelection] = useState(null)
   // The board in focus for the chat (the gear's "Change this board"): this board's id or null. The view
@@ -201,9 +216,10 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
   async function play() {
     const board = live.current
     if (!board || inFlight.current || !queue.current.length) return
-    // A move made anyway goes alone, so it is one step of the person's undo history by itself (a batch is one step);
-    // the changes after it follow in the next batch (reconcile plays what is left).
-    const alone = queue.current.findIndex(change => change.override)
+    // A move made anyway, or a change of the rules, goes alone, so it is one step of the person's undo history by itself
+    // (a batch is one step); the changes before it go together, and those after it follow in the next batch (reconcile
+    // plays what is left).
+    const alone = queue.current.findIndex(change => change.override || isRuleChange(change))
     const changes = queue.current.splice(0, alone === 0 ? 1 : alone > 0 ? alone : queue.current.length)
     inFlight.current = true
     setSaving(true)
@@ -235,7 +251,9 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
       // A shaped note that became a card says so, and so does a card that is its shape again. An undo
       // or redo says nothing. When a rule of the board speaks for the same drop, the shape joins it.
       const shapes = changes.map(change => shapeSaid.current.get(change)).filter(Boolean)
-      if (result.warnings?.length) setNotice({ text: withShapeNotice('Saved, with a warning: ' + result.warnings.join(' '), shapes), at: Date.now() })
+      const ruled = changes.find(change => ruleSaid.current.has(change))
+      if (ruled) setNotice({ text: ruleSaid.current.get(ruled), at: Date.now(), rule: true })
+      else if (result.warnings?.length) setNotice({ text: withShapeNotice('Saved, with a warning: ' + result.warnings.join(' '), shapes), at: Date.now() })
       else if (shapes.length) setShapeNotice({ key: Date.now(), text: shapes.join(' ') })
       tell(true)
     } catch (err) {
@@ -442,6 +460,18 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
         // A drop the rules refuse: "Move anyway?" with the rule's sentence; confirmed, the server marks who and when.
         confirmOverride: askMoveAnyway,
         overrideBy: () => moverName(Meteor.user()),
+        // The rule controls (drawn once their chunk has loaded): a control's edits go through the same door a drag does,
+        // as a change of the rules alone, saved at once with Undo.
+        controls: controlsRef.current,
+        onRuleEdit(edits, sentence) {
+          if (!edits?.length || !edits.every(edit => RULE_EDITS.includes(edit?.kind))) return false
+          const change = { edits }
+          ruleSaid.current.set(change, String(sentence || 'The board’s rules changed.'))
+          queue.current.push(change)
+          const answer = new Promise(resolve => answers.current.set(change, resolve))
+          playRef.current()
+          return answer.then(saved => saved === true)
+        },
         onChange(_next, change) {
           // A card that became a note goes to the server with the note, so the board and the
           // drawing are saved in one write.
@@ -687,6 +717,16 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
   useEffect(() => { if (engine && workshop) settleTrades(state) }, [engine, workshop, state?.revision, state?.trades, state?.through, settleTrades])
 
   useEffect(() => { controller?.setReadOnly(!editable) }, [controller, editable])
+  // The rule controls: their chunk loads once a board that can be edited may show them (it registers itself with every
+  // board), and the board is told when they show.
+  const wantsControls = Boolean(controller && editable && controlsMode !== 'off')
+  useEffect(() => {
+    if (!wantsControls) return undefined
+    let gone = false
+    loadControls().then(() => { if (!gone) controller.setControls?.(controlsMode) }).catch(err => console.warn('The board’s controls could not be loaded.', err))
+    return () => { gone = true }
+  }, [wantsControls, controller, controlsMode])
+  useEffect(() => { if (controller && !wantsControls) controller.setControls?.('off') }, [controller, wantsControls])
 
   // A save that did not go through is said once; it does not stay over the canvas.
   useEffect(() => {
