@@ -7,8 +7,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   classifySlate, cleanCaption, composeDeck, deckFor, frameBox, LAYOUTS, localDirection, normalizeDirection,
-  numberOnSlate, pickStyle, repeatsNote, showsOn, slateGraph, SURPRISES,
+  numberOnSlate, pickStyle, quoteOnSlate, remixDirection, repeatsNote, safeImageUrl, showsOn, slateGraph, SURPRISES,
 } from '../web/app/imports/ui/components/presentations/presentationCompose.mjs'
+import { chevron, slant, textInsetFor } from '../web/app/imports/ui/components/presentations/presentationPaths.mjs'
 import { STYLE_IDS, STYLES, cleanStyleRef, resolveStyle } from '../web/app/imports/ui/components/presentations/presentationStyles.mjs'
 import { isArt } from '../web/app/imports/ui/components/presentations/presentationArt.mjs'
 import { needsPlan, PLAN_VERSION } from '../web/app/imports/ui/components/presentations/presentationPlan.mjs'
@@ -231,5 +232,143 @@ test('flow and cluster slates compose too', () => {
     assert.ok(deck.steps.length >= 4)
     assert.equal(deck.steps.at(-1).layout, 'finale')
     assert.ok(localDirection(layout).steps.length >= 2)
+  }
+})
+
+// ─── review: templated captions, honest quotes, frames on every screen, safe directions ─────────
+
+const captionsOf = (deck) => deck.steps.map((step) => step.narrative).filter(Boolean)
+
+test('two styles on the same slate share at most half their captions, and every local caption names the slate', () => {
+  const slateWords = new Set(slateGraph(whatIsSlatebox()).list.flatMap((note) => note.text.toLowerCase().match(/[a-z0-9$]+/g) || []))
+  const decks = Object.fromEntries(STYLE_IDS.map((style) => [style, deckFor(whatIsSlatebox(), { name: NAME, style }).deck]))
+  for (const a of STYLE_IDS) {
+    for (const b of STYLE_IDS) {
+      if (a >= b) continue
+      const ca = new Set(captionsOf(decks[a]))
+      const cb = new Set(captionsOf(decks[b]))
+      const shared = [...ca].filter((c) => cb.has(c))
+      assert.ok(shared.length <= Math.min(ca.size, cb.size) / 2, `${a} and ${b} share ${shared.join(' | ')}`)
+    }
+    // Middle captions are written from the slate's words (its root, its notes), never a fixed line.
+    for (const step of decks[a].steps) {
+      if (!step.narrative || ['title', 'cover', 'finale'].includes(step.layout)) continue
+      const said = step.narrative.toLowerCase().match(/[a-z0-9$]+/g) || []
+      assert.ok(said.some((word) => word.length > 2 && slateWords.has(word)) || /\d/.test(step.narrative), `${a}: "${step.narrative}" says nothing about the slate`)
+    }
+  }
+})
+
+test('the beat structure differs by style, and a switch remixes the layouts but keeps the steps', () => {
+  const structures = new Set(STYLE_IDS.map((style) => deckFor(whatIsSlatebox(), { name: NAME, style }).deck.steps.map((step) => step.layout).join(',')))
+  assert.ok(structures.size >= 6, `only ${structures.size} structures across ${STYLE_IDS.length} styles`)
+  const { direction } = deckFor(whatIsSlatebox(), { name: NAME, style: 'voyage' })
+  const remixed = remixDirection(direction, whatIsSlatebox(), 'editorial', { name: NAME })
+  assert.equal(remixed.style.id, 'editorial')
+  assert.deepEqual(remixed.steps.map((step) => step.nodeIds), direction.steps.map((step) => step.nodeIds))
+  assert.notDeepEqual(remixed.steps.map((step) => step.layout), direction.steps.map((step) => step.layout))
+  // Slatebox's own captions are said again in the new voice; the AI's words stay.
+  assert.notDeepEqual(remixed.steps.map((step) => step.caption), direction.steps.map((step) => step.caption))
+  const ai = normalizeDirection({ style: 'voyage', steps: [{ layout: 'dive', nodeIds: ['b1', 'l1', 'l2'], caption: 'Open by default, yours to run' }] }, whatIsSlatebox(), { name: NAME })
+  const aiRemixed = remixDirection(ai, whatIsSlatebox(), 'stage', { name: NAME })
+  assert.equal(aiRemixed.steps.find((step) => step.layout !== 'overview' && step.nodeIds.includes('b1')).caption, 'Open by default, yours to run')
+})
+
+test('a quote must be the slate\'s own words: an invented testimonial becomes a note\'s words or a hero', () => {
+  const texts = slateGraph(whatIsSlatebox()).list.map((note) => note.text)
+  assert.ok(quoteOnSlate('“AI builds the story from your slate.”', texts))
+  assert.ok(!quoteOnSlate('We invented this testimonial entirely', texts))
+  const direction = normalizeDirection({
+    steps: [
+      { layout: 'quote', nodeIds: ['b3', 'l5', 'l6'], quote: 'We invented this testimonial entirely', caption: 'Hear it' },
+      { layout: 'quote', nodeIds: ['b4'], quote: 'Everyone loves it', caption: 'Hear it again' },
+    ],
+  }, whatIsSlatebox(), { name: NAME })
+  const [first, second] = direction.steps.slice(1)
+  assert.equal(first.layout, 'quote')
+  assert.equal(first.quote, 'AI builds the story from your slate')
+  assert.equal(second.layout, 'hero')
+  assert.equal(second.quote, undefined)
+  const deck = composeDeck(whatIsSlatebox(), direction)
+  for (const note of deck.stageNotes.filter((n) => n.kind === 'quote')) assert.ok(quoteOnSlate(note.text, texts), note.text)
+})
+
+const boxOfId = (deck, id, portrait) => {
+  const skin = deck.skin[id]
+  if (skin) return { x: skin.x, y: skin.y, width: skin.width, height: skin.height }
+  const note = deck.stageNotes.find((n) => n.id === id)
+  return note ? boxOf(note, portrait) : null
+}
+
+test('every lit note sits inside its step\'s landed frame, on a wide screen and on a phone, in every style', () => {
+  for (const layout of [whatIsSlatebox(), flow(), cluster()]) {
+    for (const style of STYLE_IDS) {
+      const { deck } = deckFor(layout, { name: NAME, style })
+      deck.steps.forEach((step, index) => {
+        if (step.lit === 'all' || step.camera.cover) return
+        for (const portrait of [false, true]) {
+          const frame = frameBox(deck, step, { portrait })
+          for (const id of step.lit) {
+            const box = boxOfId(deck, id, portrait)
+            if (!box) continue
+            assert.ok(inside(box, frame, 2), `${style} step ${index} (${step.layout}) ${portrait ? 'portrait' : 'landscape'}: ${id} is outside the frame`)
+          }
+        }
+      })
+    }
+  }
+})
+
+test('the stage notes of one step never sit on each other, on a wide screen or a phone', () => {
+  for (const style of STYLE_IDS) {
+    const { deck } = deckFor(whatIsSlatebox(), { name: NAME, style })
+    deck.steps.forEach((step, index) => {
+      if (index === 0 || step.layout === 'finale') return
+      const own = deck.stageNotes.filter((note) => Array.isArray(note.steps) && note.steps.includes(index) && !['tape', 'label', 'polaroid'].includes(note.kind))
+      // A polaroid's picture, label and tape are one card: compared as their card.
+      for (const portrait of [false, true]) {
+        for (let i = 0; i < own.length; i += 1) {
+          for (let j = i + 1; j < own.length; j += 1) {
+            if (own[i].kind === 'image' && own[j].kind === 'image' && style === 'sketch') continue
+            assert.ok(!overlaps(boxOf(own[i], portrait), boxOf(own[j], portrait)), `${style} step ${index} (${step.layout}) ${portrait ? 'portrait' : 'landscape'}: ${own[i].id} on ${own[j].id}`)
+          }
+        }
+      }
+    })
+  }
+})
+
+test('custom silhouettes keep their text inside: each path with a notch or tail carries its text inset', () => {
+  assert.deepEqual(textInsetFor(chevron), { left: 0.15, right: 0.17, top: 0.04, bottom: 0.04 })
+  assert.ok(textInsetFor(slant).left >= 0.14)
+  for (const style of STYLE_IDS) {
+    const { deck } = deckFor(whatIsSlatebox(), { name: NAME, style })
+    for (const [id, look] of Object.entries(deck.skin)) {
+      const inset = textInsetFor(look.vectorPath)
+      if (inset) assert.deepEqual(look.textInset, inset, `${style} ${id}`)
+    }
+    for (const note of deck.stageNotes.filter((n) => n.text && textInsetFor(n.vectorPath))) assert.ok(note.textInset, `${style} ${note.id}`)
+  }
+})
+
+test('a direction from anywhere composes: missing steps or notes never throw, and only safe picture links pass', () => {
+  for (const bad of [{}, { steps: null }, { steps: [{}] }, { steps: [null, 7, { layout: 'nope', nodeIds: 'b1' }] }, null]) {
+    const deck = composeDeck(whatIsSlatebox(), bad)
+    assert.ok(deck.steps.length >= 2)
+    assert.equal(deck.steps.at(-1).layout, 'finale')
+  }
+  assert.equal(safeImageUrl('javascript:alert(1)'), null)
+  assert.equal(safeImageUrl('http://example.com/a.png'), null)
+  assert.equal(safeImageUrl('data:image/png;base64,AAAA'), null)
+  assert.equal(safeImageUrl('https://example.com/a.png'), 'https://example.com/a.png')
+  assert.ok(safeImageUrl('data:image/svg+xml;charset=utf-8,%3Csvg%3E'))
+  const direction = normalizeDirection({ steps: [{ layout: 'dive', nodeIds: ['b1', 'l1'], caption: 'x y', image: { query: 'q', why: 'because', url: 'javascript:alert(1)' } }] }, whatIsSlatebox(), { name: NAME })
+  assert.equal(direction.steps[1].image.url, undefined)
+})
+
+test('decoration stays light: at most 40 notes of it on any style', () => {
+  for (const style of STYLE_IDS) {
+    const { deck } = deckFor(whatIsSlatebox(), { name: NAME, style })
+    assert.ok(deck.stageNotes.filter((note) => note.deco).length <= 41, style)
   }
 })

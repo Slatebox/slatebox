@@ -11,6 +11,7 @@ import { artImage } from './presentationArt.mjs'
 import { DEFAULT_STYLE, STYLES, STYLE_IDS, cleanStyleRef, resolveStyle, textOn } from './presentationStyles.mjs'
 import { groupNotes } from './presentationPlan.mjs'
 import { rotatedBounds } from './presentationFraming.mjs'
+import { phraseOf, voiceCaption, voiceKicker } from './presentationVoice.mjs'
 
 export const DECK_VERSION = 4
 export const LAYOUTS = ['title', 'overview', 'dive', 'hero', 'treeBuild', 'trace', 'sweep', 'group', 'bigNumber', 'quote', 'split', 'compare', 'cover', 'finale']
@@ -19,6 +20,8 @@ export const STEP_LAYOUTS = LAYOUTS.filter((layout) => !['title', 'cover', 'fina
 export const SURPRISES = new Set(['bigNumber', 'quote', 'compare', 'trace'])
 export const MAX_STEPS = 12
 export const CAPTION_WORDS = 12
+/** The most decoration notes (stars, rings, grid lines) a deck adds. */
+export const MAX_DECOR = 40
 const DEFAULT_CTA = 'Open the slate'
 const HONEST_CLOSE = 'Every word you saw is a note you can move.'
 
@@ -42,14 +45,27 @@ export function cleanCaption(text, limit = CAPTION_WORDS) {
   return `${list.slice(0, limit).join(' ').replace(/[,;:—–-]+$/, '')}…`
 }
 
-/** Whether a caption repeats a note: it contains a note's whole text (of three words or more). */
+/**
+ * Whether a caption only repeats a note: it contains a note's whole text (of three words or more)
+ * and that note is most of what it says. A caption that names a note inside a sentence of its own
+ * ("Chapter II: Free and open source") summarises; one that is the note again repeats.
+ */
 export function repeatsNote(caption, texts) {
-  const c = String(caption || '').toLowerCase()
+  const c = String(caption || '').toLowerCase().replace(/\s+/g, ' ').trim()
   if (!c) return false
   return texts.some((text) => {
-    const t = firstLine(text).toLowerCase()
-    return (words(t).length >= 3 || t.length >= 16) && c.includes(t)
+    const t = firstLine(text).toLowerCase().replace(/\s+/g, ' ')
+    return (words(t).length >= 3 || t.length >= 16) && c.includes(t) && t.replace(/[^a-z0-9]/g, '').length >= c.replace(/[^a-z0-9]/g, '').length * 0.75
   })
+}
+
+/** Text compared as words: lower case, plain quotes and spaces, no trailing ellipsis. */
+const plainText = (text) => String(text || '').toLowerCase().replace(/[“”"‘’']/g, '').replace(/…$/, '').replace(/[.!?,;:]+$/, '').replace(/\s+/g, ' ').trim()
+/** Whether `quote` is a note's own words: a run of words in one of `texts`. */
+export function quoteOnSlate(quote, texts) {
+  const q = plainText(quote)
+  if (words(q).length < 2) return false
+  return texts.some((text) => plainText(text).includes(q))
 }
 
 // ─── the slate as a graph ───────────────────────────────────────────────────
@@ -213,169 +229,308 @@ function numberIn(ids, graph) {
 
 // ─── the direction ──────────────────────────────────────────────────────────
 
-const PHRASES = {
-  overview: ['The whole map first. Then we fly in.', 'Here is everything at once.'],
-  dive: ['Zoom in: this is where it starts.', 'Up close, it gets specific.', 'Closer. This is the detail that matters.'],
-  treeBuild: ['One idea, and everything that grows from it.', 'Each branch builds on the last.'],
-  hero: ['Hold on this one.', 'The part to remember.'],
-  sweep: ['Side by side, they work as one.', 'Two ideas, one move.'],
-  trace: ['Follow the line back to the centre.', 'Every branch leads home.'],
-  bigNumber: ['The number that says it all.'],
-  quote: ['In the slate’s own words.'],
-  compare: ['Two sides, one board.'],
-  split: ['The detail behind the headline.'],
-  group: ['These belong together.'],
-  deep: ['Look closer: it was here all along.'],
-}
-const phrase = (layout, index) => {
-  const list = PHRASES[layout] || PHRASES.group
-  return list[index % list.length]
+// Words a step's caption is written from: the step's head note, a note under it, the second
+// group (a pair), the slate's root, how many groups and notes the slate has.
+function stepContext(ids, graph, groups, { number = null, i = 0 } = {}) {
+  const set = new Set(ids)
+  const parts = groups.filter((group) => group.ids.some((id) => set.has(id)))
+  const lead = ids.find((id) => graph.root && graph.notes.get(id)?.parent === graph.root) || parts[0]?.lead || ids[0]
+  const kids = ids.filter((id) => id !== lead && !parts.some((part) => part.lead === id)).map((id) => graph.notes.get(id)?.text).filter(Boolean)
+  const second = parts.find((part) => !part.ids.includes(lead))
+  return {
+    head: phraseOf(graph.notes.get(lead)?.text),
+    kid: phraseOf(kids[0], 6),
+    k: kids.length,
+    next: phraseOf(second?.text),
+    root: phraseOf(graph.root ? graph.notes.get(graph.root)?.text : '', 4) || 'this slate',
+    count: groups.length,
+    notes: graph.list.length,
+    number: number || '',
+    i,
+  }
 }
 
-function applicable(layout, group, next, graph) {
-  if (layout === 'bigNumber') return Boolean(numberIn(group.ids, graph))
-  if (layout === 'sweep' || layout === 'compare') return Boolean(next)
-  if (layout === 'trace') return Boolean(graph.root) && !group.ids.includes(graph.root)
-  if (layout === 'treeBuild') return group.ids.length >= 3
-  if (layout === 'quote') return group.ids.some((id) => words(graph.notes.get(id)?.text).length >= 4)
+/**
+ * A caption from the slate's words, in the style's voice: never a line that would fit any slate.
+ * Falls back through the voice's other ways of saying it, then to the head note's own phrase.
+ */
+function captionFor(styleId, layout, ids, graph, groups, texts, { index = 0, number = null } = {}) {
+  const ctx = stepContext(ids, graph, groups, { number, i: index })
+  const text = voiceCaption(styleId, layout, ctx, index, (caption) => repeatsNote(caption, texts))
+  return cleanCaption(text || (ctx.head ? `${ctx.head}, closer.` : ''))
+}
+
+// Which layouts a step's notes can take: a number must be on them, a pair needs two groups, a
+// trace a branch away from the root, a build three notes, a quote a note of four words.
+function canTake(layout, ids, graph, groups) {
+  const set = new Set(ids)
+  const parts = groups.filter((group) => group.ids.some((id) => set.has(id)))
+  if (layout === 'bigNumber') return Boolean(numberIn(ids, graph))
+  if (layout === 'sweep' || layout === 'compare') return parts.length >= 2
+  if (layout === 'trace') return Boolean(graph.root) && !ids.includes(graph.root)
+  if (layout === 'treeBuild') return ids.length >= 3
+  if (layout === 'quote') return ids.some((id) => words(graph.notes.get(id)?.text).length >= 4)
+  if (layout === 'overview') return false
   return true
+}
+
+// A picture a step asks for, from its notes' words (never the slate's own name, which finds the
+// product, not the idea): a query to search, a prompt to generate, and why it belongs there.
+function pictureFor(ids, graph, style) {
+  const lead = ids.find((id) => graph.notes.get(id)?.parent === graph.root) || ids[0]
+  const head = graph.notes.get(lead)?.text || ''
+  const kids = ids.filter((id) => id !== lead).map((id) => graph.notes.get(id)?.text).filter(Boolean)
+  const content = (text) => words(text).filter((w) => w.length > 3 && !/^(with|from|that|this|your|their|into|over|about|right)$/i.test(w))
+  const query = short([...content(head), ...content(kids[0] || '')].slice(0, 5).join(' ') || head, 80)
+  if (!query) return null
+  return {
+    query,
+    prompt: short(`${style?.imagePrompt || 'A bold editorial illustration'} of ${head}${kids.length ? `: ${kids.slice(0, 2).join(', ')}` : ''}. No text, no logos.`, 280),
+    why: `pictures “${short(head, 40)}”`,
+    role: 'hero',
+  }
+}
+
+// The slate's honest quote for a step: the longest of its notes of four words or more.
+function quoteFrom(ids, graph) {
+  const quoted = ids.map((id) => graph.notes.get(id)?.text).filter((text) => words(text).length >= 4).sort((a, b) => b.length - a.length)[0]
+  return quoted ? short(quoted, 120) : null
+}
+
+/**
+ * The layouts of a direction's steps, chosen again for a style: its rhythm from the start, each
+ * step the first layout its notes can take, its numbers, quotes, headings and pictures filled from
+ * the slate. The steps keep their notes in their order; the words Slatebox wrote (a local
+ * direction) are written again in the style's voice; the AI's words stay. → a direction
+ */
+export function remixDirection(direction, layout, styleRef, { name = '' } = {}) {
+  const graph = slateGraph(layout)
+  const groups = slateGroups(layout, graph)
+  const texts = graph.list.map((note) => note.text)
+  const styleId = STYLES[styleRef?.id || styleRef] ? (styleRef.id || styleRef) : pickStyle(layout, name)
+  const def = STYLES[styleId]
+  const source = Array.isArray(direction?.steps) ? direction.steps : []
+  const local = direction?.local === true
+  let rhythm = 0
+  let detailUsed = !def.motion.deep
+  let middle = 0
+  const steps = source.map((step, index) => {
+    const ids = [...new Set([step?.nodeIds ?? []].flat().map(String))].filter((id) => graph.notes.has(id))
+    if (!ids.length) return null
+    if (index === 0 && step.layout === 'overview') {
+      return { ...step, nodeIds: ids, ...(local ? { kicker: voiceKicker(styleId, 0), caption: captionFor(styleId, 'overview', ids, graph, groups, texts) } : {}) }
+    }
+    middle += 1
+    // A workshop lane and a step with a nested detail stay dives: every style keeps the deep zoom.
+    let layoutId = step.lane || step.detail ? 'dive' : 'group'
+    for (let k = 0; layoutId === 'group' && k < def.rhythm.length; k += 1) {
+      const candidate = def.rhythm[(rhythm + k) % def.rhythm.length]
+      if (canTake(candidate, ids, graph, groups)) {
+        layoutId = candidate
+        rhythm += k + 1
+        break
+      }
+    }
+    const out = { ...step, nodeIds: ids, layout: layoutId }
+    delete out.lane
+    delete out.number
+    delete out.quote
+    delete out.detail
+    const ctx = stepContext(ids, graph, groups)
+    if (layoutId === 'bigNumber') {
+      out.number = numberIn(ids, graph)
+      out.numberLabel = out.numberLabel || short(graph.notes.get(ids[0])?.text, 48)
+    }
+    if (layoutId === 'quote') out.quote = quoteFrom(ids, graph)
+    if (layoutId === 'sweep' || layoutId === 'compare') {
+      const set = new Set(ids)
+      const parts = groups.filter((group) => group.ids.some((id) => set.has(id))).slice(0, 2)
+      out.headlines = out.headlines?.length === 2 ? out.headlines : parts.map((part) => short(part.text, 32))
+      if (layoutId === 'sweep' && !(out.images?.length >= 2)) out.images = parts.map((part, k) => step.images?.[k] || pictureFor(part.ids, graph, def)).filter(Boolean)
+    }
+    if (['dive', 'split', 'hero'].includes(layoutId) && !out.image) out.image = pictureFor(ids, graph, def) || undefined
+    if (layoutId === 'trace' && local) out.headline = `Back to ${phraseOf(graph.notes.get(graph.root)?.text, 3)}`
+    if (layoutId === 'hero' && local) {
+      const child = graph.notes.get(ids.find((id) => graph.notes.get(id)?.parent && graph.notes.get(id).parent !== graph.root) || ids[0])
+      out.headline = short(child?.text, 40)
+    }
+    if (step.detail) {
+      out.detail = local ? { ...step.detail, caption: captionFor(styleId, 'deep', ids, graph, groups, texts) } : step.detail
+      detailUsed = true
+    } else if (!detailUsed && layoutId === 'dive' && !step.lane && ids.length >= 2) {
+      const fine = ids.slice(1).map((id) => graph.notes.get(id)?.text).filter(Boolean).join(' · ')
+      out.detail = { label: numberIn(ids, graph) || '★', fine: short(fine, 90), caption: captionFor(styleId, 'deep', ids, graph, groups, texts) }
+      detailUsed = true
+    }
+    // A lane keeps the workshop's own words.
+    if (local && !step.lane) {
+      out.kicker = voiceKicker(styleId, middle, ctx.head, source.length - 1)
+      out.caption = captionFor(styleId, layoutId, ids, graph, groups, texts, { index: middle, number: out.number })
+    }
+    return out
+  }).filter(Boolean)
+  const closing = local ? captionFor(styleId, 'finale', graph.list.map((note) => note.id), graph, groups, texts) || direction.closing : direction?.closing
+  return normalizeDirection({ ...direction, closing, style: direction?.style?.overrides ? { id: styleId, overrides: direction.style.overrides } : styleId, steps }, layout, { name })
 }
 
 /**
  * The deck Slatebox composes without the AI: the style the slate's kind calls for, its title,
  * an overview, then the slate's groups in that style's rhythm of layouts (with a deep zoom into
- * a nested detail where the style flies), and the homecoming finale. Deterministic.
+ * a nested detail where the style flies), and the homecoming finale. Its captions and kickers are
+ * the slate's own words in the style's voice. Deterministic.
  */
 export function localDirection(layout, { name = '', scenes = [], style = null } = {}) {
   const graph = slateGraph(layout)
   const styleId = STYLES[style] ? style : pickStyle(layout, name)
   const def = STYLES[styleId]
   const groups = slateGroups(layout, graph)
+  const texts = graph.list.map((note) => note.text)
   const rootText = graph.root ? graph.notes.get(graph.root).text : ''
   const title = short(name || rootText || 'This slate', 70)
   const kicker = rootText && !title.toLowerCase().includes(rootText.toLowerCase())
     ? short(rootText, 40) : `${groups.length} ideas · ${graph.list.length} notes`
-  const steps = [{ layout: 'overview', nodeIds: graph.list.map((note) => note.id), kicker: 'The map', caption: phrase('overview', 0) }]
+  const allIds = graph.list.map((note) => note.id)
+  const steps = [{ layout: 'overview', nodeIds: allIds, kicker: voiceKicker(styleId, 0), caption: captionFor(styleId, 'overview', allIds, graph, groups, texts) }]
   const lanes = scenes.filter((scene) => graph.notes.has(String(scene.nodeIds?.[0])))
   lanes.forEach((scene, index) => steps.push({
     layout: 'dive', nodeIds: scene.nodeIds.map(String).filter((id) => graph.notes.has(id)),
-    kicker: `${pad2(index + 1)} · ${short(scene.label || scene.narrative, 40)}`, caption: cleanCaption(scene.narrative || phrase('dive', index)),
+    kicker: `${pad2(index + 1)} · ${short(scene.label || scene.narrative, 40)}`, caption: cleanCaption(scene.narrative || ''), lane: true,
   }))
   const laneIds = new Set(lanes.flatMap((scene) => scene.nodeIds.map(String)))
   const left = groups.map((group) => ({ ...group, ids: group.ids.filter((id) => !laneIds.has(id)) })).filter((group) => group.ids.length)
   let rhythm = 0
-  let detailUsed = !def.motion.deep
   for (let i = 0; i < left.length && steps.length < MAX_STEPS; ) {
     const group = left[i]
     const next = left[i + 1]
     let layoutId = 'group'
     for (let k = 0; k < def.rhythm.length; k += 1) {
       const candidate = def.rhythm[(rhythm + k) % def.rhythm.length]
-      if (applicable(candidate, group, next, graph)) {
+      const ids = (candidate === 'sweep' || candidate === 'compare') && next ? [...group.ids, ...next.ids] : group.ids
+      if (canTake(candidate, ids, graph, groups)) {
         layoutId = candidate
         rhythm += k + 1
         break
       }
     }
     const pair = layoutId === 'sweep' || layoutId === 'compare'
-    const ids = pair ? [...group.ids, ...next.ids] : group.ids
-    const n = steps.length - lanes.length
-    const step = {
-      layout: layoutId,
-      nodeIds: ids,
-      kicker: pair ? `${pad2(i + 1)} · ${pad2(i + 2)}` : `${pad2(i + 1)} · ${short(group.text, 40)}`,
-      caption: phrase(layoutId, n),
-      headline: short(group.text, 48),
-    }
-    if (pair) step.headlines = [short(group.text, 32), short(next.text, 32)]
-    if (layoutId === 'bigNumber') {
-      step.number = numberIn(group.ids, graph)
-      step.numberLabel = short(group.text, 48)
-    }
-    if (layoutId === 'quote') {
-      const quoted = group.ids.find((id) => words(graph.notes.get(id)?.text).length >= 4)
-      step.quote = short(graph.notes.get(quoted)?.text, 90)
-    }
-    if (layoutId === 'trace') step.headline = rootText ? `Back to ${short(rootText, 30)}` : 'Back to the centre'
-    if (layoutId === 'hero') {
-      const child = graph.notes.get(group.ids.find((id) => id !== group.lead))
-      step.headline = short(child?.text || group.text, 40)
-    }
-    if (['dive', 'split', 'hero'].includes(layoutId) || pair) {
-      step.image = { query: short(`${group.text} ${rootText}`, 80), why: `pictures “${short(group.text, 40)}”`, role: 'hero' }
-      if (pair) step.images = [step.image, { query: short(`${next.text} ${rootText}`, 80), why: `pictures “${short(next.text, 40)}”`, role: 'hero' }]
-    }
-    if (!detailUsed && layoutId === 'dive' && group.ids.length >= 2) {
-      const fine = group.ids.filter((id) => id !== group.lead).map((id) => graph.notes.get(id)?.text).filter(Boolean).join(' · ')
-      step.detail = { label: numberIn(group.ids, graph) || '★', fine: short(fine, 90), caption: phrase('deep', 0) }
-      detailUsed = true
-    }
-    steps.push(step)
+    steps.push({ layout: layoutId, nodeIds: pair ? [...group.ids, ...next.ids] : group.ids, headline: short(group.text, 48) })
     i += pair ? 2 : 1
   }
-  return normalizeDirection({ style: styleId, title, kicker, cta: DEFAULT_CTA, closing: HONEST_CLOSE, steps }, layout, { name })
+  // The style's own layouts, numbers, quotes, pictures, detail, kickers and captions.
+  const closing = captionFor(styleId, 'finale', allIds, graph, groups, texts) || HONEST_CLOSE
+  return remixDirection({ style: styleId, title, kicker, cta: DEFAULT_CTA, closing, local: true, steps }, layout, styleId, { name })
 }
+
+const SAFE_IMAGE_URL = /^(https:\/\/[^\s"'<>]+|data:image\/svg\+xml[;,][^"<>]*)$/i
+/** A picture link a deck may show: https, or the style's own drawn art (an SVG data URI). */
+export const safeImageUrl = (url) => (typeof url === 'string' && url.length <= 200_000 && SAFE_IMAGE_URL.test(url) ? url : null)
 
 const cleanImage = (image) => {
   if (!image || typeof image !== 'object') return null
   const query = short(image.query, 120)
   const prompt = short(image.prompt, 300)
   const why = short(image.why, 140)
-  const url = typeof image.url === 'string' && /^(https:\/\/|data:image\/)/.test(image.url) ? image.url : null
+  const url = safeImageUrl(image.url)
   const mask = P.MASK_NAMES.includes(image.mask) ? image.mask : null
   const role = ['backdrop', 'hero', 'icon'].includes(image.role) ? image.role : 'hero'
+  const source = ['search', 'generated', 'upload'].includes(image.source) ? image.source : 'search'
   // No reason, no picture: an image the AI cannot tie to the slate is the style's own art.
   if (!why) return { art: true, query: query || prompt, role, mask }
-  return { query, prompt, why, role, mask, ...(url ? { url, source: image.source || 'search' } : { art: !query && !prompt }) }
+  return { query, prompt, why, role, mask, ...(url ? { url, source, ...(typeof image.credit === 'string' ? { credit: short(image.credit, 120) } : {}) } : { art: !query && !prompt }) }
+}
+
+const queryKey = (query) => String(query || '').toLowerCase().replace(/\s+/g, ' ').trim()
+/** Every picture slot a direction has: [{ image, set(patch) }] (the cover, each step's, a pair's). */
+export function pictureSlots(direction) {
+  const out = []
+  if (direction?.cover) out.push({ image: direction.cover, set: (patch) => { direction.cover = { ...direction.cover, ...patch } } })
+  ;(direction?.steps || []).forEach((step) => {
+    if (step.image) out.push({ image: step.image, set: (patch) => { step.image = { ...step.image, ...patch } } })
+    ;(step.images || []).forEach((image, k) => { if (image) out.push({ image, set: (patch) => { step.images[k] = { ...step.images[k], ...patch } } }) })
+  })
+  return out
+}
+/** How many pictures a direction still wants (a reason and a query, no picture yet). */
+export const pendingImages = (direction) => pictureSlots(direction).filter(({ image }) => !image.url && image.why && (image.query || image.prompt)).length
+/**
+ * A direction with the pictures already found for it: each slot without a picture takes the one
+ * `sources` (earlier directions, or lists of { query, url, source }) found for the same query.
+ * A refine, a restyle or a later Present reuses pictures instead of paying for them again.
+ */
+export function carryImages(direction, sources = []) {
+  const out = JSON.parse(JSON.stringify(direction || {}))
+  const found = new Map()
+  for (const source of [sources].flat()) {
+    const list = Array.isArray(source) ? source : pictureSlots(JSON.parse(JSON.stringify(source || {}))).map(({ image }) => image)
+    for (const image of list) {
+      const url = safeImageUrl(image?.url)
+      if (url && !url.startsWith('data:') && image.query && !found.has(queryKey(image.query))) found.set(queryKey(image.query), { url, source: image.source || 'search', ...(image.credit ? { credit: image.credit } : {}) })
+    }
+  }
+  pictureSlots(out).forEach(({ image, set }) => {
+    const hit = !image.url && image.why && found.get(queryKey(image.query))
+    if (hit) set(hit)
+  })
+  return out
 }
 
 /**
  * A direction made safe to compose: a known style, the layouts in the vocabulary, only notes on
- * the slate, short captions that never repeat a note or shout placeholders, honest big numbers,
- * pictures with a reason, and the variety rules (an overview first, never one layout three times
- * in a row, at least one surprising beat).
+ * the slate, short captions that never repeat a note or shout placeholders, honest big numbers
+ * and quotes, pictures with a reason and a safe link, and the variety rules (an overview first,
+ * never one layout three times in a row, at least one surprising beat).
  */
 export function normalizeDirection(raw, layout, { name = '' } = {}) {
   const graph = slateGraph(layout)
+  const groups = slateGroups(layout, graph)
   const known = (id) => graph.notes.has(String(id))
   const texts = graph.list.map((note) => note.text)
   const styleId = STYLES[raw?.style?.id || raw?.style] ? (raw.style.id || raw.style) : pickStyle(layout, name)
   const def = STYLES[styleId]
-  const rawSteps = (Array.isArray(raw?.steps) ? raw.steps : Array.isArray(raw?.segments) ? raw.segments : [])
+  const rawSteps = (Array.isArray(raw?.steps) ? raw.steps : Array.isArray(raw?.segments) ? raw.segments : []).slice(0, MAX_STEPS * 2)
   let steps = rawSteps.map((step, index) => {
-    const layoutId = STEP_LAYOUTS.includes(step?.layout) ? step.layout : 'group'
-    const nodeIds = [...new Set([step?.nodeIds ?? []].flat().map(String))].filter(known)
-    let caption = cleanCaption(step?.caption ?? step?.narrative ?? '')
-    if (!caption || repeatsNote(caption, texts)) caption = phrase(layoutId, index)
-    const out = { layout: layoutId, nodeIds, kicker: short(step?.kicker, 48), caption }
-    if (step?.headline) out.headline = short(step.headline, 60)
-    if (Array.isArray(step?.headlines)) out.headlines = step.headlines.slice(0, 2).map((h) => short(h, 40))
-    if (step?.quote) out.quote = short(step.quote, 120)
-    if (step?.number != null) {
+    if (!step || typeof step !== 'object') return null
+    const layoutId = STEP_LAYOUTS.includes(step.layout) ? step.layout : 'group'
+    const nodeIds = [...new Set([step.nodeIds ?? []].flat().filter((id) => typeof id === 'string' || typeof id === 'number').map(String))].filter(known).slice(0, 200)
+    let caption = cleanCaption(typeof (step.caption ?? step.narrative) === 'string' ? (step.caption ?? step.narrative) : '')
+    if (!caption || repeatsNote(caption, texts)) caption = nodeIds.length ? captionFor(styleId, layoutId, nodeIds, graph, groups, texts, { index }) : ''
+    const out = { layout: layoutId, nodeIds, kicker: short(step.kicker, 48), caption }
+    if (step.headline) out.headline = short(step.headline, 60)
+    if (Array.isArray(step.headlines)) out.headlines = step.headlines.slice(0, 2).map((h) => short(h, 40))
+    if (step.quote) out.quote = short(step.quote, 120)
+    if (step.number != null) {
       out.number = short(String(step.number), 8)
       out.numberLabel = short(step.numberLabel, 60)
     }
-    if (step?.detail && typeof step.detail === 'object') {
-      out.detail = { label: short(step.detail.label, 8) || '★', fine: short(step.detail.fine, 120), caption: cleanCaption(step.detail.caption || phrase('deep', 0)) }
+    if (step.detail && typeof step.detail === 'object') {
+      out.detail = { label: short(step.detail.label, 8) || '★', fine: short(step.detail.fine, 120), caption: cleanCaption(step.detail.caption) || captionFor(styleId, 'deep', nodeIds, graph, groups, texts) }
     }
-    const image = cleanImage(step?.image)
+    const image = cleanImage(step.image)
     if (image) out.image = image
-    if (Array.isArray(step?.images)) out.images = step.images.slice(0, 3).map(cleanImage).filter(Boolean)
-    if (Number.isFinite(Number(step?.roll))) out.roll = Number(step.roll)
-    if (Number.isFinite(Number(step?.duration))) out.duration = Math.round(Math.min(10000, Math.max(1500, Number(step.duration))))
+    if (Array.isArray(step.images)) out.images = step.images.slice(0, 3).map(cleanImage).filter(Boolean)
+    if (Number.isFinite(Number(step.roll))) out.roll = Number(step.roll)
+    if (Number.isFinite(Number(step.duration))) out.duration = Math.round(Math.min(10000, Math.max(1500, Number(step.duration))))
     return out
-  }).filter((step) => step.nodeIds.length)
-  // Honest big numbers only.
+  }).filter((step) => step?.nodeIds.length)
   steps.forEach((step) => {
+    // Honest big numbers only.
     if (step.layout === 'bigNumber' && !(step.number && numberOnSlate(step.number, layout, graph))) {
       step.layout = 'hero'
       delete step.number
     }
+    // A quote is a note's own words, shown in quote marks: the AI's words never pass as the slate's.
+    // Otherwise the step's longest note is quoted, else it is a hero.
+    if (step.quote && !quoteOnSlate(step.quote, step.nodeIds.map((id) => graph.notes.get(id)?.text))) {
+      step.quote = quoteFrom(step.nodeIds, graph)
+      if (!step.quote) delete step.quote
+    }
     if (step.layout === 'quote' && !step.quote) step.layout = 'hero'
+    if (step.layout !== 'quote') delete step.quote
   })
   // The wide shot comes first: an overview of the whole slate.
   if (steps[0]?.layout !== 'overview') {
-    steps.unshift({ layout: 'overview', nodeIds: graph.list.map((note) => note.id), kicker: 'The map', caption: phrase('overview', 0) })
+    const allIds = graph.list.map((note) => note.id)
+    steps.unshift({ layout: 'overview', nodeIds: allIds, kicker: voiceKicker(styleId, 0), caption: captionFor(styleId, 'overview', allIds, graph, groups, texts) })
   }
   steps = steps.slice(0, MAX_STEPS)
   // Never one layout three times running.
@@ -391,11 +546,11 @@ export function normalizeDirection(raw, layout, { name = '' } = {}) {
     if (traceable > 0) steps[traceable].layout = 'trace'
     else {
       const dive = steps.findIndex((step, i) => i > 0)
-      if (dive > 0) steps[dive].detail = { label: '★', fine: short(texts.join(' · '), 90), caption: phrase('deep', 0) }
+      if (dive > 0) steps[dive].detail = { label: '★', fine: short(texts.join(' · '), 90), caption: captionFor(styleId, 'deep', steps[dive].nodeIds, graph, groups, texts) }
     }
   }
   const cta = short(raw?.cta, 28) || DEFAULT_CTA
-  let closing = cleanCaption(raw?.closing ?? HONEST_CLOSE)
+  let closing = cleanCaption(typeof raw?.closing === 'string' ? raw.closing : HONEST_CLOSE)
   if (closing && closing.toLowerCase().includes(cta.toLowerCase())) closing = ''
   if (repeatsNote(closing, texts)) closing = HONEST_CLOSE
   const overrides = raw?.style?.overrides
@@ -407,6 +562,7 @@ export function normalizeDirection(raw, layout, { name = '' } = {}) {
     subtitle: short(raw?.subtitle, 100),
     cta,
     closing,
+    ...(raw?.local === true ? { local: true } : {}),
     ...(cleanImage(raw?.cover) ? { cover: cleanImage(raw.cover) } : {}),
     steps,
   }
@@ -445,8 +601,16 @@ export function fitFont(text, w, h, max, font = 'Inter', min = 4) {
  * 'all'), and `steps` the viewpoints (nodeIds, narrative, duration, layout, kicker, camera, lit,
  * reveal), first the title (or cover) and last the finale.
  */
-export function composeDeck(layout, direction, { style: styleRef = null } = {}) {
+export function composeDeck(layout, rawDirection, { style: styleRef = null } = {}) {
   const graph = slateGraph(layout)
+  // A direction from anywhere (an old save, a published row, a live session) composes: missing
+  // steps are none, a step without notes is skipped, a missing title is the default.
+  const direction = {
+    ...(rawDirection && typeof rawDirection === 'object' ? rawDirection : {}),
+    steps: (Array.isArray(rawDirection?.steps) ? rawDirection.steps : []).filter((step) => step && typeof step === 'object'),
+  }
+  direction.title = typeof direction.title === 'string' && direction.title ? direction.title : 'This slate'
+  direction.cta = typeof direction.cta === 'string' && direction.cta ? direction.cta : DEFAULT_CTA
   const ref = cleanStyleRef(styleRef || direction?.style || DEFAULT_STYLE)
   const style = resolveStyle(ref)
   const U = graph.unit
@@ -480,13 +644,18 @@ export function composeDeck(layout, direction, { style: styleRef = null } = {}) 
     const { grow, fontScale, rotate, image, ...options } = look
     const box = { x: c.x - width / 2, y: c.y - height / 2, width, height }
     boxes.set(note.id, box)
+    // The silhouette's inner safe area: the text keeps inside its outline.
+    const inset = P.textInsetFor(look.vectorPath) || (look.shape === 'circle' ? { left: 0.15, right: 0.15, top: 0.15, bottom: 0.15 } : null)
+    const innerW = width * (1 - (inset?.left || 0) - (inset?.right || 0))
+    const innerH = height * (1 - (inset?.top || 0) - (inset?.bottom || 0))
     skin[note.id] = {
       ...options,
       x: box.x, y: box.y, width, height,
+      ...(inset ? { textInset: inset } : {}),
       // The style's size, made smaller where the note's words would not fit its shape.
       fontSize: Math.min(
         Math.round(Math.min(height, U) * (fontScale || 0.32) * (role === 'root' ? Math.min(2.2, height / U) : 1) * 10) / 10,
-        fitFont(note.text, width * (look.vectorPath || look.shape ? 0.78 : 0.9), height * 0.8, U * 2, look.fontFamily),
+        fitFont(note.text, innerW * 0.92 - 14, innerH * 0.86, U * 2, look.fontFamily),
       ),
       ...(rotate ? { rotate: { rotationAngle: rotate } } : {}),
       ...(image === 'art' ? { image: artImage({ kind: style.art, palette: style.palette, bg: style.bg, seedText: note.text, width: 800, height: 800 }), imageOrigWidth: width, imageOrigHeight: height, imageFit: 'cover' } : {}),
@@ -536,13 +705,14 @@ export function composeDeck(layout, direction, { style: styleRef = null } = {}) 
   const add = (kind, geometry, options, steps, portrait = null) => {
     serial += 1
     const id = `sb-stage-${serial}-${kind}`
-    const note = { id, kind, x: geometry.x, y: geometry.y, w: geometry.w ?? geometry.width, h: geometry.h ?? geometry.height, ...options, steps }
+    const inset = options.text && options.vectorPath ? P.textInsetFor(options.vectorPath) : null
+    const note = { id, kind, x: geometry.x, y: geometry.y, w: geometry.w ?? geometry.width, h: geometry.h ?? geometry.height, ...(inset ? { textInset: inset } : {}), ...options, steps }
     note.p = portrait ? { x: portrait.x, y: portrait.y, w: portrait.w ?? portrait.width, h: portrait.h ?? portrait.height, ...(portrait.fontSize ? { fontSize: portrait.fontSize } : {}) } : { x: note.x, y: note.y, w: note.w, h: note.h }
     stageNotes.push(note)
     return id
   }
   const textNote = (text, font, size, color, extra = {}) => ({ text, fontFamily: font, fontSize: size, fontColor: color, backgroundColor: 'transparent', borderWidth: 0, textXAlign: 'left', ...extra })
-  const imageSrc = (image, seed) => (image?.url ? image.url : artImage({ kind: style.art, palette: style.palette, bg: style.bg, seedText: image?.query || seed }))
+  const imageSrc = (image, seed) => safeImageUrl(image?.url) || artImage({ kind: style.art, palette: style.palette, bg: style.bg, seedText: image?.query || seed })
   const maskOf = (image, index) => P.MASKS[image?.mask] || P.MASKS[style.masks[index % style.masks.length]] || P.MASKS.rect
   const fontWeight = (k) => (k.weight ? { fontWeight: k.weight } : {})
 
@@ -676,9 +846,10 @@ export function composeDeck(layout, direction, { style: styleRef = null } = {}) 
     const pLast = pPlaced.at(-1)
     ctaAnchor = { x: at.x, y: last.y + last.h + U * 0.9, w: U * 10, h: U * 2.2 }
     ctaPortrait = { x: pAt.x, y: pLast.y + pLast.h + U * 0.9, w: U * 10, h: U * 2.2 }
-    openingCamera = { frame: [...bookend, ...(root ? [root] : [])], fill: 0.88, p: { frame: [...bookend] } }
+    openingCamera = { frame: [...bookend, ...(root ? [root] : [])], fill: 0.88 }
   }
-  const openingLit = [...bookend, ...(root ? [root] : [])]
+  // What the opening lights is what it frames (a cover frames its own column, not the root).
+  const openingLit = openingCamera.cover ? [...bookend] : [...new Set([...openingCamera.frame, ...bookend])]
   // The opening shows the whole slate's story to come: it is the deck's start (step 0 of the
   // counter, where a better plan takes its place unseen), lighting only its title card.
   pushStep({ layout: openingLayout, nodeIds: allIds, lit: openingLit, narrative: '', kicker: '', camera: openingCamera, duration: 4200 })
@@ -689,18 +860,20 @@ export function composeDeck(layout, direction, { style: styleRef = null } = {}) 
   const stepNotes = []
   const markAll = []
   direction.steps.forEach((s, index) => {
-    const ids = s.nodeIds.filter((id) => boxes.has(id))
+    const ids = (Array.isArray(s.nodeIds) ? s.nodeIds : []).map(String).filter((id) => boxes.has(id))
     if (!ids.length) return
     const at = steps.length
     const gBox = unionBoxes(ids.map((id) => boxes.get(id)))
     const lead = ids.find((id) => roleOf(id) === 'branch') || ids[0]
     const leadBox = boxes.get(lead)
-    const kicker = s.kicker || ''
-    const narrative = s.caption
-    const roll = s.roll ?? null
+    const kicker = typeof s.kicker === 'string' ? s.kicker : ''
+    const narrative = typeof s.caption === 'string' ? s.caption : ''
+    const roll = Number.isFinite(Number(s.roll)) && s.roll !== null ? Number(s.roll) : null
     const own = []
     const avoid = []
-    const reserve = (box) => avoid.push(inflate({ x: box.x, y: box.y, width: box.w ?? box.width, height: box.h ?? box.height }, U * 0.3))
+    const pAvoid = []
+    const boxOfBlock = (box) => inflate({ x: box.x, y: box.y, width: box.w ?? box.width, height: box.h ?? box.height }, U * 0.3)
+    const reserve = (box) => avoid.push(boxOfBlock(box))
     const headline = (text, w, h, max) => textNote(text, kit.headline.font, fitFont(text, w, h, max, kit.headline.font), kit.headline.color, fontWeight(kit.headline))
     const portraitOf = (block, scale = 1.25) => ({ ...block, w: Math.max(U * 4, Math.min(block.w, U * 11)), h: block.h * scale })
     const placeColumn = (blocks, anchor, opts) => {
@@ -710,13 +883,17 @@ export function composeDeck(layout, direction, { style: styleRef = null } = {}) 
       placed.forEach(reserve)
       const pBlocks = blocks.map((b) => portraitOf(b, b.pScale || 1.25))
       const pSize = columnSize(pBlocks)
-      const pBox = place(pSize.w, pSize.h, anchor, { avoid: [...avoid], portrait: true, ...opts })
-      return { placed, pPlaced: column(pBlocks, { x: pBox.x, y: pBox.y }) }
+      // On a phone the step's blocks stack beside or under its notes, never on each other.
+      const pBox = place(pSize.w, pSize.h, anchor, { avoid: pAvoid, portrait: true, ...opts })
+      const pPlaced = column(pBlocks, { x: pBox.x, y: pBox.y })
+      pPlaced.forEach((b) => pAvoid.push(boxOfBlock(b)))
+      return { placed, pPlaced }
     }
     // On a phone a step frames its own stacked column (a picture, a headline): big and readable.
     // A hero keeps its note beside its bubble.
-    const ownCamera = (extra = {}) => ({ frame: [...ids, ...own], roll, ...extra, p: { frame: L === 'hero' || L === 'treeBuild' ? [lead, ...own] : [...own], ...(extra.p || {}) } })
-    const L = s.layout
+    // The camera frames everything the step lights, on a wide screen and on a phone alike.
+    const ownCamera = (extra = {}) => ({ frame: [...ids, ...own], roll, ...extra })
+    const L = STEP_LAYOUTS.includes(s.layout) ? s.layout : 'group'
     if (L === 'overview') {
       pushStep({ layout: 'overview', nodeIds: allIds, lit: allIds, kicker, narrative, camera: { frame: allIds, roll: roll ?? -Math.min(4, rollMax / 3), fill: 0.92 }, duration: 3600 })
       return
@@ -763,8 +940,8 @@ export function composeDeck(layout, direction, { style: styleRef = null } = {}) 
       const camera = L === 'dive'
         ? ownCamera({ roll: roll ?? tilt })
         : L === 'hero' ? ownCamera({ roll: roll ?? -Math.round(rollMax * 0.4) })
-          : L === 'quote' ? { frame: [...own, lead], roll: roll ?? -Math.min(2, rollMax), p: { frame: [...own] } }
-            : L === 'bigNumber' ? { frame: [...own, ...ids], roll: roll ?? 0, p: { frame: [...own] } }
+          : L === 'quote' ? { frame: [...own, ...ids], roll: roll ?? -Math.min(2, rollMax) }
+            : L === 'bigNumber' ? { frame: [...own, ...ids], roll: roll ?? 0 }
               : ownCamera()
       pushStep({ layout: L, nodeIds: ids, lit: [...ids, ...own], kicker, narrative, camera, duration: s.duration || (L === 'hero' || L === 'bigNumber' ? 4200 : 3400), reveal: L === 'treeBuild' ? 'stagger' : style.motion.reveal })
       stepNotes.push(...own)
@@ -777,8 +954,10 @@ export function composeDeck(layout, direction, { style: styleRef = null } = {}) 
         const fine = add('fine-print', { x: spot.x, y: spot.y + size * 1.15, w: size * 1.9, h: size * 0.8 }, textNote(s.detail.fine, style.fonts.body, Math.max(2, fitFont(s.detail.fine, size * 1.9, size * 0.8, U * 0.095, style.fonts.body, 1)), style.chrome.ink, { textXAlign: 'center', fontWeight: 'bold', rotate: { rotationAngle: 12 } }), 'all')
         markAll.push(sticker, fine)
         reserve(spot)
+        // The speck shows on every step: nothing placed later sits on it, on any screen.
+        blockers.push(inflate(spot, U * 0.2))
         // Only the detail is lit: everything else falls far back, so nothing sits behind the caption.
-        pushStep({ layout: 'dive', deep: true, dim: 0.05, nodeIds: [lead], lit: [sticker, fine], kicker: 'Look closer', narrative: s.detail.caption || phrase('deep', 0), camera: { frame: [sticker, fine], fill: 0.6, roll: -rollMax, deep: true }, duration: 3600 })
+        pushStep({ layout: 'dive', deep: true, dim: 0.05, nodeIds: [lead], lit: [sticker, fine], kicker: 'Look closer', narrative: s.detail.caption || '', camera: { frame: [sticker, fine], fill: 0.6, roll: -rollMax, deep: true }, duration: 3600 })
       }
       return
     }
@@ -811,7 +990,7 @@ export function composeDeck(layout, direction, { style: styleRef = null } = {}) 
           own.push(add('heading', placed[0], textNote(text, kit.headline.font, fitFont(text, placed[0].w, placed[0].h, U * 1.3, kit.headline.font), k ? style.chrome.accent : kit.headline.color, fontWeight(kit.headline)), [at], { ...pPlaced[0], fontSize: fitFont(text, pPlaced[0].w, pPlaced[0].h, U * 1.6, kit.headline.font) }))
         }
       })
-      pushStep({ layout: L, nodeIds: ids, lit: [...ids, ...own], kicker, narrative, camera: { frame: [...ids, ...own], roll: roll ?? Math.round(rollMax * 0.2), fill: 0.9, p: { frame: [...own] } }, duration: s.duration || 3800, reveal: 'stagger' })
+      pushStep({ layout: L, nodeIds: ids, lit: [...ids, ...own], kicker, narrative, camera: { frame: [...ids, ...own], roll: roll ?? Math.round(rollMax * 0.2), fill: 0.9 }, duration: s.duration || 3800, reveal: 'stagger' })
       stepNotes.push(...own)
       return
     }
@@ -827,10 +1006,20 @@ export function composeDeck(layout, direction, { style: styleRef = null } = {}) 
       const { placed, pPlaced } = placeColumn([{ key: 'label', w: U * 13, h: U * 1.8, pScale: 1.8 }], { x: rib.box.x, y: rib.box.y, width: rib.box.width, height: rib.box.height }, { sides: ['below', 'above', 'right', 'left'] })
       own.push(add('label', placed[0], textNote(label, kit.headline.font, fitFont(label, placed[0].w, placed[0].h, U * 0.95, kit.headline.font), kit.ribbon.color, { ...fontWeight(kit.headline), rotate: { rotationAngle: -3 } }), [at], { ...pPlaced[0], fontSize: fitFont(label, pPlaced[0].w, pPlaced[0].h, U * 1.3, kit.headline.font) }))
       const frame = [...ids, ...own, ...(root ? [root] : [])]
-      pushStep({ layout: 'trace', nodeIds: ids, lit: frame, kicker, narrative, camera: { frame, roll: roll ?? 0, fill: 0.9, p: { frame: [lead, ...own, ...(root ? [root] : [])] } }, duration: s.duration || 3800 })
+      pushStep({ layout: 'trace', nodeIds: ids, lit: frame, kicker, narrative, camera: { frame, roll: roll ?? 0, fill: 0.9 }, duration: s.duration || 3800 })
       stepNotes.push(...own)
     }
   })
+
+  // A road through the whole deck (Journey): one stroke from step to step, behind the slate, that
+  // the camera travels along.
+  if (style.route) {
+    const stops = steps.slice(1).filter((step) => step.layout !== 'overview' && !step.deep)
+      .map((step) => step.nodeIds.map((id) => boxes.get(id)).find(Boolean)).filter(Boolean).map((box) => [box.x + box.width / 2, box.y + box.height / 2])
+    if (root && rootBox) stops.unshift([rootBox.x + rootBox.width / 2, rootBox.y + rootBox.height / 2])
+    const road = P.route(stops)
+    if (road) add('route', { x: road.box.x, y: road.box.y, w: road.box.width, h: road.box.height }, { vectorPath: road.d, backgroundColor: 'transparent', borderColor: kit.ribbon.color, borderWidth: Math.max(4, kit.ribbon.width), borderStyle: kit.ribbon.dash === 'solid' ? 'solid' : kit.ribbon.dash, behind: true, deco: true, opacity: 0.55 }, 'all')
+  }
 
   // 5. The homecoming finale: the camera pulls back through the whole map and lands on the
   // opening bookend with the call to action.
@@ -846,7 +1035,8 @@ export function composeDeck(layout, direction, { style: styleRef = null } = {}) 
     duration: 5000, reveal: 'fade',
   })
   // Decoration (stars, orbits, grids) belongs to every step; drawn behind everything.
-  const decor = (kit.decor?.(B, U) || []).slice(0, 120).map((d) => {
+  // Kept to a few dozen: every one is a real note the camera's flights repaint.
+  const decor = (kit.decor?.(B, U) || []).slice(0, MAX_DECOR).map((d) => {
     const { key, w, h, ...rest } = d
     return { id: `sb-deco-${key}`, kind: 'deco', deco: true, behind: true, x: d.x, y: d.y, w, h, borderWidth: 0, ...rest, steps: 'all', p: { x: d.x, y: d.y, w, h } }
   })

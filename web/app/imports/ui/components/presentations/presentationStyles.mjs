@@ -49,6 +49,7 @@ export const STYLES = {
     motion: { arc: 'prezi', rollMax: 12, pace: 1, deep: true, reveal: 'stagger' },
     rhythm: ['dive', 'treeBuild', 'hero', 'sweep', 'trace', 'bigNumber', 'quote'],
     art: 'planet',
+    imagePrompt: 'A vivid cosmic illustration',
     masks: ['blob', 'hexagon', 'blob2'],
     skin(role, branch, palette) {
       const c = palette[branch % palette.length]
@@ -75,7 +76,7 @@ export const STYLES = {
         const cy = box.y + box.height / 2
         const big = Math.max(box.width, box.height)
         return [
-          ...stars(box, unit, 42),
+          ...stars(box, unit, 42, 36),
           { key: 'orbit1', x: cx - big * 0.36, y: cy - big * 0.36, w: big * 0.72, h: big * 0.72, vectorPath: P.ring(0.5), backgroundColor: '#ffffff', opacity: 0.2 },
           { key: 'orbit2', x: cx - big * 0.62, y: cy - big * 0.62, w: big * 1.24, h: big * 1.24, vectorPath: P.ring(0.3), backgroundColor: '#ffffff', opacity: 0.1 },
         ]
@@ -95,6 +96,7 @@ export const STYLES = {
     motion: { arc: 'direct', rollMax: 0, pace: 1.35, deep: false, reveal: 'fade' },
     rhythm: ['bigNumber', 'hero', 'split', 'dive', 'quote', 'group'],
     art: 'spotlight',
+    imagePrompt: 'A dramatic spotlit photograph on black',
     masks: ['circle', 'rect'],
     titleBackdrop: true,
     skin(role) {
@@ -132,6 +134,7 @@ export const STYLES = {
     motion: { arc: 'direct', rollMax: 2, pace: 1.2, deep: false, reveal: 'fade' },
     rhythm: ['split', 'quote', 'compare', 'dive', 'group'],
     art: 'halftone',
+    imagePrompt: 'An editorial magazine photograph',
     masks: ['torn', 'rect'],
     cover: true,
     skin(role) {
@@ -169,6 +172,7 @@ export const STYLES = {
     motion: { arc: 'prezi', rollMax: 6, pace: 0.8, deep: true, reveal: 'pop' },
     rhythm: ['sweep', 'hero', 'bigNumber', 'dive', 'trace'],
     art: 'sunburst',
+    imagePrompt: 'A neon, high-energy illustration',
     masks: ['hexagon', 'slant'],
     skin(role, branch, palette) {
       const c = palette[branch % palette.length]
@@ -190,7 +194,7 @@ export const STYLES = {
       number: { font: 'Anton', color: '#00f0ff' },
       quote: { path: P.quoteMarks, fill: '#ff2e93', font: 'Anton', color: '#ffffff', italic: false },
       imageBorder: { color: '#00f0ff', width: 5 },
-      decor: (box, unit) => stars(box, unit, 7, 40, '#00f0ff'),
+      decor: (box, unit) => stars(box, unit, 7, 28, '#00f0ff'),
     },
   },
 
@@ -206,6 +210,7 @@ export const STYLES = {
     motion: { arc: 'prezi', rollMax: 5, pace: 1, deep: false, reveal: 'pop' },
     rhythm: ['treeBuild', 'sweep', 'hero', 'trace', 'group'],
     art: 'confetti',
+    imagePrompt: 'A cheerful hand-drawn marker sketch',
     masks: ['wobbly', 'rect'],
     polaroid: true,
     skin(role, branch, palette, id = '') {
@@ -243,6 +248,7 @@ export const STYLES = {
     motion: { arc: 'direct', rollMax: 0, pace: 0.9, deep: true, reveal: 'stagger' },
     rhythm: ['trace', 'treeBuild', 'dive', 'split', 'bigNumber'],
     art: 'grid',
+    imagePrompt: 'A technical blueprint line drawing',
     masks: ['rect', 'hexagon'],
     skin(role) {
       if (role === 'root') return { grow: 1.3, vectorPath: P.chevron, backgroundColor: 'transparent', borderColor: '#ffd166', borderWidth: 3, fontFamily: 'Space Grotesk', fontWeight: 'bold', fontScale: 0.3, fontColor: '#ffd166' }
@@ -269,7 +275,7 @@ export const STYLES = {
         for (let x = Math.floor((box.x - unit * 20) / step) * step, i = 0; x < box.x + box.width + unit * 20; x += step, i += 1) {
           out.push({ key: `gx${i}`, x, y: box.y - unit * 8, w: unit * 0.06, h: box.height + unit * 16, backgroundColor: '#ffffff', opacity: i % 4 ? 0.08 : 0.18 })
         }
-        return out.slice(0, 60)
+        return out.filter((_, i) => i % 2 === 0).slice(0, 30)
       },
     },
   },
@@ -287,6 +293,8 @@ export const STYLES = {
     rhythm: ['trace', 'dive', 'hero', 'split', 'group'],
     art: 'terrain',
     masks: ['pin', 'rect'],
+    route: true,
+    imagePrompt: 'A vintage travel-poster illustration',
     skin(role, branch, palette) {
       const c = palette[branch % palette.length]
       if (role === 'root') return { grow: 1.5, vectorPath: P.pin, backgroundColor: '#e76f51', fontFamily: 'Abril Fatface', fontScale: 0.26, fontColor: '#ffffff', textOffset: { y: -10 } }
@@ -323,6 +331,7 @@ export const STYLES = {
     motion: { arc: 'cut', rollMax: 0, pace: 1.2, deep: false, reveal: 'none' },
     rhythm: ['group', 'split', 'dive', 'quote'],
     art: 'gradient',
+    imagePrompt: 'A calm, minimal photograph',
     masks: ['rect'],
     skin(role) {
       if (role === 'root') return { grow: 1.2, vectorPath: P.pill, backgroundColor: '#1c1917', fontFamily: 'Inter', fontWeight: 'bold', fontScale: 0.3, fontColor: '#ffffff' }
