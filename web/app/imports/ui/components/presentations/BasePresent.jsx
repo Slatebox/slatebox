@@ -1008,7 +1008,8 @@ const BasePresent = forwardRef(
         </div>
         {/* What changed, for a screen reader: the step and its narrative (a live deck says its own,
             with the notes it lights). */}
-        <Box aria-live={isLive ? 'off' : 'polite'} aria-hidden={isLive || undefined} sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
+        {/* 1px, in px: MUI reads width: 1 as 100%, which parked a whole screen of hidden box below the stage. */}
+        <Box aria-live={isLive ? 'off' : 'polite'} aria-hidden={isLive || undefined} sx={{ position: 'absolute', top: 0, left: 0, width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
           {curPresentation.currentView >= 0 && curPresentation.viewpoints?.length
             ? (total > 0 ? `${step} of ${total}${narrative ? ': ' + narrative : ''}` : narrative) : ''}
         </Box>

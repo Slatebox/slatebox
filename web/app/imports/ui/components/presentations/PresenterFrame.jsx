@@ -15,6 +15,11 @@ import CloseIcon from '@mui/icons-material/Close'
  * `escapeExits` false: Escape does not exit (ending a live presentation for everyone takes its
  * button, not a second press of the key that left full screen).
  */
+// The frame and its area never scroll: overflow hidden can still be scrolled by a focus, a
+// scrollIntoView or the browser's scroll anchoring (a popover opening once scrolled the deck up and
+// left the bottom of the window blank); clip cannot.
+const UNSCROLLABLE = { overflow: 'hidden', '@supports (overflow: clip)': { overflow: 'clip' } }
+
 export default function PresenterFrame({ open, label = 'Presentation', title, status, exitLabel = 'Exit presentation', onExit,
   keepOutOfFullScreen = false, escapeExits = true, background, error, immersive = false, children }) {
   const exit = useRef(onExit)
@@ -45,7 +50,7 @@ export default function PresenterFrame({ open, label = 'Presentation', title, st
   }, [open, keepOutOfFullScreen])
 
   return <Dialog fullScreen open={Boolean(open)} disableEscapeKeyDown={!escapeExits} onClose={() => onExit?.()}
-    slotProps={{ paper: { 'aria-label': label, sx: { background: background || 'background.default', display: 'flex', flexDirection: 'column' } } }}>
+    slotProps={{ paper: { 'aria-label': label, sx: { background: background || 'background.default', display: 'flex', flexDirection: 'column', ...UNSCROLLABLE } } }}>
     {/* A styled deck is full bleed: the bar floats over its corner (the slate's name stays for a
         screen reader), so the deck's own colour fills the screen. */}
     <Box component="header" className={`sb-presenter-bar${immersive ? ' sb-presenter-bar-immersive' : ''}`} sx={immersive ? {
@@ -54,7 +59,7 @@ export default function PresenterFrame({ open, label = 'Presentation', title, st
     } : { display: 'flex', alignItems: 'center', gap: 1, px: { xs: 1, sm: 2 }, minHeight: 48,
       bgcolor: 'shell.main', color: '#fff', flex: '0 0 auto', minWidth: 0 }}>
       {/* On a phone the status (which viewpoint) wins over the slate's name. */}
-      <Typography component="h2" noWrap sx={immersive ? { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' } : { fontWeight: 700, fontSize: 16, minWidth: 0, flex: '0 1 auto',
+      <Typography component="h2" noWrap sx={immersive ? { position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)' } : { fontWeight: 700, fontSize: 16, minWidth: 0, flex: '0 1 auto',
         display: status ? { xs: 'none', sm: 'block' } : 'block' }}>{title}</Typography>
       {status && <Typography role="status" noWrap variant="body2" sx={{ opacity: .85, minWidth: 0, flex: '1 1 auto' }}>{status}</Typography>}
       {!immersive && <Box sx={{ flex: status ? '0 0 auto' : '1 1 auto' }} />}
@@ -64,7 +69,7 @@ export default function PresenterFrame({ open, label = 'Presentation', title, st
       </Button>
     </Box>
     {error && <Typography role="alert" variant="body2" sx={{ px: 2, py: .5, bgcolor: 'error.main', color: 'error.contrastText' }}>{error}</Typography>}
-    <Box component="main" sx={{ position: 'relative', flex: '1 1 auto', minHeight: 0, overflow: 'hidden' }}>
+    <Box component="main" sx={{ position: 'relative', flex: '1 1 auto', minHeight: 0, ...UNSCROLLABLE }}>
       {children}
     </Box>
   </Dialog>

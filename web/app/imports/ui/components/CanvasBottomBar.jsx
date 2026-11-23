@@ -26,7 +26,7 @@ export default function CanvasBottomBar({ conversation, huddle, add = null }) {
       ...(add && { '@media (max-width:420px)': {
         '& [data-conversation-toggle] .MuiButton-startIcon': { display: 'none' },
         '& [data-conversation-toggle]': { whiteSpace: 'nowrap', fontSize: 15, px: 1 },
-        '& .sb-huddle-bar label > span:not([class])': { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' },
+        '& .sb-huddle-bar label > span:not([class])': { position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' },
       } }) }}>
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
       {add}
