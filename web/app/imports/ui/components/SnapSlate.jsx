@@ -9,8 +9,11 @@ import CONSTANTS from '../../api/common/constants'
 import { Collaboration } from '../../api/common/models'
 import slateProps from '../propTypes/slateProps'
 import promisify from '../../api/client/promisify'
-import { slatePreview } from '../../api/common/slate-preview.mjs'
+import { drawSlateBoards } from './workshop/boardRender'
 import useCanvasTheme from '../common/useCanvasTheme'
+
+/** Whether a saved slate holds a board (its first in creative, any further in boards). */
+const holdsBoards = (ss) => ss?.creative?.model?.kind === 'workshop' || Object.values(ss?.boards ?? {}).some((b) => b?.model?.kind === 'workshop')
 
 export default function SnapSlate({
   slate,
@@ -115,20 +118,21 @@ export default function SnapSlate({
       })
     })
 
+    // The slate's own notes, then each board it holds, drawn by the same renderer as the live canvas
+    // (boardRender.js): a plan's months and bars, not the generic columns its notes would make.
+    const boards = holdsBoards(ss)
     window.setTimeout(() => {
-      window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(async () => {
+        if (gone.current) return
         snap.loadJSON(JSON.stringify(ss))
-        if (ss.nodes.length < 25 || ss.options.templateApproved || ss.drawnFromModel) {
-          // if (!overrideContainer) {
+        if (boards) {
+          drawn.current = await drawSlateBoards(snap.v2 ?? snap, ss)
+          if (gone.current) return
+        }
+        if (ss.nodes.length < 25 || ss.options.templateApproved || boards) {
           snap.controller.scaleToFitAndCenter(() => {
             setVisible(true)
           })
-          // } else {
-          //   snap.canvas.zoom({
-          //     dur: 0,
-          //     zoomPercent: 100,
-          //   })
-          // }
         } else {
           setVisible(true)
         }
@@ -202,9 +206,20 @@ export default function SnapSlate({
     // })
   }
 
+  const gone = React.useRef(false)
+  const drawn = React.useRef([])
   useEffect(() => {
     if (slate) {
-      create(slatePreview(JSON.parse(JSON.stringify(slate))))
+      const copy = JSON.parse(JSON.stringify(slate))
+      copy.nodes = Array.isArray(copy.nodes) ? copy.nodes : []
+      copy.options = { ...copy.options, containerStyle: { backgroundColor: '#ffffff', ...copy.options?.containerStyle } }
+      create(copy)
+    }
+    return () => {
+      gone.current = true
+      for (const board of drawn.current) {
+        try { board.destroy() } catch { /* The card is already gone. */ }
+      }
     }
   }, [])
 

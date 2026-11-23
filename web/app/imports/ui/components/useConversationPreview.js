@@ -1,9 +1,8 @@
 import { useEffect } from 'react'
 import { compat } from 'slateboxjs'
-import { attachWorkshop, rulebookLoaded } from 'slateboxjs/workshops/model'
-import { KIT_KINDS, PREVIEW_CAPTION, boundsOf, draftShownBox, previewArtwork, previewBoardOf, previewCaption, previewShown, previewView } from '../../api/common/conversation-preview.mjs'
-import { lanesPerRow, workshopNoteStyle, workshopStyle } from '../../api/common/workshop-look.mjs'
-import { ensureBoardChromeStyles } from './workshop/boardChromeStyles'
+import { PREVIEW_CAPTION, boundsOf, draftShownBox, previewArtwork, previewBoardOf, previewCaption, previewShown, previewView } from '../../api/common/conversation-preview.mjs'
+import { workshopNoteStyle, workshopStyle } from '../../api/common/workshop-look.mjs'
+import { drawBoard } from './workshop/boardRender'
 
 // A preview note is drawn but not part of the slate: nobody can select, move, edit, connect or
 // delete it, and the engine leaves it out of saves, undo, exports and what it sends to collaborators.
@@ -165,20 +164,13 @@ function drawBoardDraft(engine, { workshop, origin }, preview) {
   let gone = false
   let board = null
   let before = null
-  ensureBoardChromeStyles()
   ;(async () => {
     try {
-      const kits = KIT_KINDS.includes(workshop.kind)
-        ? await Promise.all([import('slateboxjs/boards'), workshop.kind === 'nest' ? import('slateboxjs/boards/nest') : null]).then(([loaded]) => loaded) : null
-      if (workshop.behaviour && !rulebookLoaded()) await import('slateboxjs/workshops/behaviour')
-      if (gone) return
+      // The one renderer (boardRender.js): the same kit, rules and layout as the kept board, drawn as a draft.
       const width = engine.element?.clientWidth || window.innerWidth
-      const kit = kits ? kits.kitFor(workshop.kind) : undefined
-      board = attachWorkshop(engine, workshop, {
-        draft: true, readOnly: true, scope: 'pv', origin, style: workshopStyle(engine.freeNodes?.() ?? []),
-        layout: kit ? kits.boardLayoutFor(width) : { lanesPerRow: lanesPerRow(width, workshop) },
-        ...(kit && { kit }),
-      })
+      const drawn = await drawBoard(engine, workshop, { how: 'draft', origin, width, style: workshopStyle(engine.freeNodes?.() ?? []) })
+      if (gone) { drawn.destroy(); return }
+      board = drawn
       await board.whenDrawn()
       if (gone) return
       // Into view at a size that can be read, the dashed frame and its tag included; the person's view comes back after.

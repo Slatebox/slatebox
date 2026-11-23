@@ -9,6 +9,7 @@ import { workshopStyle, lanesPerRow } from '../../../api/common/workshop-look.mj
 import { shapeNotice as shapeSentence, withShapeNotice } from '../../../api/common/shape-notice.mjs'
 import { boardsCounterRecordId } from '../../../api/common/slate-boards.mjs'
 import { ensureBoardChromeStyles } from './boardChromeStyles'
+import { KIT_KINDS } from './boardRender'
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 const validOrigin = origin => Number.isFinite(origin?.x) && Number.isFinite(origin?.y) ? { x: origin.x, y: origin.y } : undefined
@@ -18,7 +19,7 @@ const MAIN = 'main'
 // One save at a time when the page gives no queue of its own.
 const alone = task => task()
 // A launch plan, a hiring plan, a sales pipeline or a budget: drawn and played by its kit, which brings its rules.
-const BOARD_KINDS = ['launch-plan', 'hiring-plan', 'pipeline', 'budget', 'nest']
+const BOARD_KINDS = KIT_KINDS
 
 // The lane a change that was turned down should show its reason on.
 function changedLane(change, workshop) {
@@ -269,7 +270,8 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
   // rules can't be read without it. Any other board (a decision path, a board without rules) never
   // loads it; the chat loads it when a rule is first said. A failed fetch is tried again when the
   // connection comes back, or when the person asks (retryBoard), as a kit's is.
-  const hasRules = Boolean(workshop?.behaviour)
+  // A kit board's legend is its rulebook's sentences too, so the board shows them on a cold load as its preview did.
+  const hasRules = Boolean(workshop?.behaviour) || BOARD_KINDS.includes(workshop?.kind)
   const [rules, setRules] = useState(rulebookLoaded())
   const [rulesTry, setRulesTry] = useState(0)
   useEffect(() => {
@@ -447,8 +449,10 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     // put the view back where the board was fitted, unless the person has taken it.
     const settleUntil = Date.now() + 3600
     const settle = setInterval(() => {
-      // A proposal shown meanwhile is brought into view by the conversation's preview: the view is left to it.
-      if (Date.now() > settleUntil || viewIsTheirs || shown.current || !framesRef.current) { clearInterval(settle); return }
+      // A proposal shown meanwhile is brought into view by the conversation's preview: the view is left to it. So is a
+      // draft of another board (a library add right after a Keep), which frames itself.
+      const drafting = Boolean(element?.querySelector?.('[data-workshop-draft]'))
+      if (Date.now() > settleUntil || viewIsTheirs || shown.current || drafting || !framesRef.current) { clearInterval(settle); return }
       if (fitted && framed() !== fitted) fit()
     }, 120)
     // The board in focus is fitted once the canvas has stopped changing size (the chat panel opening
@@ -479,7 +483,8 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
       const wanted = kit ? kits.boardLayoutFor(next) : { lanesPerRow: lanesPerRow(next, board.value) }
       const rewrap = kit ? JSON.stringify(wanted) !== JSON.stringify(board.layout) : wanted.lanesPerRow !== board.layout.lanesPerRow
       if (rewrap) board.setLayout(wanted)
-      if (rewrap || phone || !viewIsTheirs) fitSoon()
+      // A draft of another board on show keeps the view it framed for itself.
+      if ((rewrap || phone || !viewIsTheirs) && !element.querySelector('[data-workshop-draft]')) fitSoon()
     }) : null
     observer?.observe(element)
     // Any change of view (a pan, a zoom, a fit) changes what the canvas's viewBox says.

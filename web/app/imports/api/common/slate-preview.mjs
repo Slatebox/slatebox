@@ -2,10 +2,11 @@ import { workshopToSlate } from 'slateboxjs/workshops/model'
 import { workshopOrigin, workshopStyle } from './workshop-look.mjs'
 import { slateBoards } from './slate-boards.mjs'
 
-// What a dashboard card draws for a slate: what its canvas shows. A workshop slate keeps its
-// lanes and cards in creative.model, and the canvas draws them beside the slate's own notes, so
-// the card draws the same notes in the same place. The result is a private copy for the
-// preview. It is never saved.
+// A slate's notes with its boards' notes beside them, for readers that want words and places (the
+// server's slate read, the Mermaid import's "what is drawn now"). A workshop slate keeps its lanes and
+// cards in creative.model. This is NOT a picture of the boards: a plan or a budget is drawn by its kit,
+// so a slate's card draws its boards with the one renderer (ui/components/workshop/boardRender.js).
+// The result is a private copy. It is never saved.
 export function slatePreview(slate) {
   const preview = structuredClone(slate)
   preview.options = { ...preview.options }
