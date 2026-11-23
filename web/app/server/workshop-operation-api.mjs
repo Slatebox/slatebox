@@ -19,6 +19,7 @@ import { sharedSaveConditions } from './methods/native-slate-save.mjs'
 import { readWorkshop } from './workshop-read.mjs'
 import { WORKSHOP_OPERATION_KINDS } from '../imports/api/common/slate-operation-runs.mjs'
 import { MAIN_BOARD, boardIdPattern, boardPaths, chooseBoard, counterWrite, slateAsBoard } from '../imports/api/common/slate-boards.mjs'
+import { runExpiry } from '../imports/api/common/slate-operation-runs.mjs'
 
 export class WorkshopOperationError extends Error {
   constructor(status, code, message, details) {
@@ -595,6 +596,7 @@ export function createWorkshopOperations({
             userMessage,
             response: body,
             createdAt: savedAt,
+            expiresAt: runExpiry(savedAt),
           },
           { session }
         )

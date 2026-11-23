@@ -16,6 +16,16 @@ export const WORKSHOP_OPERATION_KINDS = Object.freeze([
 
 const workshopKinds = new Set(WORKSHOP_OPERATION_KINDS)
 
+/**
+ * How long a run receipt is kept (the plan, the words the person gave, the answer it replays, a
+ * workshop edit's undo state): 90 days after it is saved. MongoDB drops it by its expiresAt (a TTL
+ * index, server/startup.js). Open canvases only ever need the last few receipts.
+ */
+export const OPERATION_RUN_TTL_MS = 90 * 24 * 3600_000
+
+/** The expiresAt a receipt saved at `createdAt` (a number or a Date) carries. */
+export const runExpiry = (createdAt) => new Date(new Date(createdAt).getTime() + OPERATION_RUN_TTL_MS)
+
 /** Whether a saved run is a canvas plan the canvas applier should draw. */
 export function appliesToCanvas(run) {
   if (!run || typeof run._id !== 'string' || run._id.startsWith('workshop-')) return false

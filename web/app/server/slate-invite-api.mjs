@@ -4,6 +4,7 @@ import {
   generalGrantSelector,
   sharingVisibility,
 } from './methods/general-slate-link.mjs'
+import { runExpiry } from '../imports/api/common/slate-operation-runs.mjs'
 
 const problem = (status, code, message) =>
   Object.assign(new Error(message), { status, code })
@@ -228,6 +229,7 @@ export function createSlateInviteOperation({
           inviteFingerprint: fingerprint,
           inviteId: response.inviteId,
           createdAt: now(),
+          expiresAt: runExpiry(now()),
         },
         { session }
       )

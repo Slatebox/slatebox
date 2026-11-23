@@ -8,6 +8,7 @@ import {
   summarizeWorkshop,
   WorkshopOperationError,
 } from './workshop-operation-api.mjs'
+import { runExpiry } from '../imports/api/common/slate-operation-runs.mjs'
 
 const invalid = (message) =>
   new WorkshopOperationError(400, 'invalid_request', message)
@@ -136,6 +137,7 @@ export function createPrivateSlateOperation({
             slateShareId: shareId,
             createMapFingerprint: intent,
             createdAt,
+            expiresAt: runExpiry(createdAt),
             response,
           },
           { session }

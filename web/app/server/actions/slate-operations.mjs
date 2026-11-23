@@ -6,6 +6,7 @@ import { ref, shareIdInput } from './slate-schemas.mjs'
 import { isWorkshopOperation } from '../workshop-operation-api.mjs'
 import { sharedSaveConditions } from '../methods/native-slate-save.mjs'
 import { applyAddComponent, isAddComponentPlan } from './component-add-op.mjs'
+import { runExpiry } from '../../imports/api/common/slate-operation-runs.mjs'
 
 // Where update_slate's keys are stored: the fields the engine applier writes on
 // the slate's options (slateboxjs/operations SLATE_KEYS). The line colour also
@@ -192,6 +193,7 @@ export async function applyToCanvas(principal, input, { deps, mode, now, idempot
     report: result.report,
     response: { ...response, mode },
     createdAt: now(),
+    expiresAt: runExpiry(now()),
   })
   return { status: 201, body: response }
 }

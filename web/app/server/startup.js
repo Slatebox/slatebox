@@ -420,6 +420,8 @@ Meteor.startup(async () => {
       slateShareId: 1,
       revision: 1,
     }),
+    // Run receipts expire 90 days after they are saved (slate-operation-runs.mjs runExpiry).
+    SlateOperationRuns.rawCollection().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     SlateOperationRuns.rawCollection().createIndex(
       { tokenId: 1, idempotencyKey: 1 },
       {

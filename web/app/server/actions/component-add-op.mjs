@@ -9,6 +9,7 @@ import { workshopNodeIds } from 'slateboxjs/workshops/model'
 import { rulebook } from 'slateboxjs/workshops/model'
 import 'slateboxjs/workshops/behaviour'
 import { catalogSamples as samples } from 'slateboxjs/workshops/samples'
+import { runExpiry } from '../../imports/api/common/slate-operation-runs.mjs'
 
 
 export const isAddComponentPlan = (plan) => Array.isArray(plan?.operations) && plan.operations.some((op) => op?.kind === 'add_component')
@@ -94,6 +95,7 @@ export async function applyAddComponent(principal, input, { deps, mode, now, ide
     report: response.report,
     response: { ...response, mode },
     createdAt: now(),
+    expiresAt: runExpiry(now()),
   })
   return { status: 201, body: response }
 }

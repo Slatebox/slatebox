@@ -7,6 +7,7 @@ import { sharedSaveConditions } from '../methods/native-slate-save.mjs'
 import { privateSlateDocument } from '../private-slate-document.mjs'
 import { slatePreview } from '../../imports/api/common/slate-preview.mjs'
 import { diagramPlans, importOrigin, lastNoteLook, parseMermaid, MERMAID_MAX_LENGTH } from '../../imports/api/common/mermaid/index.mjs'
+import { runExpiry } from '../../imports/api/common/slate-operation-runs.mjs'
 
 const USER_MESSAGE = 'Import Mermaid'
 
@@ -105,6 +106,7 @@ async function importInto(principal, input, model, { deps, mode, now, idempotenc
       userMessage: USER_MESSAGE,
       report,
       createdAt: at + index,
+      expiresAt: runExpiry(at + index),
     })
   }
   return { status: 201, body: { ...summary(drawn), shareId: slate.shareId, url, revision: saved.revision } }
