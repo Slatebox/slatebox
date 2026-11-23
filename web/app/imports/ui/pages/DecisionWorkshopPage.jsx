@@ -62,6 +62,6 @@ function SavedWorkshops({userId,format,params}) {
         <Link to={base+'&resume='+row.shareId}>Open saved workshop</Link>{' '}
         {row.live && <Link to={'/workshops?room='+row.shareId}>Rejoin live room for {row.options?.name}</Link>}
       </li>)}</ul> : <p>You have no archived workshops.</p>}
-    <Link to="/">My Slates</Link>
+    <Link to="/">My slates</Link>
   </section></main>
 }

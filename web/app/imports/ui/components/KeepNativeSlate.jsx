@@ -50,9 +50,9 @@ export default function KeepNativeSlate({ routeKey, proof, slateId, visitor }) {
     '& .MuiButton-root': { minHeight:44 }, display:'flex', alignItems:'center', gap:1, flexWrap:'wrap', justifyContent:'center',
     bgcolor:'background.paper', borderRadius:2, boxShadow:3, p:1, maxWidth:'calc(100vw - 24px)', width:'max-content' }}>
     {status === 'saved'
-      ? <><span role="status">Saved to My Slates</span>{' '}<Link component={RouterLink} to="/">Open My Slates</Link></>
-      : <>{status !== 'unavailable' && <Button size="small" onClick={keep} disabled={status === 'saving'}>Keep in My Slates</Button>}
+      ? <><span role="status">Saved to My slates</span>{' '}<Link component={RouterLink} to="/">Open My slates</Link></>
+      : <>{status !== 'unavailable' && <Button size="small" onClick={keep} disabled={status === 'saving'}>Keep in My slates</Button>}
         {message && <span role="status">{message}</span>}</>}
-    <Button size="small" aria-label="Dismiss Keep in My Slates" onClick={dismiss}>Dismiss</Button>
+    <Button size="small" aria-label="Dismiss Keep in My slates" onClick={dismiss}>Dismiss</Button>
   </Box>
 }

@@ -42,8 +42,8 @@ export default function VerifyEmail() {
         await Messages.insertAsync({
           timestamp: new Date().valueOf(),
           userId: Meteor.userId(),
-          title: 'Email Verified',
-          text: `Hooray, you've verified your email!`,
+          title: 'Email verified',
+          text: `Your email is verified.`,
           read: false,
           type: CONSTANTS.messageTypes.system,
           priority: 10,
@@ -51,7 +51,7 @@ export default function VerifyEmail() {
       } else if (err) {
         setWarning({
           visible: true,
-          text: `Oh Snap. There was a problem verifying your email. (Error: ${err.reason})`,
+          text: `We couldn’t verify your email: ${err.reason}`,
           severity: 'error',
           autoHide: 60000,
         })
@@ -65,8 +65,8 @@ export default function VerifyEmail() {
     setRegistrationDetails({
       type: 'registration',
       registrationOpen: true,
-      registrationTitle: `Retry Email Verification`,
-      registrationMessage: `Please try verifying your email again.`,
+      registrationTitle: `Verify your email`,
+      registrationMessage: `Send yourself a new verification link.`,
     })
   }
 
@@ -85,11 +85,11 @@ export default function VerifyEmail() {
         </Avatar>
         {!verified && (
           <>
-            <Typography component="h1" variant="h5" sx={{ color: '#fff' }}>
+            <Typography component="h1" variant="h5" sx={{ color: 'text.primary' }}>
               {warning.visible ? (
-                <>Unable to Verify Email</>
+                <>Your email could not be verified</>
               ) : (
-                <>Verifying Email...</>
+                <>Verifying your email…</>
               )}
             </Typography>
             <Box
@@ -104,7 +104,7 @@ export default function VerifyEmail() {
             >
               {warning.visible ? (
                 <Button variant="outlined" color="secondary" onClick={retry}>
-                  Try Verifying Again
+                  Try again
                 </Button>
               ) : (
                 <CircularProgress color="secondary" />
@@ -122,8 +122,8 @@ export default function VerifyEmail() {
           >
             <Grid size={12}>
               <Box m="auto">
-                <Typography component="h1" variant="h5" sx={{ color: '#fff' }}>
-                  Woohoo! Email Verified.
+                <Typography component="h1" variant="h5" sx={{ color: 'text.primary' }}>
+                  Your email is verified
                 </Typography>
               </Box>
             </Grid>
@@ -132,14 +132,13 @@ export default function VerifyEmail() {
                 <Typography
                   component="div"
                   variant="subtitle1"
-                  sx={{ color: '#fff', margin: 'auto' }}
+                  sx={{ color: 'text.secondary', margin: 'auto' }}
                 >
-                  Congrats, you&apos;re verified! You can close this window and
-                  go back to building your slate, or just{' '}
-                  <Link component={RouterLink} sx={{ color: '#fff' }} to="/">
-                    go to your dashboard
+                  You can close this window and go back to your slate, or{' '}
+                  <Link component={RouterLink} sx={{ color: 'text.primary' }} to="/">
+                    open My slates
                   </Link>{' '}
-                  and continue here.
+                  here.
                 </Typography>
               </Box>
             </Grid>

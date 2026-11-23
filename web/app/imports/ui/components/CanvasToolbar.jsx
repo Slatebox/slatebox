@@ -144,9 +144,9 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
     manage && !themeSlate && !onWorkshop && { key: 'history', label: 'Version history', icon: <History />, run: onHistory, disabled: busy },
     'divider',
     { key: 'link', label: 'Copy link', icon: <LinkIcon />, run: copyLink },
-    // Mermaid: any slate as Mermaid text, and Mermaid drawn as notes. Free; a guest saves their work first, as for exports.
-    manage && !themeSlate && { key: 'mermaid', label: 'Mermaid', hint: 'Export or import a diagram, free', icon: <AccountTree />,
-      run: () => (user?.isAnonymous ? onOutput('export') : openMermaid('export')) },
+    // Mermaid: any slate as Mermaid text, and Mermaid drawn as notes. A guest and a reader use it too: the text is
+    // theirs to copy; only opening a diagram as a slate of its own asks for an account (MermaidDialog).
+    !themeSlate && { key: 'mermaid', label: 'Mermaid', hint: manage ? 'Export or import a diagram' : 'Copy this slate as a diagram', icon: <AccountTree />, run: () => openMermaid('export') },
     manage && !themeSlate && { key: 'export', label: 'Export', icon: <Download />, run: () => onOutput('export') },
     manage && !themeSlate && { key: 'embed', label: 'Embed', icon: <Code />, run: () => onOutput('embed') },
     'divider',
@@ -207,8 +207,8 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
         {narrow && unread > 0 && !guest && <Box component="span" aria-hidden="true" className="sb-unread-dot" sx={{ bgcolor: unreadColor }} />}
       </IconButton>
     </Tooltip>
-    <Tooltip title="My Slates">
-      <Link className="sb-board-brand" to={user ? '/' : '/start'} aria-label="My Slates"><img src="/brand/slatebox.svg" alt="" /></Link>
+    <Tooltip title="My slates">
+      <Link className="sb-board-brand" to={user ? '/' : '/start'} aria-label="My slates"><img src="/brand/slatebox.svg" alt="" /></Link>
     </Tooltip>
     <div className="sb-board-name">
       {renaming

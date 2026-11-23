@@ -1,83 +1,37 @@
-import { Box, Container, Button, Paper } from '@mui/material'
-import Typography from '@mui/material/Typography'
+// An address the app has no page for: a calm message and two ways on, never a blank page.
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
-import HomeIcon from '@mui/icons-material/Home'
-import { useTheme } from '@mui/material/styles'
+import { Link } from 'react-router-dom'
+import { Meteor } from 'meteor/meteor'
+import { useTracker } from 'meteor/react-meteor-data'
+import { Box, Button, Typography } from '@mui/material'
+import { TileArt } from '../components/EmptyState'
 
 export default function NotFound() {
-  const theme = useTheme()
-  const navigate = useNavigate()
-
+  // A visitor who is not signed in is offered Sign in, not a list they do not have.
+  const signedIn = useTracker(() => Boolean(Meteor.userId()), [])
+  const home = { variant: 'contained', color: 'primary', disableElevation: true, size: 'large', sx: { borderRadius: 6, px: 3 } }
   return (
-    <Container maxWidth="sm">
-      <Box
-        sx={{
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          textAlign: 'center',
-          py: 4,
-        }}
-      >
-        <Paper
-          elevation={3}
-          sx={{
-            p: 4,
-            width: '100%',
-            background: 'rgba(255, 255, 255, 0.1)',
-            backdropFilter: 'blur(10px)',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-          }}
-        >
-          <Typography
-            variant="h2"
-            component="h1"
-            sx={{
-              color: '#fff',
-              mb: 2,
-              fontWeight: 'bold',
-            }}
-          >
-            404
-          </Typography>
-          <Typography
-            variant="h4"
-            component="h2"
-            sx={{
-              color: '#fff',
-              mb: 3,
-            }}
-          >
-            Looks like this slate got erased
-          </Typography>
-          <Typography
-            variant="body1"
-            sx={{
-              color: 'rgba(255, 255, 255, 0.7)',
-              mb: 4,
-            }}
-          >
-            We couldn't find the page you're looking for. Maybe it's been
-            archived or moved to a different location.
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<HomeIcon />}
-            onClick={() => navigate('/')}
-            sx={{
-              backgroundColor: theme.palette.primary.main,
-              '&:hover': {
-                backgroundColor: theme.palette.primary.dark,
-              },
-            }}
-          >
-            Return Home
-          </Button>
-        </Paper>
+    <Box component="section" aria-labelledby="not-found-title" sx={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
+      gap: 1.5, minHeight: 'calc(100svh - 64px - 48px)', px: 2, mx: 'auto', maxWidth: 560, boxSizing: 'border-box',
+    }}>
+      <Box sx={{ mb: 2 }}><TileArt variant="lost" size={176} /></Box>
+      <Typography variant="overline" sx={{ color: 'text.secondary', letterSpacing: '.12em', fontWeight: 700 }}>404</Typography>
+      <Typography id="not-found-title" component="h1" sx={{ fontWeight: 750, letterSpacing: '-.025em', lineHeight: 1.1,
+        fontSize: { xs: 32, md: 40 }, color: 'text.primary' }}>
+        This page isn’t here
+      </Typography>
+      <Typography sx={{ color: 'text.secondary', fontSize: 17, lineHeight: 1.5, maxWidth: 440 }}>
+        The link may be old, or the page may have moved. Your slates are where you left them.
+      </Typography>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 1.25, mt: 2 }}>
+        {signedIn
+          ? <Button component={Link} to="/" {...home}>Open My slates</Button>
+          : <Button component={Link} to="/login" {...home}>Sign in</Button>}
+        <Button component={Link} to="/new" variant="outlined" color="primary" size="large" sx={{ borderRadius: 6, px: 3 }}>
+          Start a new slate
+        </Button>
       </Box>
-    </Container>
+    </Box>
   )
 }

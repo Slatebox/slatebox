@@ -87,7 +87,7 @@ class Confirm extends Component {
         this.dropZoneRef.current = new Dropzone('#sbDropZone', {
           url: '/sbupload/image',
           headers: uploadHeaders(),
-          dictDefaultMessage: 'Click to upload...',
+          dictDefaultMessage: 'Click to upload…',
           addRemoveLinks: true,
           autoProcessQueue: true,
           // 'png', 'jpeg', 'gif', 'webp'
@@ -102,7 +102,7 @@ class Confirm extends Component {
           ].join(','),
           renameFile: (file) => {
             const ext = file.name.split('.').pop()
-            this.prepUpload('Uploading...', true, true)
+            this.prepUpload('Uploading…', true, true)
             return `${Meteor.userId()}.${ext}`
           },
           complete: (file) => {

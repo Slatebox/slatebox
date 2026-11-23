@@ -254,7 +254,7 @@ export default function CreateOrganization({ privateBetaAccess }) {
                   justifyContent="center"
                   spacing={10}
                 >
-                  <Grid sx={{ color: '#fff' }}>Sending invites...</Grid>
+                  <Grid sx={{ color: '#fff' }}>Sending invites…</Grid>
                   <Grid>
                     <CircularProgress color="secondary" />
                   </Grid>

@@ -14,6 +14,7 @@ import { globalMessage } from '../jotai/atoms'
 import { loginDestination, rememberLoginReturn } from '../../api/common/login-return.mjs'
 import BrandBar from '../common/BrandBar'
 import { loginReturn } from '../components/billing/pay/pay-url.mjs'
+import { loginWelcome, rememberSignedIn, signedInBefore } from '../common/accountCopy.mjs'
 
 export default function Login() {
   const history = useNavigate()
@@ -25,6 +26,8 @@ export default function Login() {
   const destination = signedInPlace !== '/' ? signedInPlace : loginReturn(query) || '/'
   const { email } = useParams()
   const setGlobalMessage = useSetAtom(globalMessage)
+  // A first visit is greeted as one; a browser that has been signed in before says Welcome back.
+  const [welcome] = React.useState(() => loginWelcome(signedInBefore(globalThis.localStorage)))
   if (Meteor.user() && !Meteor.user().isAnonymous) return <Navigate replace to={destination} />
 
   async function generateLoginToken(eml) {
@@ -35,14 +38,14 @@ export default function Login() {
     if (!attempt) {
       setGlobalMessage({
         visible: true,
-        text: `Unable to create a login link for this email. Did you enter a valid email?`,
+        text: `We couldn’t send a sign-in link to that address. Check the email and try again.`,
         severity: 'error',
         autoHide: 10000,
       })
     } else {
       setGlobalMessage({
         visible: true,
-        text: `Hooray! We've sent an email to your inbox. Click the link in your email to immediately log into Slatebox.`,
+        text: `Check your inbox: the link in our email signs you in to Slatebox.`,
         severity: 'info',
         autoHide: 10000,
       })
@@ -58,7 +61,7 @@ export default function Login() {
     } else {
       setGlobalMessage({
         visible: true,
-        text: `Please provide your email to receive the login link!`,
+        text: `Enter your email address and we’ll send you a sign-in link.`,
         severity: 'error',
         autoHide: 10000,
       })
@@ -73,11 +76,12 @@ export default function Login() {
       if (err) {
         setGlobalMessage({
           visible: true,
-          text: `Invalid login, please try again`,
+          text: `That email and password don’t match. Try again, or reset your password.`,
           severity: 'error',
           autoHide: 10000,
         })
       } else {
+        rememberSignedIn(globalThis.localStorage)
         history(destination)
         setGlobalMessage({
           visible: false,
@@ -86,36 +90,19 @@ export default function Login() {
     })
   }
 
+  const quiet = { color: 'text.secondary', textTransform: 'none', fontWeight: 600 }
   return (
-    <Box sx={{ minHeight: '100svh', bgcolor: 'background.default', pb: 4 }}>
+    <Box sx={{ minHeight: '100svh', bgcolor: 'background.default', pb: 6 }}>
       <BrandBar />
-      <Typography component="h1" sx={{ fontFamily: '"Archivo Narrow", Arial, sans-serif', fontWeight: 700,
-        fontSize: { xs: 54, md: 72 }, lineHeight: 1, mt: { xs: 5, md: 7 }, mb: 3, textAlign: 'center' }}>
-        Welcome back.
-      </Typography>
-      <Container component="main" maxWidth="xs" sx={{ mt: 0, width: '100%' }}>
-        <Button
-          type="button"
-          fullWidth
-          variant="contained"
-          color="secondary"
-          component={RouterLink}
-          to="/start"
-          className="MuiBox-register"
-          sx={{ mb: 2 }}
-        >
-          Start now. No Registration required.
-        </Button>
-        <Divider sx={{ mt: 1, mb: 1, width: '100%' }} orientation="horizontal">
-          OR
-        </Divider>
-        <form
-          onSubmit={performLogin}
-          style={{
-            width: '100%',
-          }}
-          noValidate
-        >
+      <Container component="main" maxWidth="xs" sx={{ width: '100%', pt: { xs: 5, md: 8 } }}>
+        <Typography component="h1" sx={{ fontFamily: '"Archivo Narrow", Arial, sans-serif', fontWeight: 700,
+          fontSize: { xs: 44, md: 56 }, lineHeight: 1.02, letterSpacing: '-.01em', mb: 1.5, textAlign: 'center' }}>
+          {welcome.heading}
+        </Typography>
+        <Typography sx={{ color: 'text.secondary', textAlign: 'center', fontSize: 17, lineHeight: 1.45, mb: 3 }}>
+          {welcome.lede}
+        </Typography>
+        <form onSubmit={performLogin} style={{ width: '100%' }} noValidate>
           <TextField
             variant="outlined"
             margin="normal"
@@ -123,7 +110,7 @@ export default function Login() {
             required
             fullWidth
             id="email"
-            label="Email Address"
+            label="Email address"
             name="email"
             autoComplete="email"
             defaultValue={email}
@@ -142,69 +129,30 @@ export default function Login() {
             autoComplete="current-password"
             autoFocus={!!email}
           />
-          <Button
-            type="submit"
-            fullWidth
-            color="primary"
-            variant="contained"
-            sx={{
-              margin: (theme) => theme.spacing(2, 0, 2),
-            }}
-          >
-            Sign In &rarr;
+          <Button type="submit" fullWidth color="primary" variant="contained" disableElevation size="large"
+            sx={{ mt: 2, mb: 1, borderRadius: 6 }}>
+            Sign in
           </Button>
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              mt: -1,
-              mb: 4,
-            }}
-          >
-            <Button
-              sx={{
-                color: 'text.secondary',
-                textTransform: 'none',
-              }}
-              component={RouterLink}
-              to="/recover"
-              size="small"
-            >
-              Forgot password?
-            </Button>
-            <Button
-              sx={{
-                color: 'text.secondary',
-                textTransform: 'none',
-              }}
-              type="button"
-              size="small"
-              onClick={oneTimeSignIn}
-            >
-              Get a one-time sign in link &rarr;
-            </Button>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+            <Button sx={quiet} component={RouterLink} to="/recover" size="small">Forgot password?</Button>
+            <Button sx={quiet} type="button" size="small" onClick={oneTimeSignIn}>Email me a sign-in link</Button>
           </Box>
         </form>
-        <Box p={1} textAlign="center">
-          <Typography variant="caption" color="text.secondary">
-            By registering with Slatebox, you agree to the{' '}
-            <Link
-              href="./slatebox_terms_of_use.pdf"
-              target="_blank"
-              sx={{ color: 'primary.dark' }}
-            >
-              Terms of Service
-            </Link>{' '}
-            and{' '}
-            <Link
-              href="./slatebox_privacy_policy.pdf"
-              target="_blank"
-              sx={{ color: 'primary.dark' }}
-            >
-              Privacy
-            </Link>{' '}
-            policies.
+        <Divider sx={{ my: 3, color: 'text.secondary', fontSize: 14 }}>New to Slatebox?</Divider>
+        <Box sx={{ display: 'grid', gap: 1.25 }}>
+          <Button fullWidth variant="outlined" color="primary" size="large" component={RouterLink} to="/signup" sx={{ borderRadius: 6 }}>
+            Create an account
+          </Button>
+          <Button fullWidth variant="text" color="primary" component={RouterLink} to="/start" sx={{ borderRadius: 6, fontWeight: 600 }}>
+            Start a slate, no account needed
+          </Button>
+        </Box>
+        <Box sx={{ pt: 4, textAlign: 'center' }}>
+          <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+            By signing in or creating an account, you agree to the{' '}
+            <Link href="./slatebox_terms_of_use.pdf" target="_blank" sx={{ color: 'text.primary' }}>Terms of Service</Link>
+            {' '}and{' '}
+            <Link href="./slatebox_privacy_policy.pdf" target="_blank" sx={{ color: 'text.primary' }}>Privacy Policy</Link>.
           </Typography>
         </Box>
       </Container>

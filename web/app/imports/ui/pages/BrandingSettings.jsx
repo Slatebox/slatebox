@@ -974,7 +974,7 @@ export default function BrandingSettings() {
                 onPresentationTabSelect={forceEnablePresentationMode}
               />
             ) : (
-              <Typography>Loading Presets...</Typography>
+              <Typography>Loading presets…</Typography>
             )}
           </Grid>
 

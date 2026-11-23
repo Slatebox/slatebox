@@ -36,6 +36,7 @@ import {
   isValidEmail,
   markClaimFieldsInvalid,
 } from './guestRegistration.mjs'
+import { registrationCopy } from './accountCopy.mjs'
 
 let emailCheckTimer = null
 
@@ -272,9 +273,9 @@ export default function Register({ user = null }) {
     }
   }
 
-  let actionLabel = 'Send verification email'
-  if (isAnon) actionLabel = 'Save my Slatebox'
-  else if (emailSent) actionLabel = 'Resend verification email'
+  // A guest who chose Create an account is signing up; any other guest is saving their work.
+  const copy = registrationCopy({ guest: isAnon, intent: getRegistrationDetails.intent, emailSent })
+  const actionLabel = copy.action
 
   return (
     <Dialog
@@ -301,7 +302,7 @@ export default function Register({ user = null }) {
             edge="start"
             sx={{ color: 'white' }}
             onClick={handleClose}
-            aria-label={isAnon ? 'Continue as guest' : 'Close'}
+            aria-label="Close"
           >
             <CloseIcon />
           </IconButton>
@@ -349,11 +350,11 @@ export default function Register({ user = null }) {
               id="account-claim-title"
               sx={{ mb: 1.5 }}
             >
-              {isAnon ? 'Save your work' : 'Verify your email'}
+              {copy.heading}
             </Typography>
             <Typography color="text.secondary" sx={{ maxWidth: 520 }}>
               {isAnon
-                ? 'You’re using Slatebox as a guest—no signup was required. Add an email and password when you want to keep your slates across devices.'
+                ? copy.lede
                 : mailAvailable === false ? 'Ask your administrator to configure email delivery to verify this address.'
                 : `Send a verification link to ${emailAddress || 'your email address'} to finish securing your Slatebox.`}
             </Typography>
@@ -442,7 +443,7 @@ export default function Register({ user = null }) {
                     color="inherit"
                     onClick={handleClose}
                   >
-                    Continue as guest
+                    {copy.dismiss}
                   </Button>
                 )}
               </Stack>

@@ -156,7 +156,7 @@ async function createSlate(
 
   const opts = {
     id: newSlate.options?.id, // important so that the collab init works correctly
-    name: newSlate.options?.name || currentAIContext?.prompt || 'New Slate',
+    name: newSlate.options?.name || currentAIContext?.prompt || 'Untitled slate',
     description: newSlate.options?.description || '',
     defaultLineColor: currentAIContext?.aid
       ? Slatebox.utils.whiteOrBlack(bgColors[0])

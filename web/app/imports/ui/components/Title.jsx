@@ -26,6 +26,10 @@ import { useNavigate } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import { getSlateCheckmarks } from '../jotai/atoms'
 import AddIcon from '@mui/icons-material/Add'
+import SearchIcon from '@mui/icons-material/Search'
+import ClearIcon from '@mui/icons-material/Clear'
+import IconButton from '@mui/material/IconButton'
+import InputAdornment from '@mui/material/InputAdornment'
 
 export default function Title({
   showAdd,
@@ -90,16 +94,18 @@ export default function Title({
         alignItems="center"
         justifyContent="space-evenly"
       >
-        <Grid size={showAdd && mdmq ? 3 : 5}>
-          <Grid container alignItems="center" justifyContent="flex-start">
-            <Grid>
-              <Typography variant="h5">{headerMessage || ''}</Typography>
+        <Grid size={{ xs: 12, md: showAdd ? 3 : 5 }} sx={{ minWidth: 0 }}>
+          <Grid container alignItems="center" justifyContent="flex-start" sx={{ minWidth: 0 }}>
+            <Grid sx={{ minWidth: 0, maxWidth: '100%' }}>
+              <Typography variant="h5" component="h1" noWrap sx={{ fontWeight: 700, letterSpacing: '-.01em' }}>{headerMessage || ''}</Typography>
             </Grid>
-            <Grid style={{ marginLeft: '50px' }}>
-              <Typography variant="body2" color="textSecondary">
-                {subHeaderMessage}
-              </Typography>
-            </Grid>
+            {subHeaderMessage?.trim() && (
+              <Grid size={12}>
+                <Typography variant="body2" color="textSecondary">
+                  {subHeaderMessage}
+                </Typography>
+              </Grid>
+            )}
             {showPaging && (
               <Grid size={12}>
                 <Pagination
@@ -202,33 +208,19 @@ export default function Title({
               value={inputValue}
               size="small"
               slotProps={{
-                // inputLabel: { style: { color: '#fff' } },
                 input: {
                   endAdornment: (
-                    <>
-                      <Button
-                        size="small"
-                        color="secondary"
-                        onClick={() => {
-                          setInputValue(inputValue)
-                          if (onSearchInputChange)
-                            onSearchInputChange(inputValue)
-                        }}
-                      >
-                        go
-                      </Button>
+                    <InputAdornment position="end" sx={{ mr: -1 }}>
                       {inputValue && (
-                        <Button
-                          size="small"
-                          onClick={() => {
-                            setInputValue('')
-                            if (onSearchInputChange) onSearchInputChange('')
-                          }}
-                        >
-                          clear
-                        </Button>
+                        <IconButton size="small" aria-label="Clear the filter" onClick={() => {
+                          setInputValue('')
+                          if (onSearchInputChange) onSearchInputChange('')
+                        }}><ClearIcon fontSize="small" /></IconButton>
                       )}
-                    </>
+                      <IconButton size="small" aria-label="Search" onClick={() => {
+                        if (onSearchInputChange) onSearchInputChange(inputValue)
+                      }}><SearchIcon fontSize="small" /></IconButton>
+                    </InputAdornment>
                   ),
                 },
               }}

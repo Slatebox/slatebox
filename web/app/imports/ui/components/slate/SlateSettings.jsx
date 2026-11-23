@@ -170,7 +170,7 @@ export default function SlateSettings({ onChange }) {
       type: 'template',
       userId: Meteor.userId(),
       approved: false,
-      message: 'Your approval status is pending...',
+      message: 'Your approval is pending…',
     })
   }
 
@@ -180,7 +180,7 @@ export default function SlateSettings({ onChange }) {
       type: 'theme',
       userId: Meteor.userId(),
       approved: false,
-      message: 'Your approval status is pending...',
+      message: 'Your approval is pending…',
     })
   }
 

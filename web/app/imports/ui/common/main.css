@@ -148,11 +148,15 @@ input[type='range']:active::-moz-range-thumb {
 @media(max-width:700px){body:has(.sb-board-toolbar) .slateboxjs-birdseye{display:none}}
 /* A workshop slate: no minimap while the whole slate is on screen (it would only sit over a lane), and on a phone the canvas, the strip under it and the conversation end above a cookie notice not yet answered, so the notice covers none of them. */
 [data-whole-in-view]>.slateboxjs-birdseye{display:none}
-@media(max-width:599.95px){body:has(.sb-cookie) .sb-workshop-page{box-sizing:border-box;padding-bottom:calc(max(12px,env(safe-area-inset-bottom)) + 68px)}}
+/* The room an unanswered cookie notice takes: --sb-cookie-strip is its band at the foot (its height and the gap
+   above it), --sb-cookie-room what a sheet leaves for it. On a phone the notice is one slim line (Main.jsx). */
+body:has(.sb-cookie){--sb-cookie-strip:68px;--sb-cookie-room:80px}
+@media(max-width:599.95px){body:has(.sb-cookie){--sb-cookie-strip:48px;--sb-cookie-room:56px}}
+@media(max-width:599.95px){body:has(.sb-cookie) .sb-workshop-page{box-sizing:border-box;padding-bottom:calc(max(8px,env(safe-area-inset-bottom)) + var(--sb-cookie-strip))}}
 /* An unanswered cookie notice sits under the canvas page, not over it: under the bar below 1000px, and under the canvas
    and the conversation's message box beside it from 1000px. */
-body:has(.sb-cookie) .sb-canvas-page{box-sizing:border-box;padding-bottom:calc(max(12px,env(safe-area-inset-bottom)) + 68px)}
-body:has(.sb-cookie){--sb-cookie-room:80px}
+body:has(.sb-cookie) .sb-canvas-page{box-sizing:border-box;padding-bottom:calc(max(12px,env(safe-area-inset-bottom)) + var(--sb-cookie-strip))}
+@media(max-width:599.95px){body:has(.sb-cookie) .sb-canvas-page{padding-bottom:calc(max(8px,env(safe-area-inset-bottom)) + var(--sb-cookie-strip))}}
 
 /* A line a workshop draws between its stations is part of the workshop. It has no ends to drag. */
 #slateCanvas [data-governed="line"] ~ .connector-handle { display: none; }

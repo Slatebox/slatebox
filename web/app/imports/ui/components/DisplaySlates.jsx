@@ -10,7 +10,6 @@ import Typography from '@mui/material/Typography'
 import Container from '@mui/material/Container'
 import ImageList from '@mui/material/ImageList'
 import ImageListItem from '@mui/material/ImageListItem'
-import { Alert, Paper } from '@mui/material'
 import { useAtom, useSetAtom } from 'jotai'
 import { Skeleton } from '@mui/material'
 import Dialog from '@mui/material/Dialog'
@@ -39,6 +38,8 @@ import getUserName from '../../api/common/getUserName'
 import { useTranslator, getTranslation } from '../common/i18n'
 import copySlate from '../../api/client/copySlate'
 import RecentlyJoined from './RecentlyJoined'
+import EmptyState from './EmptyState'
+import { emptySlatesCopy } from '../common/emptySlates.mjs'
 import Title from './Title'
 import SnapSlate from './SnapSlate'
 import SlateMenu from './SlateMenu'
@@ -82,6 +83,8 @@ export default function DisplaySlates({
   const [slates, setSlates] = React.useState([])
   const [loading, setLoading] = React.useState(false)
   const [isSelectAllToggled, setSelectAllToggled] = React.useState(false)
+  // A new key clears the filter field when the empty state's Clear the filter is used.
+  const [titleKey, setTitleKey] = React.useState(0)
   const tags = []
 
   const [slatePreview, setSlatePreview] = React.useState({
@@ -275,9 +278,16 @@ export default function DisplaySlates({
   const isSlateChecked = (slateId) =>
     getSlateChecks?.some((s) => s.slateId === slateId)
 
+  const clearFilter = () => {
+    setSlateFilter({ ...slateFilter, filterString: '', slatePage: 1 })
+    setTitleKey((k) => k + 1)
+    setRerender(Random.id())
+  }
+  const empty = emptySlatesCopy({ type, signedIn: Boolean(Meteor.userId()), filter: slateFilter.filterString,
+    privateOnly: type === 'mine' && slateFilter.privateOnly })
+
   let headerMessage = getTranslation('slates', 'mySlates')
   let subHeaderMessage = getTranslation('slates', 'mySlatesSubHeader')
-  let noSlateMessage = getTranslation('slates', 'noSelfSlates')
   let slatePreviewMessage = getTranslation('slates', 'communitySlatePreview')
   let slatePreviewButtonText = getTranslation(
     'slates',
@@ -288,19 +298,16 @@ export default function DisplaySlates({
     case 'community': {
       headerMessage = getTranslation('slates', 'communitySlates')
       subHeaderMessage = getTranslation('slates', 'communitySlatesSubHeader')
-      noSlateMessage = getTranslation('slates', 'noCommunitySlates')
       break
     }
     case 'team': {
       headerMessage = getTranslation('slates', 'teamSlates')
       subHeaderMessage = getTranslation('slates', 'teamSlatesSubHeader')
-      noSlateMessage = getTranslation('slates', 'noTeamSlates')
       break
     }
     case 'templates': {
       headerMessage = getTranslation('slates', 'templates')
       subHeaderMessage = getTranslation('slates', 'templatesSubHeader')
-      noSlateMessage = getTranslation('slates', 'noTemplates')
       slatePreviewMessage = getTranslation('slates', 'templateSlatePreview')
       slatePreviewButtonText = getTranslation(
         'slates',
@@ -364,13 +371,15 @@ export default function DisplaySlates({
           top: 0,
           zIndex: 1,
           p: 1,
-          borderBottom: '1px solid #adadad',
+          borderBottom: 1,
+          borderColor: 'divider',
           // borderRadius: 2,
           // backgroundColor: theme.palette.background.default,
           // boxShadow: '0 0 10px rgba(0, 0, 0, 0.3)',
         }}
       >
         <Title
+          key={titleKey}
           showAdd={!(type === 'community' || type === 'templates')}
           showSearch
           searchOptions={tags.map((t) => t.tag)}
@@ -430,6 +439,9 @@ export default function DisplaySlates({
               )
             )}
           </ImageList>
+        ) : slateFilter.totalSlates === 0 ? (
+          <EmptyState variant="empty" title={empty.title} body={empty.body} action={empty.action}
+            secondary={empty.secondary} onClear={empty.clear ? clearFilter : undefined} />
         ) : (
           <ImageList
             gap={10}
@@ -443,9 +455,6 @@ export default function DisplaySlates({
               padding: 0,
             }}
           >
-            {slateFilter.totalSlates === 0 && (
-              <Alert severity="info">{noSlateMessage}</Alert>
-            )}
             {slates.map((slate, i) => {
               const name = slate.options?.name || t('slates.defaultNewSlateName')
               function openSlate() {

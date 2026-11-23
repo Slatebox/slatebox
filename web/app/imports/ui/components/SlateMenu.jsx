@@ -209,7 +209,7 @@ export default function SlateMenu({ slate, isTemplate, isCommunity }) {
               <ListItemIcon>
                 <FileCopyIcon />
               </ListItemIcon>
-              <Typography>{isTemplate ? <>Use</> : <>Copy</>} Slate</Typography>
+              <Typography>{isTemplate ? <>Use template</> : <>Make a copy</>}</Typography>
             </MenuItem>
             {!isCommunity &&
               !isTemplate &&

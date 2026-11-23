@@ -93,7 +93,7 @@ export default function RecoverPassword(props) {
                 required
                 fullWidth
                 id="email"
-                label="Email Address"
+                label="Email address"
                 name="email"
                 autoComplete="email"
                 value={userEmail}

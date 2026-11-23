@@ -77,6 +77,7 @@ import AuthManager from '../api/common/AuthManager'
 import MessagesMenu from './components/MessagesMenu'
 import getUserDisplayName from '../api/common/getUserName'
 import LoadHeap from './components/LoadHeap'
+import { rememberSignedIn } from './common/accountCopy.mjs'
 // logo color: #0F4C75
 const shrunkDrawerWidth = '50px !important'
 
@@ -127,6 +128,11 @@ export default function Main() {
     userName.current = getUserDisplayName()
     drawerWidth.current = 205
   }
+
+  // Signed in to an account on this browser: the next sign-in page greets them as returning.
+  useEffect(() => {
+    if (loadedUser && loadedUser.isAnonymous === false) rememberSignedIn(globalThis.localStorage)
+  }, [loadedUser?._id, loadedUser?.isAnonymous])
 
   const orgName = useTracker(() => {
     const org =
@@ -292,7 +298,7 @@ export default function Main() {
       primary: true,
     },
     {
-      title: 'My Slates',
+      title: 'My slates',
       path: '/',
       icon: <DashboardIcon />,
       show: true,
@@ -448,7 +454,7 @@ export default function Main() {
           onRename={setSlateName} navOpen={canvasNavOpen} onOpenNav={() => setCanvasNavOpen(true)} /> :
           <Toolbar sx={{ gap: 1.5, minHeight: '64px !important' }}>
             {loadedUser && (!mdmq || !isMainDrawerOpen) && <IconButton color="inherit" aria-label="Open navigation" onClick={handleDrawerOpen}><MenuIcon /></IconButton>}
-            <Box component={Link} to="/" aria-label="My Slates" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, color: 'inherit', textDecoration: 'none' }}>
+            <Box component={Link} to="/" aria-label="My slates" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, color: 'inherit', textDecoration: 'none' }}>
               <img src="/brand/slatebox.svg" alt="" width="29" height="29" />
               <Typography sx={{ fontWeight: 750, letterSpacing: '-.04em', fontSize: 22 }}>Slatebox</Typography>
             </Box>
@@ -554,6 +560,9 @@ export default function Main() {
         <CreatePersona />
         <MessageListener />
         {!slate?.options?.isEmbedded && !embeddedSlate && (
+          // The cookie notice: a small card in the corner, and on a phone one slim line along the
+          // foot that the canvas pages leave room for (main.css --sb-cookie-strip), so it never
+          // lies over + Add, the bar or the message box.
           <Box sx={theme => ({
             '& .sb-cookie': {
               position: 'fixed', right: 'max(12px, env(safe-area-inset-right))',
@@ -564,13 +573,15 @@ export default function Main() {
               bgcolor: '#fffef8', color: '#193c2f', border: '1px solid #a5bba7',
               boxShadow: '0 4px 18px #182b2026',
               ...theme.applyStyles('dark', { bgcolor: '#263c30', color: '#f5f3e9', borderColor: '#667d68' }),
+              [theme.breakpoints.down('sm')]: { left: 'max(8px, env(safe-area-inset-left))', right: 'max(8px, env(safe-area-inset-right))', bottom: 'max(8px, env(safe-area-inset-bottom)) !important', width: 'auto', maxWidth: 'none', height: 40, p: '0 4px 0 14px', gap: 1, borderRadius: 20, boxShadow: '0 2px 10px #182b201f' },
             },
-            '& .sb-cookie-text': { m: 0, minWidth: 0 },
-            '& .sb-cookie button': { whiteSpace: 'nowrap', cursor: 'pointer', border: 0, margin: 0 },
+            '& .sb-cookie-text': { m: 0, minWidth: 0, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+            '& .sb-cookie button': { whiteSpace: 'nowrap', cursor: 'pointer', border: 0, margin: 0, flex: 'none' },
+            [theme.breakpoints.down('sm')]: { '& .sb-cookie #rcc-confirm-button': { padding: '4px 14px !important', borderRadius: '16px !important', fontSize: 13, lineHeight: '24px' } },
           })}>
             <CookieConsent disableStyles disableButtonStyles location="none"
               containerClasses="CookieConsent sb-cookie" contentClasses="sb-cookie-text" buttonText="Got it">
-              Slatebox remembers your session with cookies.
+              Cookies keep you signed in.
             </CookieConsent>
           </Box>
         )}

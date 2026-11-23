@@ -171,7 +171,7 @@ export default function SlateBackgrounds({ onChange }) {
             variant="outlined"
             fullWidth
             id="search-backgrounds"
-            label="Search..."
+            label="Search…"
             value={filter}
             onKeyDown={(ev) => {
               if (ev.key === 'Enter') {

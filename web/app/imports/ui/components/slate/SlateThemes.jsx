@@ -113,7 +113,7 @@ export default function SlateThemes({ slate, onChange }) {
           renderInput={(params) => (
             <TextField
               {...params}
-              label="Search themes..."
+              label="Search themes…"
               variant="outlined"
               slotProps={{
                 inputLabel: {

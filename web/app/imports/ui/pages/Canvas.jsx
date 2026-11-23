@@ -923,7 +923,7 @@ export default function Canvas() {
       if (getSlate?.exists === false) {
         isNew = true
         slateBase = {
-          name: 'New Slate',
+          name: 'Untitled slate',
           userId: Meteor.userId(),
           shareId: id,
           options: {

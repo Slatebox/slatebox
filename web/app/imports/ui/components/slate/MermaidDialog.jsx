@@ -15,6 +15,8 @@ import ContentCopy from '@mui/icons-material/ContentCopy'
 import Download from '@mui/icons-material/Download'
 import UploadFile from '@mui/icons-material/UploadFile'
 import { slateToMermaid, parseMermaid, diagramPlans } from '../../../api/common/mermaid/index.mjs'
+import { mermaidNewSlateRoom } from '../../common/accountCopy.mjs'
+import { useSaveYourWork } from '../AccountMenu'
 
 const FORMAT_NAMES = { auto: 'Automatic', flowchart: 'Flowchart', mindmap: 'Mind map', gantt: 'Gantt chart' }
 const KIND_NAMES = { flowchart: 'flowchart', mindmap: 'mind map', gantt: 'Gantt chart' }
@@ -51,6 +53,9 @@ export default function MermaidDialog({ open, onClose, slate, row, canEdit, init
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState('')
   const file = useRef(null)
+  // A new slate is made in an account: a guest is asked to save their work, a visitor to sign in.
+  const newSlateRoom = mermaidNewSlateRoom(Meteor.user())
+  const saveYourWork = useSaveYourWork()
 
   useEffect(() => {
     if (open) {
@@ -212,8 +217,22 @@ export default function MermaidDialog({ open, onClose, slate, row, canEdit, init
               {canEdit && (
                 <Button variant="contained" disabled={!reading?.ok || busy} onClick={() => importInto(true)}>Add to this slate</Button>
               )}
-              <Button variant={canEdit ? 'outlined' : 'contained'} disabled={!reading?.ok || busy} onClick={() => importInto(false)}>Open as a new slate</Button>
+              {newSlateRoom === 'open' && (
+                <Button variant={canEdit ? 'outlined' : 'contained'} disabled={!reading?.ok || busy} onClick={() => importInto(false)}>Open as a new slate</Button>
+              )}
             </Box>
+            {newSlateRoom !== 'open' && (
+              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, p: 1.5, borderRadius: 2, border: 1, borderColor: 'divider' }}>
+                <Typography variant="body2" sx={{ flex: '1 1 240px', color: 'text.secondary' }}>
+                  {newSlateRoom === 'save'
+                    ? 'Save your work to open a diagram as a slate of its own. Adding it to this slate works as you are.'
+                    : 'Sign in to open a diagram as a slate of its own.'}
+                </Typography>
+                {newSlateRoom === 'save'
+                  ? <Button size="small" onClick={() => { onClose(); saveYourWork() }}>Save your work</Button>
+                  : <Button size="small" onClick={() => { onClose(); navigate('/login') }}>Sign in</Button>}
+              </Box>
+            )}
           </Box>
         )}
         <Typography role="status" variant="body2" sx={{ mt: 1.5, minHeight: 20 }}>{status}</Typography>

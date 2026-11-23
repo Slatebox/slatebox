@@ -23,6 +23,7 @@ const RecoverPassword = lazy(() => import('./pages/RecoverPassword'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
 const LoginLink = lazy(() => import('./pages/LoginLink'))
+const SignUp = lazy(() => import('./pages/SignUp'))
 const AdminTools = lazy(() => import('./pages/AdminTools'))
 const TeamSettings = lazy(() => import('./pages/TeamSettings'))
 const BrandingSettings = lazy(() => import('./pages/BrandingSettings'))
@@ -194,13 +195,14 @@ export default function SBRoutes() {
       <Route path="/recover/:email?" element={<RecoverPassword />} />
       <Route path="/reset-password/:token" element={<ResetPassword />} />
       <Route path="/slates" element={<CommunitySlates />} />
+      <Route path="/signup" element={<SignUp />} />
       {['dev', 'test'].includes(Meteor.settings.public.env) && (
         <Route
           path="/simulate/:type/:identifier"
           element={<SimulateUrlAction />}
         />
       )}
-      <Route element={<NotFound />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
     </Suspense>
   )

@@ -90,7 +90,7 @@ export default function LoginLink() {
           <LockOutlinedIcon />
         </Avatar>
         <Typography component="h1" variant="h5" style={{ color: '#fff' }}>
-          Attempting to log you in...
+          Signing you in…
         </Typography>
         <Grid
           container
