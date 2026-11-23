@@ -9,7 +9,8 @@ import { makeExecWorld } from "./exec-test-world.mjs";
 import "slateboxjs/workshops/behaviour";
 import { workshopLanePlaces } from "slateboxjs/workshops/model";
 import { catalog } from "slateboxjs/catalog";
-import { componentAddition, componentPlace, noteFrames, overlapsAny, readComponentRequest } from "../web/app/imports/api/common/component-add.mjs";
+import { boardNamesSlate, componentAddition, componentPlace, noteFrames, overlapsAny, readComponentRequest, untitledSlateName } from "../web/app/imports/api/common/component-add.mjs";
+import { readFileSync } from "node:fs";
 import { catalogSamples as samples } from "slateboxjs/workshops/samples";
 
 const sha = (text) => createHash("sha256").update(text).digest("hex");
@@ -180,4 +181,37 @@ test("a saved add_component replays from its key instead of adding twice", async
   // Without a key a save is refused: an add is never made twice by a retry.
   await assert.rejects(world.registry.run(principal, "slates.applyOperations", {
     shareId: "plain", plan: { message: "Add", operations: [{ kind: "add_component", component: "retro", expectedRevision: 2 }] } }), /component_opens_new_slate|Idempotency-Key|board/);
+});
+
+test("a board kept on an untitled slate names the slate after the board; a name the person gave stays", () => {
+  for (const name of [undefined, null, "", "  ", "Untitled slate", "untitled", "Untitled Slate"]) assert.equal(untitledSlateName(name), true, String(name));
+  for (const name of ["Q3 plans", "Untitled slate for Jo"]) assert.equal(untitledSlateName(name), false, name);
+  const plan = { title: "Hiring plan" };
+  assert.deepEqual(boardNamesSlate({ options: { name: "Untitled slate" } }, plan), { "options.name": "Hiring plan" });
+  assert.deepEqual(boardNamesSlate({ options: {} }, { title: "  Launch   plan " }), { "options.name": "Launch plan" });
+  assert.deepEqual(boardNamesSlate({ options: { name: "Q3 plans" } }, plan), {});
+  assert.deepEqual(boardNamesSlate({ options: { name: "Untitled slate" } }, { title: "" }), {});
+});
+
+test("add_component on an untitled slate names it after the board, and leaves a named slate's name", async (t) => {
+  const untitled = await setup(t, { options: { name: "Untitled slate", isPrivate: true } });
+  assert.equal((await untitled.add(untitled.context(), 1, { component: "team-board" })).ok, true);
+  assert.equal(untitled.world.slate("plain").options.name, "Team board");
+  const named = await setup(t);
+  assert.equal((await named.add(named.context(), 1, { component: "team-board" })).ok, true);
+  assert.equal(named.world.slate("plain").options.name, "Plain");
+});
+
+test("the chat's Keep names an untitled slate after the board it keeps, in the same save, and the page shows the name at once", () => {
+  const app = (path) => readFileSync(new URL("../web/app/" + path, import.meta.url), "utf8");
+  const keep = app("server/methods/native-conversation.js");
+  assert.match(keep, /named=boardNamesSlate\(current,draft\.workshop\)\['options\.name'\]/);
+  assert.match(keep, /\.\.\.\(named && \{'options\.name':named\}\)\},inc:\{nativeConversationRevision:1\}/);
+  assert.match(keep, /nativeConversationRevision:\(board\.nativeConversationRevision\?\?0\)\+1,\.\.\.\(named && \{name:named\}\)/);
+  // Both chats hand the name to the page, which holds it so its next save keeps it.
+  assert.match(app("imports/ui/components/NativeCanvasConversation.jsx"), /\.\.\.\(kept\.name && \{name:kept\.name\}\)/);
+  assert.match(app("imports/ui/components/workshop/WorkshopConversation.jsx"), /\.\.\.\(kept\?\.name && \{ name: kept\.name \}\)/);
+  const canvas = app("imports/ui/pages/Canvas.jsx");
+  assert.equal((canvas.match(/takeBoardName\(kept\?\.name\)/g) ?? []).length, 2);
+  assert.match(canvas, /const takeBoardName = name => \{[\s\S]*?slate\.current\.options\.name = name[\s\S]*?setSlateName\(name\)/);
 });

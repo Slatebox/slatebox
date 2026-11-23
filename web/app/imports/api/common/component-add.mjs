@@ -74,6 +74,19 @@ export function componentPlacing(slate, workshop, room = boardRoom) {
   return { origin, boardId, set: { nativeCanvasDrawing: true, ...mainOriginSet(slate), ...furtherBoardSet(slate, boardId, workshop, origin) } }
 }
 
+/** Whether a slate's name is one nobody gave it: none, or the name a new slate starts with. */
+export const untitledSlateName = name => typeof name !== 'string' || !name.trim() || /^untitled( slate)?$/i.test(name.trim())
+
+/**
+ * A board added to a slate nobody has named names the slate (a hiring plan kept from Ask Slatebox onto an
+ * untitled slate is "Hiring plan" in My slates, not "Untitled slate"). A name the person gave stays.
+ * The field to set, or none.
+ */
+export function boardNamesSlate(slate, workshop) {
+  const title = typeof workshop?.title === 'string' ? workshop.title.replace(/\s+/g, ' ').trim().slice(0, 100) : ''
+  return title && untitledSlateName(slate?.options?.name) ? { 'options.name': title } : {}
+}
+
 /** The fields a slate gains with its first board at `origin` (its drawing keeps its notes beside it). */
 export function componentSet(workshop, origin) {
   return {

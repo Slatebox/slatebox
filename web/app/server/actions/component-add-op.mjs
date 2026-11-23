@@ -4,7 +4,7 @@
 // open pages draw it live (they hear the slate's conversation revision move, with the board's place).
 import { problem } from './errors.mjs'
 import { sharedSaveConditions } from '../methods/native-slate-save.mjs'
-import { componentAddition, componentPlacing, readComponentRequest } from '../../imports/api/common/component-add.mjs'
+import { boardNamesSlate, componentAddition, componentPlacing, readComponentRequest } from '../../imports/api/common/component-add.mjs'
 import { workshopNodeIds } from 'slateboxjs/workshops/model'
 import { rulebook } from 'slateboxjs/workshops/model'
 import 'slateboxjs/workshops/behaviour'
@@ -74,7 +74,8 @@ export async function applyAddComponent(principal, input, { deps, mode, now, ide
         const again = componentAddition(current, op, samples)
         if (again.refused) throw Object.assign(new Error(again.refused), { code: 'board_cap' })
         made = { workshop: first.workshop, ...componentPlacing(current, first.workshop) }
-        return { set: made.set, inc: { nativeConversationRevision: 1 } }
+        // An untitled slate takes the board's title as its name, as the chat's Keep names it.
+        return { set: { ...made.set, ...boardNamesSlate(current, first.workshop) }, inc: { nativeConversationRevision: 1 } }
       },
     })
   } catch (error) {

@@ -153,7 +153,7 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
       // A board kept here is drawn on this page as it is (no reload): the board's own chat takes over.
       if(draft.mode==='play' && kept?.kept) {
         setDraft(null);inFlight.current=false;setBusy(null)
-        onKeep({board:true,origin:kept.origin,nativeConversationRevision:kept.nativeConversationRevision})
+        onKeep({board:true,origin:kept.origin,nativeConversationRevision:kept.nativeConversationRevision,...(kept.name && {name:kept.name})})
         return
       }
       focusMessageAfterReload(shareId)

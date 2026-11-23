@@ -1175,6 +1175,15 @@ export default function Canvas() {
       if (problem) setNameProblem(problem)
     },
   })
+  // A board kept on an untitled slate named it (the server stored its title as the slate's name): shown
+  // here at once, and held by the page so its next save keeps it.
+  const takeBoardName = name => {
+    if (typeof name !== 'string' || !name || !slate.current) return
+    clearTimeout(renameTimer.current)
+    slate.current.options.name = name
+    if (slate.current.v2?.options) slate.current.v2.options.name = name
+    setSlateName(name)
+  }
   // The further boards: one hook each, in fixed slots (a slate holds up to 8 boards).
   const board2 = useWorkshopOnCanvas(boardOptions(boardIds[1]))
   const board3 = useWorkshopOnCanvas(boardOptions(boardIds[2]))
@@ -1388,6 +1397,7 @@ export default function Canvas() {
         {canShowConversation && (nativeChatOpen || askKept) && <div style={{ display: nativeChatOpen && !minimised ? 'contents' : 'none' }}>{workshopSlate
           ? <React.Suspense fallback={null}><WorkshopConversation key={id} shareId={id} board={current} boards={boards} onChangeBoard={changeBoard} library={libraryRequest}
               onKept={kept => {
+                takeBoardName(kept?.name)
                 if (kept?.nativeConversationRevision !== undefined) takeBoard({ ...kept, boardIds: [...new Set([...(nativeBoard?.boardIds ?? ['main']), kept.boardId].filter(Boolean))] })
                 if (kept?.boardId) setRevealing(kept.boardId)
               }} onClose={()=>setNativeChatOpen(false)} onPreview={setDrawingPreview}
@@ -1395,6 +1405,7 @@ export default function Canvas() {
           : <React.Suspense fallback={null}><NativeCanvasConversation key={id} shareId={id} board={nativeBoard} library={libraryRequest}
               about={<AskAboutNote send={(ids, pkg) => updateNode([pkg], ids.map((nid) => slate.current?.v2?.getNode(nid)))} />}
               onClose={()=>setNativeChatOpen(false)} onKeep={kept=>{
+                takeBoardName(kept?.name)
                 if(kept?.board && (slate.current?.creativeKind==='workshop' || takeBoard(kept))) {
                   // On a phone the sheet gives the screen to the board just kept (as it opens after a reload).
                   if(window.innerWidth<600) setNativeChatOpen(false)

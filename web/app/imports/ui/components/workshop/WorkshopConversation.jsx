@@ -343,7 +343,7 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
       // A library board, added beside the boards here: the page draws it live, with no reload.
       if (drawing.component) {
         append({ role: 'user', content: drawing.message }, { role: 'assistant', content: 'Added ' + drawing.title + ' beside the board' + (drawing.rules?.length ? ' · ' + drawing.rules.join(' ') : '') })
-        onKept?.({ board: true, boardId: kept?.boardId, origin: kept?.origin, nativeConversationRevision: kept?.nativeConversationRevision })
+        onKept?.({ board: true, boardId: kept?.boardId, origin: kept?.origin, nativeConversationRevision: kept?.nativeConversationRevision, ...(kept?.name && { name: kept.name }) })
         setDrawing(null)
         running.current = false
         setBusy(false)

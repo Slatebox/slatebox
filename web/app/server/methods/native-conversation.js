@@ -14,7 +14,7 @@ import '../../imports/api/common/library.mjs'
 import {rulebook} from 'slateboxjs/workshops/model'
 import {catalogSamples as samples} from 'slateboxjs/workshops/samples'
 import {catalogFits} from 'slateboxjs/catalog'
-import {componentPlacing} from '../../imports/api/common/component-add.mjs'
+import {boardNamesSlate,componentPlacing} from '../../imports/api/common/component-add.mjs'
 import {MAX_BOARDS,slateBoards} from '../../imports/api/common/slate-boards.mjs'
 
 import {slateSaveCore} from '../slate-save'
@@ -104,7 +104,7 @@ Meteor.methods({
     // The board sits beside the slate's notes and its other boards, covering none of them (where its preview
     // was shown), and the place is stored with it, so every page draws it there. The place and the board's id
     // are worked out on the slate as the write finds it (the save core fences it on the slate's revision).
-    let made
+    let made,named
     try {
       await slateSaveCore.save({slateId:board._id,actor:{kind:'person',userId:this.userId},source:'conversation',
         conditions:{userId:board.userId,
@@ -115,7 +115,9 @@ Meteor.methods({
           // The 8th board landed between the preview and Keep: said as the cap, not as a changed drawing.
           if(slateBoards(current).length>=MAX_BOARDS) throw Object.assign(new Error('full'),{code:'save_refused',full:slateBoards(current).length})
           made=componentPlacing(current,draft.workshop)
-          return {set:{lastNativeCanvasProposal:{id,uid:this.userId,boardId:made.boardId},...made.set},inc:{nativeConversationRevision:1}}
+          // An untitled slate takes the kept board's title as its name; a name the person gave stays.
+          named=boardNamesSlate(current,draft.workshop)['options.name']
+          return {set:{lastNativeCanvasProposal:{id,uid:this.userId,boardId:made.boardId},...made.set,...(named && {'options.name':named})},inc:{nativeConversationRevision:1}}
         }})
     } catch(error) {
       if(error?.full) throw new Meteor.Error('opens-new',catalogFits('retro',{hasBoard:true,many:true,boards:error.full}).reason)
@@ -126,6 +128,7 @@ Meteor.methods({
     this.connection.slateboxNativeCanvasDraft=null
     if (board.userId!==this.userId) await rememberInvitedEdit(this.userId,board,shareId).catch(()=>{})
     // The page takes the board live (no reload): where it sits, and the revision its saves now name.
-    return {kept:true,boardId:made.boardId,origin,nativeConversationRevision:(board.nativeConversationRevision??0)+1}
+    // `name`: the slate's new name, when the board named it (the page shows it, and its saves keep it).
+    return {kept:true,boardId:made.boardId,origin,nativeConversationRevision:(board.nativeConversationRevision??0)+1,...(named && {name:named})}
   },
 })
