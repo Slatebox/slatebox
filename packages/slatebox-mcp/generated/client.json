@@ -1893,7 +1893,7 @@
     {
       "name": "slates.issueInvite",
       "id": "slates.issueInvite",
-      "title": "Send invitation",
+      "title": "Share by invitation",
       "summary": "The registered owner turns on an unlisted link. Changing its role keeps the address. Public slates are changed in the Share dialog. Anyone holding the address gets the role.",
       "kind": "write",
       "readOnly": false,
@@ -1916,15 +1916,15 @@
           "role"
         ]
       },
-      "index": "slates.issueInvite({shareId, role}) — Send invitation",
+      "index": "slates.issueInvite({shareId, role}) — Share by invitation",
       "types": [
         "Invitation"
       ],
-      "dts": "declare namespace slatebox.slates {\n  /** Send invitation. The registered owner turns on an unlisted link. Changing its role keeps the address. Public slates are changed in the Share dialog. Anyone holding the address gets the role. @scope slates:share @openWorld @confirm @idempotent */\n  function issueInvite(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    role: \"read\" | \"comment\" | \"edit\";\n  }): Promise<(Invitation) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.slates {\n  /** Share by invitation. The registered owner turns on an unlisted link. Changing its role keeps the address. Public slates are changed in the Share dialog. Anyone holding the address gets the role. @scope slates:share @openWorld @confirm @idempotent */\n  function issueInvite(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    role: \"read\" | \"comment\" | \"edit\";\n  }): Promise<(Invitation) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "create_slate_invite",
         "title": "Share a slate by invitation link",
-        "description": "Turn on an unlisted invitation link to a slate, or change the role it gives. Anyone holding the link gets that role.\n\nSend invitation. The registered owner turns on an unlisted link. Changing its role keeps the address. Public slates are changed in the Share dialog. Anyone holding the address gets the role.",
+        "description": "Turn on an unlisted invitation link to a slate, or change the role it gives. Anyone holding the link gets that role.\n\nShare by invitation. The registered owner turns on an unlisted link. Changing its role keeps the address. Public slates are changed in the Share dialog. Anyone holding the address gets the role.",
         "inputSchema": {
           "type": "object",
           "properties": {
