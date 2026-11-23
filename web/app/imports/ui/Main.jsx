@@ -31,7 +31,7 @@ import ListItemButton from '@mui/material/ListItemButton'
 import ListItemIcon from '@mui/material/ListItemIcon'
 import ListItemText from '@mui/material/ListItemText'
 import DashboardIcon from '@mui/icons-material/Dashboard'
-import PublicIcon from '@mui/icons-material/Public'
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'
 import PaletteIcon from '@mui/icons-material/Palette'
 
 import SettingsIcon from '@mui/icons-material/Settings'
@@ -296,10 +296,11 @@ export default function Main() {
       show: true,
     },
     {
-      title: 'Community slates',
-      path: '/slates',
-      icon: <PublicIcon />,
-      show: signedIn,
+      // The shared library: smart components, slates and presentations anyone can use, signed in or not.
+      title: 'Library',
+      path: '/library',
+      icon: <LibraryBooksIcon />,
+      show: true,
     },
     {
       title: loadedUser?.orgId ? `Manage ${team}` : `Create ${team}`,
