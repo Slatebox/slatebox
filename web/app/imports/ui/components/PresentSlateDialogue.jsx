@@ -21,7 +21,8 @@ export default function PresentSlateDialogue({ slate }) {
   // A slate's workshop, as the canvas page has subscribed to it: its lanes open the presentation.
   // On a slate of many boards, every board's lanes do, board by board.
   const workshop = useTracker(() => {
-    if (!presentOpen || slate.creativeKind !== 'workshop') return null
+    // The board records decide (a board kept during this visit changes slate.creativeKind in place).
+    if (!presentOpen) return null
     const main = CreativeStates.findOne(id, { fields: { model: 1 } })
     const further = CreativeStates.find({ shareId: id, boardId: { $ne: 'main' } }, { fields: { boardId: 1, model: 1 } }).fetch()
     return presentedBoards(main, further)

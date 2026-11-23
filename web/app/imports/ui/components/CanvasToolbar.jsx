@@ -69,13 +69,15 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
   const unread = useUnreadNotifications()
   const saveYourWork = useSaveYourWork()
 
-  // A workshop slate's saved workshop, as the canvas page has subscribed to it.
   const onWorkshop = Boolean(route && slate?.creativeKind === 'workshop')
-  // On a slate of many boards, every board (board by board) opens a live presentation.
-  const draft = useTracker(() => (onWorkshop
+  // A workshop slate's saved workshop, as the canvas page has subscribed to it. The board records
+  // decide, reactively: a board kept on this slate during this visit (slate.creativeKind changes
+  // in place, which renders nothing) opens a live presentation with its lanes too. On a slate of
+  // many boards, every board (board by board) does.
+  const draft = useTracker(() => (route
     ? presentedBoards(CreativeStates.findOne(route, { fields: { model: 1 } }),
       CreativeStates.find({ shareId: route, boardId: { $ne: 'main' } }, { fields: { boardId: 1, model: 1 } }).fetch())
-    : null), [route, onWorkshop])
+    : null), [route])
   const themeSlate = slate?.options?.eligibleForThemeCompilation
   const overlayKind = presentTarget(slate) === 'overlay'
   const live = useLivePresentation({ enabled: Boolean(route && slate && !overlayKind && !themeSlate), shareId: route,
