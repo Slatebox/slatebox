@@ -38,6 +38,7 @@ import { CreativeStates } from '../../api/client/creativeSlateStates'
 import copySlate from '../../api/client/copySlate'
 import confirmService from '../common/confirm'
 import { collaborationUsers, conversationAvailable, conversationOpen, isPresentOpen, mermaidDialog } from '../jotai/atoms'
+import { presentedBoards } from './presentations/workshopScenes.mjs'
 
 // One entry per person (presentPeople), named as every viewer and their pointer name them.
 const peerName = p => p.userName
@@ -70,8 +71,11 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
 
   // A workshop slate's saved workshop, as the canvas page has subscribed to it.
   const onWorkshop = Boolean(route && slate?.creativeKind === 'workshop')
-  const workshop = useTracker(() => onWorkshop ? CreativeStates.findOne(route, { fields: { model: 1 } }) : null, [route, onWorkshop])
-  const draft = workshop?.model?.kind === 'workshop' ? workshop.model.workshop : null
+  // On a slate of many boards, every board (board by board) opens a live presentation.
+  const draft = useTracker(() => (onWorkshop
+    ? presentedBoards(CreativeStates.findOne(route, { fields: { model: 1 } }),
+      CreativeStates.find({ shareId: route, boardId: { $ne: 'main' } }, { fields: { boardId: 1, model: 1 } }).fetch())
+    : null), [route, onWorkshop])
   const themeSlate = slate?.options?.eligibleForThemeCompilation
   const overlayKind = presentTarget(slate) === 'overlay'
   const live = useLivePresentation({ enabled: Boolean(route && slate && !overlayKind && !themeSlate), shareId: route,

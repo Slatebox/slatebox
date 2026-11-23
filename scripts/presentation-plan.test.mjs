@@ -383,3 +383,26 @@ test('the camera fits a viewpoint inside the room the narrative and controls lea
   // A single small note is not blown up past a sensible zoom.
   assert.ok(fitFrame(viewpointFrame(['c-one'], threeClusters()), { width: 1440, height: 900 }).scale <= 3)
 })
+
+test('a slate of many boards presents every board\'s lanes, board by board, each named in its own scope', async () => {
+  const { presentedBoards, workshopScenesKey } = await import('../web/app/imports/ui/components/presentations/workshopScenes.mjs')
+  const one = workshopScenes(pilots)
+  assert.ok(one.length >= 2)
+  // One board: the workshop itself, as it always was.
+  const record = (boardId, workshop) => ({ boardId, model: { kind: 'workshop', workshop } })
+  assert.equal(presentedBoards(record('main', pilots), []), pilots)
+  assert.equal(presentedBoards(null, []), null)
+  // Two boards: the first's lanes, then the second's, its notes named b2:<name>.
+  const boards = presentedBoards(record('main', pilots), [record('b2', pilots), { boardId: 'b3', model: { kind: 'map' } }])
+  assert.deepEqual(boards.map((board) => board.id), ['main', 'b2'])
+  const both = workshopScenes(boards)
+  assert.equal(both.length, one.length * 2)
+  assert.deepEqual(both.slice(0, one.length), one)
+  for (const [k, scene] of both.slice(one.length).entries()) {
+    assert.equal(scene.label, one[k].label)
+    assert.deepEqual(scene.nodeIds, one[k].nodeIds.map((id) => `b2:${id}`))
+  }
+  // The scenes follow a change on either board.
+  const moved = { ...pilots, presentationOrder: [...(pilots.presentationOrder || pilots.lanes.map((lane) => lane.id))].reverse() }
+  assert.notEqual(workshopScenesKey(boards), workshopScenesKey(presentedBoards(record('main', pilots), [record('b2', moved)])))
+})

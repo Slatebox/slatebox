@@ -45,7 +45,7 @@ import calculateViewpointMetrics from './presentations/calculateViewpointMetrics
 import { presentationEmbed } from './presentations/presentationEmbed.mjs'
 import { presentationShareUrl, presentationShareLinks } from './presentations/presentationShare.mjs'
 import buildFallbackPresentation, { reconcileViewpoints } from './presentations/buildFallbackPresentation.mjs'
-import { workshopScenes } from './presentations/workshopScenes.mjs'
+import { workshopScenes, workshopScenesKey } from './presentations/workshopScenes.mjs'
 import prepareSlateSurface from './presentations/prepareSlateSurface'
 import {
   extractPresentationLayout,
@@ -107,7 +107,8 @@ function getDominantColor(image) {
  * built from the slate's analysis) played over the slate's own SVG. A local sequence plays at
  * once; for someone who may edit the slate (`canAuthor`), the saved deck or the AI's plan then
  * replaces it, with the controls to refine, edit and publish it. Anyone else plays the published
- * deck, or the local sequence. `workshop` is the slate's workshop: its lanes open the sequence.
+ * deck, or the local sequence. `workshop` is the slate's workshop (or, on a slate of many boards,
+ * `[{ id, workshop }]`): its lanes open the sequence.
  * `live` (presenting to everyone): { onDeck(deck), onViewChange(step), onFail(message), resume },
  * where `resume` ({ deck, step }) is the session this presenter already leads.
  */
@@ -468,8 +469,7 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
   // The workshop's order and cards can change while the presenter is open (a teammate reorders
   // the lanes, moves a card): the lanes' viewpoints follow. A live presentation keeps the deck
   // everyone following it already has.
-  const workshopKey = workshop ? JSON.stringify([workshop.presentationOrder ?? null,
-    workshop.lanes.map((lane) => lane.id), workshop.cards.map((card) => [card.id, card.laneId])]) : ''
+  const workshopKey = workshopScenesKey(workshop)
   useEffect(() => {
     if (live || !workshop) return
     const scenes = workshopScenes(workshop)
