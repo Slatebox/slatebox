@@ -570,7 +570,8 @@ export function normalizeDirection(raw, layout, { name = '' } = {}) {
 
 // ─── composition ────────────────────────────────────────────────────────────
 
-const CHAR = { Anton: 0.46, Caveat: 0.42, 'Abril Fatface': 0.56, Fraunces: 0.52, Inter: 0.56, 'Space Grotesk': 0.56, 'IBM Plex Mono': 0.62, 'PT Sans': 0.5 }
+// Average advance per character, as a share of the size (measured high: a serif's capitals run wide).
+const CHAR = { Anton: 0.48, Caveat: 0.44, 'Abril Fatface': 0.6, Fraunces: 0.6, Inter: 0.58, 'Space Grotesk': 0.58, 'IBM Plex Mono': 0.62, 'PT Sans': 0.52 }
 /** The largest font size (≤ max) at which `text` wraps into a w×h box. */
 export function fitFont(text, w, h, max, font = 'Inter', min = 4) {
   const cw = (CHAR[font] || 0.55) * 1.06

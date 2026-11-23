@@ -1462,7 +1462,7 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
         <Tooltip title={planNotice}>
           <Chip size="small" label="Directed by Slatebox" aria-label={planNotice} className="sb-presentation-plan-chip"
             onClick={(event) => setMoreAnchorEl(event.currentTarget)}
-            sx={{ color: curPresentation?.presentationControlsColorKey || 'common.white', bgcolor: 'rgba(255,255,255,.14)', flexShrink: 0 }} />
+            sx={{ display: { xs: 'none', sm: 'inline-flex' }, color: curPresentation?.presentationControlsColorKey || 'common.white', bgcolor: 'rgba(255,255,255,.14)', flexShrink: 0 }} />
         </Tooltip>
       )}
       {planNotice && !planning && !curPresentation.deckLook && (
@@ -1514,7 +1514,7 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
   const styleButton = (
     <>
             {curPresentation.deckLook?.direction && (
-              <Tooltip title="Style">
+              <Tooltip title="Style" disableTouchListener disableFocusListener>
                 <span>
                   <IconButton
                     aria-label="Presentation style"
@@ -1706,7 +1706,7 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
               {planStatus}
               {refineButton}
               {styleButton}
-              <Tooltip title="Publish, share, versions and settings">
+              <Tooltip title="Publish, share, versions and settings" disableTouchListener disableFocusListener>
                 <IconButton
                   aria-label="More presenter options"
                   aria-haspopup="dialog"

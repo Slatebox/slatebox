@@ -372,3 +372,10 @@ test('decoration stays light: at most 40 notes of it on any style', () => {
     assert.ok(deck.stageNotes.filter((note) => note.deco).length <= 41, style)
   }
 })
+
+test('a kicker never reads like the step counter ("3 / 8"), in any style', () => {
+  for (const style of STYLE_IDS) {
+    const { deck } = deckFor(whatIsSlatebox(), { name: NAME, style })
+    for (const step of deck.steps) assert.ok(!/^-?\d+ \/ \d+$/.test(step.kicker || ''), `${style}: ${step.kicker}`)
+  }
+})

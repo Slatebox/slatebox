@@ -158,7 +158,7 @@ const KICKERS = {
   sketch: { overview: 'The whole page', step: (i, head) => `p. ${i} — ${head}` },
   blueprint: { overview: 'Plan view', step: (i, head) => `§${i} ${head}` },
   journey: { overview: 'The route', step: (i, head, total) => `Stop ${i} of ${total}` },
-  calm: { overview: 'Overview', step: (i, head, total) => `${i} / ${total}` },
+  calm: { overview: 'Overview', step: (i, head, total) => `Part ${i} of ${total}` },
 }
 
 /** The style's kicker for its overview, or for step `i` (from 1) headed by `head`. */
