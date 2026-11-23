@@ -52,12 +52,13 @@ function addFirstNote(slate, canvasId) {
   if (!v2?.addNode || !canvas) return
   const box = canvas.getBoundingClientRect()
   const at = v2.canvas?.point?.(box.left + box.width / 2, box.top + box.height / 2) ?? { x: 10000, y: 10000 }
-  const width = 180
-  const height = 84
+  const width = 160
+  const height = 68
   const node = v2.addNode({
     x: Math.round(at.x - width / 2), y: Math.round(at.y - height / 2), width, height, text: '',
     shape: 'roundedrectangle', backgroundColor: DEFAULT_NOTE.backgroundColor, fontColor: DEFAULT_NOTE.foregroundColor,
-    fontFamily: 'Manrope', fontSize: 18, borderWidth: 0,
+    // 14pt, as a slate's first note has always been (drawn at 18.7px).
+    fontFamily: 'Manrope', fontSize: '14pt', borderWidth: 0,
   })
   Promise.resolve(node?.ready).then(() => {
     v2.selectNodes?.([node])
@@ -75,7 +76,8 @@ export default function SlateWelcome({ slate, canvasId, active, phone = false, a
   const lede = boardsInSight ? `Write a first note, or pick a board ${where}.` : 'Write a first note, or let Slatebox set up a board for the work in front of you.'
   // On a phone the zoom control floats at the canvas's foot: the card keeps clear of it.
   return <Box data-slate-welcome="" sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    p: 2, pb: phone ? 9 : 2, pointerEvents: 'none', zIndex: 3, boxSizing: 'border-box', containerType: 'size' }}>
+    // No stacking of its own: what floats over the canvas after it (a huddle's strip, the style bar) stays on top.
+    p: 2, pb: phone ? 9 : 2, pointerEvents: 'none', boxSizing: 'border-box', containerType: 'size' }}>
     <Box component="section" aria-labelledby={titleId} sx={{
       pointerEvents: 'auto', textAlign: 'center', maxWidth: 440, width: '100%', boxSizing: 'border-box',
       px: { xs: 2.5, sm: 4 }, py: { xs: 2.5, sm: 3.5 }, borderRadius: '20px', border: 1, borderColor: 'divider',
