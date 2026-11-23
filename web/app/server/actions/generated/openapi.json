@@ -8165,7 +8165,7 @@
               "required": [
                 "kind"
               ],
-              "description": "Fields by kind. add_nodes: count, shape, preset, text, ids, x, y, width, height, placement, style; update_nodes: target, changes; delete_nodes: target; duplicate_nodes: target, offset, ids; connect_nodes: from, to, ids, style; disconnect_nodes: from, to, connectionIds; update_connections: from, to, connectionIds, changes; arrange_nodes: target, layout, gap; update_slate: changes.",
+              "description": "Fields by kind. add_nodes: count, shape, preset, text, ids, x, y, width, height, placement, style, media; update_nodes: target, changes; delete_nodes: target; duplicate_nodes: target, offset, ids; connect_nodes: from, to, ids, style; disconnect_nodes: from, to, connectionIds; update_connections: from, to, connectionIds, changes; arrange_nodes: target, layout, gap; update_slate: changes.",
               "properties": {
                 "kind": {
                   "type": "string",
@@ -8358,6 +8358,51 @@
                     },
                     "connect": {
                       "type": "boolean"
+                    }
+                  }
+                },
+                "media": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "url"
+                  ],
+                  "description": "add_nodes, count 1, no shape, preset or text: a media note, a video from YouTube, Vimeo or Loom drawn as its poster with a play button; it plays where it sits when someone presses play, never on its own. Hosts add videos through their own add-media action, which fetches the title and stores the poster.",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "maxLength": 2000,
+                      "description": "The video's address."
+                    },
+                    "title": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "author": {
+                      "type": "string",
+                      "maxLength": 120
+                    },
+                    "start": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 86400,
+                      "description": "Where to start, in seconds."
+                    },
+                    "poster": {
+                      "type": "string",
+                      "maxLength": 2000,
+                      "pattern": "^(https://\\S+|/[^/\\\\\\s]\\S*)$",
+                      "description": "The poster picture: an https address, or a path on this app (/...)."
+                    },
+                    "posterWidth": {
+                      "type": "number",
+                      "minimum": 1,
+                      "maximum": 10000
+                    },
+                    "posterHeight": {
+                      "type": "number",
+                      "minimum": 1,
+                      "maximum": 10000
                     }
                   }
                 },

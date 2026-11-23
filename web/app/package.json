@@ -1,8 +1,10 @@
 {
   "name": "slatebox-web",
   "private": false,
+  "license": "MIT",
   "sideEffects": false,
   "scripts": {
+    "prestart": "node ../../scripts/enterprise-stage.mjs link",
     "start": "concurrently \"testim connect\" \"stripe listen --forward-to http://localhost:3000/stripehooks\" \"meteor run --settings ./settings.dev.json\"",
     "startMin": "concurrently \"testim connect\" \"stripe listen --forward-to http://localhost:3000/stripehooks\" \"meteor run --production --settings ./settings.dev.json\"",
     "startProd": "concurrently \"testim connect\" \"stripe listen --forward-to http://localhost:3000/stripehooks\" \"meteor run --settings ./settings.prod.json\"",

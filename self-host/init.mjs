@@ -25,7 +25,7 @@ const wsUrl = origin(process.env.WS_URL || `ws://localhost:${collabPort}`, ['ws:
 if (root.startsWith('https:') && !wsUrl.startsWith('wss:')) throw Error('HTTPS sites require a secure wss:// origin')
 const publicKey = hex(), secretKey = hex()
 const settings = {
-  public: { env: 'selfhost', baseUrl: root, wsUrl, chatWoot: { enabled: false } },
+  public: { env: 'selfhost', edition: 'self-host', baseUrl: root, wsUrl, chatWoot: { enabled: false } },
   mailGun: { server: '' },
   slateboxAPI: { publicKey, secretKey },
   selfHosted: { workshopAI: false },

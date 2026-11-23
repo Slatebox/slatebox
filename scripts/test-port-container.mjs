@@ -12,6 +12,7 @@ import { homedir, tmpdir } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { verifyDeclaredSlateboxPackage } from './slatebox-package-source.mjs'
+import { checkAbsent as checkEnterpriseAbsent, copy as copyEnterprise, stub as stubEnterprise } from './enterprise-stage.mjs'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const webRoot = resolve(projectRoot, 'web')
@@ -112,9 +113,18 @@ function copyBuildContext() {
       if (parts.includes('node_modules') || parts.includes('.DS_Store')) {
         return false
       }
+      // web/app/enterprise is a development link or an old copy: staged fresh below
+      if (path === `app${sep}enterprise`) return false
       return !path.startsWith(`app${sep}.meteor${sep}local`)
     },
   })
+  // The Slatebox Cloud image carries enterprise/ (its code runs only when settings.public.edition
+  // is 'cloud'); SLATEBOX_EDITION=self-host builds the image a self-host install gets, with none.
+  const appContext = resolve(buildContext, 'app')
+  if (process.env.SLATEBOX_EDITION === 'self-host') {
+    stubEnterprise(appContext)
+    checkEnterpriseAbsent(buildContext)
+  } else copyEnterprise(appContext)
 }
 
 function stageLibraryArtifact() {

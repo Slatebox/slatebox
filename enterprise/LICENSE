@@ -1,0 +1,71 @@
+Slatebox Enterprise License
+
+Copyright (c) 2026 Slatebox LLC. All rights reserved.
+
+This license covers every file in the "enterprise" directory of this
+repository and its subdirectories ("the Enterprise Software"). The rest of
+the repository is under the MIT License in LICENSE.md at the repository root.
+
+The Enterprise Software is source-available. It is not open source software
+and is not offered under an open source license approved by the Open Source
+Initiative.
+
+1. What you may do without an agreement
+
+   You may read the Enterprise Software, copy it and change it, but only to
+   develop and test it, or to develop and test changes you plan to
+   contribute back to Slatebox LLC. You may run it for those purposes on
+   your own computers and test systems.
+
+2. What needs an agreement
+
+   Any other use needs a written agreement with Slatebox LLC. "Other use"
+   includes, without limit:
+
+   a. running the Enterprise Software, or a changed version of it, in
+      production, for real users, or to process real data;
+   b. offering it, or a service built on it, to anyone else, hosted or not;
+   c. selling, sublicensing, renting or distributing it, or a changed
+      version of it, on its own or as part of another product.
+
+   Slatebox LLC runs the Enterprise Software as part of Slatebox Cloud. Using
+   Slatebox Cloud under its terms of service is the agreement that covers
+   people who use these features there.
+
+3. Changes and contributions
+
+   Slatebox LLC and its licensors own all rights in the Enterprise Software.
+   You own the changes you make, but you may use them only as this license
+   allows for the Enterprise Software itself. If you send a change to
+   Slatebox LLC (for example as a pull request), you grant Slatebox LLC a
+   perpetual, worldwide, royalty-free license to use, change and distribute
+   it under any license.
+
+4. Notices
+
+   You must keep this license and the copyright notice with every copy of
+   the Enterprise Software, in full or in part, that you make.
+
+5. Third-party components
+
+   Third-party components used by the Enterprise Software stay under their
+   own licenses. This license does not change those licenses.
+
+6. Ending this license
+
+   If you break any term of this license, your rights under it end at once,
+   and you must stop using and delete every copy of the Enterprise Software
+   you hold.
+
+7. No warranty and no liability
+
+   THE ENTERPRISE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+   NO EVENT SHALL SLATEBOX LLC OR ITS LICENSORS BE LIABLE FOR ANY CLAIM,
+   DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE ENTERPRISE
+   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE ENTERPRISE SOFTWARE.
+
+Questions about this license or about an agreement:
+https://slatebox.com/contact/

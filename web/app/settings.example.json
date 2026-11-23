@@ -83,8 +83,13 @@
     "alertEmail": ""
   },
   "public": {
-    "//": "Everything under public reaches every browser. Only keys that are meant to be public belong here.",
+    "//": "Everything under public reaches every browser. Only keys that are meant to be public belong here. edition: \"self-host\" (the default when missing) or \"cloud\" (Slatebox Cloud only: loads the enterprise/ code, imports/api/common/edition.mjs).",
     "env": "dev",
+    "edition": "self-host",
+    "agents": {
+      "//": "Inviting outside agents (MCP servers) onto a slate. Slatebox Cloud only: it needs edition \"cloud\" and the enterprise/ code, and stays off on self-host whatever this says. Off unless invite is true.",
+      "invite": false
+    },
     "baseUrl": "http://localhost:3000",
     "wsUrl": "ws://localhost:1122",
     "dailyBaseUrl": "",

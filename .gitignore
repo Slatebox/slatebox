@@ -17,6 +17,10 @@ settings*
 web/app/public/slatebox_terms_of_use.pdf
 web/app/public/slatebox_privacy_policy.pdf
 
+# Where the app loads Slatebox Cloud's enterprise/ code from: a development link, a Cloud build's
+# copy or a self-host build's stub (scripts/enterprise-stage.mjs). Never committed.
+/web/app/enterprise
+
 # Private notes and data exports
 internal/
 

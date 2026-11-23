@@ -69,5 +69,6 @@ export const actions = [
 
 export const components = { ...slateComponents }
 
-export const createAppRegistry = (options = {}) =>
-  createRegistry({ actions, components, scopes: API_TOKEN_SCOPES, ...options })
+// extraActions: the Cloud-only enterprise actions (server/enterprise-loader.mjs), empty on self-host.
+export const createAppRegistry = ({ extraActions = [], ...options } = {}) =>
+  createRegistry({ actions: [...actions, ...extraActions], components, scopes: API_TOKEN_SCOPES, ...options })

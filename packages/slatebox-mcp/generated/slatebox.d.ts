@@ -1142,6 +1142,23 @@ interface CanvasPlan {
       gap?: number;
       connect?: boolean;
     };
+    /** add_nodes, count 1, no shape, preset or text: a media note, a video from YouTube, Vimeo or Loom drawn as its poster with a play button; it plays where it sits when someone presses play, never on its own. Hosts add videos through their own add-media action, which fetches the title and stores the poster. */
+    media?: {
+      /** The video's address. (at most 2000 characters) */
+      url: string;
+      /** (at most 300 characters) */
+      title?: string;
+      /** (at most 120 characters) */
+      author?: string;
+      /** Where to start, in seconds. (1 to 86400) */
+      start?: number;
+      /** The poster picture: an https address, or a path on this app (/...). (at most 2000 characters) */
+      poster?: string;
+      /** (1 to 10000) */
+      posterWidth?: number;
+      /** (1 to 10000) */
+      posterHeight?: number;
+    };
     /** add_nodes: note keys for the new notes. connect_nodes: connector keys for the new connectors. */
     style?: {
       /** (-360 to 360) */

@@ -29,6 +29,7 @@ import { slateListSelector } from './slate-list.mjs'
 import { API_TOKEN_SCOPES } from '../api-token-core.mjs'
 import apiTokenService from '../api-token-auth.mjs'
 import { createAppRegistry } from './index.mjs'
+import { enterpriseHost } from '../enterprise-loader.mjs'
 import { accounts, describer } from '../instance/meteor'
 import { createIdempotencyStore, ensureIdempotencyIndexes } from './idempotency.mjs'
 import { createRateLimiter } from './rate-limit.mjs'
@@ -178,7 +179,7 @@ export const deps = {
 }
 
 export const limiter = createRateLimiter({ collection: RateWindows.rawCollection() })
-export const registry = createAppRegistry({ deps, idempotency, limiter })
+export const registry = createAppRegistry({ deps, idempotency, limiter, extraActions: enterpriseHost.actions })
 // exec: the sealed runner and the gate. exec.run reaches it through deps; a local script's
 // calls (Slatebox-Exec-* headers) reach the gate through the gated registry below.
 export const exec = createMeteorExec({ registry, idempotency, presence })
