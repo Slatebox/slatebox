@@ -13,8 +13,45 @@ import { readTeamMapBrief, workshopFromTeamBrief } from '../../api/common/team-m
 import createAnonymousUser from '../../api/client/createAnonymousUser'
 import { creativeSlates, nativeSlateStarters } from '../../api/common/creativeSlates.mjs'
 import { BOARD_SAMPLES, boardInLink, loadBoardRoute } from '../../api/common/board-routes.mjs'
+import { readBuildHash } from '../components/library/build/buildTurns.mjs'
+import libraryApi from '../../api/client/library'
 
-export default function NewCreativeSlate({fromBrief = false}) {
+/**
+ * `/new#build` and `/new#build=<itemId>` (library spec §4.1): a builder slate, from scratch or a copy of a
+ * component to change, made by library.branch (a visitor becomes a guest first). The canvas opens with Ask
+ * Slatebox in build mode. The request is made once per link, even when the page renders again.
+ */
+const builders = new Map()
+function OpenBuilder({ itemId }) {
+  const navigate = useNavigate()
+  const loggingIn = useTracker(() => Meteor.loggingIn(), [])
+  const [error, setError] = useState('')
+  const [retry, setRetry] = useState(0)
+  useEffect(() => {
+    if (loggingIn) return undefined
+    let active = true
+    setError('')
+    const key = itemId + ':' + retry
+    if (!builders.has(key)) builders.set(key, libraryApi.branch({ itemId }))
+    builders.get(key).then(made => { if (active) navigate('/canvas/' + made.shareId, { replace: true }) })
+      .catch(err => { builders.delete(key); if (active) setError(err?.reason || 'Could not start building. Try again.') })
+    return () => { active = false }
+  }, [itemId, loggingIn, retry, navigate])
+  return <Box component="main" sx={{ p: 4 }}>
+    {error ? <><Typography role="alert">{error}</Typography>
+      <Button onClick={() => setRetry(n => n + 1)}>Try again</Button> <Button component={Link} to="/new#build">Start from scratch</Button></>
+      : <Typography role="status">{itemId === 'new' ? 'Opening a new smart component…' : 'Opening your copy to change…'}</Typography>}
+  </Box>
+}
+
+export default function NewCreativeSlate(props) {
+  const { hash } = useLocation()
+  const build = props.fromBrief ? readBuildHash(hash) : null
+  if (build) return <OpenBuilder itemId={build.itemId} />
+  return <NewSlateFromRoute {...props} />
+}
+
+function NewSlateFromRoute({fromBrief = false}) {
   const { creativeKind: legacyKind } = useParams()
   const { search, hash, state } = useLocation()
   const creation = useMemo(() => {

@@ -242,7 +242,7 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     else browse(library.start ?? {})
   }, [library?.nonce])
   const composer = <ConversationComposer shareId={shareId} inputRef={input} value={text} onChange={setText} onSubmit={()=>ask(text)}
-    hold={hold} canSubmit={Boolean(text.trim())} placeholder={empty ? 'What are you working on?' : agents.some(a=>a.canAsk) ? `Ask anything, or @${agents.find(a=>a.canAsk).name}` : 'Ask anything'} maxLength={1200} error={error}
+    hold={hold} canSubmit={Boolean(text.trim())} placeholder={empty ? (board.library?.mode==='build' ? 'Describe the board, or pick a shape' : 'What are you working on?') : agents.some(a=>a.canAsk) ? `Ask anything, or @${agents.find(a=>a.canAsk).name}` : 'Ask anything'} maxLength={1200} error={error}
     extra={!hold && <>
       {refusal && <PayNotice refusal={refusal} from="draft" retry={() => ask(refusal.message)} />}
       {/* One way to browse at a time: not under the library, nor under the first turn's own cards. */}
@@ -265,7 +265,8 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     {brief && <Box aria-label="Opening message" sx={{my:1}}>
       <ChatTurn who="you" as="div" after={!draft && !history.some(turn=>turn.message===brief) &&
         <Button size="small" disabled={Boolean(busy)} onClick={()=>ask(brief)}>Draft from this brief</Button>}>{brief}</ChatTurn></Box>}
-    {firstTurn && <Suspense fallback={null}><FirstTurn onAdd={addEntry} onOpen={entry=>browse({entry:entry.id})} onBrowse={browse} onGoal={value=>suggest({text:value})} /></Suspense>}
+    {firstTurn && <Suspense fallback={null}><FirstTurn onAdd={addEntry} onOpen={entry=>browse({entry:entry.id})} onBrowse={browse} onGoal={value=>suggest({text:value})}
+      build={board.library?.mode==='build' ? board.library : null} onSend={ask} /></Suspense>}
     {history.length>0 && <Box component="ol" aria-label="Kept conversation" sx={{listStyle:'none',p:0,my:1}}>
       {history.map(turn=><Box component="li" key={turn.id}>
         {turn.message!==brief && <ChatTurn who="you" as="div">{turn.message}</ChatTurn>}
