@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { normalizeConnection, operatorConfig, CONNECTION_TYPES, publicConnection } from '../web/app/server/methods/ai/connections.mjs'
+import { normalizeConnection, operatorConfig, CONNECTION_TYPES, publicConnection, resolveAIChoice, choiceFeatureFor, USE_FALLBACK, USE_KEYS } from '../web/app/server/methods/ai/connections.mjs'
 import { createAISettings } from '../web/app/server/methods/ai/ai-settings-core.mjs'
 import { connectionRequest } from '../web/app/server/methods/ai/connection-request.mjs'
 import { localWorkshopRequest } from '../web/app/server/methods/ai/workshop-provider.mjs'
@@ -371,4 +371,28 @@ test('a new installation\'s instance.env lists GEMINI_API_KEY and META_API_KEY a
   assert.match(env, /^GEMINI_API_KEY=''$/m)
   assert.match(env, /^META_API_KEY=''$/m)
   assert.match(env, /^# .*apiKeyEnv/m)
+})
+
+test('library refinement has its own use key: use.library, else use.chat, else use.default, else the built-in AI', () => {
+  assert.ok(USE_KEYS.includes('library'))
+  assert.equal(choiceFeatureFor('library-refine'), 'library')
+  assert.deepEqual(USE_FALLBACK, { library: 'chat' })
+  const connections = [{ name: 'chatbox', type: 'openai-compatible', baseUrl: 'http://10.0.0.2/v1', model: 'c' },
+    { name: 'libbox', type: 'openai-compatible', baseUrl: 'http://10.0.0.3/v1', model: 'l' },
+    { name: 'defbox', type: 'openai-compatible', baseUrl: 'http://10.0.0.4/v1', model: 'd' }]
+  const pick = (use) => resolveAIChoice({ feature: 'library', server: { connections, use }, ownProviders: false }).ref
+  assert.equal(pick({ library: 'server:libbox', chat: 'server:chatbox', default: 'server:defbox' }), 'server:libbox')
+  assert.equal(pick({ chat: 'server:chatbox', default: 'server:defbox' }), 'server:chatbox')
+  assert.equal(pick({ default: 'server:defbox' }), 'server:defbox')
+  assert.equal(pick({}), 'builtin')
+  // The fallback is library's alone: another feature never borrows the conversation choice this way.
+  assert.equal(resolveAIChoice({ feature: 'shape', server: { connections, use: { chat: 'server:chatbox' } }, ownProviders: false }).ref, 'builtin')
+  // The operator's settings file may name use.library like any other feature.
+  assert.equal(operatorConfig(selfhost({ connections: { libbox: { type: 'openai-compatible', baseUrl: 'http://10.0.0.3/v1', model: 'l' } }, use: { library: 'libbox' } })).use.library, 'server:libbox')
+  // Built-in defaults: a copy of generation's provider, model and fallback; no model is named in code.
+  const { _comment, ...library } = JSON.parse(readFileSync(new URL('server/config/ai-defaults.json', app), 'utf8')).library
+  const { _comment: _g, ...generation } = JSON.parse(readFileSync(new URL('server/config/ai-defaults.json', app), 'utf8')).generation
+  assert.deepEqual(library, generation)
+  assert.match(_comment, /settings\.ai\.use\.chat/)
+  assert.deepEqual(resolveAIFeatureConfig('library', {}), { ...DEFAULT_AI_FEATURES.library, feature: 'library' })
 })

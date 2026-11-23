@@ -14,6 +14,7 @@ export const AI_FEATURES = Object.freeze([
   Object.freeze({ id: 'vision', title: 'Reading images and diagrams', verb: 'read images', needs: Object.freeze(['vision']) }),
   Object.freeze({ id: 'images', title: 'Generating images', verb: 'make images', needs: Object.freeze(['images']) }),
   Object.freeze({ id: 'shape', title: 'Drawing custom shapes', verb: 'call tools', needs: Object.freeze(['tools']) }),
+  Object.freeze({ id: 'library', title: 'Library review and refinement', verb: 'call tools', needs: Object.freeze(['tools']) }),
 ])
 const FEATURE_IDS = AI_FEATURES.map((f) => f.id)
 // Choices that only a settings file (or a person's saved choices) name, with no row of their own in
@@ -26,8 +27,11 @@ export const USE_KEYS = Object.freeze(['default', ...FEATURE_IDS, ...Object.keys
 const REQUEST_FEATURES = Object.freeze({
   welcome: 'chat', workshop: 'chat', 'lane-chat': 'chat', 'map-chat': 'chat',
   generation: 'generation', layout: 'generation', presentation: 'presentation', vision: 'vision',
-  'image-generation': 'images', images: 'images', chat: 'chat', shape: 'shape', connectors: 'connectors',
+  'image-generation': 'images', images: 'images', chat: 'chat', shape: 'shape', connectors: 'connectors', 'library-refine': 'library',
 })
+// A choice nobody set follows another before the default: library refinement uses the conversation
+// choice unless use.library names one, so an operator who sets nothing changes nothing.
+export const USE_FALLBACK = Object.freeze({ library: 'chat' })
 // Paths that are not a model at all (image search, video calls): the built-in service serves them.
 export const BUILTIN_ONLY_FEATURES = Object.freeze(['image-search', 'call'])
 /**
@@ -225,7 +229,7 @@ const find = (holder, name) => holder?.connections?.find((c) => c.name === name)
 
 function fromUse(holder, feature, scopes, people) {
   if (!holder) return null
-  for (const key of [feature, ...(FEATURE_FALLBACKS[feature] ? [FEATURE_FALLBACKS[feature]] : []), 'default']) {
+  for (const key of [feature, FEATURE_FALLBACKS[feature] ?? USE_FALLBACK[feature], 'default'].filter(Boolean)) {
     const parsed = parseRef(holder.use?.[key])
     if (!parsed) continue
     if (parsed.scope === 'builtin') return { ref: 'builtin', scope: 'builtin', connection: null }

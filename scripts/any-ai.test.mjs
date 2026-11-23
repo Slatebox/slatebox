@@ -106,11 +106,12 @@ test('the connection lookup applies the same rules to every address a name resol
 // ---------- connections ----------
 
 test('the features are listed with what each needs, and every request feature maps to one', () => {
-  assert.deepEqual(AI_FEATURES.map((f) => f.id), ['chat', 'generation', 'presentation', 'vision', 'images', 'shape'])
+  // Restated (library): library review and refinement is a feature of its own, which follows chat unless chosen.
+  assert.deepEqual(AI_FEATURES.map((f) => f.id), ['chat', 'generation', 'presentation', 'vision', 'images', 'shape', 'library'])
   assert.deepEqual(AI_FEATURES.find((f) => f.id === 'images').needs, ['images'])
   assert.deepEqual(AI_FEATURES.find((f) => f.id === 'vision').needs, ['vision'])
   for (const [request, choice] of Object.entries({ welcome: 'chat', workshop: 'chat', 'lane-chat': 'chat', 'map-chat': 'chat', generation: 'generation',
-    layout: 'generation', presentation: 'presentation', vision: 'vision', 'image-generation': 'images' })) {
+    layout: 'generation', presentation: 'presentation', vision: 'vision', 'image-generation': 'images', 'library-refine': 'library' })) {
     assert.equal(choiceFeatureFor(request), choice, request)
   }
   assert.equal(choiceFeatureFor('image-search'), null, 'image search is not a model')

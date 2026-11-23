@@ -50,5 +50,14 @@
       "provider": "deepinfra",
       "engine": "google/gemini-3.7-flash"
     }
+  },
+  "library": {
+    "_comment": "Library review and refinement (server/library/refine-ai.mjs): one forced tool call, propose_library_refinement. It follows settings.ai.use.chat unless settings.ai.use.library names a connection; these are the built-in defaults when neither does, a copy of generation's.",
+    "provider": "deepinfra",
+    "engine": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "fallback": {
+      "provider": "deepinfra",
+      "engine": "deepseek-ai/DeepSeek-V3.1-Terminus"
+    }
   }
 }
