@@ -1,4 +1,5 @@
 import React from 'react'
+import { withNativeInk } from '../../common/canvasTheme.mjs'
 import { Meteor } from 'meteor/meteor'
 import { Slatebox } from 'slateboxjs'
 import { useAtom, useSetAtom } from 'jotai'
@@ -38,7 +39,6 @@ import { BarButton, Pop, Sheet, Choices, useRoving, focusInto } from './parts'
 import { ColourPanel, CustomColour, useSlateColours } from './ColourPanel'
 import { MoreRows, Back, FontPanel, PicturePanel, EffectsPanel, LinkPanel, OrderPanel } from './MoreMenu'
 import ShapeMaker, { ShapePreview } from '../shapes/ShapeMaker'
-import { withNativeInk } from '../../common/canvasTheme.mjs'
 
 const ALIGN_X = [
   { key: 'left', name: 'Left', icon: <FormatAlignLeftIcon /> },

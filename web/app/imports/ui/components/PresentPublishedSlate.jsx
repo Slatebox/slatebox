@@ -6,6 +6,7 @@
 /* eslint-disable no-underscore-dangle */
 /* eslint-disable no-restricted-syntax */
 import React, { useState, useEffect, useRef } from 'react'
+import useCanvasTheme from '../common/useCanvasTheme'
 import { Meteor } from 'meteor/meteor'
 import ReplayIcon from '@mui/icons-material/Replay'
 import Button from '@mui/material/Button'
@@ -33,7 +34,6 @@ function publishedLook(row) {
     return null
   }
 }
-import useCanvasTheme from '../common/useCanvasTheme'
 
 export default function PresentPublishedSlate({ slateShareId, surfaceId = 'presentMain' }) {
   const refMethods = useRef(null)
