@@ -1,7 +1,7 @@
 import {
   addWorkshopCard, addWorkshopLane, businessKind, rulebook, startupExperienceKind, validateWorkshop,
   workshopCandidate, workshopCardAsNote, workshopCardAsNoteRefusal, workshopLineRefusal, workshopNewLine, workshopPresentationLanes, workshopRefusal,
-  workshopTakesLines, workshopWithLine,
+  workshopNewCardName, workshopTakesLines, workshopWithLine,
 } from 'slateboxjs/workshops/model'
 import { N, atMost, count, cuts, finder, listed, named, plainRequest as plain, pointing, said, several, things, unquoted, whole } from './plain-words.mjs'
 import { noteRequest, noteRequestProblem } from './note-requests.mjs'
@@ -142,13 +142,14 @@ function change(board, message, selection) {
       hereLane && (m = is(counted + '\\s+(?:here|to it|in it)')))) {
     const target = m[2] ? lanes.attempt(m[2]) : hereLane
     const amount = count(m[1])
-    // One card without words is an empty card, as an empty note dropped there is; several at once start as “New card”.
+    // A card without words takes the board's name for a new item (“New card”), as an empty note dropped there does.
     if (amount === 1) {
       if (board.cards.length >= 24) throw Error('A workshop can have up to 24 cards. Remove one first.')
       if (target.capacity !== undefined && board.cards.filter(item => item.laneId === target.id).length >= target.capacity) {
         throw Error(said(target.label) + ' is full: it holds ' + target.capacity + (target.capacity === 1 ? ' card' : ' cards') + '. Add the card to another column, or raise the limit.')
       }
-      return done(addWorkshopCard(board, target.id, { label: '' }), 'Added an empty card to ' + said(target.label) + '.')
+      const unnamed = workshopNewCardName(board)
+      return done(addWorkshopCard(board, target.id, { label: unnamed }), 'Added ' + said(unnamed) + ' to ' + said(target.label) + '.')
     }
     if (!(amount >= 2)) throw Error('Say how many cards to add, such as “Add two cards to ' + target.label + '”.')
     if (board.cards.length + amount > 24) throw Error('A workshop can have up to 24 cards. Remove some first.')
@@ -157,7 +158,7 @@ function change(board, message, selection) {
       throw Error(said(target.label) + ' holds up to ' + target.capacity + (target.capacity === 1 ? ' card' : ' cards') + ' and has ' + held + '. Add fewer, or raise the limit.')
     }
     let next = board
-    for (let i = 0; i < amount; i++) next = addWorkshopCard(next, target.id, { label: 'New card' })
+    for (let i = 0; i < amount; i++) next = addWorkshopCard(next, target.id, { label: workshopNewCardName(board) })
     return done(next, 'Added ' + amount + ' cards to ' + said(target.label) + '.')
   }
 
@@ -459,8 +460,9 @@ function change(board, message, selection) {
     if (board.cards.length >= 24) throw Error('A workshop can have up to 24 cards. Remove one first.')
     const full = target.capacity !== undefined && board.cards.filter(item => item.laneId === target.id).length >= target.capacity
     if (full) throw Error(said(target.label) + ' is full: it holds ' + target.capacity + (target.capacity === 1 ? ' card' : ' cards') + '. Add the card to another column, or raise the limit.')
-    // Without words it is an empty card, as an empty note dropped on the lane is.
-    return done(addWorkshopCard(board, target.id, { label: label ?? '' }), 'Added ' + (label ? said(label) : 'an empty card') + ' to ' + said(target.label) + '.')
+    // Without words it takes the board's name for a new item (“New card”), as an empty note dropped on the lane does.
+    const words = label || workshopNewCardName(board)
+    return done(addWorkshopCard(board, target.id, { label: words }), 'Added ' + said(words) + ' to ' + said(target.label) + '.')
   }
 
   // “Add a card called Listen to the tide to Ready to review”: either name may hold the word

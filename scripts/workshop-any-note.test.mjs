@@ -13,11 +13,16 @@ const board = () => validateWorkshop({
   cards: [{ id: 'alpha', label: 'Alpha', laneId: 'now' }],
 })
 
-test('an empty note dropped on a lane is saved as an empty card, and leaves the drawing', () => {
+// (Restated 2026-11-23, owner decision: an empty note becomes a card named with the board's word for a new
+// item, “New card” on lanes, and leaves the board as an empty note again.)
+test('an empty note dropped on a lane is saved as “New card”, and leaves the drawing', () => {
   const drawn = [{ options: { id: 'blank', text: '' }, relationships: { associations: [] } }]
   const played = playWorkshopChanges(board(), readWorkshopChanges([{ cardId: 'blank', laneId: 'now', noteToCard: { noteId: 'blank', label: '' } }]), ['blank'], {})
   assert.equal(played.refused, undefined)
-  assert.deepEqual(played.workshop.cards.at(-1), { id: 'blank', label: '', laneId: 'now' })
+  assert.deepEqual(played.workshop.cards.at(-1), { id: 'blank', label: 'New card', laneId: 'now', asNote: { text: '' } })
+  // The canvas sends the card's name and that the note had no words: the server makes the same card.
+  const sent = playWorkshopChanges(board(), readWorkshopChanges([{ cardId: 'blank', laneId: 'now', noteToCard: { noteId: 'blank', label: 'New card', asNote: { text: '' } } }]), ['blank'], {})
+  assert.deepEqual(sent.workshop.cards.at(-1), played.workshop.cards.at(-1))
   assert.deepEqual(drawingAfter(drawn, played.drawing), [])
   // And back off the lanes as an empty note.
   const back = playWorkshopChanges(played.workshop, readWorkshopChanges([{ cardId: 'blank', cardToNote: { noteId: 'blank', note: { options: { id: 'blank', text: '' } } } }]), [], {})
@@ -39,4 +44,18 @@ test('the board\'s own rules still refuse: a full lane', () => {
   const full = playWorkshopChanges(board(), readWorkshopChanges([{ cardId: 'one', laneId: 'later', noteToCard: { noteId: 'one', label: '' } }]), ['one'], {}).workshop
   const refused = playWorkshopChanges(full, readWorkshopChanges([{ cardId: 'two', laneId: 'later', noteToCard: { noteId: 'two', label: 'Two' } }]), ['two'], {})
   assert.equal(refused.refused.reason, 'It already holds 1 of 1 card.')
+})
+
+test('an empty note on a hiring plan or a launch plan is saved as “New hire” or “New task”, never refused', async () => {
+  await import('slateboxjs/workshops/behaviour')
+  const { hiringPlanSample, launchPlanSample } = await import('slateboxjs/workshops/rules')
+  for (const [make, name] of [[hiringPlanSample, 'New hire'], [launchPlanSample, 'New task']]) {
+    const plan = validateWorkshop(make())
+    const laneId = plan.lanes[0].id
+    for (const label of ['', name]) {
+      const played = playWorkshopChanges(plan, readWorkshopChanges([{ cardId: 'node_blank', laneId, noteToCard: { noteId: 'node_blank', label, asNote: { text: '' } } }]), ['node_blank'], {})
+      assert.equal(played.refused, undefined, JSON.stringify(played.refused))
+      assert.equal(played.workshop.cards.find(card => card.id === 'node_blank').label, name)
+    }
+  }
 })

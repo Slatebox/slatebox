@@ -1522,7 +1522,7 @@ interface WorkshopEditsPlan {
         /** (1–64 characters) */
         id: string;
       };
-      /** What the card says. Left out, the card is empty (on a map, the token is numbered); a launch plan, pipeline, budget, hiring plan or nest board needs it. (1–80 characters) */
+      /** What the card says. Left out, the card takes the board’s name for a new item: “New card”, “New hire”, “New task”, “New deal” (on a map, a token is numbered; a free card is “New stop”). (1–80 characters) */
       label?: string;
       /** Lane boards only: the lanes it may go in, including the one it starts in. Leave it out for any lane. (1–5 items) */
       allowedLanes?: Array<string | {

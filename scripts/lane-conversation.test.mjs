@@ -201,10 +201,10 @@ test('the same things said other ways: names first, lanes by their place, severa
     (next,message)=>assert.deepEqual([next.cards.at(-1).label,next.cards.at(-1).laneId],['Email Jo',lane(week,'Next').id],message))
   // Half a request is answered with the other half to give, not with a card called “to Next”.
   assert.throws(()=>edit(week,'Add a lane'),/Give the column a name, such as “Add a column called Later”\./)
-  // (Restated 2026-11-21, owner decision: a card may be empty. "Add a card to Next" adds an empty card;
-  // "Add a card" asks only which lane.)
+  // (Restated 2026-11-23, owner decision: a card asked for without words takes the board's name for a
+  // new item. "Add a card to Next" adds “New card”; "Add a card" asks only which lane.)
   assert.throws(()=>edit(week,'Add a card'),/Say which column the card goes in/)
-  assert.deepEqual([edit(week,'Add a card to Next').cards.at(-1).label, edit(week,'Add a card to Next').cards.at(-1).laneId], ['', lane(week,'Next').id])
+  assert.deepEqual([edit(week,'Add a card to Next').cards.at(-1).label, edit(week,'Add a card to Next').cards.at(-1).laneId], ['New card', lane(week,'Next').id])
   each(['Now should be called Today','Call Now Today','Call the Now lane Today','Name the Now lane Today','Change the name of Now to Today','Change the name of the Now lane to Today','Rename the first lane to Today','Rename lane 1 to Today'],
     (next,message)=>assert.equal(next.lanes[0].label,'Today',message))
   assert.equal(edit(week,'Rename the last lane to Someday').lanes.at(-1).label,'Someday')
@@ -295,9 +295,9 @@ test('cards by number go in the lane named or selected, and a card takes a colou
   assert.deepEqual(proposeLaneReply(base, 'add two notes here', lane).workshop.cards.slice(1).map(item => item.laneId), ['later', 'later'])
   // With a card selected, “here” is the card's lane.
   assert.deepEqual(proposeLaneReply(base, 'add two notes here', laneObjectSelection(base, { kind: 'card', id: 'idea' })).workshop.cards.slice(1).map(item => item.laneId), ['now', 'now'])
-  // (Restated 2026-11-21: one card asked for without words is an empty card in that lane, not one called “here”.)
+  // (Restated 2026-11-23: one card asked for without words is “New card” in that lane, not one called “here”.)
   const blank = proposeLaneReply(base, 'add a note here', lane)
-  assert.deepEqual([blank.workshop.cards.at(-1).label, blank.workshop.cards.at(-1).laneId, blank.reply], ['', 'later', 'Added an empty card to “Later”.'])
+  assert.deepEqual([blank.workshop.cards.at(-1).label, blank.workshop.cards.at(-1).laneId, blank.reply], ['New card', 'later', 'Added “New card” to “Later”.'])
   const red = proposeLaneReply(base, 'make this card red', laneObjectSelection(base, { kind: 'card', id: 'idea' }))
   assert.match(red.workshop.cards[0].look.backgroundColor, /^#[0-9a-f]{6}$/)
   assert.equal(red.reply, 'Coloured “New idea” red.')
