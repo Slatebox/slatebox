@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import { compat } from 'slateboxjs'
-import { PREVIEW_CAPTION, boundsOf, previewArtwork, previewCaption, previewShown, previewView } from '../../api/common/conversation-preview.mjs'
-import { workshopNoteStyle } from '../../api/common/workshop-look.mjs'
+import { attachWorkshop, rulebookLoaded } from 'slateboxjs/workshops/model'
+import { KIT_KINDS, PREVIEW_CAPTION, boundsOf, previewArtwork, previewBoardOf, previewCaption, previewShown, previewView } from '../../api/common/conversation-preview.mjs'
+import { lanesPerRow, workshopNoteStyle, workshopStyle } from '../../api/common/workshop-look.mjs'
+import { ensureBoardChromeStyles } from './workshop/boardChromeStyles'
 
 // A preview note is drawn but not part of the slate: nobody can select, move, edit, connect or
 // delete it, and the engine leaves it out of saves, undo, exports and what it sends to collaborators.
@@ -22,6 +24,10 @@ export default function useConversationPreview(engine, preview) {
   useEffect(() => {
     if (!engine || !preview || typeof engine.setDragPolicy !== 'function') return undefined
     const existing = engine.freeNodes().map(({ id, options: o }) => ({ id, x: o.x, y: o.y, width: o.width, height: o.height }))
+    // A whole board (a library add, an interactive route) is drawn by the board renderer itself, see-through in
+    // its dashed "Preview · not added yet" frame: every kind of board shows, a plan's bars and grid included.
+    const draftBoard = preview.canvas ? previewBoardOf(preview.canvas, existing) : null
+    if (draftBoard) return drawBoardDraft(engine, draftBoard, preview)
     let artwork
     try {
       artwork = preview.canvas ? previewArtwork(preview.canvas, existing, workshopNoteStyle) : { notes: [], links: [], bounds: preview.frame }
@@ -149,4 +155,65 @@ export default function useConversationPreview(engine, preview) {
       engine.notifyNodeChanged?.()
     }
   }, [engine, preview])
+}
+
+/**
+ * Draw a board draft with attachWorkshop (`draft: true`, view-only, in the scope `pv`) where Keep will put it, bring its
+ * frame into view, and take it away (and give the view back) when the preview goes. Its kit and rules load first.
+ */
+function drawBoardDraft(engine, { workshop, origin }, preview) {
+  let gone = false
+  let board = null
+  let before = null
+  ensureBoardChromeStyles()
+  ;(async () => {
+    try {
+      const kits = KIT_KINDS.includes(workshop.kind)
+        ? await Promise.all([import('slateboxjs/boards'), workshop.kind === 'nest' ? import('slateboxjs/boards/nest') : null]).then(([loaded]) => loaded) : null
+      if (workshop.behaviour && !rulebookLoaded()) await import('slateboxjs/workshops/behaviour')
+      if (gone) return
+      const width = engine.element?.clientWidth || window.innerWidth
+      const kit = kits ? kits.kitFor(workshop.kind) : undefined
+      board = attachWorkshop(engine, workshop, {
+        draft: true, readOnly: true, scope: 'pv', origin, style: workshopStyle(engine.freeNodes?.() ?? []),
+        layout: kit ? kits.boardLayoutFor(width) : { lanesPerRow: lanesPerRow(width, workshop) },
+        ...(kit && { kit }),
+      })
+      await board.whenDrawn()
+      if (gone) return
+      // Into view at a size that can be read, the dashed frame and its tag included; the person's view comes back after.
+      const view = viewOf(engine)
+      if (!view) return
+      const next = previewView(previewShown(board.frame, preview.focus ?? null, view), view)
+      if (!next) return
+      before = { cx: view.cx, cy: view.cy, zoom: view.zoom }
+      engine.canvas.viewbox(next.x, next.y, next.width, next.height)
+    } catch (err) {
+      console.warn('The preview could not be drawn on the canvas.', err)
+    }
+  })()
+  return () => {
+    gone = true
+    try { board?.destroy() } catch { /* The slate is already gone. */ }
+    if (before) {
+      try {
+        const view = viewOf(engine)
+        if (view) {
+          const width = view.rect.width / before.zoom, height = view.rect.height / before.zoom
+          engine.canvas.viewbox(before.cx - width / 2, before.cy - height / 2, width, height)
+        }
+      } catch { /* The page is leaving. */ }
+    }
+  }
+}
+
+/** The view now, as the preview reads it: the box, the zoom (from the canvas's width in pixels) and its centre. */
+function viewOf(engine) {
+  const view = engine.canvas?.viewbox?.()
+  const rect = engine.element?.getBoundingClientRect?.()
+  if (!view || !rect || !(rect.width > 0) || !(rect.height > 0) || !(view.width > 0)) return null
+  const zoom = rect.width / view.width
+  const cx = view.x + view.width / 2, cy = view.y + view.height / 2
+  const height = rect.height / zoom
+  return { x: view.x, y: cy - height / 2, width: view.width, height, zoom, cx, cy, rect }
 }

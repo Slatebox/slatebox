@@ -102,7 +102,7 @@ test('finding 3: ordinary messages reach the drawing and the rule grammar, not t
 
 test('finding 4: a contradiction said in chat is refused with its sentence', () => {
   assert.throws(() => say(team, 'Make that a rule: From Doing, cards go only to Done'),
-    /Cards move one lane at a time, so cards in Doing could never reach Done\./)
+    /Cards move one column at a time, so cards in Doing could never reach Done\./)
 })
 
 test('finding 6: add_rule over exec cannot forge the audit line or the id', () => {

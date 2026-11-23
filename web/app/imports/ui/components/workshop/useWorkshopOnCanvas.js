@@ -8,6 +8,7 @@ import createAnonymousUser from '../../../api/client/createAnonymousUser'
 import { workshopStyle, lanesPerRow } from '../../../api/common/workshop-look.mjs'
 import { shapeNotice as shapeSentence, withShapeNotice } from '../../../api/common/shape-notice.mjs'
 import { boardsCounterRecordId } from '../../../api/common/slate-boards.mjs'
+import { ensureBoardChromeStyles } from './boardChromeStyles'
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 const validOrigin = origin => Number.isFinite(origin?.x) && Number.isFinite(origin?.y) ? { x: origin.x, y: origin.y } : undefined
@@ -92,6 +93,8 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
   const [focus, setFocus] = useState(null)
   const focusRef = useRef(null)
   focusRef.current = focus
+  // The focus frame's "Done" on the canvas: the same as the chat's "Stop editing this board".
+  const leaveRef = useRef(null)
   const fitBoardRef = useRef(null)
   const [joining, setJoining] = useState(false)
   const [, redraw] = useState(0)
@@ -292,6 +295,7 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     const kit = BOARD_KINDS.includes(first.model.workshop.kind) ? kits.kitFor(first.model.workshop.kind) : null
     const layoutFor = width => kit ? kits.boardLayoutFor(width) : { lanesPerRow: lanesPerRow(width, first.model.workshop) }
     let board
+    ensureBoardChromeStyles()
     // Cards are drawn as this slate's own notes are.
     const style = workshopStyle(engine.freeNodes?.() ?? [])
     roundCards.current = ((style.card?.cornerRadius ?? style.cornerRadius) ?? 0) > 0
@@ -306,6 +310,7 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
         layout: layoutFor(measure()),
         ...(kit && { kit }),
         style,
+        onFocusDone: () => leaveRef.current?.(),
         onChange(_next, change) {
           // A card that became a note goes to the server with the note, so the board and the
           // drawing are saved in one write.
@@ -367,10 +372,14 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     const margin = 24
     // The box of what the canvas shows: the workshop, or a proposal that may have more lanes.
     // On a phone the toolbar's own floating buttons sit over the top of the canvas; the board starts below them.
+    // The board's title row and legend (and, in focus, its frame) are part of what is fitted (board.frame).
     const bounds = () => {
       const { width: w, height: h } = kit ? board.bounds : workshopLanePlaces(shown.current ?? board.value, { layout: board.layout })
       const clear = measure() < 600 ? 52 : 0
-      return { x: board.origin.x, y: board.origin.y - clear, width: w, height: h + clear }
+      const chrome = board.frame ?? board.bounds
+      const left = Math.min(board.origin.x, chrome.x), top = Math.min(board.origin.y, chrome.y) - clear
+      const right = Math.max(board.origin.x + w, chrome.x + chrome.width), bottom = Math.max(board.origin.y + h, chrome.y + chrome.height)
+      return { x: left, y: top, width: right - left, height: bottom - top }
     }
     // Whether the whole of a box is on screen now.
     const inView = box => {
@@ -396,16 +405,20 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     // `only`: the board alone (a board in focus), not the notes beside it.
     const fit = (only = Boolean(focusRef.current)) => {
       if (live.current !== board) return
-      if (measure() < 600) engine.fitToWidth(bounds(), 24, 1)
+      // A phone shows the board at its full width: in focus its frame (8 outside it) takes 8 of the margin, so the board
+      // is shown at the size it always was and its grips stay a finger's size.
+      if (measure() < 600) engine.fitToWidth(bounds(), only && focusRef.current ? 16 : 24, 1)
       else {
         // A wide canvas shows all of it, in the middle of what a person can see: the canvas is
         // the area beside an open conversation and below the toolbar, less the row at its foot
         // that the zoom control (and a cookie notice not yet answered) lies over. Never past 100%.
         const box = only ? bounds() : everything()
         const w = element.clientWidth, h = element.clientHeight
+        // A board in focus has room round its frame: its neighbours show, dimmed, at the edges.
+        const room = only ? Math.min(120, Math.max(margin, Math.floor(Math.min(w, h) / 10))) : margin
         // The canvas-shaped region that has the board in the middle of what is left above `foot`.
         const place = foot => {
-          const scale = Math.min(1, (w - margin * 2) / box.width, (h - margin * 2 - foot) / box.height)
+          const scale = Math.min(1, (w - room * 2) / box.width, (h - room * 2 - foot) / box.height)
           return { scale, foot, region: { x: box.x + box.width / 2 - w / scale / 2, y: box.y + box.height / 2 - (h - foot) / 2 / scale, width: w / scale, height: h / scale } }
         }
         let view = place(28)
@@ -523,8 +536,15 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     }
   }, [engine, ready, reconcile, kits, boardId])
 
-  // The board's notes say it is in focus (the engine's mark, the hook for a kit's focused-only parts).
+  // The board's notes say it is in focus (the engine's mark, the hook for a kit's focused-only parts), and the
+  // canvas carries `focusing` meanwhile, which brings everything that is not this board down to 32%.
   useEffect(() => { controller?.setFocused?.(Boolean(focus)) }, [controller, focus])
+  useEffect(() => {
+    const element = engine?.element
+    if (!controller || !focus || !element) return undefined
+    element.classList.add('focusing')
+    return () => element.classList.remove('focusing')
+  }, [controller, focus, engine])
 
   // The publication delivered a model: the owner's own save coming back, or someone else's.
   useEffect(() => { if (controller) reconcile() }, [controller, state?.revision, state?.model, reconcile])
@@ -609,7 +629,9 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     try {
       const reserve = workshopReserve(controller.value, {}, boardKind ? kits?.kitFor?.(boardKind) : undefined)
       const drawn = live.current.bounds
-      room = { x: live.current.origin.x, y: live.current.origin.y, width: Math.max(reserve.width, drawn?.width ?? 0), height: Math.max(reserve.height, drawn?.height ?? 0) }
+      // The room grows upward by the board's title row and legend (its chrome), so no board's legend runs into another.
+      const above = Math.max(0, live.current.origin.y - (live.current.frame?.y ?? live.current.origin.y))
+      room = { x: live.current.origin.x, y: live.current.origin.y - above, width: Math.max(reserve.width, drawn?.width ?? 0), height: Math.max(reserve.height, drawn?.height ?? 0) + above }
     } catch { room = live.current.bounds ? { x: live.current.origin.x, y: live.current.origin.y, width: live.current.bounds.width, height: live.current.bounds.height } : null }
   }
   return {
@@ -653,7 +675,7 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
       fitBoardRef.current?.()
       return true
     },
-    leaveFocus: () => {
+    leaveFocus: leaveRef.current = () => {
       if (preview) return false
       setFocus(null)
       return true
@@ -661,7 +683,7 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     preview,
     previewing,
     // Where the workshop is drawn (world units), for the caption that marks a proposal as a preview.
-    frame: live.current?.bounds ?? null,
+    frame: live.current?.frame ?? live.current?.bounds ?? null,
     // What the proposal shown changes (world units, with and without its lanes' names): null when it
     // outlines nothing, undefined until it is drawn.
     changed: proposal && changed?.proposal === proposal ? changed.box : undefined,

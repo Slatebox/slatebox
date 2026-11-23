@@ -25,6 +25,9 @@ async function keep(page) {
 }
 // What the canvas says, from its own notes (SVG text).
 const canvasText = page => page.evaluate(() => [...document.querySelectorAll('svg text')].map(t => t.textContent).join(' | '))
+// Doing's limit, as its column says it to a screen reader ("Doing, 1 of 3"). Board polish: the rules are the board's
+// chrome now, not a "How this board behaves" note on the canvas, so the limit is read from the column itself.
+const doingHolds = (on, max) => expect(on.locator(`g[aria-label^="Doing, "][aria-label$=" of ${max}"]`).first()).toBeVisible({ timeout: 30000 })
 const frames = page => page.evaluate(() => [...document.querySelectorAll('[data-node-id]')].map(g => {
   const r = g.getBoundingClientRect()
   return { id: g.getAttribute('data-node-id'), x: r.x, y: r.y, w: r.width, h: r.height }
@@ -58,11 +61,11 @@ test('Keep adds a board and keeps a rule live on every open page; Undo and the n
 
   // 1. Add a team board by chat, Keep: drawn here and there with no reload, beside the notes.
   await say(page, 'Add a team board')
-  await expect(panel(page).getByText('How this board behaves')).toBeVisible({ timeout: 60000 })
+  await expect(panel(page).getByRole('region', { name: 'Rules' })).toBeVisible({ timeout: 60000 })
   await keep(page)
   await expect(page.locator('[data-creative-revision]')).toBeVisible({ timeout: 60000 })
   await expect(other.locator('[data-creative-revision]')).toBeVisible({ timeout: 30000 })
-  await expect.poll(() => canvasText(other)).toContain('Doing holds 3.')
+  await doingHolds(other, 3)
   expect(navigations).toEqual({ a: 0, b: 0 })
   await expect(other.getByText('A teammate updated this drawing')).toHaveCount(0)
   // The board's own chat takes over the panel.
@@ -95,19 +98,19 @@ test('Keep adds a board and keeps a rule live on every open page; Undo and the n
   await expect(panel(page).getByText(/Rules \(rev \d+ → \d+\)/)).toBeVisible()
   await keep(page)
   await expect(panel(page).getByText('Saved to the workshop.').last()).toBeVisible()
-  await expect.poll(() => canvasText(page)).toContain('Doing holds 1.')
-  await expect.poll(() => canvasText(other)).toContain('Doing holds 1.')
+  await doingHolds(page, 1)
+  await doingHolds(other, 1)
 
   // 4. Undo puts the rule back on both pages.
   await page.getByRole('button', { name: 'Undo last change' }).click()
-  await expect.poll(() => canvasText(page)).toContain('Doing holds 3.')
-  await expect.poll(() => canvasText(other)).toContain('Doing holds 3.')
+  await doingHolds(page, 3)
+  await doingHolds(other, 3)
 
   // 5. The rule again; the next real drag of Billing onto Doing is refused with the rule's sentence.
   await say(page, 'Let Doing hold 1')
   await expect(panel(page).getByText(/Rules \(rev \d+ → \d+\)/)).toBeVisible()
   await keep(page)
-  await expect.poll(() => canvasText(other)).toContain('Doing holds 1.')
+  await doingHolds(other, 1)
   // The same real drag on either page: the rule kept on page A must hold on page B's own canvas too.
   const dragBillingToDoing = async (on) => {
     const card = await on.locator('g[aria-label^="Billing"]').first().boundingBox()
@@ -132,7 +135,7 @@ test('Keep adds a board and keeps a rule live on every open page; Undo and the n
   // 6. A reload: the board is where it was put, the rule and the moved note are saved.
   await page.reload()
   await expect(page.locator('[data-creative-revision]')).toBeVisible({ timeout: 60000 })
-  await expect.poll(() => canvasText(page)).toContain('Doing holds 1.')
+  await doingHolds(page, 1)
   expect(await yOf(page, welcome.id)).toBeCloseTo(moved, 0)
   expect(errors).toEqual([])
   await two.close()
@@ -157,11 +160,11 @@ test('a board given its first rule shows it live on a page that never loaded the
   other.on('pageerror', e => errors.push('B: ' + e.message))
   await other.goto(page.url())
   await expect(other.locator('[data-creative-revision]')).toBeVisible({ timeout: 60000 })
-  expect(await canvasText(other)).not.toContain('Proposal needs an amount.')
+  expect(await canvasText(other)).not.toContain('Proposal needs an amount')
   await say(page, 'Proposal needs an amount')
   await expect(panel(page).getByText(/Rules \(rev \d+ → \d+\)/)).toBeVisible()
   await keep(page)
-  await expect.poll(() => canvasText(other), { timeout: 30000 }).toContain('Proposal needs an amount.')
+  await expect.poll(() => canvasText(other), { timeout: 30000 }).toContain('Proposal needs an amount')
   await expect(other.locator('[data-creative-revision]')).toBeVisible()
   expect(errors).toEqual([])
   await two.close()
@@ -190,7 +193,8 @@ test.describe('on a phone', () => {
     await expect(panel(page).getByText('Saved to the workshop.').last()).toBeVisible()
     await panel(page).getByRole('button', { name: 'Close' }).first().click()
     await page.waitForTimeout(1500)
-    await expect.poll(() => canvasText(page)).toContain('1 of 3')
+    // Board polish: a column's counter is "1 / 3" on the canvas; its words for a screen reader stay "1 of 3".
+    await expect(page.locator('g[aria-label="Doing, 1 of 3"]').first()).toBeVisible()
     // The board was drawn on this page as it is, fitted to the phone: the card and To do are on screen.
     const card = await page.locator('g[aria-label^="Search"]').first().boundingBox()
     const lane = await page.locator('g[aria-label^="To do"]').first().boundingBox()
@@ -201,8 +205,8 @@ test.describe('on a phone', () => {
     await page.mouse.down()
     for (let i = 1; i <= 14; i++) await page.mouse.move(card.x + card.width / 2, card.y + card.height / 2 + (drop - card.y - card.height / 2) * i / 14)
     await page.mouse.up()
-    await expect.poll(() => canvasText(page)).toContain('0 of 3')
-    await expect.poll(() => canvasText(page)).toContain('1 card')
+    await expect(page.locator('g[aria-label="Doing, 0 of 3"]').first()).toBeVisible()
+    await expect(page.locator('g[aria-label="To do, 1 card"]').first()).toBeVisible()
     expect(navigations).toBe(0)
     expect(errors).toEqual([])
   })

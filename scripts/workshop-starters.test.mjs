@@ -48,11 +48,12 @@ for (const [name, model] of Object.entries(maps)) {
   })
 }
 
+// Board polish: starters say "column" (the chat still reads "lane", "column", "list" and "stage").
 test('a starter that would not work is not offered', () => {
   // The interview board keeps its two fixed lanes: a starter that adds a lane would break the layout.
   const interview = workshopStarters(createInterviewWorkshop()).map(item => item.text)
-  assert.equal(interview.some(text => /^Add a lane/.test(text)), false)
-  assert.equal(workshopStarters(createLaneWorkshop()).some(item => /^Add a lane/.test(item.text)), true, 'it is offered where it works')
+  assert.equal(interview.some(text => /^Add a (?:lane|column)/.test(text)), false)
+  assert.equal(workshopStarters(createLaneWorkshop()).some(item => /^Add a column/.test(item.text)), true, 'it is offered where it works')
   assert.throws(() => proposeLaneEdit(createInterviewWorkshop(), 'Add a lane called Later', null))
   // A map already at its five stations has no room for a follow-up.
   let full = nightTransfer
@@ -67,11 +68,11 @@ test('lane starters are things a person would say, about the lanes and cards tha
   assert.deepEqual(workshopStarters(createBudgetWorkshop()).map(item => item.text),
     ['Move Third $200 to Customer calls', 'Let Unallocated hold two cards', 'Add a card called New idea to Unallocated'])
   assert.deepEqual(workshopStarters(createLaneWorkshop()).map(item => item.text),
-    ['Add a lane called Later', 'Let Lane 1 hold two cards', 'Add a card called New idea to Lane 1'])
+    ['Add a column called Later', 'Let Lane 1 hold two cards', 'Add a card called New idea to Lane 1'])
   assert.deepEqual(workshopStarters(createBudgetWorkshop(), { kind: 'card', id: 'fund-2' }).map(item => item.text),
     ['Move this to Customer calls', 'Rename this card to Review notes', 'Remove this card'])
   assert.deepEqual(workshopStarters(createLaneWorkshop(), { kind: 'lane', id: 'lane-2' }).map(item => item.text),
-    ['Add a card called New idea here', 'Rename this lane to Ready', 'Let this lane hold two cards'])
+    ['Add a card called New idea here', 'Rename this column to Ready', 'Let this column hold two cards'])
   for (const model of [...Object.values(lanes), ...Object.values(maps)]) {
     for (const selection of selections(model)) {
       const offered = workshopStarters(model, selection)

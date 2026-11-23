@@ -47,9 +47,9 @@ function laneStarters(model, selection) {
   if (selected) {
     return [
       starter('Add a card called New idea here', 'New idea'),
-      starter('Rename this lane to ' + (release ? 'Next release' : 'Ready'), release ? 'Next release' : 'Ready'),
-      starter(release ? 'Give this lane 12 points' : 'Let this lane hold two cards'),
-      starter('Present this lane first'),
+      starter('Rename this column to ' + (release ? 'Next release' : 'Ready'), release ? 'Next release' : 'Ready'),
+      starter(release ? 'Give this column 12 points' : 'Let this column hold two cards'),
+      starter('Present this column first'),
     ]
   }
   const fresh = ['Later', 'Review', 'Done', 'Next'].find(name => !model.lanes.some(lane => lane.label.toLowerCase() === name.toLowerCase()))
@@ -57,7 +57,7 @@ function laneStarters(model, selection) {
   const [card, to] = [...held(model.lanes[0]).reverse(), ...model.cards].map(moveOf).find(Boolean) ?? []
   const roomy = model.lanes.find(lane => lane.capacity === undefined && held(lane).length <= 2) ?? model.lanes[0]
   return [
-    ...(fresh ? [starter('Add a lane called ' + fresh, fresh)] : []),
+    ...(fresh ? [starter('Add a column called ' + fresh, fresh)] : []),
     ...(card ? [starter('Move ' + cardName(card) + ' to ' + laneName(to))] : []),
     starter(release ? 'Give ' + laneName(model.lanes[0]) + ' 12 points' : 'Let ' + laneName(roomy) + ' hold two cards'),
     starter('Add a card called New idea to ' + laneName(model.lanes[0]), 'New idea'),

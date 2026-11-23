@@ -93,5 +93,5 @@ test("add_rule travels through workshop_edits: the rule moves nothing, bumps rev
   assert.equal(board.behaviour.rules[1].set.via, "exec");
   const skip = await edit([{ kind: "move_card", card: "Billing", lane: "Done" }], 2);
   assert.equal(skip.ok, false);
-  assert.match(JSON.stringify(skip.error), /Cards move one lane at a time\. Billing is in To do, so Doing comes first\./);
+  assert.match(JSON.stringify(skip.error), /Cards move one column at a time\. Billing is in To do, so Doing comes first\./);
 });

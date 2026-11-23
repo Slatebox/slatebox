@@ -9,6 +9,8 @@ import AddStrip,{AddShort} from './library/AddStrip'
 import ChatTurn,{ChatThinking} from './ChatTurn'
 import {keptReply} from '../../api/common/chat-words.mjs'
 import {loadLibrary} from './library/libraryBus'
+import BoardRules from './workshop/BoardRules'
+import {previewKeepSentence} from '../../api/common/conversation-preview.mjs'
 
 // The library (a view inside this conversation) and its cards: the library chunk, loaded on demand.
 const LibraryView=lazy(loadLibrary)
@@ -249,13 +251,12 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
         <ul>{draft.removed.map(r=><li key={r.id}>{r.text}</li>)}</ul>
       </Box>}
       {!draft.component && draft.capacities?.map(l=><Typography variant="body2" key={l.label}>{l.label} holds up to {l.capacity} cards.</Typography>)}
-      {draft.rules?.length>0 && <Box component="section" aria-label="How this board behaves">
-        <Typography variant="body2" sx={{fontWeight:600}}>How this board behaves</Typography>
-        <ul>{draft.rules.map(line=><li key={line}>{line}</li>)}</ul>
-      </Box>}
-      {draft.format==='lanes' && <Typography variant="body2">{draft.component ? 'Drag notes onto it after Keep: each becomes a card.' : 'Add your cards in the workshop after Keep.'}</Typography>}
+      {/* The board's rules as the chips it draws above itself on the canvas (boardLegend): the chat and the canvas say the same. */}
+      {draft.canvas?.workshop && <BoardRules workshop={draft.canvas.workshop} />}
+      {draft.format==='lanes' && !draft.component && <Typography variant="body2">Add your cards in the workshop after Keep.</Typography>}
       {draft.said && <Typography variant="body2">{draft.said.replace(/^Added /,'Keep this to add ')}.</Typography>}
-      {draft.mode==='play' && draft.format!=='lanes' && !draft.said && <Typography variant="body2">Keep this to play the route alongside your original drawing.</Typography>}
+      {/* What Keep does, in the board's own words: "play the route" is a map's only. */}
+      {!draft.said && (draft.component || draft.mode==='play') && previewKeepSentence(draft) && <Typography variant="body2">{previewKeepSentence(draft)}</Typography>}
       {draft.warnings?.map(w=><Typography variant="body2" key={w.rule} role="note" color="warning.main">{WARNINGS[w.rule]?.(w.count)}</Typography>)}
       </Box></ChatTurn>
     </Box>}

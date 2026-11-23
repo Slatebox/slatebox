@@ -42,8 +42,8 @@ test('“make that a rule” adds a rule that moves nothing: Review shows 3 of 2
 })
 
 test('the D1 phrases: one lane at a time, a path, a bin, warn instead, off, removed', () => {
-  const step = say(bare, 'Cards move one lane at a time').workshop
-  assert.throws(() => say(step, 'Move Billing to Review'), /Cards move one lane at a time\. Billing is in To do, so Doing comes first\./)
+  const step = say(bare, 'Cards move one column at a time').workshop
+  assert.throws(() => say(step, 'Move Billing to Review'), /Cards move one column at a time\. Billing is in To do, so Doing comes first\./)
   const path = say(bare, 'From Doing, cards go only to Review').workshop
   assert.equal(path.behaviour.rules.at(-1).kind, 'path')
   assert.throws(() => say(path, 'Move Search to Done'), /From Doing, cards go only to Review\./)
@@ -65,7 +65,7 @@ test('“How does this board behave?” and “Why can’t I move X?” are answ
   const kept = say(team, 'Review holds 2').workshop
   const how = say(kept, 'How does this board behave?')
   assert.equal(how.workshop, undefined)
-  assert.equal(how.reply, 'How this board behaves:\n• Cards move one lane at a time.\n• Doing holds 3.\n• Won\'t do archives cards: they stay on the board, never deleted.\n• Review holds 2.')
+  assert.equal(how.reply, 'How this board behaves:\n• Cards move one column at a time.\n• Doing holds 3.\n• Won\'t do archives cards: they stay on the board, never deleted.\n• Review holds 2.')
   const why = say(kept, 'Why can’t I move Search to Review?')
   assert.match(why.reply, /^Review holds 2\. It has 3\. Tim set that rule on \d{1,2} [A-Z][a-z]{2}\. Search can go to To do instead\.$/)
   assert.equal(say(kept, 'Why can’t I move Billing to Doing?').reply, 'Billing can move to Doing.')

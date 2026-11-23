@@ -27,7 +27,8 @@ export function WorkshopStatus({ board, docked = false, conversationOpen = false
   // name never covers "Join to edit" or another of its buttons.
   const place = docked
     ? { flexShrink: 0, minWidth: 0, borderRadius: 0, borderTop: 1, borderColor: 'divider', position: 'relative', zIndex: 2 }
-    : { position: 'absolute', bottom: 12, left: 12, zIndex: 5, maxWidth: 'min(420px, calc(100% - 24px))', borderRadius: 2 }
+    // Above the zoom control, which has the canvas's bottom-left corner (board polish), clear of the add button at the right.
+    : { position: 'absolute', bottom: 60, left: 12, zIndex: 5, maxWidth: 'min(420px, calc(100% - 24px))', borderRadius: 2 }
   return <Paper elevation={docked ? 0 : 2} role="group" aria-label="Workshop" sx={{ ...place,
     display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, px: 1.5, py: .75 }}>
     {canJoin && <>

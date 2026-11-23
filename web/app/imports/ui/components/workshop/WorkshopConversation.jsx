@@ -15,6 +15,8 @@ import ChatTurn, { ChatThinking } from '../ChatTurn'
 import { loadLibrary } from '../library/libraryBus'
 import { pickBoard, whichBoard } from '../../../api/common/board-pick.mjs'
 import { MAX_BOARDS } from '../../../api/common/slate-boards.mjs'
+import BoardRules from './BoardRules'
+import { previewKeepSentence } from '../../../api/common/conversation-preview.mjs'
 
 const LibraryView = lazy(loadLibrary)
 const LibraryCards = lazy(() => loadLibrary().then(m => ({ default: m.LibraryCards })))
@@ -488,9 +490,10 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
         : drawing.mode === 'play' ? 'Interactive route' : drawing.labels.length === 1 ? '1 note for the slate' : drawing.labels.length + ' notes for the slate'}</Typography>
       <Typography variant="body2">{drawingStale ? 'Your drawing changed after this preview, so it is no longer shown. Discard it and ask again on the drawing as it is now.'
         : 'Shown on the canvas with dashed outlines. Nothing is added until you keep it.'}</Typography>
-      {drawing.component ? drawing.rules?.length > 0 && <Box component="section" aria-label="How this board behaves">
-        {drawing.rules.map(line => <Typography key={line} variant="body2">{line}</Typography>)}</Box>
+      {drawing.component ? drawing.canvas?.workshop && <BoardRules workshop={drawing.canvas.workshop} />
         : <ul>{drawing.labels.map((label, i) => <li key={i}>{label}</li>)}</ul>}
+      {/* What Keep does, in the board's own words: "play the route" is a map's only. */}
+      {!drawingStale && (drawing.component || drawing.mode === 'play') && previewKeepSentence(drawing) && <Typography variant="body2">{previewKeepSentence(drawing)}</Typography>}
       </Box></ChatTurn>
     </Box> : preview && <Box aria-label={map ? 'Review proposed map' : 'Review proposed workshop'} aria-live="polite" sx={{ my: 2 }}>
       <Typography sx={{ fontWeight: 600 }}>{stale ? map ? 'A teammate changed this map.' : 'A teammate changed the workshop.' : orderChanged ? 'Proposed presentation order' : 'Preview · shown on the canvas'}</Typography>

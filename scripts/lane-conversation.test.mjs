@@ -116,7 +116,7 @@ test('cards and empty lanes can be removed, with everything that pointed at them
     assert.deepEqual(next.presentationOrder,[lane(week,'Now').id,lane(week,'Next').id],message)
   },board)
   assert.throws(()=>edit(week,'Remove the lane Now'),/“Now” holds 2 cards\. Move or remove them first\./)
-  assert.throws(()=>edit(createLaneWorkshop(),'Delete Lane 2'),/at least two lanes/)
+  assert.throws(()=>edit(createLaneWorkshop(),'Delete Lane 2'),/at least two columns/)
   assert.deepEqual(week.cards.map(item=>item.label),['Call Sam','Write the brief','Book the room'],'the source is untouched')
 })
 
@@ -130,7 +130,7 @@ test('“this” is the lane or card selected on the canvas, and asks for a sele
   each(['Let this lane hold two cards','This holds 2'],(next,message)=>assert.equal(lane(next,'Later').capacity,2,message),week,later)
   assert.equal(edit(week,'Remove this lane',later).lanes.length,2)
   assert.throws(()=>edit(week,'Move this to Next'),/Select a card on the canvas first, or use its name\./)
-  assert.throws(()=>edit(week,'Remove this'),/Select a lane or a card on the canvas first, or use its name\./)
+  assert.throws(()=>edit(week,'Remove this'),/Select a column or a card on the canvas first, or use its name\./)
 })
 
 test('a name is read as a person would say it, and a reply says what is there when it picks nothing or too much', () => {
@@ -159,7 +159,7 @@ test('a name is read as a person would say it, and a reply says what is there wh
 
 test('limits, layouts and rules are refused in plain words', () => {
   assert.throws(()=>edit(week,'Let Now hold one card'),/“Now” already holds 2 cards\. Move some out first, or choose a higher number\./)
-  assert.throws(()=>edit(week,'Let Now hold zero cards'),/A lane can hold from 1 to 24 cards\./)
+  assert.throws(()=>edit(week,'Let Now hold zero cards'),/A column can hold from 1 to 24 cards\./)
   assert.throws(()=>edit(week,'Call Sam can only go in Later'),/“Call Sam” is in “Now” now\. Include “Now”, or move the card first\./)
   const full = edit(week,'Next holds 1')
   assert.throws(()=>edit(full,'Add a card called Email Jo to Next'),/“Next” is full: it holds 1 card\./)
@@ -200,10 +200,10 @@ test('the same things said other ways: names first, lanes by their place, severa
   each(['Add a card to Next called Email Jo','Add a card in Next: Email Jo','Create a card for Email Jo in Next','Add a task called Email Jo to Next','Add an item called Email Jo to Next'],
     (next,message)=>assert.deepEqual([next.cards.at(-1).label,next.cards.at(-1).laneId],['Email Jo',lane(week,'Next').id],message))
   // Half a request is answered with the other half to give, not with a card called “to Next”.
-  assert.throws(()=>edit(week,'Add a lane'),/Give the lane a name, such as “Add a lane called Later”\./)
+  assert.throws(()=>edit(week,'Add a lane'),/Give the column a name, such as “Add a column called Later”\./)
   // (Restated 2026-11-21, owner decision: a card may be empty. "Add a card to Next" adds an empty card;
   // "Add a card" asks only which lane.)
-  assert.throws(()=>edit(week,'Add a card'),/Say which lane the card goes in/)
+  assert.throws(()=>edit(week,'Add a card'),/Say which column the card goes in/)
   assert.deepEqual([edit(week,'Add a card to Next').cards.at(-1).label, edit(week,'Add a card to Next').cards.at(-1).laneId], ['', lane(week,'Next').id])
   each(['Now should be called Today','Call Now Today','Call the Now lane Today','Name the Now lane Today','Change the name of Now to Today','Change the name of the Now lane to Today','Rename the first lane to Today','Rename lane 1 to Today'],
     (next,message)=>assert.equal(next.lanes[0].label,'Today',message))
@@ -252,7 +252,7 @@ test('money and features are moved in the words people use for them', () => {
 test('a proposal comes with what to say back', () => {
   assert.equal(proposeLaneReply(createBudgetWorkshop(),'Move Third $200 to Customer calls').reply,'Moved “Third $200” to “Customer calls · $50 per call”.')
   assert.equal(proposeLaneReply(week,'Let Now hold two cards').reply,'“Now” now holds up to 2 cards.')
-  assert.equal(proposeLaneReply(week,'Add a lane called Blocked').reply,'Added the lane “Blocked”.')
+  assert.equal(proposeLaneReply(week,'Add a lane called Blocked').reply,'Added the column “Blocked”.')
 })
 
 test('a request for ordinary notes is understood and handed to the drawing; a note for a lane is a card there', () => {

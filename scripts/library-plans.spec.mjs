@@ -71,9 +71,10 @@ async function freshSlate(browser, viewport) {
   return { context, page, errors }
 }
 
+// Board polish: `line` is read from the board's chrome (its title or a rule's chip), not a rules note.
 async function addFromLibrary(page, message, line) {
   await say(page, message)
-  await expect(panel(page).getByText('How this board behaves').first()).toBeVisible({ timeout: 60000 })
+  await expect(panel(page).getByRole('region', { name: 'Rules' }).first()).toBeVisible({ timeout: 60000 })
   await panel(page).getByRole('button', { name: 'Keep changes' }).click()
   await expect(page.locator('[data-creative-revision]')).toBeVisible({ timeout: 60000 })
   await expect.poll(() => canvasText(page), { timeout: 30000 }).toContain(line)
@@ -81,7 +82,7 @@ async function addFromLibrary(page, message, line) {
 
 test('launch plan: a slip pushes and stops at the line; chat makes the line soft, then makes a slip stop at what waits on it; a freeze is hopped', async ({ browser }) => {
   const { context, page, errors } = await freshSlate(browser)
-  await addFromLibrary(page, 'Add a launch plan', 'Launch is a hard line: every task ends by ' + name(18) + '.')
+  await addFromLibrary(page, 'Add a launch plan', 'Hard line')
   // Working days from the next Monday: QA's last day is the third Tuesday; launch is the third Friday.
   await expect.poll(() => canvasText(page)).toContain('Done ' + name(15) + ' · launch ' + name(18))
   const design = await box(page, 'card-design')

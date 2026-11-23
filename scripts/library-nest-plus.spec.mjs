@@ -64,9 +64,10 @@ async function freshSlate(browser, viewport) {
   return { context, page, errors }
 }
 
+// Board polish: `line` is read from the board's chrome (its title or a rule's chip), not a rules note.
 async function addFromLibrary(page, message, line) {
   await say(page, message)
-  await expect(panel(page).getByText('How this board behaves').first()).toBeVisible({ timeout: 60000 })
+  await expect(panel(page).getByRole('region', { name: 'Rules' }).first()).toBeVisible({ timeout: 60000 })
   await panel(page).getByRole('button', { name: 'Keep changes' }).click()
   await expect(page.locator('[data-creative-revision]')).toBeVisible({ timeout: 60000 })
   await expect.poll(() => canvasText(page), { timeout: 30000 }).toContain(line)
@@ -81,7 +82,7 @@ async function whatCanThisDo(page, phrase) {
 
 test('impact × effort: a fourth idea into Do now is refused; "Do now holds 4" is kept; the same drag lands and stays after a reload', async ({ browser }) => {
   const { context, page, errors } = await freshSlate(browser)
-  await addFromLibrary(page, 'Add an impact × effort board', 'Do now holds 3.')
+  await addFromLibrary(page, 'Add an impact × effort board', 'Impact × effort')
   await whatCanThisDo(page, 'Plan it holds 2')
   const billing = await box(page, 'card-billing')
   const square = await box(page, 'column-q-do-now')
@@ -115,7 +116,7 @@ test('impact × effort: a fourth idea into Do now is refused; "Do now holds 4" i
 
 test('reorg sandbox: a drag under an open role is refused; a manager dragged under another VP brings the whole team', async ({ browser }) => {
   const { context, page, errors } = await freshSlate(browser)
-  await addFromLibrary(page, 'Add a reorg & hiring sandbox', 'Open roles don’t manage.')
+  await addFromLibrary(page, 'Add a reorg & hiring sandbox', 'Open roles don’t manage')
   await whatCanThisDo(page, 'Engineers don’t manage')
   const tom = await box(page, 'card-tom')
 
@@ -167,7 +168,7 @@ test('reorg sandbox: a drag under an open role is refused; a manager dragged und
 
 test('goals & owners: a key result dropped on another team is flagged cross-team; after "bring its initiatives along" the next drop carries them', async ({ browser }) => {
   const { context, page, errors } = await freshSlate(browser)
-  await addFromLibrary(page, 'Add a goals & owners board', 'Initiatives sit under a key result.')
+  await addFromLibrary(page, 'Add a goals & owners board', 'Initiatives sit under a key result')
   await whatCanThisDo(page, 'When I move a key result, bring its initiatives along')
   await says(page, 'Platform 3 cards')
 
@@ -219,7 +220,7 @@ test('the library in Ask Slatebox lists all three, each with its looping picture
 
 test('on a phone (390) Impact × effort is a square that fits, with every scored idea inside it', async ({ browser }) => {
   const { context, page, errors } = await freshSlate(browser, { width: 390, height: 844 })
-  await addFromLibrary(page, 'Add an impact × effort board', 'Do now holds 3.')
+  await addFromLibrary(page, 'Add an impact × effort board', 'Impact × effort')
   await page.waitForTimeout(1500)
   const squares = await Promise.all(['do-now', 'plan', 'later', 'skip'].map(id => box(page, 'column-q-' + id)))
   const left = Math.min(...squares.map(b => b.x)), right = Math.max(...squares.map(b => b.x + b.width))

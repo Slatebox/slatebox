@@ -25,7 +25,7 @@ export const laneEditFormats = [
 
 /** A message that is not one of the things a workshop conversation can do. */
 function notUnderstood() {
-  const error = Error('I did not follow that. I can add, rename, move and remove lanes and cards, and set how many cards a lane holds.')
+  const error = Error('I did not follow that. I can add, rename, move and remove columns and cards, and set how many cards a column holds.')
   error.code = 'not-understood'
   return error
 }
@@ -146,7 +146,7 @@ function change(board, message, selection) {
     if (amount === 1) {
       if (board.cards.length >= 24) throw Error('A workshop can have up to 24 cards. Remove one first.')
       if (target.capacity !== undefined && board.cards.filter(item => item.laneId === target.id).length >= target.capacity) {
-        throw Error(said(target.label) + ' is full: it holds ' + target.capacity + (target.capacity === 1 ? ' card' : ' cards') + '. Add the card to another lane, or raise the limit.')
+        throw Error(said(target.label) + ' is full: it holds ' + target.capacity + (target.capacity === 1 ? ' card' : ' cards') + '. Add the card to another column, or raise the limit.')
       }
       return done(addWorkshopCard(board, target.id, { label: '' }), 'Added an empty card to ' + said(target.label) + '.')
     }
@@ -166,18 +166,18 @@ function change(board, message, selection) {
   const cardNoun = '(?:card|note|feature|task|item|idea|ticket|sticky note|sticky|to-?do)'
   if (is('(?:add|create|make|start|new)\\s+' + another + '(?:lane|column|list)')) {
     if (release) throw Error('A release plan keeps the releases it came with. You can rename them and set how many points each holds.')
-    throw Error('Give the lane a name, such as “Add a lane called Later”.')
+    throw Error('Give the column a name, such as “Add a column called Later”.')
   }
   if (is('(?:add|create|make|new)\\s+' + another + cardNoun)) {
     if (release) throw Error('A release plan keeps the features it came with. You can rename them, move them and set their points.')
-    throw Error('Say which lane the card goes in, such as “Add a card to ' + board.lanes[0].label + '”, or what it says: “Add a card called New idea”.')
+    throw Error('Say which column the card goes in, such as “Add a card to ' + board.lanes[0].label + '”, or what it says: “Add a card called New idea”.')
   }
   if ((m = is('(?:add|create|make|start|new)\\s+(?:(?:a new|another|one more|a|an|new)\\s+)?(?:lane|column|list)(?:\\s+(?:called|named|titled|labell?ed|for))?\\s*[:,-]?\\s+(.+)'))) {
     const limited = new RegExp('^(.+?),?\\s+(?:(?:that|which)\\s+)?(?:holds?|can hold|takes?|with (?:room|space|a limit|a capacity) (?:for|of))\\s+' + atMost + N + things + '$', 'i').exec(m[1])
     const label = named(limited ? limited[1] : m[1])
     if (release) throw Error('A release plan keeps the releases it came with. You can rename them and set how many points each holds.')
-    if (board.lanes.length >= 5) throw Error('A workshop can have up to five lanes. Remove one first.')
-    return done(addWorkshopLane(board, { label, ...(limited && { capacity: count(limited[2]) }) }), 'Added the lane ' + said(label) + '.')
+    if (board.lanes.length >= 5) throw Error('A workshop can have up to five columns. Remove one first.')
+    return done(addWorkshopLane(board, { label, ...(limited && { capacity: count(limited[2]) }) }), 'Added the column ' + said(label) + '.')
   }
   if ((m = is('(?:add|create|make|new|put|write)\\s+' + another + cardNoun + '(?:\\s+(?:(called|named|titled|labell?ed|saying)|for))?\\s*[:,-]?\\s+(.+)'))) {
     return addCard(m[2], Boolean(m[1]))
@@ -185,9 +185,9 @@ function change(board, message, selection) {
   // “Add a Done lane”: the name comes first. (A name that holds “to” or “in” is read below, as a card for a lane.)
   if ((m = is('(?:add|create|make|start)\\s+(?:a new|another|one more|a|an|new)\\s+(.+?)\\s+(?:lane|column)')) && !/\b(?:to|in|into|under|on)\b/i.test(m[1])) {
     if (release) throw Error('A release plan keeps the releases it came with. You can rename them and set how many points each holds.')
-    if (board.lanes.length >= 5) throw Error('A workshop can have up to five lanes. Remove one first.')
+    if (board.lanes.length >= 5) throw Error('A workshop can have up to five columns. Remove one first.')
     const label = named(m[1])
-    return done(addWorkshopLane(board, { label }), 'Added the lane ' + said(label) + '.')
+    return done(addWorkshopLane(board, { label }), 'Added the column ' + said(label) + '.')
   }
 
   // The workshop's own name.
@@ -231,7 +231,7 @@ function change(board, message, selection) {
       (m = is('(?:limit|cap)\\s+(.+?)\\s+(?:to|at)\\s+' + atMost + N + things)) ||
       (m = is('(?:increase|raise|lower|decrease|reduce|bump)\\s+(.+?)\\s+(?:to|at)\\s+' + atMost + N + things)) ||
       (m = is('(?:set|change)\\s+(.+?)\\s+(?:to|at)\\s+' + atMost + N + '\\s+(?:cards?|points?|items?)')) && (lanes.attempt(m[1]) || cards.attempt(m[1]))) {
-    if (!release && /\bpoints?$/i.test(message.replace(/[.!]$/, '')) && cards.attempt(m[1]) && !lanes.attempt(m[1])) throw Error('This workshop counts cards, not points. You can set how many cards a lane holds.')
+    if (!release && /\bpoints?$/i.test(message.replace(/[.!]$/, '')) && cards.attempt(m[1]) && !lanes.attempt(m[1])) throw Error('This workshop counts cards, not points. You can set how many cards a column holds.')
     // On a release plan “Sign-in takes 3 points” is about a feature, not a release.
     const feature = release && !lanes.attempt(m[1]) && cards.attempt(m[1])
     return feature ? setPoints(feature, count(m[2])) : setLimit(lane(m[1]), count(m[2]))
@@ -246,7 +246,7 @@ function change(board, message, selection) {
       (m = is('(?:make|give|estimate|size)\\s+(.+?)\\s+(?:at\\s+)?' + N + '\\s+points?')) ||
       // “Billing is a 5”, “Estimate Billing at 5”: only where features have points.
       release && ((m = is('(.+?)\\s+is\\s+an?\\s+(\\d+)')) || (m = is('(?:estimate|size|score)\\s+(.+?)\\s+(?:at|as)\\s+' + N))) && cards.attempt(m[1])) {
-    if (!release) throw Error('This workshop counts cards, not points. You can set how many cards a lane holds.')
+    if (!release) throw Error('This workshop counts cards, not points. You can set how many cards a column holds.')
     // “Give This week 12 points” is the release's budget.
     const budgeted = !cards.attempt(m[1]) && lanes.attempt(m[1])
     return budgeted ? setLimit(budgeted, count(m[2])) : setPoints(card(m[1]), count(m[2]))
@@ -305,7 +305,7 @@ function change(board, message, selection) {
       (m = is('(.+?)\\s+(?:can|may|should be able to)\\s+(?:go|be|move|sit)\\s+' + anywhere))) {
     const target = card(m[1])
     delete target.allowedLaneIds
-    return done(board, said(target.label) + ' can now go in any lane.')
+    return done(board, said(target.label) + ' can now go in any column.')
   }
   const rest = '(?:go|be|move|sit|stay)'
   if ((m = is('(?:only\\s+)?(?:allow|let|permit|keep|restrict|limit)\\s+(.+?)\\s+(?:(?:to\\s+)?' + rest + '\\s+)?(?:only\\s+)?(?:in|to|into)\\s+(.+)')) ||
@@ -341,7 +341,7 @@ function change(board, message, selection) {
     if (options.length) {
       // Nothing by that name: say so, with the names that are here.
       const [before] = options[0]
-      if (pointing.test(unquoted(before))) throw Error('Select a lane or a card on the canvas first, or use its name.')
+      if (pointing.test(unquoted(before))) throw Error('Select a column or a card on the canvas first, or use its name.')
       if (/^(?:the\s+)?(?:card|feature|note)\s/i.test(before)) card(before)
       lane(before)
     }
@@ -427,8 +427,8 @@ function change(board, message, selection) {
     if (chosen.length && chosen.every(Boolean)) return removeAll([...new Set(chosen)])
     if (kind === 'lane') lane(m[2])
     if (kind === 'card') card(m[2])
-    if (pointing.test(unquoted(m[2]))) throw Error('Select a lane or a card on the canvas first, or use its name.')
-    if (m[2].trim().split(/\s+/).length <= 5) throw Error('There is no lane or card called ' + said(unquoted(m[2])) + ' here.')
+    if (pointing.test(unquoted(m[2]))) throw Error('Select a column or a card on the canvas first, or use its name.')
+    if (m[2].trim().split(/\s+/).length <= 5) throw Error('There is no column or card called ' + said(unquoted(m[2])) + ' here.')
   }
   throw notUnderstood()
 
@@ -445,7 +445,7 @@ function change(board, message, selection) {
       return done(board, said(target.label) + ' now holds any number of ' + unit + 's.')
     }
     const most = release ? 576 : 24
-    if (amount < 1 || amount > most) throw Error('A lane can hold from 1 to ' + most + ' ' + unit + 's.')
+    if (amount < 1 || amount > most) throw Error('A column can hold from 1 to ' + most + ' ' + unit + 's.')
     const held = release ? board.cards.reduce((sum, item) => sum + (item.laneId === target.id ? item.points ?? 1 : 0), 0)
       : board.cards.filter(item => item.laneId === target.id).length
     if (held > amount) throw Error(said(target.label) + ' already holds ' + held + ' ' + unit + (held === 1 ? '' : 's') + '. Move some out first, or choose a higher number.')
@@ -458,7 +458,7 @@ function change(board, message, selection) {
     if (release) throw Error('A release plan keeps the features it came with. You can rename them, move them and set their points.')
     if (board.cards.length >= 24) throw Error('A workshop can have up to 24 cards. Remove one first.')
     const full = target.capacity !== undefined && board.cards.filter(item => item.laneId === target.id).length >= target.capacity
-    if (full) throw Error(said(target.label) + ' is full: it holds ' + target.capacity + (target.capacity === 1 ? ' card' : ' cards') + '. Add the card to another lane, or raise the limit.')
+    if (full) throw Error(said(target.label) + ' is full: it holds ' + target.capacity + (target.capacity === 1 ? ' card' : ' cards') + '. Add the card to another column, or raise the limit.')
     // Without words it is an empty card, as an empty note dropped on the lane is.
     return done(addWorkshopCard(board, target.id, { label: label ?? '' }), 'Added ' + (label ? said(label) : 'an empty card') + ' to ' + said(target.label) + '.')
   }
@@ -596,7 +596,7 @@ function change(board, message, selection) {
     const held = board.cards.filter(item => item.laneId === gone.id).length
     if (held) throw Error(said(gone.label) + ' holds ' + held + (held === 1 ? ' card' : ' cards') + '. Move or remove ' + (held === 1 ? 'it' : 'them') + ' first.')
     if (release) throw Error('A release plan keeps the releases it came with. You can rename them and set how many points each holds.')
-    if (board.lanes.length <= 2) throw Error('A workshop needs at least two lanes.')
+    if (board.lanes.length <= 2) throw Error('A workshop needs at least two columns.')
     board.lanes = board.lanes.filter(item => item !== gone)
     if (board.presentationOrder) board.presentationOrder = board.presentationOrder.filter(id => id !== gone.id)
     for (const item of board.cards) if (item.allowedLaneIds) item.allowedLaneIds = item.allowedLaneIds.filter(id => id !== gone.id)
@@ -606,7 +606,7 @@ function change(board, message, selection) {
     }
     // A lane removed takes the rules that named it (the reducer's remove_lane does the same).
     if (board.behaviour) board.behaviour = rulebook().dropLane(board.behaviour, gone.id)
-    return done(board, 'Removed the lane ' + said(gone.label) + '.')
+    return done(board, 'Removed the column ' + said(gone.label) + '.')
   }
 }
 
@@ -628,7 +628,7 @@ function aboutTheBoard(message, selection) {
   // Said of a lane or a card while the board is in focus: read as "Rename this lane to …", which asks
   // for the lane (or card) to be selected, as it does without the board in focus.
   const part = /^(?:call|name|title)\s+this\s+(?:(lanes?|columns?|lists?|stages?|stations?|rows?)|(cards?|notes?|items?|tasks?|features?|steps?|tokens?))\s+(.+)$/i.exec(text)
-  return part ? 'Rename this ' + (part[1] ? 'lane' : 'card') + ' to ' + part[3] : text
+  return part ? 'Rename this ' + (part[1] ? 'column' : 'card') + ' to ' + part[3] : text
 }
 
 function propose(input, asked, selection, actor) {

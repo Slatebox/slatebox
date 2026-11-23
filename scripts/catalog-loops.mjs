@@ -41,7 +41,7 @@ export function loopCaption(entry) {
     case 'reorg-sandbox': return behaviourLines(board).find(line => /^Open roles/.test(line))
     case 'goals-owners': return behaviourLines(board).find(line => /^A card is owned/.test(line))
     // A lane board or the pipeline: a line of its own "How this board behaves" note (a limit, the one the loop shows).
-    default: return behaviourLines(board).filter(line => / holds \d+\.$/.test(line)).at(-1) ?? 'No rules: any card goes in any lane.'
+    default: return behaviourLines(board).filter(line => / holds \d+\.$/.test(line)).at(-1) ?? 'No rules: any card goes in any column.'
   }
 }
 

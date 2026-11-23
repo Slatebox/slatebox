@@ -60,9 +60,10 @@ async function freshSlate(browser, viewport) {
   return { context, page, errors }
 }
 
+// Board polish: `line` is read from the board's chrome (its title or a rule's chip), not a rules note.
 async function addFromLibrary(page, message, line) {
   await say(page, message)
-  await expect(panel(page).getByText('How this board behaves').first()).toBeVisible({ timeout: 60000 })
+  await expect(panel(page).getByRole('region', { name: 'Rules' }).first()).toBeVisible({ timeout: 60000 })
   await panel(page).getByRole('button', { name: 'Keep changes' }).click()
   await expect(page.locator('[data-creative-revision]')).toBeVisible({ timeout: 60000 })
   await expect.poll(() => canvasText(page), { timeout: 30000 }).toContain(line)
@@ -70,14 +71,14 @@ async function addFromLibrary(page, message, line) {
 
 test('discovery tree: a solution dragged onto the outcome is refused; chat changes the rule (diff, Keep); the same drag lands, and stays after a reload', async ({ browser }) => {
   const { context, page, errors } = await freshSlate(browser)
-  await addFromLibrary(page, 'Add a discovery tree', 'Solutions sit under an opportunity.')
+  await addFromLibrary(page, 'Add a discovery tree', 'Solutions sit under an opportunity')
   const csv = await box(page, 'card-csv-import')
   const outcome = await box(page, 'card-outcome')
   const opportunity = await box(page, 'card-slow-onboarding')
 
   // 1. Onto the outcome: refused, in the rule's words, and CSV import goes back where it was.
   await dragTo(page, 'card-csv-import', { x: outcome.x + outcome.width / 2, y: outcome.y + outcome.height / 2 })
-  await says(page, 'Solutions sit under an opportunity.')
+  await says(page, 'Solutions sit under an opportunity')
   await expect.poll(async () => Math.abs((await box(page, 'card-csv-import')).y - csv.y)).toBeLessThan(3)
 
   // 2. "Let solutions sit under the outcome for now": a rules diff, kept; nothing moved.
@@ -105,7 +106,7 @@ test('discovery tree: a solution dragged onto the outcome is refused; chat chang
 
 test('sort the evidence: a note carried to another pile, a far drop starts a pile, "Weight by ARR" re-ranks', async ({ browser }) => {
   const { context, page, errors } = await freshSlate(browser)
-  await addFromLibrary(page, 'Add a board to sort the evidence', 'Piles rank by number of customers.')
+  await addFromLibrary(page, 'Add a board to sort the evidence', 'Piles rank by number of customers')
   await expect.poll(() => canvasText(page)).toContain('Onboarding')
   const onboarding = await box(page, 'card-onboarding')
 
@@ -136,7 +137,7 @@ test('sort the evidence: a note carried to another pile, a far drop starts a pil
 // A sentence that changes a rule and the cards at once, and a merge, are kept, drawn, and still there after a reload.
 test('sort the evidence by chat: "Group … into Money" and a merge are kept, drawn, and survive a reload', async ({ browser }) => {
   const { context, page, errors } = await freshSlate(browser)
-  await addFromLibrary(page, 'Add a board to sort the evidence', 'Piles rank by number of customers.')
+  await addFromLibrary(page, 'Add a board to sort the evidence', 'Piles rank by number of customers')
   await expect.poll(() => canvasText(page)).toContain('Onboarding')
 
   // 1. A rule and the cards in one sentence: the depth rule is raised, a Money card is made, Pricing and Reporting go under it.
@@ -168,7 +169,7 @@ test('sort the evidence by chat: "Group … into Money" and a merge are kept, dr
 
 test('on a phone (390) a nested board is an outline: rows one under another, a note indented under its pile', async ({ browser }) => {
   const { context, page, errors } = await freshSlate(browser, { width: 390, height: 844 })
-  await addFromLibrary(page, 'Add a board to sort the evidence', 'Piles rank by number of customers.')
+  await addFromLibrary(page, 'Add a board to sort the evidence', 'Piles rank by number of customers')
   await page.waitForTimeout(1500)
   const rows = await Promise.all(['card-onboarding', 'card-setup-days', 'card-where-start', 'card-reporting'].map(id => box(page, id)))
   expect(rows.every(Boolean)).toBe(true)

@@ -64,7 +64,7 @@ function question(board, text) {
     const who = set ? (set.via === 'preset' ? ' That rule came with the board.' : ' ' + set.by + ' set that rule' + (day(set.at) ? ' on ' + day(set.at) : '') + '.') : ''
     return sentence + who + (nearest && m[2] ? ' ' + card.label + ' can go to ' + nearest + ' instead.' : '')
   }).filter(Boolean)
-  return { reply: answers.length ? answers.join('\n') : card.label + ' can move to any lane.' }
+  return { reply: answers.length ? answers.join('\n') : card.label + ' can move to any column.' }
 }
 
 /** A sentence about the rules: the edits it makes, or null when it is not one. */

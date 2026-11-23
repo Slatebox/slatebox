@@ -17,9 +17,11 @@ import { workshopToSlate } from 'slateboxjs/workshops/model'
 
 export const PREVIEW_PREFIX = 'preview-'
 export const PREVIEW_CAPTION = PREVIEW_PREFIX + 'caption'
-export const PREVIEW_CAPTION_TEXT = 'Preview · not kept yet'
-const accent = '#2f5fd0'
-const provisional = { borderStyle: 'dashed', borderWidth: 2, borderColor: accent, opacity: 0.72 }
+// The same words and colours the engine's draft frame uses (DRAFT_TAG): the brand's amber, with dark-green ink.
+export const PREVIEW_CAPTION_TEXT = 'Preview · not added yet'
+const accent = '#8a6a1f'
+const tag = { fill: '#f6cf86', ink: '#1f3d33' }
+const provisional = { borderStyle: 'dashed', borderWidth: 2, borderColor: accent, opacity: 0.78 }
 const finite = value => (Number.isFinite(Number(value)) ? Number(value) : 0)
 const frame = options => ({ x: finite(options.xPos), y: finite(options.yPos), width: finite(options.width), height: finite(options.height) })
 const previewId = id => PREVIEW_PREFIX + id
@@ -56,8 +58,35 @@ export function boundsOf(frames) {
 export function previewCaption(bounds) {
   return { options: {
     id: PREVIEW_CAPTION, text: PREVIEW_CAPTION_TEXT, xPos: Math.round(bounds.x), yPos: Math.round(bounds.y - 52),
-    width: 216, height: 36, fontSize: 15, foregroundColor: '#ffffff', backgroundColor: accent, borderWidth: 0,
+    width: 216, height: 36, fontSize: 15, foregroundColor: tag.ink, backgroundColor: tag.fill, borderWidth: 0,
   }, relationships: { associations: [] } }
+}
+
+/**
+ * A draft of a whole board (a library add, an interactive route): drawn by the board renderer itself
+ * (attachWorkshop with `draft: true`), so every kind of board shows, a launch plan's bars and grid included,
+ * where Keep will put it (the server's `origin`, or past the right of what the slate holds). Null for a drawing.
+ */
+export function previewBoardOf(canvas, existing = []) {
+  if (!canvas?.workshop) return null
+  const origin = Number.isFinite(canvas.origin?.x) && Number.isFinite(canvas.origin?.y) ? { x: canvas.origin.x, y: canvas.origin.y } : besideExisting(existing)
+  return { workshop: canvas.workshop, origin }
+}
+
+/** Business boards are drawn by their kit (slateboxjs/boards); a nest board by its own (slateboxjs/boards/nest). */
+export const KIT_KINDS = ['launch-plan', 'hiring-plan', 'pipeline', 'budget', 'nest']
+
+/**
+ * The sentence under a board preview in the chat: what Keep does, in the board's own words. "Play the route"
+ * is a map's only; a plan's is its own; a board of columns takes notes.
+ */
+export function previewKeepSentence(draft) {
+  const workshop = draft?.canvas?.workshop
+  if (!workshop) return null
+  if (workshop.lanes?.[0]?.station) return 'Keep this to play the route alongside your original drawing.'
+  if (workshop.kind === 'launch-plan' || workshop.kind === 'hiring-plan') return 'Keep it to add the plan; slide a task and what waits on it follows.'
+  if (KIT_KINDS.includes(workshop.kind)) return null
+  return 'Drag notes onto it after Keep: each becomes a card.'
 }
 
 /**
