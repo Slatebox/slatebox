@@ -36,6 +36,34 @@ export const BOARD_INK = Object.freeze({
 })
 
 /**
+ * The board chrome (board polish) on the dark canvas: a board's title, its legend chips and badges, the focus
+ * frame with its "Editing" and "Done" tags, a draft's frame and tag, and what a kit draws on the canvas itself
+ * (a plan's header and dates, a phone's plan rows). The engine's light defaults are the brand's dark green,
+ * which vanishes here: the title takes the canvas's light ink, the focus frame and tags the brand's amber,
+ * the chips and badges a raised dark surface (the board's light ink reads on them), and the canvas-facing ink
+ * the board's own dark ink.
+ */
+export const BOARD_CHROME = Object.freeze({
+  dark: Object.freeze({
+    '--slatebox-board-title': '#eef1e8',
+    '--slatebox-board-chip': '#263a33',
+    '--slatebox-board-chip-ink': '#d9e2dc',
+    '--slatebox-board-badge': '#2c4338',
+    '--slatebox-board-focus': '#f6cf86',
+    '--slatebox-board-focus-ink': '#1f3d33',
+    '--slatebox-board-focus-tint': 'rgba(246, 207, 134, 0.05)',
+    '--slatebox-board-preview': '#f6cf86',
+    '--slatebox-board-preview-fill': '#f6cf86',
+    '--slatebox-board-preview-ink': '#1f3d33',
+    '--slatebox-board-halo': '#14201b',
+    '--slatebox-board-canvas-ink': BOARD_INK.dark['--slatebox-board-ink'],
+    '--slatebox-board-canvas-grid': BOARD_INK.dark['--slatebox-board-grid'],
+    '--slatebox-board-canvas-week': BOARD_INK.dark['--slatebox-board-week'],
+    '--slatebox-board-canvas-track': BOARD_INK.dark['--slatebox-board-track'],
+  }),
+})
+
+/**
  * A board's white card (a plan's task bar) on the dark canvas: a raised surface, a step lighter than
  * the lanes it sits on (as the white bar is on the light canvas's pastel lanes), and its edge.
  */
@@ -215,7 +243,8 @@ export function withNativeInk(fn, root = globalThis.document) {
 
 /** A board's card drawn on white paper (a launch plan's task bar): its fill is opaque and near white. */
 function isBoardPaper(group, path) {
-  if (!(group.getAttribute('data-node-id') || '').startsWith('card-')) return false
+  // A board's own card (card-…), or one on a second or third board of the slate (b2:card-…).
+  if (!/(^|:)card-/.test(group.getAttribute('data-node-id') || '')) return false
   const fill = parseColor(path.getAttribute('fill'))
   return Boolean(fill && fill.a === 1 && luminance(fill) > 0.9)
 }
@@ -289,9 +318,11 @@ export function inkCanvas(root, scheme) {
   unpaintStale(root, touched)
 }
 
-/** The dark canvas's colour and the board's dark ink, as custom properties on the canvas element. */
+/** The dark canvas's colour, the board's dark ink and its chrome's, as custom properties on the canvas element. */
 function setCanvasTokens(el, dark) {
   const tokens = { '--sb-canvas-bg': CANVAS.dark.background, ...BOARD_INK.dark }
+  // The board chrome's dark tokens ride with them, on every themed surface (canvas, presenter, share page).
+  Object.assign(tokens, BOARD_CHROME.dark)
   Object.entries(tokens).forEach(([name, value]) => {
     if (!dark) el.style.removeProperty(name)
     else if (el.style.getPropertyValue(name) !== value) el.style.setProperty(name, value)

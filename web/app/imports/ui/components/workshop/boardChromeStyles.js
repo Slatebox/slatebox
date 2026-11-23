@@ -5,8 +5,8 @@ import { boardChromeStyles } from 'slateboxjs/workshops/model'
 //   `focusing`, and a draft's notes are see-through;
 // - the app's: the board chrome's type is the app's (Manrope), and the zoom control keeps clear of a
 //   cookie notice not yet answered.
-// The chrome's colours are the engine's defaults (the brand's green ink and amber), which suit the slate's
-// own background; whether a viewer's dark mode darkens the canvas is the dark-mode work's to decide.
+// The chrome's colours are the engine's defaults (the brand's green ink and amber) on a light canvas; on the
+// dark canvas the canvas theme sets its dark tokens (canvasTheme.mjs, BOARD_CHROME).
 const css = boardChromeStyles + `
 .slatebox-zoom-slider { --slatebox-zoom-offset: var(--sb-cookie-room, 0px); }
 [data-board-chrome], [data-board-layer] { --slatebox-board-font: Manrope, system-ui, sans-serif; }

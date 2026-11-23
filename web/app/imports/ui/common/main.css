@@ -168,9 +168,12 @@ body:has(.sb-cookie) .sb-canvas-page{box-sizing:border-box;padding-bottom:calc(m
 [data-sb-canvas=dark]{background-color:var(--sb-canvas-bg)!important;color-scheme:dark}
 /* Lane columns: their own pastel at about 18%, edged a little brighter, so a board reads as lanes, not white slabs.
    Lane headers and cards keep their pastel, with their dark words on it. */
-[data-sb-canvas=dark] g[data-node-id^="column-"] [data-node-background-path]{fill-opacity:.18;stroke-opacity:.45}
+/* (b2:column-… is a column of a second or third board on the slate.) */
+[data-sb-canvas=dark] g[data-node-id*=":column-"] [data-node-background-path],[data-sb-canvas=dark] g[data-node-id^="column-"] [data-node-background-path]{fill-opacity:.18;stroke-opacity:.45}
 /* The note a board explains its rules in: a quiet tint of its paper; its words are lifted to the light ink. */
 [data-sb-canvas=dark] g[data-node-id^="rules-"] [data-node-background-path]{fill-opacity:.1;stroke:#5d7566}
+/* The focus frame's "Done" tag, focused from the keyboard: outlined in the dark mode's amber, as the frame is. */
+[data-sb-canvas=dark] [data-board-layer="focus-done-box"]:focus-visible{outline-color:#f6cf86}
 
 /* The minimap and the zoom controls, in the app's own surface, border and ink (light and dark). */
 #slateCanvas .slateboxjs-birdseye{background-color:var(--sb-surface,#fffef8)!important;border:1px solid var(--sb-border,#c6d1bf)!important;

@@ -104,3 +104,39 @@ test('a board draft brought into view includes its tag at the size it is drawn, 
   const tagGrowth = 12 / 0.8 - 12
   assert.ok(Math.abs(phone.y - (50 - tagGrowth - 52 / 0.8)) < 1e-9)
 })
+
+test('on the dark canvas the chrome reads: the title in light ink, the focus frame and tags amber, chips and badges a raised surface (dark mode with board polish)', async () => {
+  const { BOARD_CHROME, BOARD_INK, CANVAS, contrast, inkCanvas } = await import('../web/app/imports/ui/common/canvasTheme.mjs')
+  const { JSDOM } = await import('jsdom')
+  const t = BOARD_CHROME.dark
+  const bg = CANVAS.dark.background
+  // Every token is one the engine's chrome reads (chromeInk / layerInk), so none is a typo the engine ignores.
+  const dist = new URL('../web/app/node_modules/slateboxjs/dist/', import.meta.url)
+  const engine = readdirSync(dist).filter(f => f.endsWith('.js')).map(f => readFileSync(new URL(f, dist), 'utf8')).join('\n')
+  for (const name of Object.keys(t)) assert.ok(engine.includes(`var(${name},`), `${name} is read by the engine`)
+  assert.ok(contrast(t['--slatebox-board-title'], bg) >= 7, 'a board\'s title is AAA on the dark canvas')
+  assert.ok(contrast(t['--slatebox-board-chip-ink'], t['--slatebox-board-chip']) >= 4.5, 'a legend chip\'s words')
+  assert.ok(contrast(BOARD_INK.dark['--slatebox-board-ink'], t['--slatebox-board-badge']) >= 4.5, 'a badge\'s icon (the board\'s ink)')
+  assert.ok(contrast(t['--slatebox-board-focus'], bg) >= 3, 'the focus frame on the canvas')
+  assert.ok(contrast(t['--slatebox-board-focus-ink'], t['--slatebox-board-focus']) >= 4.5, '"Editing" on its tag')
+  assert.ok(contrast(t['--slatebox-board-focus'], t['--slatebox-board-halo']) >= 4.5, '"Done" on its tag')
+  assert.ok(contrast(t['--slatebox-board-preview'], bg) >= 3, 'a draft\'s dashed frame')
+  assert.ok(contrast(t['--slatebox-board-preview-ink'], t['--slatebox-board-preview-fill']) >= 4.5, 'a draft\'s tag')
+  assert.ok(contrast(t['--slatebox-board-canvas-ink'], bg) >= 7, 'a plan\'s header and dates on the canvas')
+  // Set with the board's ink on every themed surface (canvas, presenter, share page), and taken off in light mode.
+  const doc = new JSDOM('<!doctype html><body><div id="c"></div></body>').window.document
+  const el = doc.getElementById('c')
+  const { themeCanvas } = await import('../web/app/imports/ui/common/canvasTheme.mjs')
+  const undo = themeCanvas(el, { mode: 'dark', getContainerStyle: () => ({}) })
+  assert.equal(el.style.getPropertyValue('--slatebox-board-title'), t['--slatebox-board-title'])
+  assert.equal(el.style.getPropertyValue('--slatebox-board-focus'), t['--slatebox-board-focus'])
+  undo()
+  assert.equal(el.style.getPropertyValue('--slatebox-board-title'), '')
+  // A second board's plan bar (b2:card-…) takes the dark card surface, as the first board's does.
+  const page = new JSDOM(`<!doctype html><body><div id="slateCanvas"><svg><g data-node-id="b2:card-design"><path data-node-background-path fill="#fffdf6" stroke="#667872"></path><text fill="#1d2b2a">Design</text></g></svg></div></body>`).window.document
+  inkCanvas(page.getElementById('slateCanvas'), 'dark')
+  assert.notEqual(page.querySelector('[data-node-id="b2:card-design"] path').style.getPropertyValue('fill'), '')
+  // A second board's columns are lanes on the dark canvas too, not white slabs.
+  const css = readFileSync(new URL('../web/app/imports/ui/common/main.css', import.meta.url), 'utf8')
+  assert.match(css, /\[data-sb-canvas=dark\] g\[data-node-id\*=":column-"\] \[data-node-background-path\],/)
+})
