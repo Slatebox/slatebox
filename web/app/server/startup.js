@@ -7,6 +7,8 @@ import { onPageLoad } from 'meteor/server-render'
 import app from './expressApp'
 import { presentationMeta } from './common/presentationMeta.mjs'
 import { slateShareImage, slateShareText } from './common/share-image.mjs'
+import { libraryItemHead, librarySlugOf } from './library/item-meta.mjs'
+import { LibraryItems } from '../imports/api/common/models'
 import setup from './email/setup'
 import { onCreateUser } from './common/accounts'
 import { ensureLibraryIndexes, migrateCommunitySlates, seedLibraryBuiltins } from './library/meteor'
@@ -225,6 +227,25 @@ onPageLoad(async (sink) => {
   const urlPath =
     sink.request.path ||
     (typeof url === 'string' ? url : url?.path || url?.pathname || '')
+
+  const pathname = urlPath.split('?')[0].replace(/\/+$/, '')
+
+  // A library item's page: its title, summary and author for share previews, and the marketing site's copy as the
+  // canonical page (server/library/item-meta.mjs). Unpublished or unknown items are noindex.
+  const librarySlug = librarySlugOf(pathname)
+  if (librarySlug) {
+    appendDefaults(sink)
+    try {
+      const item = await LibraryItems.findOneAsync({ slug: librarySlug, status: 'published' },
+        { fields: { slug: 1, status: 1, kind: 1, origin: 1, title: 1, summary: 1, authorName: 1, publishedAt: 1 } })
+      const appOrigin = Meteor.settings.public.baseUrl || Meteor.absoluteUrl().replace(/\/$/, '')
+      const siteOrigin = Meteor.settings.public.env === 'selfhost' ? null : (Meteor.settings.public.marketingOrigin || 'https://slatebox.com')
+      sink.appendToHead(libraryItemHead(item, { appOrigin, siteOrigin }))
+    } catch {
+      sink.appendToHead('<meta name="robots" content="noindex">')
+    }
+    return
+  }
 
   // Extract path type and ID using regex
   const match = urlPath.match(/\/(canvas|present)\/([^/?]+)/)
