@@ -94,7 +94,8 @@ export default function Title({
         alignItems="center"
         justifyContent="space-evenly"
       >
-        <Grid size={{ xs: 12, md: showAdd ? 3 : 5 }} sx={{ minWidth: 0 }}>
+        {/* Below md the header is one row: the title takes what is left (and ellipsizes), + New keeps its own width. */}
+        <Grid size={{ xs: 'grow', md: showAdd ? 3 : 5 }} sx={{ minWidth: 0 }}>
           <Grid container alignItems="center" justifyContent="flex-start" sx={{ minWidth: 0 }}>
             <Grid sx={{ minWidth: 0, maxWidth: '100%' }}>
               <Typography variant="h5" component="h1" noWrap sx={{ fontWeight: 700, letterSpacing: '-.01em' }}>{headerMessage || ''}</Typography>
@@ -197,8 +198,9 @@ export default function Title({
           </Grid>
         )}
 
+        {mdmq && (
         <Grid size={showPaging ? 3 : 4}>
-          {showSearch && mdmq && (
+          {showSearch && (
             <TextField
               variant="outlined"
               fullWidth
@@ -236,8 +238,9 @@ export default function Title({
             />
           )}
         </Grid>
+        )}
         {showAdd && (
-          <Grid size={2} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Grid size={{ xs: 'auto', md: 2 }} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Button
               variant="contained"
               onClick={onAdd}

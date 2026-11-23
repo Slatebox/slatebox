@@ -28,6 +28,8 @@ export function registrationCopy({ guest, intent, emailSent = false }) {
       lede: 'Add your email and a password. Your slates stay with you on every device.',
       action: 'Create account',
       dismiss: 'Not now',
+      // Someone signing up has no slate yet: the line under the email field speaks only of the email.
+      emailHelper: 'We’ll send a link to confirm it’s you.',
     }
   }
   if (guest) {
@@ -36,6 +38,7 @@ export function registrationCopy({ guest, intent, emailSent = false }) {
       lede: 'You’re working as a guest, no account needed. Add an email and a password to keep your slates on every device.',
       action: 'Save my Slatebox',
       dismiss: 'Continue as guest',
+      emailHelper: 'We’ll send a verification link. Your slate remains available while you verify.',
     }
   }
   return {
@@ -43,6 +46,7 @@ export function registrationCopy({ guest, intent, emailSent = false }) {
     lede: null,
     action: emailSent ? 'Resend verification email' : 'Send verification email',
     dismiss: null,
+    emailHelper: 'We’ll send a verification link.',
   }
 }
 
@@ -51,4 +55,15 @@ export function registrationCopy({ guest, intent, emailSent = false }) {
 export function mermaidNewSlateRoom(user) {
   if (!user) return 'sign-in'
   return user.isAnonymous ? 'save' : 'open'
+}
+
+// The note in the Mermaid dialog when a new slate needs an account. It speaks of Add to this slate
+// only when that button is there (the person can edit this slate); a guest reading someone else's
+// slate hears only the way on.
+export function mermaidNewSlateNote(room, canEdit) {
+  if (room === 'open') return null
+  if (room === 'sign-in') return 'Sign in to open a diagram as a slate of its own.'
+  return canEdit
+    ? 'Save your work to open a diagram as a slate of its own. Adding it to this slate works as you are.'
+    : 'Save your work to open this diagram as a slate of its own.'
 }

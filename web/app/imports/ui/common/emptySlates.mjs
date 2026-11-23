@@ -34,4 +34,17 @@ export function emptySlatesCopy({ type, signedIn, filter = '', privateOnly = fal
   }
 }
 
+// Which of the list's states to paint. `answer` is the last reply from slates.get: null before the
+// first one comes back, { ok: false } when the fetch failed, { ok: true, total } otherwise. The
+// empty state shows only once a reply said there are none, so it never flashes before the first fetch
+// and never tells someone with slates that they have none because a fetch failed.
+export function slateListView({ signedIn, loading, answer }) {
+  if (!signedIn) return 'empty'
+  if (loading || !answer) return 'loading'
+  if (!answer.ok) return 'error'
+  return answer.total === 0 ? 'empty' : 'list'
+}
+
+export const SLATES_FAILED_COPY = { line: 'We couldn’t load your slates just now.', retry: 'Try again' }
+
 export default emptySlatesCopy

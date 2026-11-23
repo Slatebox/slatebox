@@ -6,9 +6,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import {
-  SIGNED_IN_BEFORE_KEY, loginWelcome, rememberSignedIn, signedInBefore, registrationCopy, mermaidNewSlateRoom,
+  SIGNED_IN_BEFORE_KEY, loginWelcome, rememberSignedIn, signedInBefore, registrationCopy, mermaidNewSlateRoom, mermaidNewSlateNote,
 } from '../web/app/imports/ui/common/accountCopy.mjs'
-import { emptySlatesCopy } from '../web/app/imports/ui/common/emptySlates.mjs'
+import { emptySlatesCopy, slateListView, SLATES_FAILED_COPY } from '../web/app/imports/ui/common/emptySlates.mjs'
 
 const app = (path) => readFileSync(new URL('../web/app/' + path, import.meta.url), 'utf8')
 const ui = (path) => app('imports/ui/' + path)
@@ -72,15 +72,21 @@ test('#8 the account form says sign up to a new visitor and save your work to a 
     lede: 'Add your email and a password. Your slates stay with you on every device.',
     action: 'Create account',
     dismiss: 'Not now',
+    emailHelper: 'We’ll send a link to confirm it’s you.',
   })
   assert.deepEqual(registrationCopy({ guest: true }), {
     heading: 'Save your work',
     lede: 'You’re working as a guest, no account needed. Add an email and a password to keep your slates on every device.',
     action: 'Save my Slatebox',
     dismiss: 'Continue as guest',
+    emailHelper: 'We’ll send a verification link. Your slate remains available while you verify.',
   })
   assert.equal(registrationCopy({ guest: false }).heading, 'Verify your email')
   assert.equal(registrationCopy({ guest: false, emailSent: true }).action, 'Resend verification email')
+  // The line under the email field comes from the copy, so a sign-up never hears about a slate it doesn't have.
+  const form = ui('common/Register.jsx')
+  assert.match(form, /copy\.emailHelper/)
+  assert.doesNotMatch(form, /Your slate remains available while you verify/)
 })
 
 test('#9 an empty list is a designed state with a next step, never an alert', () => {
@@ -113,6 +119,23 @@ test('#9 an empty list is a designed state with a next step, never an alert', ()
   assert.match(list, /<EmptyState/)
 })
 
+test('#9 the empty state waits for a reply saying none; a failed fetch says so and offers Try again', () => {
+  // Before the first reply the list is loading, never empty (no flash of "No slates yet").
+  assert.equal(slateListView({ signedIn: true, loading: false, answer: null }), 'loading')
+  assert.equal(slateListView({ signedIn: true, loading: true, answer: { ok: true, total: 0 } }), 'loading')
+  assert.equal(slateListView({ signedIn: true, loading: false, answer: { ok: true, total: 0 } }), 'empty')
+  assert.equal(slateListView({ signedIn: true, loading: false, answer: { ok: true, total: 3 } }), 'list')
+  // A failed fetch never says "No slates yet" to someone who has slates.
+  assert.equal(slateListView({ signedIn: true, loading: false, answer: { ok: false } }), 'error')
+  assert.equal(slateListView({ signedIn: false, loading: false, answer: null }), 'empty')
+  assert.deepEqual(SLATES_FAILED_COPY, { line: 'We couldn’t load your slates just now.', retry: 'Try again' })
+  const list = ui('components/DisplaySlates.jsx')
+  assert.match(list, /slateListView\(\{/)
+  assert.match(list, /view === 'empty' \?/)
+  assert.doesNotMatch(list, /slateFilter\.totalSlates === 0 \?/)
+  assert.match(list, /view === 'error'[\s\S]{0,400}SLATES_FAILED_COPY\.retry/)
+})
+
 test('#9 the filter searches from an icon in the field, and the title does not wrap on a phone', () => {
   const title = ui('components/Title.jsx')
   assert.doesNotMatch(title, />\s*go\s*</)
@@ -122,7 +145,11 @@ test('#9 the filter searches from an icon in the field, and the title does not w
   assert.match(title, /<SearchIcon/)
   assert.doesNotMatch(title, /marginLeft: '50px'/, 'no indent for an empty subheading')
   assert.match(title, /noWrap/)
-  assert.match(title, /size=\{\{ xs: 12, md:/, 'the heading takes the whole row on a phone')
+  // Below md the title and + New share one row: the title grows (and ellipsizes), New keeps its width,
+  // and the filter's cell is not there at all (an empty cell pushed New to a second row).
+  assert.match(title, /size=\{\{ xs: 'grow', md:/, 'the heading takes what is left of the row on a phone')
+  assert.match(title, /size=\{\{ xs: 'auto', md: 2 \}\}[\s\S]{0,400}>\s*New\s*</, '+ New sits at the end of the same row')
+  assert.match(title, /\{mdmq && \(\s*<Grid size=\{showPaging \? 3 : 4\}>/, 'the filter cell itself is gone on a phone')
 })
 
 test('#13 the cookie notice is one slim line on a phone and the canvas keeps room for exactly that', () => {
@@ -148,7 +175,12 @@ test('#18 a guest opens Mermaid itself: export is free to read, and a new slate 
   const dialog = ui('components/slate/MermaidDialog.jsx')
   assert.match(dialog, /mermaidNewSlateRoom\(/)
   assert.match(dialog, /newSlateRoom === 'open' &&[\s\S]{0,200}Open as a new slate/)
-  assert.match(dialog, /Save your work to open a diagram as a slate of its own/)
+  assert.match(dialog, /mermaidNewSlateNote\(newSlateRoom, canEdit\)/)
+  // The note names Add to this slate only when that button is shown (canEdit); a guest reader hears only the way on.
+  assert.equal(mermaidNewSlateNote('save', true), 'Save your work to open a diagram as a slate of its own. Adding it to this slate works as you are.')
+  assert.equal(mermaidNewSlateNote('save', false), 'Save your work to open this diagram as a slate of its own.')
+  assert.equal(mermaidNewSlateNote('sign-in', false), 'Sign in to open a diagram as a slate of its own.')
+  assert.equal(mermaidNewSlateNote('open', true), null)
   assert.match(dialog, /saveYourWork\(\)/)
 })
 

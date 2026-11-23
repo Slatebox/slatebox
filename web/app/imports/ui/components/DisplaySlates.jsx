@@ -39,7 +39,7 @@ import { useTranslator, getTranslation } from '../common/i18n'
 import copySlate from '../../api/client/copySlate'
 import RecentlyJoined from './RecentlyJoined'
 import EmptyState from './EmptyState'
-import { emptySlatesCopy } from '../common/emptySlates.mjs'
+import { emptySlatesCopy, slateListView, SLATES_FAILED_COPY } from '../common/emptySlates.mjs'
 import Title from './Title'
 import SnapSlate from './SnapSlate'
 import SlateMenu from './SlateMenu'
@@ -82,6 +82,8 @@ export default function DisplaySlates({
   const setGlobalMessage = useSetAtom(globalMessage)
   const [slates, setSlates] = React.useState([])
   const [loading, setLoading] = React.useState(false)
+  // The last reply from slates.get (null until the first one): the empty state waits for a reply saying none.
+  const [answer, setAnswer] = React.useState(null)
   const [isSelectAllToggled, setSelectAllToggled] = React.useState(false)
   // A new key clears the filter field when the empty state's Clear the filter is used.
   const [titleKey, setTitleKey] = React.useState(0)
@@ -99,6 +101,7 @@ export default function DisplaySlates({
       slatePage: 1,
       filterString: null,
     })
+    setAnswer(null)
     setRerender(Random.id())
   }, [
     sentSlateMinimumPerPage,
@@ -136,6 +139,7 @@ export default function DisplaySlates({
               totalSlates: nextSlates.counts.total,
               type: type,
             })
+            setAnswer({ ok: true, total: nextSlates.counts.total })
             setLoading(false)
           } else {
             setSlates([])
@@ -143,6 +147,7 @@ export default function DisplaySlates({
               ...slateFilter,
               totalSlates: 0,
             })
+            setAnswer({ ok: false })
             setLoading(false)
           }
         }
@@ -283,6 +288,7 @@ export default function DisplaySlates({
     setTitleKey((k) => k + 1)
     setRerender(Random.id())
   }
+  const view = slateListView({ signedIn: Boolean(Meteor.userId()), loading, answer })
   const empty = emptySlatesCopy({ type, signedIn: Boolean(Meteor.userId()), filter: slateFilter.filterString,
     privateOnly: type === 'mine' && slateFilter.privateOnly })
 
@@ -413,7 +419,7 @@ export default function DisplaySlates({
       </Box>
       <Box sx={{ flexGrow: 1, overflowY: 'auto', padding: '10px' }}>
         {type === 'mine' && <RecentlyJoined />}
-        {loading ? (
+        {view === 'loading' ? (
           <ImageList
             gap={10}
             cols={cols || (xlmq ? 4 : lgmq ? 3 : 2)}
@@ -439,7 +445,12 @@ export default function DisplaySlates({
               )
             )}
           </ImageList>
-        ) : slateFilter.totalSlates === 0 ? (
+        ) : view === 'error' ? (
+          <Box role="alert" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 1, py: 6 }}>
+            <Typography variant="body1" color="text.secondary">{SLATES_FAILED_COPY.line}</Typography>
+            <Button size="small" onClick={() => setRerender(Random.id())}>{SLATES_FAILED_COPY.retry}</Button>
+          </Box>
+        ) : view === 'empty' ? (
           <EmptyState variant="empty" title={empty.title} body={empty.body} action={empty.action}
             secondary={empty.secondary} onClear={empty.clear ? clearFilter : undefined} />
         ) : (

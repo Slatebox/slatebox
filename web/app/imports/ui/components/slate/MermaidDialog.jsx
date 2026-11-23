@@ -15,7 +15,7 @@ import ContentCopy from '@mui/icons-material/ContentCopy'
 import Download from '@mui/icons-material/Download'
 import UploadFile from '@mui/icons-material/UploadFile'
 import { slateToMermaid, parseMermaid, diagramPlans } from '../../../api/common/mermaid/index.mjs'
-import { mermaidNewSlateRoom } from '../../common/accountCopy.mjs'
+import { mermaidNewSlateRoom, mermaidNewSlateNote } from '../../common/accountCopy.mjs'
 import { useSaveYourWork } from '../AccountMenu'
 
 const FORMAT_NAMES = { auto: 'Automatic', flowchart: 'Flowchart', mindmap: 'Mind map', gantt: 'Gantt chart' }
@@ -224,9 +224,7 @@ export default function MermaidDialog({ open, onClose, slate, row, canEdit, init
             {newSlateRoom !== 'open' && (
               <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, p: 1.5, borderRadius: 2, border: 1, borderColor: 'divider' }}>
                 <Typography variant="body2" sx={{ flex: '1 1 240px', color: 'text.secondary' }}>
-                  {newSlateRoom === 'save'
-                    ? 'Save your work to open a diagram as a slate of its own. Adding it to this slate works as you are.'
-                    : 'Sign in to open a diagram as a slate of its own.'}
+                  {mermaidNewSlateNote(newSlateRoom, canEdit)}
                 </Typography>
                 {newSlateRoom === 'save'
                   ? <Button size="small" onClick={() => { onClose(); saveYourWork() }}>Save your work</Button>

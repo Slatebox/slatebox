@@ -390,7 +390,7 @@ export default function Register({ user = null }) {
                   helperText={
                     formVals.email.valid === false
                       ? 'Enter a valid email address.'
-                      : 'We’ll send a verification link. Your slate remains available while you verify.'
+                      : copy.emailHelper
                   }
                   autoFocus
                 />
