@@ -12,13 +12,7 @@ import { readCreationBrief } from '../../api/common/native-diagram-brief.mjs'
 import { readTeamMapBrief, workshopFromTeamBrief } from '../../api/common/team-map-brief.mjs'
 import createAnonymousUser from '../../api/client/createAnonymousUser'
 import { creativeSlates, nativeSlateStarters } from '../../api/common/creativeSlates.mjs'
-
-// The starter routes for the business boards: /new/launch-plan, /new/pipeline and /new/budget open
-// the sample board. A workshop link whose model is one of these boards (#model=…) opens too.
-const BOARD_SAMPLES = { 'launch-plan': 'sampleLaunchPlan', 'hiring-plan': 'hiringPlanSample', pipeline: 'samplePipeline', budget: 'sampleBudget', nest: 'sortEvidenceSample' }
-const boardInLink = hash => {
-  try { return Object.hasOwn(BOARD_SAMPLES, JSON.parse(new URLSearchParams(hash.slice(1)).get('model') ?? 'null')?.kind) } catch { return false }
-}
+import { BOARD_SAMPLES, boardInLink, loadBoardRoute } from '../../api/common/board-routes.mjs'
 
 export default function NewCreativeSlate({fromBrief = false}) {
   const { creativeKind: legacyKind } = useParams()
@@ -38,9 +32,9 @@ export default function NewCreativeSlate({fromBrief = false}) {
   useEffect(() => {
     if (!needsRules || rules) return undefined
     let gone = false
-    // A nested board's sample is in the library's samples chunk (which loads the rules with it).
-    Promise.all([import('slateboxjs/workshops/rules'), boardRoute === 'nest' ? import('slateboxjs/workshops/samples') : null])
-      .then(([loaded, samples]) => { if (!gone) setRules(samples ? { ...loaded, ...samples } : loaded) }).catch(() => { if (!gone) setError('Could not open this slate.') })
+    // The board's rules and its rulebook's module (board-routes.mjs), before its model is read.
+    loadBoardRoute(boardRoute)
+      .then(loaded => { if (!gone) setRules(loaded) }).catch(() => { if (!gone) setError('Could not open this slate.') })
     return () => { gone = true }
   }, [needsRules, rules, boardRoute])
   const waiting = needsRules && !rules

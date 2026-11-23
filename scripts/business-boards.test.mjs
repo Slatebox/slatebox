@@ -135,14 +135,17 @@ test("the read of a board carries its numbers: days and the critical path, the f
 test("a plain slate's code never loads a board's rules or kit: they load on demand, before the board is read", () => {
   const eager = ["imports/api/common/native-canvas-conversation.mjs", "imports/ui/components/NativeCanvasConversation.jsx",
     "imports/ui/components/workshop/useWorkshopOnCanvas.js", "imports/ui/pages/NewCreativeSlate.jsx", "imports/api/common/portableWorkshopSlate.mjs",
-    "imports/api/common/creativeSlates.mjs", "imports/ui/pages/Canvas.jsx"];
+    "imports/api/common/creativeSlates.mjs", "imports/ui/pages/Canvas.jsx", "imports/api/common/board-routes.mjs"];
   for (const file of eager) {
     const source = app(file);
     assert.doesNotMatch(source, /^\s*import[^(]*from\s+['"]slateboxjs\/(?:boards|workshops\/rules)['"]/m, file);
     assert.doesNotMatch(source, /from\s+['"][^'"]*(?:launch-plan|pipeline|budget|business-board)-brief\.mjs['"]/, file);
   }
   assert.match(app("imports/ui/components/workshop/useWorkshopOnCanvas.js"), /import\('slateboxjs\/boards'\)/);
-  assert.match(app("imports/ui/pages/NewCreativeSlate.jsx"), /import\('slateboxjs\/workshops\/rules'\)/);
+  // The board routes load a board's rules, and its rulebook's module, on demand (board-routes.mjs).
+  assert.match(app("imports/ui/pages/NewCreativeSlate.jsx"), /loadBoardRoute\(/);
+  assert.match(app("imports/api/common/board-routes.mjs"), /import\('slateboxjs\/workshops\/rules'\)/);
+  assert.match(app("imports/api/common/board-routes.mjs"), /import\('slateboxjs\/workshops\/behaviour'\)/);
   // The server loads every board's rules before it reads a board.
   assert.match(app("server/main.js"), /^import 'slateboxjs\/workshops\/rules'$/m);
 });
