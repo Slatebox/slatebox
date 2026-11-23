@@ -122,7 +122,8 @@ method[CONSTANTS.methods.utils.getCloudLink] = async (
   imgData,
   isSvg,
   addFrame,
-  updateAPILink
+  updateAPILink,
+  forShare = false
 ) => {
   check(slateId, String)
   check(imgData, String)
@@ -145,12 +146,15 @@ method[CONSTANTS.methods.utils.getCloudLink] = async (
         if (!isRasterImage(Buffer.from(imgData.replace('data:image/png;base64,', '').trim(), 'base64'))) {
           throw new Meteor.Error('invalid-image', 'That preview is not a PNG image.')
         }
-        imgBuffer = await sharp(
+        const picture = sharp(
           Buffer.from(
             imgData.replace('data:image/png;base64,', '').trim(),
             'base64'
           )
         )
+        // A share card's picture (a public slate's link): small enough for every crawler (some stop at 5 MB).
+        if (forShare === true) picture.resize({ width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true })
+        imgBuffer = await picture
           .toBuffer()
           .catch((err) => console.log('err is', err))
 

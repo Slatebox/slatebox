@@ -121,6 +121,10 @@ const viewEvents = new Set(['onZoom', 'onCanvasMove', 'onMouseMoved', 'onCursorM
 // Mermaid's dialog (and the Mermaid code with it) loads only when someone opens it.
 const MermaidDialog = React.lazy(() => import('../components/slate/MermaidDialog'))
 
+// A public slate's share preview: uploaded 20 s after its last change, at most every 5 minutes.
+const SHARE_PREVIEW_QUIET = 20_000
+const SHARE_PREVIEW_EVERY = 5 * 60_000
+
 export default function Canvas() {
   const history = useNavigate()
   const { id, asEmbed } = useParams()
@@ -209,6 +213,32 @@ export default function Canvas() {
     }
     if (value) nativeProof.current = { key:id, value }
     return value
+  }
+  // The share preview of a public slate: SHARE_PREVIEW_QUIET after the last change, never sooner than
+  // SHARE_PREVIEW_EVERY after the last one (each is a new image on the store).
+  const sharePreview = React.useRef({ timer: null, at: 0, busy: false })
+  useEffect(() => () => clearTimeout(sharePreview.current.timer), [id])
+  function sharePreviewLater() {
+    const preview = sharePreview.current
+    clearTimeout(preview.timer)
+    const wait = Math.max(SHARE_PREVIEW_QUIET, preview.at + SHARE_PREVIEW_EVERY - Date.now())
+    preview.timer = setTimeout(() => {
+      const drawing = slate.current
+      const o = drawing?.options
+      if (!drawing || preview.busy || !o?.isPublic || o.isPrivate || o.isUnlisted) return
+      preview.busy = true
+      withNativeInk(() => drawing.png({ base64: true }, async (base64) => {
+        try {
+          const urlDetails = await Meteor.callAsync(CONSTANTS.methods.utils.getCloudLink, o.id, base64, false, false, false, true)
+          if (urlDetails?.slateImageUrl && slate.current === drawing) drawing.options.staticImage = urlDetails.slateImageUrl
+          preview.at = Date.now()
+        } catch (error) {
+          console.warn('The share preview was not saved.', error?.reason ?? error)
+        } finally {
+          preview.busy = false
+        }
+      }))
+    }, wait)
   }
   const accessLevel = React.useRef({
     isReadOnly: false,
@@ -474,6 +504,13 @@ export default function Canvas() {
             slateId: slate.current.options.id,
             orgId: Meteor.user().orgId,
           })
+        }
+
+        // A public slate's share link shows a picture of its board (server/common/share-image.mjs): the
+        // preview is uploaded once the slate has been still for a while, and at most every few minutes.
+        if (!['onMouseMoved', 'onCanvasMove'].includes(pkg.type) && isPublic && !isPrivate && !isUnlisted &&
+          !publishedTemplate && !isEmbedded && accessLevel.current?.isEditable) {
+          sharePreviewLater()
         }
 
         // special work for templates or embedded slates

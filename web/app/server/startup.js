@@ -6,6 +6,7 @@ import { WebApp } from 'meteor/webapp'
 import { onPageLoad } from 'meteor/server-render'
 import app from './expressApp'
 import { presentationMeta } from './common/presentationMeta.mjs'
+import { slateShareImage, slateShareText } from './common/share-image.mjs'
 import { publicTemplateSummary } from './methods/template-directory'
 import setup from './email/setup'
 import { onCreateUser } from './common/accounts'
@@ -283,8 +284,20 @@ onPageLoad(async (sink) => {
           )
         : null
 
+    // A public slate's link shows a picture of its board, with its name (share-image.mjs); any other, the logo.
+    const shared =
+      pathType === 'canvas' && /^[A-Za-z0-9_-]{1,80}$/.test(slateId)
+        ? await Slates.findOneAsync(
+            { shareId: slateId, 'options.isPublic': true, 'options.isPrivate': { $ne: true }, 'options.isUnlisted': { $ne: true } },
+            { fields: { 'options.id': 1, 'options.name': 1, 'options.description': 1, 'options.isPublic': 1, 'options.isPrivate': 1, 'options.isUnlisted': 1, 'options.staticImage': 1 } }
+          ).catch(() => null)
+        : null
+    const boardImage = shared && slateShareImage(shared, Meteor.settings.aws?.cloudUrl)
+    const sharedText = shared && slateShareText(shared)
+
     const imageUrl =
       presentation?.imageUrl ||
+      boardImage ||
       'https://files.slatebox.com/slatebox_small_logo.svg'
 
     const appOrigin = Meteor.settings.public.baseUrl || Meteor.absoluteUrl().replace(/\/$/, '')
@@ -294,20 +307,23 @@ onPageLoad(async (sink) => {
         : `${appOrigin}/canvas/${slateId}`
 
     sink.appendToHead(presentationMeta({
-      'og:title': presentation?.name || 'Slatebox - visualize everything',
-      'og:description': presentation?.description || 'Your data has a story, unlock it.',
+      'og:title': presentation?.name || sharedText?.title || 'Slatebox - visualize everything',
+      'og:description': presentation?.description || sharedText?.description || 'Your data has a story, unlock it.',
       'og:image': imageUrl,
       'og:url': ogUrl,
       'og:type': 'website',
       'fb:app_id': Meteor.settings.public.facebookAppId ?? '',
-      'og:image:width': presentation?.imageWidth || '800',
-      'og:image:height': presentation?.imageHeight || '600',
+      // A board picture's size is its own (the crawler reads it): only a published deck's is known here.
+      ...(!boardImage || presentation?.imageUrl ? {
+        'og:image:width': presentation?.imageWidth || '800',
+        'og:image:height': presentation?.imageHeight || '600',
+      } : {}),
       'og:locale': 'en_US',
-      'og:image:alt': 'Slatebox - visualize everything',
+      'og:image:alt': boardImage && !presentation?.imageUrl ? (sharedText?.title ? sharedText.title + ', a board on Slatebox' : 'A board on Slatebox') : 'Slatebox - visualize everything',
       'article:published_time': presentation?.created ? new Date(presentation.created).toISOString() : '',
       'og:updated_time': presentation?.updated ? new Date(presentation.updated).toISOString() : '',
     }))
-    sink.appendToHead(presentationMeta({ author: presentation?.author || 'Slatebox' }, 'name'))
+    sink.appendToHead(presentationMeta({ author: presentation?.author || 'Slatebox', ...(boardImage && !presentation?.imageUrl && { 'twitter:card': 'summary_large_image' }) }, 'name'))
     if (!presentation) {
       appendDefaults(sink)
     }
