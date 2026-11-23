@@ -37,6 +37,7 @@ import Box from '@mui/material/Box'
 import CONSTANTS from '../../../api/common/constants'
 import { Permissions, SlateAccess, Slates } from '../../../api/common/models'
 import slateProps from '../../propTypes/slateProps'
+import PublishStatus from '../library/PublishStatus'
 
 import {
   isShareDialogOpen,
@@ -85,6 +86,8 @@ function LinkSettings({ type, active, grant, currentPermission, busy, configure 
 
 export default function SlateSharing({ slate }) {
   const panelId = useId()
+  // The slate as stored (published to its owner only): its visibility, and what the library publishes.
+  const ownSlate = useTracker(() => Slates.findOne({ _id: slate?.options?.id }) || null)
   const visibility = useTracker(() => {
     if (!Meteor.subscribe(CONSTANTS.publications.shareableSlate, slate?.options?.id).ready()) return null
     const s = Slates.findOne({ _id: slate?.options?.id })
@@ -178,6 +181,13 @@ export default function SlateSharing({ slate }) {
       setLinkError(error.reason || 'Could not update the team member’s access.')
     }
   }
+
+  // Publishing to the library: the owner, or an admin of the slate's team. A guest is asked to sign up.
+  const me = Meteor.user()
+  const guest = Boolean(me?.isAnonymous)
+  const teamAdmin = Boolean(me?.orgId && me.orgId === (ownSlate?.orgId ?? slate?.orgId) && memberPermissions.admins.has(me._id))
+  const canPublish = Boolean(ownSlate && ownSlate.userId === Meteor.userId()) || teamAdmin
+  const showLibrary = (guest || canPublish) && !ownSlate?.library?.mode
 
   const makePrivate = <Box sx={{ mb: 2 }}>
     <Typography sx={{ mb: 1 }}>This will turn off the current invitation link.</Typography>
@@ -423,6 +433,16 @@ export default function SlateSharing({ slate }) {
               currentPermission={panelPermission} busy={savingLink || !visibility || !accessReady} configure={configureLink} />}
           </AccordionDetails>
         </Accordion>
+        {showLibrary && (
+          <Box data-testid="share-library" sx={{ mt: 3, display: 'grid', gap: 1 }}>
+            <Typography variant="subtitle1" component="h3">Library</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Share this slate with everyone who uses Slatebox. After a review, people can open a copy and make it their own.
+            </Typography>
+            <PublishStatus kind="slate" shareId={slate?.shareId} guest={guest} name={slate?.options?.name}
+              description={slate?.options?.description} libraryOrigin={ownSlate?.libraryOrigin} previewSlate={ownSlate} />
+          </Box>
+        )}
       </DialogContent>
       <DialogActions>
         <Button

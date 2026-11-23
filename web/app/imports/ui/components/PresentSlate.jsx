@@ -28,6 +28,7 @@ import ListItemButton from '@mui/material/ListItemButton'
 import ListItemText from '@mui/material/ListItemText'
 import SendIcon from '@mui/icons-material/Send'
 import Tooltip from '@mui/material/Tooltip'
+import PublishStatus from './library/PublishStatus'
 import HistoryIcon from '@mui/icons-material/History'
 import DeleteIcon from '@mui/icons-material/Delete'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
@@ -154,7 +155,6 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
   const [manualViewpointChanges, setManualViewpointChanges] = useState({})
   const [showFooter, setShowFooter] = useState(false)
   // Add a new state variable for dimming
-  const [isMU, setIsMU] = useState(false)
   // The AI planner is planning the slate; the local plan stays playable meanwhile.
   const [planning, setPlanning] = useState(false)
   // Why the presentation playing is the automatic one and not the AI's plan.
@@ -171,15 +171,6 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
   nowShowing.current = { view: curPresentation.currentView, viewpoints: curPresentation.viewpoints }
   // The slate could not be drawn for presenting: said to everyone, whatever their role.
   const [surfaceFailed, setSurfaceFailed] = useState(false)
-
-  useEffect(() => {
-    if (!authoring) return
-    async function getMU() {
-      const gmu = await Meteor.callAsync(CONSTANTS.methods.users.isMasterUser)
-      setIsMU(gmu)
-    }
-    getMU()
-  }, [])
 
   function processViewpoints(vps, preziData, multiplier = 1) {
     const processedViewpoints = vps.map((viewpoint) => {
@@ -239,7 +230,6 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
         isPublic: workingPresentation?.isPublic ?? false,
         isEmbedded: workingPresentation?.isEmbedded ?? false,
         playOnHover: workingPresentation?.playOnHover ?? false,
-        isFeatured: workingPresentation?.isFeatured ?? false,
         presentationMenuBgColorKey: getPrezis?.presentationMenuBgColorKey,
         presentationControlsColorKey: getPrezis?.presentationControlsColorKey,
       }))
@@ -518,7 +508,6 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
         manualViewpointChanges,
         intentionId:
           slate.options.ai?.isConversation?.intentionInitialData?.intentionId,
-        isFeatured: curPresentation.isFeatured,
       }
     )
     // Show temporary message and copy URL
@@ -1236,7 +1225,6 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
                 setCurPresentation((prev) => ({
                   ...prev,
                   isPublic: e.target.checked,
-                  isFeatured: e.target.checked && prev.isFeatured,
                 }))
                 handlePresentationUpdate({ isPublic: e.target.checked })
               }}
@@ -1246,7 +1234,7 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
             <Box>
               <Typography>Make presentation public</Typography>
               <Typography variant="caption" color="text.secondary">
-                Mark the published version as public and eligible for featuring. Leave off for an unlisted link.
+                Mark the published version as public. Leave off for an unlisted link.
               </Typography>
             </Box>
           }
@@ -1381,42 +1369,19 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
             ml: 6, // Indent to show it's related to autoplay
           }}
         />
-        {isMU && (
-          <Tooltip title="You must make presentation public, embedded, and play on hover is checked to allow this">
-            <FormControlLabel
-              sx={{
-                mb: '3px',
-                ml: 6,
-              }}
-              control={
-                <Switch
-                  checked={curPresentation.isFeatured}
-                  onChange={(e) => {
-                    setCurPresentation((prev) => ({
-                      ...prev,
-                      isFeatured: e.target.checked,
-                    }))
-                    handlePresentationUpdate({ isFeatured: e.target.checked })
-                  }}
-                  disabled={
-                    !curPresentation.autoplayOnPublish ||
-                    !curPresentation.isPublic ||
-                    !curPresentation.isEmbedded
-                  }
-                />
-              }
-              label={
-                <Box>
-                  <Typography>Feature Presentation</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Mark this public presentation as featured.
-                  </Typography>
-                </Box>
-              }
-            />
-          </Tooltip>
-        )}
       </FormGroup>
+      {/* The library: anyone who uses Slatebox can open a copy of this presentation once it is reviewed. */}
+      {authoring && (
+        <Box data-testid="present-library" sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider', display: 'grid', gap: 1 }}>
+          <Typography variant="subtitle2">Library</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Publish this presentation as it is now, for anyone to copy and make their own after a review.
+          </Typography>
+          <PublishStatus kind="presentation" shareId={slate?.shareId} guest={Boolean(Meteor.user()?.isAnonymous)}
+            name={slate?.options?.name} description={slate?.options?.description}
+            disabled={!presentationId || planning} disabledReason={!presentationId ? 'Make the presentation first.' : ''} />
+        </Box>
+      )}
     </Box>
   )
 
