@@ -214,3 +214,58 @@ test("the Slates page's Delete and slates.delete delete through one function", a
   const mount = await readFile(new URL("../web/app/server/actions/mount.js", import.meta.url), "utf8");
   assert.match(mount, /deleteSlate: \(slate\) => deleteOwnedSlate\(slate\)/);
 });
+
+// Owner decision (2026-11-23): commenting follows the sharing comment role, on every surface.
+test("comments follow the slate's comment role: a reader may read but not comment or resolve; commenters and editors may", async () => {
+  const { registry, agent, grants, comments } = makeWorld();
+  grants.push({ slateId: "s-pub", type: "public", slateAccessPermissionId: "READ" });
+  const read = body(await registry.run(agent("ben"), "comments.list", { shareId: "pub" }));
+  assert.deepEqual(read.comments, []);
+  await assert.rejects(registry.run(agent("ana"), "comments.add", { shareId: "pub", noteId: "p1", text: "Spam" }), (error) => error.status === 403 && error.code === "comment_role_required" && /comment/i.test(error.message));
+  await assert.rejects(registry.run(agent("ana"), "comments.resolve", { shareId: "pub", noteId: "p1" }), (error) => error.code === "comment_role_required");
+  assert.equal(comments.length, 0);
+  grants[0].slateAccessPermissionId = "COMMENT";
+  assert.equal(body(await registry.run(agent("ana"), "comments.add", { shareId: "pub", noteId: "p1", text: "Fine" })).text, "Fine");
+  assert.equal(body(await registry.run(agent("ana"), "comments.resolve", { shareId: "pub", noteId: "p1" })).comments, 1);
+  // The owner always may.
+  assert.equal(body(await registry.run(agent("ben"), "comments.add", { shareId: "pub", noteId: "p1", text: "Mine" })).text, "Mine");
+});
+
+test("a signed-in page comments through the same action (the drawer), by the session's comment role", async () => {
+  const roles = { ana: "COMMENT", cy: "READ" };
+  const { registry, comments } = makeWorld({ canComment: async (_slate, userId) => roles[userId] === "COMMENT" || userId === "ben" });
+  const person = (userId) => ({ kind: "person", userId, tokenId: null, tokenName: null, scopes: ["slates:read", "slates:write"] });
+  assert.equal(body(await registry.run(person("ana"), "comments.add", { shareId: "pub", noteId: "p1", text: "From the drawer" })).author, "Ana");
+  await assert.rejects(registry.run(person("cy"), "comments.add", { shareId: "pub", noteId: "p1", text: "x" }), (error) => error.code === "comment_role_required");
+  assert.equal(comments.length, 1);
+});
+
+test("@Slatebox in a comment asks the Slatebox agent from the server, on every surface; a commenter who cannot edit is told why", async () => {
+  const asked = [];
+  const started = [];
+  const agentTasks = {
+    store: { create: async ({ slate, by, text, assignee, nodeId, commentId }) => { const doc = { _id: "task" + (asked.length + 1), slateId: slate._id, shareId: slate.shareId, text, assignee, nodeId, commentId, askedBy: by, status: "submitted" }; asked.push(doc); return doc; } },
+    labelOf: async (principal) => (principal.kind === "agent" ? "Ana's agent" : "Ana"),
+    onAssigned: (doc) => started.push(doc._id),
+  };
+  const { registry, agent, grants } = makeWorld({ agentTasks });
+  const added = body(await registry.run(agent("ana"), "comments.add", { shareId: "own", noteId: "n1", text: "@Slatebox add notes: Risks, Owners" }));
+  assert.equal(added.agentTask, "task1");
+  assert.deepEqual([asked[0].text, asked[0].assignee, asked[0].nodeId, asked[0].commentId], ["add notes: Risks, Owners", "slatebox", "n1", added.commentId]);
+  assert.deepEqual(started, ["task1"]);
+  // A plain comment asks nothing.
+  assert.equal(body(await registry.run(agent("ana"), "comments.add", { shareId: "own", noteId: "n1", text: "email ana@slatebox.com" })).agentTask, undefined);
+  // On Ben's public slate Ana may comment (COMMENT role) but not edit: the comment stays, no task.
+  grants.push({ slateId: "s-pub", type: "public", slateAccessPermissionId: "COMMENT" });
+  const refused = body(await registry.run(agent("ana"), "comments.add", { shareId: "pub", noteId: "p1", text: "@Slatebox delete everything" }));
+  assert.equal(refused.agentTask, undefined);
+  assert.match(refused.agentNote, /can edit/);
+  assert.equal(asked.length, 1);
+});
+
+test("the Slatebox agent's replies can be removed by whoever may edit the slate", async () => {
+  const { registry, agent, comments } = makeWorld();
+  comments.push({ _id: "c-agent", slateId: "s-own", nodeId: "n1", createdByUserId: "slatebox-agent", createdByUserName: "Slatebox agent", text: "Done", fromAgent: true });
+  assert.deepEqual(body(await registry.run(agent("ana"), "comments.remove", { shareId: "own", commentId: "c-agent" })), { commentId: "c-agent", removed: true });
+  assert.equal(comments.length, 0);
+});

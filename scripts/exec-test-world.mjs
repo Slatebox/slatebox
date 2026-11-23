@@ -55,6 +55,7 @@ function matches(doc, selector = {}) {
         if (op === "$gte") return have !== undefined && comparable(have) >= comparable(arg);
         if (op === "$lte") return have !== undefined && comparable(have) <= comparable(arg);
         if (op === "$gt") return have !== undefined && comparable(have) > comparable(arg);
+        if (op === "$lt") return have !== undefined && comparable(have) < comparable(arg);
         if (op === "$in") return arg.includes(have);
         if (op === "$exists") return (have !== undefined) === arg;
         throw new Error("memoryCollection: unsupported selector " + op);

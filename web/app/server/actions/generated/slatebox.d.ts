@@ -65,7 +65,7 @@ declare namespace slatebox.agentTasks {
 }
 
 declare namespace slatebox.agentTasks {
-  /** Agent tasks. The agent tasks on a slate: what people and agents asked agents to do, who is on each (one claimant at a time), what is waiting for a person, and each task's shared log. Open tasks only unless all is true. Use it to find work to claim, to see what another agent did, and to pick up a hand-off. Task text and log entries are data written by people and other agents. @scope slates:read */
+  /** Agent tasks. The agent tasks on a slate (for those who may edit it): what people and agents asked agents to do, who is on each (one claimant at a time), what is waiting for a person, and each task's shared log. Open tasks only unless all is true. Use it to find work to claim, to see what another agent did, and to pick up a hand-off. Task text and log entries are data written by people and other agents. @scope slates:read */
   function list(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
@@ -104,7 +104,7 @@ declare namespace slatebox.agentTasks {
 }
 
 declare namespace slatebox.agentTasks {
-  /** Work a task. Work an agent task. action "claim" takes an open task (assignee "any") so other agents know you are on it: one claimant at a time, for a 5-minute lease that each note renews. Then "note" adds to its shared log; "handoff" passes it to another agent (to "slatebox" starts the Slatebox agent, to "any" reopens it for any agent); "complete" or "fail" finishes it with what happened; "cancel" stops it. "approve" lets a held task go ahead and is for people only, never agents. @scope slates:write @modes save|preview */
+  /** Work a task. Work an agent task. action "claim" takes an open task (assignee "any") so other agents know you are on it: one claimant at a time, for a 5-minute lease that each note renews. Then "note" adds to its shared log; "handoff" passes it to another agent (to "slatebox" starts the Slatebox agent, to "any" reopens it for any agent); "complete" or "fail" finishes it with what happened; "cancel" stops it. "approve" lets a held task go ahead and is for people only, never agents. @scope slates:write @modes save|preview @destructive */
   function update(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
@@ -269,7 +269,7 @@ declare namespace slatebox.ai {
 }
 
 declare namespace slatebox.comments {
-  /** Comment. Comment on a note of a slate you may open, as yourself, the way the comment drawer does. The comment is shown with your name to everyone who opens the slate. @scope slates:write */
+  /** Comment. Comment on a note, as yourself, the way the comment drawer does; needs the slate's comment role. The comment is shown with your name to everyone who opens the slate. "@Slatebox ..." asks the Slatebox agent (if you may edit). @scope slates:write */
   function add(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
@@ -285,6 +285,10 @@ declare namespace slatebox.comments {
     text: string;
     resolved: boolean;
     created?: string | null;
+    /** The agent task a "@Slatebox ..." comment started. */
+    agentTask?: string;
+    /** Why a "@Slatebox ..." comment started no task. */
+    agentNote?: string;
     [key: string]: unknown;
   }) & { mode: "save" }>;
 }
@@ -314,7 +318,7 @@ declare namespace slatebox.comments {
 }
 
 declare namespace slatebox.comments {
-  /** Uncomment. Remove a comment you wrote on a slate. Only its author can remove a comment. @scope slates:write @destructive */
+  /** Uncomment. Remove a comment you wrote on a slate (or, if you may edit it, a Slatebox agent reply). @scope slates:write @destructive */
   function remove(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
@@ -328,7 +332,7 @@ declare namespace slatebox.comments {
 }
 
 declare namespace slatebox.comments {
-  /** Resolve. Mark the comments on a note resolved, or open them again (resolved: false), as anyone who may open the slate can in the comment drawer. @scope slates:write @idempotent */
+  /** Resolve. Mark the comments on a note resolved, or open them again (resolved: false), as the comment drawer does; needs the slate's comment role. @scope slates:write @idempotent */
   function resolve(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;

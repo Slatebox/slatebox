@@ -39,6 +39,21 @@ export async function canReadSlate(userId, slate) {
   return Boolean(resolveSlateRole(slate, user, isAdmin, grants))
 }
 
+// Commenting follows the slate's sharing comment role (owner decision 2026-11-23): COMMENT or EDIT,
+// never plain read access. The owner and whoever may edit always may.
+export async function canCommentSlate(userId, slate) {
+  if (!slate) return false
+  if (userId && slate.userId === userId) return true
+  const user = await viewer(userId)
+  if (!user) return false
+  if (await canEditSlate(userId, slate)) return true
+  const isAdmin = user.isMasterUser === true || Boolean(user.orgId && user.orgId === slate.orgId && await isTeamAdmin(user._id))
+  const grants = await SlateAccess.find({ slateId: slate._id, type: slateVisibility(slate) }, {
+    fields: { slateId: 1, type: 1, userId: 1, accessKey: 1, slateAccessPermissionId: 1 },
+  }).fetchAsync()
+  return ['COMMENT', 'EDIT'].includes(resolveSlateRole(slate, user, isAdmin, grants))
+}
+
 export async function canEditSlate(userId, slate) {
   if (!slate) return false
   if (userId && slate.userId === userId) return true

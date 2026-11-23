@@ -17,7 +17,8 @@ export const TASK_LIMITS = Object.freeze({
   logEntries: 100,
   textChars: 500,
   leaseMs: 5 * 60_000,
-  keepEndedMs: 30 * 24 * 3600_000,
+  // Every task is deleted this long after its last change, open or ended.
+  keepMs: 30 * 24 * 3600_000,
 })
 export const TASK_STATES = Object.freeze(['submitted', 'working', 'input-required', 'completed', 'failed', 'canceled'])
 export const OPEN_STATES = Object.freeze(['submitted', 'working', 'input-required'])
@@ -76,9 +77,8 @@ export function createAgentTasks({ collection, now = Date.now, newId }) {
   async function change(doc, set, logEntry, unset = null) {
     const at = new Date(now())
     const log = [...(doc.log || []), ...(logEntry ? [logEntry] : [])].slice(-TASK_LIMITS.logEntries)
-    const ended = !OPEN_STATES.includes(set.status ?? doc.status)
     const update = {
-      $set: { ...set, log, updatedAt: at, ...(ended && { expiresAt: new Date(at.getTime() + TASK_LIMITS.keepEndedMs) }) },
+      $set: { ...set, log, updatedAt: at, expiresAt: new Date(at.getTime() + TASK_LIMITS.keepMs) },
       $inc: { rev: 1 },
       ...(unset && { $unset: unset }),
     }
@@ -116,6 +116,7 @@ export function createAgentTasks({ collection, now = Date.now, newId }) {
       rev: 0,
       createdAt: at,
       updatedAt: at,
+      expiresAt: new Date(at.getTime() + TASK_LIMITS.keepMs),
     }
     await collection.insertOne(doc)
     return doc
@@ -152,6 +153,45 @@ export function createAgentTasks({ collection, now = Date.now, newId }) {
     if (!holds(doc, claimant)) throw problem(409, 'not_claimed', 'Claim the task before writing to it.')
     if (!cleanTaskText(text)) throw problem(400, 'invalid_request', 'Write a note of 1 to 500 characters.')
     return change(doc, { claim: { ...doc.claim, until: new Date(now() + TASK_LIMITS.leaseMs) } }, entry(claimant.label, 'note', text))
+  }
+
+  /** The claimant is still at it: its lease runs on, with nothing written to the log. */
+  async function renew(slateId, taskId, claimant) {
+    const doc = await load(slateId, taskId)
+    if (!holds(doc, claimant) || doc.status !== 'working') throw problem(409, 'not_claimed', 'This task is no longer yours to work.')
+    return change(doc, { claim: { ...doc.claim, until: new Date(now() + TASK_LIMITS.leaseMs) } }, null)
+  }
+
+  /** Whether the claimant still holds this task and may go on with it. */
+  async function stillHolds(slateId, taskId, claimant) {
+    const doc = await collection.findOne({ _id: taskId })
+    return Boolean(doc && doc.slateId === slateId && doc.status === 'working' && holds(doc, claimant))
+  }
+
+  /**
+   * Claims that lapsed while a task was being worked (a crash, a lost agent): a task for the
+   * Slatebox agent fails with the reason, so its slot is free; an outside agent's task opens again
+   * for any agent. isRunning(taskId): a run this server still has going is left alone.
+   */
+  async function expireClaims({ isRunning = () => false, limit = 100 } = {}) {
+    const rows = await collection.find({ status: 'working', 'claim.until': { $lt: new Date(now()) } }).toArray()
+    const expired = []
+    for (const doc of rows.slice(0, limit)) {
+      if (isRunning(doc._id)) continue
+      const builtin = doc.assignee === 'slatebox'
+      const done = await change(
+        doc,
+        builtin ? { status: 'failed', claim: null } : { status: 'submitted', claim: null },
+        entry(doc.claim?.label || 'Slatebox', builtin ? 'failed' : 'expired', builtin ? 'The agent stopped before it finished. Ask again.' : 'The claim lapsed; open for any agent again.')
+      ).catch(() => null)
+      if (done) expired.push(done)
+    }
+    return expired
+  }
+
+  /** A slate was deleted: its tasks go with it. */
+  async function removeForSlate(slateId) {
+    if (typeof collection.deleteMany === 'function') await collection.deleteMany({ slateId })
   }
 
   /**
@@ -230,5 +270,5 @@ export function createAgentTasks({ collection, now = Date.now, newId }) {
     await collection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
   }
 
-  return { create, list, load, claim, note, handoff, hold, finish, approve, cancel, ensureIndexes }
+  return { create, list, load, claim, renew, stillHolds, note, handoff, hold, finish, approve, cancel, expireClaims, removeForSlate, ensureIndexes }
 }

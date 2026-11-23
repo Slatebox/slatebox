@@ -16,6 +16,7 @@ import rawMongoSearch from '../common/rawMongoSearch'
 import {
   Slates,
   SlateAccess,
+  AgentTasks,
   Comments,
   Messages,
   GuestViews,
@@ -86,6 +87,7 @@ export async function deleteOwnedSlate(slate) {
   await SlateAccess.removeAsync({ slateId: slate._id })
   await Messages.removeAsync({ slateId: slate._id })
   await Comments.removeAsync({ slateId: slate._id })
+  await AgentTasks.removeAsync({ slateId: slate._id })
   await Slates.removeAsync({ _id: slate._id })
   if (slate.creative?.model?.kind === 'workshop') {
     await SlatePresentations.removeAsync({ slateShareId: slate.shareId, userId: slate.userId, workshop: { $exists: true } })

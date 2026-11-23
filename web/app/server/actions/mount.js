@@ -19,6 +19,7 @@ import { createSlateReader } from '../slate-read.mjs'
 import { createPrivateSlateOperation } from '../create-slate-api.mjs'
 import { createSlateInviteOperation } from '../slate-invite-api.mjs'
 import { deleteOwnedSlate, embedViewerOrigin, generateSlateShareId } from '../methods/slates'
+import { canCommentSlate } from '../common/slate-access'
 import { resolvePresentationSlate } from '../methods/creative-slates'
 import { slateSaveCore } from '../slate-save'
 import { publicTemplateSelector } from '../../imports/api/common/template-policy.mjs'
@@ -29,7 +30,7 @@ import { API_TOKEN_SCOPES } from '../api-token-core.mjs'
 import apiTokenService from '../api-token-auth.mjs'
 import { createAppRegistry } from './index.mjs'
 import { accounts, describer } from '../instance/meteor'
-import { createIdempotencyStore } from './idempotency.mjs'
+import { createIdempotencyStore, ensureIdempotencyIndexes } from './idempotency.mjs'
 import { createRateLimiter } from './rate-limit.mjs'
 import { principalFromToken } from './principal.mjs'
 import { mountHttp } from './http.mjs'
@@ -84,6 +85,8 @@ export const deps = {
     saveCore: slateSaveCore,
     operationRuns: SlateOperationRuns,
     // The session rule the canvas uses: what this account may open and edit.
+    // The drawer's comment rule (comments.add for a signed-in page): the sharing comment role.
+    canComment: (slate, userId) => canCommentSlate(userId, slate),
     async resolveSlateForUser(shareId, userId) {
       const access = await resolvePresentationSlate(shareId, userId)
       if (access) return { slate: access.slateBase, canRead: Boolean(access.accessLevel), canEdit: access.canEdit }
@@ -202,4 +205,5 @@ export function mountActions(app) {
 
 Meteor.startup(async () => {
   await RateWindows.rawCollection().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+  await ensureIdempotencyIndexes(IdempotencyRecords.rawCollection())
 })

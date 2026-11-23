@@ -27,14 +27,15 @@ export default function AgentTasksPanel({ shareId, canEdit }) {
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
   const [error, setError] = useState('')
+  // Task text and logs are for people who can edit the slate; the server publishes nothing to others.
   const tasks = useTracker(() => {
-    if (!shareId) return []
+    if (!shareId || !canEdit) return []
     Meteor.subscribe('agentTasks.forSlate', shareId)
     return AgentTasks.find({ shareId }, { sort: { createdAt: -1 } }).fetch()
-  }, [shareId])
+  }, [shareId, canEdit])
   const waiting = tasks.filter((task) => task.status === 'input-required').length
   const active = tasks.filter((task) => ['submitted', 'working', 'input-required'].includes(task.status)).length
-  if (!canEdit && !tasks.length) return null
+  if (!canEdit) return null
 
   const call = async (method, input) => {
     setError('')
@@ -82,6 +83,11 @@ export default function AgentTasksPanel({ shareId, canEdit }) {
               </Box>
               <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{task.text}</Typography>
               {task.waiting && <Typography variant="body2" sx={{ mt: 0.5 }} data-agent-task-waiting>{task.waiting}</Typography>}
+              {task.status === 'failed' && task.assignee === 'slatebox' && (
+                <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+                  <Button size="small" data-agent-task-replan onClick={() => call('agentTasks.create', { text: task.text, assignee: 'slatebox', ...(task.nodeId && { nodeId: task.nodeId }) })}>Plan again</Button>
+                </Box>
+              )}
               {canEdit && task.status === 'input-required' && (
                 <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
                   <Button size="small" variant="contained" data-agent-task-approve onClick={() => call('agentTasks.update', { taskId: task._id, action: 'approve' })}>Approve</Button>

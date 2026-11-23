@@ -61,9 +61,10 @@ const onlyFields = (fieldNames, allowed) => fieldNames.every(field => allowed.in
 const signedIn = userId => typeof userId === 'string' && userId.length > 0
 
 Comments.allow({
-  async insert(userId, doc) {
-    return signedIn(userId) && doc.createdByUserId === userId && typeof doc.slateId === 'string' &&
-      canReadSlate(userId, await findSlate({ slateId: doc.slateId }))
+  // Comments are posted on the server only (comments.add: the comment role, and "@Slatebox ..."
+  // asks the Slatebox agent there), never inserted from a browser.
+  insert() {
+    return false
   },
   update(userId, doc, fieldNames) {
     return signedIn(userId) && doc.createdByUserId === userId && onlyFields(fieldNames, ['text', 'resolved', 'mentionedTeamMembers'])

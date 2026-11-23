@@ -30,7 +30,6 @@ import AuthManager from '../../api/common/AuthManager'
 import CONSTANTS from '../../api/common/constants'
 import { Messages, Comments } from '../../api/common/models'
 import promisify from '../../api/client/promisify'
-import { slateboxRequest } from '../../api/common/agent-mention.mjs'
 
 import { globalMessage } from '../jotai/atoms'
 
@@ -59,6 +58,8 @@ const StyledMentionsInput = styled(MentionsInput)(({ theme }) => ({
 
 export default function CommentDrawer({
   shareId,
+  // The slate's comment role (COMMENT or EDIT by its sharing): readers see comments, never post.
+  canComment = true,
   orgId,
   slateId,
   slateName,
@@ -218,25 +219,19 @@ export default function CommentDrawer({
 
   const sendComment = async () => {
     if (comment.trim() !== '') {
-      const comm = {
-        timestamp: new Date().valueOf(),
-        createdByUserId: Meteor.userId(),
-        createdByUserName: getUserName(),
-        mentionedTeamMembers: attachedTeamMembers(),
-        text: comment,
-        read: false,
-        priority: 5,
-        slateId,
-        nodeId,
-        resolved: false,
+      // Posted on the server (comments.add): the slate's comment role decides, and "@Slatebox …"
+      // asks the Slatebox agent there, the same as from the API, MCP or exec.
+      let posted
+      try {
+        posted = await Meteor.callAsync('comments.add', { shareId, noteId: nodeId, text: comment })
+      } catch (e) {
+        setMessage({ visible: true, text: e.reason || e.message || 'The comment could not be posted.', severity: 'error' })
+        return
       }
-      const commId = await Comments.insertAsync(comm)
-      // "@Slatebox …" asks the Slatebox agent: it works on the slate and replies in this thread.
-      const forAgent = slateboxRequest(comment)
-      if (forAgent && shareId) {
-        Meteor.callAsync('agentTasks.create', { shareId, text: forAgent, nodeId, assignee: 'slatebox' })
-          .catch((e) => setMessage({ visible: true, text: e.reason || 'The Slatebox agent could not take that.', severity: 'error' }))
-      }
+      const commId = posted.commentId
+      const mentioned = attachedTeamMembers()
+      if (mentioned.length) await Comments.updateAsync({ _id: commId }, { $set: { mentionedTeamMembers: mentioned } })
+      if (posted.agentNote) setMessage({ visible: true, text: posted.agentNote, severity: 'info' })
       const note = `[${slateName}] from ${getUserName()}: ${cleanTextForDisplay(
         comment
       )}`
@@ -311,6 +306,7 @@ export default function CommentDrawer({
     orgId: PropTypes.string,
     slateId: PropTypes.string,
     shareId: PropTypes.string,
+    canComment: PropTypes.bool,
     nodeId: PropTypes.string,
     closeDrawer: PropTypes.func,
     open: PropTypes.bool.isRequired,
@@ -343,7 +339,7 @@ export default function CommentDrawer({
                 <Typography variant="h5">Comment</Typography>
               </Box>
             </Grid>
-            {Meteor.user() && comments.length > 0 ? (
+            {Meteor.user() && canComment && comments.length > 0 ? (
               <Grid size={12}>
                 <Tooltip
                   title="Mark once resolved"
@@ -394,6 +390,7 @@ export default function CommentDrawer({
                 )}
               </div>
             )}
+            {canComment ? (<>
             <Grid style={{ minHeight: '80px' }} size={10}>
               <StyledMentionsInput
                 value={comment}
@@ -416,6 +413,13 @@ export default function CommentDrawer({
                 Go
               </Button>
             </Grid>
+            </>) : (
+              <Grid size={12}>
+                <Typography variant="body2" color="text.secondary" sx={{ mx: 2, mb: 2 }}>
+                  You can read the comments here. Commenting needs the comment role on this slate: ask its owner.
+                </Typography>
+              </Grid>
+            )}
             <Grid size={12}>
               {comments.map((c) => (
                 <Grid

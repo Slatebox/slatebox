@@ -10,7 +10,8 @@ import { buildOpenApi } from "../web/app/server/actions/openapi.mjs";
 import { buildContract } from "../web/app/server/actions/contract.mjs";
 import { renderClientFiles } from "../web/app/server/actions/client-render.mjs";
 import { mountDdp } from "../web/app/server/actions/ddp.mjs";
-import { createIdempotencyStore } from "../web/app/server/actions/idempotency.mjs";
+import { OPERATION_RUN_TTL_MS, runExpiry } from "../web/app/imports/api/common/slate-operation-runs.mjs";
+import { IDEMPOTENCY_TTL_MS, createIdempotencyStore, ensureIdempotencyIndexes } from "../web/app/server/actions/idempotency.mjs";
 import { createRateLimiter } from "../web/app/server/actions/rate-limit.mjs";
 import { principalFromToken, principalFromUser } from "../web/app/server/actions/principal.mjs";
 import { isApiPath } from "../web/app/server/actions/http.mjs";
@@ -257,6 +258,48 @@ test("a replayed idempotency key with a different body answers 409; the same bod
   assert.equal(malformed.status, 400);
 });
 
+// Privacy: an idempotency record (and the answer it replays) is kept 24 hours after it is
+// written, then expires. MongoDB drops it by its expiresAt (TTL index); until then, reads treat an
+// expired record as absent, so a key reused after a day starts a new request.
+test("idempotency records expire 24 hours after they are written; replay works inside the window", async () => {
+  let time = 0;
+  const rows = memoryDriverCollection();
+  const store = createIdempotencyStore({ collection: rows, now: () => time });
+  const claim = { subject: "token", key: "k", action: "slates.applyOperations", fingerprint: "f1" };
+  assert.equal((await store.reserve(claim)).state, "reserved");
+  await store.complete("token", "k", { ok: true, text: "people's words" });
+  const [row] = rows.docs.values();
+  assert.ok(row.expiresAt instanceof Date, "a TTL index needs a Date");
+  assert.equal(row.expiresAt.getTime(), IDEMPOTENCY_TTL_MS);
+  assert.equal(IDEMPOTENCY_TTL_MS, 24 * 3600_000);
+  time = IDEMPOTENCY_TTL_MS - 1;
+  const replay = await store.reserve(claim);
+  assert.deepEqual([replay.state, replay.record.response], ["existing", { ok: true, text: "people's words" }]);
+  assert.equal((await store.get("token", "k")).state, "done");
+  time = IDEMPOTENCY_TTL_MS;
+  assert.equal(await store.get("token", "k"), null, "an expired record is not read");
+  const fresh = await store.reserve({ ...claim, fingerprint: "f2" });
+  assert.equal(fresh.state, "reserved", "an expired key starts a new request");
+  const [again] = rows.docs.values();
+  assert.equal(again.response, undefined, "the old answer is gone");
+  assert.equal(again.expiresAt.getTime(), 2 * IDEMPOTENCY_TTL_MS);
+});
+
+// Privacy: a saved run's receipt (the plan, the person's words, the answer) is kept 90 days, then
+// MongoDB drops it by its expiresAt; open canvases only ever need the last few.
+test("a saved canvas plan's run receipt expires 90 days after it is saved", async (t) => {
+  assert.equal(OPERATION_RUN_TTL_MS, 90 * 24 * 3600_000);
+  assert.equal(runExpiry(1000).getTime(), 1000 + OPERATION_RUN_TTL_MS);
+  assert.equal(runExpiry(new Date(1000)).getTime(), 1000 + OPERATION_RUN_TTL_MS);
+  const call = await serve(t, world.build(), world.authenticate);
+  const { token } = await world.mint();
+  const saved = await call("/api/v1/slates/demo/operations", { token, key: "keep-90", method: "POST", body: { plan: addPlan, expectedRevision: world.slate.revision ?? 0 } });
+  assert.equal(saved.status, 201);
+  const run = world.runs.at(-1);
+  assert.ok(run.expiresAt instanceof Date);
+  assert.equal(run.expiresAt.getTime(), new Date(run.createdAt).getTime() + OPERATION_RUN_TTL_MS);
+});
+
 // Release/agentic, the lead's decision: every edit through the API names the revision it was
 // made on. A canvas plan without expectedRevision is refused with a 400 that names it, preview
 // and save alike, and nothing is saved.
@@ -364,7 +407,7 @@ test("the Developer tab and the API run one handler for list, create and revoke"
   // Import a team export calls teamImports.start, list, get, confirm, invite and discard.
   // Restated (agent teammates): the canvas's Agent tasks panel lists, asks and approves through
   // agentTasks.list, agentTasks.create and agentTasks.update, the actions tokens call.
-  assert.deepEqual(names.sort(), ["account.get", "agentTasks.create", "agentTasks.list", "agentTasks.update", "ai.check", "ai.get", "ai.update", "apiTokens.create", "apiTokens.list", "apiTokens.revoke", "instance.describe", "slates.copy", "slates.importMermaid", "slates.updateSettings", "team.export", "teamImports.confirm", "teamImports.discard", "teamImports.get", "teamImports.invite", "teamImports.list", "teamImports.start"]);
+  assert.deepEqual(names.sort(), ["account.get", "agentTasks.create", "agentTasks.list", "agentTasks.update", "ai.check", "ai.get", "ai.update", "apiTokens.create", "apiTokens.list", "apiTokens.revoke", "comments.add", "instance.describe", "slates.copy", "slates.importMermaid", "slates.updateSettings", "team.export", "teamImports.confirm", "teamImports.discard", "teamImports.get", "teamImports.invite", "teamImports.list", "teamImports.start"]);
   const asOwner = { userId: "owner" };
   const created = await methods["apiTokens.create"].call(asOwner, { name: "From the tab", scopes: ["slates:read"] });
   assert.match(created.token, /^sbx_/);
@@ -490,6 +533,9 @@ test(
       await client.close();
     });
     let time = 1000;
+    await ensureIdempotencyIndexes(db.collection("idempotency"));
+    const ttl = (await db.collection("idempotency").indexes()).find((index) => index.key.expiresAt === 1);
+    assert.equal(ttl?.expireAfterSeconds, 0);
     const store = createIdempotencyStore({ collection: db.collection("idempotency"), now: () => time, staleMs: 50 });
     const claim = { subject: "token", key: "k", action: "slates.applyOperations", fingerprint: "f1" };
     assert.equal((await store.reserve(claim)).state, "reserved");
@@ -510,3 +556,31 @@ test(
     assert.equal((await db.collection("rate").findOne({ _id: "account:u:0" })).count, 2);
   }
 );
+
+test("the scopes a token may need are derived from the actions: every scope any agent-callable action checks, in the token vocabulary's order", () => {
+  const registry = world.build();
+  // ai:admin is checked by ai.update and ai.check for level team or server, so they declare it.
+  assert.deepEqual(registry.neededScopes(), API_TOKEN_SCOPES);
+  for (const id of ["agentTasks.list", "agentTasks.create", "agentTasks.update", "comments.list", "comments.add", "comments.resolve", "comments.remove"]) {
+    const action = registry.get(id);
+    assert.ok(action, id);
+    assert.ok(registry.neededScopes().includes(action.scope), id);
+  }
+  assert.throws(
+    () => defineAction({ id: "probe.x", title: "x", description: "x", toolset: "x", kind: "read", scope: "slates:read", alsoScopes: "ai:admin", principals: ["agent"], input: { type: "object", properties: {}, additionalProperties: false }, output: { type: "object", properties: {} }, handler: async () => ({}) }),
+    /alsoScopes/
+  );
+});
+
+test("an OAuth connection lacking a permission is told to reconnect and allow it; a personal token to create one", async () => {
+  const registry = world.build();
+  const ask = (principal) => registry.run(principal, "slates.issueInvite", { shareId: "demo", role: "viewer" }).catch((error) => error);
+  const base = { kind: "agent", userId: "owner", tokenId: "t1", scopes: ["slates:read", "slates:write"] };
+  const viaApp = await ask({ ...base, oauth: true });
+  assert.equal(viaApp.code, "insufficient_scope");
+  assert.match(viaApp.message, /Reconnect/);
+  assert.match(viaApp.message, /slates:share/);
+  assert.doesNotMatch(viaApp.message, /Create a token/);
+  const viaToken = await ask(base);
+  assert.match(viaToken.message, /Create a token that has it/);
+});

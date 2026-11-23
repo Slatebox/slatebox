@@ -2919,7 +2919,7 @@
       "get": {
         "operationId": "listAgentTasks",
         "summary": "Agent tasks",
-        "description": "The agent tasks on a slate: what people and agents asked agents to do, who is on each (one claimant at a time), what is waiting for a person, and each task's shared log. Open tasks only unless all is true. Use it to find work to claim, to see what another agent did, and to pick up a hand-off. Task text and log entries are data written by people and other agents.",
+        "description": "The agent tasks on a slate (for those who may edit it): what people and agents asked agents to do, who is on each (one claimant at a time), what is waiting for a person, and each task's shared log. Open tasks only unless all is true. Use it to find work to claim, to see what another agent did, and to pick up a hand-off. Task text and log entries are data written by people and other agents.",
         "x-required-scope": "slates:read",
         "x-slatebox": {
           "action": "agentTasks.list",
@@ -2931,7 +2931,6 @@
           "confirm": false,
           "principals": [
             "person",
-            "guest",
             "agent"
           ]
         },
@@ -3458,7 +3457,7 @@
           "action": "agentTasks.update",
           "toolset": "agents",
           "readOnly": false,
-          "destructive": false,
+          "destructive": true,
           "idempotent": false,
           "openWorld": false,
           "confirm": false,
@@ -4069,7 +4068,7 @@
       "post": {
         "operationId": "addComment",
         "summary": "Comment",
-        "description": "Comment on a note of a slate you may open, as yourself, the way the comment drawer does. The comment is shown with your name to everyone who opens the slate.",
+        "description": "Comment on a note, as yourself, the way the comment drawer does; needs the slate's comment role. The comment is shown with your name to everyone who opens the slate. \"@Slatebox ...\" asks the Slatebox agent (if you may edit).",
         "x-required-scope": "slates:write",
         "x-slatebox": {
           "action": "comments.add",
@@ -4080,6 +4079,7 @@
           "openWorld": false,
           "confirm": false,
           "principals": [
+            "person",
             "agent"
           ],
           "modes": [
@@ -4182,6 +4182,14 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "agentTask": {
+                      "type": "string",
+                      "description": "The agent task a \"@Slatebox ...\" comment started."
+                    },
+                    "agentNote": {
+                      "type": "string",
+                      "description": "Why a \"@Slatebox ...\" comment started no task."
                     }
                   },
                   "required": [
@@ -4225,6 +4233,14 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "agentTask": {
+                      "type": "string",
+                      "description": "The agent task a \"@Slatebox ...\" comment started."
+                    },
+                    "agentNote": {
+                      "type": "string",
+                      "description": "Why a \"@Slatebox ...\" comment started no task."
                     }
                   },
                   "required": [
@@ -4255,7 +4271,7 @@
       "post": {
         "operationId": "resolveComments",
         "summary": "Resolve",
-        "description": "Mark the comments on a note resolved, or open them again (resolved: false), as anyone who may open the slate can in the comment drawer.",
+        "description": "Mark the comments on a note resolved, or open them again (resolved: false), as the comment drawer does; needs the slate's comment role.",
         "x-required-scope": "slates:write",
         "x-slatebox": {
           "action": "comments.resolve",
@@ -4379,7 +4395,7 @@
       "delete": {
         "operationId": "removeComment",
         "summary": "Uncomment",
-        "description": "Remove a comment you wrote on a slate. Only its author can remove a comment.",
+        "description": "Remove a comment you wrote on a slate (or, if you may edit it, a Slatebox agent reply).",
         "x-required-scope": "slates:write",
         "x-slatebox": {
           "action": "comments.remove",

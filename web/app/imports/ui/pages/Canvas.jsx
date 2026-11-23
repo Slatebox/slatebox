@@ -307,6 +307,8 @@ export default function Canvas() {
       nodeId: node.options.id,
       slateId: slate.current.options.id,
       shareId: slate.current.shareId,
+      // Readers read; the comment role (or edit) posts and resolves. The server checks it too.
+      canComment: Boolean(Meteor.userId()) && !accessLevel.current.isReadOnly,
       slateName: slate.current.options.name,
       orgId: slateOrgId.current,
       open: true,

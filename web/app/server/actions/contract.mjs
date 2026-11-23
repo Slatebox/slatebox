@@ -1,7 +1,8 @@
-// The contract the published package (MCP tools and CLI commands) is generated from.
+// The contract the published package (MCP tools; the CLI's `slatebox exec` / `describe`) is generated from.
 // Every action a token can call over HTTP appears here with its route, flags, schemas
 // (references inlined, so each schema stands alone) and, where it has one, its draft tool
-// name and CLI command. Names are a draft until the tool evaluation run (P18b) freezes them.
+// name and a reserved CLI name (not a command the CLI serves today: the CLI reaches every action
+// through `slatebox exec`). Names are a draft until the tool evaluation run (P18b) freezes them.
 import { CONTRACT_VERSION } from './registry.mjs'
 import { actionFlags, httpLayout, modeDescription } from './openapi.mjs'
 import { inlineRefs } from './schema.mjs'

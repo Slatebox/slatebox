@@ -1,12 +1,17 @@
-// Comments on a slate's notes, for agents, by the rules the comment drawer follows
-// (server/permissions.js and server/methods/comments.js):
-//   read, add, resolve  anyone who may open the slate (a token acts as its account)
-//   remove              your own comment only
+// Comments on a slate's notes, by the rules the comment drawer follows (the drawer posts through
+// comments.add too, server/methods/comments.js resolves and removes):
+//   read                anyone who may open the slate (a token acts as its account)
+//   add, resolve        the slate's comment role: COMMENT or EDIT by its sharing (owner decision
+//                       2026-11-23), never plain read access
+//   remove              your own comment; the Slatebox agent's replies, by anyone who may edit
+// "@Slatebox ..." in a comment asks the Slatebox agent here, on the server, whichever surface
+// posted it (the drawer, REST, MCP add_comment, exec).
 // slates.get counts each note's comments; these read and write the comments themselves.
 import { defineAction } from './registry.mjs'
 import { problem } from './errors.mjs'
 import { loadSlate } from './slate-access.mjs'
 import { shareIdInput } from './slate-schemas.mjs'
+import { slateboxRequest } from '../../imports/api/common/agent-mention.mjs'
 
 const noteId = { type: 'string', minLength: 1, maxLength: 128, description: 'The note\'s id, as slates.get gives it.' }
 const commentId = { type: 'string', minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' }
@@ -34,6 +39,43 @@ export const commentEntry = (row, userId) => ({
   resolved: Boolean(row.resolved),
   created: row.timestamp ? new Date(row.timestamp).toISOString() : null,
 })
+
+const COMMENT_ROLES = ['COMMENT', 'EDIT']
+const noCommentRole = () =>
+  problem(403, 'comment_role_required', 'Your role on this slate does not include commenting. Ask its owner to share it with you as a commenter.')
+
+// A token by its account's role on the slate (authorizeTokenForSlate); a signed-in page (the
+// drawer) by the session's rule (deps.canComment, or the edit right where that is not given).
+const loadCommenter = async (principal, input, ctx) => {
+  if (principal.kind === 'person') {
+    const found = await ctx.deps.resolveSlateForUser(input.shareId, principal.userId)
+    if (!found?.slate || !found.canRead) throw problem(404, 'not_found', 'Slate not found or unavailable.')
+    const may = found.canEdit || (ctx.deps.canComment ? await ctx.deps.canComment(found.slate, principal.userId) : false)
+    if (!may) throw noCommentRole()
+    ctx.access = { canEdit: Boolean(found.canEdit), role: found.canEdit ? 'EDIT' : 'COMMENT' }
+    return found.slate
+  }
+  const slate = await loadSlate(false)(principal, input, ctx)
+  if (!ctx.access?.canEdit && !COMMENT_ROLES.includes(ctx.access?.role)) throw noCommentRole()
+  return slate
+}
+
+// "@Slatebox ..." asks the Slatebox agent, as the commenter, when they may edit the slate (the agent
+// works with the asker's rights). The comment is kept either way; agentNote says why no task.
+async function askFromComment({ principal, deps, slate, canEdit, text, nodeId, commentId }) {
+  const request = slateboxRequest(text)
+  const tasks = deps.agentTasks
+  if (!request || !tasks?.store) return {}
+  if (!canEdit) return { agentNote: 'The Slatebox agent works only for people who can edit this slate, so it was not asked.' }
+  try {
+    const label = await tasks.labelOf(principal, slate)
+    const doc = await tasks.store.create({ slate, by: { userId: principal.userId, label }, text: request, assignee: 'slatebox', nodeId, commentId })
+    tasks.onAssigned?.(doc)
+    return { agentTask: doc._id }
+  } catch (error) {
+    return { agentNote: String(error?.message || 'The Slatebox agent could not take that.').slice(0, 200) }
+  }
+}
 
 const hasNote = (slate, id) => (slate.nodes || []).some((node) => node?.options?.id === id)
 const noNote = () => problem(404, 'not_found', 'There is no note with that id on this slate.')
@@ -68,25 +110,32 @@ export const commentsAdd = defineAction({
   id: 'comments.add',
   title: 'Comment',
   description:
-    'Comment on a note of a slate you may open, as yourself, the way the comment drawer does. The comment is shown with your name to everyone who opens the slate.',
+    'Comment on a note, as yourself, the way the comment drawer does; needs the slate\'s comment role. The comment is shown with your name to everyone who opens the slate. "@Slatebox ..." asks the Slatebox agent (if you may edit).',
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:write',
-  principals: ['agent'],
+  principals: ['person', 'agent'],
   // A retried comment answers the first instead of posting it twice.
   idempotency: 'optional',
-  mounts: { http: { method: 'POST', path: '/slates/{shareId}/comments', operationId: 'addComment' } },
+  mounts: { ddp: true, http: { method: 'POST', path: '/slates/{shareId}/comments', operationId: 'addComment' } },
   input: {
     type: 'object',
     properties: { shareId: shareIdInput, noteId, text: { type: 'string', minLength: 1, maxLength: 4000 } },
     required: ['shareId', 'noteId', 'text'],
     additionalProperties: false,
   },
-  output: comment,
-  load: loadSlate(false),
+  output: {
+    ...comment,
+    properties: {
+      ...comment.properties,
+      agentTask: { type: 'string', description: 'The agent task a "@Slatebox ..." comment started.' },
+      agentNote: { type: 'string', description: 'Why a "@Slatebox ..." comment started no task.' },
+    },
+  },
+  load: loadCommenter,
   tool: { name: 'add_comment', title: 'Comment on a note', description: 'Leave a comment on a note of a slate, under the person\'s name.' },
   cli: { command: 'comment' },
-  async handler(principal, input, { deps, now, resource: slate }) {
+  async handler(principal, input, { deps, now, resource: slate, access }) {
     if (!hasNote(slate, input.noteId)) throw noNote()
     const text = input.text.trim()
     if (!text) throw problem(400, 'invalid_request', 'Write the comment.')
@@ -103,7 +152,8 @@ export const commentsAdd = defineAction({
       resolved: false,
     }
     const id = await deps.comments.add(row)
-    return commentEntry({ ...row, _id: id }, principal.userId)
+    const asked = await askFromComment({ principal, deps, slate, canEdit: Boolean(access?.canEdit), text, nodeId: input.noteId, commentId: id })
+    return { ...commentEntry({ ...row, _id: id }, principal.userId), ...asked }
   },
 })
 
@@ -111,7 +161,7 @@ export const commentsResolve = defineAction({
   id: 'comments.resolve',
   title: 'Resolve',
   description:
-    'Mark the comments on a note resolved, or open them again (resolved: false), as anyone who may open the slate can in the comment drawer.',
+    'Mark the comments on a note resolved, or open them again (resolved: false), as the comment drawer does; needs the slate\'s comment role.',
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:write',
@@ -132,7 +182,7 @@ export const commentsResolve = defineAction({
     required: ['noteId', 'resolved', 'comments'],
   },
   successStatus: 200,
-  load: loadSlate(false),
+  load: loadCommenter,
   tool: { name: 'resolve_comments', title: 'Resolve a note\'s comments', description: 'Mark the comments on a note resolved, or open them again.' },
   cli: { command: 'resolve' },
   async handler(_principal, input, { deps, resource: slate }) {
@@ -145,7 +195,7 @@ export const commentsResolve = defineAction({
 export const commentsRemove = defineAction({
   id: 'comments.remove',
   title: 'Uncomment',
-  description: 'Remove a comment you wrote on a slate. Only its author can remove a comment.',
+  description: 'Remove a comment you wrote on a slate (or, if you may edit it, a Slatebox agent reply).',
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:write',
@@ -159,10 +209,12 @@ export const commentsRemove = defineAction({
   load: loadSlate(false),
   tool: { name: 'remove_comment', title: 'Remove your comment', description: 'Remove a comment the person wrote on a slate.' },
   cli: { command: 'uncomment' },
-  async handler(principal, input, { deps, resource: slate }) {
+  async handler(principal, input, { deps, resource: slate, access }) {
     const row = await deps.comments.get({ slateId: slate._id, commentId: input.commentId })
     if (!row) throw problem(404, 'not_found', 'There is no such comment on this slate.')
-    if (row.createdByUserId !== principal.userId) throw problem(403, 'forbidden', 'Only its author can remove a comment.')
+    const agentReply = row.fromAgent === true && row.createdByUserId === 'slatebox-agent'
+    if (row.createdByUserId !== principal.userId && !(agentReply && access?.canEdit))
+      throw problem(403, 'forbidden', 'Only its author can remove a comment; the Slatebox agent\'s replies, whoever may edit the slate.')
     await deps.comments.remove({ slateId: slate._id, commentId: input.commentId })
     return { commentId: input.commentId, removed: true }
   },

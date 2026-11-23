@@ -4,6 +4,7 @@
 // notifications, and the agentTasks.forSlate publication the canvas panel reads.
 import { Meteor } from 'meteor/meteor'
 import { Random } from 'meteor/random'
+import { Mongo } from 'meteor/mongo'
 import { AgentTasks, Comments, Messages, SlateApiTokens } from '../../imports/api/common/models'
 import CONSTANTS from '../../imports/api/common/constants'
 import { agentLabel, firstNameOf } from '../../imports/api/common/agent-label.mjs'
@@ -20,8 +21,22 @@ import { canStartAI } from '../metering/meteor'
 import { runAIAction } from '../metering/context.mjs'
 import { OPEN_STATES, SLATEBOX_AGENT, createAgentTasks, publicTask } from './agentTasks.mjs'
 import { createTeammate } from './teammate.mjs'
+import { createDailyCap, createRunQueue, runLimits } from './queue.mjs'
+import { selfHosted } from '../../imports/api/common/own-keys.mjs'
 
 export const agentTasks = createAgentTasks({ collection: AgentTasks.rawCollection(), newId: () => Random.id() })
+
+// How many runs go at once and how many a person starts a day (queue.mjs). The daily cap applies on
+// Slatebox Cloud, where each run spends the person's Pro credits; self-host sets its own (or none
+// beyond the concurrency caps) with settings.agents.dailyPerPerson.
+const LIMITS = runLimits(Meteor.settings)
+const queue = createRunQueue({ ...LIMITS, log: (error) => console.error('[agents]', error?.message) })
+const AgentRunDays = new Mongo.Collection('agentRunDays')
+const CLOUD = !selfHosted(Meteor.settings)
+const dailyCap = CLOUD || Meteor.settings?.agents?.dailyPerPerson
+  ? createDailyCap({ collection: AgentRunDays.rawCollection(), limit: LIMITS.dailyPerPerson })
+  : null
+const BUILTIN = Object.freeze({ key: SLATEBOX_AGENT.key, label: SLATEBOX_AGENT.label, builtin: true })
 
 const drawable = (slate) => !slate.creative || slate.nativeCanvasDrawing || slate.creative.model?.kind === 'workshop'
 
@@ -50,15 +65,19 @@ export const teammate = createTeammate({
   registry,
   conversation,
   presence: deps.presence,
+  async admit(task) {
+    if (!dailyCap || (await dailyCap.take(task.assignedBy))) return null
+    return `You have asked the Slatebox agent for ${dailyCap.limit} tasks today, the most for one day. It takes new tasks again after midnight UTC.`
+  },
   async resolveBoard(shareId, userId) {
     const access = await resolvePresentationSlate(shareId, userId)
     return access?.canEdit && drawable(access.slateBase) ? access.slateBase : null
   },
   // AI for an account that may draft (on Cloud: Pro credits and top-ups, through the meter), for a
   // request that reads as prose; typed notes and lines are drawn directly, at no cost.
-  async draft({ userId, text }, fn) {
+  async draft({ userId, text, board: given }, fn) {
     const user = await Meteor.users.findOneAsync(userId)
-    const board = { nodes: [] }
+    const board = given || { nodes: [] }
     const prose = !noteRequest(text) && !lineRequest(board, text, null) && aiQualifies({ canGenerate: await canStartAI(user), message: text })
     if (!prose) return fn({ useAI: false, model: null })
     return runAIAction({ feature: 'workshop', userId }, () => fn({ useAI: true, model: modelFor(null) }))
@@ -96,7 +115,19 @@ export const teammate = createTeammate({
     })
   },
 })
-const later = (work) => Meteor.defer(() => work().catch((error) => console.error('[agents]', error?.message)))
+// Every run goes through the bounded queue; a full queue fails the task with the reason, so nothing
+// piles up unseen.
+async function refuse(task, text) {
+  const claimed = await agentTasks.claim(task.slateId, task._id, BUILTIN).catch(() => null)
+  if (claimed) await agentTasks.finish(task.slateId, task._id, BUILTIN, 'failed', text).catch(() => null)
+}
+const BUSY = 'The Slatebox agent has too much waiting on this server right now. Ask again in a few minutes.'
+function enqueue(key, owner, work, task) {
+  const queued = queue.enqueue({ key, owner, work })
+  if (queued === 'full') refuse(task, BUSY).catch((error) => console.error('[agents]', error?.message))
+  return queued
+}
+const runTask = (task) => enqueue(task._id, task.assignedBy, () => teammate.run(task), task)
 
 // The action layer reaches the store, the names and the Slatebox agent through deps.
 deps.agentTasks = {
@@ -110,17 +141,19 @@ deps.agentTasks = {
       : null
     return agentLabel(first, token?.lastClient)
   },
-  onAssigned: (task) => later(() => teammate.run(task)),
-  onApproved: (approved) => later(() => teammate.resume(approved)),
+  onAssigned: (task) => runTask(task),
+  onApproved: (approved) => enqueue(approved.task._id, approved.task.assignedBy, () => teammate.resume(approved), approved.task),
+  // A canceled task that had not started leaves the queue; a running one stops before it saves.
+  onCanceled: (task) => queue.cancel(task._id),
 }
 
 // agentTasks.forSlate(shareId): the slate's tasks (open, and those finished in the last day) as
-// screens show them, for anyone who may read the slate.
+// screens show them, for people who may edit the slate. Public viewers, guests and readers get none.
 const RECENT_MS = 24 * 3600_000
 Meteor.publish('agentTasks.forSlate', async function (shareId) {
   if (typeof shareId !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(shareId)) return this.ready()
   const access = await resolvePresentationSlate(shareId, this.userId)
-  if (!access?.accessLevel || !access.slateBase?._id) return this.ready()
+  if (!this.userId || !access?.canEdit || !access.slateBase?._id) return this.ready()
   const callerKey = this.userId ? 'user:' + this.userId : null
   const since = new Date(Date.now() - RECENT_MS)
   const shown = (doc) => {
@@ -141,7 +174,12 @@ Meteor.publish('agentTasks.forSlate', async function (shareId) {
 
 Meteor.startup(async () => {
   await agentTasks.ensureIndexes().catch((error) => console.error('[agents] indexes', error?.message))
-  // Tasks the Slatebox agent was given before a restart: pick them up.
-  const waiting = await AgentTasks.rawCollection().find({ assignee: 'slatebox', status: 'submitted' }).limit(50).toArray()
-  for (const task of waiting) later(() => teammate.run(task))
+  await dailyCap?.ensureIndexes().catch((error) => console.error('[agents] indexes', error?.message))
+  // Claims that lapsed (a crash mid-run): free them, now and every minute.
+  const sweep = () => agentTasks.expireClaims({ isRunning: (id) => queue.isActive(id) }).catch((error) => console.error('[agents] sweep', error?.message))
+  await sweep()
+  Meteor.setInterval(sweep, 60_000)
+  // Tasks the Slatebox agent was given before a restart: pick them up, through the queue.
+  const waiting = await AgentTasks.rawCollection().find({ assignee: 'slatebox', status: 'submitted' }).limit(LIMITS.queued).toArray()
+  for (const task of waiting) runTask(task)
 })
