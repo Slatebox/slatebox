@@ -12,7 +12,7 @@ import { Slates, SlateAccess, Permissions, GuestViews } from '../../imports/api/
 import { creativeSlates, nativeSlateStarters } from '../../imports/api/common/creativeSlates.mjs'
 import { maxWorkshopFragmentLength } from '../../imports/api/common/portableWorkshopSlate.mjs'
 import { slateSaveCore, fencedSlateSaveCore } from '../slate-save'
-import { playWorkshopChanges, readWorkshopChanges, drawingAfter, tradeKey, tradesAfter } from './workshop-play.mjs'
+import { playWorkshopChanges, readWorkshopChanges, drawingAfter, tradeKey, tradesAfter, isRuleChange } from './workshop-play.mjs'
 import { storeTradePictures, storeWorkshopPictures } from './workshop-pictures.mjs'
 import { recordedUndo, replaceWorkshop } from './workshop-replace.mjs'
 import { moverName } from '../../imports/api/common/mover-name.mjs'
@@ -217,9 +217,10 @@ Meteor.methods({
         ? await Slates.findOneAsync({ _id: slate._id }, { fields: { nodes: 1, lastSaved: 1 } }) : null
       const noteIds = drawn ? (drawn.nodes ?? []).map(node => node?.options?.id).filter(id => typeof id === 'string') : undefined
       let played
-      // Who moves a card anyway, as the card says it (the server stamps it, never the page).
+      // Who moves a card anyway, as the card says it (the server stamps it, never the page); a rule control's
+      // change is stamped with who set it too (its audit line says 'canvas').
       const account = changes.some(change => change.override) ? await Meteor.users.findOneAsync(this.userId, { fields: { 'profile.name': 1, username: 1, isAnonymous: 1 } }) : null
-      const actor = account ? { by: moverName(account) } : null
+      const actor = account ? { by: moverName(account) } : changes.some(isRuleChange) ? { by: await ruleSetter(this.userId) } : null
       try { played = playWorkshopChanges(before.workshop, changes, noteIds, slate.creative.trades, actor) } catch { throw invalid() }
       if (played.refused) {
         throw new Meteor.Error('refused', played.refused.reason, { laneId: played.refused.laneId, revision, model: before, at: played.at, ...(played.taken ? { taken: true } : {}),
@@ -248,6 +249,12 @@ Meteor.methods({
     throw stale()
   },
 })
+
+// The name a rule's audit line gives the person who set it: their first name, as a whole save gives it.
+async function ruleSetter(userId) {
+  const account = await Meteor.users.findOneAsync(userId, { fields: { profile: 1, username: 1 } })
+  return String(account?.profile?.name || account?.username || 'Someone').split(' ')[0].slice(0, 80)
+}
 
 const stale = () => new Meteor.Error('stale', 'A teammate changed this slate. Try your change on the latest version.')
 

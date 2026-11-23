@@ -5,6 +5,8 @@ import {
 import { unsafeKeyPath } from '../common/document-keys.mjs'
 // A launch plan's, pipeline's or budget's rules: the same modules the canvas plays them by.
 import 'slateboxjs/workshops/rules'
+// A rule control's edits are the rulebook's (add_rule, set_rule, remove_rule).
+import 'slateboxjs/workshops/behaviour'
 
 // A change a person makes to a workshop on the canvas: a card moved to a lane, a lane, a card or
 // the workshop itself renamed, an ordinary note dropped on a lane becoming a card there, or a
@@ -31,6 +33,20 @@ const savedLine = value => plain(value) && lineKey(value.id) && noteKey(value.pa
 const planDay = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1000
 const savedLines = value => Array.isArray(value) && value.length <= 96 && value.every(savedLine)
 
+/**
+ * The edits a rule control on the canvas makes (slateboxjs/workshops/controls RULE_CONTROL_EDITS, library spec §4.3): the
+ * add_rule, set_rule and remove_rule chat and exec make, and a column's own limit or a new column. A change of these alone is a
+ * change of the rules, taken on every board that has rules (a board of columns, a pipeline, a plan, a nested board), and its
+ * audit line says it was set on the canvas.
+ */
+export const CANVAS_RULE_EDITS = Object.freeze(['add_rule', 'set_rule', 'remove_rule', 'set_lane_capacity', 'add_lane'])
+const RULE_KINDS = new Set(['add_rule', 'set_rule', 'remove_rule'])
+/** Whether a change is a rule control's: edits that are all canvas rule edits, at least one of them a rule or a column's limit. */
+export const isRuleChange = change => Array.isArray(change?.edits) && change.edits.length > 0 &&
+  change.edits.every(edit => CANVAS_RULE_EDITS.includes(edit?.kind))
+/** What a request that mixes a change of the rules with any other change is told (the same sentence a whole save says). */
+export const RULES_ALONE = 'Change the rules on their own, then move cards.'
+
 /** The changes of one request, in the order they were made. Throws on anything else. */
 export function readWorkshopChanges(input) {
   if (!Array.isArray(input) || !input.length || input.length > 50) throw new Error('Expected 1 to 50 changes.')
@@ -44,6 +60,8 @@ export function readWorkshopChanges(input) {
         const rename = change.rename
         const named = rename && (words(rename.title) ? { title: rename.title } : key(rename.laneId) && words(rename.label) ? { laneId: rename.laneId, label: rename.label }
           : key(rename.cardId) && words(rename.label) ? { cardId: rename.cardId, label: rename.label } : null)
+        // A rule control's change holds its rule edits and nothing else: no rename rides along with it.
+        if (edits.some(edit => RULE_KINDS.has(edit?.kind)) && (named || !isRuleChange({ edits }))) throw new Error(RULES_ALONE)
         // `override`: an edit made anyway (a deal past its stages, a task past its rule, a card under another), once the
         // person confirmed it. The edit itself carries override true; the server marks who and when (playWorkshopChanges).
         const anyway = change.override === true || edits.some(edit => edit.override === true)
@@ -113,6 +131,12 @@ const agreed = value => typeof value === 'string' && value.length > 0 && value.l
  */
 export function playWorkshopChanges(workshop, changes, noteIds, trades, actor = null) {
   let board = validateWorkshop(workshop)
+  // A change of the rules is never sent with a move, a rename or a trade: each is its own request, and so its own undo.
+  const ruled = changes.filter(isRuleChange)
+  if (ruled.length && ruled.length !== changes.length) {
+    const at = changes.findIndex(change => !isRuleChange(change))
+    return { refused: { reason: RULES_ALONE, laneId: null }, at }
+  }
   const drawing = new Set(noteIds ?? [])
   const remove = new Set(), add = new Map()
   // The lines that join the drawing (a card's lines to notes, once it is a note), by id.
@@ -127,6 +151,17 @@ export function playWorkshopChanges(workshop, changes, noteIds, trades, actor = 
     if ('warnings' in verdict) for (const line of verdict.warnings) if (!warnings.includes(line)) warnings.push(line)
   }
   for (const { change, at } of played) {
+    if (isRuleChange(change)) {
+      // A rule control (library spec §4.3): the same edits chat and exec make, on every board that takes rules. The server
+      // stamps the audit line (who, when, 'canvas'); whatever the page sent is never taken for it.
+      const made = applyWorkshopEdits(board, change.edits, { actor: { by: String(actor?.by || 'Someone').slice(0, 80), via: 'canvas' } })
+      if ('refused' in made) {
+        const { reason, laneId, limits } = made.refused
+        return refuse(at, { reason, laneId: laneId ?? change.laneId ?? null, ...(limits && { limits }) })
+      }
+      board = made.workshop
+      continue
+    }
     if (change.edits) {
       // A launch plan, a pipeline or a budget is played by its edits; so is a map's path changed on the canvas in
       // focus (its grips, a path removed): the path edits chat and exec make (boards S2b).
