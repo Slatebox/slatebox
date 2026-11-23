@@ -535,13 +535,20 @@ export default function Canvas() {
           }
           idx = Cookies.get(CONSTANTS.guestCollaboratorCookieId)
         }
-        const collaboratorDetails = await Meteor.callAsync(
-          CONSTANTS.methods.collaborators.init,
-          {
-            id: idx,
-            shareId: slateBase.shareId,
-          }
-        )
+        // Who this person is to their peers. If that fails, the visit is still recorded below
+        // (organizations.trackGuest), or a visitor with no account could not save at all.
+        let collaboratorDetails = {}
+        try {
+          collaboratorDetails = await Meteor.callAsync(
+            CONSTANTS.methods.collaborators.init,
+            {
+              id: idx,
+              shareId: slateBase.shareId,
+            }
+          )
+        } catch (error) {
+          console.warn('Collaboration details are unavailable; editing continues without them.', error?.reason ?? error)
+        }
 
         collaborator.current = {
           // const collaborator = JSON.parse(JSON.stringify(opts))

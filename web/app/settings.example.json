@@ -1,6 +1,11 @@
 {
   "//": "Example Meteor settings for a local run. Copy this file to settings.dev.json (git-ignored) and fill in only the keys for the features you use; an empty value leaves that feature off. Never commit a settings file with real values. Production and test read their settings from METEOR_SETTINGS (a Kubernetes Secret), and a self-hosted install writes its own .state/settings.json (see self-host/README.md).",
   "env": "dev",
+  "slateboxAPI": {
+    "//": "The key pair the collaboration relay is given as API_KEYS ([{\"name\":\"slatebox\",\"publicKey\":...,\"secretKey\":...}]); live editing between people needs it. self-host/init.mjs makes one. Left empty, editing and saving still work.",
+    "publicKey": "",
+    "secretKey": ""
+  },
   "packages": {
     "mongo": {
       "reactivity": ["changeStreams", "oplog", "polling"]
