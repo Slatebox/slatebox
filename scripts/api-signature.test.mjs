@@ -56,7 +56,9 @@ test('the collaboration credential every viewer receives is not a hook signature
   assert.equal(hookSignatureIsValid({ publicKey: 'public-test', secretKey: 'secret-test', bearer: hash, dateString: timestamp }), false)
 })
 test('collaborators.init hands out the relay credential, never the hook signature', () => {
-  const source = readFileSync(new URL('server/methods/collaborators.js', root), 'utf8')
+  // The method hands its work to collaborator-details.mjs (fix/guest-editing): the rule holds across both.
+  const source = ['server/methods/collaborators.js', 'server/common/collaborator-details.mjs']
+    .map((file) => readFileSync(new URL(file, root), 'utf8')).join('\n')
   assert.match(source, /collabCredential\(/)
   assert.doesNotMatch(source, /createHmacString/)
 })

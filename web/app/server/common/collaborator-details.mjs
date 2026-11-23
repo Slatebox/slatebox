@@ -9,7 +9,7 @@ import { guestNameFor, personCursorColour } from '../../imports/api/common/guest
 
 const isKey = (value) => typeof value === 'string' && value.length > 0
 
-export function collaboratorDetails({ user, userId, id, shareId, settings, fallbackSecret, now }) {
+export default function collaboratorDetails({ user, userId, id, shareId, settings, fallbackSecret, now }) {
   const { publicKey, secretKey } = settings?.slateboxAPI ?? {}
   const relay = isKey(publicKey) && isKey(secretKey)
   // The relay's credential is signed with the Slatebox API key over a stamp that is never an ISO
@@ -25,9 +25,12 @@ export function collaboratorDetails({ user, userId, id, shareId, settings, fallb
     visitorId: typeof id === 'string' ? id.slice(0, 64) : '',
     slate: typeof shareId === 'string' ? shareId.slice(0, 64) : '',
   }, relay ? secretKey : fallbackSecret)
-  const accountName = isAnonymous ? '' : (person.profile?.firstName
-    ? `${person.profile.firstName} ${person.profile.lastName || ''}`.trim()
-    : person.emails?.[0]?.address?.split('@')[0])
+  let accountName = ''
+  if (!isAnonymous) {
+    accountName = person.profile?.firstName
+      ? `${person.profile.firstName} ${person.profile.lastName || ''}`.trim()
+      : person.emails?.[0]?.address?.split('@')[0]
+  }
   return {
     isAnonymous,
     userName: accountName || guestNameFor(personKey),

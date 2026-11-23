@@ -3,7 +3,7 @@
 import { randomBytes } from 'node:crypto'
 import { Meteor } from 'meteor/meteor'
 import CONSTANTS from '../../imports/api/common/constants'
-import { collaboratorDetails } from '../common/collaborator-details.mjs'
+import collaboratorDetails from '../common/collaborator-details.mjs'
 
 // Keys a person when the collaboration relay's key pair is not set up: made once per server, so a
 // person's tabs still count once (collaborator-details.mjs).

@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
-import { collaboratorDetails } from '../web/app/server/common/collaborator-details.mjs'
+import collaboratorDetails from '../web/app/server/common/collaborator-details.mjs'
 
 const app = (path) => readFileSync(new URL('../web/app/' + path, import.meta.url), 'utf8')
 const keys = { publicKey: 'pk-test', secretKey: 'sk-test' }

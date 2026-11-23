@@ -547,6 +547,7 @@ export default function Canvas() {
             }
           )
         } catch (error) {
+          // eslint-disable-next-line no-console
           console.warn('Collaboration details are unavailable; editing continues without them.', error?.reason ?? error)
         }
 
