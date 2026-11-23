@@ -11,6 +11,7 @@ export default defineAction({
   toolset: 'account',
   kind: 'write',
   scope: 'ai:settings',
+  alsoScopes: ['ai:admin'],
   principals: ['person', 'agent'],
   mounts: { ddp: true, http: { method: 'PUT', path: '/ai', operationId: 'updateAISettings' } },
   tool: { name: 'update_ai_settings', title: 'Change AI connections and choices', description: 'Add, change or remove the AI connections Slatebox drafts with, and choose which connection each feature uses.' },

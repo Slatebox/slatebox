@@ -87,13 +87,16 @@ function missingScope(registry, principal, refusal, calls = []) {
 
 export function createMcpHandler({
   sdk, registry, manifest, tools, authenticate, appOrigin, version, recordClient = null, typedTools = true,
-  resourceMetadata = null, challengeScopes = ['slates:read', 'slates:write'],
+  resourceMetadata = null, challengeScopes = null,
 }) {
   const {
     Server, StreamableHTTPServerTransport, ListToolsRequestSchema, CallToolRequestSchema, ListPromptsRequestSchema,
     GetPromptRequestSchema, ListResourcesRequestSchema, ListResourceTemplatesRequestSchema, ReadResourceRequestSchema, McpError,
   } = sdk
   const allowedOrigin = appOrigin ? new URL(appOrigin).origin : null
+  // The 401 names every scope a tool needs (from the registry), so a client asks for all of them
+  // at once rather than meeting a 403 on the first share, settings or team tool.
+  const advertised = challengeScopes || registry.neededScopes?.() || ['slates:read', 'slates:write']
   const listed = listedTools(tools, { typed: typedTools })
   const typedByName = new Map(typedTools ? tools.typed.map((tool) => [tool.name, tool]) : [])
   const withResources = Boolean(ListResourcesRequestSchema && ReadResourceRequestSchema && ListResourceTemplatesRequestSchema)
@@ -214,7 +217,7 @@ export function createMcpHandler({
         'Bearer realm="Slatebox"',
         ...(presented ? ['error="invalid_token"', 'error_description="The token is not valid for this endpoint."'] : []),
         ...(resourceMetadata ? [`resource_metadata="${resourceMetadata}"`] : []),
-        `scope="${challengeScopes.join(' ')}"`,
+        `scope="${advertised.join(' ')}"`,
       ].join(', ')
       return rpcError(res, 401, -32001, 'Sign in to Slatebox, or send a personal API token (Authorization: Bearer).', {
         'WWW-Authenticate': challenge,

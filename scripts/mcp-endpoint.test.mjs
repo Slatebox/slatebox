@@ -305,14 +305,16 @@ test("exec runs a script with the caller's token; describe teaches the client", 
 });
 
 test("no token answers 401 with WWW-Authenticate; a foreign Origin 403; GET 405", async (t) => {
-  const { url, token } = await setup(t);
+  const { url, token, world } = await setup(t);
   const init = { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "x", version: "1" } } };
   const post = (headers) => fetch(url, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers }, body: JSON.stringify(init) });
   const anonymous = await post({});
   assert.equal(anonymous.status, 401);
-  // The challenge names the scope to ask for (and, with OAuth mounted, the resource metadata:
-  // mcp-oauth.test.mjs); a presented token that fails is invalid_token.
-  assert.equal(anonymous.headers.get("www-authenticate"), 'Bearer realm="Slatebox", scope="slates:read slates:write"');
+  // The challenge names every scope a tool needs, from the registry (and, with OAuth mounted, the
+  // resource metadata: mcp-oauth.test.mjs); a presented token that fails is invalid_token.
+  const needed = world.registry.neededScopes();
+  assert.ok(needed.includes("slates:share") && needed.includes("slates:write"), needed.join(" "));
+  assert.equal(anonymous.headers.get("www-authenticate"), `Bearer realm="Slatebox", scope="${needed.join(" ")}"`);
   const wrong = await post({ authorization: "Bearer sbx_nope_nope" });
   assert.equal(wrong.status, 401);
   assert.match(wrong.headers.get("www-authenticate"), /^Bearer realm="Slatebox", error="invalid_token"/);

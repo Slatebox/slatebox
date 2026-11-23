@@ -65,3 +65,17 @@ test("after signing in, a person waiting on consent goes back to it", () => {
   assert.match(login, /loginDestination\(query\)/);
   assert.match(loginLink, /recalledLoginReturn\(localStorage/);
 });
+
+test("each permission is explained in plain words on the consent page and the token form", async () => {
+  const { tokenPermissions } = await import("../web/app/imports/api/common/token-permissions.mjs");
+  const { API_TOKEN_SCOPES } = await import("../web/app/server/api-token-core.mjs");
+  assert.deepEqual(tokenPermissions.map(({ scope }) => scope), API_TOKEN_SCOPES);
+  for (const { scope, label, explain } of tokenPermissions) {
+    assert.ok(label, scope);
+    assert.equal(typeof explain, "string", scope);
+    assert.ok(explain.length >= 20 && explain.length <= 200, scope);
+    assert.match(explain, /^[A-Z].*\.$/, scope);
+    assert.doesNotMatch(explain, /\b(scope|OAuth|token|API)\b/, `${scope}: plain words`);
+  }
+  assert.match(consent, /explain/);
+});

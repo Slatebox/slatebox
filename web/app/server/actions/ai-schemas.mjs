@@ -1,4 +1,5 @@
 import { problem } from './errors.mjs'
+import { lacksScopeText } from './registry.mjs'
 
 // The AI settings as every surface sends and reads them (ai.get, ai.update, ai.check).
 const ref = {
@@ -42,7 +43,7 @@ export const connectionInput = {
 export function requireLevelScope(principal, level) {
   if (principal.kind !== 'agent' || !level || level === 'me') return
   if (!principal.scopes?.includes('ai:admin')) {
-    throw problem(403, 'insufficient_scope', `This token lacks the ai:admin permission, which changing or testing the ${level}'s AI needs. Create a token that has it.`, { details: { requiredScope: 'ai:admin' } })
+    throw problem(403, 'insufficient_scope', lacksScopeText(principal, 'ai:admin', `, which changing or testing the ${level}'s AI needs`), { details: { requiredScope: 'ai:admin' } })
   }
 }
 

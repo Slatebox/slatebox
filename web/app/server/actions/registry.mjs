@@ -33,6 +33,9 @@ export function defineAction(definition) {
     toolset,
     kind,
     scope = null,
+    // Scopes the handler may check as well, for some inputs (ai:admin for a team's AI). Declared
+    // so the scopes a connection may need are known from the actions alone.
+    alsoScopes = [],
     principals = ['person'],
     mounts = { ddp: true },
     input,
@@ -56,6 +59,9 @@ export function defineAction(definition) {
   if (Object.hasOwn(input.properties, 'mode')) fail(id, 'mode belongs to the registry, not to the input')
   if (input.oneOf && (mounts.http ? pathParams(mounts.http.path).length : 0))
     fail(id, 'an input with several forms carries body fields only')
+
+  if (!Array.isArray(alsoScopes) || alsoScopes.some((item) => typeof item !== 'string' || !item))
+    fail(id, 'alsoScopes is a list of scope names')
 
   const destructive = Boolean(definition.destructive)
   const openWorld = Boolean(definition.openWorld)
@@ -134,6 +140,7 @@ export function defineAction(definition) {
     openWorld,
     confirm,
     scope,
+    alsoScopes: [...alsoScopes],
     principals: [...principals],
     mounts: { ddp: Boolean(mounts.ddp), http },
     modes,
@@ -179,6 +186,13 @@ export function requestFingerprint(actionId, input) {
     .digest('hex')
 }
 
+// A refused permission, in the words that fit the caller: a connected app (OAuth) signs the
+// person in again for it; a personal token cannot gain a scope, so a new one is made.
+export const lacksScopeText = (principal, scope, why = '') =>
+  principal?.oauth
+    ? `This connection lacks the ${scope} permission${why}. Reconnect the app and allow ${scope} when Slatebox asks.`
+    : `This token lacks the ${scope} permission${why}. Create a token that has it.`
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export function createRegistry({
@@ -195,8 +209,8 @@ export function createRegistry({
   const routes = new Set()
   for (const action of actions) {
     if (byId.has(action.id)) throw new Error(`Action ${action.id} is declared twice`)
-    if (action.scope !== null && !scopes.includes(action.scope))
-      throw new Error(`Action ${action.id}: unknown scope ${action.scope}`)
+    const unknown = [action.scope, ...(action.alsoScopes || [])].find((item) => item !== null && !scopes.includes(item))
+    if (unknown) throw new Error(`Action ${action.id}: unknown scope ${unknown}`)
     if (action.mounts.http) {
       const route = `${action.mounts.http.method} ${action.mounts.http.path.replace(/\{[^}]+\}/g, '{}')}`
       if (routes.has(route)) throw new Error(`Action ${action.id}: ${route} is mounted twice`)
@@ -221,7 +235,7 @@ export function createRegistry({
       throw problem(
         403,
         'insufficient_scope',
-        `This token lacks the ${action.scope} permission. Create a token that has it.`,
+        lacksScopeText(principal, action.scope),
         { details: { requiredScope: action.scope } }
       )
     return principal
@@ -377,7 +391,15 @@ export function createRegistry({
     return principal
   }
 
+  // Every scope a token may need for the actions an agent can call, in the vocabulary's order:
+  // what /mcp's challenge and the OAuth metadata advertise.
+  const needed = new Set(
+    [...byId.values()].filter((action) => action.principals.includes('agent')).flatMap((action) => [action.scope, ...action.alsoScopes]).filter(Boolean)
+  )
+  const neededScopes = () => scopes.filter((scope) => needed.has(scope))
+
   return {
+    neededScopes,
     get: (id) => byId.get(id),
     list: () => [...byId.values()],
     admits,

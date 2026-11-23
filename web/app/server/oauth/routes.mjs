@@ -26,18 +26,18 @@ const notFound = (_req, res) => {
 }
 
 // eslint-disable-next-line import/prefer-default-export
-export function mountOAuth(app, { express, handlers, core, rateLimit }) {
+export function mountOAuth(app, { express, handlers, core, rateLimit, scopes = undefined }) {
   const { authorizationHandler, tokenHandler, clientRegistrationHandler, revocationHandler, metadataHandler } = handlers
   const { provider, urls } = core
   const limit = rateLimit === undefined ? {} : { rateLimit }
 
-  const resourceMetadata = metadataHandler(protectedResourceMetadata(urls))
+  const resourceMetadata = metadataHandler(protectedResourceMetadata(urls, scopes))
   app.use(OAUTH_PATHS.resourceMetadata, resourceMetadata)
   app.use('/.well-known/oauth-protected-resource', (req, res, next) => (req.path === '/' ? resourceMetadata(req, res, next) : notFound(req, res)))
   app.use('/.well-known/oauth-authorization-server', (req, res, next) =>
     req.path === '/' ? next() : notFound(req, res)
   )
-  app.use('/.well-known/oauth-authorization-server', metadataHandler(authorizationServerMetadata(urls)))
+  app.use('/.well-known/oauth-authorization-server', metadataHandler(authorizationServerMetadata(urls, scopes)))
   // Any other OAuth or OpenID discovery address: a JSON 404 a client can read, not the app's page.
   app.use('/.well-known', (req, res, next) => (/^\/(oauth-|openid-)/.test(req.path) ? notFound(req, res) : next()))
 

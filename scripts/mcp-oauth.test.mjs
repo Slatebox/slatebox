@@ -73,7 +73,7 @@ async function setup(t) {
   };
   const stores = { clients: memoryMeteorCollection("client"), requests: memoryMeteorCollection("request"), codes: memoryMeteorCollection("code"), refreshFamily: family };
   const core = createOAuthCore({ ...stores, apiTokens: world.tokens, users: world.users, origin, errors, now });
-  mountOAuth(app, { express, handlers, core, rateLimit: false });
+  mountOAuth(app, { express, handlers, core, rateLimit: false, scopes: world.registry.neededScopes() });
   const mcpAuthenticate = async (req) => principalFromToken(await service.authenticateApiRequest(req, { audience: core.urls.resource }));
   const apiAuthenticate = async (req) => principalFromToken(await service.authenticateApiRequest(req));
   mountMcp(app, {
@@ -148,7 +148,7 @@ async function setup(t) {
 // ---- discovery ------------------------------------------------------------------------------
 
 test("protected resource metadata names /mcp, this server as its authorization server, and the scopes", async (t) => {
-  const { app, origin } = await setup(t);
+  const { app, origin, world } = await setup(t);
   // Stands in for the app's own page, which Meteor serves after these middlewares.
   app.get(["/oauth/consent", "/oauth/consentx"], (_req, res) => res.type("html").send("<p>consent</p>"));
   for (const path of ["/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource"]) {
@@ -158,14 +158,14 @@ test("protected resource metadata names /mcp, this server as its authorization s
     const body = await response.json();
     assert.equal(body.resource, `${origin}/mcp`);
     assert.deepEqual(body.authorization_servers, [origin]);
-    assert.deepEqual(body.scopes_supported, API_TOKEN_SCOPES);
+    assert.deepEqual(body.scopes_supported, world.registry.neededScopes());
     assert.deepEqual(body.bearer_methods_supported, ["header"]);
     assert.equal(body.resource_name, "Slatebox");
   }
 });
 
 test("authorization server metadata: code flow with PKCE S256 only, registration, revocation, iss", async (t) => {
-  const { origin } = await setup(t);
+  const { origin, world } = await setup(t);
   const body = await (await fetch(`${origin}/.well-known/oauth-authorization-server`)).json();
   assert.equal(body.issuer, origin);
   assert.equal(body.authorization_endpoint, `${origin}/oauth/authorize`);
@@ -176,7 +176,7 @@ test("authorization server metadata: code flow with PKCE S256 only, registration
   assert.deepEqual(body.response_types_supported, ["code"]);
   assert.deepEqual(body.grant_types_supported, ["authorization_code", "refresh_token"]);
   assert.deepEqual(body.token_endpoint_auth_methods_supported, ["none", "client_secret_post"]);
-  assert.deepEqual(body.scopes_supported, API_TOKEN_SCOPES);
+  assert.deepEqual(body.scopes_supported, world.registry.neededScopes());
   assert.equal(body.authorization_response_iss_parameter_supported, true);
   // MCP clients refuse a server without code_challenge_methods_supported, so it is never absent.
   assert.ok(body.code_challenge_methods_supported.length);
@@ -194,14 +194,19 @@ test("other /.well-known OAuth and OpenID addresses answer 404 JSON, not the app
   }
 });
 
-test("/mcp without a token answers 401 with resource_metadata and the default scope; a bad token says invalid_token", async (t) => {
-  const { rawMcp, core } = await setup(t);
+test("/mcp without a token answers 401 with resource_metadata and every scope a tool needs; a bad token says invalid_token", async (t) => {
+  const { rawMcp, core, world } = await setup(t);
   const none = await rawMcp();
   assert.equal(none.status, 401);
   const header = none.headers.get("www-authenticate");
   assert.match(header, /^Bearer /);
   assert.ok(header.includes(`resource_metadata="${core.urls.resourceMetadata}"`), header);
-  assert.ok(header.includes(`scope="${DEFAULT_SCOPES.join(" ")}"`), header);
+  // Every scope a tool may need, derived from the registry, so a client can ask for all of them
+  // at once instead of meeting a 403 on the first share or settings tool.
+  const advertised = /scope="([^"]*)"/.exec(header)[1].split(" ");
+  assert.deepEqual(advertised, world.registry.neededScopes());
+  for (const scope of DEFAULT_SCOPES) assert.ok(advertised.includes(scope), scope);
+  assert.ok(advertised.includes("slates:share"), header);
   assert.doesNotMatch(header, /error=/);
   const bad = await rawMcp({ authorization: "Bearer sbo_nope_nope" });
   assert.equal(bad.status, 401);
@@ -446,6 +451,9 @@ test("a connected app lacking a permission gets 403 insufficient_scope naming wh
   assert.equal(invite.body.id, 7);
   assert.equal(invite.body.result.isError, true);
   assert.match(invite.body.result.content[0].text, /^create_slate_invite: insufficient_scope: /);
+  // An OAuth connection is told to reconnect and allow the permission, never to create a token.
+  assert.match(invite.body.result.content[0].text, /Reconnect the app and allow slates:share/);
+  assert.doesNotMatch(invite.body.result.content[0].text, /Create a token/);
   // exec: a read before the refused call saved nothing, so the same challenge.
   const read = await rawCall(tokens.access_token, "exec", { intent: "Share", code: 'await slatebox.slates.get({ shareId: "demo" }); return await slatebox.slates.issueInvite({ shareId: "demo", role: "viewer" })' });
   assert.equal(read.status, 403);
@@ -471,6 +479,8 @@ test("a personal token keeps the refusal in the tool result (200): it has no sig
   assert.equal(invite.status, 200);
   assert.equal(invite.challenge, null);
   assert.match(invite.body.result.content[0].text, /^create_slate_invite: insufficient_scope: /);
+  // A personal token cannot gain a scope: it is told to create one that has it.
+  assert.match(invite.body.result.content[0].text, /Create a token that has it/);
 });
 
 test("tokens are bound to /mcp: another resource is refused, and an OAuth token does not open /api/v1", async (t) => {

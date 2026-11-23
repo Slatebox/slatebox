@@ -102,10 +102,16 @@ export default function OAuthConsent() {
             <Typography component="legend" variant="subtitle2" sx={{ mb: SPACE.tight }}>
               {request.client.name} asked for
             </Typography>
-            {offered.map(({ scope, label }) => (
+            {offered.map(({ scope, label, explain }) => (
               <FormControlLabel
                 key={scope}
-                label={label}
+                sx={{ alignItems: 'flex-start' }}
+                label={(
+                  <Box sx={{ pt: '9px' }}>
+                    <Typography variant="body2">{label}</Typography>
+                    <Typography variant="caption" color="text.secondary">{explain}</Typography>
+                  </Box>
+                )}
                 control={(
                   <Checkbox
                     size="small"

@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { SlateApiTokens } from '../../imports/api/common/models'
 import CONSTANTS from '../../imports/api/common/constants'
 import { clientAddress } from '../actions/http.mjs'
+import { registry } from '../actions/mount'
 import { createOAuthCore, REQUEST_ID } from './core.mjs'
 import { mountOAuth as mount } from './routes.mjs'
 
@@ -48,6 +49,8 @@ export function mountOAuth(app) {
   mount(app, {
     express,
     core: oauth,
+    // What the metadata advertises: every scope a tool needs, from the actions.
+    scopes: registry.neededScopes(),
     handlers: {
       authorizationHandler: load('@modelcontextprotocol/sdk/server/auth/handlers/authorize.js').authorizationHandler,
       tokenHandler: load('@modelcontextprotocol/sdk/server/auth/handlers/token.js').tokenHandler,

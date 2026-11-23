@@ -52,17 +52,19 @@ export function oauthUrls(origin) {
 }
 
 // RFC 9728.
-export const protectedResourceMetadata = (urls) => ({
+// scopes: what the actions need (registry.neededScopes()), so a client can ask for every scope a
+// tool uses at once; the token vocabulary when no registry is at hand.
+export const protectedResourceMetadata = (urls, scopes = API_TOKEN_SCOPES) => ({
   resource: urls.resource,
   authorization_servers: [urls.issuer],
-  scopes_supported: [...API_TOKEN_SCOPES],
+  scopes_supported: [...scopes],
   bearer_methods_supported: ['header'],
   resource_name: 'Slatebox',
   resource_documentation: 'https://docs.slatebox.com/developers/slateboxapi/terminal-and-agents/',
 })
 
 // RFC 8414.
-export const authorizationServerMetadata = (urls) => ({
+export const authorizationServerMetadata = (urls, scopes = API_TOKEN_SCOPES) => ({
   issuer: urls.issuer,
   authorization_endpoint: urls.authorize,
   token_endpoint: urls.token,
@@ -74,7 +76,7 @@ export const authorizationServerMetadata = (urls) => ({
   code_challenge_methods_supported: ['S256'],
   token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
   revocation_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
-  scopes_supported: [...API_TOKEN_SCOPES],
+  scopes_supported: [...scopes],
   authorization_response_iss_parameter_supported: true,
   service_documentation: 'https://docs.slatebox.com/developers/slateboxapi/terminal-and-agents/',
 })
