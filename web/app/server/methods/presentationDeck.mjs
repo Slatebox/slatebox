@@ -313,3 +313,18 @@ export async function ogCardReady({ direction, style, fetchImage = null }) {
 }
 
 export { deckFor, deckRecord, withLanes }
+
+/**
+ * Whether a change to a version gives it a new share card: a published version whose look changes
+ * (a restyle or another picture, which write a new direction). → { generation, look, replaces } or
+ * null. `generation` is new, so a card still rendering for the old look is never kept; `replaces`
+ * is the card to remove once the new one is in place.
+ */
+export function shareCardChange(row, fields, newGeneration) {
+  if (!row?.isPublished || !fields?.direction) return null
+  return {
+    generation: newGeneration,
+    look: { direction: fields.direction, style: fields.style ?? row.style ?? null },
+    replaces: row.imageUrl ? { url: row.imageUrl, generation: row.snapshotGeneration ?? null } : null,
+  }
+}

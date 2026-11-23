@@ -250,3 +250,19 @@ test('a searched picture names its source where it shows (its licence asks for a
   const { stageNodes } = await import('../web/app/imports/ui/components/presentations/livePresenter.mjs')
   assert.ok(stageNodes(deck).every((node) => node.options.credit === undefined))
 })
+
+test('a restyle (or another picture) of a published version gives it a new share card; an unpublished one keeps none', async () => {
+  const { shareCardChange } = await import('../web/app/server/methods/presentationDeck.mjs')
+  const row = { ...deckRecord({ layout: whatIsSlatebox(), direction: aiDirection(), style: 'neon', name: NAME }), isPublished: true, imageUrl: 'https://store.example/present_P_g1.png', snapshotGeneration: 'g1' }
+  const change = styleChange(row, { id: 'sketch' })
+  const card = shareCardChange(row, change, 'g2')
+  assert.equal(card.generation, 'g2')
+  assert.equal(card.look.style.id ?? card.look.style, 'sketch')
+  assert.deepEqual(card.look.direction, change.direction)
+  assert.deepEqual(card.replaces, { url: 'https://store.example/present_P_g1.png', generation: 'g1' })
+  // Not published: nothing to render. A change that leaves the look alone (no new direction): none.
+  assert.equal(shareCardChange({ ...row, isPublished: false }, change, 'g2'), null)
+  assert.equal(shareCardChange(row, { isPublic: true }, 'g2'), null)
+  // Published with no card yet: a card, replacing nothing.
+  assert.equal(shareCardChange({ ...row, imageUrl: undefined }, change, 'g2').replaces, null)
+})

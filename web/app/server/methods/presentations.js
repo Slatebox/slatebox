@@ -27,7 +27,7 @@ import { keepActionOpen, runAIAction } from '../metering/context.mjs'
 import { resolveAIFeatureConfig } from './ai/feature-config.mjs'
 import { resolveRequestConnection } from './ai/ai-settings'
 import {
-  LICENCE_FILTER, MAX_DECK_IMAGES, MAX_DECK_IMAGES_PER_DAY, deckRecord, imageEstimateMicros, ogCardReady, pictureChange, pictureTime, playerSlateCopy,
+  LICENCE_FILTER, MAX_DECK_IMAGES, MAX_DECK_IMAGES_PER_DAY, deckRecord, imageEstimateMicros, ogCardReady, pictureChange, shareCardChange, pictureTime, playerSlateCopy,
   resolveDirectionImages, styleChange,
 } from './presentationDeck.mjs'
 import { carryImages, composeDeck, normalizeDirection, pendingImages } from '../../imports/ui/components/presentations/presentationCompose.mjs'
@@ -294,6 +294,41 @@ method[CONSTANTS.methods.presentations.get] = async ({
   }
 }
 
+/**
+ * The published deck's share card, rendered after the call that needs it: a styled deck's title
+ * card in its style (its words as paths, its cover inlined: the renderer has no web fonts and
+ * fetches nothing), else the slate's snapshot. It is kept only while `generation` is still the
+ * version's (a newer publish or restyle wins); `replaces` (the card it takes the place of) is then
+ * removed from storage.
+ */
+async function renderShareCard(presentationId, generation, { look = null, rawSVG = null } = {}, replaces = null) {
+  try {
+    const card = look ? await ogCardReady({ direction: look.direction, style: look.style, fetchImage: (url) => fetchPublicImage(url, { maxBytes: MAX_PICTURE_BYTES, timeoutMs: 4000 }) }) : null
+    if (!card && !rawSVG) return
+    let kept = false
+    await finishSnapshot(
+      () => svgToPng({
+        svg: card || rawSVG,
+        fileName: `present_${presentationId}_${generation}`,
+        skipTimestamp: true,
+        includeWidthHeight: true,
+      }),
+      async ({ url, width, height }) => {
+        const changed = await SlatePresentations.updateAsync(
+          { _id: presentationId, isPublished: true, snapshotGeneration: generation },
+          { $set: { imageUrl: url, imageWidth: width, imageHeight: height } }
+        )
+        kept = changed > 0
+        return changed
+      },
+      (url) => discardSnapshot({ _id: presentationId, snapshotGeneration: generation }, url)
+    )
+    if (kept && replaces?.url) await discardSnapshot({ _id: presentationId, snapshotGeneration: replaces.generation }, replaces.url)
+  } catch {
+    console.warn('Unable to finish a presentation snapshot')
+  }
+}
+
 async function discardSnapshot(presentation, url) {
   const key = ownedSnapshotKey(url, Meteor.settings.aws?.cloudUrl, presentation._id, presentation.snapshotGeneration)
   if (!key) return
@@ -399,28 +434,7 @@ method[CONSTANTS.methods.presentations.publish] = async ({
   }
 
   // async produce the image so it doesn't hold up the publish
-  setTimeout(async () => {
-    try {
-      // A styled deck's preview is its title card in its style (its words as paths, its cover
-      // inlined: the renderer has no web fonts and fetches nothing), not a grey snapshot.
-      const card = look ? await ogCardReady({ direction: look.direction, style: look.style, fetchImage: (url) => fetchPublicImage(url, { maxBytes: MAX_PICTURE_BYTES, timeoutMs: 4000 }) }) : null
-      await finishSnapshot(
-        () => svgToPng({
-          svg: card || rawSVG,
-          fileName: `present_${presentation._id}_${snapshotGeneration}`,
-          skipTimestamp: true,
-          includeWidthHeight: true,
-        }),
-        ({ url, width, height }) => SlatePresentations.updateAsync(
-          { _id: presentation._id, isPublished: true, snapshotGeneration },
-          { $set: { imageUrl: url, imageWidth: width, imageHeight: height } }
-        ),
-        (url) => discardSnapshot({ _id: presentation._id, snapshotGeneration }, url)
-      )
-    } catch {
-      console.warn('Unable to finish a presentation snapshot')
-    }
-  }, 100)
+  setTimeout(() => renderShareCard(presentation._id, snapshotGeneration, { look, rawSVG }), 100)
 
   return presentationUrl
 }
@@ -877,12 +891,18 @@ method[CONSTANTS.methods.presentations.update] = async ({
     updateFields.viewpointsManuallyChanged = viewpointsManuallyChanged
   }
 
+  // A published version whose look changes (another style, another picture) gets a new share card:
+  // a new generation, so a card still rendering for the old look is never kept.
+  const recard = shareCardChange(existingPresentation, updateFields, Random.id())
+  if (recard) updateFields.snapshotGeneration = recard.generation
+
   if (Object.keys(updateFields).length > 0) {
     await SlatePresentations.updateAsync(
       { _id: presentationId },
       { $set: updateFields }
     )
   }
+  if (recard) setTimeout(() => renderShareCard(presentationId, recard.generation, { look: recard.look }, recard.replaces), 100)
 
   // A picture change gives back the deck's new direction for the presenter to play.
   return pictured ? { ...viewpointsManuallyChanged, direction: pictured.direction } : viewpointsManuallyChanged
