@@ -512,6 +512,9 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
         // The deck's look: the server checks it and builds the slate copy the published page plays.
         direction: curPresentation.deckLook?.direction,
         style: curPresentation.deckLook?.style,
+        // Used only when the saved slate lacks an edit not saved yet; the server keeps only what
+        // the player draws.
+        slateJSON: curPresentation.slateJSON,
         manualViewpointChanges,
         intentionId:
           slate.options.ai?.isConversation?.intentionInitialData?.intentionId,

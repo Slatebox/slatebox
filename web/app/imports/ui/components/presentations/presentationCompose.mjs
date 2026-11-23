@@ -670,10 +670,10 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null } = {
   // 2. Stage notes in free space.
   const stageNotes = []
   const blockers = graph.list.map((note) => inflate(boxes.get(note.id), U * 0.35))
-  const isFree = (box, extra = []) => ![...blockers, ...extra].some((b) => overlaps(box, b))
+  const isFree = (box, extra = [], only = null) => ![...(only || blockers), ...extra].some((b) => overlaps(box, b))
   // A free spot for a w×h block beside `anchor`, preferring the side away from the slate's middle.
   // Landscape frames grow sideways (a wide screen), portrait ones up and down (a phone).
-  const place = (w, h, anchor, { gap = U * 0.8, sides = null, avoid = [], portrait = false } = {}) => {
+  const place = (w, h, anchor, { gap = U * 0.8, sides = null, avoid = [], portrait = false, only = null } = {}) => {
     const c = centre(anchor)
     const m = centre(B)
     const across = c.x >= m.x ? ['right', 'left'] : ['left', 'right']
@@ -687,7 +687,7 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null } = {
         if (side === 'left') box = { x: anchor.x - gap - w - step, y: c.y - h / 2, width: w, height: h }
         if (side === 'below') box = { x: c.x - w / 2, y: anchor.y + anchor.height + gap + step, width: w, height: h }
         if (side === 'above') box = { x: c.x - w / 2, y: anchor.y - gap - h - step, width: w, height: h }
-        if (isFree(box, avoid)) return box
+        if (isFree(box, avoid, only)) return box
       }
     }
     return { x: B.x + B.width + gap, y: c.y - h / 2, width: w, height: h }
@@ -876,18 +876,31 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null } = {
     const boxOfBlock = (box) => inflate({ x: box.x, y: box.y, width: box.w ?? box.width, height: box.h ?? box.height }, U * 0.3)
     const reserve = (box) => avoid.push(boxOfBlock(box))
     const headline = (text, w, h, max) => textNote(text, kit.headline.font, fitFont(text, w, h, max, kit.headline.font), kit.headline.color, fontWeight(kit.headline))
-    const portraitOf = (block, scale = 1.25) => ({ ...block, w: Math.max(U * 4, Math.min(block.w, U * 11)), h: block.h * scale })
+    // On a phone a block keeps to a column (a picture as wide as the step's notes, so it stays the
+    // biggest thing in the frame).
+    const portraitOf = (block, scale = 1.25) => (block.pw
+      ? { ...block, w: block.pw, h: block.h * (block.pw / block.w) * scale }
+      : { ...block, w: Math.max(U * 4, Math.min(block.w, U * 11)), h: block.h * scale })
     const placeColumn = (blocks, anchor, opts) => {
       const size = columnSize(blocks)
       const box = place(size.w, size.h, anchor, { avoid, ...opts })
       const placed = column(blocks, { x: box.x, y: box.y })
       placed.forEach(reserve)
-      const pBlocks = blocks.map((b) => portraitOf(b, b.pScale || 1.25))
-      const pSize = columnSize(pBlocks)
-      // On a phone the step's blocks stack beside or under its notes, never on each other.
-      const pBox = place(pSize.w, pSize.h, anchor, { avoid: pAvoid, portrait: true, ...opts })
-      const pPlaced = column(pBlocks, { x: pBox.x, y: pBox.y })
-      pPlaced.forEach((b) => pAvoid.push(boxOfBlock(b)))
+      // A block with its own phone geometry (a picture behind the step's notes) keeps it.
+      blocks.filter((b) => b.pAt).forEach((b) => pAvoid.push(boxOfBlock(b.pAt)))
+      const pBlocks = blocks.filter((b) => !b.pAt).map((b) => portraitOf(b, b.pScale || 1.25))
+      let pStacked = []
+      if (pBlocks.length) {
+        const pSize = columnSize(pBlocks)
+        // On a phone the step's blocks stack beside or under its notes, never on each other.
+        // Beside a backdrop picture the words go just under it, over the dimmed neighbours only:
+        // the step's own notes and the deck's fixed notes stay clear.
+        const only = blocks.some((b) => b.pAt) ? [...ids.map((id) => inflate(boxes.get(id), U * 0.35)), ...blockers.slice(graph.list.length)] : null
+        const pBox = place(pSize.w, pSize.h, anchor, { avoid: pAvoid, portrait: true, ...(only ? { only, sides: ['below', 'above'] } : {}), ...opts })
+        pStacked = column(pBlocks, { x: pBox.x, y: pBox.y })
+        pStacked.forEach((b) => pAvoid.push(boxOfBlock(b)))
+      }
+      const pPlaced = blocks.map((b) => b.pAt || pStacked.shift())
       return { placed, pPlaced }
     }
     // On a phone a step frames its own stacked column (a picture, a headline): big and readable.
@@ -904,7 +917,9 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null } = {
       const tilt = L === 'dive' ? Math.round(rollMax * 0.66) : 0
       if (L === 'dive' || L === 'split') {
         const image = s.image || { query: s.headline || graph.notes.get(lead)?.text }
-        blocks.push({ key: 'image', w: U * 10, h: U * 7, pScale: 1.1, opts: { vectorPath: maskOf(image, index), image: imageSrc(image, s.headline), imageFit: 'cover', borderColor: kit.imageBorder.color, borderWidth: kit.imageBorder.width, backgroundColor: style.bg, why: image.why || '', art: !image.url } })
+        // On a phone the picture is the step's backdrop: full width behind its notes, so it is the
+        // biggest thing in the frame and the notes stay in it.
+        blocks.push({ key: 'image', w: U * 10, h: U * 7, pAt: { x: gBox.x - U * 0.8, y: gBox.y - U * 0.8, w: gBox.width + U * 1.6, h: gBox.height + U * 1.6 }, opts: { vectorPath: maskOf(image, index), image: imageSrc(image, s.headline), imageFit: 'cover', borderColor: kit.imageBorder.color, borderWidth: kit.imageBorder.width, backgroundColor: style.bg, why: image.why || '', art: !image.url } })
       }
       if (L === 'bigNumber') {
         blocks.push({ key: 'number', w: U * 10, h: U * 9, pScale: 1, text: s.number })
@@ -924,7 +939,7 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null } = {
       placed.forEach((b, k) => {
         const pb = pPlaced[k]
         const r = tilt ? { rotate: { rotationAngle: -tilt } } : {}
-        if (b.key === 'image') own.push(add('image', b, { ...b.opts, ...r }, [at], pb))
+        if (b.key === 'image') own.push(add('image', b, { ...b.opts, ...r, ...(b.pAt ? { behind: true, opacity: 0.9 } : {}) }, [at], pb))
         if (b.key === 'headline') own.push(add('headline', b, { ...headline(b.text, b.w, b.h, U * 1.15), ...r }, [at], { ...pb, fontSize: fitFont(b.text, pb.w, pb.h, U * 1.5, kit.headline.font) }))
         if (b.key === 'number') own.push(add('number', b, textNote(b.text, kit.number.font, fitFont(b.text, b.w, b.h, U * 8, kit.number.font), kit.number.color, { ...fontWeight(kit.number), textXAlign: 'center' }), [at], { ...pb, fontSize: fitFont(b.text, pb.w, pb.h, U * 8, kit.number.font) }))
         if (b.key === 'bar') own.push(add('bar', b, { backgroundColor: kit.number.color, borderWidth: 0 }, [at], pb))

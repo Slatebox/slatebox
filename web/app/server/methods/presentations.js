@@ -44,13 +44,26 @@ const today = () => new Date().toISOString().slice(0, 10)
 // within the size cap is fetched (safe-fetch.mjs). → url or null
 // A published deck's look, made on the server: its direction checked against the layout its
 // deck was planned for, its style, and the slate copy the player draws. → null without one.
-async function publishedLook({ slateShareId, presentation, presentationData, direction, style }) {
+async function publishedLook({ slateShareId, presentation, presentationData, direction, style, slateJSON: sent }) {
   if (!direction || typeof direction !== 'object' || !Array.isArray(direction.steps)) return null
   const { layout } = sanitizeLayout(presentation.presentationData ?? presentationData)
   if (!layout) return null
   const saved = await Slates.findOneAsync({ shareId: slateShareId }, { fields: { nodes: 1, 'options.name': 1, 'options.viewPort': 1 } })
-  const slateJSON = playerSlateCopy(saved)
-  if (!slateJSON || slateJSON.length > MAX_SLATE_JSON) return null
+  // The saved slate, when it has every note the deck shows; otherwise (an edit not saved yet) the
+  // editor's own copy, cut down the same way to what the player draws.
+  const wanted = []
+  const walk = (nodes) => (nodes || []).forEach((node) => { wanted.push(String(node.nodeId)); walk(node.childrenNodes) })
+  walk(layout.nodes)
+  const covers = (copy) => {
+    if (!copy) return false
+    const ids = new Set(JSON.parse(copy).nodes.map((node) => String(node.options.id)))
+    return wanted.every((id) => ids.has(id))
+  }
+  let slateJSON = playerSlateCopy(saved)
+  if (!covers(slateJSON) && typeof sent === 'string' && sent.length <= MAX_SLATE_JSON) {
+    try { slateJSON = playerSlateCopy(JSON.parse(sent)) } catch { slateJSON = null }
+  }
+  if (!covers(slateJSON) || slateJSON.length > MAX_SLATE_JSON) return null
   const ref = cleanStyleRef(style || direction.style)
   const checked = normalizeDirection(direction, layout, { name: saved?.options?.name || '' })
   return { direction: { ...checked, style: ref }, style: ref, slateJSON }
@@ -325,10 +338,12 @@ method[CONSTANTS.methods.presentations.publish] = async ({
   intentionId,
   direction,
   style,
+  slateJSON,
 }) => {
   const user = await Meteor.userAsync()
   if (!user) return null
   check(slateShareId, String)
+  check(slateJSON, Match.Maybe(String))
   check(direction, Match.Maybe(Object))
   check(style, Match.Maybe(Match.OneOf(String, Object)))
   await guardPresentation(slateShareId, user._id)
@@ -355,7 +370,7 @@ method[CONSTANTS.methods.presentations.publish] = async ({
   // here, never taken as sent: the slate copy from the saved slate (only what the player needs),
   // the direction checked against the slate it was planned for (its notes, honest numbers and
   // quotes, safe picture links), and a known style.
-  const look = await publishedLook({ slateShareId, presentation, presentationData, direction, style })
+  const look = await publishedLook({ slateShareId, presentation, presentationData, direction, style, slateJSON })
 
   // now set the isPublished flag on this one
   await SlatePresentations.updateAsync(

@@ -379,3 +379,15 @@ test('a kicker never reads like the step counter ("3 / 8"), in any style', () =>
     for (const step of deck.steps) assert.ok(!/^-?\d+ \/ \d+$/.test(step.kicker || ''), `${style}: ${step.kicker}`)
   }
 })
+
+test('on a phone a dive\'s or split\'s picture is the biggest thing in its frame: at least 60% of its width', () => {
+  for (const style of STYLE_IDS) {
+    const { deck } = deckFor(whatIsSlatebox(), { name: NAME, style })
+    deck.steps.forEach((step, index) => {
+      if (!['dive', 'split'].includes(step.layout) || step.deep) return
+      const frame = frameBox(deck, step, { portrait: true })
+      const picture = deck.stageNotes.find((note) => note.kind === 'image' && Array.isArray(note.steps) && note.steps.includes(index))
+      assert.ok(picture.p.w >= frame.width * 0.6, `${style} step ${index}: picture ${Math.round(picture.p.w)} of ${Math.round(frame.width)}`)
+    })
+  }
+})
