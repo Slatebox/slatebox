@@ -24,6 +24,7 @@ import { actions } from "../web/app/server/actions/index.mjs";
 import { RATE_LIMITS } from "../web/app/server/actions/rate-limit.mjs";
 import { memoryMeteorCollection } from "./action-test-stores.mjs";
 import { createAgentPresence } from "../web/app/server/presence/agentPresence.mjs";
+import { makeLibrary } from "./library-test-stores.mjs";
 
 const appRequire = createRequire(new URL("../web/app/package.json", import.meta.url));
 const { applyPlanToJSON, describeOperations, LIMITS } = appRequire("slateboxjs/operations");
@@ -145,6 +146,8 @@ export function makeExecWorld({ limits = EXEC_LIMITS, rateLimits, nodePath = pro
   users.docs.push(
     { _id: "owner", profile: { firstName: "Ada" }, emails: [{ address: "ada@example.test" }] },
     { _id: "other", emails: [{ address: "ben.smith@example.test" }] },
+    // An administrator of this server: reviews library submissions.
+    { _id: "admin", profile: { firstName: "Root" }, emails: [{ address: "root@example.test" }] },
   );
   const tokens = memoryMeteorCollection("token");
   const many = Array.from({ length: 14 }, (_, i) => note(`n${i + 1}`, `Note ${i + 1}`, 100 + i * 220));
@@ -270,6 +273,10 @@ export function makeExecWorld({ limits = EXEC_LIMITS, rateLimits, nodePath = pro
     presence,
   });
   deps.exec = exec.service;
+  // The shared library over the same slates and save core; "admin" reviews. Await libraryReady (the built-ins' seed).
+  const library = makeLibrary({ slates: slateRows, saveCore, reviewers: ["admin"], users: { owner: { name: "Ada" }, other: { name: "Ben Smith" } },
+    applyWorkshopOperations: deps.applyWorkshopOperations });
+  deps.library = library.library;
   const authenticate = async (req) => principalFromToken(await service.authenticateApiRequest(req));
   const mint = (scopes = ["slates:read", "slates:write"], userId = "owner") => service.createApiToken({ userId, name: "Agent", scopes });
   const principalFor = async (scopes, userId) => {
@@ -302,7 +309,7 @@ export function makeExecWorld({ limits = EXEC_LIMITS, rateLimits, nodePath = pro
   return {
     users, tokens, slates, slate: bySlateId, saveCore, runs, workshopRuns, created, invites, deps, registry, idempotency,
     collections, exec, logs, mint, principalFor, authenticate, serve, setClock: (ms) => (clock = ms),
-    presence, presenceRows, setPresenceClock: (ms) => (presenceClock = ms),
+    presence, presenceRows, setPresenceClock: (ms) => (presenceClock = ms), library, libraryReady: library.ready,
     close: () => exec.pool.close(),
   };
 }

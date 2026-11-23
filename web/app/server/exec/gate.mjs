@@ -308,7 +308,7 @@ export function createGate({
     if (mode === 'save' && !(runKey && (await isReplay(ctx.subject, runKey)))) {
       // A call the caller may not make (a permission the token lacks) is refused now, before
       // the person is asked to agree to it.
-      const refusal = refusedBeforeHold(ctx.principal, action, given)
+      const refusal = await refusedBeforeHold(ctx.principal, action, given)
       if (refusal) return refuse(refusal, { mode })
       const assessed = await assess(ctx, action, given)
       rewrites = assessed.rewrites || 0
@@ -370,10 +370,10 @@ export function createGate({
 
   // The refusal registry.run would answer for who calls and what they ask, or null. Only a
   // registry that can say (registry.admits) is asked; the call itself still runs every check.
-  function refusedBeforeHold(principal, action, input) {
+  async function refusedBeforeHold(principal, action, input) {
     if (typeof registry.admits !== 'function') return null
     try {
-      registry.admits(principal, action.id, input)
+      await registry.admits(principal, action.id, input)
       return null
     } catch (error) {
       return error instanceof ActionError ? error : toActionError(error)
@@ -559,7 +559,7 @@ export function createGate({
     if (idempotencyKey !== undefined && (await isReplay(subject, idempotencyKey)))
       return registry.run(principal, actionId, input, { idempotencyKey })
     const ctx = newContext({ execId: 'api', principal, surface: 'api', codeSha256: DIRECT_CODE, intent: 'API call' })
-    if (refusedBeforeHold(principal, action, input)) return registry.run(principal, actionId, input, { idempotencyKey })
+    if (await refusedBeforeHold(principal, action, input)) return registry.run(principal, actionId, input, { idempotencyKey })
     const assessed = await assess(ctx, action, input)
     if (assessed.reasons.length) {
       const fingerprint = callFingerprint(actionId, assessed.fingerprintInput ?? input)

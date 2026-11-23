@@ -110,10 +110,20 @@ export const slateComponents = {
     ...onePlan({
       ...record({
         kind: { const: 'add_component' },
-        component: { type: 'string', enum: catalog.map((entry) => entry.id), description: 'The library entry to add (components.list ids).' },
+        component: { type: 'string', enum: catalog.map((entry) => entry.id), description: 'The library entry to add (components.list ids). Or name a shared library item with library instead.' },
+        library: {
+          type: 'object',
+          properties: {
+            itemId: { type: 'string', minLength: 1, maxLength: 120, pattern: '^[A-Za-z0-9_-]+$', description: 'A smart component from library.list (kind component), or one of your own.' },
+            version: { type: 'integer', minimum: 1 },
+          },
+          required: ['itemId'],
+          additionalProperties: false,
+          description: 'A smart component from the shared library (in place of component).',
+        },
         topic: { type: 'string', minLength: 1, maxLength: 100, description: 'What it is about: names the board ("Retro: Q3 launch").' },
         expectedRevision: { ...revision, description: 'The slate revision you read (slates.get).' },
-      }, ['kind', 'component', 'expectedRevision']),
+      }, ['kind', 'expectedRevision']),
       additionalProperties: false,
     }),
     description:

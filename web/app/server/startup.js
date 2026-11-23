@@ -10,6 +10,7 @@ import { slateShareImage, slateShareText } from './common/share-image.mjs'
 import { publicTemplateSummary } from './methods/template-directory'
 import setup from './email/setup'
 import { onCreateUser } from './common/accounts'
+import { ensureLibraryIndexes, seedLibraryBuiltins } from './library/meteor'
 import './bootstrap/all'
 import {
   IconPacks,
@@ -420,6 +421,17 @@ Meteor.startup(async () => {
     }
   }
   await ensureTextIndices()
+
+  // The shared library: its indexes, and the built-in catalogue entries as published items (a
+  // version is added only when an entry's board changed). A failure is logged and never stops the start.
+  try {
+    await ensureLibraryIndexes()
+    const seeded = await seedLibraryBuiltins()
+    if (seeded.created.length || seeded.updated.length || seeded.unpublished.length)
+      console.log('[library] built-ins', JSON.stringify({ created: seeded.created.length, updated: seeded.updated.length, unpublished: seeded.unpublished.length }))
+  } catch (error) {
+    console.error('[library] startup', error?.message)
+  }
 
   await Promise.all([
     SlateApiTokens.rawCollection().createIndex(

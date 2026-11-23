@@ -84,6 +84,15 @@ export function clientAddress(req, forwardedCount = 0) {
 
 // authenticate(req) -> principal or null. express is passed in so this module loads without it.
 // forwardedCount: the number of proxies in front of the app (see clientAddress).
+// A public read (publicCache) answered to a visitor: cacheable, and readable from any origin
+// (no credentials). Vary on Authorization so a cache never hands a visitor's copy to a token holder
+// or the other way round. Anything else stays no-store.
+export function publicHeaders(res, action) {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Vary', 'Authorization')
+  res.setHeader('Cache-Control', `public, max-age=60, s-maxage=${action.publicCache.maxAge}`)
+}
+
 export function mountHttp(app, registry, { express, authenticate, forwardedCount = 0 }) {
   const router = express.Router()
   const openApi = buildOpenApi(registry)
@@ -95,8 +104,19 @@ export function mountHttp(app, registry, { express, authenticate, forwardedCount
     const http = action.mounts.http
     if (!http) continue
     const parse = express.json({ limit: action.bodyLimit })
+    // A browser on another origin asks first: GET only, no credentials.
+    if (action.publicCache)
+      router.options(expressPath(http.path), (_req, res) => {
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Methods', 'GET')
+        res.setHeader('Access-Control-Max-Age', '600')
+        res.setHeader('Cache-Control', 'no-store')
+        res.status(204).end()
+      })
     router[http.method.toLowerCase()](expressPath(http.path), parse, async (req, res) => {
       res.setHeader('Cache-Control', 'no-store')
+      // A public read's refusal is readable from another origin too (it is never cached).
+      if (action.publicCache && !req.get('authorization')) res.setHeader('Access-Control-Allow-Origin', '*')
       let principal = null
       try {
         principal = await authenticate(req)
@@ -124,6 +144,7 @@ export function mountHttp(app, registry, { express, authenticate, forwardedCount
         })
         setRateHeaders(res, result.meta?.rateLimit)
         if (result.meta?.replayed) res.setHeader('Idempotent-Replayed', 'true')
+        if (action.publicCache && principal.kind === 'visitor') publicHeaders(res, action)
         return res.status(result.status).json(result.body)
       } catch (error) {
         setRateHeaders(res, error.meta?.rateLimit)

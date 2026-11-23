@@ -45,11 +45,22 @@ test('chat and exec can set what is kept: templateCategory and hiddenControls ar
   const contract = await readFile(join(appDir, 'server/actions/generated/contract.json'), 'utf8')
   for (const key of ['"templateCategory"', '"hiddenControls"', '"locked"']) assert.ok(contract.includes(key), `contract should offer ${key}`)
   // Review M1: a bare "category" key invites "group these into categories" to make template buckets.
-  assert.doesNotMatch(contract, /"category"\s*:/)
+  // Restated (library): the shared library's items have a category (one of five, fixed), so the guard
+  // holds for every action but library.*: no canvas, slate or board call takes a bare category.
+  const { actions } = JSON.parse(contract)
+  assert.ok(actions.some((action) => action.id === 'library.list'))
+  for (const action of actions.filter((entry) => !entry.id.startsWith('library.')))
+    assert.doesNotMatch(JSON.stringify(action), /"category"\s*:/, action.id)
+  for (const action of actions.filter((entry) => entry.id.startsWith('library.')))
+    for (const [where, schema] of [['input', action.input], ['output', action.output]]) {
+      const category = JSON.stringify(schema).match(/"category":\{[^}]*\}/g) || []
+      for (const found of category) assert.match(found, /"enum":\["plan","decide","meetings","track","map"\]/, `${action.id} ${where}`)
+    }
   const client = await readFile(join(appDir, 'server/actions/generated/slatebox.d.ts'), 'utf8')
   assert.match(client, /hiddenControls/)
   assert.match(client, /templateCategory/)
-  assert.doesNotMatch(client, /\bcategory\??:/)
+  const outsideLibrary = client.split(/(?=^declare namespace )/m).filter((block) => !/^declare namespace slatebox\.library\b/.test(block)).join('')
+  assert.doesNotMatch(outsideLibrary, /\bcategory\??:/)
 })
 
 test('greenfield: no commented-out remains of the retired flags, and the collaboration examples do not document the retired package', async () => {

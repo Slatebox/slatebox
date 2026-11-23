@@ -1,4 +1,5 @@
 import { defineAction } from './registry.mjs'
+import { LIBRARY_CATEGORIES } from '../../imports/api/common/library-model.mjs'
 
 export default defineAction({
   id: 'instance.describe',
@@ -35,9 +36,14 @@ export default defineAction({
       workshops: { type: 'object' },
       actions: { type: 'array', items: { type: 'object' } },
       account: { type: 'object' },
+      library: { type: 'object', description: 'With a token or sign-in: the shared library\'s categories, and whether you review its submissions.' },
     },
     required: ['view', 'instance', 'contract', 'api', 'signIn', 'connect', 'link'],
   },
   tool: { name: 'describe_instance', title: 'Describe this instance', description: 'Describe the Slatebox server these tools talk to: its name, version, what it can do and where its API is.' },
-  handler: (principal, _input, { deps }) => deps.instance.describe(principal),
+  async handler(principal, _input, { deps }) {
+    const described = await deps.instance.describe(principal)
+    if (!deps.library || described?.view !== 'account') return described
+    return { ...described, library: { categories: [...LIBRARY_CATEGORIES], reviewer: await deps.library.isReviewer(principal.userId) } }
+  },
 })

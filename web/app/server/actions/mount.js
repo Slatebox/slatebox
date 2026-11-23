@@ -46,6 +46,7 @@ import { shapeService } from '../shapes/meteor'
 import { createPresentationFor } from '../methods/presentations'
 import { mediaLookup } from '../media/meteor'
 import { posterAllowedFor } from '../media/media-lookup.mjs'
+import { createAppLibrary } from '../library/meteor'
 
 const IdempotencyRecords = new Mongo.Collection('apiIdempotencyRecords')
 const RateWindows = new Mongo.Collection('apiRateWindows')
@@ -183,6 +184,9 @@ export const deps = {
     // Video posters in a plan must be ones this app stored (slate-operations.mjs).
     posterAllowed: (url) => posterAllowedFor(Meteor.settings)(url),
 }
+
+// library.* (server/library): the shared library, over the same save core, slate access and decks.
+deps.library = createAppLibrary(deps)
 
 export const limiter = createRateLimiter({ collection: RateWindows.rawCollection() })
 export const registry = createAppRegistry({ deps, idempotency, limiter, extraActions: enterpriseHost.actions })

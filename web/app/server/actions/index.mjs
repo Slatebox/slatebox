@@ -35,6 +35,9 @@ import commentActions from './comments.mjs'
 import agentTaskActions from './agent-tasks.mjs'
 import agentSuggestionActions from './agent-suggestions.mjs'
 import mediaActions from './media.mjs'
+import libraryRead from './library-read.mjs'
+import libraryAuthor from './library-author.mjs'
+import libraryReview from './library-review.mjs'
 
 export const actions = [
   slatesGet,
@@ -72,6 +75,10 @@ export const actions = [
   ...agentTaskActions,
   ...agentSuggestionActions,
   ...mediaActions,
+  // The review routes and the more specific reads first: Express matches /library/{itemId} last.
+  ...libraryReview,
+  ...libraryAuthor,
+  ...libraryRead,
 ]
 
 export const components = { ...slateComponents }

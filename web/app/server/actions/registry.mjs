@@ -118,6 +118,15 @@ export function defineAction(definition) {
   // the read has an HTTP route.
   if (principals.includes('visitor') && (kind !== 'read' || !mounts.http || !principals.includes('agent')))
     fail(id, 'a visitor only reads what a token may also read, and the read has an HTTP route')
+  // publicCache: a visitor's answer may be cached by browsers and shared caches (and read from any
+  // origin), for maxAge seconds at a shared cache. Only a read a visitor may make: anything with a
+  // caller's own rights in it stays no-store.
+  if (definition.publicCache != null) {
+    const maxAge = definition.publicCache?.maxAge
+    if (kind !== 'read' || !principals.includes('visitor')) fail(id, 'publicCache is for a read a visitor may make')
+    if (!Number.isInteger(maxAge) || maxAge < 1 || maxAge > 86400 || Object.keys(definition.publicCache).length !== 1)
+      fail(id, 'publicCache is { maxAge } in whole seconds, 1 to 86400')
+  }
   if (mounts.ddp && !principals.some((p) => p !== 'agent' && p !== 'visitor'))
     fail(id, 'a Meteor method is called by a signed-in session')
   if (!http && definition.tool)
@@ -162,6 +171,7 @@ export function defineAction(definition) {
     successStatus: definition.successStatus || (kind === 'write' ? 201 : 200),
     bodyLimit: definition.bodyLimit || '100kb',
     tool: definition.tool || null,
+    publicCache: definition.publicCache ? { maxAge: definition.publicCache.maxAge } : null,
   })
 }
 
@@ -390,12 +400,14 @@ export function createRegistry({
   // Whether this caller may make this call at all: the principal, the action's permission and
   // its precheck. Throws the refusal run would throw. The exec gate asks before it holds a
   // change for the person's agreement, so a call that would be refused anyway is not held.
+  // A precheck may answer a promise (a permission read from the database, such as being this
+  // server's administrator): admits then answers one too, and the gate awaits it.
   function admits(caller, id, input = {}) {
     const action = byId.get(id)
     if (!action) throw problem(404, 'unknown_action', 'There is no such action.')
     const principal = admit(action, caller)
-    if (action.precheck) action.precheck(principal, input && typeof input === 'object' ? input : {})
-    return principal
+    const checked = action.precheck ? action.precheck(principal, input && typeof input === 'object' ? input : {}, { deps }) : null
+    return checked && typeof checked.then === 'function' ? checked.then(() => principal) : principal
   }
 
   // What a call would do, read without saving (the action's peek), or null when the action cannot say.

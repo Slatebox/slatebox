@@ -19,8 +19,8 @@ function readPlan(plan) {
   if (ops.length !== 1 || typeof plan.message !== 'string' || !plan.message.trim())
     throw problem(400, 'invalid_operation_plan', 'An add_component plan holds one operation and a message.')
   const op = ops[0]
-  const extra = Object.keys(op).filter((key) => !['kind', 'component', 'topic', 'expectedRevision'].includes(key))
-  if (extra.length) throw problem(400, 'invalid_operation_plan', 'add_component takes component, topic and expectedRevision only.')
+  const extra = Object.keys(op).filter((key) => !['kind', 'component', 'library', 'topic', 'expectedRevision'].includes(key))
+  if (extra.length) throw problem(400, 'invalid_operation_plan', 'add_component takes component (or library), topic and expectedRevision only.')
   if (!Number.isSafeInteger(op.expectedRevision) || op.expectedRevision < 0)
     throw problem(400, 'invalid_request', 'add_component names the slate revision it was made on (expectedRevision, from slates.get).', { details: { field: 'expectedRevision' } })
   let request
@@ -35,27 +35,36 @@ export async function applyAddComponent(principal, input, { deps, mode, now, ide
   if (input.expectedRevision !== undefined)
     throw problem(400, 'invalid_request', 'add_component carries its expectedRevision inside the plan operation.')
   const op = readPlan(input.plan)
+  // A smart component from the shared library: its board as the caller may read it (published, or their own).
+  let fromLibrary = null
+  if (op.library) {
+    if (!deps.library) throw problem(400, 'invalid_component', 'This server has no shared library.')
+    fromLibrary = await deps.library.componentFor(principal, op.library)
+    op.workshop = fromLibrary.workshop
+  }
+  const named = op.library ? { library: op.library } : { component: op.component }
   const respond = (made, revision) => ({
     ok: true,
     shareId: slate.shareId,
     revision,
     message: input.plan.message,
-    operations: [{ kind: 'add_component', component: op.component, ...(op.topic && { topic: op.topic }), expectedRevision: op.expectedRevision }],
+    operations: [{ kind: 'add_component', ...named, ...(op.topic && { topic: op.topic }), expectedRevision: op.expectedRevision }],
     // The board's id on the slate (main for its first board): what workshop operations name it by (boardId).
     boardId: made.boardId,
-    report: { component: op.component, boardId: made.boardId, origin: made.origin, rules: lines(made.workshop),
+    report: { ...(op.component ? { component: op.component } : { library: { itemId: fromLibrary.item._id, version: fromLibrary.version } }), boardId: made.boardId, origin: made.origin, rules: lines(made.workshop),
       targets: made.workshop.lanes.map((lane) => workshopNodeIds.of(made.boardId).lane(lane.id)) },
     workshop: { boardId: made.boardId, title: made.workshop.title, revision: 0, lanes: made.workshop.lanes.map(({ id, label }) => ({ id, label })), cards: made.workshop.cards.length },
   })
   const first = componentAddition(slate, op, samples)
-  if (first.refused) throw problem(409, 'component_opens_new_slate', first.refused, { details: { component: op.component, fits: false } })
+  if (first.refused) throw problem(409, 'component_opens_new_slate', first.refused, { details: { ...named, fits: false } })
   if ((slate.revision ?? 0) !== op.expectedRevision)
     throw problem(409, 'slate_changed', 'The slate changed since you read it. Read it again (slates.get) and send its revision.', { details: { revision: slate.revision ?? 0 } })
   if (mode === 'preview') return { status: 200, body: respond(first, slate.revision ?? 0) }
   if (!idempotencyKey) throw problem(400, 'invalid_request', 'Set Idempotency-Key when adding a component.')
   const prior = await deps.operationRuns.findOneAsync({ tokenId: principal.tokenId, idempotencyKey })
   if (prior) {
-    if (prior.response?.operations?.[0]?.component === op.component && prior.slateId === slate._id) return { status: 200, body: prior.response }
+    const was = prior.response?.operations?.[0]
+    if ((op.library ? was?.library?.itemId === op.library.itemId : was?.component === op.component) && prior.slateId === slate._id) return { status: 200, body: prior.response }
     throw problem(409, 'idempotency_conflict', 'That key belongs to a different request. Use a new key.')
   }
   let made = first
@@ -80,9 +89,14 @@ export async function applyAddComponent(principal, input, { deps, mode, now, ide
     })
   } catch (error) {
     if (error?.code === 'slate_moved') throw problem(409, 'slate_changed', 'The slate changed since you read it. Read it again (slates.get) and send its revision.')
-    if (error?.code === 'board_cap') throw problem(409, 'component_opens_new_slate', error.message, { details: { component: op.component, fits: false } })
+    if (error?.code === 'board_cap') throw problem(409, 'component_opens_new_slate', error.message, { details: { ...named, fits: false } })
     throw error
   }
+  // One more add, counted on the library item (a catalogue entry's is its built-in item). Never fails the add.
+  try {
+    if (fromLibrary) await fromLibrary.count()
+    else await deps.library?.countBuiltinAdd(op.component)
+  } catch (error) { console.error('[library] count', error?.message) }
   const response = respond(made, saved.revision)
   await deps.operationRuns.insertAsync({
     userId: principal.userId,

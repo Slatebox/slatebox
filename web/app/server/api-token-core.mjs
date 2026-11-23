@@ -8,7 +8,8 @@ import { createHash, randomBytes } from 'node:crypto'
 // team:export: download everything the team owns (the person must be a team admin).
 // slates:delete: delete slates the account owns and remove comments (separate from editing).
 // team:import: import a team export as a new team, and confirm or discard it (administrators).
-export const API_TOKEN_SCOPES = ['slates:read', 'slates:write', 'slates:share', 'slates:delete', 'ai:settings', 'ai:admin', 'team:export', 'team:import']
+// library:review: review, refine, publish and unpublish library submissions (administrators).
+export const API_TOKEN_SCOPES = ['slates:read', 'slates:write', 'slates:share', 'slates:delete', 'ai:settings', 'ai:admin', 'team:export', 'team:import', 'library:review']
 export const ACTIVE_TOKEN_LIMIT = 10
 
 export function hashApiToken(token) {

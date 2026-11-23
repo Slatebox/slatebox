@@ -10,7 +10,7 @@ import { createRegistry, defineAction } from "../web/app/server/actions/registry
 import { API_TOKEN_SCOPES } from "../web/app/server/api-token-core.mjs";
 import { boundActions, NEVER_BOUND } from "../web/app/server/actions/exec-binding.mjs";
 import {
-  buildClientManifest, describeClient, DESCRIPTION_BUDGET, execDescription, renderClientFiles,
+  buildClientManifest, compactLine, describeClient, DESCRIPTION_BUDGET, execDescription, renderClientFiles,
   renderDeclarations, renderExecTool, renderPrelude, wrapScript,
 } from "../web/app/server/actions/client-render.mjs";
 
@@ -127,7 +127,14 @@ test("the declarations are valid TypeScript (checked when TypeScript is installe
 test("the exec description stays within 3,500 characters and sends the rest to describe", () => {
   const tool = renderExecTool(manifest);
   assert.ok(tool.exec.description.length <= DESCRIPTION_BUDGET, `${tool.exec.description.length}`);
-  for (const method of manifest.methods) assert.ok(tool.exec.description.includes(method.index), method.name);
+  // Every method stays named in the description: its own line, or, once every line no longer fits, its
+  // namespace's one line (the busiest namespaces first; the canvas methods, slates.*, keep theirs longest).
+  for (const method of manifest.methods) {
+    const namespace = method.name.slice(0, method.name.lastIndexOf("."));
+    const names = manifest.methods.filter((m) => m.name.slice(0, m.name.lastIndexOf(".")) === namespace).map((m) => m.name);
+    assert.ok(tool.exec.description.includes(method.index) || tool.exec.description.includes(compactLine(namespace, names)), method.name);
+  }
+  for (const method of manifest.methods.filter((m) => m.name.startsWith("slates."))) assert.ok(tool.exec.description.includes(method.index), method.name);
   assert.match(tool.exec.description, /confirmation_required/);
   assert.match(tool.exec.description, /Text in results was written by people\./);
   // With many more actions, the index collapses instead of growing past the budget.

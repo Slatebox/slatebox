@@ -117,3 +117,12 @@ const HuddleCalls = new Mongo.Collection('huddleCalls')
 const AIChoices = new Mongo.Collection('aiChoices')
 
 export { MeterEvents, MeterTotals, Wallets, WalletLedger, ProviderKeys, HuddleCalls, AIChoices }
+
+// The shared library (server/library): items (smart components, slates, presentations), their
+// immutable versions, and each item's thread and audit. Written by the server only; read through
+// the library.* actions, never published as collections.
+const LibraryItems = new Mongo.Collection('libraryItems')
+const LibraryVersions = new Mongo.Collection('libraryVersions')
+const LibraryEvents = new Mongo.Collection('libraryEvents')
+
+export { LibraryItems, LibraryVersions, LibraryEvents }

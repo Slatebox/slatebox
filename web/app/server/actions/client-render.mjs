@@ -416,11 +416,50 @@ export function renderDeclarations(manifest) {
   )
 }
 
-// The exec description: the rules, then one line per method, cut to the budget. Lines past
-// the budget collapse into one line that sends the agent to describe.
+// The exec description: the rules, then one line per method, within the budget. When every line
+// does not fit, the namespace with the most methods is named in one line instead (its methods by
+// name, their inputs from describe), then the next, so every method stays named; a namespace of
+// more than COMPACT_MAX methods is never compacted. Lines that still do not fit collapse into one
+// line that sends the agent to describe.
+export const COMPACT_MAX = 24
+// The canvas methods nearly every script calls keep their full lines longest.
+export const KEEP_WHOLE = Object.freeze(['slates'])
+const namespaceOf = (name) => name.slice(0, name.lastIndexOf('.'))
+export const compactLine = (namespace, names) =>
+  `${namespace}.{${names.map((name) => name.slice(namespace.length + 1)).join(', ')}} (call describe for their inputs)`
+
 export function execDescription(manifest, budget = DESCRIPTION_BUDGET) {
   const head = `${EXEC_LEAD} ${manifest.rules} Methods:`
-  const lines = manifest.methods.map((method) => method.index)
+  const methods = manifest.methods
+  const compacted = new Set()
+  const render = () => {
+    const out = []
+    const done = new Set()
+    for (const method of methods) {
+      const namespace = namespaceOf(method.name || '')
+      if (!compacted.has(namespace)) out.push(method.index)
+      else if (!done.has(namespace)) {
+        done.add(namespace)
+        out.push(compactLine(namespace, methods.filter((m) => namespaceOf(m.name) === namespace).map((m) => m.name)))
+      }
+    }
+    return out
+  }
+  const fits = (lines) => `${head}\n${lines.join('\n')}`.length <= budget
+  let lines = render()
+  while (!fits(lines)) {
+    const counts = new Map()
+    for (const method of methods) {
+      const namespace = namespaceOf(method.name || '')
+      if (method.name && !compacted.has(namespace)) counts.set(namespace, (counts.get(namespace) || 0) + 1)
+    }
+    const last = (namespace) => (KEEP_WHOLE.includes(namespace) ? 1 : 0)
+    const [next] = [...counts.entries()].filter(([, n]) => n > 1 && n <= COMPACT_MAX)
+      .sort((a, b) => last(a[0]) - last(b[0]) || b[1] - a[1] || a[0].localeCompare(b[0]))
+    if (!next) break
+    compacted.add(next[0])
+    lines = render()
+  }
   let text = head
   for (let index = 0; index < lines.length; index += 1) {
     const rest = lines.length - index - 1

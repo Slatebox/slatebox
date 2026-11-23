@@ -42,6 +42,8 @@ const { createAISettings } = await import(new URL("server/methods/ai/ai-settings
 const { createAgentTasks } = await import(new URL("server/agents/agentTasks.mjs", app));
 const { createAgentPresence } = await import(new URL("server/presence/agentPresence.mjs", app));
 const { deckRecord } = await import(new URL("imports/ui/components/presentations/presentationCompose.mjs", app));
+// The shared library over in-memory stores (scripts/library-test-stores.mjs), its built-ins seeded.
+const { makeLibrary } = await import(new URL("../../scripts/library-test-stores.mjs", app));
 
 const at = (doc, path) => path.split(".").reduce((value, key) => value?.[key], doc);
 function put(doc, path, value) {
@@ -165,12 +167,16 @@ async function instance(t) {
     { nodeId: "c", description: "Gamma", metrics: box(600), childrenNodes: [] }] }] };
   const deckRow = { _id: "deck1", version: 1, name: "Probe deck", presentationData: JSON.stringify(deckLayout), ...deckRecord({ layout: deckLayout, name: "Probe" }) };
   const restyles = [];
+  // The library: the probe's owner is also this server's administrator, so its token may review.
+  const library = makeLibrary({ slates, saveCore, reviewers: ["owner"], users: { owner: { name: "Owner" } }, applyWorkshopOperations: createWorkshopOperations(stores) });
+  await library.ready;
   const planned = [];
   // Parity (slates.list, slates.copy, slates.delete, comments.*): the app's rules have their own
   // tests (scripts/agent-parity.test.mjs). Here: the routes and the calls, on the same store.
   const comments = [];
   const deletedSlates = [];
   const registry = createAppRegistry({ deps: {
+    library: library.library,
     listSlates: async ({ userId, limit }) => slates.rows.filter((row) => row.userId === userId).slice(0, limit),
     deleteSlate: async (slate) => { deletedSlates.push(slate.shareId); return { deleted: true }; },
     resolveSlateForUser: async (shareId, userId) => {
@@ -267,7 +273,7 @@ async function instance(t) {
   mountHttp(server, gatedRegistry(registry, gate), {
     express,
     authenticate: async (req) => (req.get("authorization") === "Bearer probe-token"
-      ? { kind: "agent", tokenId: "token", userId: "owner", scopes: ["slates:read", "slates:write", "slates:share", "slates:delete", "ai:settings", "team:export", "team:import"] } : null),
+      ? { kind: "agent", tokenId: "token", userId: "owner", scopes: ["slates:read", "slates:write", "slates:share", "slates:delete", "ai:settings", "team:export", "team:import", "library:review"] } : null),
   });
   const listener = server.listen(0, "127.0.0.1");
   await new Promise((resolve) => listener.once("listening", resolve));
@@ -560,6 +566,46 @@ return slatebox.agentTasks.update({ shareId: "canvas", taskId: ${JSON.stringify(
   const added = await ok(`return slatebox.slates.addMedia({ shareId: "canvas", url: "https://youtu.be/dQw4w9WgXcQ", x: 900, y: 40 })`);
   assert.equal(added.media.id, "dQw4w9WgXcQ");
   assert.ok(added.nodeId);
+
+  // The shared library (new): browse and use it, build and submit a component, review and publish it,
+  // through scripts. Submitting and approving widen who sees something, so they wait for the person;
+  // discarding and unpublishing take something away, so they do too.
+  assert.equal((await ok(`return slatebox.library.stats({})`)).components.total, 19);
+  assert.deepEqual((await ok(`return slatebox.library.list({ kind: "component", category: "meetings" })`)).items.map((item) => item.slug).sort(), ["incident-review", "retro"]);
+  assert.equal((await ok(`return slatebox.library.get({ itemId: "retro" })`)).version.content.kind, "component");
+  assert.equal((await ok(`return slatebox.library.export({})`)).items.length, 19);
+  const builder = await ok(`return slatebox.library.branch({ itemId: "retro" })`);
+  const draft = await ok(`return slatebox.library.saveDraft({ shareId: ${JSON.stringify(builder.shareId)}, title: "Probe retro", summary: "Went well, change, try" })`);
+  const lib = (code) => code.replaceAll("ITEM", JSON.stringify(draft.itemId));
+  assert.equal((await confirmed(lib(`return slatebox.library.submit({ kind: "component", itemId: ITEM, note: "Please look" })`), ["widens_access"])).status, "submitted");
+  assert.ok((await ok(lib(`return slatebox.library.comment({ itemId: ITEM, message: "One more thing" })`))).eventId);
+  assert.equal((await ok(`return slatebox.library.mine({})`)).items[0].status, "submitted");
+  assert.deepEqual((await ok(`return slatebox.library.review.queue({})`)).items.map((item) => item.id), [draft.itemId]);
+  assert.equal((await ok(lib(`return slatebox.library.review.open({ itemId: ITEM })`))).status, "in_review");
+  assert.deepEqual((await ok(lib(`return slatebox.library.review.refine({ itemId: ITEM, message: "rename it to Probe retro board", mode: "preview" })`))).diff.meta.title, ["Probe retro", "Probe retro board"]);
+  assert.equal((await ok(lib(`return slatebox.library.review.refine({ itemId: ITEM, message: "put it in Meetings" })`))).kept, false, "already in Meetings: nothing to keep");
+  assert.equal((await ok(lib(`return slatebox.library.review.update({ itemId: ITEM, summary: "Three columns, one rule" })`))).item.summary, "Three columns, one rule");
+  const approved = await confirmed(lib(`return slatebox.library.review.approve({ itemId: ITEM, message: "Published" })`), ["widens_access"]);
+  assert.deepEqual([approved.status, approved.publishedVersion], ["published", 2]);
+  const use = await ok(lib(`return slatebox.library.fork({ itemId: ITEM, mode: "preview" })`));
+  assert.equal(use.canvas.workshop.title, "Probe retro");
+  const used = await ok(lib(`return slatebox.library.fork({ itemId: ITEM })`));
+  assert.equal((await stored(used.shareId)).libraryOrigin.itemId, draft.itemId);
+  assert.equal((await confirmed(lib(`return slatebox.library.review.unpublish({ itemId: ITEM, message: "A duplicate" })`), ["removes"])).status, "unpublished");
+  const second = await ok(`const { shareId } = await slatebox.library.branch({ itemId: "triage" });
+return slatebox.library.saveDraft({ shareId, title: "Probe triage", summary: "Sort what comes in" })`);
+  const lib2 = (code) => code.replaceAll("ITEM", JSON.stringify(second.itemId));
+  await confirmed(lib2(`return slatebox.library.submit({ kind: "component", itemId: ITEM })`), ["widens_access"]);
+  assert.equal((await ok(lib2(`return slatebox.library.withdraw({ itemId: ITEM })`))).status, "draft");
+  assert.equal((await confirmed(lib2(`return slatebox.library.discard({ itemId: ITEM })`), ["removes"])).discarded, true);
+  const slateItem = await confirmed(`return slatebox.library.submit({ kind: "slate", shareId: "canvas", summary: "The probe's canvas" })`, ["widens_access"]);
+  const lib3 = (code) => code.replaceAll("ITEM", JSON.stringify(slateItem.itemId));
+  await ok(lib3(`return slatebox.library.review.open({ itemId: ITEM })`));
+  assert.equal((await ok(lib3(`return slatebox.library.review.requestChanges({ itemId: ITEM, message: "Name the notes" })`))).status, "changes_requested");
+  await confirmed(lib3(`return slatebox.library.submit({ kind: "slate", shareId: "canvas" })`), ["widens_access"]);
+  assert.equal((await ok(lib3(`return slatebox.library.review.reject({ itemId: ITEM, message: "Not for the library" })`))).status, "rejected");
+  const refusedReview = await exec(`return slatebox.library.review.reject({ itemId: "retro", message: "No" })`);
+  assert.deepEqual([refusedReview.error.status, refusedReview.error.code], [409, "builtin"]);
 
   assert.deepEqual([...called].sort(), [...defaultGenerated().methods.keys()].sort(), "every client method was called");
 });

@@ -63,7 +63,10 @@ test("the client has a method per bound action and none for token management", (
   // Later actions appear on their own (wave 2 adds account and instance); these must be there.
   assert.ok(!("apiTokens" in client) && !("exec" in client));
   for (const name of ["applyOperations", "create", "get", "issueInvite", "revokeInvite"]) assert.equal(typeof client.slates[name], "function", name);
-  assert.deepEqual(Object.keys(client).flatMap((area) => Object.keys(client[area]).map((fn) => area + "." + fn)).sort(), [...generated.methods.keys()].sort());
+  // Restated (library): a method name may have more than two parts (library.review.queue), so the client is walked to its leaves.
+  const leaves = (node, prefix) => Object.entries(node).flatMap(([key, value]) => (typeof value === "function" ? [prefix + key] : leaves(value, prefix + key + ".")));
+  assert.deepEqual(leaves(client, "").sort(), [...generated.methods.keys()].sort());
+  assert.equal(typeof client.library.review.approve, "function");
   assert.ok(Object.isFrozen(client) && Object.isFrozen(client.slates));
 });
 

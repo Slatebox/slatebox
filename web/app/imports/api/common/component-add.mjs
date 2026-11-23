@@ -2,7 +2,7 @@
 // Keep (nativeCanvas.keep), exec and agents (slates.applyOperations add_component). Pure: what
 // the slate stores and where the board sits. The server saves it; the page draws it live.
 import { validateWorkshop } from 'slateboxjs/workshops/model'
-import { catalogEntry, catalogFits, catalogPreset } from 'slateboxjs/catalog'
+import { catalogEntry, catalogFits, catalogPreset, maxBoardsPerSlate } from 'slateboxjs/catalog'
 import { besideExisting } from './conversation-preview.mjs'
 import { datedLaunchPlan } from './plan-dates.mjs'
 import { MAIN_BOARD, besideBoards, boardBoxes, furtherBoardSet, mainOriginSet, nextBoardId, slateBoards } from './slate-boards.mjs'
@@ -40,14 +40,32 @@ export function overlapsAny(box, frames) {
   return frames.some(f => box.x < f.x + f.width && f.x < box.x + box.width && box.y < f.y + f.height && f.y < box.y + box.height)
 }
 
-/** A component request as exec sends it: `{ component, topic? }`, checked. Throws an Error with `code`. */
+/**
+ * A component request as exec sends it: `{ component, topic? }` (a catalogue entry) or `{ library: { itemId, version? }, topic? }`
+ * (a smart component from the shared library: its board is resolved by the server, server/library/core.mjs componentFor). Checked.
+ * Throws an Error with `code`.
+ */
 export function readComponentRequest(input) {
   const fail = (message) => Object.assign(new Error(message), { code: 'invalid_component' })
   if (!input || typeof input !== 'object') throw fail('Name the component to add.')
-  const { component, topic } = input
-  if (typeof component !== 'string' || !catalogEntry(component)) throw fail('There is nothing called ' + String(component).slice(0, 60) + ' in the library. components.list names what can be added.')
+  const { component, topic, library } = input
   if (topic !== undefined && (typeof topic !== 'string' || !topic.trim() || topic.length > 100 || /[<>\x00-\x1f]/.test(topic))) throw fail('A topic is up to 100 characters of plain text.')
-  return { component, ...(topic !== undefined && { topic: topic.replace(/\s+/g, ' ').trim() }) }
+  const about = topic !== undefined ? { topic: topic.replace(/\s+/g, ' ').trim() } : {}
+  if (library !== undefined) {
+    if (component !== undefined) throw fail('Name a library component or a library item, not both.')
+    const { itemId, version } = library || {}
+    if (typeof itemId !== 'string' || !/^[A-Za-z0-9_-]{1,120}$/.test(itemId) || (version !== undefined && (!Number.isSafeInteger(version) || version < 1)) ||
+      Object.keys(library).some(key => !['itemId', 'version'].includes(key))) throw fail('library is { itemId, version? }: an item from library.list.')
+    return { library: { itemId, ...(version !== undefined && { version }) }, ...about }
+  }
+  if (typeof component !== 'string' || !catalogEntry(component)) throw fail('There is nothing called ' + String(component).slice(0, 60) + ' in the library. components.list names what can be added.')
+  return { component, ...about }
+}
+
+/** A library item's board named after a topic, as catalogPreset names an entry's ("Retro: Q3 launch"). */
+export function namedBoard(workshop, topic) {
+  if (!topic) return workshop
+  return { ...workshop, title: (String(workshop.title || 'Board') + ': ' + topic.replace(/\s+/g, ' ').trim().slice(0, 100)).slice(0, 120) }
 }
 
 /**
@@ -57,14 +75,17 @@ export function readComponentRequest(input) {
  * Read the slate as it stands at the write: the place and the id are computed again there. `samples` are the
  * business boards' samples (slateboxjs/workshops/samples).
  */
-export function componentAddition(slate, { component, topic }, samples = {}, room = boardRoom) {
+export function componentAddition(slate, { component, topic, workshop: resolved }, samples = {}, room = boardRoom) {
   const held = slateBoards(slate).length
   // A slate of another creative kind (not a workshop) holds no board, and takes none.
   if (slate?.creative && !held) return { refused: 'This slate can’t hold a board.' }
-  const fits = catalogFits(component, { hasBoard: held > 0, many: true, boards: held })
+  // A library item's board (resolved by the server) fits the way a catalogue entry does: beside the boards, up to 8.
+  const fits = resolved
+    ? (held >= maxBoardsPerSlate ? { ok: false, reason: `This slate holds ${maxBoardsPerSlate} boards, the most for now. Add it on a new slate?` } : { ok: true })
+    : catalogFits(component, { hasBoard: held > 0, many: true, boards: held })
   if (!fits.ok) return { refused: fits.reason }
-  // A launch plan launches on the day its topic names (“launching in March”).
-  const workshop = datedLaunchPlan(validateWorkshop(catalogPreset(component, topic, samples)), topic)
+  // A launch plan launches on the day its topic names (“launching in March”). A library item's board (resolved) is used as published.
+  const workshop = datedLaunchPlan(resolved ? validateWorkshop(namedBoard(resolved, topic)) : validateWorkshop(catalogPreset(component, topic, samples)), topic)
   return { workshop, ...componentPlacing(slate, workshop, room) }
 }
 

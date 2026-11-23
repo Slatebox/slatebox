@@ -123,6 +123,35 @@ test("an action definition is refused when it would publish something it cannot 
   assert.throws(() => defineAction({ ...base, kind: "write", mounts: { http: { method: "GET", path: "/x" } }, input: { type: "object", properties: { mode: {} }, additionalProperties: false } }), /mode belongs/);
   assert.throws(() => defineAction({ ...base, mounts: { ddp: true } }), /Meteor method is called by a signed-in session/);
   assert.throws(() => defineAction({ ...base, mounts: { ddp: true }, principals: ["person"], tool: { name: "x" } }), /needs one/);
+  // A cacheable public answer (library): only a read a visitor may make, with a whole number of seconds.
+  assert.equal(defineAction({ ...base, principals: ["agent", "visitor"], publicCache: { maxAge: 300 } }).publicCache.maxAge, 300);
+  assert.throws(() => defineAction({ ...base, publicCache: { maxAge: 300 } }), /publicCache is for a read a visitor may make/);
+  assert.throws(() => defineAction({ ...base, kind: "write", principals: ["agent", "visitor"], mounts: { http: { method: "POST", path: "/example/{shareId}" } }, idempotency: "optional", publicCache: { maxAge: 60 } }), /publicCache|visitor only reads/);
+  assert.throws(() => defineAction({ ...base, principals: ["agent", "visitor"], publicCache: { maxAge: 0 } }), /whole seconds/);
+  assert.throws(() => defineAction({ ...base, principals: ["agent", "visitor"], publicCache: { maxAge: 60, private: true } }), /whole seconds/);
+});
+
+test("the library's actions: every one has an HTTP route and a tool (commands come from tools); only public reads are cached", () => {
+  const registry = createAppRegistry();
+  const library = registry.list().filter((action) => action.id.startsWith("library."));
+  assert.equal(library.length, 20);
+  for (const action of library) {
+    assert.ok(action.mounts.http && action.tool?.name, action.id);
+    assert.equal(Boolean(action.publicCache), action.principals.includes("visitor"), action.id);
+    if (action.publicCache) assert.equal(action.kind, "read", action.id);
+    // Review is for administrators: its own permission, and never a guest's or a visitor's.
+    if (action.id.startsWith("library.review.")) {
+      assert.equal(action.scope, "library:review", action.id);
+      assert.deepEqual(action.principals, ["person", "agent"], action.id);
+      assert.equal(typeof action.precheck, "function", action.id);
+    }
+  }
+  assert.deepEqual(library.filter((action) => action.publicCache).map((action) => [action.id, action.publicCache.maxAge]).sort(),
+    [["library.export", 600], ["library.get", 300], ["library.list", 300], ["library.stats", 300]]);
+  assert.deepEqual(library.filter((action) => action.confirm).map((action) => action.id).sort(), ["library.review.approve", "library.submit"]);
+  assert.deepEqual(library.filter((action) => action.destructive).map((action) => action.id).sort(), ["library.discard", "library.review.unpublish"]);
+  // Nothing else in the registry is cached: every other answer stays no-store.
+  assert.deepEqual(registry.list().filter((action) => action.publicCache && !action.id.startsWith("library.")).map((action) => action.id), []);
 });
 
 test("the OpenAPI document is generated from the registry and lists every route with its flags", async (t) => {
@@ -412,7 +441,9 @@ test("the Developer tab and the API run one handler for list, create and revoke"
   // let one edit directly through agents.control.
 // Restated (video notes): a video address pasted on the canvas is looked up through media.lookup,
   // and slates.addMedia is the same add the API, exec and MCP make.
-  assert.deepEqual(names.sort(), ["account.get", "agentTasks.create", "agentTasks.list", "agentTasks.update", "agents.control", "ai.check", "ai.get", "ai.update", "apiTokens.create", "apiTokens.list", "apiTokens.revoke", "comments.add", "instance.describe", "media.lookup", "slates.addMedia", "slates.copy", "slates.importMermaid", "slates.updateSettings", "suggestions.decide", "suggestions.list", "team.export", "teamImports.confirm", "teamImports.discard", "teamImports.get", "teamImports.invite", "teamImports.list", "teamImports.start"]);
+  // Restated (library): the app's library pages, the builder and the review panel call every library.*
+  // action but library.export (a token's or a visitor's read for the public gallery build).
+  assert.deepEqual(names.sort(), ["account.get", "agentTasks.create", "agentTasks.list", "agentTasks.update", "agents.control", "ai.check", "ai.get", "ai.update", "apiTokens.create", "apiTokens.list", "apiTokens.revoke", "comments.add", "instance.describe", "library.branch", "library.comment", "library.discard", "library.fork", "library.get", "library.list", "library.mine", "library.review.approve", "library.review.open", "library.review.queue", "library.review.refine", "library.review.reject", "library.review.requestChanges", "library.review.unpublish", "library.review.update", "library.saveDraft", "library.stats", "library.submit", "library.withdraw", "media.lookup", "slates.addMedia", "slates.copy", "slates.importMermaid", "slates.updateSettings", "suggestions.decide", "suggestions.list", "team.export", "teamImports.confirm", "teamImports.discard", "teamImports.get", "teamImports.invite", "teamImports.list", "teamImports.start"]);
   const asOwner = { userId: "owner" };
   const created = await methods["apiTokens.create"].call(asOwner, { name: "From the tab", scopes: ["slates:read"] });
   assert.match(created.token, /^sbx_/);
