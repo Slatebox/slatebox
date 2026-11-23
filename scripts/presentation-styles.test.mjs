@@ -9,7 +9,7 @@ import {
   classifySlate, cleanCaption, composeDeck, deckFor, frameBox, LAYOUTS, localDirection, normalizeDirection,
   numberOnSlate, pickStyle, quoteOnSlate, remixDirection, repeatsNote, safeImageUrl, showsOn, slateGraph, SURPRISES,
 } from '../web/app/imports/ui/components/presentations/presentationCompose.mjs'
-import { chevron, slant, textInsetFor } from '../web/app/imports/ui/components/presentations/presentationPaths.mjs'
+import { chevron, insetBox, slant, textInsetFor } from '../web/app/imports/ui/components/presentations/presentationPaths.mjs'
 import { STYLE_IDS, STYLES, cleanStyleRef, resolveStyle } from '../web/app/imports/ui/components/presentations/presentationStyles.mjs'
 import { isArt } from '../web/app/imports/ui/components/presentations/presentationArt.mjs'
 import { needsPlan, PLAN_VERSION } from '../web/app/imports/ui/components/presentations/presentationPlan.mjs'
@@ -338,16 +338,40 @@ test('the stage notes of one step never sit on each other, on a wide screen or a
   }
 })
 
-test('custom silhouettes keep their text inside: each path with a notch or tail carries its text inset', () => {
+test('custom silhouettes keep their text inside: each path with a notch or tail carries its text inset, as its custom shape\'s text box', () => {
   assert.deepEqual(textInsetFor(chevron), { left: 0.15, right: 0.17, top: 0.04, bottom: 0.04 })
   assert.ok(textInsetFor(slant).left >= 0.14)
+  assert.deepEqual(insetBox(textInsetFor(chevron)), { x: 0.15, y: 0.04, w: 0.68, h: 0.92 })
   for (const style of STYLE_IDS) {
     const { deck } = deckFor(whatIsSlatebox(), { name: NAME, style })
     for (const [id, look] of Object.entries(deck.skin)) {
-      const inset = textInsetFor(look.vectorPath)
-      if (inset) assert.deepEqual(look.textInset, inset, `${style} ${id}`)
+      if (!look.vectorPath) continue
+      assert.equal(look.shape, 'custom', `${style} ${id}`)
+      assert.ok(look.textBox && look.textBox.w > 0 && look.textBox.h > 0 && look.textBox.x + look.textBox.w <= 1.0001, `${style} ${id}`)
+      assert.equal(look.textInset, undefined, `${style} ${id}: one safe area, not two`)
     }
-    for (const note of deck.stageNotes.filter((n) => n.text && textInsetFor(n.vectorPath))) assert.ok(note.textInset, `${style} ${note.id}`)
+    for (const note of deck.stageNotes.filter((n) => n.text && n.vectorPath)) assert.ok(note.shape === 'custom' && note.textBox, `${style} ${note.id}`)
+  }
+  // Neon's branches are chevrons: their text box is the chevron's hand-tuned inset.
+  const { deck: neon } = deckFor(whatIsSlatebox(), { name: NAME, style: 'neon' })
+  assert.deepEqual(neon.skin.b1.textBox, insetBox(textInsetFor(chevron)))
+})
+
+test('silhouettes are the shapes service\'s custom shapes; only line art (open ribbons, hairline rings) stays a plain outline', async () => {
+  const shapes = await import('slateboxjs/shapes')
+  for (const style of STYLE_IDS) {
+    const { deck } = deckFor(whatIsSlatebox(), { name: NAME, style })
+    const notes = [...Object.values(deck.skin), ...deck.stageNotes].filter((n) => n.vectorPath)
+    for (const note of notes) {
+      if (note.shape === 'custom') {
+        assert.ok(shapes.isCustomShapeOptions(note), `${style} ${note.kind}`)
+        assert.ok(shapes.validateShapePath(note.vectorPath, { fillRule: note.fillRule }).ok, `${style} ${note.kind}`)
+        assert.ok(note.shapeRef?.name, `${style} ${note.kind}`)
+      } else {
+        assert.ok(['ribbon', 'route', 'deco'].includes(note.kind), `${style} ${note.kind} should be a custom shape`)
+        assert.ok(!note.text, `${style} ${note.kind}`)
+      }
+    }
   }
 })
 

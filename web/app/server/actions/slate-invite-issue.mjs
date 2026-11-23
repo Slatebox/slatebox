@@ -4,7 +4,7 @@ import { inviteRole, ref, shareIdInput } from './slate-schemas.mjs'
 
 export default defineAction({
   id: 'slates.issueInvite',
-  title: 'Send invitation',
+  title: 'Share by invitation',
   description:
     'The registered owner turns on an unlisted link. Changing its role keeps the address. Public slates are changed in the Share dialog. Anyone holding the address gets the role.',
   toolset: 'sharing',

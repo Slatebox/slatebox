@@ -22,6 +22,34 @@ const all = (n) => ({ left: n, right: n, top: n, bottom: n })
 /** The text inset a path needs ({ left, right, top, bottom } shares), or null for a plain box. */
 export const textInsetFor = (d) => (d ? INSETS.get(d) || null : null)
 
+/** A text inset as a custom shape's text box (0..1 of the box). */
+export const insetBox = (sides) => {
+  const s = { left: 0, right: 0, top: 0, bottom: 0, ...(sides || {}) }
+  const r = (n) => Math.round(n * 1000) / 1000
+  return { x: r(s.left), y: r(s.top), w: r(1 - s.left - s.right), h: r(1 - s.top - s.bottom) }
+}
+
+/**
+ * Put a silhouette on note options the way the shapes service does (slateboxjs/shapes: checked,
+ * normalised, stored as a custom shape with its fill rule, text box and name), so a deck's
+ * outlines are the same custom shapes as any drawn or library shape and "Keep this look" saves
+ * them as such. A hand-tuned inset becomes the shape's text box; a path without one keeps the
+ * whole box for text, as the style's font sizes assume. Line art the shapes service refuses (an
+ * open ribbon, a hairline ring) keeps the plain outline it had.
+ */
+export function asCustomShape(options, name, shapes) {
+  const d = options?.vectorPath
+  if (!d || !shapes?.prepareShape) return options
+  const sides = options.textInset || textInsetFor(d)
+  const prepared = shapes.prepareShape({ name: String(name || 'stage').replace(/[^A-Za-z0-9 -]/g, ' ').trim() || 'stage', d, fillRule: 'nonzero' })
+  if (!prepared.ok) return options
+  const out = { ...options }
+  delete out.textInset
+  shapes.storeCustomShape(out, prepared.shape)
+  out.textBox = insetBox(sides)
+  return out
+}
+
 /** A smooth organic blob (Catmull-Rom through jittered radial points). */
 export function blob(seed = 1, wobble = 0.16, n = 8) {
   const r = rng(seed)
@@ -110,7 +138,7 @@ export const roundRect = inset('M10,0 H90 Q100,0 100,10 V50 Q100,60 90,60 H10 Q0
 export const bubble = inset('M10,0 H90 Q100,0 100,10 V50 Q100,60 90,60 H42 L20,80 L26,60 H10 Q0,60 0,50 V10 Q0,0 10,0 Z', { left: 0.06, right: 0.06, top: 0.05, bottom: 0.3 })
 export const tab = inset('M0,8 Q0,0 8,0 H40 L46,8 H92 Q100,8 100,16 V60 H0 Z', { left: 0.04, right: 0.04, top: 0.16, bottom: 0.04 })
 export const bolt = 'M58,0 L18,56 H44 L30,100 L82,36 H54 L70,0 Z'
-export const pin = inset('M50,0 C22,0 4,20 4,46 C4,74 50,120 50,120 C50,120 96,74 96,46 C96,20 78,0 50,0 Z M50,28 A18,18 0 1 0 50.01,28 Z', { left: 0.14, right: 0.14, top: 0.08, bottom: 0.5 })
+export const pin = inset('M50,0 C22,0 4,20 4,46 C4,74 50,120 50,120 C50,120 96,74 96,46 C96,20 78,0 50,0 Z M50,28 A18,18 0 1 0 50,64 A18,18 0 1 0 50,28 Z', { left: 0.14, right: 0.14, top: 0.08, bottom: 0.5 })
 export const flag = inset('M0,0 H8 V100 H0 Z M8,4 H96 L80,26 L96,48 H8 Z', { left: 0.1, right: 0.2, top: 0.05, bottom: 0.52 })
 export const quoteMarks =
   'M30,8 C12,13 2,28 2,46 C2,58 10,66 21,66 C31,66 38,59 38,49 C38,40 31,33 22,33 C20,33 18,34 17,34 C18,25 25,18 35,14 Z ' +
@@ -198,7 +226,7 @@ export const MASKS = {
   hexagon,
   slant,
   torn: torn(9),
-  circle: 'M50,0 A50,50 0 1 1 49.99,0 Z',
+  circle: 'M50,0 A50,50 0 1 1 50,100 A50,50 0 1 1 50,0 Z',
   ticket,
   wobbly: wobblyRect(41),
   pin,

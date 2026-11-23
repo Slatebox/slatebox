@@ -6,6 +6,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- A presentation's silhouettes (blobs, chevrons, bubbles, pins, masks) are custom shapes from the
+  shapes service (slateboxjs/shapes: checked, normalised, stored with their text box and name), the
+  same as any drawn or library shape; only line art (open ribbons, hairline rings) stays a plain
+  outline. A searched picture names its source in a small credit line on the steps it shows
+  (its licence asks for attribution); generated pictures and the style's art need none.
+
 - Presentations look like their slate and their style, not a template. Captions, kickers and the
   closing line are written from the slate's own words in each style's voice (a keynote is terse, a
   magazine reads in chapters, a road trip counts stops); a style switch gives the same steps that

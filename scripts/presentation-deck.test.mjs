@@ -234,3 +234,19 @@ test('a person swaps a picture before publishing: drawn art for good, or another
   assert.equal(await pictureChange(row, { slot: 99, action: 'art' }), null)
   assert.equal(await pictureChange(row, { slot, action: 'next' }, { search: async () => ({ items: [{ link: shown }] }) }), null)
 })
+
+test('a searched picture names its source where it shows (its licence asks for attribution); a generated one needs none', async () => {
+  const { direction } = await resolveDirectionImages(aiDirection(), {
+    search: async (query) => (query.includes('bridge') ? { items: [{ link: 'https://stranger.example/bridge.jpg', displayLink: 'stranger.example', image: { contextLink: 'https://stranger.example/page' } }] } : { items: [] }),
+    copy: async () => 'https://store.slatebox.example/bridge.jpg',
+    generate: async () => ['https://store.slatebox.example/made.png'],
+  })
+  const deck = composeDeck(whatIsSlatebox(), direction)
+  const shown = deck.stageNotes.filter((note) => note.image === 'https://store.slatebox.example/bridge.jpg')
+  assert.ok(shown.length >= 1)
+  assert.ok(shown.every((note) => note.credit === 'stranger.example'))
+  assert.ok(deck.stageNotes.filter((note) => note.image === 'https://store.slatebox.example/made.png').every((note) => !note.credit))
+  // The credit is the player's to show, never an engine option on the note.
+  const { stageNodes } = await import('../web/app/imports/ui/components/presentations/livePresenter.mjs')
+  assert.ok(stageNodes(deck).every((node) => node.options.credit === undefined))
+})

@@ -7,7 +7,7 @@
 import { frameBox, showsOn } from './presentationCompose.mjs'
 import { resolveStyle } from './presentationStyles.mjs'
 
-const STAGE_ONLY = new Set(['kind', 'steps', 'p', 'deco', 'detail', 'behind', 'why', 'art', 'w', 'h'])
+const STAGE_ONLY = new Set(['kind', 'steps', 'p', 'deco', 'detail', 'behind', 'why', 'art', 'w', 'h', 'credit'])
 const LOCKED = { allowDrag: false, allowMenu: false, allowContext: false, allowResize: false, showMenu: false }
 
 /** The stage notes as engine notes, in landscape or portrait geometry. */
@@ -96,6 +96,7 @@ const CSS = `
 .sbp-route svg{width:100%;height:100%;overflow:visible}
 @media (max-width:600px){.sbp-cap{right:18px;max-width:none}.sbp-cap .t{font-size:26px}.sbp-big .sbp-cap .t{font-size:34px}}
 .sbp-reduced .sbp-cap .t span{animation:none}
+.sbp-credit{position:absolute;right:clamp(12px,2vw,24px);bottom:calc(var(--sbp-inset,0px) + 8px);max-width:60vw;font:400 11px/1.3 system-ui,sans-serif;color:var(--sbp-ink);opacity:.62;pointer-events:none;z-index:3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sbp-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
 .sbp-reduced .sbp-canvas g[data-node-id],.sbp-reduced .sbp-canvas [data-source-node-id]{transition:none}
 `
@@ -170,7 +171,11 @@ export async function mountLiveDeck({
   spoken.setAttribute('aria-live', 'polite')
   spoken.setAttribute('aria-atomic', 'true')
   spoken.setAttribute('data-presentation-spoken', '')
-  root.append(spoken)
+  // The sources of the searched pictures on this step (their licence asks for attribution).
+  const credit = doc.createElement('div')
+  credit.className = 'sbp-credit'
+  credit.setAttribute('data-presentation-credit', '')
+  root.append(spoken, credit)
   if (captions) root.append(cap, route)
   host.appendChild(root)
 
@@ -283,8 +288,14 @@ export async function mountLiveDeck({
     spoken.textContent = [`Step ${index + 1} of ${deck.steps.length}.`, step.kicker, step.narrative, said.length ? `On screen: ${said.join('; ')}.` : ''].filter(Boolean).join(' ')
   }
 
+  function showCredit(index) {
+    const names = [...new Set(deck.stageNotes.filter((note) => note.credit && showsOn(note, index)).map((note) => note.credit))]
+    credit.textContent = names.length ? `Pictures: ${names.join(', ')}` : ''
+  }
+
   function showCaption(index, flying) {
     if (!flying) speak(index)
+    showCredit(index)
     if (!captions) return
     const step = deck.steps[index]
     root.classList.toggle('sbp-flying', flying)

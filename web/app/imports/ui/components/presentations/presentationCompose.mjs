@@ -7,6 +7,7 @@
 // has a landscape and a portrait geometry. Pure and deterministic: shared by the presenter and
 // the server, so a deck composed in either place is the same deck.
 import * as P from './presentationPaths.mjs'
+import * as shapes from 'slateboxjs/shapes'
 import { artImage } from './presentationArt.mjs'
 import { DEFAULT_STYLE, STYLES, STYLE_IDS, cleanStyleRef, resolveStyle, textOn } from './presentationStyles.mjs'
 import { groupNotes } from './presentationPlan.mjs'
@@ -1064,7 +1065,16 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null } = {
     step.camera.frame = step.camera.frame.filter(Boolean)
     if (step.camera.p) step.camera.p.frame = step.camera.p.frame.filter(Boolean)
   })
-  return { version: DECK_VERSION, style: ref, skin, lines, stageNotes: [...decor, ...stageNotes], steps }
+  // Every outline goes through the shapes service's checks and is stored as a custom shape.
+  Object.keys(skin).forEach((id) => { skin[id] = P.asCustomShape(skin[id], roleOf(id), shapes) })
+  // A searched picture carries its source's credit, so the player can name it where it shows
+  // (the licence asks for attribution); generated pictures and the style's art need none.
+  const credits = new Map()
+  ;[direction.cover, ...direction.steps.flatMap((step) => [step.image, ...(Array.isArray(step.images) ? step.images : [])])]
+    .forEach((image) => { if (image?.url && image.source !== 'generated' && typeof image.credit === 'string' && image.credit) credits.set(image.url, image.credit.split(' · ')[0].slice(0, 60)) })
+  stageNotes.forEach((note) => { if (note.image && credits.has(note.image)) note.credit = credits.get(note.image) })
+  const staged = [...decor, ...stageNotes].map((note) => P.asCustomShape(note, note.kind, shapes))
+  return { version: DECK_VERSION, style: ref, skin, lines, stageNotes: staged, steps }
 }
 
 /**
