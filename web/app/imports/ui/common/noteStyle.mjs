@@ -1,12 +1,15 @@
 // The look of a new note on a slate: the organisation's default preset (its first category style,
 // category font and size, set on the branding page) or, without one, the default note (white on a
-// calm blue, Manrope at the style bar's Medium, 18px). One answer for every way a note is made on a fresh slate: the
-// welcome's Add a note, a double-click on the canvas and the tool dock.
+// calm blue, Manrope at the style bar's Medium, 18px). One answer for every way a note is made on
+// a fresh slate: the welcome's Add a note, a double-click on the canvas and the tool dock.
+// Sizes are pixels, as numbers: the engine wraps and grows a note's words only for a pixel size
+// (a "14pt" string is drawn on one line, past the note's edge), and the branding page's preview
+// draws a preset's size in pixels too.
 import { DEFAULT_NOTE, contrast } from './canvasTheme.mjs'
 
 export const NOTE_FONT = 'Manrope'
-// 13.5pt is 18px: the style bar's M, so a first note's size is one of its chips.
-export const NOTE_SIZE = 13.5 // points
+// The style bar's M, so a first note's size is one of its chips.
+export const NOTE_SIZE = 18 // pixels
 
 /** Black or white, whichever reads better on the colour. */
 export function inkFor(background) {
@@ -14,7 +17,7 @@ export function inkFor(background) {
 }
 
 /**
- * A new note's colours, font and size (in points), from an organisation's default preset value
+ * A new note's colours, font and size (in pixels), from an organisation's default preset value
  * ({ categoryStyles: [{ backgroundColor, foregroundColor }], categoryFont, categoryFontSize }).
  * A preset's font is the name of a typography setting: `fonts` maps names to font families.
  */
@@ -38,22 +41,22 @@ export function noteAt(style, at) {
   const s = style || presetNoteStyle(null)
   // 160 by 68 at the default size; taller for bigger words.
   const width = 160
-  const height = Math.max(68, Math.round((s.fontSize * 4) / 3 * 1.4 + 40))
+  const height = Math.max(68, Math.round(s.fontSize * 1.4 + 40))
   return {
     x: Math.round(at.x - width / 2), y: Math.round(at.y - height / 2), width, height, text: '',
     shape: 'roundedrectangle', backgroundColor: s.backgroundColor, fontColor: s.foregroundColor,
-    fontFamily: s.fontFamily, fontSize: `${s.fontSize}pt`, borderWidth: 0,
+    fontFamily: s.fontFamily, fontSize: s.fontSize, borderWidth: 0,
   }
 }
 
-/** The style in the tool dock's own terms (the classic note options; its sizes are pixels). */
+/** The style in the tool dock's own terms (the classic note options). */
 export function dockNoteStyle(style) {
   const s = style || presetNoteStyle(null)
   return {
     backgroundColor: s.backgroundColor,
     foregroundColor: s.foregroundColor,
     fontFamily: s.fontFamily,
-    fontSize: Math.round((s.fontSize * 4) / 3),
+    fontSize: s.fontSize,
     lineColor: '#333',
     lineWidth: 3,
   }

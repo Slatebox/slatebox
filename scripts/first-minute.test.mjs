@@ -226,11 +226,11 @@ test('#6 a new note takes the organisation\'s default preset: colours, font and 
   // A font name with no typography setting is used as it is.
   assert.equal(presetNoteStyle({ categoryFont: 'Georgia' }).fontFamily, 'Georgia')
   // Without a preset: the default note, white on a calm blue, Manrope at the style bar's M (18px).
-  assert.deepEqual(presetNoteStyle(null), { ...DEFAULT_NOTE, fontFamily: 'Manrope', fontSize: 13.5 })
-  assert.deepEqual(sizeChoice(`${presetNoteStyle(null).fontSize}pt`), { key: 'M' })
+  assert.deepEqual(presetNoteStyle(null), { ...DEFAULT_NOTE, fontFamily: 'Manrope', fontSize: 18 })
+  assert.deepEqual(sizeChoice(presetNoteStyle(null).fontSize), { key: 'M' })
   assert.equal(dockNoteStyle(null).fontSize, 18)
-  // The tool dock's first note on an empty slate is the same look (its sizes are pixels).
-  assert.deepEqual(dockNoteStyle(style), { backgroundColor: '#ffd23f', foregroundColor: '#000000', fontFamily: 'Lora, serif', fontSize: 24, lineColor: '#333', lineWidth: 3 })
+  // The tool dock's first note on an empty slate is the same look.
+  assert.deepEqual(dockNoteStyle(style), { backgroundColor: '#ffd23f', foregroundColor: '#000000', fontFamily: 'Lora, serif', fontSize: 18, lineColor: '#333', lineWidth: 3 })
   const addNote = ui('components/node/addNote.js')
   assert.match(addNote, /noteBase\(ownNotes, slate\?\.noteStyle\)/)
   assert.doesNotMatch(addNote, /#23aad6/)
@@ -266,7 +266,8 @@ test('#6 a preset\'s style reaches the welcome\'s note, which opens for typing',
   assert.equal(opts.backgroundColor, '#ffd23f')
   assert.equal(opts.fontColor, '#000000')
   assert.equal(opts.fontFamily, 'Lora')
-  assert.equal(opts.fontSize, '18pt')
+  // A pixel number: the engine wraps and grows words only for a pixel size (a "14pt" string runs past the edge).
+  assert.equal(opts.fontSize, 18)
   assert.equal(opts.shape, 'roundedrectangle')
   // Centred on the middle of the view (400 by 200 on screen is 400, 200 on the slate here).
   assert.equal(opts.x + opts.width / 2, 400)
@@ -274,11 +275,11 @@ test('#6 a preset\'s style reaches the welcome\'s note, which opens for typing',
   await new Promise((resolve) => setTimeout(resolve))
   assert.deepEqual(v2.selected, [added[0]])
   assert.equal(added[0].typing, true)
-  // Without a preset it is the default note at 13.5pt (18px, the bar's M), 160 by 68.
+  // Without a preset it is the default note at 18px (the bar's M), 160 by 68.
   const plain = fakeSlate(undefined)
   addNoteAt(plain.slate, { x: 100, y: 100 })
   assert.deepEqual(plain.added[0].opts, { x: 20, y: 66, width: 160, height: 68, text: '', shape: 'roundedrectangle',
-    backgroundColor: DEFAULT_NOTE.backgroundColor, fontColor: DEFAULT_NOTE.foregroundColor, fontFamily: 'Manrope', fontSize: '13.5pt', borderWidth: 0 })
+    backgroundColor: DEFAULT_NOTE.backgroundColor, fontColor: DEFAULT_NOTE.foregroundColor, fontFamily: 'Manrope', fontSize: 18, borderWidth: 0 })
 })
 
 test('#6 a double-click on empty canvas makes the welcome\'s note, where it landed, before the engine\'s grey one', () => {
