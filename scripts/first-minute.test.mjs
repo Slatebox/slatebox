@@ -183,6 +183,16 @@ test('#6 review: one spacing scale, theme type, and the loading moment wherever 
   assert.match(ui('components/SlateLoading.jsx'), /\(i \* \.18 - \.55\)\.toFixed\(2\)/)
 })
 
+test('#6 review: Ask Slatebox\'s first turn follows the slate as it is now: the first note brings the starters, no reload', () => {
+  const native = ui('components/NativeCanvasConversation.jsx')
+  // A new slate starts empty; the loaded snapshot is only the answer until the drawing is watched.
+  assert.match(native, /const drawnEmpty = useDrawnEmpty\(liveNodes\)/)
+  assert.match(native, /const empty = \(drawnEmpty \?\? !\(board\.nodes\|\|\[\]\)/)
+  assert.match(native, /new MutationObserver\(check\)/)
+  // The notes are read only when a note's drawing comes or goes.
+  assert.match(native, /if \(now===drawn\) return/)
+})
+
 test('#15 one way to browse at a time: no strip under the library or under the first turn\'s cards', () => {
   const native = ui('components/NativeCanvasConversation.jsx')
   assert.match(native, /\{!view && !firstTurn && <AddStrip/)

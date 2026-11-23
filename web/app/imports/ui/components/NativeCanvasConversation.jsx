@@ -29,6 +29,32 @@ const WARNINGS={
   widens_access:()=>'This gives more people access.',
 }
 
+/**
+ * Whether the slate's canvas holds no note, watched as its drawing changes (null until it is known).
+ * The drawing is read for its notes only when a note's drawing comes or goes, so editing is not slowed.
+ */
+function useDrawnEmpty(liveNodes) {
+  const [empty,setEmpty]=useState(null)
+  const read=useRef(liveNodes)
+  read.current=liveNodes
+  useEffect(() => {
+    const canvas=document.getElementById('slateCanvas')
+    if (!canvas || typeof MutationObserver!=='function') return undefined
+    let frame=0, drawn=null
+    const check=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{
+      const now=Boolean(canvas.querySelector('g[data-node-id]'))
+      if (now===drawn) return
+      drawn=now
+      setEmpty(!now || !read.current().some(node=>!node?.options?.isComment))
+    })}
+    const observer=new MutationObserver(check)
+    observer.observe(canvas,{childList:true,subtree:true})
+    check()
+    return () => {observer.disconnect();cancelAnimationFrame(frame)}
+  }, [])
+  return empty
+}
+
 export default function NativeCanvasConversation({shareId,board,onClose,onKeep,onPreview,readNodes,readSelection=null,about=null,library=null}) {
   // The library view, when it is open in place of the conversation (Back returns to the chat).
   const [view,setView]=useState(null)
@@ -157,7 +183,10 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
       <Button size="small" disabled={Boolean(busy)} onClick={discard}>Discard preview</Button>
     </>} : null
   // An empty slate opens with the library's first turn ("What are you working on?") instead of starters.
-  const empty = !(board.nodes||[]).some(node=>!node?.options?.isComment) && !brief
+  // Watched live: a new slate starts empty, and its first note (the welcome's, a double-click, an
+  // agent's) turns the first turn into the usual starters without a reload; emptied, it comes back.
+  const drawnEmpty = useDrawnEmpty(liveNodes)
+  const empty = (drawnEmpty ?? !(board.nodes||[]).some(node=>!node?.options?.isComment)) && !brief
   const firstTurn = empty && !history.length && !draft && !view
   // Add from the library, the strip or the + menu: the entry's own add message, previewed, then kept.
   async function addEntry(entry) {
