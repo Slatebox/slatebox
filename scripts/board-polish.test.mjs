@@ -112,7 +112,7 @@ test('on the dark canvas the chrome reads: the title in light ink, the focus fra
   const bg = CANVAS.dark.background
   // Every token is one the engine's chrome reads (chromeInk / layerInk), so none is a typo the engine ignores.
   const dist = new URL('../web/app/node_modules/slateboxjs/dist/', import.meta.url)
-  const engine = readdirSync(dist).filter(f => f.endsWith('.js')).map(f => readFileSync(new URL(f, dist), 'utf8')).join('\n')
+  const engine = readdirSync(dist).filter(f => /\.c?js$/.test(f)).map(f => readFileSync(new URL(f, dist), 'utf8')).join('\n')
   for (const name of Object.keys(t)) assert.ok(engine.includes(`var(${name},`), `${name} is read by the engine`)
   assert.ok(contrast(t['--slatebox-board-title'], bg) >= 7, 'a board\'s title is AAA on the dark canvas')
   assert.ok(contrast(t['--slatebox-board-chip-ink'], t['--slatebox-board-chip']) >= 4.5, 'a legend chip\'s words')
