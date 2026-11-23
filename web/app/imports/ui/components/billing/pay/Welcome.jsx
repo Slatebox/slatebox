@@ -93,7 +93,7 @@ function useCountUp(cents, run) {
   return shown
 }
 
-export default function Welcome({ copy, credits, ready, titleId, leadId, onPrimary, onSeePro, handle }) {
+export default function Welcome({ copy, credits, ready, titleId, leadId, onPrimary, onSeePro, handle, after }) {
   const theme = useTheme()
   const h2 = useRef(null)
   const go = useRef(null)
@@ -159,6 +159,7 @@ export default function Welcome({ copy, credits, ready, titleId, leadId, onPrima
         <p className="pw-sub">A receipt is on its way to your email. {onSeePro && <Button variant="text" size="small" onClick={onSeePro} sx={{ fontWeight: 600, fontSize: 'inherit', p: 0, minWidth: 0, verticalAlign: 'baseline' }}>See your Pro</Button>}</p>
       )}
       {!copy.included && copy.countUp != null && <p className="pw-sub">A receipt is on its way to your email.</p>}
+      {after}
     </Box>
   )
 }
@@ -172,5 +173,7 @@ Welcome.propTypes = {
   onPrimary: PropTypes.func.isRequired,
   onSeePro: PropTypes.func,
   handle: PropTypes.node,
+  // an optional next step under the celebration (ClaimStep: a guest's password), never a blocker
+  after: PropTypes.node,
 }
-Welcome.defaultProps = { credits: null, onSeePro: null, handle: null }
+Welcome.defaultProps = { credits: null, onSeePro: null, handle: null, after: null }

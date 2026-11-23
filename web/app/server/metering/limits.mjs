@@ -18,8 +18,8 @@ const SESSIONS = ['wallet.createTopUp', 'pro.checkout', 'pro.cardSession']
 // the return checks the pay sheet polls after a payment (every 1-2 s for about 15 s): each re-reads
 // Stripe on the server and grants nothing the webhook would not
 const CONFIRM = ['pro.confirm', 'wallet.confirmTopUp', 'pro.cardConfirm']
-// saving a key: a few tries to fix a typo; asking for the confirmation email again
-const KEYS = ['keys.save', 'users.sendVerification']
+// saving a key: a few tries to fix a typo; asking for the confirmation email again; a first password after paying
+const KEYS = ['keys.save', 'users.sendVerification', 'pro.setPassword']
 
 const rules = (methods, perUser, perAddress) => methods.flatMap(method => [
   { method, per: 'user', count: perUser, intervalMs: 60_000 },

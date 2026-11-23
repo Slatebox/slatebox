@@ -2,12 +2,17 @@
 // webhook writes through. Rules in ../pro-billing.mjs; prices in imports/api/pro/catalog.mjs.
 import { Meteor } from 'meteor/meteor'
 import { check, Match } from 'meteor/check'
+import { Accounts } from 'meteor/accounts-base'
+import { Email } from 'meteor/email'
+import { Random } from 'meteor/random'
 import CONSTANTS from '../../imports/api/common/constants'
-import { Audit } from '../../imports/api/common/models'
+import { Audit, LoginLinks, Slates } from '../../imports/api/common/models'
+import { verificationMailAvailable } from '../instance/meteor'
 import { PRO_LOOKUP_KEYS, PRO_PRICES } from '../../imports/api/pro/catalog.mjs'
 import { HELD_STATUSES, PRO_COPY, checkProPrice, handleBillingEvent, proOnSale, startProCheckout, syncSubscription } from '../pro-billing.mjs'
 import { actionSecret, applyDefaultCard, cardOf, cardSessionKey, cardSessionParams, handleSetupEvent, invoiceRows, previewSwitch, setRenewal, switchInterval } from '../pro-manage.mjs'
 import { sessionAnswer } from '../pay-attempt.mjs'
+import { canSetFirstPassword, claimAnswer, claimGuestPurchase, mergeGuestPurchase, MERGE_LINK_DAYS } from '../pro-claim.mjs'
 import { asMethodError, inAppOn, stripeClient } from './wallet'
 import { alert, meterOn, meterSettings, setProCardReader } from '../metering/meteor'
 import { BILLING_CONTACT_URL } from '../../imports/api/common/contact.mjs'
@@ -53,8 +58,96 @@ export const billingStore = {
 
 export const billingDeps = () => ({ stripe: stripeClient(), store: billingStore, alert, now: () => Date.now() })
 
+// A guest's Pro purchase (pro-claim.mjs): the account side of the payment, in Mongo.
+const escapeRegex = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+export const claimStore = {
+  findUser: id => Meteor.users.rawCollection().findOne({ _id: id }, { projection: { isAnonymous: 1, checkoutClaim: 1, pro: 1, emails: 1 } }),
+  findUserByEmail: email => Meteor.users.rawCollection().findOne(
+    { 'emails.address': { $regex: `^${escapeRegex(email)}$`, $options: 'i' } }, { projection: { _id: 1 } },
+  ),
+  async attachEmail(userId, email, claim) {
+    try {
+      const result = await Meteor.users.rawCollection().updateOne(
+        { _id: userId, isAnonymous: true, checkoutClaim: null },
+        { $set: { emails: [{ address: email, verified: false }], isAnonymous: false, checkoutClaim: claim } },
+      )
+      return result.modifiedCount === 1 ? 'attached' : 'skipped'
+    } catch (error) {
+      // the unique index on emails.address: someone took the address a moment ago
+      if (error?.code === 11000) return 'taken'
+      throw error
+    }
+  },
+  async markClaim(userId, claim) {
+    const result = await Meteor.users.rawCollection().updateOne({ _id: userId, isAnonymous: true, checkoutClaim: null }, { $set: { checkoutClaim: claim } })
+    return result.modifiedCount === 1
+  },
+  setClaim: (userId, claim) => Meteor.users.rawCollection().updateOne({ _id: userId }, { $set: { checkoutClaim: claim } }),
+  async clearGuestPro(guestId, subscriptionId) {
+    const result = await Meteor.users.rawCollection().updateOne({ _id: guestId, 'pro.subscriptionId': subscriptionId }, { $set: { pro: null } })
+    return result.modifiedCount === 1
+  },
+  async moveSlates(fromId, toId) {
+    const result = await Slates.rawCollection().updateMany({ userId: fromId }, { $set: { userId: toId } })
+    return result.modifiedCount
+  },
+}
+
+async function sendClaimVerification(userId) {
+  if (!verificationMailAvailable()) return false
+  await Accounts.sendVerificationEmail(userId)
+  return true
+}
+
+// The one-time link that moves a guest's Pro into the account that already owns the address. It goes
+// to that address only; opening it is what proves the mailbox (users.attemptLoginWithLink).
+async function sendMergeLink({ guestId, targetId, email, sessionId }) {
+  const linkId = Random.secret(32)
+  const createdAt = new Date()
+  await LoginLinks.insertAsync({
+    _id: linkId, userId: targetId, email, mergeFrom: guestId, sessionId, createdAt,
+    expiresAt: createdAt.getTime() + MERGE_LINK_DAYS * 86_400_000,
+  })
+  await Email.sendAsync({
+    from: 'no-reply@slatebox.com',
+    to: email,
+    subject: 'Slatebox - Move your Slatebox Pro into your account',
+    text: [
+      'Hi! Slatebox Pro was just bought with this email address, by someone who was not signed in.',
+      '',
+      'This address already has a Slatebox account. If it was you, open this link to move Slatebox Pro and the slates you made into your account:',
+      '',
+      `${Meteor.settings.public.baseUrl}/login-link/${linkId}`,
+      '',
+      `The link works once, for ${MERGE_LINK_DAYS} days. If it was not you, ignore this email: nothing changes in your account, and nobody was signed in to it.`,
+    ].join('\n'),
+  })
+}
+
+export const claimDeps = () => ({
+  store: claimStore, sendVerification: sendClaimVerification, sendMergeLink,
+  audit: entry => Audit.insertAsync({ ...entry, created: Date.now() }), now: () => Date.now(),
+})
+
+/** A paid Pro checkout's account side (pro-claim.mjs), from the webhook or the sheet's confirm. */
+export const claimPurchase = session => claimGuestPurchase(claimDeps(), session)
+
+/** Opening the move link: the guest's Pro and slates into the account the link was sent to. */
+export const mergePurchase = ({ guestId, targetId }) => mergeGuestPurchase({
+  stripe: stripeClient(), store: claimStore, now: () => Date.now(),
+  sync: (subscriptionId, userId) => syncSubscription(billingDeps(), subscriptionId, { userId }),
+  audit: entry => Audit.insertAsync({ ...entry, created: Date.now() }),
+}, { guestId, targetId })
+
 // The webhook's entry: Pro first, top-ups after (stripeHooks.js); card changes are handleSetup below.
-export const handleBilling = event => handleBillingEvent(event, billingDeps())
+// A paid Pro checkout then names the guest's account (even if the tab was closed mid-payment).
+export async function handleBilling(event) {
+  const out = await handleBillingEvent(event, billingDeps())
+  if (out.handled && ['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(event?.type)) {
+    await claimPurchase(event.data?.object)
+  }
+  return out
+}
 
 // The catalogue's price for an interval, read from Stripe by lookup_key (10 minutes in memory).
 const priceCache = new Map()
@@ -127,6 +220,13 @@ const readSession = async (stripe, sessionId, params) => {
   }
 }
 
+// Whoever is here, a guest included: a guest pays for Pro with no sign-up first (pro-claim.mjs).
+async function buyer() {
+  const user = await Meteor.userAsync()
+  if (!user) throw new Meteor.Error('sign-in', 'Open Slatebox to get Slatebox Pro.')
+  return user
+}
+
 async function signedIn() {
   const user = await Meteor.userAsync()
   if (!user || user.isAnonymous) throw new Meteor.Error('sign-in', 'Sign in to manage Slatebox Pro.')
@@ -161,16 +261,18 @@ Meteor.methods({
     check(ui, Match.OneOf('elements', 'hosted'))
     check(attemptId, Match.Maybe(String))
     requireCloud()
-    const user = await signedIn()
-    if (!user.emails?.[0]?.verified) throw new Meteor.Error('unverified', PRO_COPY.unverified)
+    // anyone pays at once: a guest gives their email in the sheet, a member pays with the address
+    // on the account (confirmed or not: a paid Pro counts as confirmed for the meter, policy.mjs)
+    const user = await buyer()
+    const guest = user.isAnonymous === true
     if (HELD_STATUSES.has(user.pro?.status)) throw new Meteor.Error('pro-already', PRO_COPY.already)
     const settings = await meterSettings()
     if (!proOnSale(settings)) throw new Meteor.Error('pro-not-yet', PRO_COPY.notYet)
     const stripe = stripeClient()
     const price = await proPrice(stripe, interval)
     return managed(() => startProCheckout({ stripe }, {
-      userId: user._id, email: user.emails[0].address, customerId: user.pro?.customerId ?? null, price, interval,
-      baseUrl: Meteor.settings.public.baseUrl, ui, attemptId, inApp: inAppOn(), now: Date.now(),
+      userId: user._id, email: guest ? null : user.emails?.[0]?.address, customerId: user.pro?.customerId ?? null, price, interval,
+      baseUrl: Meteor.settings.public.baseUrl, ui, attemptId, inApp: inAppOn(), guest, now: Date.now(),
     }))
   },
 
@@ -247,10 +349,11 @@ Meteor.methods({
   },
 
   // The return page asks until the subscription is on the account (the webhook usually arrives first).
+  // → { status, claim }: claim says what a guest's email did (pro-claim.mjs), for the Welcome's next step.
   async [CONSTANTS.methods.pro.confirm]({ sessionId } = {}) {
     check(sessionId, String)
     requireCloud()
-    const user = await signedIn()
+    const user = await buyer()
     const stripe = stripeClient()
     const session = await readSession(stripe, sessionId)
     if (session.client_reference_id !== user._id || session.metadata?.product !== 'pro') throw new Meteor.Error('invalid', PRO_COPY.notYours)
@@ -258,8 +361,27 @@ Meteor.methods({
     const deps = billingDeps()
     if (session.customer) await billingStore.setProCustomer(user._id, typeof session.customer === 'string' ? session.customer : session.customer.id)
     await syncSubscription(deps, typeof session.subscription === 'string' ? session.subscription : session.subscription.id, { userId: user._id })
+    const claim = await claimPurchase(session)
     const fresh = await Meteor.users.findOneAsync(user._id, { fields: { pro: 1 } })
-    return { status: fresh?.pro?.status === 'active' ? 'active' : 'pending' }
+    return { status: fresh?.pro?.status === 'active' ? 'active' : 'pending', claim: ['attached', 'existing'].includes(claim?.kind) ? claimAnswer(claim) : null }
+  },
+
+  // The Welcome's optional next step for a guest who just paid: a password, so the slates are theirs on
+  // every device. Only on the account their own payment named, and only while it has none.
+  async [CONSTANTS.methods.pro.setPassword]({ password } = {}) {
+    check(password, String)
+    const user = await Meteor.userAsync()
+    if (!canSetFirstPassword(user)) throw new Meteor.Error('not-allowed', 'Set or change your password from your profile.')
+    if (password.length < 8 || password.length > 256) throw new Meteor.Error('weak-password', 'Choose a password of at least 8 characters.')
+    // once: the first caller marks it, a second (another tab, a replay) finds it marked
+    const marked = await Meteor.users.rawCollection().updateOne(
+      { _id: user._id, isAnonymous: false, 'checkoutClaim.kind': 'attached', 'checkoutClaim.passwordSet': { $ne: true } },
+      { $set: { 'checkoutClaim.passwordSet': true } },
+    )
+    if (marked.modifiedCount !== 1) throw new Meteor.Error('not-allowed', 'Set or change your password from your profile.')
+    await Accounts.setPasswordAsync(user._id, password, { logout: false })
+    await Audit.insertAsync({ type: 'pro-guest-password-set', userId: user._id, created: Date.now() })
+    return true
   },
 
   // Stripe's customer portal: change card, switch monthly and yearly, cancel, invoices.

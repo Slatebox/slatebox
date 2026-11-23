@@ -69,7 +69,8 @@ async function askServer(paid) {
     return { pending: true }
   }
   const result = await Meteor.callAsync(CONSTANTS.methods.pro.confirm, { sessionId: paid.sessionId })
-  return result.status === 'active' ? { done: true, detail: null } : { pending: true }
+  // claim: what a guest's email did after paying (server/pro-claim.mjs), for the Welcome's next step
+  return result.status === 'active' ? { done: true, detail: result.claim ? { claim: result.claim } : null } : { pending: true }
 }
 
 const DONE_TOAST = { pro: 'Slatebox Pro is on.', topup: 'Your balance is topped up.', card: 'Your card is updated.' }
@@ -98,13 +99,14 @@ export default function PaySheetHost({ children }) {
     if (!asked) return
     // A guest (an exec or MCP &pay= link opened signed out) saves their account or signs in first:
     // the link stays in the address, and the pane opens once they are a member (design §4.1).
-    if (account === 'guest' && asked.open) return
+    // Pro is the exception: a guest pays it at once and gives their email in the sheet (/pro, pro-claim.mjs).
+    if (account === 'guest' && asked.open && asked.open.action !== 'pro') return
     const next = new URLSearchParams(query)
     PAY_PARAMS.forEach(p => next.delete(p))
     setQuery(next, { replace: true })
     prefetchPaySheet()
     if (asked.back) dispatch({ type: 'return', ...asked.back })
-    else dispatch({ type: 'open', request: { ...asked.open, reason: '' }, attemptId: newAttempt(), choice: defaultChoice(asked.open.action, null), inApp: payUi().inApp })
+    else dispatch({ type: 'open', request: { action: asked.open.action, wallet: asked.open.wallet, from: asked.open.from, reason: '' }, attemptId: newAttempt(), choice: asked.open.choice || defaultChoice(asked.open.action, null), inApp: payUi().inApp })
   }, [query, userId, account])
 
   // the summary the sheet reads (credits, amounts, balances): fetched when it opens if nobody has

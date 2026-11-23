@@ -6,7 +6,7 @@ import { Fine, PayAlert, PayButton, SheetBody, SheetFooter, Totals } from './She
 // The lower half of a paying pane: in the app (the Payment Element in StripeCheckout.jsx), or, where
 // in-app payments are off (public.stripe.inApp false, no publishable key, self-host, the dev mock),
 // the same choice and totals with a Pay button that goes to the hosted page (today's redirect).
-export default function PayArea({ state, pay, before, lines, payLabel, hostedLabel, hostedRows, fine, mode }) {
+export default function PayArea({ state, pay, before, lines, payLabel, hostedLabel, hostedRows, fine, mode, askEmail }) {
   const confirming = state.stage === 'confirming'
   if (state.hosted || state.session?.ui === 'hosted') {
     return (
@@ -40,6 +40,7 @@ export default function PayArea({ state, pay, before, lines, payLabel, hostedLab
       onExpired={pay.onExpired}
       announce={pay.announce}
       phone={pay.phone}
+      askEmail={askEmail}
     />
   )
 }
@@ -56,5 +57,6 @@ PayArea.propTypes = {
   hostedRows: PropTypes.arrayOf(PropTypes.shape({})),
   fine: PropTypes.node,
   mode: PropTypes.oneOf(['payment', 'setup']),
+  askEmail: PropTypes.bool,
 }
-PayArea.defaultProps = { before: null, hostedRows: null, fine: null, mode: 'payment' }
+PayArea.defaultProps = { before: null, hostedRows: null, fine: null, mode: 'payment', askEmail: false }

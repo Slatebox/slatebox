@@ -10,7 +10,8 @@ import { Meteor } from 'meteor/meteor'
 import { Email } from 'meteor/email'
 import { refundBalance } from './wallet'
 import { removeAccountAfterRefund } from '../wallet-stripe.mjs'
-import { endProForRemoval, PRO_END_FAILED } from './pro'
+import { endProForRemoval, PRO_END_FAILED, mergePurchase } from './pro'
+import { mergeLinkLive } from '../pro-claim.mjs'
 import { Accounts } from 'meteor/accounts-base'
 import { check, Match } from 'meteor/check'
 import { DDPRateLimiter } from 'meteor/ddp-rate-limiter'
@@ -466,7 +467,25 @@ async function issueLoginToken(opts) {
 
 method[CONSTANTS.methods.users.attemptLoginWithLink] = async (opts) => {
   if (opts.token) {
+    if (typeof opts.token !== 'string') return null
     const ll = await LoginLinks.findOneAsync({ _id: opts.token })
+    // A guest's Pro purchase with an address that already had an account (pro-claim.mjs): the link
+    // went only to that address, so opening it signs its owner in and moves the Pro there. Once.
+    if (ll?.mergeFrom) {
+      const removed = await LoginLinks.rawCollection().deleteOne({ _id: ll._id })
+      if (removed.deletedCount !== 1 || !mergeLinkLive(ll, Date.now())) return null
+      try {
+        await mergePurchase({ guestId: ll.mergeFrom, targetId: ll.userId })
+      } catch (error) {
+        // Stripe could not be reached: the link stays usable, nothing was moved halfway that a retry would not finish
+        await LoginLinks.rawCollection().insertOne(ll).catch(() => {})
+        throw new Meteor.Error('merge-failed', 'We could not move Slatebox Pro just now. Open the link again in a minute.')
+      }
+      await Meteor.users.updateAsync({ _id: ll.userId, 'emails.address': ll.email }, { $set: { 'emails.$.verified': true } })
+      const stamped = Accounts._generateStampedLoginToken()
+      await Accounts._insertLoginToken(ll.userId, stamped)
+      return stamped.token
+    }
     if (ll) {
       await LoginLinks.removeAsync({ _id: opts.token })
       // The emailed link reached that mailbox: the address is confirmed, if it is still the account's.

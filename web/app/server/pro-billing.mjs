@@ -147,14 +147,19 @@ export const proCheckoutKey = (userId, interval, now, { ui = 'hosted', attemptId
  * redirect to Stripe's page. With a customer, the sheet offers to save the card (redisplayed only
  * with that consent: allow_redisplay 'always'; never widened to 'limited').
  */
-export function proCheckoutParams({ userId, email, customerId = null, priceId, baseUrl, ui = 'hosted', now = Date.now() }) {
-  const metadata = { product: 'pro', userId }
+export function proCheckoutParams({ userId, email, customerId = null, priceId, baseUrl, ui = 'hosted', guest = false, now = Date.now() }) {
+  // a guest (the site's "Get Slatebox Pro", no sign-up first) gives their email in the sheet itself:
+  // nothing is prefilled, and the claim after payment decides what the address does (pro-claim.mjs)
+  const metadata = { product: 'pro', userId, ...(guest && { guest: '1' }) }
+  let buyer = { customer_email: email }
+  if (customerId) buyer = { customer: customerId, customer_update: { address: 'auto', name: 'auto' } }
+  else if (guest) buyer = {}
   const back = `${baseUrl}/profile?tab=credits&pro={CHECKOUT_SESSION_ID}`
   return {
     ...(checkUi(ui) === 'elements' && { ui_mode: 'elements' }),
     mode: 'subscription',
     line_items: [{ price: priceId, quantity: 1 }],
-    ...(customerId ? { customer: customerId, customer_update: { address: 'auto', name: 'auto' } } : { customer_email: email }),
+    ...buyer,
     client_reference_id: userId,
     metadata,
     subscription_data: { metadata: { ...metadata } },
@@ -172,10 +177,10 @@ export function proCheckoutParams({ userId, email, customerId = null, priceId, b
  * Makes the Pro session. → { ui:'elements', clientSecret, sessionId } | { ui:'hosted', url, sessionId }.
  * The sheet's mode only where in-app payments are on (inApp); otherwise today's redirect.
  */
-export async function startProCheckout({ stripe }, { userId, email, customerId = null, price, interval, baseUrl, ui = 'hosted', attemptId, inApp, now = Date.now() }) {
+export async function startProCheckout({ stripe }, { userId, email, customerId = null, price, interval, baseUrl, ui = 'hosted', attemptId, inApp, guest = false, now = Date.now() }) {
   const mode = sessionUi(ui, inApp)
   const key = proCheckoutKey(userId, interval, now, { ui: mode, attemptId })
-  const params = proCheckoutParams({ userId, email, customerId, priceId: price.id, baseUrl, ui: mode, now })
+  const params = proCheckoutParams({ userId, email, customerId, priceId: price.id, baseUrl, ui: mode, guest, now })
   return sessionAnswer(mode, await stripe.checkout.sessions.create(params, { idempotencyKey: key }))
 }
 

@@ -344,6 +344,8 @@ const CONSTANTS = {
     pro: {
       checkout: 'pro.checkout',
       confirm: 'pro.confirm',
+      // the Welcome's optional password for a guest who just paid (server/pro-claim.mjs)
+      setPassword: 'pro.setPassword',
       portal: 'pro.portal',
       refresh: 'pro.refresh',
       // managed in the pay sheet (server/pro-manage.mjs)

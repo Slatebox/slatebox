@@ -275,9 +275,10 @@ test('a signed-out person following a &pay= link keeps it through sign-in (desig
   assert.equal(loginReturn(new URLSearchParams('')), null)
   // the login page goes on to the pane (/login?pay=pro)
   assert.match(read('imports/ui/pages/Login.jsx'), /loginReturn\(query\)/)
-  // a guest's profile asks them to save their account; the link waits in the address until they have
+  // a guest's profile asks them to save their account; the link waits in the address until they have,
+  // except Pro, which a guest pays at once with their email in the sheet (owner, 2026-11-23; pro-claim.mjs)
   const host = read('imports/ui/components/billing/pay/PaySheetHost.jsx')
-  assert.match(host, /if \(account === 'guest' && asked\.open\) return/)
+  assert.match(host, /if \(account === 'guest' && asked\.open && asked\.open\.action !== 'pro'\) return/)
   assert.match(host, /Meteor\.subscribe\(CONSTANTS\.publications\.users\.me\)\.ready\(\)/)
 })
 

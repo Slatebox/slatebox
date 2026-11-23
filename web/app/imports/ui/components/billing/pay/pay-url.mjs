@@ -2,11 +2,19 @@
 // pane; ?pro= / ?topup= / ?card= with a Checkout session id is the return from a payment that left
 // the page (the hosted fallback, or a redirecting method) and opens the Welcome in finalizing. Pure.
 
-export const PAY_PARAMS = Object.freeze(['pay', 'wallet', 'pro', 'topup', 'card'])
+export const PAY_PARAMS = Object.freeze(['pay', 'wallet', 'plan', 'pro', 'topup', 'card'])
 const OPENABLE = new Set(['pro', 'topup', 'card', 'manage'])
 const SESSION_ID = /^cs_[A-Za-z0-9_]+$/
 
-/** → { open: { action, wallet, from } } | { back: { kind, sessionId } } | null */
+/** A plan named in a link (?plan=monthly|yearly, also month|year) → 'month' | 'year' | null. */
+export function planInterval(value) {
+  const plan = String(value || '').toLowerCase()
+  if (plan === 'monthly' || plan === 'month') return 'month'
+  if (plan === 'yearly' || plan === 'year' || plan === 'annual') return 'year'
+  return null
+}
+
+/** → { open: { action, wallet, from, choice? } } | { back: { kind, sessionId } } | null */
 export function payRequestFromQuery(params) {
   const kind = ['pro', 'topup', 'card'].find(k => SESSION_ID.test(params.get(k) || ''))
   if (kind) return { back: { kind, sessionId: params.get(kind) } }
@@ -14,7 +22,27 @@ export function payRequestFromQuery(params) {
   if (!OPENABLE.has(action)) return null
   let wallet = null
   if (action === 'topup') wallet = params.get('wallet') === 'team' ? 'team' : 'me'
-  return { open: { action, wallet, from: 'profile' } }
+  const interval = action === 'pro' ? planInterval(params.get('plan')) : null
+  return { open: { action, wallet, from: interval ? 'site' : 'profile', ...(interval && { choice: { interval } }) } }
+}
+
+/**
+ * The site's "Get Slatebox Pro" (/pro?plan=monthly|yearly): where the app opens the sheet, preselected.
+ * The sheet opens over My Slates; anyone may pay, a guest included (PaySheetHost.jsx).
+ */
+export const proSheetPath = params => `/?pay=pro&plan=${planInterval(params.get('plan')) === 'year' ? 'yearly' : 'monthly'}`
+
+/**
+ * The old site link (/profile?tab=credits, and ?buy=pro-monthly|pro-yearly): → the /pro route for a
+ * visitor who is not a member yet (a guest, or nobody signed in) or who named a plan; null otherwise
+ * (a member's own Credits tab stays as it is).
+ */
+export function oldProLink(params, account) {
+  if (!['credits', 'free'].includes(params.get('tab'))) return null
+  const buy = /^pro-(monthly|yearly)$/.exec(params.get('buy') || '')
+  if (buy) return `/pro?plan=${buy[1]}`
+  if (account === 'member') return null
+  return '/pro'
 }
 
 /** Where the login page sends a person who arrived with ?pay=: the pane on Credits, or null. */

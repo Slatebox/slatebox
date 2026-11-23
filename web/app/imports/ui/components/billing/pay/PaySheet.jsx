@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import { useAtom } from 'jotai'
+import { useTracker } from 'meteor/react-meteor-data'
 import Box from '@mui/material/Box'
 import Dialog from '@mui/material/Dialog'
 import Drawer from '@mui/material/Drawer'
@@ -19,6 +20,7 @@ import CardPane from './CardPane'
 import ManagePane from './ManagePane'
 import BlockedPane from './BlockedPane'
 import Welcome from './Welcome'
+import ClaimStep from './ClaimStep'
 
 // The pay sheet (design §5, §6): a centred dialog on a wide screen, a bottom drawer on a phone, one
 // pane at a time (Pro, Top-up, Card, Manage, blocked) and the Welcome after a payment, all driven by
@@ -40,6 +42,8 @@ export default function PaySheet({ state, dispatch }) {
   const phone = useMediaQuery(theme.breakpoints.down('sm'))
   const [summary, setAllowance] = useAtom(allowance)
   const { publishableKey } = payUi()
+  // a guest pays Pro with no sign-up first, giving their email in the sheet (server/pro-claim.mjs)
+  const guest = useTracker(() => Meteor.user()?.isAnonymous === true, [])
   const paperRef = useRef(null)
   const [announcement, setAnnouncement] = useState('')
   const announce = useCallback(text => { setAnnouncement(''); setTimeout(() => setAnnouncement(text), 30) }, [])
@@ -169,7 +173,7 @@ export default function PaySheet({ state, dispatch }) {
     const head = <SheetHeader eyebrow={header.eyebrow} title={header.title} titleId={TITLE_ID} onClose={close} closable={closable} />
     let body = null
     if (s.stage === 'blocked') body = <BlockedPane blocked={s.blocked} onClose={close} />
-    else if (s.request?.action === 'pro') body = <ProPane state={s} summary={summary} onChoose={choose} pay={pay} />
+    else if (s.request?.action === 'pro') body = <ProPane state={s} summary={summary} onChoose={choose} pay={pay} guest={guest} />
     else if (s.request?.action === 'topup') body = <TopUpPane state={s} summary={summary} onChoose={choose} pay={pay} />
     else if (s.request?.action === 'card') body = <CardPane state={s} summary={summary} pay={pay} onBack={summary?.proState ? () => openPane('manage') : null} />
     else if (s.request?.action === 'manage') body = <ManagePane state={s} summary={summary} pay={pay} dispatch={dispatch} onOpen={openPane} refresh={refresh} />
@@ -206,7 +210,8 @@ export default function PaySheet({ state, dispatch }) {
           titleId={TITLE_ID}
           leadId={LEAD_ID}
           onPrimary={() => dispatch({ type: 'close' })}
-          onSeePro={seePro}
+          onSeePro={guest ? null : seePro}
+          after={state.confirmed && state.detail?.claim ? <ClaimStep claim={state.detail.claim} /> : null}
           handle={phone ? <Box aria-hidden sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: 'divider', mx: 'auto', mb: 2.5 }} /> : null}
         />
       )}

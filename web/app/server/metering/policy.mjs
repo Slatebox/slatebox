@@ -281,7 +281,8 @@ const isCall = kind => kind === 'voice' || kind === 'video'
 // Free route for one kind, or the reason it is not available.
 function freeCheck({ kind, person, usage, level, settings, estimateMicros, minutes, running, countsAsDraft }) {
   const { free, budget } = settings
-  if (!person.emailVerified) return 'unverified'
+  // a paid Slatebox Pro is proof enough: a guest who just paid has Pro at once, before confirming (pro-claim.mjs)
+  if (!person.emailVerified && person.pro !== true) return 'unverified'
   if (person.freeStopped) return 'free-stopped'
   if (isCall(kind)) {
     if (level >= budget.pauseCallsAt) return 'calls-paused'

@@ -84,3 +84,39 @@ export function welcomeCopy({ kind = 'pro', from = 'profile', firstPro = false, 
     included: true,
   }
 }
+
+// A guest's email in the Pro sheet (no sign-up first): it names the receipt and, after the payment, the account.
+export const BUYER_EMAIL = Object.freeze({
+  label: 'Email',
+  help: 'For your receipt and your account. No password needed now.',
+  invalid: 'Enter an email address like name@example.com.',
+})
+export const buyerEmailValid = value => typeof value === 'string' && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && !/\.invalid$/i.test(value)
+
+/**
+ * What a guest's email did after paying (server/pro-claim.mjs claim: { kind, email }), as the Welcome's
+ * optional next step. 'attached': the account is theirs now; a password is offered, never required.
+ * 'existing': the address already has an account; a link went there, nobody was signed in.
+ * → { kind, title, lead, action?, skip? } | null
+ */
+export function claimCopy(claim) {
+  if (!claim?.email) return null
+  if (claim.kind === 'attached') {
+    return {
+      kind: 'attached',
+      title: 'Keep your slates on every device',
+      lead: `Your account is ${claim.email}. We sent a link there to confirm it. Choose a password to sign in anywhere, now or later from your profile.`,
+      action: 'Save password',
+      skip: 'Not now',
+      saved: 'Password saved. Sign in with it on any device.',
+    }
+  }
+  if (claim.kind === 'existing') {
+    return {
+      kind: 'existing',
+      title: 'One more step, when you like',
+      lead: `${claim.email} already has a Slatebox account, so we sent it a link. Open it to move Slatebox Pro and these slates into that account, and use Pro there from then on.`,
+    }
+  }
+  return null
+}

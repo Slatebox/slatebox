@@ -5,6 +5,8 @@ import React, { Suspense, lazy, useEffect, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
+import { useTracker } from 'meteor/react-meteor-data'
+import { oldProLink } from './components/billing/pay/pay-url.mjs'
 import MySlates from './pages/MySlates'
 import Canvas from './pages/Canvas'
 import AIPassthrough from './pages/AIPassthrough'
@@ -19,6 +21,7 @@ const TeamSlates = lazy(() => import('./pages/TeamSlates'))
 const CommunitySlates = lazy(() => import('./pages/CommunitySlates'))
 const Team = lazy(() => import('./pages/Team'))
 const Profile = lazy(() => import('./pages/Profile'))
+const GetPro = lazy(() => import('./pages/GetPro'))
 const RecoverPassword = lazy(() => import('./pages/RecoverPassword'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
@@ -90,6 +93,26 @@ function SlateCreateRoute() {
   return <CSSUnicorn />
 }
 
+// /profile. The old site link (/profile?tab=credits, ?buy=pro-monthly|pro-yearly) goes to /pro for
+// anyone who is not a member yet, so nobody meets a sign-up wall before paying (pay-url.mjs oldProLink).
+function ProfileRoute() {
+  const [params] = useSearchParams()
+  const credits = ['credits', 'free'].includes(params.get('tab'))
+  const account = useTracker(() => {
+    if (!credits) return 'skip'
+    if (Meteor.loggingIn()) return 'loading'
+    if (!Meteor.userId()) return 'none'
+    if (!Meteor.subscribe(CONSTANTS.publications.users.me).ready()) return 'loading'
+    const user = Meteor.user()
+    if (typeof user?.isAnonymous !== 'boolean') return 'loading'
+    return user.isAnonymous ? 'guest' : 'member'
+  }, [credits])
+  if (account === 'loading') return null
+  const to = account === 'skip' ? null : oldProLink(params, account)
+  if (to) return <Navigate to={to} replace />
+  return <PrivateRoute><Profile /></PrivateRoute>
+}
+
 PrivateRoute.propTypes = {
   children: PropTypes.node.isRequired,
 }
@@ -134,14 +157,8 @@ export default function SBRoutes() {
           </PrivateRoute>
         }
       />
-      <Route
-        path="/profile"
-        element={
-          <PrivateRoute>
-            <Profile />
-          </PrivateRoute>
-        }
-      />
+      <Route path="/profile" element={<ProfileRoute />} />
+      <Route path="/pro" element={<GetPro />} />
       <Route
         path="/team/slates"
         element={

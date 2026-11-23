@@ -8,7 +8,7 @@ import { PRO_FIGURES, money, proBrings } from './pay-copy.mjs'
 import { billingDate, dayOfMonth } from '../billing-date.mjs'
 
 // Get Pro: month or year, what Pro brings (the meter's own numbers), then pay (design §5.1).
-export default function ProPane({ state, summary, onChoose, pay }) {
+export default function ProPane({ state, summary, onChoose, pay, guest }) {
   const interval = state.choice?.interval === 'year' ? 'year' : 'month'
   const fig = PRO_FIGURES[interval]
   const busy = state.stage === 'confirming'
@@ -63,7 +63,7 @@ export default function ProPane({ state, summary, onChoose, pay }) {
     return checkout.tax?.status === 'ready' ? `Pay ${checkout.total.total.amount}` : `Pay ${checkout.total.subtotal.amount} + tax`
   }
   const hostedLabel = `Pay ${money(fig.cents)} + tax`
-  return <PayArea state={state} pay={pay} before={before} lines={lines} payLabel={payLabel} hostedLabel={hostedLabel} hostedRows={[{ label: fig.line, value: money(fig.cents) }, { label: 'Tax', value: 'Where applicable', muted: true }]} fine={fine} />
+  return <PayArea state={state} pay={pay} before={before} lines={lines} payLabel={payLabel} hostedLabel={hostedLabel} hostedRows={[{ label: fig.line, value: money(fig.cents) }, { label: 'Tax', value: 'Where applicable', muted: true }]} fine={fine} askEmail={guest} />
 }
 
 ProPane.propTypes = {
@@ -71,5 +71,7 @@ ProPane.propTypes = {
   summary: PropTypes.shape({ credits: PropTypes.shape({}) }),
   onChoose: PropTypes.func.isRequired,
   pay: PropTypes.shape({}).isRequired,
+  // a guest pays with no sign-up first and gives their email in the sheet (server/pro-claim.mjs)
+  guest: PropTypes.bool,
 }
-ProPane.defaultProps = { summary: null }
+ProPane.defaultProps = { summary: null, guest: false }

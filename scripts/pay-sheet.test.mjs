@@ -102,7 +102,12 @@ test('?pay= opens a pane; ?pro= / ?topup= / ?card= return into finalizing', () =
   // the literal template (a hosted page that was never paid) and junk are ignored
   assert.equal(payRequestFromQuery(q('pro={CHECKOUT_SESSION_ID}')), null)
   assert.equal(payRequestFromQuery(q('topup=../../x')), null)
-  assert.deepEqual([...PAY_PARAMS].sort(), ['card', 'pay', 'pro', 'topup', 'wallet'])
+  assert.deepEqual([...PAY_PARAMS].sort(), ['card', 'pay', 'plan', 'pro', 'topup', 'wallet'])
+  // the site's plan picks the interval (/pro?plan=yearly → ?pay=pro&plan=yearly); junk plans fall back to the default
+  assert.deepEqual(payRequestFromQuery(q('pay=pro&plan=yearly')), { open: { action: 'pro', wallet: null, from: 'site', choice: { interval: 'year' } } })
+  assert.deepEqual(payRequestFromQuery(q('pay=pro&plan=monthly')), { open: { action: 'pro', wallet: null, from: 'site', choice: { interval: 'month' } } })
+  assert.deepEqual(payRequestFromQuery(q('pay=pro&plan=weekly')), { open: { action: 'pro', wallet: null, from: 'profile' } })
+  assert.deepEqual(payRequestFromQuery(q('pay=topup&plan=yearly')), { open: { action: 'topup', wallet: 'me', from: 'profile' } })
 })
 
 test('the processor\'s fields are drawn in Slatebox\'s colours and type, both modes', () => {
