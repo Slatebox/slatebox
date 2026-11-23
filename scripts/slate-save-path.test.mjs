@@ -259,19 +259,21 @@ test("a copy cannot come out approved, featured or public, and leaves the author
     "options.lastSavedGoogleDocUrl": "https://docs.google.com/document/d/author", "options.staticImage": "https://img/author.png",
     "options.staticImageTimestamp": 9, "options.staticFrameImage": "https://img/author-frame.png", "options.showZoom": false,
   } });
-  for (const keepTemplate of [false, true]) {
-    const copied = await env.registry.run(stranger, "slates.copy", { shareId: "share1", keepTemplate });
-    const copy = await env.slates.findOne({ shareId: copied.body.shareId });
-    assert.deepEqual(
-      [copy.options.isPrivate, copy.options.isPublic, copy.options.isUnlisted, copy.options.isCommunity, copy.options.isFeatured, copy.options.templateApproved],
-      [true, false, false, false, false, false],
-    );
-    assert.equal(copy.options.isTemplate, keepTemplate);
-    for (const key of ["welcomeAid", "uploadedFiles", "lastSavedGoogleDocUrl", "staticImage", "staticImageTimestamp", "staticFrameImage"])
-      assert.equal(copy.options[key], undefined, key);
-    // The slate's own settings come with it.
-    assert.equal(copy.options.showZoom, false);
-  }
+  // A copy is an ordinary private slate: never a template, whatever its source was (templates are
+  // gone; the library replaces them), and the old template switches are refused as unknown fields.
+  const copied = await env.registry.run(stranger, "slates.copy", { shareId: "share1" });
+  const copy = await env.slates.findOne({ shareId: copied.body.shareId });
+  assert.deepEqual(
+    [copy.options.isPrivate, copy.options.isPublic, copy.options.isUnlisted, copy.options.isCommunity, copy.options.isFeatured, copy.options.templateApproved],
+    [true, false, false, false, false, undefined],
+  );
+  assert.equal(copy.options.isTemplate, undefined);
+  for (const key of ["welcomeAid", "uploadedFiles", "lastSavedGoogleDocUrl", "staticImage", "staticImageTimestamp", "staticFrameImage"])
+    assert.equal(copy.options[key], undefined, key);
+  // The slate's own settings come with it.
+  assert.equal(copy.options.showZoom, false);
+  for (const field of ["keepTemplate", "fromTemplate", "projectName"])
+    await assert.rejects(env.registry.run(stranger, "slates.copy", { shareId: "share1", [field]: field === "projectName" ? "X" : true }), { status: 400, code: "invalid_request" });
 });
 
 // fix-P05a (review finding 2): a note text the contract allows saves; the search text is bounded.
