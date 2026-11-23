@@ -80,5 +80,6 @@ test('H4: a public name that resolves to a private address is refused when saved
 test('L2: the camera warning speaks of free calls only on a metered server', () => {
   const warning = source('imports/ui/components/billing/CameraWarning.jsx')
   assert.match(warning, /metered \?/)
-  assert.match(source('imports/ui/components/CollaborationUsers.jsx'), /metered=\{Boolean\(Meteor\.settings\.public\.metered\)\}/)
+  // Restated 2026-11-23 (perf/daily-lazy): the huddle's people and calls moved to huddle/CollaborationHuddle.jsx.
+  assert.match(source('imports/ui/components/huddle/CollaborationHuddle.jsx'), /metered=\{Boolean\(Meteor\.settings\.public\.metered\)\}/)
 })

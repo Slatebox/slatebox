@@ -39,14 +39,17 @@ test('the React bindings are a release that accepts that daily-js', async () => 
   assert.equal(lock.packages['node_modules/@daily-co/daily-react/node_modules/@daily-co/daily-js'], undefined, 'one daily-js in the bundle')
 })
 
+// Restated 2026-11-23 (perf/daily-lazy): the page's one call object is made where Daily loads, with the
+// first huddle (HuddleIsland), not in App.jsx.
 test('the call object is made without options the client deprecates, once per page', async () => {
-  const appSource = await source('imports/ui/App.jsx')
+  const appSource = await source('imports/ui/components/huddle/HuddleIsland.jsx')
   assert.match(appSource, /DailyIframe\.getCallInstance\(\)/)
   assert.match(appSource, /DailyIframe\.createCallObject\(/)
   // "All calls use v2CamAndMic": the option is deprecated and will be removed.
   assert.doesNotMatch(appSource, /v2CamAndMic|dailyConfig/)
 })
 
+// Restated 2026-11-23 (perf/daily-lazy): that one place is HuddleIsland, loaded with the first huddle.
 test('nothing but the page’s one call object imports daily-js', async () => {
   const { readdir } = await import('node:fs/promises')
   const files = []
@@ -61,5 +64,5 @@ test('nothing but the page’s one call object imports daily-js', async () => {
   await walk(new URL('server/', app))
   const importing = []
   for (const file of files) if (/from '@daily-co\/daily-js'/.test(await readFile(file, 'utf8'))) importing.push(file.pathname.split('/web/app/')[1])
-  assert.deepEqual(importing, ['imports/ui/App.jsx'])
+  assert.deepEqual(importing, ['imports/ui/components/huddle/HuddleIsland.jsx'])
 })

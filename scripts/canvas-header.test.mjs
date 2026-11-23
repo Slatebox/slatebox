@@ -20,7 +20,7 @@ test("the legacy chat window and its open state are gone; nothing reads isChatOp
   assert.equal(await exists("components/Chat.jsx"), false);
   const atoms = await read("jotai/atoms.js");
   assert.doesNotMatch(atoms, /isChatOpen/);
-  for (const file of ["pages/Canvas.jsx", "components/AdHocAINodes.jsx", "components/CollaborationUsers.jsx",
+  for (const file of ["pages/Canvas.jsx", "components/AdHocAINodes.jsx", "components/CollaborationUsers.jsx", "components/huddle/CollaborationHuddle.jsx",
     "components/ai/CanvasAIIntentionsDialog.jsx", "components/node/QuickNodeActions.jsx"]) {
     assert.doesNotMatch(await read(file), /isChatOpen/, file);
   }

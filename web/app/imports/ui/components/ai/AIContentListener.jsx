@@ -9,7 +9,7 @@ import { useAtom, useSetAtom, useAtomValue } from 'jotai'
 import uniq from 'lodash.uniq'
 import { useTracker } from 'meteor/react-meteor-data'
 import PropTypes from 'prop-types'
-import { useDaily } from '@daily-co/daily-react'
+import { dailyCall } from '../huddle/daily-call.mjs'
 import { Slatebox } from 'slateboxjs'
 import {
   createSlateWithAIContent,
@@ -48,7 +48,6 @@ export default function AIContentListener({
     [onAIContextChange, setAtomAIContext]
   )
   const setHuddleEnabled = useSetAtom(huddleEnabled)
-  const callObject = useDaily()
   const { themes, templates } = useAtomValue(isCanvasAICustomActionsOpen)
   const setSlateAudioURL = useSetAtom(currentSlateAudioUrl)
   // console.log('ailistener context', currentAIContext)
@@ -282,7 +281,7 @@ export default function AIContentListener({
                   }
 
                   // stop transcription (if it is running)
-                  callObject.stopTranscription()
+                  dailyCall()?.stopTranscription()
 
                   // always disable the huddle
                   setHuddleEnabled(false)

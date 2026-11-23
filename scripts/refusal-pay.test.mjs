@@ -219,7 +219,8 @@ test('the nine surfaces offer the action in place, each with its retry (§4.1)',
   assert.match(adhoc, /payAction\(err, \{ from: 'image', retry: \(\) => adhocAINodes\(pkgs\) \}\)/)
   assert.match(adhoc, /text: paid \? err\.reason :/)
   // calls: start, video on, the voice fallback and the ending notice
-  const calls = read('imports/ui/components/CollaborationUsers.jsx')
+  // Restated 2026-11-23 (perf/daily-lazy): the huddle's people and calls moved to huddle/CollaborationHuddle.jsx.
+  const calls = read('imports/ui/components/huddle/CollaborationHuddle.jsx')
   assert.match(calls, /payAction\(error, \{ from: 'call', retry: \(\) => setHuddleEnabled\(true\) \}\)/)
   assert.match(calls, /payAction\(error, \{ from: 'call', retry: \(\) => turnOnCamera\(\) \}\)/)
   assert.match(calls, /payAction\(\{ code: 'video-stage', reason: starterNotice \}, \{ from: 'call', retry: \(\) => videoOnAgain\(callId\) \}\)/)

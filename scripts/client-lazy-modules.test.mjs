@@ -61,3 +61,19 @@ test("pages a slate's first paint never shows load when their route is first ope
     assert.ok(!own(page), page + " is in the first load");
   }
 });
+
+// Daily (video and voice calls, about 340 KB minified) loads when this person starts or joins a huddle:
+// presence (who is on the slate) never needs it.
+test("Daily loads with the first huddle, never with the page; presence and the huddle switch work without it", () => {
+  for (const daily of ["@daily-co/daily-js", "@daily-co/daily-react"]) assert.ok(!packages.has(daily), `${daily} is in the first load`);
+  assert.ok(own("imports/ui/components/CollaborationUsers.jsx"), "presence is in the first load");
+  assert.ok(own("imports/ui/components/HuddleUp.jsx"), "the huddle switch is in the first load");
+  for (const huddle of ["imports/ui/components/huddle/HuddleIsland.jsx", "imports/ui/components/huddle/CollaborationHuddle.jsx",
+    "imports/ui/components/HuddleProperties.jsx", "imports/ui/components/VideoParticipant.jsx", "imports/ui/components/ai/AIAudioListener.jsx"]) {
+    assert.ok(existsSync(join(app, huddle)), huddle + " exists");
+    assert.ok(!own(huddle), huddle + " is in the first load");
+  }
+  // The island is what loads it, once, from presence.
+  const presence = readFileSync(join(app, "imports/ui/components/CollaborationUsers.jsx"), "utf8");
+  assert.match(presence, /import\(['"]\.\/huddle\/HuddleIsland['"]\)/);
+});

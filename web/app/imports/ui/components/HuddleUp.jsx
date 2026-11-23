@@ -13,7 +13,7 @@ import MicIcon from '@mui/icons-material/Mic'
 import VideocamIcon from '@mui/icons-material/Videocam'
 import VideocamOffIcon from '@mui/icons-material/VideocamOff'
 import MicOffIcon from '@mui/icons-material/MicOff'
-import { useDaily } from '@daily-co/daily-react'
+import { dailyCall } from './huddle/daily-call.mjs'
 import Pulse from '../common/Pulse'
 import {
   slateHuddleType,
@@ -28,7 +28,6 @@ import CONSTANTS from '../../api/common/constants'
 // toggle. `variant="bar"` is the phone's bottom bar, where it keeps the same label.
 export default function HuddleUp({ variant = 'header' }) {
   const slate = useAtomValue(currentSlate)
-  const callObject = useDaily()
   const canTranscribe = useAtomValue(canManageHuddleTranscription)
   const huddleType = useAtomValue(slateHuddleType)
   const [on, setOn] = useAtom(huddleEnabled)
@@ -49,8 +48,8 @@ export default function HuddleUp({ variant = 'header' }) {
       userId: Meteor.userId(),
     })
     if (!isTranscribing) {
-      callObject.startTranscription({ model: 'nova-2', endpointing: 1500, punctuate: true })
-    } else callObject?.stopTranscription()
+      dailyCall()?.startTranscription({ model: 'nova-2', endpointing: 1500, punctuate: true })
+    } else dailyCall()?.stopTranscription()
   }
 
   return (

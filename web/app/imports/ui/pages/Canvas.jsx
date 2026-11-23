@@ -19,7 +19,7 @@ import cloneDeep from 'lodash.clonedeep'
 
 import omit from 'lodash.omit'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useDaily } from '@daily-co/daily-react'
+import { dailyCall } from '../components/huddle/daily-call.mjs'
 import createSlate from '../../api/client/createSlate'
 import saveSlateLite from '../../api/client/saveSlateLite'
 import { watchCanvasKeys } from '../../api/client/canvasKeys'
@@ -93,7 +93,6 @@ import AuthManager from '../../api/common/AuthManager'
 import confirmService from '../common/confirm'
 import AIContentListener from '../components/ai/AIContentListener'
 import NeuralThinking from '../components/ai/NeuralThinking'
-import AIAudioListener from '../components/ai/AIAudioListener'
 import AdHocAINodes from '../components/AdHocAINodes'
 import PresentSlateDialogue from '../components/PresentSlateDialogue'
 import SlateOperationListener from '../components/SlateOperationListener'
@@ -202,7 +201,6 @@ export default function Canvas() {
     if (value) nativeProof.current = { key:id, value }
     return value
   }
-  const callObject = useDaily()
   const accessLevel = React.useRef({
     isReadOnly: false,
     isCommentOnly: false,
@@ -1068,7 +1066,7 @@ export default function Canvas() {
 
       // stop transcription (if it is running)
       if (getHuddleEnabled) {
-        callObject?.stopTranscription()
+        dailyCall()?.stopTranscription()
       }
 
       setSlateBackgroundColor('#ffffff')
@@ -1447,6 +1445,7 @@ export default function Canvas() {
           <CollaborationUsers
             localCollaborator={collaborator.current}
             slate={slate.current}
+            aiListening={Boolean(effectiveAIContext?.aid)}
             onSlateUpdate={onSlateUpdate}
           />
           <SlateSnapshots
@@ -1482,7 +1481,7 @@ export default function Canvas() {
             aiContext={effectiveAIContext}
             onAIContextChange={setLocalAIContext}
           />
-          <AIAudioListener />
+          {/* The AI listening to a huddle's call is in the huddle (HuddleIsland): Daily loads with the first huddle. */}
         </>
       )}
       {slate.current && <SlateOperationListener slate={slate.current} />}
