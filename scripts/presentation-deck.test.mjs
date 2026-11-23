@@ -4,8 +4,11 @@
 // a live session carries the look to followers.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { DECK_TIME_LIMIT_MS, deckRecord, liveDeckLook, ogCardSvg, pictureTime, resolveDirectionImages, styleChange, withLanes } from '../web/app/server/methods/presentationDeck.mjs'
-import { normalizeDirection, composeDeck, showsOn } from '../web/app/imports/ui/components/presentations/presentationCompose.mjs'
+import {
+  DECK_TIME_LIMIT_MS, MAX_DECK_GENERATIONS, deckRecord, imageEstimateMicros, liveDeckLook, ogCardSvg, pictureTime, playerSlateCopy,
+  resolveDirectionImages, sanitizeDirectionShape, styleChange, withLanes,
+} from '../web/app/server/methods/presentationDeck.mjs'
+import { carryImages, deckFor, normalizeDirection, composeDeck, pendingImages, showsOn } from '../web/app/imports/ui/components/presentations/presentationCompose.mjs'
 import { STYLES } from '../web/app/imports/ui/components/presentations/presentationStyles.mjs'
 import { isArt } from '../web/app/imports/ui/components/presentations/presentationArt.mjs'
 import { readDeck } from '../web/app/server/methods/live-presentation.mjs'
@@ -25,7 +28,7 @@ const aiDirection = () => normalizeDirection({
 
 test('pictures: search first, then generation, then the style\'s own art; nothing throws', async () => {
   const calls = []
-  const searched = await resolveDirectionImages(aiDirection(), {
+  const { direction: searched } = await resolveDirectionImages(aiDirection(), {
     search: async (query) => { calls.push(['search', query]); return query.includes('bridge') ? { items: [{ link: 'http://insecure.example/x.jpg' }, { link: 'https://images.example/bridge.jpg' }] } : { items: [] } },
     generate: async (prompt) => { calls.push(['generate', prompt]); return prompt.includes('door') ? ['https://cdn.example/door.png'] : [{ error: true, message: 'no credits' }] },
   })
@@ -38,11 +41,11 @@ test('pictures: search first, then generation, then the style\'s own art; nothin
 })
 
 test('every image provider failing still gives a finished deck: art wherever a picture was asked for', async () => {
-  const failing = await resolveDirectionImages(aiDirection(), {
+  const { direction: failing } = await resolveDirectionImages(aiDirection(), {
     search: async () => { throw new Error('Picture search is not set up on this server.') },
     generate: async () => { throw new Error('Register to generate pictures.') },
   })
-  const slow = await resolveDirectionImages(aiDirection(), { search: () => new Promise(() => {}), generate: () => new Promise(() => {}), timeLimitMs: 50 })
+  const { direction: slow } = await resolveDirectionImages(aiDirection(), { search: () => new Promise(() => {}), generate: () => new Promise(() => {}), timeLimitMs: 50 })
   for (const direction of [failing, slow]) {
     const deck = composeDeck(whatIsSlatebox(), direction)
     deck.steps.forEach((step, index) => {
@@ -54,7 +57,7 @@ test('every image provider failing still gives a finished deck: art wherever a p
   }
 })
 
-test('a style switch composes the same steps again: no AI, the steps and their words kept', () => {
+test('a style switch remixes the same steps: no AI, the steps (and the deep zoom) and their words kept', () => {
   const record = deckRecord({ layout: whatIsSlatebox(), direction: aiDirection(), name: NAME })
   const row = { presentationData: JSON.stringify(whatIsSlatebox()), direction: record.direction, viewpoints: record.viewpoints }
   let asked = 0
@@ -121,8 +124,113 @@ test('agents read a deck and restyle it in one call: same steps, no AI, saved', 
   assert.equal(read.steps[0].layout, 'title')
   const styled = await presentationsSetStyle.handler(principal, { shareId: 'abc', style: 'sketch', palette: ['#ff0000', '#00ff00', '#0000ff'] }, { deps })
   assert.equal(styled.style, 'sketch')
-  assert.deepEqual(styled.steps.map((step) => step.layout), read.steps.map((step) => step.layout))
+  // The same steps (notes, order, the deep zoom); the layouts are the new style's own beats.
+  assert.equal(styled.steps.length, read.steps.length)
+  assert.deepEqual(styled.steps.map((step) => step.caption), read.steps.map((step) => step.caption))
   assert.equal(saved[0][0], 'p1')
   assert.deepEqual(saved[0][1].style, { id: 'sketch', overrides: { palette: ['#ff0000', '#00ff00', '#0000ff'] } })
   await assert.rejects(presentationsGet.handler(principal, { shareId: 'none' }, { deps }), /no presentation yet/)
+})
+
+// ─── review: spend, licensing, reuse, the publish trust boundary ────────────────────────────────
+
+test('generation is never started without the time it usually takes, and at most two per deck', async () => {
+  let generated = 0
+  const generate = async () => { generated += 1; return ['https://cdn.example/g.png'] }
+  const none = { items: [] }
+  // 50 ms left: a generation would be paid for and then abandoned, so none is asked for.
+  await resolveDirectionImages(aiDirection(), { search: async () => none, generate, timeLimitMs: 50 })
+  assert.equal(generated, 0)
+  const { direction, found } = await resolveDirectionImages(aiDirection(), { search: async () => none, generate, timeLimitMs: 7000, generateTypicalMs: 10 })
+  assert.equal(generated, MAX_DECK_GENERATIONS)
+  assert.equal(found, MAX_DECK_GENERATIONS)
+  assert.ok(pendingImages(direction) >= 1)
+})
+
+test('a found picture is copied into Slatebox storage (licensed search), never hotlinked; a late one is kept', async () => {
+  const copied = []
+  const late = []
+  const { direction } = await resolveDirectionImages(aiDirection(), {
+    search: async (query) => ({ items: [{ link: `https://stranger.example/${encodeURIComponent(query)}.jpg`, displayLink: 'stranger.example', image: { contextLink: 'https://stranger.example/page' } }] }),
+    copy: async (link) => { copied.push(link); return link.includes('lego') ? null : `https://store.slatebox.example/${copied.length}.jpg` },
+    generate: null,
+  })
+  const urls = [direction.cover, ...direction.steps.flatMap((step) => [step.image, ...(step.images || [])])].filter((image) => image?.url).map((image) => image.url)
+  assert.ok(urls.length >= 3)
+  assert.ok(urls.every((url) => url.startsWith('https://store.slatebox.example/')), urls.join())
+  assert.ok(direction.steps[1].image.credit.includes('stranger.example'))
+  // A copy that fails (lego) is no picture: never the stranger's link.
+  assert.equal(direction.steps[2].images[1].url, undefined)
+  // A search that answers after the deadline: its picture goes to onLate, to be saved with the deck.
+  let release
+  const gate = new Promise((resolve) => { release = resolve })
+  await resolveDirectionImages(aiDirection(), {
+    search: async () => { await gate; return { items: [{ link: 'https://x.example/a.jpg' }] } },
+    copy: async () => 'https://store.slatebox.example/late.jpg',
+    timeLimitMs: 30,
+    onLate: (hit) => late.push(hit),
+  })
+  release()
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  assert.ok(late.length >= 1 && late[0].url === 'https://store.slatebox.example/late.jpg' && late[0].query)
+})
+
+test('pictures are reused across refines and restyles, matched by query, and the spend is estimated up front', async () => {
+  const first = { ...aiDirection() }
+  const { direction: withPictures } = await resolveDirectionImages(first, { search: async (query) => ({ items: [{ link: `https://x.example/${query.length}.jpg` }] }), copy: async (link) => link })
+  // The next plan asks for the same pictures (and one new one): only the new one is searched.
+  const next = normalizeDirection({ ...aiDirection(), steps: [...aiDirection().steps, { layout: 'split', nodeIds: ['b4', 'l7'], caption: 'Calls on the slate', image: { query: 'video call', why: 'calls on the slate' } }] }, whatIsSlatebox(), { name: NAME })
+  const carried = carryImages(next, [withPictures])
+  let searched = 0
+  await resolveDirectionImages(carried, { search: async () => { searched += 1; return { items: [] } } })
+  assert.equal(searched, pendingImages(carried))
+  assert.equal(pendingImages(carried), 1)
+  assert.equal(imageEstimateMicros(6), 6 * 5000 + MAX_DECK_GENERATIONS * 30000)
+  assert.equal(imageEstimateMicros(0), 0)
+  // The local direction (no AI) asks for pictures too, from its notes' words, not the slate's name.
+  const { direction: local } = deckFor(whatIsSlatebox(), { name: NAME })
+  assert.ok(pendingImages(local) >= 2)
+  for (const step of local.steps) for (const image of [step.image, ...(step.images || [])].filter(Boolean)) assert.ok(!/slatebox/i.test(image.query), image.query)
+})
+
+test('publishing keeps only what the player needs: the slate copy is built on the server, directions are cleaned', () => {
+  const slateDoc = {
+    options: { name: 'What is Slatebox', secretSetting: 'x', viewPort: { width: 10000, height: 10000, zoom: 1 } },
+    nodes: [
+      { options: { id: 'n0', text: 'Slatebox', xPos: 1, yPos: 2, width: 100, height: 50, image: 'https://private.example/p.png', comments: ['c'], ai: { prompt: 'p' } }, relationships: { associations: [{ parentId: 'n0', childId: 'b1', lineColor: '#000', secret: 1 }] } },
+      { options: { id: 'b1', text: 'Free', xPos: 200, yPos: 2, width: 100, height: 50 } },
+    ],
+  }
+  const copy = JSON.parse(playerSlateCopy(slateDoc))
+  assert.deepEqual(Object.keys(copy.options).sort(), ['name', 'viewPort'])
+  assert.equal(copy.options.viewPort.zoom, undefined)
+  assert.equal(copy.nodes[0].options.image, undefined)
+  assert.equal(copy.nodes[0].options.comments, undefined)
+  assert.equal(copy.nodes[0].relationships.associations[0].secret, undefined)
+  assert.equal(copy.nodes[1].relationships.associations.length, 0)
+  assert.equal(playerSlateCopy({}), null)
+  const cleaned = sanitizeDirectionShape({ style: 'nope', steps: [{ layout: 'dive', nodeIds: ['a', { $gt: '' }, 'x'.repeat(200)], image: { query: 'q', why: 'w', url: 'javascript:alert(1)' }, roll: 400 }], extra: 'dropped' })
+  assert.equal(cleaned.style.id, 'voyage')
+  assert.deepEqual(cleaned.steps[0].nodeIds, ['a'])
+  assert.equal(cleaned.steps[0].image.url, undefined)
+  assert.equal(cleaned.steps[0].roll, 15)
+  assert.equal(cleaned.extra, undefined)
+  assert.equal(sanitizeDirectionShape({ steps: null }), null)
+})
+
+test('a person swaps a picture before publishing: drawn art for good, or another picture (never the same one)', async () => {
+  const { pictureChange } = await import('../web/app/server/methods/presentationDeck.mjs')
+  const { pictureSlots } = await import('../web/app/imports/ui/components/presentations/presentationCompose.mjs')
+  const { direction } = await resolveDirectionImages(aiDirection(), { search: async (query) => ({ items: [{ link: `https://x.example/${query.length}.jpg` }] }), copy: async (link) => link })
+  const row = { presentationData: JSON.stringify(whatIsSlatebox()), direction, style: direction.style }
+  const slot = pictureSlots(JSON.parse(JSON.stringify(direction))).findIndex(({ image }) => image.url)
+  const art = await pictureChange(row, { slot, action: 'art' })
+  const artImage = pictureSlots(art.direction)[slot].image
+  assert.equal(artImage.url, undefined)
+  assert.equal(pendingImages(art.direction), pendingImages(direction))
+  const shown = pictureSlots(JSON.parse(JSON.stringify(direction)))[slot].image.url
+  const next = await pictureChange(row, { slot, action: 'next' }, { search: async () => ({ items: [{ link: shown }, { link: 'https://y.example/other.jpg', displayLink: 'y.example' }] }), copy: async (link) => link })
+  assert.equal(pictureSlots(next.direction)[slot].image.url, 'https://y.example/other.jpg')
+  assert.equal(await pictureChange(row, { slot: 99, action: 'art' }), null)
+  assert.equal(await pictureChange(row, { slot, action: 'next' }, { search: async () => ({ items: [{ link: shown }] }) }), null)
 })

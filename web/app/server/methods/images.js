@@ -25,7 +25,8 @@ const method = {}
 // Google closes this API on 2027-01-01: the replacement is a follow-up.
 export async function searchGoogleImages(opts) {
   const query = String(opts?.query ?? '').slice(0, 200)
-  const filter = typeof opts?.filter === 'string' && /^(&[a-zA-Z]+=[a-zA-Z0-9_-]{1,40}){0,4}$/.test(opts.filter) ? opts.filter : ''
+  // Extra Google parameters from server code only (a licence filter: rights=a|b|c).
+  const filter = typeof opts?.filter === 'string' && /^(&[a-zA-Z]+=[a-zA-Z0-9_|-]{1,60}){0,4}$/.test(opts.filter) ? opts.filter.replace(/\|/g, '%7C') : ''
   const limit = Math.min(Math.max(Number(opts?.limit) || 10, 1), 10)
   const page = Math.min(Math.max(Number(opts?.page) || 0, 0), 9)
   // The keys live in the server's own settings only; no browser ever receives them.

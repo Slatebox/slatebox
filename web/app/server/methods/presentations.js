@@ -2,9 +2,11 @@
 import { Meteor } from 'meteor/meteor'
 import { check, Match } from 'meteor/check'
 import { canEditSlate } from '../common/slate-access'
-import { svgToPng } from './images'
+import { svgToPng, searchGoogleImages } from './images'
+import { generateImagesFor } from './stabilityai'
+import { fetchPublicImage } from '../common/safe-fetch.mjs'
 import { Random } from 'meteor/random'
-import { deleteImageByKey } from '../common/s3Utils'
+import { deleteImageByKey, uploadS3Object } from '../common/s3Utils'
 import { finishSnapshot, ownedSnapshotKey } from '../common/presentationSnapshot.mjs'
 import CONSTANTS from '../../imports/api/common/constants'
 import {
@@ -18,17 +20,96 @@ import {
   EMPTY_SLATE, MAX_REFINEMENT_CHARS, PLAN_FUNCTIONS, TOO_MANY_NOTES,
   PLAN_OUTPUT_TOKENS, planEstimateMicros, planModels, planWithAI, presentationPrompts, reusableDeck, sanitizeLayout, singleFlight, slateForPrompt,
 } from './presentationRequest.mjs'
-import { actionCeilingMicros, aiPrice } from '../metering/prices.mjs'
+import { FIXED_PRICES, actionCeilingMicros, aiPrice } from '../metering/prices.mjs'
 import { workshopScenes } from '../../imports/ui/components/presentations/workshopScenes.mjs'
 import req from './ai/req'
-import { runAIAction } from '../metering/context.mjs'
+import { keepActionOpen, runAIAction } from '../metering/context.mjs'
 import { resolveAIFeatureConfig } from './ai/feature-config.mjs'
 import { resolveRequestConnection } from './ai/ai-settings'
-import { deckRecord, ogCardSvg, pictureTime, resolveDirectionImages, styleChange } from './presentationDeck.mjs'
-import { composeDeck } from '../../imports/ui/components/presentations/presentationCompose.mjs'
+import {
+  LICENCE_FILTER, MAX_DECK_IMAGES, MAX_DECK_IMAGES_PER_DAY, deckRecord, imageEstimateMicros, ogCardReady, pictureChange, pictureTime, playerSlateCopy,
+  resolveDirectionImages, styleChange,
+} from './presentationDeck.mjs'
+import { carryImages, composeDeck, normalizeDirection, pendingImages } from '../../imports/ui/components/presentations/presentationCompose.mjs'
+import { cleanStyleRef } from '../../imports/ui/components/presentations/presentationStyles.mjs'
 
 // The largest slate copy a published deck keeps for its live player (characters of JSON).
 const MAX_SLATE_JSON = 5_000_000
+// The largest picture a deck copies into Slatebox's storage.
+const MAX_PICTURE_BYTES = 6 * 1024 * 1024
+const today = () => new Date().toISOString().slice(0, 10)
+
+// A searched picture, copied into Slatebox's own storage: a published deck never hotlinks a
+// stranger's server (their link may vanish, or count its viewers). Only a public https image
+// within the size cap is fetched (safe-fetch.mjs). → url or null
+// A published deck's look, made on the server: its direction checked against the layout its
+// deck was planned for, its style, and the slate copy the player draws. → null without one.
+async function publishedLook({ slateShareId, presentation, presentationData, direction, style }) {
+  if (!direction || typeof direction !== 'object' || !Array.isArray(direction.steps)) return null
+  const { layout } = sanitizeLayout(presentation.presentationData ?? presentationData)
+  if (!layout) return null
+  const saved = await Slates.findOneAsync({ shareId: slateShareId }, { fields: { nodes: 1, 'options.name': 1, 'options.viewPort': 1 } })
+  const slateJSON = playerSlateCopy(saved)
+  if (!slateJSON || slateJSON.length > MAX_SLATE_JSON) return null
+  const ref = cleanStyleRef(style || direction.style)
+  const checked = normalizeDirection(direction, layout, { name: saved?.options?.name || '' })
+  return { direction: { ...checked, style: ref }, style: ref, slateJSON }
+}
+
+async function copyPicture(link, userId) {
+  const image = await fetchPublicImage(link, { maxBytes: MAX_PICTURE_BYTES, timeoutMs: 4000 }).catch(() => null)
+  if (!image?.bytes) return null
+  const ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }[image.contentType] || 'img'
+  const now = new Date()
+  const key = `${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/presentation_${userId}_${Random.id()}.${ext}`
+  return uploadS3Object({ body: image.bytes, key, contentType: image.contentType }).catch(() => null)
+}
+
+// How many new pictures this person's decks of this slate found today (the daily cap).
+async function picturesFoundToday(slateShareId, userId) {
+  const rows = await SlatePresentations.find({ slateShareId, userId, imagesDay: today() }, { fields: { imagesFound: 1 } }).fetchAsync()
+  return rows.reduce((sum, row) => sum + (Number(row.imagesFound) || 0), 0)
+}
+
+/**
+ * The deck's pictures: those found before are reused (by query), the rest are searched (licensed
+ * for reuse, copied into Slatebox's storage), else generated, within `timeLimitMs`. One counted
+ * action covers them, pre-checked by the meter at what they may cost at most; a refusal (no
+ * credits) or no image service leaves the style's own art. A picture that arrives late goes to
+ * `onLate`. → { direction, found }
+ */
+async function deckPictures(direction, { user, slateShareId, earlier = [], timeLimitMs, onLate }) {
+  const carried = carryImages(direction, earlier)
+  const room = Math.min(MAX_DECK_IMAGES, MAX_DECK_IMAGES_PER_DAY - await picturesFoundToday(slateShareId, user._id))
+  const wanted = Math.min(pendingImages(carried), Math.max(0, room))
+  if (!wanted || !timeLimitMs) return { direction: carried, found: 0 }
+  const estimateMicros = imageEstimateMicros(wanted, { prices: { search: FIXED_PRICES.imageSearch, generate: FIXED_PRICES.imageGeneration } })
+  return runAIAction({ feature: 'image-search', kind: 'imageSearch', estimateMicros }, () => resolveDirectionImages(carried, {
+    timeLimitMs,
+    max: wanted,
+    search: (query) => searchGoogleImages({ query, limit: 5, filter: LICENCE_FILTER }),
+    copy: (link) => copyPicture(link, user._id),
+    generate: (prompt) => generateImagesFor(user, { prompts: [prompt], width: 768, height: 512 }),
+    track: keepActionOpen,
+    onLate,
+  })).catch((error) => {
+    console.warn('Presentation pictures were not found:', error?.reason || error?.message)
+    return { direction: carried, found: 0 }
+  })
+}
+
+// A picture that arrived after its deck was saved: kept in the deck (never an orphaned file).
+async function keepLatePicture(presentationId, hit) {
+  const row = await SlatePresentations.findOneAsync({ _id: presentationId }, { fields: { direction: 1, style: 1, presentationData: 1, imagesDay: 1, imagesFound: 1 } })
+  if (!row?.direction?.steps) return
+  const direction = carryImages(row.direction, [[hit]])
+  if (JSON.stringify(direction) === JSON.stringify(row.direction)) return
+  let layout = row.presentationData
+  try { layout = typeof layout === 'string' ? JSON.parse(layout) : layout } catch { return }
+  const viewpoints = composeDeck(layout, direction, { style: row.style }).steps
+  const found = (row.imagesDay === today() ? Number(row.imagesFound) || 0 : 0) + 1
+  await SlatePresentations.updateAsync({ _id: presentationId }, { $set: { direction, viewpoints, imagesDay: today(), imagesFound: found } })
+}
 
 const method = {}
 
@@ -244,14 +325,13 @@ method[CONSTANTS.methods.presentations.publish] = async ({
   intentionId,
   direction,
   style,
-  slateJSON,
 }) => {
   const user = await Meteor.userAsync()
   if (!user) return null
+  check(slateShareId, String)
+  check(direction, Match.Maybe(Object))
+  check(style, Match.Maybe(Match.OneOf(String, Object)))
   await guardPresentation(slateShareId, user._id)
-  // The published deck plays on a live canvas: it keeps a copy of the slate as it was published
-  // (its notes are the deck's notes) and its look.
-  const slateCopy = typeof slateJSON === 'string' && slateJSON.length <= MAX_SLATE_JSON ? slateJSON : null
   const presentation = await SlatePresentations.findOneAsync({
     slateShareId,
     version,
@@ -271,6 +351,12 @@ method[CONSTANTS.methods.presentations.publish] = async ({
   const snapshotGeneration = Random.id()
   const presentationUrl = `${Meteor.settings.public.baseUrl}/present/${slateShareId}`
 
+  // The published deck plays on a live canvas for anyone with the link. What it plays is built
+  // here, never taken as sent: the slate copy from the saved slate (only what the player needs),
+  // the direction checked against the slate it was planned for (its notes, honest numbers and
+  // quotes, safe picture links), and a known style.
+  const look = await publishedLook({ slateShareId, presentation, presentationData, direction, style })
+
   // now set the isPublished flag on this one
   await SlatePresentations.updateAsync(
     { _id: presentation._id },
@@ -285,9 +371,7 @@ method[CONSTANTS.methods.presentations.publish] = async ({
         orientData,
         presentationData,
         viewpoints,
-        ...(direction && typeof direction === 'object' ? { direction } : {}),
-        ...(style ? { style } : {}),
-        ...(slateCopy ? { slateJSON: slateCopy } : {}),
+        ...(look ? { direction: look.direction, style: look.style, slateJSON: look.slateJSON } : {}),
         url: presentationUrl,
         viewpointsManuallyChanged: manualViewpointChanges, // carry any changes forward
       },
@@ -302,10 +386,12 @@ method[CONSTANTS.methods.presentations.publish] = async ({
   // async produce the image so it doesn't hold up the publish
   setTimeout(async () => {
     try {
+      // A styled deck's preview is its title card in its style (its words as paths, its cover
+      // inlined: the renderer has no web fonts and fetches nothing), not a grey snapshot.
+      const card = look ? await ogCardReady({ direction: look.direction, style: look.style, fetchImage: (url) => fetchPublicImage(url, { maxBytes: MAX_PICTURE_BYTES, timeoutMs: 4000 }) }) : null
       await finishSnapshot(
         () => svgToPng({
-          // A styled deck's preview is its title card in its style, not a grey snapshot.
-          svg: direction?.steps ? ogCardSvg({ direction, style }) : rawSVG,
+          svg: card || rawSVG,
           fileName: `present_${presentation._id}_${snapshotGeneration}`,
           skipTimestamp: true,
           includeWidthHeight: true,
@@ -403,7 +489,7 @@ async function analyzePresentation(args, user, stored, layout, counted) {
   // automatic deck, see reusableDeck).
   const latestDeck = await SlatePresentations.findOneAsync(
     { slateShareId: slate.shareId, userId: user._id, ...deck },
-    { sort: { version: -1 }, fields: { version: 1, automatic: 1, isPublished: 1, viewpointsManuallyChanged: 1 } }
+    { sort: { version: -1 }, fields: { version: 1, automatic: 1, isPublished: 1, viewpointsManuallyChanged: 1, direction: 1, imagesDay: 1, imagesFound: 1 } }
   )
   // A person's conversation with the model about their plan: a new plan starts a new one, a
   // refinement continues it. Another editor's conversation is theirs.
@@ -478,16 +564,27 @@ async function analyzePresentation(args, user, stored, layout, counted) {
   let record = styled
     ? deckRecord({ layout, direction: automatic ? null : plan.direction, name: slate.name, scenes })
     : { viewpoints: plan.viewpoints, direction: null, style: null }
+  // Pictures for every styled deck a signed-in person makes, the AI's or Slatebox's own: the
+  // pictures this person's last deck found are reused; the rest are found within the time left.
   const imageTime = pictureTime(Date.now() - started)
-  if (styled && !automatic && !user.isAnonymous && imageTime) {
-    const direction = await resolveDirectionImages(record.direction, {
+  let foundImages = 0
+  const late = { id: null, hits: [] }
+  if (styled && record.direction && !user.isAnonymous) {
+    const pictured = await deckPictures(record.direction, {
+      user,
+      slateShareId: slate.shareId,
+      earlier: latestDeck?.direction ? [latestDeck.direction] : [],
       timeLimitMs: imageTime,
-      search: (query) => Meteor.callAsync(CONSTANTS.methods.images.search, { query }),
-      generate: (prompt) => Meteor.callAsync(CONSTANTS.methods.stabilityai.generate, { prompts: [prompt], width: 768, height: 512 }),
-    }).catch(() => record.direction)
-    record = { ...record, direction, viewpoints: composeDeck(layout, direction, { style: record.style }).steps }
+      onLate: (hit) => {
+        late.hits.push(hit)
+        if (late.id) keepLatePicture(late.id, hit).catch(() => {})
+      },
+    })
+    foundImages = pictured.found
+    record = { ...record, direction: pictured.direction, viewpoints: composeDeck(layout, pictured.direction, { style: record.style }).steps }
   }
   const { viewpoints, direction, style } = record
+  const imagesFound = foundImages + (latestDeck?.imagesDay === today() ? Number(latestDeck.imagesFound) || 0 : 0)
   const name = String(plan?.name || '').trim() || `${slate.name || 'Slate'} presentation`
   const description = String(plan?.description || '').trim()
   const saveShowNarrative = showNarrative ?? intention.showNarrative ?? true
@@ -505,7 +602,7 @@ async function analyzePresentation(args, user, stored, layout, counted) {
     presentationId = replace._id
     version = replace.version
     await SlatePresentations.updateAsync({ _id: replace._id }, {
-      $set: { timestamp: Date.now(), presentationData, name, description, viewpoints, direction, style, automatic: true, planVersion: PLAN_VERSION, layoutKey: planKey(layout), updated: now },
+      $set: { timestamp: Date.now(), presentationData, name, description, viewpoints, direction, style, automatic: true, planVersion: PLAN_VERSION, layoutKey: planKey(layout), updated: now, imagesDay: today(), imagesFound },
     })
   } else {
     version = (latestDeck?.version || 0) + 1
@@ -524,6 +621,8 @@ async function analyzePresentation(args, user, stored, layout, counted) {
       viewpoints,
       direction,
       style,
+      imagesDay: today(),
+      imagesFound: foundImages,
       // Made without the AI (no provider key, no allowance): the presenter rebuilds it from the
       // slate as it is, and Present plans the slate again next time.
       automatic,
@@ -537,6 +636,10 @@ async function analyzePresentation(args, user, stored, layout, counted) {
       updated: now,
     })
   }
+
+  // Pictures that arrive after the deck was saved are kept in it.
+  late.id = presentationId
+  late.hits.forEach((hit) => keepLatePicture(presentationId, hit).catch(() => {}))
 
   // The conversation is kept only for a plan the AI made, so it can be refined.
   if (!automatic) {
@@ -610,9 +713,11 @@ method[CONSTANTS.methods.presentations.update] = async ({
   isPublic,
   isFeatured,
   style,
+  picture,
 }) => {
   const user = await Meteor.userAsync()
   if (!user) return null
+  check(picture, Match.Maybe({ slot: Match.Integer, action: Match.OneOf('art', 'next') }))
 
   // first check to see if any SlatePresentations exist for this slate
   const existingPresentation = await SlatePresentations.findOneAsync({
@@ -709,6 +814,19 @@ method[CONSTANTS.methods.presentations.update] = async ({
     if (!change) throw new Meteor.Error('presentation-unstyled', 'This presentation has no art direction to restyle. Press Present to plan it again.')
     Object.assign(updateFields, change)
   }
+  // A person's choice of a picture before publishing: the style's own art there, or another
+  // picture for the same reason (a search, counted like any).
+  let pictured = null
+  if (picture) {
+    const change = () => pictureChange(existingPresentation, picture, {
+      search: (query, page) => searchGoogleImages({ query, limit: 5, page, filter: LICENCE_FILTER }),
+      copy: (link) => copyPicture(link, user._id),
+    })
+    // Only another picture is searched for (and counted); drawn art costs nothing.
+    pictured = picture.action === 'next' ? await runAIAction({ feature: 'image-search', kind: 'imageSearch' }, change) : await change()
+    if (!pictured) throw new Meteor.Error('picture-unavailable', picture.action === 'next' ? 'No other picture was found for this step. Try drawn art instead.' : 'That picture is no longer in this presentation.')
+    Object.assign(updateFields, pictured)
+  }
   if (viewpoints) {
     updateFields.viewpoints = viewpoints
     // A sequence someone has edited is theirs, no longer the automatic one.
@@ -751,7 +869,8 @@ method[CONSTANTS.methods.presentations.update] = async ({
     )
   }
 
-  return viewpointsManuallyChanged
+  // A picture change gives back the deck's new direction for the presenter to play.
+  return pictured ? { ...viewpointsManuallyChanged, direction: pictured.direction } : viewpointsManuallyChanged
 }
 
 Meteor.methods(method)

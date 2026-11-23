@@ -55,10 +55,14 @@ const side = (value) => (Number.isInteger(value) && value >= 256 && value <= 102
 // and bounded sizes and prompt.
 method[CONSTANTS.methods.stabilityai.generate] = async (opts) => {
   check(opts, Match.ObjectIncluding({ prompts: [String], width: Match.Maybe(Number), height: Match.Maybe(Number) }))
+  return generateImagesFor(await Meteor.userAsync(), opts)
+}
+
+// Generated images for a signed-in person (this method, a deck's pictures), each counted.
+export async function generateImagesFor(user, opts) {
   if (opts.prompts.length < 1 || opts.prompts.length > 2 || opts.prompts.some((p) => p.length > 2000)) {
     throw new Meteor.Error('invalid-prompt', 'Describe the image in one short prompt.')
   }
-  const user = await Meteor.userAsync()
   if (user && !user.isAnonymous) {
     // a connection chosen for generating images answers here; without one, the built-in service below
     const chosen = await imagesFromChoice(user, opts)
@@ -139,7 +143,8 @@ method[CONSTANTS.methods.stabilityai.generate] = async (opts) => {
     //   ]
     // ]
 
-    console.log('img response is ', JSON.stringify(response))
+    // The response carries the images as base64: only its outcome is logged.
+    console.log('stability answered', { images: response?.artifacts?.length ?? 0, message: response?.message ?? null })
 
     // {"id":"6b3714e101b593bae7a694937fde7690","message":"Invalid prompts detected","name":"invalid_prompts"}
 
@@ -161,7 +166,7 @@ method[CONSTANTS.methods.stabilityai.generate] = async (opts) => {
       images.push(slateImageUrl)
     }
 
-    console.log('returning images', images)
+    console.log('returning images', images.length)
     return images
     })
   }
