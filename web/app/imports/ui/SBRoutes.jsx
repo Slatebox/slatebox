@@ -1,30 +1,33 @@
 /* eslint-disable react/jsx-props-no-spreading */
 /* eslint-disable react/jsx-boolean-value */
 /* eslint-disable no-underscore-dangle */
-import React, { useEffect, useState } from 'react'
+import React, { Suspense, lazy, useEffect, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 import MySlates from './pages/MySlates'
-import TeamSlates from './pages/TeamSlates'
-import CommunitySlates from './pages/CommunitySlates'
-import Team from './pages/Team'
-import Profile from './pages/Profile'
 import Canvas from './pages/Canvas'
 import AIPassthrough from './pages/AIPassthrough'
-import RecoverPassword from './pages/RecoverPassword'
-import ResetPassword from './pages/ResetPassword'
-import VerifyEmail from './pages/VerifyEmail'
-import LoginLink from './pages/LoginLink'
 import NotFound from './pages/NotFound'
-import AdminTools from './pages/AdminTools'
-import TeamSettings from './pages/TeamSettings'
-import BrandingSettings from './pages/BrandingSettings'
-import SimulateUrlAction from './components/SimulateUrlAction'
 import AuthManager from '../api/common/AuthManager'
 import CONSTANTS from '../api/common/constants'
-import ShowThemes from './pages/ShowThemes'
 import CSSUnicorn from './components/ai/Unicorn'
+
+// Pages a first visit never opens (a slate, the start page and My Slates stay in the first load): each loads
+// when its route is first opened.
+const TeamSlates = lazy(() => import('./pages/TeamSlates'))
+const CommunitySlates = lazy(() => import('./pages/CommunitySlates'))
+const Team = lazy(() => import('./pages/Team'))
+const Profile = lazy(() => import('./pages/Profile'))
+const RecoverPassword = lazy(() => import('./pages/RecoverPassword'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
+const LoginLink = lazy(() => import('./pages/LoginLink'))
+const AdminTools = lazy(() => import('./pages/AdminTools'))
+const TeamSettings = lazy(() => import('./pages/TeamSettings'))
+const BrandingSettings = lazy(() => import('./pages/BrandingSettings'))
+const SimulateUrlAction = lazy(() => import('./components/SimulateUrlAction'))
+const ShowThemes = lazy(() => import('./pages/ShowThemes'))
 
 function PrivateRoute({ children }) {
   const isAuthorized =
@@ -112,6 +115,7 @@ export default function SBRoutes() {
   }, [Meteor.userId()])
 
   return (
+    <Suspense fallback={null}>
     <Routes>
       <Route
         path="/"
@@ -198,5 +202,6 @@ export default function SBRoutes() {
       )}
       <Route element={<NotFound />} />
     </Routes>
+    </Suspense>
   )
 }

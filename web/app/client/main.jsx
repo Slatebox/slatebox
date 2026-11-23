@@ -1,6 +1,5 @@
 /* eslint-disable no-underscore-dangle */
-import SlateTemplates from '../imports/ui/pages/SlateTemplates'
-import React, { useEffect } from 'react'
+import React, { Suspense, lazy, useEffect } from 'react'
 import { Meteor } from 'meteor/meteor'
 import { createRoot } from 'react-dom/client'
 import { Provider, useAtom } from 'jotai'
@@ -12,14 +11,17 @@ import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
 import sbTheme from '../imports/ui/common/muiThemes'
 import App from '../imports/ui/App'
-import Present from '../imports/ui/pages/Present'
-import Workshops from '../imports/ui/pages/DecisionWorkshopPage.jsx'
 import NewCreativeSlate from '../imports/ui/pages/NewCreativeSlate'
 import GetStarted from '../imports/ui/pages/GetStarted'
 import { legacyTemplateDestination } from '../imports/api/common/template-policy.mjs'
 import Login from '../imports/ui/pages/Login'
-import OAuthConsent from '../imports/ui/pages/OAuthConsent'
 import { globalMessage } from '../imports/ui/jotai/atoms'
+
+// Pages a first visit to a slate never opens: each loads when its route is first opened.
+const SlateTemplates = lazy(() => import('../imports/ui/pages/SlateTemplates'))
+const Present = lazy(() => import('../imports/ui/pages/Present'))
+const Workshops = lazy(() => import('../imports/ui/pages/DecisionWorkshopPage.jsx'))
+const OAuthConsent = lazy(() => import('../imports/ui/pages/OAuthConsent'))
 import './i18n/en/common.i18n.json'
 import './i18n/en/slates.i18n.json'
 import './i18n/en/nodeDrawer.i18n.json'
@@ -93,6 +95,7 @@ function AppWrapper() {
         </Alert>
       </Snackbar>
       <Router>
+        <Suspense fallback={null}>
         <Routes>
           <Route path="/templates" element={<SlateTemplates />} />
           <Route path="/templates/:slug" element={<SlateTemplates />} />
@@ -108,6 +111,7 @@ function AppWrapper() {
           <Route path="/oauth/consent" element={<OAuthConsent />} />
           <Route path="/*" element={<App />} />
         </Routes>
+        </Suspense>
       </Router>
     </>
   )

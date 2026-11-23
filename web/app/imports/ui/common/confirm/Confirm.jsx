@@ -11,7 +11,6 @@ import Typography from '@mui/material/Typography'
 import Box from '@mui/material/Box'
 import React, { Component } from 'react'
 import { ThemeProvider } from '@mui/material/styles'
-import Dropzone from 'dropzone'
 import { createRoot } from 'react-dom/client'
 import { flushSync } from 'react-dom'
 import TextField from '@mui/material/TextField'
@@ -80,7 +79,10 @@ class Confirm extends Component {
 
   // eslint-disable-next-line class-methods-use-this, react/sort-comp
   createDropZone() {
-    setTimeout(() => {
+    // The uploader loads when a dialog first asks for one, never with the page.
+    setTimeout(async () => {
+      if (this.dropZoneRef.current || !document.querySelector('#sbDropZone')) return
+      const { default: Dropzone } = await import('dropzone')
       if (!this.dropZoneRef.current && document.querySelector('#sbDropZone')) {
         this.dropZoneRef.current = new Dropzone('#sbDropZone', {
           url: '/sbupload/image',

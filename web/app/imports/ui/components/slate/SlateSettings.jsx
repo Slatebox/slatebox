@@ -1,5 +1,5 @@
 /* eslint-disable no-underscore-dangle */
-import React, { useEffect } from 'react'
+import React, { Suspense, lazy, useEffect, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import Grid from '@mui/material/Grid2'
@@ -22,7 +22,8 @@ import {
 } from '../../jotai/atoms'
 
 import { ApprovalRequests, Organizations } from '../../../api/common/models'
-import TemplateDetails from '../TemplateDetails'
+// The template editor (a Markdown editor) loads when it is first opened, never with the canvas.
+const TemplateDetails = lazy(() => import('../TemplateDetails'))
 import { Link } from '@mui/material'
 
 export default function SlateSettings({ onChange }) {
@@ -30,6 +31,9 @@ export default function SlateSettings({ onChange }) {
   const [getTemplateDetails, setTemplateDetails] = useAtom(
     areTemplateDetailsOpen
   )
+  // Once opened, the editor stays mounted so it closes with its own transition.
+  const [templateEditorWanted, setTemplateEditorWanted] = useState(false)
+  if (getTemplateDetails.open && !templateEditorWanted) setTemplateEditorWanted(true)
   const [getSlateName, setSlateName] = useAtom(currentSlateName)
   const [nameProblem, setNameProblem] = useAtom(slateNameProblem)
   const [getSlateHuddleType, setSlateHuddleType] = useAtom(slateHuddleType)
@@ -445,7 +449,7 @@ export default function SlateSettings({ onChange }) {
           </Grid>
         </>
       )}
-      <TemplateDetails
+      {(templateEditorWanted || getTemplateDetails.open) && <Suspense fallback={null}><TemplateDetails
         open={getTemplateDetails.open}
         shareId={slate?.shareId}
         initialContent={slate?.options?.templateMarkdown || ''}
@@ -465,7 +469,7 @@ export default function SlateSettings({ onChange }) {
         onClose={(e) => {
           setTemplateDetails({ open: false })
         }}
-      />
+      /></Suspense>}
     </Grid>
   )
 }
