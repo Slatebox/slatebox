@@ -432,7 +432,10 @@ return slatebox.presence.step({ shareId: "canvas", index: 0, status: "done" })`)
   assert.equal(deck.steps[0].layout, "title");
   const restyled = await ok(`return slatebox.presentations.setStyle({ shareId: "canvas", style: "neon" })`);
   assert.equal(restyled.style, "neon");
-  assert.deepEqual(restyled.steps.map((step) => step.layout), deck.steps.map((step) => step.layout));
+  // The same steps (each the same notes, in the same order) in the new style's own beats: a style
+  // may show a step as another layout (2244bafe: "beats that differ by style").
+  assert.deepEqual(restyled.steps.map((step) => [step.step, step.notes]), deck.steps.map((step) => [step.step, step.notes]));
+  assert.deepEqual([restyled.steps[0].layout, restyled.steps.at(-1).layout], [deck.steps[0].layout, deck.steps.at(-1).layout]);
   assert.deepEqual(restyles, [["deck1", { id: "neon" }]]);
 
   assert.deepEqual([...called].sort(), [...defaultGenerated().methods.keys()].sort(), "every client method was called");
