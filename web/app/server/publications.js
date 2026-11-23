@@ -4,6 +4,7 @@ import { Meteor } from 'meteor/meteor'
 import { Match } from 'meteor/check'
 import { canEditSlate, canReadSlate, findSlate } from './common/slate-access'
 import { PLAN_FIELDS } from './metering/migrations.mjs'
+import { runFields, runsSince } from '../imports/api/common/slate-operation-runs.mjs'
 import CONSTANTS from '../imports/api/common/constants'
 import {
   Tags,
@@ -70,30 +71,21 @@ Meteor.publish(
 
 Meteor.publish(
   CONSTANTS.publications.slateOperationRuns,
-  async function (shareId, asOfDate) {
-    if (!this.userId || !shareId) {
+  async function (shareId, since) {
+    if (typeof shareId !== 'string' || !shareId) {
       this.ready()
       return null
     }
-    // Runs are shown to whoever may edit the slate they changed.
-    if (typeof shareId !== 'string' || !await canEditSlate(this.userId, await findSlate({ shareId }))) {
+    // Every open canvas that may read the slate is sent the agent's saved edits and draws them
+    // itself, a visitor with no account too (they used to wait for an account holder's canvas to
+    // pass them on through the room). Only an editor is sent the words the person gave the agent.
+    const slate = await findSlate({ shareId })
+    const canEdit = await canEditSlate(this.userId, slate)
+    if (!canEdit && !await canReadSlate(this.userId, slate)) {
       this.ready()
       return null
     }
-    return SlateOperationRuns.find(
-      {
-        slateShareId: shareId,
-        createdAt: { $gte: typeof asOfDate === 'number' ? asOfDate : Date.now() },
-      },
-      {
-        fields: {
-          slateShareId: 1,
-          plan: 1,
-          userMessage: 1,
-          createdAt: 1,
-        },
-      }
-    )
+    return SlateOperationRuns.find(runsSince(shareId, since), { fields: runFields(canEdit) })
   }
 )
 

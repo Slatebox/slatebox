@@ -8,7 +8,7 @@ import CONSTANTS from '../../api/common/constants'
 import { SlateOperationRuns } from '../../api/common/models'
 import executeSlateOperations from '../../api/client/executeSlateOperations'
 import { waitForRun } from '../../api/client/waitForRun.mjs'
-import { appliesToCanvas } from '../../api/common/slate-operation-runs.mjs'
+import { appliesToCanvas, runsSince } from '../../api/common/slate-operation-runs.mjs'
 
 // What changes as a run draws: the notes on this canvas, how many are drawn (a note gets its
 // relationships once drawn), and their lines.
@@ -19,26 +19,22 @@ function canvasProgress(slate) {
   return `${notes.length}:${drawn}:${lines}`
 }
 
-export default function SlateOperationListener({ slate }) {
-  const mountedAt = React.useRef(Date.now())
+export default function SlateOperationListener({ slate, revision }) {
+  // The runs saved after the revision this canvas loaded, by the server's numbering: one saved
+  // between loading the slate and starting to listen is drawn, one already in what was loaded is
+  // not, whatever the browser's clock says.
+  const since = React.useMemo(() => ({ revision: Number.isInteger(revision) && revision >= 0 ? revision : 0 }), [slate, revision])
   const processed = React.useRef(new Set())
-  // Runs are drawn one after another, in the order they arrive: a Mermaid import saves once and
+  // Runs are drawn one after another, in the order they were saved: a Mermaid import saves once and
   // sends its plans as several runs, and a later plan joins notes an earlier one made.
   const queue = React.useRef(Promise.resolve())
 
   useTracker(() => {
-    Meteor.subscribe(
-      CONSTANTS.publications.slateOperationRuns,
-      slate.shareId,
-      mountedAt.current
-    )
-  }, [slate.shareId])
+    Meteor.subscribe(CONSTANTS.publications.slateOperationRuns, slate.shareId, since)
+  }, [slate.shareId, since])
 
   React.useEffect(() => {
-    const observer = SlateOperationRuns.find({
-      slateShareId: slate.shareId,
-      createdAt: { $gte: mountedAt.current },
-    }).observe({
+    const observer = SlateOperationRuns.find(runsSince(slate.shareId, since), { sort: { revision: 1, createdAt: 1 } }).observe({
       added(run) {
         if (processed.current.has(run._id)) return
         processed.current.add(run._id)
@@ -54,6 +50,9 @@ export default function SlateOperationListener({ slate }) {
               // A saved run's plan is already carried out: ids it names that
               // this canvas already holds were made by that run.
               replay: true,
+              // A visitor with no account only draws it: their canvas neither saves what the server
+              // already holds nor passes it on to the room (each open canvas draws runs itself).
+              send: Boolean(Meteor.userId()),
             })
           } catch (error) {
             drawing = Promise.reject(error)
@@ -73,11 +72,16 @@ export default function SlateOperationListener({ slate }) {
       },
     })
     return () => observer.stop()
-  }, [slate])
+  }, [slate, since])
 
   return null
 }
 
 SlateOperationListener.propTypes = {
   slate: PropTypes.object.isRequired,
+  revision: PropTypes.number,
+}
+
+SlateOperationListener.defaultProps = {
+  revision: 0,
 }

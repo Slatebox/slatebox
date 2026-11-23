@@ -415,6 +415,11 @@ Meteor.startup(async () => {
       slateShareId: 1,
       createdAt: 1,
     }),
+    // The runs a canvas is sent: those after the revision it loaded (slate-operation-runs.mjs runsSince).
+    SlateOperationRuns.rawCollection().createIndex({
+      slateShareId: 1,
+      revision: 1,
+    }),
     SlateOperationRuns.rawCollection().createIndex(
       { tokenId: 1, idempotencyKey: 1 },
       {

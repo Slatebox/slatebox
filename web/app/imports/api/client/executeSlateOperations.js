@@ -7,8 +7,9 @@ export default async function executeSlateOperations({
   plan,
   userMessage,
   replay = false,
+  send = true,
 }) {
-  const result = SlateOperations.applySlateOperations(slate, plan, { userMessage, replay })
+  const result = SlateOperations.applySlateOperations(slate, plan, { userMessage, replay, send })
   await result.applied
   return result
 }

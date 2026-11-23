@@ -292,6 +292,8 @@ export default function Canvas() {
   // In dark mode the canvas is dark too, unless the slate has a background of its own (canvasTheme.mjs).
   // A reader's share link opens this same page, so it follows the same rule.
   const canvasRef = React.useRef(null)
+  // The revision the canvas was drawn from: the agent runs it is sent are those saved after it.
+  const loadedRevision = React.useRef(0)
   useCanvasTheme(canvasRef, () => (slate.current?.v2 ?? slate.current)?.options?.containerStyle)
   function openComments(node) {
     setCommentDrawer({
@@ -711,6 +713,7 @@ export default function Canvas() {
     // first time (slate.current is null) and best-effort/idempotent thereafter.
     slate.current?.destroy?.()
 
+    loadedRevision.current = Number.isInteger(sBase.revision) ? sBase.revision : 0
     // create slate (the createWithTheme will inhibit the saving of the slate until the theme is applied)
     slate.current = await createSlate(
       sBase,
@@ -1494,7 +1497,7 @@ export default function Canvas() {
           {/* The AI listening to a huddle's call is in the huddle (HuddleIsland): Daily loads with the first huddle. */}
         </>
       )}
-      {slate.current && <SlateOperationListener slate={slate.current} />}
+      {slate.current && <SlateOperationListener slate={slate.current} revision={loadedRevision.current} />}
       {slate.current && <AgentPresenceListener slate={slate.current} />}
       {/* {currentAIContext?.aid &&
         slate.current &&
