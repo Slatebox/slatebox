@@ -1,5 +1,6 @@
 import { validateWorkshop } from 'slateboxjs/workshops/model'
-import { readNoteNumbers, sampleLaunchPlan } from 'slateboxjs/workshops/rules'
+import { launchPlanSample, readNoteNumbers, sampleLaunchPlan } from 'slateboxjs/workshops/rules'
+import { datedLaunchPlan, namedDay } from './plan-dates.mjs'
 
 // “Plan a launch for day 30: Design 5 days, Build 8 days after Design, Docs 3 days after Build”.
 // The opener, an optional launch day, then tasks separated by commas: a name, its days, what it
@@ -22,7 +23,12 @@ export function launchPlanFromBrief(text) {
   const words = String(text ?? '').replace(/\s+/g, ' ').trim().replace(/[.!]$/, '')
   if (!launchPlanOpener.test(words)) throw new Error(instructions)
   const match = /^(?:plan a launch|make a launch plan)(?:\s+(?:for\s+day\s+(\d{1,3})|in\s+(\d{1,3})\s+days?))?\s*(?::\s*(.*))?$/i.exec(words)
-  if (!match) throw new Error(instructions)
+  if (!match) {
+    // “Plan a launch in March”, “Make a launch plan launching 12 March”: the library's dated plan, launching that day.
+    const sample = validateWorkshop(launchPlanSample())
+    if (namedDay(sample.clock.origin, words) !== null) return datedLaunchPlan(sample, words)
+    throw new Error(instructions)
+  }
   const day = match[1] ?? match[2]
   const items = match[3]?.trim()
   if (!items) {

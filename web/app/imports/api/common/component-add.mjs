@@ -4,6 +4,7 @@
 import { validateWorkshop } from 'slateboxjs/workshops/model'
 import { catalogEntry, catalogFits, catalogPreset } from 'slateboxjs/catalog'
 import { besideExisting } from './conversation-preview.mjs'
+import { datedLaunchPlan } from './plan-dates.mjs'
 import { MAIN_BOARD, besideBoards, boardBoxes, furtherBoardSet, mainOriginSet, nextBoardId, slateBoards } from './slate-boards.mjs'
 // Server only (the chat's Keep and exec): the room a board keeps needs the business boards' kits.
 import { boardRoom } from '../../../server/board-room.mjs'
@@ -62,7 +63,8 @@ export function componentAddition(slate, { component, topic }, samples = {}, roo
   if (slate?.creative && !held) return { refused: 'This slate can’t hold a board.' }
   const fits = catalogFits(component, { hasBoard: held > 0, many: true, boards: held })
   if (!fits.ok) return { refused: fits.reason }
-  const workshop = validateWorkshop(catalogPreset(component, topic, samples))
+  // A launch plan launches on the day its topic names (“launching in March”).
+  const workshop = datedLaunchPlan(validateWorkshop(catalogPreset(component, topic, samples)), topic)
   return { workshop, ...componentPlacing(slate, workshop, room) }
 }
 

@@ -15,6 +15,7 @@ import {rulebook} from 'slateboxjs/workshops/model'
 import {catalogSamples as samples} from 'slateboxjs/workshops/samples'
 import {catalogFits} from 'slateboxjs/catalog'
 import {boardNamesSlate,componentPlacing} from '../../imports/api/common/component-add.mjs'
+import {datedLaunchPlan} from '../../imports/api/common/plan-dates.mjs'
 import {MAX_BOARDS,slateBoards} from '../../imports/api/common/slate-boards.mjs'
 
 import {slateSaveCore} from '../slate-save'
@@ -78,6 +79,8 @@ Meteor.methods({
     let draft
     try {draft=nativeCanvasDraft(board,message,id,generated,samples)}
     catch(e){throw new Meteor.Error('invalid-turn',e.message)}
+    // A library launch plan launches on the day the request names (“… launching in March”), not on the sample's third Friday.
+    if(draft.component) draft={...draft,workshop:datedLaunchPlan(draft.workshop,message)}
     // Beside the slate's boards: shown where Keep puts it (Keep places it again on the slate as it stands then).
     if(draft.component && held) draft={...draft,origin:componentPlacing(board,draft.workshop).origin}
     if(digest(await resolve(shareId,this.userId))!==base) throw changed()
