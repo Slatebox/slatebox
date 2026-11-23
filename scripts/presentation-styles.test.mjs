@@ -415,3 +415,40 @@ test('on a phone a dive\'s or split\'s picture is the biggest thing in its frame
     })
   }
 })
+
+test('words are fitted by measured widths: a wide face gets a smaller size, never a word broken across lines', async () => {
+  const { fitNoteFont } = await import('../web/app/imports/ui/components/presentations/presentationCompose.mjs')
+  const { fitPresentedWords } = await import('../web/app/imports/ui/components/presentations/livePresenter.mjs')
+  // A face far wider than the estimate (bold Inter at weight 900 runs ~0.66 em a character).
+  const wide = (text, size, font, weight) => String(text).length * size * (weight === 'bold' ? 0.66 : 0.6)
+  const fitsWhole = (text, size, area) => text.split(/\s+/).every((word) => wide(word, size, 'Inter', 'bold') <= area)
+  // Stage's title at 1440 (its landscape box): two lines in the real face fit; the size stays.
+  assert.equal(fitNoteFont({ text: 'Slatebox, six ways in', fontFamily: 'Inter', fontWeight: 'bold', fontSize: 187.7, width: 1736, height: 494 }, wide), null)
+  // On a phone (its portrait box) "Slatebox," alone is wider than the line: a smaller size, whole words.
+  const title = { text: 'Slatebox, six ways in', fontFamily: 'Inter', fontWeight: 'bold', fontSize: 132.5, width: 784, height: 571.2 }
+  const size = fitNoteFont(title, wide)
+  assert.ok(size && size < 132.5)
+  const lines = []
+  let line = ''
+  for (const word of title.text.split(' ')) {
+    const next = line ? `${line} ${word}` : word
+    if (line && wide(next, size, 'Inter', 'bold') > (title.width - 14) * 0.94) { lines.push(line); line = word } else line = next
+  }
+  lines.push(line)
+  assert.ok(lines.every((l) => wide(l, size, 'Inter', 'bold') <= title.width - 14), lines.join(' / '))
+  assert.ok(lines.length * size * 1.18 <= title.height - 10)
+  // Neon's "Diagrams" in a chevron on a phone: the word fits its text box whole.
+  const chevron = { text: 'Diagrams', fontFamily: 'Anton', fontWeight: 'bold', fontSize: 72.8, width: 300, height: 200, shape: 'custom', textBox: { x: 0.15, y: 0.04, w: 0.68, h: 0.92 } }
+  const fitted = fitNoteFont(chevron, wide) ?? chevron.fontSize
+  assert.ok(fitsWhole('Diagrams', fitted, 300 * 0.68 - 14))
+  // A note that already fits keeps its size; a note with no words is left alone.
+  assert.equal(fitNoteFont({ text: 'Hi', fontFamily: 'Inter', fontSize: 20, width: 400, height: 200 }, wide), null)
+  assert.equal(fitNoteFont({ text: '', fontSize: 20, width: 10, height: 10 }, wide), null)
+  // Over a whole presented slate: only sizes change, only where needed.
+  const json = { nodes: [{ options: { ...title } }, { options: { text: 'Hi', fontFamily: 'Inter', fontSize: 20, width: 400, height: 200 } }] }
+  fitPresentedWords(json, wide)
+  assert.equal(json.nodes[0].options.fontSize, size)
+  assert.equal(json.nodes[1].options.fontSize, 20)
+  // With no way to measure (no canvas), nothing changes.
+  assert.equal(fitPresentedWords({ nodes: [{ options: { ...title } }] }, null).nodes[0].options.fontSize, 132.5)
+})

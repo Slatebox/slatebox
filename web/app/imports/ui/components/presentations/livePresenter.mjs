@@ -4,7 +4,7 @@
 // and flies the engine's camera between the steps: Prezi arcs that pull back and come in, roll,
 // deep zooms, a homecoming finale. The copy is never saved: nothing here reaches the slate, its
 // room or its undo. Reduced motion cuts between framings with a short crossfade instead.
-import { frameBox, showsOn } from './presentationCompose.mjs'
+import { fitNoteFont, frameBox, showsOn } from './presentationCompose.mjs'
 import { resolveStyle } from './presentationStyles.mjs'
 
 const STAGE_ONLY = new Set(['kind', 'steps', 'p', 'deco', 'detail', 'behind', 'why', 'art', 'w', 'h', 'credit'])
@@ -117,6 +117,49 @@ function ensureStyles(doc) {
   }
 }
 
+const weightOf = (weight) => (weight === 'bold' || Number(weight) >= 600 ? 'bold' : 'normal')
+
+/**
+ * Load the faces the presented notes are drawn in (each family at the weight it is used), so the
+ * words are measured and wrapped in the real face, not a fallback: the browser fetches a web
+ * font only when something draws with it, so "fonts ready" alone can come too early. A face that
+ * does not arrive within `ms` is measured in whatever the page has (offline still plays).
+ */
+export async function loadDeckFonts(doc, nodes, ms = 3500) {
+  const specs = new Set()
+  nodes.forEach(({ options = {} }) => { if (options.text && options.fontFamily) specs.add(`${weightOf(options.fontWeight)} 32px "${options.fontFamily}"`) })
+  if (!doc.fonts?.load || !specs.size) return
+  const timeout = new Promise((resolve) => { setTimeout(resolve, ms) })
+  // The faces are declared by the styles' font stylesheet: until it has loaded, asking for a face
+  // answers at once with nothing (and the words would be wrapped in a fallback face).
+  const link = doc.getElementById('sbp-fonts')
+  if (link && !link.sheet) {
+    await Promise.race([new Promise((resolve) => { link.addEventListener('load', resolve, { once: true }); link.addEventListener('error', resolve, { once: true }) }), timeout])
+  }
+  await Promise.race([Promise.all([...specs].map((spec) => doc.fonts.load(spec).catch(() => null))), timeout])
+}
+
+/** Text widths in the page's real faces (a canvas), for fitNoteFont. → (text, size, font, weight) → px */
+export function canvasMeasure(doc) {
+  let ctx = null
+  try { ctx = doc.createElement('canvas').getContext('2d') } catch { ctx = null }
+  if (!ctx) return null
+  return (text, size, font, weight) => {
+    ctx.font = `${weightOf(weight) === 'bold' ? 'bold ' : ''}${size}px "${font}"`
+    return ctx.measureText(String(text)).width
+  }
+}
+
+/** Every note's words fitted to its shape in the real faces: a smaller size, never a broken word. */
+export function fitPresentedWords(json, measure) {
+  if (!measure) return json
+  json.nodes.forEach((node) => {
+    const size = fitNoteFont(node.options, measure)
+    if (size) node.options.fontSize = size
+  })
+  return json
+}
+
 const escapeHtml = (text) => String(text || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const easeIn = (t) => t * t
 const easeOut = (t) => 1 - Math.pow(1 - t, 3)
@@ -198,7 +241,12 @@ export async function mountLiveDeck({
   const slate = facade.v2 || facade
   // The engine behind the stage, for checks that read the notes as drawn (never enumerable).
   Object.defineProperty(root, 'sbpSlate', { value: slate, configurable: true })
-  await slate.loadJSON(presentedSlate(slateJSON, deck, { portrait: isPortrait }), false, true)
+  // The words are fitted in the faces they are drawn in, before anything is drawn: the composer's
+  // sizes are estimates (it also runs on the server, with no fonts to measure).
+  const presented = presentedSlate(slateJSON, deck, { portrait: isPortrait })
+  try { await loadDeckFonts(doc, presented.nodes) } catch { /* fonts are a nicety */ }
+  fitPresentedWords(presented, canvasMeasure(doc))
+  await slate.loadJSON(presented, false, true)
   try { slate.disablePanZoom?.() } catch { /* already off */ }
   try { await slate.loadAllFonts?.() } catch { /* fonts are a nicety */ }
   try { await doc.fonts?.ready } catch { /* ignore */ }

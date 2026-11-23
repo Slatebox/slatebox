@@ -571,29 +571,62 @@ export function normalizeDirection(raw, layout, { name = '' } = {}) {
 
 // ─── composition ────────────────────────────────────────────────────────────
 
-// Average advance per character, as a share of the size (measured high: a serif's capitals run wide).
+// Average advance per character, as a share of the size (measured high: a serif's capitals run
+// wide). Only an estimate, for where no fonts can be measured (the server): the presenter fits
+// every note again with the real faces (fitNoteFont) before the slate is drawn.
 const CHAR = { Anton: 0.48, Caveat: 0.44, 'Abril Fatface': 0.6, Fraunces: 0.6, Inter: 0.58, 'Space Grotesk': 0.58, 'IBM Plex Mono': 0.62, 'PT Sans': 0.52 }
-/** The largest font size (≤ max) at which `text` wraps into a w×h box. */
-export function fitFont(text, w, h, max, font = 'Inter', min = 4) {
-  const cw = (CHAR[font] || 0.55) * 1.06
+const isBold = (weight) => weight === 'bold' || Number(weight) >= 600
+/** The estimated width of `text` at `size` (no fonts to measure). */
+export const estimateWidth = (text, size, font = 'Inter', weight = 'normal') =>
+  String(text).length * (CHAR[font] || 0.55) * 1.06 * (isBold(weight) ? 1.08 : 1) * size
+
+/**
+ * The largest font size (≤ max) at which `text` wraps into a w×h box, words whole: a size at which
+ * any one word is wider than the box is never chosen, so the drawing never breaks a word. `measure`
+ * (text, size, font, weight) → px gives real widths (a canvas with the loaded face); without it the
+ * widths are estimated.
+ */
+export function fitFont(text, w, h, max, font = 'Inter', min = 4, { weight = 'normal', measure = null } = {}) {
+  const width = (str, size) => (measure ? measure(str, size, font, weight) : estimateWidth(str, size, font, weight))
   const list = words(text)
   if (!list.length) return Math.max(min, Math.min(max, h * 0.6))
-  const longest = Math.max(...list.map((word) => word.length))
+  const longest = list.reduce((a, b) => (width(b, 100) > width(a, 100) ? b : a))
   for (let size = max; size > min; size *= 0.93) {
     // A word is never broken: the longest one fits on its own line.
-    if (longest * cw * size > w * 0.94) continue
+    if (width(longest, size) > w * 0.94) continue
     let lines = 1
-    let line = 0
+    let line = ''
     for (const word of list) {
-      const len = (word.length + 1) * cw * size
-      if (line && line + len > w * 0.94) {
+      const next = line ? `${line} ${word}` : word
+      if (line && width(next, size) > w * 0.94) {
         lines += 1
-        line = len
-      } else line += len
+        line = word
+      } else line = next
     }
     if (lines * size * 1.18 <= h * 0.96) return Math.round(size * 10) / 10
   }
   return min
+}
+
+/**
+ * A note's font size fitted to where the engine sets its words (its custom shape's text box, or
+ * the box less its text inset, less the engine's padding), measured: never larger than the size it
+ * has, and never so large that a word would be broken. → the size, or null when nothing changes.
+ */
+export function fitNoteFont(options, measure) {
+  const text = String(options?.text || '').trim()
+  const size = Number(options?.fontSize)
+  if (!text || !(size > 0)) return null
+  const w = Number(options.width) || 0
+  const h = Number(options.height) || 0
+  const tb = options.shape === 'custom' && options.textBox && typeof options.textBox === 'object' ? options.textBox : null
+  const inset = options.textInset || {}
+  const share = (v) => (Number.isFinite(Number(v)) ? Math.min(0.45, Math.max(0, Number(v))) : 0)
+  const aw = (tb ? w * tb.w : w) * (1 - share(inset.left) - share(inset.right)) - 14
+  const ah = (tb ? h * tb.h : h) * (1 - share(inset.top) - share(inset.bottom)) - 10
+  if (!(aw > 0 && ah > 0)) return null
+  const fitted = fitFont(text, aw, ah, size, options.fontFamily || 'Inter', Math.min(size, 6), { weight: options.fontWeight || 'normal', measure })
+  return fitted < size - 0.05 ? fitted : null
 }
 
 /**
