@@ -50,6 +50,12 @@ function RenderMessage({ message, onFollow }) {
       : <Box><Typography variant="caption" color="error">You no longer have access to this slate.</Typography>
           <Typography variant="body2">{message.text}</Typography></Box>
   }
+  if (message.action?.type === CONSTANTS.messageActionTypes.link && typeof message.action.url === 'string' && message.action.url.startsWith('/')) {
+    return <Box>
+      <Link component={RouterLink} to={message.action.url} onClick={() => { markRead(message); onFollow?.() }} variant="body2" sx={{ fontWeight: message.read ? 400 : 700 }}>{message.text}</Link>
+      <Typography variant="caption" component="div" sx={{ color: 'text.secondary' }}>{new Date(message.timestamp).toLocaleString()}</Typography>
+    </Box>
+  }
   if (message.action?.type === CONSTANTS.messageActionTypes.modal) {
     return <Button size="small" sx={{ p: 0, textTransform: 'none', textAlign: 'left', fontWeight: message.read ? 400 : 700 }}
       onClick={() => { markRead(message); confirmService.show({ theme, title: message.modalTitle, message: message.modalBody }) }}>{message.text}</Button>
@@ -64,7 +70,7 @@ RenderMessage.propTypes = {
   message: PropTypes.shape({
     _id: PropTypes.string, read: PropTypes.bool, modalTitle: PropTypes.string, timestamp: PropTypes.number,
     text: PropTypes.string, modalBody: PropTypes.string, slateId: PropTypes.string, nodeId: PropTypes.string,
-    action: PropTypes.shape({ type: PropTypes.string }),
+    action: PropTypes.shape({ type: PropTypes.string, url: PropTypes.string }),
   }).isRequired,
   onFollow: PropTypes.func,
 }

@@ -3,15 +3,21 @@
 // runs without Meteor in the tests (server/library/*.mjs).
 import { Meteor } from 'meteor/meteor'
 import { Random } from 'meteor/random'
+import { Email } from 'meteor/email'
 import {
-  LibraryEvents, LibraryItems, LibraryVersions, Permissions, SlatePresentations, Slates,
+  LibraryEvents, LibraryItems, LibraryVersions, Messages, Permissions, SlatePresentations, Slates,
 } from '../../imports/api/common/models'
 import CONSTANTS from '../../imports/api/common/constants'
 import { catalogSamples } from 'slateboxjs/workshops/samples'
 import { createLibraryCore } from './core.mjs'
 import { seedBuiltins } from './builtins.mjs'
 import { migrateCommunity } from './migrate.mjs'
-import { refineWithAI } from './refine-ai.mjs'
+import { createRefineAI } from './refine-ai.mjs'
+import { createLibraryNotifier } from './notify.mjs'
+import req from '../methods/ai/req'
+import { runAIAction } from '../metering/context.mjs'
+import { canStartAI } from '../metering/meteor'
+import { resolveAIFeatureConfig } from '../methods/ai/feature-config.mjs'
 
 const raw = (collection) => collection.rawCollection()
 
@@ -26,6 +32,27 @@ async function loadUser(userId) {
   const name = user.isAnonymous ? '' : [user.profile?.firstName, user.profile?.lastName].filter((part) => typeof part === 'string' && part.trim()).join(' ')
   return { _id: user._id, orgId: user.orgId, isAnonymous: Boolean(user.isAnonymous), name }
 }
+
+// The refine chat of the review panel: the library use key (settings.ai.use.library, then use.chat),
+// counted like any chat turn. One per server: its memory lets Keep apply the proposal it previewed.
+const refineWithAI = createRefineAI({
+  request: (opts) => req(opts),
+  meter: (opts, fn) => runAIAction(opts, fn),
+  canUseAI: async (userId) => canStartAI(userId && (await Meteor.users.findOneAsync(userId)), 'library'),
+  config: () => resolveAIFeatureConfig('library', Meteor.settings),
+})
+
+// The author hears about every decision: in the bell's list, and by email when the server sends mail.
+const mailAvailable = () => Boolean(process.env.MAIL_URL || Meteor.settings.packages?.email?.service)
+const notifyAuthor = (appOrigin) => createLibraryNotifier({
+  insertMessage: (row) => Messages.insertAsync(row),
+  sendEmail: (mail) => (mailAvailable() ? Email.sendAsync({ from: Meteor.settings.mailFrom || 'no-reply@slatebox.com', ...mail }) : null),
+  loadAuthor: async (userId) => {
+    const user = await Meteor.users.findOneAsync(userId, { fields: { emails: 1, isAnonymous: 1 } })
+    return user && { email: user.emails?.[0]?.address, isAnonymous: Boolean(user.isAnonymous) }
+  },
+  appOrigin,
+})
 
 const isTeamAdmin = async (userId, orgId) =>
   Boolean(userId && orgId && (await Permissions.findOneAsync({ userId, orgId, claimId: CONSTANTS.claims.admin._id }, { fields: { _id: 1 } })))
@@ -47,6 +74,7 @@ export function createAppLibrary(shared) {
     copyPresentation: shared.copyPresentation,
     applyWorkshopOperations: shared.applyWorkshopOperations,
     refineWithAI,
+    notify: notifyAuthor(shared.appOrigin || (() => Meteor.settings.public?.baseUrl || '')),
     generateShareId: shared.generateShareId,
     newId: () => Random.id(),
     now: Date.now,

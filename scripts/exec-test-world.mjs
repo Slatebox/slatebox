@@ -141,7 +141,7 @@ const note = (id, text, x = 100) => ({
   relationships: { associations: [] },
 });
 
-export function makeExecWorld({ limits = EXEC_LIMITS, rateLimits, nodePath = process.env.EXEC_RUNNER_NODE || process.execPath, grants = [] } = {}) {
+export function makeExecWorld({ limits = EXEC_LIMITS, rateLimits, nodePath = process.env.EXEC_RUNNER_NODE || process.execPath, grants = [], library: libraryOptions = {} } = {}) {
   const users = memoryMeteorCollection("user");
   users.docs.push(
     { _id: "owner", profile: { firstName: "Ada" }, emails: [{ address: "ada@example.test" }] },
@@ -274,8 +274,9 @@ export function makeExecWorld({ limits = EXEC_LIMITS, rateLimits, nodePath = pro
   });
   deps.exec = exec.service;
   // The shared library over the same slates and save core; "admin" reviews. Await libraryReady (the built-ins' seed).
+  // `library` options reach makeLibrary (the refine AI, presentations) for the tests that need them.
   const library = makeLibrary({ slates: slateRows, saveCore, reviewers: ["admin"], users: { owner: { name: "Ada" }, other: { name: "Ben Smith" } },
-    applyWorkshopOperations: deps.applyWorkshopOperations });
+    applyWorkshopOperations: deps.applyWorkshopOperations, ...libraryOptions });
   deps.library = library.library;
   const authenticate = async (req) => principalFromToken(await service.authenticateApiRequest(req));
   const mint = (scopes = ["slates:read", "slates:write"], userId = "owner") => service.createApiToken({ userId, name: "Agent", scopes });

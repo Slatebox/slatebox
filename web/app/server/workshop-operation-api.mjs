@@ -463,6 +463,8 @@ export function createWorkshopOperations({
     userMessage = '',
     dryRun = false,
     key,
+    // A library reviewer's refinement by chat stamps its rules via 'chat' (server/library/core.mjs refine).
+    ruleActor = null,
   }) {
     if (typeof dryRun !== 'boolean' || typeof userMessage !== 'string')
       throw invalid('Use a boolean dryRun and a text userMessage.')
@@ -523,8 +525,9 @@ export function createWorkshopOperations({
         // Undoing an edit that added cards takes them away again: reported (and held) as any removal is.
         report = { undone: receipt._id, restoredRevision: receipt.beforeRevision, ...removedBetween(board, next), targets: receipt.report?.targets ?? [] }
       } else {
-        // Who moves a card anyway, as the card says it: the agent's token, by its name.
-        ;({ next, report } = applyWorkshopEdit(board, operation, slate, { by: String(token.name || 'an agent').slice(0, 80), via: 'exec' }))
+        // Who moves a card anyway, as the card says it: the agent's token, by its name. A library reviewer's
+        // refinement by chat stamps its rules as the library's refine passes them (ruleActor).
+        ;({ next, report } = applyWorkshopEdit(board, operation, slate, ruleActor ?? { by: String(token.name || 'an agent').slice(0, 80), via: 'exec' }))
       }
       report = scopedTargets(report, boardId)
       const body = {

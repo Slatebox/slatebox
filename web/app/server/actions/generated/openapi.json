@@ -4184,7 +4184,7 @@
       "get": {
         "operationId": "getLibraryItem",
         "summary": "Library item",
-        "description": "One library item by id or slug, with a version's content: a smart component's board (workshop, with its rules), or a slate's notes (and a presentation's deck). Anyone reads published items; an item's author and reviewers also read its drafts and every version.",
+        "description": "One library item by id or slug, with a version's content: a smart component's board (workshop, with its rules), or a slate's notes (and a presentation's deck). Anyone reads published items; an item's author and reviewers also read its drafts, every version and its review thread.",
         "x-required-scope": "slates:read",
         "security": [
           {},
@@ -4415,6 +4415,13 @@
                         "meta",
                         "content"
                       ]
+                    },
+                    "thread": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      },
+                      "description": "Its author and reviewers only: the review thread (every action and message), oldest first."
                     }
                   },
                   "required": [

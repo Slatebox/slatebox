@@ -27,7 +27,7 @@ import { privateSlateDocument } from '../private-slate-document.mjs'
 import { componentPlacing, componentSet } from '../../imports/api/common/component-add.mjs'
 import { MAIN_BOARD, MAX_BOARDS, slateBoards } from '../../imports/api/common/slate-boards.mjs'
 import { sharedSaveConditions } from '../methods/native-slate-save.mjs'
-import { validateWorkshop, rulebook } from 'slateboxjs/workshops/model'
+import { applyWorkshopEdits, validateWorkshop, rulebook } from 'slateboxjs/workshops/model'
 import 'slateboxjs/workshops/behaviour'
 
 const DAY = 86400000
@@ -220,7 +220,11 @@ export function createLibraryCore(deps) {
   async function get(principal, input) {
     const { item, privileged } = await readableItem(principal, input.itemId)
     const version = await visibleVersion(item, privileged, input.version)
-    return { item: detail(item, privileged), version: versionShape(version) }
+    // Its author and reviewers also read the review thread (the review panel and My library show it).
+    const thread = privileged && item.origin !== 'builtin'
+      ? (await events.find({ itemId: item._id }, { sort: { at: -1, _id: -1 }, limit: 100 }).toArray()).reverse().map(eventShape)
+      : null
+    return { item: detail(item, privileged), version: versionShape(version), ...(thread && { thread }) }
   }
 
   async function stats() {
@@ -255,7 +259,7 @@ export function createLibraryCore(deps) {
     const rows = await items.find(selector, { sort: { updatedAt: -1 }, limit: 200 }).toArray()
     const out = []
     for (const item of rows) {
-      const thread = await events.find({ itemId: item._id }, { sort: { at: -1 }, limit: LIBRARY_LIMITS.mineEvents }).toArray()
+      const thread = await events.find({ itemId: item._id }, { sort: { at: -1, _id: -1 }, limit: LIBRARY_LIMITS.mineEvents }).toArray()
       out.push({ ...detail(item, true), events: thread.reverse().map(eventShape) })
     }
     return { items: out }
@@ -622,14 +626,23 @@ export function createLibraryCore(deps) {
       if (!board || !applyWorkshopOperations) throw fail(409, 'no_board', 'There is no board on the review copy to edit.')
       const plan = { message: 'Refine', operations: [{ kind: 'workshop_edits', edits: proposal.edits, expectedRevision: board.revision ?? 0, boardId: board.id }] }
       const token = { _id: null, userId: principal.userId, name: 'Library review' }
-      const dry = await applyWorkshopOperations({ slate, token, plan, dryRun: true })
+      // The dry run checks the edits the way a person's would be checked; a refusal is answered with
+      // its sentence and recorded, and nothing is applied.
+      try {
+        await applyWorkshopOperations({ slate, token, plan, dryRun: true, ruleActor: { by: actor.name, via: 'chat' } })
+      } catch (error) {
+        await log(item, 'refine_proposed', { kind: local ? 'system' : 'ai', userId: null, name: 'Slatebox' }, { message: `${message}\n— ${error.message}`.slice(0, 2000), ...(raw?.ai && { ai: raw.ai }) })
+        throw error
+      }
+      // The rule lines the reviewer sees: the board before and after the same edits (the dry run's
+      // answer is the board as an agent reads it, not the stored model).
       try {
         const before = validateWorkshop(board.model.workshop)
-        const after = validateWorkshop(dry.body.workshop?.workshop ?? dry.body.workshop ?? before)
+        const after = applyWorkshopEdits(before, proposal.edits, { actor: { by: actor.name, via: 'chat' } }).workshop
         const lines = rulebook().diff(before, after).lines
         if (lines.length) diff.rules = lines
-      } catch { /* the board answer has no rulebook to compare */ }
-      if (mode === 'save') applied = await applyWorkshopOperations({ slate, token, plan, dryRun: false, key: newId() })
+      } catch { /* a board without a rulebook has no rule lines to show */ }
+      if (mode === 'save') applied = await applyWorkshopOperations({ slate, token, plan, dryRun: false, key: newId(), ruleActor: { by: actor.name, via: 'chat' } })
     }
     await log(item, 'refine_proposed', { kind: local ? 'system' : 'ai', userId: null, name: 'Slatebox' }, {
       message: message, ...(Object.keys(diff).length && { diff }), ...(raw?.ai && { ai: raw.ai }),

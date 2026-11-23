@@ -90,7 +90,7 @@ export const libraryGet = defineAction({
   id: 'library.get',
   title: 'Library item',
   description:
-    'One library item by id or slug, with a version\'s content: a smart component\'s board (workshop, with its rules), or a slate\'s notes (and a presentation\'s deck). Anyone reads published items; an item\'s author and reviewers also read its drafts and every version.',
+    'One library item by id or slug, with a version\'s content: a smart component\'s board (workshop, with its rules), or a slate\'s notes (and a presentation\'s deck). Anyone reads published items; an item\'s author and reviewers also read its drafts, every version and its review thread.',
   toolset: 'library',
   kind: 'read',
   scope: 'slates:read',
@@ -98,7 +98,14 @@ export const libraryGet = defineAction({
   mounts: { ddp: true, http: { method: 'GET', path: '/library/{itemId}', operationId: 'getLibraryItem' } },
   publicCache: { maxAge: 300 },
   input: object({ itemId: itemRef, version: versionInput }, ['itemId']),
-  output: { type: 'object', properties: { item: itemDetail, version: versionOutput }, required: ['item', 'version'] },
+  output: {
+    type: 'object',
+    properties: {
+      item: itemDetail, version: versionOutput,
+      thread: { type: 'array', items: { type: 'object' }, description: 'Its author and reviewers only: the review thread (every action and message), oldest first.' },
+    },
+    required: ['item', 'version'],
+  },
   tool: { name: 'get_library_item', title: 'Read a library item', description: 'Read one item of the shared library in full: a smart component\'s board and rules, or a slate or presentation.' },
   handler: (principal, input, { deps }) => deps.library.get(principal, input),
 })

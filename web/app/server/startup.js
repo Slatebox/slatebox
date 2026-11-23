@@ -7,10 +7,9 @@ import { onPageLoad } from 'meteor/server-render'
 import app from './expressApp'
 import { presentationMeta } from './common/presentationMeta.mjs'
 import { slateShareImage, slateShareText } from './common/share-image.mjs'
-import { publicTemplateSummary } from './methods/template-directory'
 import setup from './email/setup'
 import { onCreateUser } from './common/accounts'
-import { ensureLibraryIndexes, seedLibraryBuiltins } from './library/meteor'
+import { ensureLibraryIndexes, migrateCommunitySlates, seedLibraryBuiltins } from './library/meteor'
 import './bootstrap/all'
 import {
   IconPacks,
@@ -18,6 +17,7 @@ import {
   SlatePresentations,
   SlateApiTokens,
   SlateOperationRuns,
+  SystemSettings,
 } from '../imports/api/common/models'
 
 function appendDefaults(sink) {
@@ -226,40 +226,6 @@ onPageLoad(async (sink) => {
     sink.request.path ||
     (typeof url === 'string' ? url : url?.path || url?.pathname || '')
 
-  const pathname = urlPath.split('?')[0].replace(/\/+$/, '')
-  if (pathname.startsWith('/templates/')) {
-    sink.setHeader('Cache-Control', 'no-store')
-    appendDefaults(sink)
-    // A signed-in author loads the private preview through their own app session.
-    if (/^\/templates\/preview\/[^/]+$/.test(pathname)) {
-      sink.appendToHead('<meta name="robots" content="noindex">')
-      return
-    }
-    const templatePath = /^\/templates\/(tag\/)?([^/]+)$/.exec(pathname)
-    let key
-    if (templatePath) {
-      try { key = decodeURIComponent(templatePath[2]) } catch { /* Malformed bookmark. */ }
-    }
-    if (key) {
-      try {
-        const entry = await publicTemplateSummary(templatePath[1] ? 'tag' : 'slug', key)
-        if (entry) {
-          sink.appendToHead(presentationMeta({
-            'og:title': entry.type === 'tag' ? entry.name + ' templates' : entry.name,
-            'og:description': entry.description || '',
-          }))
-          return
-        }
-      } catch {
-        sink.setStatusCode(503)
-        return
-      }
-    }
-    sink.setStatusCode(404)
-    sink.appendToHead('<meta name="robots" content="noindex">')
-    return
-  }
-
   // Extract path type and ID using regex
   const match = urlPath.match(/\/(canvas|present)\/([^/?]+)/)
 
@@ -333,6 +299,19 @@ onPageLoad(async (sink) => {
   }
 })
 
+// The one-time move of community slates, templates and featured presentations into the library.
+async function runLibraryMigration() {
+  const key = 'library-migration-2026-11'
+  try {
+    if (await SystemSettings.findOneAsync({ _id: key })) return
+    const report = await migrateCommunitySlates()
+    console.log('[library] moved', JSON.stringify({ ...report.created, skipped: report.skipped, failed: report.failed }))
+    await SystemSettings.upsertAsync({ _id: key }, { $set: { finishedAt: new Date(), report: { ...report.created, skipped: report.skipped, failed: report.failed } } })
+  } catch (error) {
+    console.error('[library] migration', error?.message)
+  }
+}
+
 Meteor.startup(async () => {
   // setup mail
   await setup()
@@ -392,10 +371,8 @@ Meteor.startup(async () => {
       })
     }
 
-    await slatePresentations.createIndex({ intentionId: 1, timestamp: -1, _id: 1 }, {
-      name: 'public_presentation_gallery',
-      partialFilterExpression: { isPublished: true, isPublic: true, isFeatured: true, playOnHover: true, autoplayOnPublish: true },
-    })
+    // Featured presentations are library items now: the old gallery's index goes.
+    await slatePresentations.dropIndex('public_presentation_gallery').catch(() => {})
 
     if (!slatePresentationIndices.some((s) => s.key._fts === 'text')) {
       await slatePresentations.createIndex({
@@ -429,6 +406,10 @@ Meteor.startup(async () => {
     const seeded = await seedLibraryBuiltins()
     if (seeded.created.length || seeded.updated.length || seeded.unpublished.length)
       console.log('[library] built-ins', JSON.stringify({ created: seeded.created.length, updated: seeded.updated.length, unpublished: seeded.unpublished.length }))
+    // Community slates, approved templates and featured presentations become library items once
+    // (keyed by migratedFrom, so a second run adds nothing). Community slates wait in the review
+    // queue. It runs beside the start, never in its way; a finished run is remembered.
+    runLibraryMigration()
   } catch (error) {
     console.error('[library] startup', error?.message)
   }

@@ -438,7 +438,6 @@ const CONSTANTS = {
     collaboration: 'collaboration',
     mySlates: 'slates',
     shareableSlate: 'shareableSlate',
-    communitySlates: 'communitySlates',
     tags: 'tags',
     messages: 'messages',
     comments: 'comments',
@@ -466,6 +465,8 @@ const CONSTANTS = {
   messageActionTypes: {
     slate: 'slate',
     modal: 'modal',
+    // A page of the app (its path in action.url), such as My library for a review decision.
+    link: 'link',
   },
   slateAccessPermissions: {
     none: { id: 'NONE', description: 'no access' },
