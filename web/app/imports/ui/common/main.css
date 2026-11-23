@@ -183,11 +183,12 @@ body:has(.sb-cookie) .sb-canvas-page{box-sizing:border-box;padding-bottom:calc(m
 .slatebox-zoom-slider.slatebox-zoom-slider{background:var(--sb-surface,#fffef8)!important;color:var(--sb-ink,#193c2f)!important;
   border:1px solid var(--sb-border,#c6d1bf)!important;border-radius:18px!important;box-shadow:0 2px 10px rgb(25 53 41 / 12%);font-family:inherit!important}
 .slatebox-zoom-slider.slatebox-zoom-slider button{color:inherit!important}
-[data-sb-canvas=dark] .slateboxjs-birdseye{box-shadow:0 4px 18px rgb(0 0 0 / 40%)!important}
-[data-sb-canvas=dark] .slateboxjs-birdseye > svg > rect:first-child{fill:var(--sb-canvas-bg)}
-[data-sb-mode=dark] .slateboxjs-birdseye-viewport{fill:rgb(242 206 139 / 10%);stroke:#f2ce8b}
-[data-sb-canvas=dark] .slateboxjs-birdseye-zoom-controls button{background:var(--sb-offset,#2c4338)!important}
-[data-sb-canvas=dark] .slatebox-zoom-slider{box-shadow:0 2px 12px rgb(0 0 0 / 35%)}
+/* The dark rules carry the canvas's id too: without it the #slateCanvas rules above outrank them. */
+#slateCanvas[data-sb-canvas=dark] .slateboxjs-birdseye{box-shadow:0 4px 18px rgb(0 0 0 / 40%)!important}
+#slateCanvas[data-sb-canvas=dark] .slateboxjs-birdseye > svg > rect:first-child{fill:var(--sb-canvas-bg)}
+#slateCanvas[data-sb-mode=dark] .slateboxjs-birdseye-viewport{fill:rgb(242 206 139 / 10%);stroke:#f2ce8b}
+#slateCanvas[data-sb-canvas=dark] .slateboxjs-birdseye-zoom-controls button{background:var(--sb-offset,#2c4338)!important}
+#slateCanvas[data-sb-canvas=dark] .slatebox-zoom-slider{box-shadow:0 2px 12px rgb(0 0 0 / 35%)}
 /* From a tablet up the zoom controls sit beside the add button, centred on it, not under it. */
 @media(min-width:600px){#slateCanvas .slatebox-zoom-slider{right:76px!important;bottom:21px!important}}
 /* A note drawn with no fill (a text note) stays clear while it is presented: the presenter's highlight sets every

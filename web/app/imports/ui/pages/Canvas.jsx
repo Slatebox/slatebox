@@ -61,6 +61,7 @@ import initAIConversation from '../../api/common/initAIConversation'
 import { sheetBackAfterDrop, watchNoteDrag } from '../../api/common/sheet-drag.mjs'
 import KeepNativeSlate from '../components/KeepNativeSlate'
 import useCanvasTheme from '../common/useCanvasTheme'
+import { withNativeInk } from '../common/canvasTheme.mjs'
 // Ask Slatebox loads when the page is idle (or when it opens first): a page that never opens it never waits for it.
 const loadNativeConversation = () => import('../components/NativeCanvasConversation')
 const NativeCanvasConversation = React.lazy(loadNativeConversation)
@@ -473,7 +474,7 @@ export default function Canvas() {
           )
           if (!slate.current.savingTemplateImage) {
             slate.current.savingTemplateImage = true
-            slate.current.png({ base64: true }, async (base64) => {
+            withNativeInk(() => slate.current.png({ base64: true }, async (base64) => {
               const urlDetails = await Meteor.callAsync(
                 CONSTANTS.methods.utils.getCloudLink,
                 slate?.current?.options.id,
@@ -496,7 +497,7 @@ export default function Canvas() {
                 guestCollaboratorId: collaborator.current?.instanceId,
               })
               slate.current.savingTemplateImage = false
-            })
+            }))
           }
         }
       },
@@ -738,7 +739,7 @@ export default function Canvas() {
     // for outside access
     window.slate = slate.current
     window.slate.pngLinkSync = async ({ slateId }) => {
-      const base64 = await window.slate.pngSync({ base64: true })
+      const base64 = await withNativeInk(() => window.slate.pngSync({ base64: true }))
       const res = await Meteor.callAsync(
         CONSTANTS.methods.utils.getCloudLink,
         slateId,
@@ -1430,7 +1431,11 @@ export default function Canvas() {
           )}
           <SlateOutputDialog
             onExport={(type, opts, cb) => {
-              slate.current[type](opts, cb)
+              const s = slate.current
+              // A copy holds the slate's own colours, not the ink lifted for the dark canvas. The SVG export is
+              // the engine's (v2), which hands back the SVG text; the dialog reads it as { svg }.
+              if (type === 'svg') withNativeInk(() => (s.v2 ?? s).svg(opts, (svg) => cb?.(typeof svg === 'string' ? { svg } : svg)))
+              else withNativeInk(() => s[type](opts, cb))
             }}
             getOrientation={() => slate.current.getOrientation()}
             slate={slate.current}

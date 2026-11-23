@@ -4,6 +4,7 @@ import {
   findPresentationBackground,
   resolvePresentationViewport,
 } from './presentationRuntime.mjs'
+import { withNativeInk } from '../../common/canvasTheme.mjs'
 
 const pause = (ms) => new Promise((resolve) => { setTimeout(resolve, ms) })
 
@@ -30,7 +31,9 @@ async function whenDrawn(slate, nodeIds) {
  */
 export default async function prepareSlateSurface(slate, { drawn = [] } = {}) {
   await whenDrawn(slate, drawn)
-  const exported = await exportPresentationSvg(slate, { skipOptimize: true, drawBorder: true, deferAnimations: true })
+  // The surface (and a published presentation's picture) holds the slate's own colours, not the
+  // ink lifted for the dark canvas: the export's clone is made inside withNativeInk.
+  const exported = await withNativeInk(() => exportPresentationSvg(slate, { skipOptimize: true, drawBorder: true, deferAnimations: true }))
   const { svg: rawSvg, orient } = exported
   if (!rawSvg || !orient) throw new Error('The slate could not be drawn for presenting.')
 

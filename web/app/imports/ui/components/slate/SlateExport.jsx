@@ -146,7 +146,16 @@ export default function SlateExport({ onExport }) {
       }
       case 0:
       default: {
-        onExport('png')
+        // The picture comes back as a data URL; save it under the slate's name.
+        onExport('png', {}, (dataUrl) => {
+          if (typeof dataUrl !== 'string' || !dataUrl) return
+          const dl = document.createElement('a')
+          dl.href = dataUrl
+          dl.download = `${(slate?.options.name || 'slate')
+            .replace(/[^a-z0-9]/gi, '_')
+            .toLowerCase()}_${slate?.shareId}.png`
+          dl.click()
+        })
         break
       }
     }

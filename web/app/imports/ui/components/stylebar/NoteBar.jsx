@@ -38,6 +38,7 @@ import { BarButton, Pop, Sheet, Choices, useRoving, focusInto } from './parts'
 import { ColourPanel, CustomColour, useSlateColours } from './ColourPanel'
 import { MoreRows, Back, FontPanel, PicturePanel, EffectsPanel, LinkPanel, OrderPanel } from './MoreMenu'
 import ShapeMaker, { ShapePreview } from '../shapes/ShapeMaker'
+import { withNativeInk } from '../../common/canvasTheme.mjs'
 
 const ALIGN_X = [
   { key: 'left', name: 'Left', icon: <FormatAlignLeftIcon /> },
@@ -242,13 +243,14 @@ export default function NoteBar({
     const done = (what) => setMessage({ visible: true, text: `${several ? 'These notes' : 'This note'} ${what} copied to the clipboard.`, severity: 'info', autoHide: 6000 })
     const failed = (err) => setMessage({ visible: true, text: `Could not copy to the clipboard: ${err?.message ?? err}`, severity: 'error', autoHide: 8000 })
     if (kind === 'png') {
-      v2.png({ nodes: ids, noBackground: true, asBinary: true }, (blob) => {
+      // The picture holds the note's own colours, not the ink lifted for the dark canvas.
+      withNativeInk(() => v2.png({ nodes: ids, noBackground: true, asBinary: true }, (blob) => {
         navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(() => done('as a picture was'), failed)
-      })
+      }))
     } else {
-      v2.svg({ nodes: ids, noBackground: true }, (res) => {
+      withNativeInk(() => v2.svg({ nodes: ids, noBackground: true }, (res) => {
         navigator.clipboard.writeText(typeof res === 'string' ? res : res?.svg ?? '').then(() => done('as SVG was'), failed)
-      })
+      }))
     }
   }
 

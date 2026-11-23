@@ -4,8 +4,9 @@
 // A slate whose background nobody chose (white: every slate is made with it) follows the app's
 // mode: white in light mode, a deep green a step below the dark chrome in dark mode. A slate with
 // its own colour, gradient or picture keeps it in both modes. Nothing here is saved: the dark
-// canvas, and ink lifted so it reads on it, are how a slate is shown, not what it holds, so
-// exports, thumbnails made on the server and other people's screens are unchanged.
+// canvas, and ink lifted so it reads on it, are how a slate is shown, not what it holds. Every
+// copy of the live drawing (exports, a copied picture, a template's picture, a presentation's
+// surface) is made inside withNativeInk, so it holds the slate's own colours.
 
 export const CANVAS = Object.freeze({
   light: Object.freeze({ background: '#ffffff', ink: '#1d2b2a', line: '#333333' }),
@@ -27,9 +28,19 @@ export const BOARD_INK = Object.freeze({
     '--slatebox-board-accept': '#6fd0a4',
     '--slatebox-board-refuse': '#ff9a62',
     '--slatebox-board-bar': '#7fb3d3',
-    '--slatebox-board-track': '#2c3f35',
+    // Below the canvas, not above it: a plan's weekends stay the muted columns, as in light mode,
+    // and a meter's empty track reads as a groove.
+    '--slatebox-board-track': '#0a120e',
     '--slatebox-board-launch': '#c79be4',
   }),
+})
+
+/**
+ * A board's white card (a plan's task bar) on the dark canvas: a raised surface, a step lighter than
+ * the lanes it sits on (as the white bar is on the light canvas's pastel lanes), and its edge.
+ */
+export const BOARD_CARD = Object.freeze({
+  dark: Object.freeze({ fill: '#3a4f44', edge: '#9db3a4' }),
 })
 
 const NAMED = { white: '#ffffff', black: '#000000' }
@@ -175,6 +186,40 @@ function unpaintStale(root, touched) {
   })
 }
 
+/**
+ * Run `fn` with every painted ink under `root` taken off, then put it back exactly as it was,
+ * before the browser draws again. For anything that copies the live drawing (a PNG or SVG export,
+ * a copied picture, a template's picture, a presentation's surface): the engine clones the canvas
+ * synchronously when an export starts, so the copy holds the slate's own colours, never the ink
+ * lifted for the dark canvas. Returns what `fn` returns (a promise too; the clone is already made).
+ */
+export function withNativeInk(fn, root = globalThis.document) {
+  if (!root?.querySelectorAll) return fn()
+  const saved = [...root.querySelectorAll(`[${MARK}]`)].map((el) => (
+    [el, el.getAttribute('style'), el.getAttribute(MARK), el.getAttribute('data-sb-ink-color')]
+  ))
+  if (!saved.length) return fn()
+  unpaintStale(root, new Map())
+  try {
+    return fn()
+  } finally {
+    saved.forEach(([el, style, mark, color]) => {
+      if (style == null) el.removeAttribute('style')
+      else el.setAttribute('style', style)
+      el.setAttribute(MARK, mark)
+      if (color == null) el.removeAttribute('data-sb-ink-color')
+      else el.setAttribute('data-sb-ink-color', color)
+    })
+  }
+}
+
+/** A board's card drawn on white paper (a launch plan's task bar): its fill is opaque and near white. */
+function isBoardPaper(group, path) {
+  if (!(group.getAttribute('data-node-id') || '').startsWith('card-')) return false
+  const fill = parseColor(path.getAttribute('fill'))
+  return Boolean(fill && fill.a === 1 && luminance(fill) > 0.9)
+}
+
 /** How much of a note's own fill covers the canvas behind it (0: clear, 1: solid), and its colour. */
 function noteBackdrop(path, view) {
   if (!path) return { alpha: 0, color: null }
@@ -205,8 +250,18 @@ export function inkCanvas(root, scheme) {
       return
     }
     if (!bg) return
+    // A board's white card (a plan's task bar) would be the brightest thing on the dark canvas: it
+    // takes the dark card surface, its edge the line ink unless it is coloured (a critical path).
+    // Judged on the colour the engine drew, so the next pass paints it the same.
+    const paper = Boolean(path && isBoardPaper(group, path))
+    if (paper) {
+      paint(path, 'fill', BOARD_CARD.dark.fill, touched)
+      const edge = liftInk(path.getAttribute('stroke'), BOARD_CARD.dark.fill, 3, BOARD_CARD.dark.edge)
+      if (edge) paint(path, 'stroke', edge, touched)
+    }
     const { alpha, color } = noteBackdrop(path, view)
-    if (alpha >= 0.99) return
+    // Words on a solid note are judged against it and left alone; a card shown dark lifts them.
+    if (alpha >= 0.99 && !paper) return
     const backdrop = color ? mix(color, bg, alpha) : parseColor(bg)
     texts.forEach((t) => {
       const lifted = liftInk(t.getAttribute('fill'), backdrop, 4.5)

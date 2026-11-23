@@ -8,8 +8,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import {
-  CANVAS, DEFAULT_NOTE, LEGACY_DEFAULT_NOTE, BOARD_INK, parseColor, contrast, followsTheme, canvasMode, liftInk, mix, toHex, resolveMode,
+  CANVAS, DEFAULT_NOTE, LEGACY_DEFAULT_NOTE, BOARD_INK, BOARD_CARD, parseColor, contrast, followsTheme, canvasMode, liftInk, mix, toHex, resolveMode,
+  inkCanvas, withNativeInk,
 } from '../web/app/imports/ui/common/canvasTheme.mjs'
+import { JSDOM } from 'jsdom'
 
 const app = (path) => readFileSync(new URL('../web/app/' + path, import.meta.url), 'utf8')
 const ui = (path) => app('imports/ui/' + path)
@@ -69,8 +71,19 @@ test('the dark canvas sits a step below the dark chrome and every ink on it read
   // The board's own ink (axis labels, grid, bars) as CSS custom properties the engine reads.
   for (const [name, color] of Object.entries(BOARD_INK.dark)) {
     assert.match(name, /^--slatebox-board-/)
-    const min = /grid|track|week/.test(name) ? 1.4 : name === '--slatebox-board-ink' ? 7 : 3
+    if (name === '--slatebox-board-track') continue
+    const min = /grid|week/.test(name) ? 1.4 : name === '--slatebox-board-ink' ? 7 : 3
     assert.ok(contrast(color, bg) >= min, `${name} ${color} on the dark canvas: ${contrast(color, bg).toFixed(2)}`)
+  }
+  // The track (a plan's weekends, at 70%, over its lanes) sits below the canvas, as weekends are the muted columns
+  // in light mode, and the band still reads against every lane it crosses (each lane its pastel at 18%).
+  const track = BOARD_INK.dark['--slatebox-board-track']
+  const darkness = (c) => contrast(c, '#000000')
+  assert.ok(darkness(track) < darkness(bg), `${track} is darker than the canvas`)
+  for (const pastel of ['#d5e9e3', '#fbdfac', '#dedef4', '#dcebf3', '#efd7dc']) {
+    const lane = mix(pastel, bg, 0.18)
+    const band = mix(track, lane, 0.7)
+    assert.ok(darkness(band) < darkness(lane) && contrast(band, lane) >= 1.4, `weekend on ${pastel}: ${contrast(band, lane).toFixed(2)}`)
   }
   assert.deepEqual(Object.keys(BOARD_INK.dark).sort(), ['--slatebox-board-accept', '--slatebox-board-bar', '--slatebox-board-grid',
     '--slatebox-board-ink', '--slatebox-board-launch', '--slatebox-board-refuse', '--slatebox-board-track', '--slatebox-board-week'])
@@ -136,9 +149,82 @@ test('the dark canvas tokens reach the minimap, the zoom controls, the board and
   // The board's dark ink is set on the canvas from BOARD_INK, one list for the code and the page.
   assert.match(ui('common/canvasTheme.mjs'), /\{ '--sb-canvas-bg': CANVAS\.dark\.background, \.\.\.BOARD_INK\.dark \}/)
   assert.doesNotMatch(css, /--slatebox-board-ink:/)
-  assert.match(css, /\[data-sb-canvas=dark\] \.slateboxjs-birdseye\{/)
-  assert.match(css, /\[data-sb-canvas=dark\] \.slateboxjs-birdseye-zoom-controls/)
-  assert.match(css, /\[data-sb-canvas=dark\] \.slatebox-zoom-slider\{/)
+  // The dark minimap rules carry the canvas's id: the #slateCanvas base rules would outrank them otherwise.
+  assert.match(css, /#slateCanvas\[data-sb-canvas=dark\] \.slateboxjs-birdseye\{/)
+  assert.match(css, /#slateCanvas\[data-sb-canvas=dark\] \.slateboxjs-birdseye > svg > rect:first-child\{fill:var\(--sb-canvas-bg\)\}/)
+  assert.match(css, /#slateCanvas\[data-sb-mode=dark\] \.slateboxjs-birdseye-viewport\{[^}]*stroke:#f2ce8b/)
+  assert.match(css, /#slateCanvas\[data-sb-canvas=dark\] \.slateboxjs-birdseye-zoom-controls/)
+  assert.match(css, /#slateCanvas\[data-sb-canvas=dark\] \.slatebox-zoom-slider\{/)
+  assert.doesNotMatch(css, /^\[data-sb-(canvas|mode)=dark\] \.slate(boxjs-birdseye|box-zoom)/m)
   // Lane columns: their own pastel at about 18%, so a board reads as lanes on the dark canvas, not white slabs.
   assert.match(css, /\[data-sb-canvas=dark\] g\[data-node-id\^="column-"\] \[data-node-background-path\]\{fill-opacity:\.18/)
+})
+
+const dom = (body) => new JSDOM(`<!doctype html><body><div id="slateCanvas">${body}</div></body>`).window.document
+
+test('a copy of the drawing holds the slate\'s own colours, never the ink lifted for the dark canvas', () => {
+  const doc = dom(`<svg><g data-node-id="t"><path data-node-background-path fill="#ffffff" opacity="0"></path>
+    <text fill="#000000">A text note</text></g><path data-connection-id="l" stroke="#333333"></path></svg>`)
+  const canvas = doc.getElementById('slateCanvas')
+  inkCanvas(canvas, 'dark')
+  const text = canvas.querySelector('text'); const line = canvas.querySelector('[data-connection-id]')
+  assert.equal(text.style.getPropertyValue('fill'), CANVAS.dark.ink)
+  assert.equal(line.style.getPropertyValue('stroke'), CANVAS.dark.line)
+  const before = canvas.innerHTML
+  // The engine clones the live canvas synchronously when an export starts.
+  const copy = withNativeInk(() => canvas.querySelector('svg').cloneNode(true).outerHTML, doc)
+  assert.doesNotMatch(copy, /eef1e8|a9bcab|data-sb-ink/i)
+  assert.match(copy, /fill="#000000"/)
+  // And the canvas is shown as it was, at once.
+  assert.equal(canvas.innerHTML, before)
+  // A promise comes back as it is (the clone is already made).
+  const p = Promise.resolve(1)
+  assert.equal(withNativeInk(() => p, doc), p)
+  // Nothing painted: the call simply runs.
+  assert.equal(withNativeInk(() => 'ok', dom('')), 'ok')
+})
+
+test('every copy of the live drawing is made inside withNativeInk', () => {
+  const canvas = ui('pages/Canvas.jsx')
+  assert.match(canvas, /withNativeInk\(\(\) => \(s\.v2 \?\? s\)\.svg\(opts, /)
+  assert.match(canvas, /withNativeInk\(\(\) => s\[type\]\(opts, cb\)\)/)
+  // Download PNG saves the picture (it used to ask for one and drop it).
+  assert.match(ui('components/slate/SlateExport.jsx'), /onExport\('png', \{\}, \(dataUrl\) => \{/)
+  assert.match(canvas, /withNativeInk\(\(\) => slate\.current\.png\(\{ base64: true \}/)
+  assert.match(canvas, /withNativeInk\(\(\) => window\.slate\.pngSync\(/)
+  const bar = ui('components/stylebar/NoteBar.jsx')
+  assert.match(bar, /withNativeInk\(\(\) => v2\.png\(/)
+  assert.match(bar, /withNativeInk\(\(\) => v2\.svg\(/)
+  assert.match(ui('components/presentations/prepareSlateSurface.js'), /await withNativeInk\(\(\) => exportPresentationSvg\(/)
+})
+
+test('a plan\'s white task bars take the dark card surface; its weekends stay the muted columns', () => {
+  const doc = dom(`<svg><g data-node-id="card-design"><path data-node-background-path fill="#fffdf6" stroke="#667872"></path>
+    <text fill="#1d2b2a">Design · 4d</text></g>
+    <g data-node-id="card-late"><path data-node-background-path fill="#fde3d7" stroke="#c2410c"></path><text fill="#1d2b2a">Late</text></g>
+    <g data-node-id="lane-product"><path data-node-background-path fill="#ffffff"></path><text fill="#1d2b2a">Product</text></g></svg>`)
+  const canvas = doc.getElementById('slateCanvas')
+  inkCanvas(canvas, 'dark')
+  const bar = canvas.querySelector('[data-node-id="card-design"] path')
+  assert.equal(bar.style.getPropertyValue('fill'), BOARD_CARD.dark.fill)
+  assert.ok(contrast(bar.style.getPropertyValue('stroke'), BOARD_CARD.dark.fill) >= 3)
+  const words = canvas.querySelector('[data-node-id="card-design"] text').style.getPropertyValue('fill')
+  assert.ok(contrast(words, BOARD_CARD.dark.fill) >= 4.5, words)
+  // Painted the same on the next pass (judged on the colour the engine drew), and gone in light mode.
+  inkCanvas(canvas, 'dark')
+  assert.equal(bar.style.getPropertyValue('fill'), BOARD_CARD.dark.fill)
+  // A late bar keeps its warning colour; a note that is not a card keeps its own white.
+  assert.equal(canvas.querySelector('[data-node-id="card-late"] path').style.getPropertyValue('fill'), '')
+  assert.equal(canvas.querySelector('[data-node-id="lane-product"] path').style.getPropertyValue('fill'), '')
+  inkCanvas(canvas, 'light')
+  assert.equal(bar.style.getPropertyValue('fill'), '')
+  assert.equal(canvas.querySelectorAll('[data-sb-ink]').length, 0)
+  // The bar stands off the canvas, and the weekend band (the track at 70%) is darker than the canvas.
+  assert.ok(contrast(BOARD_CARD.dark.fill, CANVAS.dark.background) > 1.5)
+  for (const pastel of ['#d5e9e3', '#fbdfac', '#dedef4']) {
+    const lane = mix(pastel, CANVAS.dark.background, 0.18)
+    assert.ok(contrast(BOARD_CARD.dark.fill, '#000000') > contrast(lane, '#000000'), `a bar is raised above the ${pastel} lane`)
+  }
+  const weekend = mix(BOARD_INK.dark['--slatebox-board-track'], CANVAS.dark.background, 0.7)
+  assert.ok(contrast(weekend, '#000000') < contrast(CANVAS.dark.background, '#000000'), toHex(weekend))
 })
