@@ -181,7 +181,7 @@ test("help and describe work without credentials; bad usage fails locally and se
   const one = await run(["describe", "--method", "slates.get"], { credential: "" });
   // Restated (wave 2, P07): slates.get also takes the note selection and paging inputs, and
   // answers the flat slate read.
-  assert.match(one.out, /function get\(input: \{\n[^}]*shareId: string;\n\s+include\?: "full";\n[^}]*\}\): Promise<SlateRead>;/);
+  assert.match(one.out, /function get\(input: \{\n[^}]*shareId: string;\n\s+include\?: "full" \| "suggestions";\n[^}]*\}\): Promise<SlateRead>;/);
   for (const args of [["exec"], ["exec", "a.js", "-e", "1"], ["read", "board"], ["exec", "-e", "1", "--method", "x"],
     ["exec", "-e", "1", "--confirm", "nope"], ["exec", "-e", "1", "--idempotency-key", "has space"],
     ["exec", "-e", "1", "--base-url", "https://name:" + token + "@example.test"], ["exec", "missing-file.js"], ["exec", "-e", "1", "--dry-run"]]) {

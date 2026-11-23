@@ -39,7 +39,8 @@ import {
 } from '../../jotai/atoms'
 
 import HuddleProperties from '../HuddleProperties'
-import { AgentChips, useAgentPresence } from '../AgentPresenceListener'
+import { AgentChips, useAgentPresence, useAgentSuggestions } from '../AgentPresenceListener'
+import { agentsOnRoster } from '../../../api/common/agent-roster.mjs'
 
 
 const theme = createTheme()
@@ -78,6 +79,8 @@ export default function CollaborationHuddle({
   const currentCollaborators = useAtomValue(collaborationUsers)
   // Agents saving to this slate: their own chips, never Huddle participants.
   const agents = useAgentPresence(slate?.shareId).shown
+  const { actions: agentActions } = useAgentSuggestions(slate?.shareId)
+  const agentsShown = agentsOnRoster(agents, agentActions).length
   const callObject = useDaily() // Meteor.callObject // useDaily() //useAtom(callObj)
 
   const [isListening, setListening] = useAtom(listeningForTranscriptionMessages)
@@ -267,7 +270,7 @@ export default function CollaborationHuddle({
         <Alert severity="warning" onClose={() => { setJoinError(''); setJoinAction(null) }}
           action={joinAction && <Button color="inherit" size="small" onClick={() => { setJoinError(''); setJoinAction(null); joinAction.run() }}>{joinAction.label}</Button>}>{joinError}</Alert>
       </Snackbar>
-      {(currentCollaborators.length > 0 || isHuddleEnabled || agents.length > 0) && (
+      {(currentCollaborators.length > 0 || isHuddleEnabled || agentsShown > 0) && (
         <>
           <Grid
             container
@@ -301,7 +304,7 @@ export default function CollaborationHuddle({
                   <Chip key={person.key} label={person.userName}
                     avatar={<Avatar name={person.key === 'you' ? 'You' : person.userName} colour={person.color} size={24} />} />
                 ))}
-            <AgentChips records={agents} />
+            <AgentChips records={agents} shareId={slate?.shareId} />
           </Grid>
           <DailyAudio onPlayFailed={handlePlayFailed} />
           <HuddleProperties

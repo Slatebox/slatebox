@@ -31,9 +31,33 @@ export const PALETTE_SIZE = 6
 export const SLATEBOX_AGENT_LABEL = 'Slatebox agent'
 // publicId: the id a screen knows the record by (an HMAC of the record's own id), so two runs of
 // one token on one slate are two pointers, and neither id can be followed back to the token.
+// point, say and sayAt: where the pointer goes before its targets and the short line it says
+// there (choreography). origin, via, invitedBy, iconUrl: where the agent comes from. agentId: the
+// agent across its runs on this slate (its suggestions, activity and undo are filed under it).
 export const PUBLIC_FIELDS = Object.freeze([
   'slateId', 'agentKey', 'label', 'initial', 'colorIndex', 'targets', 'plan', 'message', 'status', 'updatedAt', 'endedAt', 'expiresAt',
+  'point', 'say', 'sayAt', 'origin', 'via', 'invitedBy', 'iconUrl', 'agentId',
 ])
+
+// A short line said over the pointer ("Suggesting 3 notes"): plain, one line, 60 characters.
+export const SAY_CHARS = 60
+// An invited agent's icon: an https: address or a small raster data URL, never anything that runs.
+export const ICON_URL_CHARS = 2048
+export function safeIconUrl(raw) {
+  if (typeof raw !== 'string' || raw.length > 64 * 1024) return null
+  if (/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(raw)) return raw
+  if (raw.length > ICON_URL_CHARS) return null
+  try {
+    const url = new URL(raw)
+    return url.protocol === 'https:' && !url.username && !url.password ? url.href : null
+  } catch {
+    return null
+  }
+}
+const finitePoint = (point) =>
+  point && Number.isFinite(Number(point.x)) && Number.isFinite(Number(point.y)) && Math.abs(point.x) < 1e7 && Math.abs(point.y) < 1e7
+    ? { x: Math.round(Number(point.x)), y: Math.round(Number(point.y)) }
+    : null
 
 import { agentLabel, cleanStepText, firstNameOf, initialOf, sameName, sanitizeClientName } from '../../imports/api/common/agent-label.mjs'
 
@@ -84,11 +108,31 @@ export function createAgentPresence({
   // Coalescing, per record: when it was last written, and the latest write still waiting.
   const pacing = new Map()
 
+  // Who an agent is on this slate, as everyone there sees it: its name, colour and where it comes
+  // from. agentId stays the same across the agent's runs on this slate (never across slates).
   async function identity(principal, slate) {
+    const who = await name(principal, slate)
+    return { ...who, agentId: who.agentKey }
+  }
+
+  async function name(principal, slate) {
+    // An outside agent a person invited (Slatebox Cloud builds this principal): the name the person
+    // gave it, never the server's own words alone, then "added by" the person who invited it.
+    if (principal.connector) {
+      const [user] = await Promise.all([findUser(principal.userId).catch(() => null)])
+      const label = sanitizeClientName(principal.connector.name) || 'Invited agent'
+      const agentKey = agentKeyFor(await keyOf(), 'connector:' + principal.connector.id, slate._id)
+      return {
+        agentKey, label, initial: label.charAt(0).toUpperCase(),
+        colorIndex: Number.parseInt(agentKey.slice(0, 4), 16) % PALETTE_SIZE,
+        origin: 'invited', invitedBy: firstNameOf(user), via: null,
+        iconUrl: safeIconUrl(principal.connector.iconUrl),
+      }
+    }
     // The Slatebox agent (server/agents/teammate.mjs) is named by the server alone: no client can
     // wear the name (sanitizeClientName refuses "Slatebox"), and it keeps one colour on every slate.
     if (principal.builtin === 'slatebox')
-      return { agentKey: agentKeyFor(await keyOf(), principal.tokenId, slate._id), label: SLATEBOX_AGENT_LABEL, initial: 'S', colorIndex: 0 }
+      return { agentKey: agentKeyFor(await keyOf(), principal.tokenId, slate._id), label: SLATEBOX_AGENT_LABEL, initial: 'S', colorIndex: 0, origin: 'slatebox', via: null, invitedBy: null, iconUrl: null }
     const [user, token] = await Promise.all([
       findUser(principal.userId).catch(() => null),
       principal.tokenId && !String(principal.tokenId).startsWith('session:') ? findToken(principal.tokenId).catch(() => null) : null,
@@ -107,10 +151,15 @@ export function createAgentPresence({
       label: agentLabel(first, token?.lastClient),
       initial: first.charAt(0).toUpperCase(),
       colorIndex: Number.parseInt(agentKey.slice(0, 4), 16) % PALETTE_SIZE,
+      // A visiting agent: its own MCP client (Claude, ChatGPT, a command line) calling Slatebox.
+      origin: 'visiting',
+      via: sanitizeClientName(token?.lastClient) || null,
+      invitedBy: null,
+      iconUrl: null,
     }
   }
 
-  const isAgent = (principal) => principal?.kind === 'agent' && principal.tokenId && principal.userId
+  const isAgent = (principal) => principal?.kind === 'agent' && (principal.tokenId || principal.connector) && principal.userId
 
   // A run that ended stays ended: a call of it still running when it ended (a script that timed
   // out lets a pending save finish) saves its change, but its pointer does not come back. Null then.
@@ -181,12 +230,17 @@ export function createAgentPresence({
    * After a saved write: the pointer goes to what it touched. targets: note ids, or card-<id>
    * and lane-<id>. message: the save's plan.message, shown when the run sent no plan.
    */
-  async function saved(principal, slate, { targets = [], message = '' } = {}) {
+  async function saved(principal, slate, { targets = [], message = '', point = null, say = '' } = {}) {
     if (!isAgent(principal) || !slate?._id) return
     const _id = recordId(runOf(principal), slate._id)
+    const said = cleanStepText(say).slice(0, SAY_CHARS)
     const write = {
       targets: [...new Set(targets.filter((id) => typeof id === 'string' && id))].slice(0, PRESENCE_LIMITS.targets),
       message: cleanStepText(message),
+      // The spot the pointer goes to first (where a suggestion lands), and what it says there.
+      point: finitePoint(point),
+      say: said || null,
+      sayAt: said ? new Date(now()) : null,
     }
     const at = now()
     forget(at)
@@ -294,7 +348,8 @@ export function createAgentPresence({
   }
 
   // pacingSize: how many runs are paced now (for tests).
-  return { saved, plan, step, end, flush, ensureIndexes, pacingSize: () => pacing.size }
+  // identify: who an agent is on a slate (its suggestions are filed under the same name).
+  return { saved, plan, step, end, flush, ensureIndexes, identify: identity, pacingSize: () => pacing.size }
 }
 
 /**
@@ -302,11 +357,14 @@ export function createAgentPresence({
  * targets filtered to ids on it. resolve(shareId, userId) answers the slate a reader may read
  * (the check creativeSlates.state makes) or null; list(slateId) the stored records.
  */
-export function createPresenceReader({ resolve, list, now = Date.now }) {
+export function createPresenceReader({ resolve, list, ghosts = async () => [], now = Date.now }) {
   return async function read(shareId, userId) {
     const slate = await resolve(shareId, userId)
     if (!slate?._id) return null
     const ids = slateTargetIds(slate)
+    // An agent's pointer may point at its own suggestion before anyone keeps it: the ghost of a
+    // note still waiting on this slate (ghost-<id>, as the engine names it).
+    for (const id of await ghosts(slate._id)) ids.add(id)
     const at = now()
     const docs = await list(slate._id)
     return {

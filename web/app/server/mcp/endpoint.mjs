@@ -58,13 +58,21 @@ function validDescribe(args) {
   return args
 }
 
-// The name an MCP client reports when it starts (initialize's clientInfo.name). The endpoint is
-// stateless, so it is kept on the token (lastClient) and shown after "{name}'s agent ·".
+// The name an MCP client reports: initialize's clientInfo.name, or, from clients on the
+// 2026-07-28 protocol that send it with every request instead, params._meta's
+// "io.modelcontextprotocol/clientInfo". The endpoint is stateless, so it is kept on the token
+// (lastClient) and shown after "{name}'s agent ·".
+export const CLIENT_INFO_META = 'io.modelcontextprotocol/clientInfo'
 export function reportedClientName(body) {
-  const messages = Array.isArray(body) ? body : [body]
-  const init = messages.find((message) => message && message.method === 'initialize')
-  const name = init?.params?.clientInfo?.name
-  return typeof name === 'string' ? name : null
+  const messages = (Array.isArray(body) ? body : [body]).filter((message) => message && typeof message === 'object')
+  const init = messages.find((message) => message.method === 'initialize')
+  const fromInit = init?.params?.clientInfo?.name
+  if (typeof fromInit === 'string') return fromInit
+  for (const message of messages) {
+    const name = message.params?._meta?.[CLIENT_INFO_META]?.name
+    if (typeof name === 'string') return name
+  }
+  return null
 }
 
 // The script did not run: say why, in the API's words.

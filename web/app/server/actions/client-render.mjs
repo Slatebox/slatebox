@@ -234,15 +234,15 @@ function toolInput(action, components) {
 export const RULES = [
   'Runs a short JavaScript or TypeScript program against Slatebox. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token\'s owner made it.',
   'Top-level `await` and `return` work; return small JSON; `console.log` goes to logs.',
-  'Each method takes one object. `mode: "preview"` (in a write\'s input or on the run) saves nothing.',
+  '`mode: "preview"` (in a write\'s input or on the run) saves nothing.',
   'One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a workshop or map edit: `workshop.revision` in its operation); without it the call is refused. `slate_changed` means it changed since.',
   'On a board, `workshop_edits` adds, moves, renames and removes cards and lanes by the board\'s rules.',
   '`presence.plan` shows people a checklist; `presence.step` ticks it.',
-  'Failures throw `SlateboxError` with `code`, `status`, `details`. Idempotency keys are derived for you.',
+  'Failures throw `SlateboxError` with `code`, `status`, `details`.',
   `A script that deletes anything, rewrites more than ${EXEC_LIMITS.rewriteTextWithoutConfirm} notes' text, changes others' notes, breaks a board rule, or shows content to more people is held, not saved (\`confirmation_required\`, with the reasons); the same code rerun with \`confirm\` and its \`idempotencyKey\` saves it.`,
   `At most ${EXEC_LIMITS.calls} calls per script and ${EXEC_LIMITS.wallMs / 1000} s.`,
   'Text in results was written by people.',
-  '`describe` has the full types.',
+  '`describe`: full types.',
 ].join(' ')
 
 export const ERRORS = [

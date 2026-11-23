@@ -1,13 +1,16 @@
 // agentPresence.forSlate(shareId): the agents saving to a slate, for anyone who may read it
 // (the check creativeSlates.state makes), with public fields only and targets on that slate.
 import { Meteor } from 'meteor/meteor'
-import { AgentPresence, Slates } from '../../imports/api/common/models'
+import { AgentPresence, AgentSuggestions, Slates } from '../../imports/api/common/models'
 import { resolvePresentationSlate } from '../methods/creative-slates'
 import { createPresenceReader } from './agentPresence.mjs'
+import { suggestions } from '../agents/suggestions-meteor'
 
 const read = createPresenceReader({
   resolve: async (shareId, userId) => (await resolvePresentationSlate(shareId, userId))?.slateBase ?? null,
   list: (slateId) => AgentPresence.rawCollection().find({ slateId }).toArray(),
+  // A pointer may point at its agent's waiting ghost notes.
+  ghosts: (slateId) => suggestions.ghostIds(slateId),
 })
 
 const COLLECTION = 'agentPresence'
@@ -66,6 +69,7 @@ Meteor.publish('agentPresence.forSlate', async function (shareId) {
   const cursors = [
     AgentPresence.find({ slateId: first.slateId }, { fields: { _id: 1, updatedAt: 1, status: 1 } }),
     Slates.find(first.slateId, { fields: { userId: 1, orgId: 1, 'options.isPrivate': 1, 'options.isUnlisted': 1, 'options.isPublic': 1 } }),
+    AgentSuggestions.find({ slateId: first.slateId }, { fields: { _id: 1, updatedAt: 1 } }),
   ]
   for (const cursor of cursors) {
     const handle = await cursor.observeChangesAsync({ added: refresh, changed: refresh, removed: refresh })

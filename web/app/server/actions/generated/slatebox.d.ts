@@ -651,7 +651,7 @@ declare namespace slatebox.shapes {
 }
 
 declare namespace slatebox.slates {
-  /** Edit a slate. mode "preview" shows the result without saving. Every edit names the revision it was made on: a canvas plan (notes and connections) sends expectedRevision, the revision slates.get returned; a workshop or map plan holds one operation with its own expectedRevision (workshop.revision), and saving it requires an Idempotency-Key. Without it the edit is refused with 400 invalid_request naming expectedRevision. On a workshop, workshop_edits makes 1 to 50 edits (add, move, rename, remove cards and lanes) by the rules people meet; a refusal answers 409 edit_refused with the sentence a person sees, and a move the rules refuse answers 409 move_refused. A saved workshop edit answers with a receiptId that undo_workshop_edit takes. A slate holds up to 8 boards: a workshop operation names its board (boardId, from slates.get boards[]); on a slate of several boards one that names none is refused with 400 board_required listing them. add_component adds a library component (components.list) beside the slate's notes and boards and answers with its boardId; it carries its own expectedRevision (the slate revision). @scope slates:write @modes save|preview @destructive */
+  /** Edit a slate. mode "preview" shows the result without saving. Every edit names the revision it was made on: a canvas plan (notes and connections) sends expectedRevision, the revision slates.get returned; a workshop or map plan holds one operation with its own expectedRevision (workshop.revision), and saving it requires an Idempotency-Key. Without it the edit is refused with 400 invalid_request naming expectedRevision. On a workshop, workshop_edits makes 1 to 50 edits (add, move, rename, remove cards and lanes) by the rules people meet; a refusal answers 409 edit_refused with the sentence a person sees, and a move the rules refuse answers 409 move_refused. A saved workshop edit answers with a receiptId that undo_workshop_edit takes. A slate holds up to 8 boards: a workshop operation names its board (boardId, from slates.get boards[]); on a slate of several boards one that names none is refused with 400 board_required listing them. add_component adds a library component (components.list) beside the slate's notes and boards and answers with its boardId; it carries its own expectedRevision (the slate revision). A canvas plan saved by an agent is shown live on the slate as suggestions (outcome "suggested", 202) for people there to keep or discard, unless a person lets that agent edit directly; its new notes' ids work in the next edit. @scope slates:write @modes save|preview @destructive */
   function applyOperations(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
@@ -692,6 +692,10 @@ declare namespace slatebox.slates {
     };
     /** A saved workshop edit: pass it to undo_workshop_edit. */
     receiptId?: string;
+    /** suggested: an agent's canvas edit is shown live on the slate as suggestions for people there to keep or discard; nothing was saved yet (revision is unchanged). Its new notes' ids work in your next edit. saved: the edit is saved. */
+    outcome?: "saved" | "suggested";
+    /** outcome suggested: the suggestion (actionId, items) as list_suggestions gives it. */
+    suggestion?: Record<string, unknown>;
     workshop?: Workshop;
     [key: string]: unknown;
   }) & { mode: "save" | "preview" }>;
@@ -810,11 +814,11 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.slates {
-  /** Read a slate. Read a slate you can open: every note with every key a write sets, its connectors, what you may do here (access), its address, comments, conversation starters and, on a workshop or map, the workshop with its own revision (the one workshop and map edits use) and what it takes in plain words (workshop.can). revision is the slate's save count: send it as expectedRevision with an edit, and the edit is refused only if a note it changes was changed since. Select notes with ids, within, groupId or q (the notes a write naming that text would change) and keys with fields; page with cursor. include=full adds the slate as the engine loads it. A public slate reads without a token. @scope slates:read */
+  /** Read a slate. Read a slate you can open: every note with every key a write sets, its connectors, what you may do here (access), its address, comments, conversation starters and, on a workshop or map, the workshop with its own revision (the one workshop and map edits use) and what it takes in plain words (workshop.can). revision is the slate's save count: send it as expectedRevision with an edit, and the edit is refused only if a note it changes was changed since. Select notes with ids, within, groupId or q (the notes a write naming that text would change) and keys with fields; page with cursor. include=full adds the slate as the engine loads it; include=suggestions adds what agents suggested here (waiting for people to keep or discard, with their ids) and what became of each agent's recent edits. A public slate reads without a token. @scope slates:read */
   function get(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
-    include?: "full";
+    include?: "full" | "suggestions";
     /** Comma-separated note keys to return (id always comes): any key a write sets, and image and comments. */
     fields?: string;
     /** Comma-separated note IDs: only these notes. */
@@ -908,6 +912,31 @@ declare namespace slatebox.slates {
     inviteId: string;
     revoked: true;
     mode?: "save";
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.suggestions {
+  /** Keep/discard/undo. Decide what an agent's work on a slate becomes, as the canvas does. keep or discard: what it suggested, as Keep and Discard on each ghost: name the action (actionId, from your edit or slates.get include=suggestions), optionally some of its items (itemIds); Keep all on an agent's chip decides each of its actions. Keeping saves them as one change (a line brings the new notes at its ends); an item whose note is gone is refused and says why. Discarding saves nothing. undo: one action (actionId) that was kept or saved directly, as Undo in the agent's activity list: only that action, and only what nobody changed since (left[] says what stayed and why), so it never undoes another agent's work or a person's. Needs the edit right on the slate; an agent cannot keep its own suggestions. @scope slates:write @destructive */
+  function decide(input: {
+    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
+    shareId: string;
+    decision: "keep" | "discard" | "undo";
+    /** The action, as list_suggestions gives it (actions[].actionId). (1–64 characters) */
+    actionId: string;
+    /** Only these items of the action. (1–200 items) */
+    itemIds?: string[];
+  }): Promise<({
+    ok: boolean;
+    shareId: string;
+    revision?: number;
+    kept?: Array<Record<string, unknown>>;
+    discarded?: Array<Record<string, unknown>>;
+    refused?: Array<Record<string, unknown>>;
+    /** undo: the items undone. */
+    undone?: string[];
+    /** undo: the items left as they are, each with its reason. */
+    left?: Array<Record<string, unknown>>;
     [key: string]: unknown;
   }) & { mode: "save" }>;
 }
@@ -1483,6 +1512,12 @@ interface SlateRead {
   } | null;
   /** Notes the selection matches, on every page. (at least 0) */
   nodeCount: number;
+  /** include=suggestions: what agents suggested here (each waiting item is a ghost people keep or discard; your own canvas saves land here too) and each agent's recent actions, with the ids decide_suggestions takes. */
+  suggestions?: {
+    paused?: boolean;
+    actions?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  };
   nodes: Array<{
     id: string;
     /** The note's text. */

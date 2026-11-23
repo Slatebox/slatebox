@@ -28,6 +28,8 @@ import { templateCategories } from './bootstrap/template-categories.mjs'
 import AuthManager from '../imports/api/common/AuthManager'
 // agentPresence.forSlate: the agents saving to a slate, for anyone who may read it.
 import './presence/publication'
+// agentSuggestions.forSlate: what agents suggest on a slate, drawn live as ghosts on every screen.
+import './agents/suggestions-publication'
 
 Meteor.publish(CONSTANTS.publications.slateAccess, function () {
   if (this.userId) {

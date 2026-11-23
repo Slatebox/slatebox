@@ -1531,7 +1531,7 @@ export default function Canvas() {
         </>
       )}
       {slate.current && <SlateOperationListener slate={slate.current} revision={loadedRevision.current} />}
-      {slate.current && <AgentPresenceListener slate={slate.current} />}
+      {slate.current && <AgentPresenceListener slate={slate.current} canEdit={!accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly} />}
       {slate.current && !asEmbed && Meteor.userId() && (
         <AgentTasksPanel shareId={slate.current.shareId} canEdit={!accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly && !Meteor.user()?.isAnonymous} />
       )}

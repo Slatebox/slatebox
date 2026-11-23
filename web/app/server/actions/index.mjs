@@ -32,6 +32,7 @@ import slatesList from './slate-list.mjs'
 import slatesDelete from './slate-delete.mjs'
 import commentActions from './comments.mjs'
 import agentTaskActions from './agent-tasks.mjs'
+import agentSuggestionActions from './agent-suggestions.mjs'
 
 export const actions = [
   slatesGet,
@@ -65,6 +66,7 @@ export const actions = [
   slatesDelete,
   ...commentActions,
   ...agentTaskActions,
+  ...agentSuggestionActions,
 ]
 
 export const components = { ...slateComponents }

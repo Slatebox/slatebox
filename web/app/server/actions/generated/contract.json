@@ -24,7 +24,7 @@
     {
       "id": "slates.get",
       "title": "Read a slate",
-      "description": "Read a slate you can open: every note with every key a write sets, its connectors, what you may do here (access), its address, comments, conversation starters and, on a workshop or map, the workshop with its own revision (the one workshop and map edits use) and what it takes in plain words (workshop.can). revision is the slate's save count: send it as expectedRevision with an edit, and the edit is refused only if a note it changes was changed since. Select notes with ids, within, groupId or q (the notes a write naming that text would change) and keys with fields; page with cursor. include=full adds the slate as the engine loads it. A public slate reads without a token.",
+      "description": "Read a slate you can open: every note with every key a write sets, its connectors, what you may do here (access), its address, comments, conversation starters and, on a workshop or map, the workshop with its own revision (the one workshop and map edits use) and what it takes in plain words (workshop.can). revision is the slate's save count: send it as expectedRevision with an edit, and the edit is refused only if a note it changes was changed since. Select notes with ids, within, groupId or q (the notes a write naming that text would change) and keys with fields; page with cursor. include=full adds the slate as the engine loads it; include=suggestions adds what agents suggested here (waiting for people to keep or discard, with their ids) and what became of each agent's recent edits. A public slate reads without a token.",
       "action": "slates.get",
       "toolset": "slates",
       "readOnly": true,
@@ -70,7 +70,8 @@
           "include": {
             "type": "string",
             "enum": [
-              "full"
+              "full",
+              "suggestions"
             ]
           },
           "fields": {
@@ -240,6 +241,21 @@
             "type": "integer",
             "minimum": 0,
             "description": "Notes the selection matches, on every page."
+          },
+          "suggestions": {
+            "type": "object",
+            "description": "include=suggestions: what agents suggested here (each waiting item is a ghost people keep or discard; your own canvas saves land here too) and each agent's recent actions, with the ids decide_suggestions takes.",
+            "properties": {
+              "paused": {
+                "type": "boolean"
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "nodes": {
             "type": "array",
@@ -1931,7 +1947,7 @@
     {
       "id": "slates.applyOperations",
       "title": "Edit a slate",
-      "description": "mode \"preview\" shows the result without saving. Every edit names the revision it was made on: a canvas plan (notes and connections) sends expectedRevision, the revision slates.get returned; a workshop or map plan holds one operation with its own expectedRevision (workshop.revision), and saving it requires an Idempotency-Key. Without it the edit is refused with 400 invalid_request naming expectedRevision. On a workshop, workshop_edits makes 1 to 50 edits (add, move, rename, remove cards and lanes) by the rules people meet; a refusal answers 409 edit_refused with the sentence a person sees, and a move the rules refuse answers 409 move_refused. A saved workshop edit answers with a receiptId that undo_workshop_edit takes. A slate holds up to 8 boards: a workshop operation names its board (boardId, from slates.get boards[]); on a slate of several boards one that names none is refused with 400 board_required listing them. add_component adds a library component (components.list) beside the slate's notes and boards and answers with its boardId; it carries its own expectedRevision (the slate revision).",
+      "description": "mode \"preview\" shows the result without saving. Every edit names the revision it was made on: a canvas plan (notes and connections) sends expectedRevision, the revision slates.get returned; a workshop or map plan holds one operation with its own expectedRevision (workshop.revision), and saving it requires an Idempotency-Key. Without it the edit is refused with 400 invalid_request naming expectedRevision. On a workshop, workshop_edits makes 1 to 50 edits (add, move, rename, remove cards and lanes) by the rules people meet; a refusal answers 409 edit_refused with the sentence a person sees, and a move the rules refuse answers 409 move_refused. A saved workshop edit answers with a receiptId that undo_workshop_edit takes. A slate holds up to 8 boards: a workshop operation names its board (boardId, from slates.get boards[]); on a slate of several boards one that names none is refused with 400 board_required listing them. add_component adds a library component (components.list) beside the slate's notes and boards and answers with its boardId; it carries its own expectedRevision (the slate revision). A canvas plan saved by an agent is shown live on the slate as suggestions (outcome \"suggested\", 202) for people there to keep or discard, unless a person lets that agent edit directly; its new notes' ids work in the next edit.",
       "action": "slates.applyOperations",
       "toolset": "slates",
       "readOnly": false,
@@ -7015,6 +7031,18 @@
             "type": "string",
             "description": "A saved workshop edit: pass it to undo_workshop_edit."
           },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "saved",
+              "suggested"
+            ],
+            "description": "suggested: an agent's canvas edit is shown live on the slate as suggestions for people there to keep or discard; nothing was saved yet (revision is unchanged). Its new notes' ids work in your next edit. saved: the edit is saved."
+          },
+          "suggestion": {
+            "type": "object",
+            "description": "outcome suggested: the suggestion (actionId, items) as list_suggestions gives it."
+          },
           "workshop": {
             "type": "object",
             "properties": {
@@ -7626,7 +7654,7 @@
       "tool": {
         "name": "edit_slate",
         "title": "Edit a slate",
-        "description": "Edit a slate: add, change, connect, lay out or remove notes and lines, and edit boards (cards, lanes, rules, plan weeks, budgets, presentation order; name the board on a slate with several). One call saves atomically; mode \"preview\" shows the result without saving.",
+        "description": "Edit a slate: add, change, connect, lay out or remove notes and lines, and edit boards (cards, lanes, rules, plan weeks, budgets, presentation order; name the board on a slate with several). One call saves atomically; mode \"preview\" shows the result without saving. Your canvas edits appear live as suggestions people on the slate keep or discard.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": true,
@@ -12961,6 +12989,148 @@
         "name": "update_agent_task",
         "title": "Claim, note, hand off or finish an agent task",
         "description": "Claim an open agent task, add to its shared log, hand it to the Slatebox agent or any agent, or complete, fail or cancel it.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "suggestions.decide",
+      "title": "Keep/discard/undo",
+      "description": "Decide what an agent's work on a slate becomes, as the canvas does. keep or discard: what it suggested, as Keep and Discard on each ghost: name the action (actionId, from your edit or slates.get include=suggestions), optionally some of its items (itemIds); Keep all on an agent's chip decides each of its actions. Keeping saves them as one change (a line brings the new notes at its ends); an item whose note is gone is refused and says why. Discarding saves nothing. undo: one action (actionId) that was kept or saved directly, as Undo in the agent's activity list: only that action, and only what nobody changed since (left[] says what stayed and why), so it never undoes another agent's work or a person's. Needs the edit right on the slate; an agent cannot keep its own suggestions.",
+      "action": "suggestions.decide",
+      "toolset": "slates",
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "guest",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "slates:write",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/slates/{shareId}/suggestions/decide",
+        "pathParams": [
+          "shareId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "decision",
+          "actionId",
+          "itemIds"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "shareId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The slate ID from its address: /canvas/<shareId>."
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "keep",
+              "discard",
+              "undo"
+            ]
+          },
+          "actionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The action, as list_suggestions gives it (actions[].actionId)."
+          },
+          "itemIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            "description": "Only these items of the action."
+          }
+        },
+        "required": [
+          "shareId",
+          "decision",
+          "actionId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "shareId": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "kept": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "discarded": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "refused": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "undone": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "undo: the items undone."
+          },
+          "left": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "undo: the items left as they are, each with its reason."
+          }
+        },
+        "required": [
+          "ok",
+          "shareId"
+        ]
+      },
+      "tool": {
+        "name": "decide_suggestions",
+        "title": "Keep, discard or undo agent work",
+        "description": "Keep (save) or discard what an agent suggested on a slate (one action or some of its items), or undo one agent action that was kept or saved directly.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": true,

@@ -510,6 +510,11 @@ return slatebox.agentTasks.update({ shareId: "canvas", taskId: ${JSON.stringify(
   const notYours = await exec(`return slatebox.agentTasks.update({ shareId: "canvas", taskId: ${JSON.stringify(asked.task.id)}, action: "claim" })`);
   assert.deepEqual([notYours.error.status, notYours.error.code], [409, "task_assigned"]);
 
+  // Agent suggestions need the app's suggestion store, which this app runs without (its agents save,
+  // as a self-hosted app before suggestions did): the call is refused in the API's words.
+  const decided = await exec(`return slatebox.suggestions.decide({ shareId: "canvas", decision: "discard", actionId: "a1" })`);
+  assert.deepEqual([decided.error.status, decided.error.code], [501, "not_available"]);
+
   assert.deepEqual([...called].sort(), [...defaultGenerated().methods.keys()].sort(), "every client method was called");
 });
 

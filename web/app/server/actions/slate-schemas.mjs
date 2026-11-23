@@ -262,6 +262,11 @@ export const slateComponents = {
       background: { type: ['object', 'null'], description: 'As update_slate takes it: {color, gradient?}.' },
       bounds: { type: ['object', 'null'], properties: { x: number, y: number, width: number, height: number } },
       nodeCount: { type: 'integer', minimum: 0, description: 'Notes the selection matches, on every page.' },
+      suggestions: {
+        type: 'object',
+        description: 'include=suggestions: what agents suggested here (each waiting item is a ghost people keep or discard; your own canvas saves land here too) and each agent\'s recent actions, with the ids decide_suggestions takes.',
+        properties: { paused: { type: 'boolean' }, actions: { type: 'array', items: { type: 'object' } } },
+      },
       nodes: {
         type: 'array',
         items: {

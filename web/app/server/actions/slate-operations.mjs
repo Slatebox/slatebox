@@ -7,6 +7,7 @@ import { isWorkshopOperation } from '../workshop-operation-api.mjs'
 import { sharedSaveConditions } from '../methods/native-slate-save.mjs'
 import { applyAddComponent, isAddComponentPlan } from './component-add-op.mjs'
 import { runExpiry } from '../../imports/api/common/slate-operation-runs.mjs'
+import { choreography, publicAction, withOwnGhosts } from '../agents/suggestions.mjs'
 
 // Where update_slate's keys are stored: the fields the engine applier writes on
 // the slate's options (slateboxjs/operations SLATE_KEYS). The line colour also
@@ -51,6 +52,12 @@ const result = {
       },
     },
     receiptId: { type: 'string', description: 'A saved workshop edit: pass it to undo_workshop_edit.' },
+    outcome: {
+      type: 'string',
+      enum: ['saved', 'suggested'],
+      description: 'suggested: an agent\'s canvas edit is shown live on the slate as suggestions for people there to keep or discard; nothing was saved yet (revision is unchanged). Its new notes\' ids work in your next edit. saved: the edit is saved.',
+    },
+    suggestion: { type: 'object', description: 'outcome suggested: the suggestion (actionId, items) as list_suggestions gives it.' },
     workshop: ref('Workshop'),
   },
   required: ['ok', 'mode', 'shareId', 'message', 'operations', 'report'],
@@ -99,22 +106,26 @@ async function showAgent(principal, slate, body, deps) {
 // changed after that revision.
 export const EXPECTED_REVISION_REQUIRED =
   'expectedRevision is required: send the revision slates.get returned (GET /api/v1/slates/{shareId}). A workshop or map edit carries it in its plan operation instead.'
-export async function applyToCanvas(principal, input, { deps, mode, now, idempotencyKey, resource: slate }) {
+function applyPlanTo(deps, target, plan, userMessage, requireMatches) {
+  try {
+    // A save refuses an operation that matched nothing (409 no_match); a preview reports it.
+    return deps.applySlateOperationPlanToJSON(target, plan, { userMessage, requireMatches })
+  } catch (error) {
+    // The engine's own refusals (no_match, id_taken, connector_limit, ambiguous_selector)
+    // carry a status, a code and details; the caller reads them as sent.
+    if (error?.code && error?.status)
+      throw problem(error.status, error.code, error.message, { details: error.details })
+    throw problem(400, 'invalid_operation_plan', error.message)
+  }
+}
+
+// attribution: which agent a kept suggestion or an undo came from (on the run every canvas draws).
+// onApplied({ before, after, revision }): told what a save changed (an agent editing directly is filed as one action).
+export async function applyToCanvas(principal, input, { deps, mode, now, idempotencyKey, resource: slate, attribution = null, onApplied = null }) {
   const { plan, userMessage = '', expectedRevision } = input
   if (expectedRevision === undefined)
     throw problem(400, 'invalid_request', EXPECTED_REVISION_REQUIRED, { details: { field: 'expectedRevision' } })
-  const apply = (target) => {
-    try {
-      // A save refuses an operation that matched nothing (409 no_match); a preview reports it.
-      return deps.applySlateOperationPlanToJSON(target, plan, { userMessage, requireMatches: mode !== 'preview' })
-    } catch (error) {
-      // The engine's own refusals (no_match, id_taken, connector_limit, ambiguous_selector)
-      // carry a status, a code and details; the caller reads them as sent.
-      if (error?.code && error?.status)
-        throw problem(error.status, error.code, error.message, { details: error.details })
-      throw problem(400, 'invalid_operation_plan', error.message)
-    }
-  }
+  const apply = (target) => applyPlanTo(deps, target, plan, userMessage, mode !== 'preview')
   const respond = (result, revision) => ({
     ok: true,
     shareId: slate.shareId,
@@ -158,6 +169,7 @@ export async function applyToCanvas(principal, input, { deps, mode, now, idempot
     throw problem(409, 'idempotency_conflict', 'That key belongs to a different request. Use a new key.')
   let result
   let saved
+  let before = null
   try {
     saved = await deps.saveCore.save({
       slateId: slate._id,
@@ -170,6 +182,7 @@ export async function applyToCanvas(principal, input, { deps, mode, now, idempot
         ...sharedSaveConditions(slate, principal.userId),
       },
       build(current) {
+        before = current
         result = apply(current)
         return { set: setFor(result) }
       },
@@ -192,17 +205,73 @@ export async function applyToCanvas(principal, input, { deps, mode, now, idempot
     userMessage,
     report: result.report,
     response: { ...response, mode },
+    ...(attribution && { agent: attribution }),
     createdAt: now(),
     expiresAt: runExpiry(now()),
   })
+  if (onApplied) await onApplied({ before, after: result.slate, revision: saved.revision })
   return { status: 201, body: response }
+}
+
+// Slate settings are not suggested (there is no ghost of a background): a person changes them, or
+// an agent a person lets edit directly.
+const SETTINGS_NEED_DIRECT =
+  'Slate settings (update_slate) are changed by a person, or by an agent a person lets edit directly. Suggest notes and lines instead.'
+
+/**
+ * An agent's canvas edit, as suggestions everyone on the slate sees live: applied to the slate with
+ * the agent's own waiting notes in it (so it builds on what it suggested), checked as a save would
+ * be, and filed for people to keep or discard. Nothing is saved; the pointer goes to each ghost.
+ */
+export async function suggestToCanvas(principal, input, ctx, who) {
+  const { deps, resource: slate } = ctx
+  const { plan, userMessage = '', expectedRevision } = input
+  if (expectedRevision === undefined)
+    throw problem(400, 'invalid_request', EXPECTED_REVISION_REQUIRED, { details: { field: 'expectedRevision' } })
+  if ((plan?.operations || []).some((operation) => operation?.kind === 'update_slate'))
+    throw problem(409, 'needs_direct_edit', SETTINGS_NEED_DIRECT)
+  const store = deps.suggestions
+  const own = (await store.list(slate._id)).filter((action) => action.agentId === who.agentId)
+  const base = withOwnGhosts(slate, own)
+  const applied = applyPlanTo(deps, base, plan, userMessage, true)
+  try {
+    deps.saveCore.check({ current: slate, set: { nodes: applied.slate.nodes }, expectedRevision })
+  } catch (error) {
+    if (error?.code === 'slate_changed') throw problem(409, 'slate_changed', error.message, { details: error.details })
+    throw error
+  }
+  const message = applied.materializedPlan.message || userMessage
+  const { action, changedEarlier } = await store.suggest(principal, slate, { base, after: applied.slate, message, identity: who })
+  if (action && deps.presence) {
+    const { targets, point } = choreography(action.items)
+    try {
+      await deps.presence.saved(principal, slate, { targets, point, message, say: 'Suggesting ' + action.summary })
+    } catch (error) {
+      console.error('[presence]', error?.message)
+    }
+  }
+  return {
+    status: action || changedEarlier ? 202 : 200,
+    body: {
+      ok: true,
+      shareId: slate.shareId,
+      revision: slate.revision ?? 0,
+      message: action
+        ? `Suggested on the slate: ${action.summary}, shown live to everyone there for a person to keep or discard. Nothing is saved until then; the new notes' ids work in your next edit.`
+        : changedEarlier ? 'Your waiting suggestions were changed.' : 'Nothing to suggest: the edit changes nothing.',
+      operations: applied.materializedPlan.operations,
+      report: applied.report,
+      outcome: 'suggested',
+      ...(action && { suggestion: publicAction(action) }),
+    },
+  }
 }
 
 export default defineAction({
   id: 'slates.applyOperations',
   title: 'Edit a slate',
   description:
-    'mode "preview" shows the result without saving. Every edit names the revision it was made on: a canvas plan (notes and connections) sends expectedRevision, the revision slates.get returned; a workshop or map plan holds one operation with its own expectedRevision (workshop.revision), and saving it requires an Idempotency-Key. Without it the edit is refused with 400 invalid_request naming expectedRevision. On a workshop, workshop_edits makes 1 to 50 edits (add, move, rename, remove cards and lanes) by the rules people meet; a refusal answers 409 edit_refused with the sentence a person sees, and a move the rules refuse answers 409 move_refused. A saved workshop edit answers with a receiptId that undo_workshop_edit takes. A slate holds up to 8 boards: a workshop operation names its board (boardId, from slates.get boards[]); on a slate of several boards one that names none is refused with 400 board_required listing them. add_component adds a library component (components.list) beside the slate\'s notes and boards and answers with its boardId; it carries its own expectedRevision (the slate revision).',
+    'mode "preview" shows the result without saving. Every edit names the revision it was made on: a canvas plan (notes and connections) sends expectedRevision, the revision slates.get returned; a workshop or map plan holds one operation with its own expectedRevision (workshop.revision), and saving it requires an Idempotency-Key. Without it the edit is refused with 400 invalid_request naming expectedRevision. On a workshop, workshop_edits makes 1 to 50 edits (add, move, rename, remove cards and lanes) by the rules people meet; a refusal answers 409 edit_refused with the sentence a person sees, and a move the rules refuse answers 409 move_refused. A saved workshop edit answers with a receiptId that undo_workshop_edit takes. A slate holds up to 8 boards: a workshop operation names its board (boardId, from slates.get boards[]); on a slate of several boards one that names none is refused with 400 board_required listing them. add_component adds a library component (components.list) beside the slate\'s notes and boards and answers with its boardId; it carries its own expectedRevision (the slate revision). A canvas plan saved by an agent is shown live on the slate as suggestions (outcome "suggested", 202) for people there to keep or discard, unless a person lets that agent edit directly; its new notes\' ids work in the next edit.',
   toolset: 'slates',
   kind: 'write',
   // A canvas plan may delete notes and connections (delete_nodes, disconnect_nodes).
@@ -236,11 +305,16 @@ export default defineAction({
   output: result,
   load: loadSlate(true),
   failure: { code: 'operation_failed', message: 'The request could not be completed. Retry with the same key.' },
-  tool: { name: 'edit_slate', title: 'Edit a slate', description: 'Edit a slate: add, change, connect, lay out or remove notes and lines, and edit boards (cards, lanes, rules, plan weeks, budgets, presentation order; name the board on a slate with several). One call saves atomically; mode "preview" shows the result without saving.' },
+  tool: { name: 'edit_slate', title: 'Edit a slate', description: 'Edit a slate: add, change, connect, lay out or remove notes and lines, and edit boards (cards, lanes, rules, plan weeks, budgets, presentation order; name the board on a slate with several). One call saves atomically; mode "preview" shows the result without saving. Your canvas edits appear live as suggestions people on the slate keep or discard.' },
   async handler(principal, input, ctx) {
     const slate = ctx.resource
     const requested = input.plan?.operations
     const workshopPlan = Array.isArray(requested) && requested.some((op) => isWorkshopOperation(op?.kind))
+    const store = ctx.deps.suggestions
+    // Pause all agents (agents.control): anyone who may edit the slate stops every agent's edits on it.
+    if (store && principal.kind === 'agent' && ctx.mode === 'save' && (await store.controlsOf(slate._id)).paused)
+      throw problem(423, 'agents_paused', 'People on this slate paused its agents. Ask one of them to resume agents, then retry.')
+    const canvas = (inputs) => canvasEdit(principal, inputs, ctx)
     let result
     // A library component: the board the chat's Add adds, placed beside the slate's notes.
     if (isAddComponentPlan(input.plan)) result = await applyAddComponent(principal, input, ctx)
@@ -248,7 +322,7 @@ export default defineAction({
       // A slate's drawing is the notes beside whatever it holds, and a workshop is drawn on that
       // same canvas: a canvas plan edits those notes, as the in-app conversation can; a workshop
       // plan edits the workshop.
-      if (!workshopPlan) result = await applyToCanvas(principal, input, ctx)
+      if (!workshopPlan) result = await canvas(input)
       else {
         if (input.expectedRevision !== undefined)
           throw problem(400, 'invalid_request', 'A workshop or map edit carries its expectedRevision inside the plan operation.')
@@ -257,9 +331,29 @@ export default defineAction({
     } else {
       if (slate.creative?.model || workshopPlan)
         throw problem(400, 'invalid_operation_plan', 'Choose an operation supported by this type of slate.')
-      result = await applyToCanvas(principal, input, ctx)
+      result = await canvas(input)
     }
     if (ctx.mode === 'save' && result.status === 201) await showAgent(principal, slate, result.body, ctx.deps)
     return result
   },
 })
+
+// A canvas plan. An agent's save is a suggestion (ghosts everyone on the slate sees, for a person
+// to keep), unless a person let that agent edit directly; then it saves, filed as one undoable
+// action. The Slatebox agent works on tasks a person assigned and approved, and saves; a person's
+// own edits and every preview are unchanged.
+async function canvasEdit(principal, input, ctx) {
+  const { deps, mode, resource: slate } = ctx
+  const store = deps.suggestions
+  if (!store || principal.kind !== 'agent' || principal.builtin === 'slatebox' || mode !== 'save' || !deps.presence?.identify)
+    return applyToCanvas(principal, input, ctx)
+  const who = await deps.presence.identify(principal, slate)
+  const direct = (await store.modeOf(slate._id, who.agentId, Boolean(deps.agentOptions?.editDirectly?.()))) === 'direct'
+  if (!direct) return suggestToCanvas(principal, input, ctx, who)
+  const result = await applyToCanvas(principal, input, {
+    ...ctx,
+    onApplied: ({ before, after, revision }) =>
+      store.applied(principal, slate, { before, after, revision, message: input.plan?.message || input.userMessage || '', identity: who }),
+  })
+  return { ...result, body: { ...result.body, outcome: 'saved' } }
+}

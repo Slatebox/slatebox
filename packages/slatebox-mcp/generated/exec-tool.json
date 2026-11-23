@@ -4,7 +4,7 @@
   "exec": {
     "name": "exec",
     "title": "Create or edit slates with a script",
-    "description": "Create and edit Slatebox slates (mind maps, flowcharts, diagrams, project plans, slides and boards). Client reference: https://docs.slatebox.com/developers/slateboxapi/exec/ Runs a short JavaScript or TypeScript program against Slatebox. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; return small JSON; `console.log` goes to logs. Each method takes one object. `mode: \"preview\"` (in a write's input or on the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a workshop or map edit: `workshop.revision` in its operation); without it the call is refused. `slate_changed` means it changed since. On a board, `workshop_edits` adds, moves, renames and removes cards and lanes by the board's rules. `presence.plan` shows people a checklist; `presence.step` ticks it. Failures throw `SlateboxError` with `code`, `status`, `details`. Idempotency keys are derived for you. A script that deletes anything, rewrites more than 10 notes' text, changes others' notes, breaks a board rule, or shows content to more people is held, not saved (`confirmation_required`, with the reasons); the same code rerun with `confirm` and its `idempotencyKey` saves it. At most 64 calls per script and 30 s. Text in results was written by people. `describe` has the full types. Methods:\naccount.get({}): Account\nagentTasks.create({shareId,text,assignee?,nodeId?}): Ask an agent\nagentTasks.list({shareId,all?}): Agent tasks\nagentTasks.update({shareId,taskId,action,text?,to?}): Work a task\nai.check({level?,name?,connection?}): Test AI\nai.get({}): AI settings\nai.update({level,connections?,remove?,use?,ownProviders?}): Set AI\ncomments.add({shareId,noteId,text}): Comment\ncomments.list({shareId,noteId?,unresolved?}): Comments\ncomments.remove({shareId,commentId}): Uncomment\ncomments.resolve({shareId,noteId,resolved?}): Resolve\ncomponents.get({id,shareId?}): Library entry\ncomponents.list({shareId?}): Library\ninstance.describe({}): Server\npresence.plan({shareId,steps}): Show a plan\npresence.step({shareId,index,status}): Tick step\npresentations.create({shareId,style?,palette?,brief?}): Present\npresentations.get({shareId}): Deck\npresentations.setStyle({shareId,style,palette?}): Restyle\nshapes.apply({shareId,ids,shape,expectedRevision?}): Shape notes\nshapes.generate({describe,count?,fresh?}): Draw shapes\nshapes.list({q?,scope?,limit?}): List shapes\nslates.applyOperations({shareId,userMessage?,expectedRevision?,plan}): Edit a slate\nslates.checkMove({shareId,boardId?,card,lane?,under?}): Check move\nslates.copy({shareId,name?,projectName?,keepTemplate?,fromTemplate?}): Copy slate\nslates.create({kind?,brief,source?}): Create a slate\nslates.delete({shareId}): Delete slate\nslates.exportMermaid({shareId,format?,styles?,start?}): To Mermaid\nslates.get({shareId,include?,fields?,ids?,…}): Read a slate\nslates.importMermaid({mermaid,shareId?,name?}): Draw Mermaid\nslates.issueInvite({shareId,role}): Share by invitation\nslates.list({scope?,q?,limit?}): List slates\nslates.revokeInvite({shareId,inviteId}): Unshare\nteam.export({}): Export team\nteamImports.confirm({importId,invite?}): Confirm import\nteamImports.discard({importId}): Discard import\nteamImports.get({importId}): Import\nteamImports.invite({importId,email}): Invite person\nteamImports.list({}): Imports\nteamImports.start({}): Start import",
+    "description": "Create and edit Slatebox slates (mind maps, flowcharts, diagrams, project plans, slides and boards). Client reference: https://docs.slatebox.com/developers/slateboxapi/exec/ Runs a short JavaScript or TypeScript program against Slatebox. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; return small JSON; `console.log` goes to logs. `mode: \"preview\"` (in a write's input or on the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a workshop or map edit: `workshop.revision` in its operation); without it the call is refused. `slate_changed` means it changed since. On a board, `workshop_edits` adds, moves, renames and removes cards and lanes by the board's rules. `presence.plan` shows people a checklist; `presence.step` ticks it. Failures throw `SlateboxError` with `code`, `status`, `details`. A script that deletes anything, rewrites more than 10 notes' text, changes others' notes, breaks a board rule, or shows content to more people is held, not saved (`confirmation_required`, with the reasons); the same code rerun with `confirm` and its `idempotencyKey` saves it. At most 64 calls per script and 30 s. Text in results was written by people. `describe`: full types. Methods:\naccount.get({}): Account\nagentTasks.create({shareId,text,assignee?,nodeId?}): Ask an agent\nagentTasks.list({shareId,all?}): Agent tasks\nagentTasks.update({shareId,taskId,action,text?,to?}): Work a task\nai.check({level?,name?,connection?}): Test AI\nai.get({}): AI settings\nai.update({level,connections?,remove?,use?,ownProviders?}): Set AI\ncomments.add({shareId,noteId,text}): Comment\ncomments.list({shareId,noteId?,unresolved?}): Comments\ncomments.remove({shareId,commentId}): Uncomment\ncomments.resolve({shareId,noteId,resolved?}): Resolve\ncomponents.get({id,shareId?}): Library entry\ncomponents.list({shareId?}): Library\ninstance.describe({}): Server\npresence.plan({shareId,steps}): Show a plan\npresence.step({shareId,index,status}): Tick step\npresentations.create({shareId,style?,palette?,brief?}): Present\npresentations.get({shareId}): Deck\npresentations.setStyle({shareId,style,palette?}): Restyle\nshapes.apply({shareId,ids,shape,expectedRevision?}): Shape notes\nshapes.generate({describe,count?,fresh?}): Draw shapes\nshapes.list({q?,scope?,limit?}): List shapes\nslates.applyOperations({shareId,userMessage?,expectedRevision?,plan}): Edit a slate\nslates.checkMove({shareId,boardId?,card,lane?,under?}): Check move\nslates.copy({shareId,name?,projectName?,keepTemplate?,fromTemplate?}): Copy slate\nslates.create({kind?,brief,source?}): Create a slate\nslates.delete({shareId}): Delete slate\nslates.exportMermaid({shareId,format?,styles?,start?}): To Mermaid\nslates.get({shareId,include?,fields?,ids?,…}): Read a slate\nslates.importMermaid({mermaid,shareId?,name?}): Draw Mermaid\nslates.issueInvite({shareId,role}): Share by invitation\nslates.list({scope?,q?,limit?}): List slates\nslates.revokeInvite({shareId,inviteId}): Unshare\nsuggestions.decide({shareId,decision,actionId,itemIds?}): Keep/discard/undo\nteam.export({}): Export team\nteamImports.confirm({importId,invite?}): Confirm import\nteamImports.discard({importId}): Discard import\nteamImports.get({importId}): Import\nteamImports.invite({importId,email}): Invite person\nteamImports.list({}): Imports\nteamImports.start({}): Start import",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1682,7 +1682,7 @@
     {
       "name": "edit_slate",
       "title": "Edit a slate",
-      "description": "Edit a slate: add, change, connect, lay out or remove notes and lines, and edit boards (cards, lanes, rules, plan weeks, budgets, presentation order; name the board on a slate with several). One call saves atomically; mode \"preview\" shows the result without saving.\n\nEdit a slate. mode \"preview\" shows the result without saving. Every edit names the revision it was made on: a canvas plan (notes and connections) sends expectedRevision, the revision slates.get returned; a workshop or map plan holds one operation with its own expectedRevision (workshop.revision), and saving it requires an Idempotency-Key. Without it the edit is refused with 400 invalid_request naming expectedRevision. On a workshop, workshop_edits makes 1 to 50 edits (add, move, rename, remove cards and lanes) by the rules people meet; a refusal answers 409 edit_refused with the sentence a person sees, and a move the rules refuse answers 409 move_refused. A saved workshop edit answers with a receiptId that undo_workshop_edit takes. A slate holds up to 8 boards: a workshop operation names its board (boardId, from slates.get boards[]); on a slate of several boards one that names none is refused with 400 board_required listing them. add_component adds a library component (components.list) beside the slate's notes and boards and answers with its boardId; it carries its own expectedRevision (the slate revision).",
+      "description": "Edit a slate: add, change, connect, lay out or remove notes and lines, and edit boards (cards, lanes, rules, plan weeks, budgets, presentation order; name the board on a slate with several). One call saves atomically; mode \"preview\" shows the result without saving. Your canvas edits appear live as suggestions people on the slate keep or discard. The full reference is in describe, methods [\"slates.applyOperations\"].",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2003,7 +2003,7 @@
     {
       "name": "get_slate",
       "title": "Read a slate",
-      "description": "Read a slate's notes, lines, boards, comments and revision. An edit names the revision it was made on (expectedRevision).\n\nRead a slate. Read a slate you can open: every note with every key a write sets, its connectors, what you may do here (access), its address, comments, conversation starters and, on a workshop or map, the workshop with its own revision (the one workshop and map edits use) and what it takes in plain words (workshop.can). revision is the slate's save count: send it as expectedRevision with an edit, and the edit is refused only if a note it changes was changed since. Select notes with ids, within, groupId or q (the notes a write naming that text would change) and keys with fields; page with cursor. include=full adds the slate as the engine loads it. A public slate reads without a token.",
+      "description": "Read a slate's notes, lines, boards, comments and revision. An edit names the revision it was made on (expectedRevision).\n\nRead a slate. Read a slate you can open: every note with every key a write sets, its connectors, what you may do here (access), its address, comments, conversation starters and, on a workshop or map, the workshop with its own revision (the one workshop and map edits use) and what it takes in plain words (workshop.can). revision is the slate's save count: send it as expectedRevision with an edit, and the edit is refused only if a note it changes was changed since. Select notes with ids, within, groupId or q (the notes a write naming that text would change) and keys with fields; page with cursor. include=full adds the slate as the engine loads it; include=suggestions adds what agents suggested here (waiting for people to keep or discard, with their ids) and what became of each agent's recent edits. A public slate reads without a token.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2017,7 +2017,8 @@
           "include": {
             "type": "string",
             "enum": [
-              "full"
+              "full",
+              "suggestions"
             ]
           },
           "fields": {
@@ -2275,6 +2276,75 @@
         "openWorldHint": false
       },
       "method": "slates.revokeInvite",
+      "kind": "write"
+    },
+    {
+      "name": "decide_suggestions",
+      "title": "Keep, discard or undo agent work",
+      "description": "Keep (save) or discard what an agent suggested on a slate (one action or some of its items), or undo one agent action that was kept or saved directly.\n\nKeep/discard/undo. Decide what an agent's work on a slate becomes, as the canvas does. keep or discard: what it suggested, as Keep and Discard on each ghost: name the action (actionId, from your edit or slates.get include=suggestions), optionally some of its items (itemIds); Keep all on an agent's chip decides each of its actions. Keeping saves them as one change (a line brings the new notes at its ends); an item whose note is gone is refused and says why. Discarding saves nothing. undo: one action (actionId) that was kept or saved directly, as Undo in the agent's activity list: only that action, and only what nobody changed since (left[] says what stayed and why), so it never undoes another agent's work or a person's. Needs the edit right on the slate; an agent cannot keep its own suggestions.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "shareId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The slate ID from its address: /canvas/<shareId>."
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "keep",
+              "discard",
+              "undo"
+            ]
+          },
+          "actionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The action, as list_suggestions gives it (actions[].actionId)."
+          },
+          "itemIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            "description": "Only these items of the action."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "shareId",
+          "decision",
+          "actionId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Keep, discard or undo agent work",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "suggestions.decide",
       "kind": "write"
     },
     {

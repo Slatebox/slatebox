@@ -407,7 +407,10 @@ test("the Developer tab and the API run one handler for list, create and revoke"
   // Import a team export calls teamImports.start, list, get, confirm, invite and discard.
   // Restated (agent teammates): the canvas's Agent tasks panel lists, asks and approves through
   // agentTasks.list, agentTasks.create and agentTasks.update, the actions tokens call.
-  assert.deepEqual(names.sort(), ["account.get", "agentTasks.create", "agentTasks.list", "agentTasks.update", "ai.check", "ai.get", "ai.update", "apiTokens.create", "apiTokens.list", "apiTokens.revoke", "comments.add", "instance.describe", "slates.copy", "slates.importMermaid", "slates.updateSettings", "team.export", "teamImports.confirm", "teamImports.discard", "teamImports.get", "teamImports.invite", "teamImports.list", "teamImports.start"]);
+  // Restated (agent suggestions): the canvas reads what agents suggest through suggestions.list, keeps,
+  // discards and undoes through suggestions.decide (the action tokens call), and people pause agents or
+  // let one edit directly through agents.control.
+  assert.deepEqual(names.sort(), ["account.get", "agentTasks.create", "agentTasks.list", "agentTasks.update", "agents.control", "ai.check", "ai.get", "ai.update", "apiTokens.create", "apiTokens.list", "apiTokens.revoke", "comments.add", "instance.describe", "slates.copy", "slates.importMermaid", "slates.updateSettings", "suggestions.decide", "suggestions.list", "team.export", "teamImports.confirm", "teamImports.discard", "teamImports.get", "teamImports.invite", "teamImports.list", "teamImports.start"]);
   const asOwner = { userId: "owner" };
   const created = await methods["apiTokens.create"].call(asOwner, { name: "From the tab", scopes: ["slates:read"] });
   assert.match(created.token, /^sbx_/);

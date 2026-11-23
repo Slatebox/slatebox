@@ -48,10 +48,14 @@ export function mountMcp(app) {
     // The one option: SLATEBOX_MCP_TYPED_TOOLS=off serves exec and describe only. exec is always on.
     typedTools: typedToolsEnabled(process.env.SLATEBOX_MCP_TYPED_TOOLS),
     // The client's own name, cleaned, for the label of its agent on the canvas.
-    recordClient: (principal, name) =>
-      SlateApiTokens.updateAsync(
-        { _id: principal.tokenId, userId: principal.userId },
-        sanitizeClientName(name) ? { $set: { lastClient: sanitizeClientName(name) } } : { $unset: { lastClient: '' } }
-      ),
+    // Clients on the 2026-07-28 protocol name themselves on every request: the token is written
+    // only when the name changes.
+    recordClient: (principal, name) => {
+      const cleaned = sanitizeClientName(name)
+      return SlateApiTokens.updateAsync(
+        { _id: principal.tokenId, userId: principal.userId, lastClient: cleaned ? { $ne: cleaned } : { $exists: true } },
+        cleaned ? { $set: { lastClient: cleaned } } : { $unset: { lastClient: '' } }
+      )
+    },
   })
 }

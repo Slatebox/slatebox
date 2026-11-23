@@ -56,6 +56,8 @@ const SlateOperationRuns = new Mongo.Collection('slateOperationRuns')
 const AgentPresence = new Mongo.Collection('agentPresence')
 // Agent tasks: the work people and agents hand to agents on a slate (server/agents).
 const AgentTasks = new Mongo.Collection('agentTasks')
+// What agents suggest on a slate (server/agents/suggestions.mjs), as agentSuggestions.forSlate publishes it.
+const AgentSuggestions = new Mongo.Collection('agentSuggestions')
 
 export {
   Organizations,
@@ -101,6 +103,7 @@ export {
   SlateOperationRuns,
   AgentPresence,
   AgentTasks,
+  AgentSuggestions,
 }
 
 // Metering, wallets, own keys and calls (server/metering). ProviderKeys is never published.

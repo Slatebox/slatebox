@@ -7,7 +7,8 @@ import Chip from '@mui/material/Chip'
 import { HuddleCalls } from '../../api/common/models'
 import { Avatar } from './AccountMenu'
 import { slateHuddleType, huddleEnabled, collaborationUsers } from '../jotai/atoms'
-import { AgentChips, useAgentPresence } from './AgentPresenceListener'
+import { AgentChips, useAgentPresence, useAgentSuggestions } from './AgentPresenceListener'
+import { agentsOnRoster } from '../../api/common/agent-roster.mjs'
 
 // Daily (calls, about 340 KB) loads the first time this person starts or joins a huddle, never with the page.
 const HuddleIsland = lazy(() => import('./huddle/HuddleIsland'))
@@ -41,7 +42,10 @@ function Presence({ localCollaborator, slate }) {
   const huddleType = call ? (call.mode === 'video' ? 'video' : 'audio') : slateHuddle
   const currentCollaborators = useAtomValue(collaborationUsers)
   const agents = useAgentPresence(slate?.shareId).shown
-  if (!(currentCollaborators.length > 0 || agents.length > 0)) return null
+  // An agent with suggestions waiting (or a recent action to undo) is on the roster too.
+  const { actions } = useAgentSuggestions(slate?.shareId)
+  const onRoster = agentsOnRoster(agents, actions).length
+  if (!(currentCollaborators.length > 0 || onRoster > 0)) return null
   return (
     <Grid container spacing={1} component="section" aria-label="Huddle"
       sx={{
@@ -56,7 +60,7 @@ function Presence({ localCollaborator, slate }) {
         <Chip key={person.key} label={person.userName}
           avatar={<Avatar name={person.key === 'you' ? 'You' : person.userName} colour={person.color} size={24} />} />
       ))}
-      <AgentChips records={agents} />
+      <AgentChips records={agents} shareId={slate?.shareId} />
     </Grid>
   )
 }
