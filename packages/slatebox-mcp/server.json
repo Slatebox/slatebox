@@ -3,7 +3,7 @@
   "name": "com.slatebox/slatebox",
   "title": "Slatebox",
   "description": "Mind maps, diagrams, project plans and presentations on a free, open-source team canvas.",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "websiteUrl": "https://slatebox.com",
   "repository": {
     "url": "https://github.com/Slatebox/slatebox",
@@ -31,7 +31,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "slatebox-mcp",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "transport": {
         "type": "stdio"
       },
