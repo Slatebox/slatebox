@@ -117,6 +117,7 @@ import useMinimapWhenNeeded from '../common/useMinimapWhenNeeded'
 import { useNoteOnDoubleClick } from '../common/newNote.mjs'
 import '../common/main.css'
 import { noteSelection } from '../../api/common/chat-selection.mjs'
+import LibrarySlot from '../components/library/LibrarySlot'
 
 // Viewport and presence packages can save a snapshot without changing the team's work.
 const viewEvents = new Set(['onZoom', 'onCanvasMove', 'onMouseMoved', 'onCursorMoved', 'onPresenceChanged',
@@ -1468,6 +1469,8 @@ export default function Canvas() {
                 return noteSelection(selectedOwnNotes().map((n) => n.options?.id))
               }} /></React.Suspense>}</div>}
         {slate.current && <SlateDrawer updateSlate={onSlateUpdate} slate={slate.current} />}
+        {/* A builder or review slate of the shared library: its build bar or review panel (nothing on any other slate). */}
+        {!asEmbed && <LibrarySlot slate={nativeBoard} />}
         {/* On a phone the tool dock folds into "+ Add", first in the bar under the canvas. */}
         {narrow && !asEmbed && !overlayKind && (canShowConversation || showHuddle || (phone && showTools)) &&
           <CanvasBottomBar conversation={canShowConversation} huddle={showHuddle}

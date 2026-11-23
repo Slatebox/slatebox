@@ -31,6 +31,11 @@ const AdminTools = lazy(() => import('./pages/AdminTools'))
 const TeamSettings = lazy(() => import('./pages/TeamSettings'))
 const BrandingSettings = lazy(() => import('./pages/BrandingSettings'))
 const SimulateUrlAction = lazy(() => import('./components/SimulateUrlAction'))
+// The shared library: the public gallery and an item's page (signed out too), your own items, and the review queue.
+const Library = lazy(() => import('./pages/Library'))
+const LibraryItem = lazy(() => import('./pages/LibraryItem'))
+const MyLibrary = lazy(() => import('./pages/MyLibrary'))
+const LibraryReview = lazy(() => import('./pages/LibraryReview'))
 
 function PrivateRoute({ children }) {
   const isAuthorized =
@@ -190,6 +195,26 @@ export default function SBRoutes() {
           }
         />
       )}
+      {isElevatedUser && (
+        <Route
+          path="/admin/library"
+          element={
+            <PrivateRoute>
+              <LibraryReview />
+            </PrivateRoute>
+          }
+        />
+      )}
+      <Route path="/library" element={<Library />} />
+      <Route
+        path="/library/mine"
+        element={
+          <PrivateRoute>
+            <MyLibrary />
+          </PrivateRoute>
+        }
+      />
+      <Route path="/library/:slug" element={<LibraryItem />} />
       <Route path="/canvas/:id?/:nodeId?/:asEmbed?" element={<CanvasForSlate />} />
       <Route path="/ai/:prompt?" element={<SlateCreateRoute />} />
       <Route path="/verify-email/:token" element={<VerifyEmail />} />
