@@ -197,6 +197,9 @@ export async function mountLiveDeck({
   try { slate.disablePanZoom?.() } catch { /* already off */ }
   try { await slate.loadAllFonts?.() } catch { /* fonts are a nicety */ }
   try { await doc.fonts?.ready } catch { /* ignore */ }
+  // The words were fitted to their shapes before the styles' fonts arrived: fit them again in
+  // the fonts they are drawn in, so a wide face (Fraunces, Abril) never runs past its shape.
+  slate.nodes?.allNodes?.forEach((node) => { try { node.centerText?.() } catch { /* a note without words */ } })
 
   const camera = slate.camera
   camera.configure({ viewport: size, rollHost: roll, hostSide: side })
