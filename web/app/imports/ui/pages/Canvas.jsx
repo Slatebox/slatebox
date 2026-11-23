@@ -60,6 +60,7 @@ import { Comments } from '../../api/common/models'
 import initAIConversation from '../../api/common/initAIConversation'
 import { sheetBackAfterDrop, watchNoteDrag } from '../../api/common/sheet-drag.mjs'
 import KeepNativeSlate from '../components/KeepNativeSlate'
+import useCanvasTheme from '../common/useCanvasTheme'
 // Ask Slatebox loads when the page is idle (or when it opens first): a page that never opens it never waits for it.
 const loadNativeConversation = () => import('../components/NativeCanvasConversation')
 const NativeCanvasConversation = React.lazy(loadNativeConversation)
@@ -287,6 +288,10 @@ export default function Canvas() {
   // A control beside the canvas that has no use for the keyboard hands it back, so Delete after
   // a colour is picked still means the selected note (see canvasKeys.js).
   useEffect(() => watchCanvasKeys(() => document.getElementById(containerId)), [])
+  // In dark mode the canvas is dark too, unless the slate has a background of its own (canvasTheme.mjs).
+  // A reader's share link opens this same page, so it follows the same rule.
+  const canvasRef = React.useRef(null)
+  useCanvasTheme(canvasRef, () => (slate.current?.v2 ?? slate.current)?.options?.containerStyle)
   function openComments(node) {
     setCommentDrawer({
       nodeId: node.options.id,
@@ -1319,7 +1324,7 @@ export default function Canvas() {
         <div ref={canvasArea} data-creative-revision={workshopSlate && workshop.ready ? workshop.revision : undefined}
           style={{ position: 'relative', flex: '1 1 0', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <div style={{ position: 'relative', flex: '1 1 0', minWidth: 0, minHeight: 0, display: 'flex' }}>
-            <div id={containerId} style={{ position: 'relative', flex: '1 1 0', minWidth: 0, minHeight: 0, overflow: 'hidden',
+            <div id={containerId} ref={canvasRef} style={{ position: 'relative', flex: '1 1 0', minWidth: 0, minHeight: 0, overflow: 'hidden',
               ...(overlayKind && { visibility: 'hidden', pointerEvents: 'none' }) }} />
             {/* The bar over the selection, inside the canvas's own area: never under the panel beside it. */}
             {boardLoaded && !overlayKind && !asEmbed && slate.current && (

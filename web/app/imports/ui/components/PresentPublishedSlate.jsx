@@ -33,6 +33,7 @@ function publishedLook(row) {
     return null
   }
 }
+import useCanvasTheme from '../common/useCanvasTheme'
 
 export default function PresentPublishedSlate({ slateShareId, surfaceId = 'presentMain' }) {
   const refMethods = useRef(null)
@@ -40,6 +41,11 @@ export default function PresentPublishedSlate({ slateShareId, surfaceId = 'prese
   const [curPresentation, setCurPresentation] = useAtom(currentPresentation)
   const [showFooter, setShowFooter] = useState(false)
   const [unavailable, setUnavailable] = useState(false)
+  // The published slate's background, as it was published: one nobody chose follows the viewer's
+  // mode, as the slate's own canvas does (canvasTheme.mjs). A styled deck keeps its style's backdrop
+  // and ink in both modes: no theming.
+  const [published, setPublished] = useState(null)
+  useCanvasTheme(() => (published && !published.styled ? document.getElementById(surfaceId) : null), () => published?.background, [published, surfaceId])
   const [, baseUrl] = useState(Meteor.settings.public.baseUrl)
 
   const mobileOrTouch =
@@ -79,6 +85,7 @@ export default function PresentPublishedSlate({ slateShareId, surfaceId = 'prese
       }
       // A styled deck's page is its style's colour, not a forced dark theme.
       document.getElementById(surfaceId).style.background = styled ? resolveStyle(styled.deck.style).bg : bg
+      setPublished({ background: pinnedPrezi.background, styled: Boolean(styled) })
 
       console.log(
         'got control controls',

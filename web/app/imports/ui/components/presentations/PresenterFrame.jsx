@@ -1,9 +1,11 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import Dialog from '@mui/material/Dialog'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import CloseIcon from '@mui/icons-material/Close'
+import useCanvasTheme from '../../common/useCanvasTheme'
+import { CANVAS, canvasMode } from '../../common/canvasTheme.mjs'
 
 /**
  * The presenter's frame: the whole screen. It asks the browser for full screen (the Fullscreen
@@ -24,6 +26,12 @@ export default function PresenterFrame({ open, label = 'Presentation', title, st
   keepOutOfFullScreen = false, escapeExits = true, background, error, immersive = false, children }) {
   const exit = useRef(onExit)
   exit.current = onExit
+  // The slate is shown as it is on its canvas: a background nobody chose is the dark canvas in dark
+  // mode, and the drawing's ink is lifted to read on it (canvasTheme.mjs).
+  // A styled deck (immersive) keeps its own style's backdrop and ink in both modes: no theming.
+  const [stage, setStage] = useState(null)
+  const mode = useCanvasTheme(() => (immersive ? null : stage), () => background, [stage, background, immersive])
+  const surface = !immersive && canvasMode(mode, background) === 'dark' ? CANVAS.dark.background : background
   useEffect(() => {
     if (!open) return undefined
     let entered = false
@@ -50,7 +58,7 @@ export default function PresenterFrame({ open, label = 'Presentation', title, st
   }, [open, keepOutOfFullScreen])
 
   return <Dialog fullScreen open={Boolean(open)} disableEscapeKeyDown={!escapeExits} onClose={() => onExit?.()}
-    slotProps={{ paper: { 'aria-label': label, sx: { background: background || 'background.default', display: 'flex', flexDirection: 'column', ...UNSCROLLABLE } } }}>
+    slotProps={{ paper: { 'aria-label': label, sx: { background: surface || 'background.default', display: 'flex', flexDirection: 'column', ...UNSCROLLABLE } } }}>
     {/* A styled deck is full bleed: the bar floats over its corner (the slate's name stays for a
         screen reader), so the deck's own colour fills the screen. */}
     <Box component="header" className={`sb-presenter-bar${immersive ? ' sb-presenter-bar-immersive' : ''}`} sx={immersive ? {
@@ -69,7 +77,7 @@ export default function PresenterFrame({ open, label = 'Presentation', title, st
       </Button>
     </Box>
     {error && <Typography role="alert" variant="body2" sx={{ px: 2, py: .5, bgcolor: 'error.main', color: 'error.contrastText' }}>{error}</Typography>}
-    <Box component="main" sx={{ position: 'relative', flex: '1 1 auto', minHeight: 0, ...UNSCROLLABLE }}>
+    <Box component="main" ref={setStage} sx={{ position: 'relative', flex: '1 1 auto', minHeight: 0, ...UNSCROLLABLE }}>
       {children}
     </Box>
   </Dialog>

@@ -160,3 +160,36 @@ body:has(.sb-cookie) .sb-canvas-page{box-sizing:border-box;padding-bottom:calc(m
 
 /* A line a workshop draws between its stations is part of the workshop. It has no ends to drag. */
 #slateCanvas [data-governed="line"] ~ .connector-handle { display: none; }
+
+/* The canvas in dark mode (canvasTheme.mjs marks a canvas data-sb-canvas=dark when the app is dark and the slate's
+   background is the default nobody chose; a slate with its own colour, gradient or picture keeps it). The canvas sits
+   a step below the dark chrome; the board's own ink, its lanes, the minimap and the zoom controls follow it. The board's
+   ink (--slatebox-board-*) is set on the canvas by canvasTheme.mjs (BOARD_INK). */
+[data-sb-canvas=dark]{background-color:var(--sb-canvas-bg)!important;color-scheme:dark}
+/* Lane columns: their own pastel at about 18%, edged a little brighter, so a board reads as lanes, not white slabs.
+   Lane headers and cards keep their pastel, with their dark words on it. */
+[data-sb-canvas=dark] g[data-node-id^="column-"] [data-node-background-path]{fill-opacity:.18;stroke-opacity:.45}
+/* The note a board explains its rules in: a quiet tint of its paper; its words are lifted to the light ink. */
+[data-sb-canvas=dark] g[data-node-id^="rules-"] [data-node-background-path]{fill-opacity:.1;stroke:#5d7566}
+
+/* The minimap and the zoom controls, in the app's own surface, border and ink (light and dark). */
+#slateCanvas .slateboxjs-birdseye{background-color:var(--sb-surface,#fffef8)!important;border:1px solid var(--sb-border,#c6d1bf)!important;
+  border-radius:10px!important;box-shadow:0 4px 16px rgb(25 53 41 / 14%)!important}
+#slateCanvas .slateboxjs-birdseye > svg > rect:first-child{fill:var(--sb-surface,#fffef8)}
+#slateCanvas .slateboxjs-birdseye-viewport{fill:rgb(37 75 59 / 6%);stroke:#39604c;stroke-width:1.5px}
+#slateCanvas .slateboxjs-birdseye-zoom-controls{background:var(--sb-surface,#fffef8)!important;border-top-color:var(--sb-border,#c6d1bf)!important;border-radius:0 0 10px 10px!important}
+#slateCanvas .slateboxjs-birdseye-zoom-controls button{background:var(--sb-offset,#edf0e5)!important;border-color:var(--sb-border,#c6d1bf)!important;color:var(--sb-ink,#193c2f)!important}
+#slateCanvas .slateboxjs-birdseye-zoom-controls span{color:var(--sb-ink,#193c2f)!important}
+.slatebox-zoom-slider.slatebox-zoom-slider{background:var(--sb-surface,#fffef8)!important;color:var(--sb-ink,#193c2f)!important;
+  border:1px solid var(--sb-border,#c6d1bf)!important;border-radius:18px!important;box-shadow:0 2px 10px rgb(25 53 41 / 12%);font-family:inherit!important}
+.slatebox-zoom-slider.slatebox-zoom-slider button{color:inherit!important}
+[data-sb-canvas=dark] .slateboxjs-birdseye{box-shadow:0 4px 18px rgb(0 0 0 / 40%)!important}
+[data-sb-canvas=dark] .slateboxjs-birdseye > svg > rect:first-child{fill:var(--sb-canvas-bg)}
+[data-sb-mode=dark] .slateboxjs-birdseye-viewport{fill:rgb(242 206 139 / 10%);stroke:#f2ce8b}
+[data-sb-canvas=dark] .slateboxjs-birdseye-zoom-controls button{background:var(--sb-offset,#2c4338)!important}
+[data-sb-canvas=dark] .slatebox-zoom-slider{box-shadow:0 2px 12px rgb(0 0 0 / 35%)}
+/* From a tablet up the zoom controls sit beside the add button, centred on it, not under it. */
+@media(min-width:600px){#slateCanvas .slatebox-zoom-slider{right:76px!important;bottom:21px!important}}
+/* A note drawn with no fill (a text note) stays clear while it is presented: the presenter's highlight sets every
+   shape's opacity, which would otherwise show its hidden white box. */
+.sb-presentation-camera [data-node-background-path][opacity="0"]{opacity:0!important}

@@ -6,6 +6,7 @@ import { Organizations, OrganizationSettings } from '../common/models'
 import CONSTANTS from '../common/constants'
 import { createAINodes } from '../common/ai'
 import defaultShapes from '../../ui/components/node/defaultShapes'
+import { DEFAULT_NOTE } from '../../ui/common/canvasTheme.mjs'
 
 async function createSlate(
   slateBase,
@@ -61,7 +62,8 @@ async function createSlate(
     // New slates are private for everyone.
   }
 
-  // Default background colors and style
+  // Default background colors and style. White is the background nobody chose: in dark mode the
+  // canvas shows it as the dark canvas (ui/common/canvasTheme.mjs), and it is saved as white.
   let bgColors = ['#ffffff', '#f0f0f0', '#e1e1e1', '#d2d2d2', '#c3c3c3']
   let containerStyle = {
     width: 'auto',
@@ -247,11 +249,12 @@ async function createSlate(
 
       // --- Start Default Node Style Logic ---
       let initialNodeStyle = {
-        backgroundColor: '#699bc3',
+        // White on a calm blue, AA in both modes (canvasTheme.mjs).
+        backgroundColor: DEFAULT_NOTE.backgroundColor,
         opacity: 1,
         borderOpacity: 0,
         fontFamily: createWithTheme?.styles?.parent?.fontFamily || 'Manrope',
-        foregroundColor: 'rgba(255, 255, 255, 0.87)',
+        foregroundColor: DEFAULT_NOTE.foregroundColor,
         lineColor: '#000',
         lineWidth: 5,
         vectorPath: 'roundedrectangle',

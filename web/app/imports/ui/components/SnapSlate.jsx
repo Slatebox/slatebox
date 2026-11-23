@@ -10,6 +10,7 @@ import { Collaboration } from '../../api/common/models'
 import slateProps from '../propTypes/slateProps'
 import promisify from '../../api/client/promisify'
 import { slatePreview } from '../../api/common/slate-preview.mjs'
+import useCanvasTheme from '../common/useCanvasTheme'
 
 export default function SnapSlate({
   slate,
@@ -21,6 +22,9 @@ export default function SnapSlate({
   index,
 }) {
   const [isVisible, setVisible] = React.useState(null)
+  // A slate's picture follows the app's mode, as its canvas does (canvasTheme.mjs).
+  const box = React.useRef(null)
+  useCanvasTheme(box, () => slate?.options?.containerStyle)
 
   async function create(ss) {
     const snap = await new Slatebox.slate(
@@ -218,6 +222,7 @@ export default function SnapSlate({
   // return null;
   return (
     <Box
+      ref={box}
       sx={{
         visibility: isVisible ? 'visible' : 'hidden',
         width: 'inherit',
