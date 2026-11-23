@@ -13,7 +13,7 @@
 // more than `allowance.eager` bytes over the baseline, or a board chunk is found in the eager scripts.
 // --record writes the measurement as the new baseline (after a reviewed, intended change).
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -54,6 +54,14 @@ const leaked = ['launchPlanKit', 'pipelineKit', 'budgetKit', 'registerWorkshopRu
 let stamp = null
 try { stamp = JSON.parse(readFileSync(join(app, 'node_modules/slateboxjs/dist/BUILD.json'), 'utf8')) } catch { /* An engine built before stamps. */ }
 const measured = { ...now, engine: stamp ? { version: stamp.version, commit: stamp.commit } : null }
+// A local engine linked in (file-based iteration: node_modules/slateboxjs -> a checkout) brings its own
+// node_modules, and with it a second react-dom that the shipped bundle never has (ship installs the engine
+// from its packed tarball, which declares react and react-dom as peers). Say so, so the number is read right.
+const engineDir = join(app, 'node_modules/slateboxjs')
+const ownReactDom = (() => { try { return lstatSync(engineDir).isSymbolicLink() && existsSync(join(realpathSync(engineDir), 'node_modules/react-dom/package.json')) } catch { return false } })()
+if (ownReactDom) {
+  console.warn('⚠ slateboxjs is a linked checkout with its own node_modules/react-dom: this build carries a second react-dom (about 45 KB gzip) that the shipped bundle, made from the packed engine, does not.')
+}
 console.table([{ part: 'eager', gzip: now.eager }, { part: 'boards (dynamic)', gzip: now.boards }, { part: 'rules (dynamic)', gzip: now.rules }])
 
 if (record) {
