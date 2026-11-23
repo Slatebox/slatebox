@@ -2,7 +2,7 @@
 // (connect_nodes), the same plans an agent or the canvas conversation sends. The engine's
 // applier draws them, so an import is an ordinary edit: saved by the save core, sent to everyone
 // on the slate, and readable afterwards. Plans keep to the public limits (50 operations each).
-import { layoutDiagram, noteSize } from './layout.mjs'
+import { labelSize, layoutDiagram, noteSize } from './layout.mjs'
 
 export const OPERATIONS_PER_PLAN = 50
 
@@ -261,7 +261,9 @@ export function diagramPlans(model, { existingIds = [], existingConnectorIds = [
   drawing.lines.forEach((line, index) => {
     if (layout.labelAt.has(index)) line.style = { ...line.style, labelPosition: Math.round(layout.labelAt.get(index) * 100) / 100 }
   })
-  for (const line of drawing.lines) {
+  const sides = sideRoutes(drawing, layout, frameOf)
+  const routed = []
+  for (const [index, line] of drawing.lines.entries()) {
     const from = endId(line.from)
     const to = endId(line.to)
     if (!from || !to) {
@@ -283,7 +285,24 @@ export function diagramPlans(model, { existingIds = [], existingConnectorIds = [
     let id = `${from}->${to}`
     for (let k = 2; connectorIds.has(id); k += 1) id = `${from}->${to}~${k}`
     connectorIds.add(id)
-    operations.push({ kind: 'connect_nodes', from: { ids: [from] }, to: { ids: [to] }, ids: [id], style: line.style })
+    const side = sides.get(index)
+    const style = side ? Object.fromEntries(Object.entries(line.style).filter(([key]) => key !== 'labelPosition')) : line.style
+    operations.push({ kind: 'connect_nodes', from: { ids: [from] }, to: { ids: [to] }, ids: [id], style })
+    if (side) routed.push({ id, side })
+  }
+  // A line that would be drawn over another one running the other way leaves and enters its notes on one side,
+  // curving round beside them (connect_nodes takes no ends, so the ends are set once the line is there).
+  for (const { id, side } of routed) {
+    operations.push({ kind: 'update_connections', connectionIds: [id], changes: { fromEnd: side.name, toEnd: side.name } })
+  }
+  const box = { minX: 0, minY: 0, maxX: layout.width, maxY: layout.height }
+  for (const { side } of routed) {
+    for (const [x, y] of side.points) {
+      box.minX = Math.min(box.minX, x - SIDE_ROUTE_MARGIN)
+      box.minY = Math.min(box.minY, y - SIDE_ROUTE_MARGIN)
+      box.maxX = Math.max(box.maxX, x + SIDE_ROUTE_MARGIN)
+      box.maxY = Math.max(box.maxY, y + SIDE_ROUTE_MARGIN)
+    }
   }
   const lines = (n) => `${n} line${n === 1 ? '' : 's'}`
   const was = (n) => (n === 1 ? 'was' : 'were')
@@ -305,9 +324,158 @@ export function diagramPlans(model, { existingIds = [], existingConnectorIds = [
     frames: drawing.frames.length,
     lines: operations.filter((op) => op.kind === 'connect_nodes').length,
     created: operations.filter((op) => op.kind === 'add_nodes').map((op) => op.ids[0]),
-    bounds: { x: origin.x, y: origin.y, width: round(layout.width), height: round(layout.height) },
+    bounds: { x: round(origin.x + box.minX), y: round(origin.y + box.minY), width: round(box.maxX - box.minX), height: round(box.maxY - box.minY) },
     warnings: drawing.warnings,
   }
+}
+
+// The canvas draws a line whose ends are pinned to the middle of a side as a cubic curve leaving and entering
+// along that side's outward normal, its handles 0.12 + 0.55 x curviness (0.3, the default) of the span, at
+// least 20 (slateboxjs svg.connectable geometry). sideRoutes samples the same curve.
+const SIDE_HANDLE = 0.12 + 0.55 * 0.3
+const SIDE_ROUTE_MARGIN = 8
+const SIDE_NORMAL = { right: [1, 0], left: [-1, 0], bottom: [0, 1], top: [0, -1] }
+
+/**
+ * Lines drawn on top of each other: two lines between the same two ends, running opposite ways, where an end
+ * may be a frame holding the other line's end (a note and the frame holding it share a middle line). The
+ * one running back against the layout (up, or leftwards) is routed round one side of its notes, a side where
+ * the curve meets no other note. Returns line index -> { name, points } (points: the sampled curve).
+ */
+function sideRoutes(drawing, layout, frameOf) {
+  const routes = new Map()
+  const notes = new Map(drawing.notes.map((note) => [note.name, note]))
+  const boxOf = (name) => {
+    const group = layout.groups.get(name)
+    if (group) return group
+    const at = layout.nodes.get(name)
+    const note = notes.get(name)
+    return at && note ? { x: at.x, y: at.y, width: note.width, height: note.height } : null
+  }
+  const holds = (outer, name) => {
+    for (let at = name, hops = 0; at != null && hops <= drawing.frames.length + 1; at = frameOf.get(at), hops += 1) if (at === outer) return true
+    return false
+  }
+  const meets = (a, b) => holds(a, b) || holds(b, a)
+  const centre = (b) => [b.x + b.width / 2, b.y + b.height / 2]
+  const lines = drawing.lines.map((line, index) => ({ line, index, from: boxOf(line.from), to: boxOf(line.to) }))
+    .filter((l) => l.from && l.to && l.line.from !== l.line.to)
+  const names = [...drawing.notes.map((note) => note.name), ...drawing.frames.map((frame) => frame.name)]
+  const back = (l) => {
+    const [fx, fy] = centre(l.from)
+    const [tx, ty] = centre(l.to)
+    return Math.abs(ty - fy) >= Math.abs(tx - fx) ? ty < fy : tx < fx
+  }
+  const frameNames = new Set(drawing.frames.map((frame) => frame.name))
+  const titles = drawing.frames.map((frame) => {
+    const b = boxOf(frame.name)
+    return { name: frame.name, box: { x: b.x, y: b.y, width: Math.min(b.width, [...`${frame.title ?? ''}`].length * 9.6 + 28), height: 40 } }
+  })
+  // Where each line's label sits while the line is straight (border to border, at its place along it).
+  const chipAt = (mid, text) => {
+    const { width, height } = labelSize(text)
+    return { x: mid.x - width / 2, y: mid.y - height / 2, width, height }
+  }
+  const chips = new Map()
+  for (const l of lines) {
+    if (!l.line.style?.label) continue
+    const [p, q] = straight(l.from, l.to, centre)
+    const at = layout.labelAt.get(l.index) ?? 0.5
+    chips.set(l.index, chipAt({ x: p[0] + (q[0] - p[0]) * at, y: p[1] + (q[1] - p[1]) * at }, l.line.style.label))
+  }
+  const context = { names, boxOf, holds, centre, titles, frameNames, chips, chipAt }
+  for (const a of lines) {
+    if (routes.has(a.index)) continue
+    const b = lines.find((o) => o.index !== a.index && !routes.has(o.index) && meets(a.line.from, o.line.to) && meets(a.line.to, o.line.from))
+    if (!b) continue
+    // The one running back is routed; when both or neither run back, the one written later.
+    const routedLine = back(a) !== back(b) ? (back(a) ? a : b) : (a.index > b.index ? a : b)
+    const route = sideRoute(routedLine, context)
+    if (route?.chip) context.chips.set(routedLine.index, route.chip)
+    else if (route) context.chips.delete(routedLine.index)
+    if (route) routes.set(routedLine.index, route)
+  }
+  return routes
+}
+
+function sideRoute(l, { names, boxOf, holds, centre, titles, frameNames, chips, chipAt }) {
+  const [fx, fy] = centre(l.from)
+  const [tx, ty] = centre(l.to)
+  const upright = Math.abs(ty - fy) >= Math.abs(tx - fx)
+  const port = (b, side) => {
+    const [cx, cy] = centre(b)
+    if (side === 'right') return [b.x + b.width, cy]
+    if (side === 'left') return [b.x, cy]
+    if (side === 'bottom') return [cx, b.y + b.height]
+    return [cx, b.y]
+  }
+  // Every other note and frame the curve could cross: not an end, not held by an end, not holding an end.
+  const ends = [l.line.from, l.line.to]
+  const obstacles = names
+    .filter((name) => !ends.some((end) => holds(end, name) || holds(name, end)))
+    .map(boxOf)
+    .filter(Boolean)
+  for (const name of upright ? ['right', 'left'] : ['bottom', 'top']) {
+    const p1 = port(l.from, name)
+    const p2 = port(l.to, name)
+    const [nx, ny] = SIDE_NORMAL[name]
+    const handle = Math.max(20, Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) * SIDE_HANDLE)
+    const c1 = [p1[0] + nx * handle, p1[1] + ny * handle]
+    const c2 = [p2[0] + nx * handle, p2[1] + ny * handle]
+    const points = []
+    for (let k = 0; k <= 24; k += 1) {
+      const t = k / 24
+      const u = 1 - t
+      points.push([0, 1].map((i) => u * u * u * p1[i] + 3 * u * u * t * c1[i] + 3 * u * t * t * c2[i] + t * t * t * p2[i]))
+    }
+    const m = SIDE_ROUTE_MARGIN
+    const off = (x, y, b, by) => x < b.x - by || x > b.x + b.width + by || y < b.y - by || y > b.y + b.height + by
+    // Clear of every other note and frame, and of every frame title but the ends' own.
+    const titlesInWay = titles.filter((t) => !ends.includes(t.name)).map((t) => t.box)
+    if (!points.every(([x, y]) => obstacles.every((b) => off(x, y, b, m)) && titlesInWay.every((b) => off(x, y, b, 0)))) continue
+    // The label, halfway along the curve, clear of notes, titles, frames holding neither end, and other labels.
+    let chip = null
+    if (l.line.style?.label) {
+      const [x, y] = halfway(points)
+      chip = chipAt({ x, y }, l.line.style.label)
+      const meets = (a, b, by = 0) => a.x < b.x + b.width + by && b.x < a.x + a.width + by && a.y < b.y + b.height + by && b.y < a.y + a.height + by
+      const boxes = names.filter((n) => !frameNames.has(n) || !ends.some((end) => holds(n, end))).map(boxOf).filter(Boolean)
+      if (boxes.some((b) => meets(chip, b, 10)) || titles.some((t) => meets(chip, t.box))) continue
+      if ([...chips].some(([index, other]) => index !== l.index && meets(chip, other, 20))) continue
+    }
+    return { name, points, chip }
+  }
+  return null
+}
+
+const straightExit = (b, from, to) => {
+  const dx = to[0] - from[0]
+  const dy = to[1] - from[1]
+  let t = 1
+  if (dx > 0) t = Math.min(t, (b.x + b.width - from[0]) / dx)
+  if (dx < 0) t = Math.min(t, (b.x - from[0]) / dx)
+  if (dy > 0) t = Math.min(t, (b.y + b.height - from[1]) / dy)
+  if (dy < 0) t = Math.min(t, (b.y - from[1]) / dy)
+  return [from[0] + dx * t, from[1] + dy * t]
+}
+/** A line following its notes: border to border on the line between their middles. */
+function straight(a, b, centre) {
+  const ca = centre(a)
+  const cb = centre(b)
+  return [straightExit(a, ca, cb), straightExit(b, cb, ca)]
+}
+/** The point halfway along a sampled curve, by length. */
+function halfway(points) {
+  const lengths = points.slice(1).map((q, i) => Math.hypot(q[0] - points[i][0], q[1] - points[i][1]))
+  let left = lengths.reduce((sum, l) => sum + l, 0) / 2
+  for (let i = 0; i < lengths.length; i += 1) {
+    if (left <= lengths[i]) {
+      const t = lengths[i] ? left / lengths[i] : 0
+      return [points[i][0] + (points[i + 1][0] - points[i][0]) * t, points[i][1] + (points[i + 1][1] - points[i][1]) * t]
+    }
+    left -= lengths[i]
+  }
+  return points[points.length - 1]
 }
 
 const KIND_NAME = { flowchart: 'flowchart', mindmap: 'mind map', gantt: 'Gantt chart' }

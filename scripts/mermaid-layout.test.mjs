@@ -186,6 +186,27 @@ test('notes take the app\'s new-note look; frames keep theirs; a Mermaid style s
   assert.equal(into.boxes.get('a').style.borderColor, '#38761d')
 })
 
+// Two lines between the same ends running opposite ways (or into the frame holding the other's end) would be
+// drawn one over the other: the one running back curves round a side, both ends pinned to that side.
+const routes = (drawing) => drawing.lines.filter((l) => l.fromEnd || l.toEnd).map((l) => `${l.from}->${l.to} ${l.fromEnd}/${l.toEnd}`)
+test('a line back over another runs round a side: the site flowchart\'s "not yet", the subgraphs\' "reports to"', () => {
+  assert.deepEqual(routes(clean('flowchart', SITE_EXAMPLES.flowchart)), ['review->plan right/right'])
+  assert.deepEqual(routes(clean('frames', SITE_EXAMPLES.frames)), ['b1->inner right/right'])
+  assert.deepEqual(routes(clean('mindmap', SITE_EXAMPLES.mindmap)), [])
+  assert.deepEqual(routes(clean('gantt', SITE_EXAMPLES.gantt)), [])
+})
+
+test('across the page the line back runs below; a note in the way sends it round the other side; a lone line stays straight', () => {
+  assert.deepEqual(routes(clean('lr pair', 'flowchart LR\n  a --> b\n  b --> a')), ['b->a bottom/bottom'])
+  assert.deepEqual(routes(clean('td pair', 'flowchart TD\n  a --> b\n  b -->|again| a')), ['b->a right/right'])
+  assert.deepEqual(routes(clean('one way', 'flowchart TD\n  a --> b\n  b --> c')), [])
+  const blocked = clean('blocked', 'flowchart TD\n  a --> b\n  b --> a\n  a --> c\n  c --> d\n  b --> d')
+  for (const l of blocked.lines.filter((x) => x.fromEnd)) assert.equal(l.fromEnd, l.toEnd)
+  const { drawn } = draw('flowchart TD\n  a --> b\n  b --> a')
+  const box = drawn.bounds
+  assert.ok(box.width > 120, 'the bounds take in the curve beside the notes')
+})
+
 test('frame titles sit top left, so lines into a frame pass beside them', () => {
   assert.equal(FRAME_STYLE.textXAlign, 'left')
   assert.equal(FRAME_STYLE.textYAlign, 'top')
