@@ -7,26 +7,17 @@ import { Random } from 'meteor/random'
 import { useTheme } from '@mui/material/styles'
 import { useNavigate } from 'react-router-dom'
 import Typography from '@mui/material/Typography'
-import Container from '@mui/material/Container'
 import ImageList from '@mui/material/ImageList'
 import ImageListItem from '@mui/material/ImageListItem'
 import { useAtom, useSetAtom } from 'jotai'
 import { Skeleton } from '@mui/material'
-import Dialog from '@mui/material/Dialog'
-import AppBar from '@mui/material/AppBar'
-import IconButton from '@mui/material/IconButton'
 import Checkbox from '@mui/material/Checkbox'
-import CloseIcon from '@mui/icons-material/Close'
-import FileCopyIcon from '@mui/icons-material/FileCopy'
 import PublicIcon from '@mui/icons-material/Public'
 import LockIcon from '@mui/icons-material/Lock'
 import VpnLockIcon from '@mui/icons-material/VpnLock'
-import FilterNoneIcon from '@mui/icons-material/FilterNone'
 import ClearIcon from '@mui/icons-material/Clear'
 import SearchIcon from '@mui/icons-material/Search'
-import Toolbar from '@mui/material/Toolbar'
 import cloneDeep from 'lodash.clonedeep'
-import Grid from '@mui/material/Grid2'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import TextField from '@mui/material/TextField'
@@ -35,7 +26,6 @@ import promisify from '../../api/client/promisify'
 import CONSTANTS from '../../api/common/constants'
 import getUserName from '../../api/common/getUserName'
 import { useTranslator, getTranslation } from '../common/i18n'
-import copySlate from '../../api/client/copySlate'
 import RecentlyJoined from './RecentlyJoined'
 import EmptyState from './EmptyState'
 import { emptySlatesCopy, slateListView, SLATES_FAILED_COPY } from '../common/emptySlates.mjs'
@@ -87,11 +77,6 @@ export default function DisplaySlates({
   // A new key clears the filter field when the empty state's Clear the filter is used.
   const [titleKey, setTitleKey] = React.useState(0)
   const tags = []
-
-  const [slatePreview, setSlatePreview] = React.useState({
-    open: false,
-    slate: null,
-  })
 
   // reset to first page on first load
   useEffect(() => {
@@ -259,16 +244,6 @@ export default function DisplaySlates({
     }
   }
 
-  const handlePreviewClose = (e) => {
-    setSlatePreview({ open: false, slate: null })
-  }
-
-  const copyPreviewSlate = async (e) => {
-    const shareId = await copySlate(slatePreview.slate.shareId)
-    history(`/canvas/${shareId}`)
-    setSlatePreview({ open: false, slate: null })
-  }
-
   const addSlateToChecked = async (slate, isChecked) => {
     let lastChecked = cloneDeep(getSlateChecks) || []
     if (isChecked) {
@@ -293,31 +268,11 @@ export default function DisplaySlates({
 
   let headerMessage = getTranslation('slates', 'mySlates')
   let subHeaderMessage = getTranslation('slates', 'mySlatesSubHeader')
-  let slatePreviewMessage = getTranslation('slates', 'communitySlatePreview')
-  let slatePreviewButtonText = getTranslation(
-    'slates',
-    'communitySlatePreviewButtonText'
-  )
 
   switch (type) {
-    case 'community': {
-      headerMessage = getTranslation('slates', 'communitySlates')
-      subHeaderMessage = getTranslation('slates', 'communitySlatesSubHeader')
-      break
-    }
     case 'team': {
       headerMessage = getTranslation('slates', 'teamSlates')
       subHeaderMessage = getTranslation('slates', 'teamSlatesSubHeader')
-      break
-    }
-    case 'templates': {
-      headerMessage = getTranslation('slates', 'templates')
-      subHeaderMessage = getTranslation('slates', 'templatesSubHeader')
-      slatePreviewMessage = getTranslation('slates', 'templateSlatePreview')
-      slatePreviewButtonText = getTranslation(
-        'slates',
-        'templateSlatePreviewButtonText'
-      )
       break
     }
     default:
@@ -335,11 +290,6 @@ export default function DisplaySlates({
   }
 
   const getSlateChips = (slate) => [
-    {
-      show: slate.options?.isTemplate,
-      icon: <FilterNoneIcon />,
-      label: 'Template',
-    },
     {
       show: slate.options?.isPublic,
       icon: <PublicIcon color="inherit" />,
@@ -380,22 +330,14 @@ export default function DisplaySlates({
       >
         <Title
           key={titleKey}
-          showAdd={!(type === 'community' || type === 'templates')}
+          showAdd
           showSearch
           searchOptions={tags.map((t) => t.tag)}
           onAdd={() => history('/new')}
           onSearchInputChange={filterSlates}
-          onPrivateChanged={
-            type === 'community' || type === 'templates'
-              ? null
-              : onPrivateChanged
-          }
-          onDelete={
-            type === 'community' || type === 'templates' ? null : onDelete
-          }
-          onToggleSelect={
-            type === 'community' || type === 'templates' ? null : onToggleSelect
-          }
+          onPrivateChanged={onPrivateChanged}
+          onDelete={onDelete}
+          onToggleSelect={onToggleSelect}
           isSelectAllToggled={isSelectAllToggled}
           slateMinimumPerPage={slateFilter.slateMinimumPerPage}
           recordsPerPage={slateFilter.slateRecordsPerPage}
@@ -464,11 +406,7 @@ export default function DisplaySlates({
               const name = slate.options?.name || t('slates.defaultNewSlateName')
               function openSlate() {
                 setMainDrawerOpen(false)
-                if (type === 'community' || type === 'templates') {
-                  setSlatePreview({ open: true, slate: cloneDeep(slate) })
-                } else {
-                  history(`/canvas/${slate.shareId}`)
-                }
+                history(`/canvas/${slate.shareId}`)
               }
               return (
                 <Box component="li" key={slate.shareId} sx={{ minWidth: 0, listStyle: 'none', px: 0.75, pb: 1 }}>
@@ -476,7 +414,7 @@ export default function DisplaySlates({
                     {/* The thumbnail is one picture, named after the slate; its parts say nothing and take no focus or clicks. */}
                     <Box role="img" aria-label={name} sx={{ width: '100%', height: '100%' }}>
                       <Box inert="" sx={{ width: '100%', height: '100%' }}>
-                        <SnapSlate slate={slate} allowDrag={false} allowZoom={false} disableCollab={type === 'community'} index={i} />
+                        <SnapSlate slate={slate} allowDrag={false} allowZoom={false} index={i} />
                       </Box>
                     </Box>
                     <Box component="button" type="button" onClick={openSlate} aria-label={`Open ${name}`}
@@ -493,8 +431,8 @@ export default function DisplaySlates({
                         {slate.options?.userNameOverride || <UserName slateUserId={slate.userId} />}
                       </Typography>
                     </Box>
-                    <SlateMenu slate={slate} isTemplate={type === 'templates'} isCommunity={type === 'community'} isTeam={type === 'team'} />
-                    {!['community', 'team', 'templates'].includes(type) && (
+                    <SlateMenu slate={slate} />
+                    {type !== 'team' && (
                       <Checkbox size="small" checked={isSlateChecked(slate.options?.id)} inputProps={{ 'aria-label': `Select ${name}` }}
                         onChange={e => addSlateToChecked(slate, e.target.checked)} />
                     )}
@@ -511,70 +449,6 @@ export default function DisplaySlates({
           </ImageList>
         )}
       </Box>
-      <Dialog fullScreen open={slatePreview?.open} onClose={handlePreviewClose}>
-        <AppBar>
-          <Toolbar>
-            <Grid
-              justifyContent="space-between"
-              alignItems="center"
-              spacing={1}
-              container
-            >
-              <Grid size={1}>
-                <IconButton
-                  edge="start"
-                  color="inherit"
-                  onClick={handlePreviewClose}
-                  aria-label="close"
-                >
-                  <CloseIcon />
-                </IconButton>
-              </Grid>
-              <Grid size={3}>
-                <Typography variant="h5">
-                  {slatePreview?.slate?.options.name
-                    ? slatePreview.slate.options.name
-                    : 'Slate Preview'}
-                </Typography>
-              </Grid>
-              <Grid size={8}>
-                <Grid
-                  container
-                  justifyContent="flex-end"
-                  alignItems="center"
-                  spacing={2}
-                >
-                  {lgmq && (
-                    <Grid>
-                      <Typography variant="body2">
-                        {slatePreviewMessage} &rarr;
-                      </Typography>
-                    </Grid>
-                  )}
-                  <Grid>
-                    <Button
-                      variant="outlined"
-                      startIcon={<FileCopyIcon />}
-                      onClick={copyPreviewSlate}
-                    >
-                      {slatePreviewButtonText}
-                    </Button>
-                  </Grid>
-                </Grid>
-              </Grid>
-            </Grid>
-          </Toolbar>
-        </AppBar>
-        <Container component="main" maxWidth="xl" style={{ height: '100%' }}>
-          <SnapSlate
-            slate={slatePreview?.slate}
-            overrideContainer
-            allowZoom
-            allowDrag
-            disableCollab={false}
-          />
-        </Container>
-      </Dialog>
     </Box>
   )
 }

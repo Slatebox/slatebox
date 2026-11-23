@@ -48,21 +48,11 @@ test("welcome discovery and template validation share the eligibility policy", a
   );
 });
 
-test("explicit creation links preserve known aliases, names, IDs and copy titles", async () => {
-  const { legacyTemplateDestination, templateCopyTopic } = await import("../web/app/imports/api/common/template-policy.mjs");
-  assert.equal(legacyTemplateDestination("?topic=one"), null);
-  for (const param of ["template", "templateId"]) {
-    const search = new URLSearchParams({ [param]: "proConScaffold", topic: "R&D / next?", token: "unused" });
-    const dest = new URL(legacyTemplateDestination(search), "https://app.slatebox.com");
-    assert.equal(dest.pathname, "/templates/pro-con-analysis");
-    assert.equal(templateCopyTopic(dest.searchParams), "R&D / next?");
-    assert.deepEqual([...dest.searchParams.keys()], ["topic"]);
-  }
-  assert.equal(legacyTemplateDestination("?template=Pro%2FCon+Analysis"), "/templates/pro-con-analysis");
-  assert.equal(legacyTemplateDestination("?templateId=tplprocon001"), "/templates/tplprocon001");
-  assert.equal(legacyTemplateDestination("?templateId=Case_Sensitive-ID"), "/templates/Case_Sensitive-ID");
-  assert.equal(legacyTemplateDestination("?template=removed-template"), "/templates/removed-template");
-  assert.equal(legacyTemplateDestination("?template=%2E%2E%2F"), "/templates");
-  assert.equal(legacyTemplateDestination("?template=" + "x".repeat(241)), "/templates");
-  assert.equal(templateCopyTopic(new URLSearchParams({ topic: " a".repeat(200) })).length, 160);
+test("the template gallery is gone: creation links open a new slate, and no /templates route or link remains", async () => {
+  // Superseded (2026-11-23): the public template gallery and its creation-link redirects were
+  // replaced by the shared library (/library). The policy keeps only the welcome assistant's rule.
+  const policy = await import("../web/app/imports/api/common/template-policy.mjs");
+  assert.deepEqual(Object.keys(policy).sort(), ["isUserSelectableTemplate", "userSelectableTemplateSelector"]);
+  const main = await readFile(new URL("../web/app/client/main.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(main, /\/templates|SlateTemplates|legacyTemplateDestination/);
 });

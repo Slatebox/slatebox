@@ -38,7 +38,7 @@ export default function FollowPresentation({ slate, deck, step, workshop }) {
       setPresentation(previous => ({
         ...previous,
         isAnalyzing: false, isPlaying: false, currentView: -1,
-        autoplayOnPublish: false, isEmbedded: false, playOnHover: false, isFeatured: false, showNarrative: true,
+        autoplayOnPublish: false, isEmbedded: false, playOnHover: false, showNarrative: true,
         slateSVG: surface.svg, orientData: surface.orient, presentationData: surface.layout,
         presentationName: deck.name,
         slateJSON: copy,

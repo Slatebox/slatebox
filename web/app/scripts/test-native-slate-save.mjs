@@ -189,9 +189,10 @@ try {
   } }
   await save(owner, authored)
   const draft = await slates.findOne({ _id: 'authored' })
-  assert.equal(draft.options.isTemplate, true)
+  // The template gallery, community list and featuring are retired (the shared library replaced
+  // them): a browser save writes none of their flags, for anyone.
   assert.equal(draft.options.isPublic, true)
-  assert.ok(!draft.options.templateApproved && !draft.options.isFeatured)
+  assert.ok(!('isTemplate' in draft.options) && !('templateApproved' in draft.options) && !('isFeatured' in draft.options))
   console.log('PASS native saves, concurrent creation, retries, stale identity and visibility, copy, private and public grants, and board-bound guest access')
   // An old browser snapshot cannot erase notes appended by a newer conversation.
   await slates.updateOne({_id:'native'},{$set:{nativeConversationRevision:1}})

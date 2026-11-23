@@ -1,16 +1,12 @@
 /* eslint-disable no-underscore-dangle */
 import React from 'react'
-import PropTypes from 'prop-types'
 import { Random } from 'meteor/random'
 import { Meteor } from 'meteor/meteor'
 import { useTheme } from '@mui/material/styles'
-import { useNavigate } from 'react-router-dom'
 import Typography from '@mui/material/Typography'
 import IconButton from '@mui/material/IconButton'
-import { Button, ButtonGroup } from '@mui/material'
 import FileCopyIcon from '@mui/icons-material/FileCopy'
 import DeleteIcon from '@mui/icons-material/Delete'
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import LockOpenIcon from '@mui/icons-material/LockOpen'
 import LockIcon from '@mui/icons-material/Lock'
 import { useAtom } from 'jotai'
@@ -18,11 +14,6 @@ import MoreVertIcon from '@mui/icons-material/MoreVert'
 import MenuItem from '@mui/material/MenuItem'
 import Menu from '@mui/material/Menu'
 import ListItemIcon from '@mui/material/ListItemIcon'
-import Popper from '@mui/material/Popper'
-import Grow from '@mui/material/Grow'
-import Paper from '@mui/material/Paper'
-import ClickAwayListener from '@mui/material/ClickAwayListener'
-import MenuList from '@mui/material/MenuList'
 import confirmService from '../common/confirm'
 import copySlate from '../../api/client/copySlate'
 import CONSTANTS from '../../api/common/constants'
@@ -35,21 +26,16 @@ import {
   slateRererender,
 } from '../jotai/atoms'
 
-export default function SlateMenu({ slate, isTemplate, isCommunity }) {
-  const history = useNavigate()
+// The menu on a slate in your own lists (My slates, Team slates): make a copy, delete it, make it public or private.
+export default function SlateMenu({ slate }) {
   const theme = useTheme()
-  const anchorRef = React.useRef(null)
-  const [rerender, setRerender] = useAtom(slateRererender)
-  const [message, setMessage] = useAtom(globalMessage)
-  const [templateSubMenuOpen, setTemplateSubMenuOpen] = React.useState(false)
+  const [, setRerender] = useAtom(slateRererender)
+  const [, setMessage] = useAtom(globalMessage)
 
-  async function copy(blnTemplateFromTemplate) {
-    const shareId = await copySlate(slate.shareId, { keepTemplate: !isTemplate, fromTemplate: blnTemplateFromTemplate })
+  async function copy() {
+    await copySlate(slate.shareId)
     // causes rerender:
     setRerender(Random.id())
-    if (isCommunity || isTemplate) {
-      history(`/canvas/${shareId}`)
-    }
   }
 
   async function deleteSlate() {
@@ -101,84 +87,9 @@ export default function SlateMenu({ slate, isTemplate, isCommunity }) {
     setSlateAnchorEl(null)
   }
 
-  function handleTemplateFromTemplateSubMenu(e) {
-    e.stopPropagation()
-    setTemplateSubMenuOpen((prevOpen) => !prevOpen)
-  }
-
-  function handleSlateSubMenuClose() {
-    setTemplateSubMenuOpen(false)
-  }
-
   return (
     <div>
-      {isTemplate ? (
-        <>
-          <ButtonGroup
-            variant="contained"
-            color="secondary"
-            ref={anchorRef}
-            aria-label="split button"
-          >
-            <Button
-              onClick={(e) => {
-                e.stopPropagation()
-                copy()
-              }}
-            >
-              Use
-            </Button>
-            <Button
-              color="secondary"
-              aria-controls={
-                templateSubMenuOpen
-                  ? 'create-template-from-template'
-                  : undefined
-              }
-              aria-expanded={templateSubMenuOpen ? 'true' : undefined}
-              aria-haspopup="menu"
-              onClick={handleTemplateFromTemplateSubMenu}
-            >
-              <ArrowDropDownIcon />
-            </Button>
-          </ButtonGroup>
-          <Popper
-            open={templateSubMenuOpen}
-            anchorEl={anchorRef.current}
-            role={undefined}
-            transition
-            disablePortal
-            placement="bottom-start"
-          >
-            {({ TransitionProps, placement }) => (
-              <Grow
-                {...TransitionProps}
-                style={{
-                  transformOrigin:
-                    placement === 'bottom' ? 'center top' : 'center bottom',
-                }}
-              >
-                <Paper>
-                  <ClickAwayListener onClickAway={handleSlateSubMenuClose}>
-                    <MenuList id="create-template-from-template">
-                      <MenuItem
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          copy(true)
-                          handleSlateSubMenuClose()
-                        }}
-                      >
-                        As Template
-                      </MenuItem>
-                    </MenuList>
-                  </ClickAwayListener>
-                </Paper>
-              </Grow>
-            )}
-          </Popper>
-        </>
-      ) : (
-        <>
+      <>
           <IconButton
             aria-controls="slate-menu"
             aria-haspopup="true"
@@ -209,11 +120,9 @@ export default function SlateMenu({ slate, isTemplate, isCommunity }) {
               <ListItemIcon>
                 <FileCopyIcon />
               </ListItemIcon>
-              <Typography>{isTemplate ? <>Use template</> : <>Make a copy</>}</Typography>
+              <Typography>Make a copy</Typography>
             </MenuItem>
-            {!isCommunity &&
-              !isTemplate &&
-              (Meteor.userId() === slate.userId ||
+            {(Meteor.userId() === slate.userId ||
                 AuthManager.userHasClaim(Meteor.userId(), [
                   CONSTANTS.claims.admin._id,
                 ])) && (
@@ -229,9 +138,7 @@ export default function SlateMenu({ slate, isTemplate, isCommunity }) {
                   <Typography>Delete</Typography>
                 </MenuItem>
               )}
-            {!isCommunity &&
-              !isTemplate &&
-              Meteor.userId() === slate.userId && (
+            {Meteor.userId() === slate.userId && (
                 <MenuItem
                   onClick={async (e) => {
                     hideSlateMenu(e)
@@ -248,13 +155,10 @@ export default function SlateMenu({ slate, isTemplate, isCommunity }) {
               )}
           </Menu>
         </>
-      )}
     </div>
   )
 }
 
 SlateMenu.propTypes = {
   slate: slateProps.isRequired,
-  isTemplate: PropTypes.bool.isRequired,
-  isCommunity: PropTypes.bool.isRequired,
 }

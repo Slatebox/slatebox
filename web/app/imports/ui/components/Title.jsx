@@ -249,43 +249,6 @@ export default function Title({
             >
               New
             </Button>
-            {/* <Popper
-              style={{ zIndex: 9999 }}
-              open={slateSubMenuOpen}
-              anchorEl={anchorRef.current}
-              role={undefined}
-              transition
-              disablePortal
-              placement="bottom-end"
-            >
-              {({ TransitionProps }) => (
-                <Grow {...TransitionProps}>
-                  <Paper
-                    elevation={3}
-                    sx={{
-                      backgroundColor: theme.palette.background.default,
-                      color: theme.palette.text.primary,
-                    }}
-                  >
-                    <ClickAwayListener onClickAway={handleSlateSubMenuClose}>
-                      <MenuList id="create-slate-menu">
-                        <MenuItem
-                          onClick={() => history('/templates')}
-                          sx={{
-                            color: theme.palette.secondary.main,
-                            '&:hover': {
-                              backgroundColor: theme.palette.action.hover,
-                            },
-                          }}
-                        >
-                          Browse Templates
-                        </MenuItem>
-                      </MenuList>
-                    </ClickAwayListener>
-                  </Paper>
-                </Grow>
-              )}
-            </Popper> */}
           </Grid>
         )}
       </Grid>

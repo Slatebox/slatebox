@@ -790,7 +790,6 @@ method[CONSTANTS.methods.presentations.update] = async ({
   isEmbedded,
   playOnHover,
   isPublic,
-  isFeatured,
   style,
   picture,
 }) => {
@@ -879,10 +878,6 @@ method[CONSTANTS.methods.presentations.update] = async ({
 
   const updateFields = {}
 
-  if (isFeatured === true && user.isMasterUser !== true) {
-    throw new Meteor.Error('not-authorized', 'Only an editor of the public gallery can feature presentations.')
-  }
-
   if (showNarrative != null) {
     updateFields.showNarrative = showNarrative
   }
@@ -911,9 +906,6 @@ method[CONSTANTS.methods.presentations.update] = async ({
     // A sequence someone has edited is theirs, no longer the automatic one.
     updateFields.automatic = false
   }
-  if (isFeatured != null) {
-    updateFields.isFeatured = isFeatured === true
-  }
   if (isEmbedded != null) {
     updateFields.isEmbedded = isEmbedded
   }
@@ -925,7 +917,6 @@ method[CONSTANTS.methods.presentations.update] = async ({
   }
   if (isPublic != null) {
     updateFields.isPublic = isPublic
-    if (!isPublic) updateFields.isFeatured = false
   }
   if (playOnHover != null) {
     updateFields.playOnHover = playOnHover

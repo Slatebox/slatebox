@@ -132,7 +132,7 @@ export default function SnapSlate({
           drawn.current = await drawSlateBoards(snap.v2 ?? snap, ss)
           if (gone.current) return
         }
-        if (ss.nodes.length < 25 || ss.options.templateApproved || boards) {
+        if (ss.nodes.length < 25 || boards) {
           snap.controller.scaleToFitAndCenter(() => {
             setVisible(true)
           })

@@ -4,14 +4,5 @@
   "mySlatesSubHeader": " ",
   "teamSlates": "Team slates",
   "teamSlatesSubHeader": "Your team’s slates, and yours shared with the team",
-  "communitySlates": "Community slates",
-  "communitySlatesSubHeader": " ",
-  "templates": "Slate templates",
-  "templatesSubHeader": " ",
-  "defaultNewSlateName": "Untitled slate",
-  "communitySlatePreview": "This slate is read-only. Make a copy to edit it in your own slates",
-  "communitySlatePreviewButtonText": "Make a copy",
-  "templateSlatePreview": "Start a slate from this template",
-  "slatePreviewButtonText": "Make a copy",
-  "templateSlatePreviewButtonText": "Use template"
+  "defaultNewSlateName": "Untitled slate"
 }

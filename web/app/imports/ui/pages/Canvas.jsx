@@ -510,8 +510,7 @@ export default function Canvas() {
           contextuallySetSlate(slate.current)
         }
 
-        const { isTemplate, templateApproved, isPublic, isPrivate, isUnlisted, isEmbedded } = slate.current.options
-        const publishedTemplate = isTemplate && templateApproved && isPublic && !isPrivate && !isUnlisted
+        const { isPublic, isPrivate, isUnlisted, isEmbedded } = slate.current.options
 
         // special handling of deleted comment node
         if (pkg.data.isComment && pkg.type === 'onNodeDeleted') {
@@ -525,14 +524,14 @@ export default function Canvas() {
         // A public slate's share link shows a picture of its board (server/common/share-image.mjs): the
         // preview is uploaded once the slate has been still for a while, and at most every few minutes.
         if (!['onMouseMoved', 'onCanvasMove'].includes(pkg.type) && isPublic && !isPrivate && !isUnlisted &&
-          !publishedTemplate && !isEmbedded && accessLevel.current?.isEditable) {
+          !isEmbedded && accessLevel.current?.isEditable) {
           sharePreviewLater()
         }
 
-        // special work for templates or embedded slates
+        // An embedded slate keeps a picture of itself for its embeds.
         if (
           !['onMouseMoved', 'onCanvasMove'].includes(pkg.type) &&
-          (publishedTemplate || isEmbedded)
+          isEmbedded
         ) {
           slate.current.options.urlName = utils.safeForUrls(
             slate.current.options.name
@@ -545,7 +544,7 @@ export default function Canvas() {
                 slate?.current?.options.id,
                 base64,
                 false,
-                publishedTemplate,
+                false,
                 slate?.current?.options?.isEmbedded
               )
               if (!urlDetails?.slateImageUrl) {
@@ -553,8 +552,6 @@ export default function Canvas() {
                 return
               }
               slate.current.options.staticImage = urlDetails.slateImageUrl
-              slate.current.options.staticFrameImage =
-                urlDetails.slateImageWithFrameUrl
               await saveSlateLite({
                 routeKey: id,
                 type: null,

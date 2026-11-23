@@ -15,8 +15,8 @@ export const sourceOnly = ['_id', 'shareId', 'userId', 'orgId', 'created', 'last
 export const sourceOnlyOptions = ['url_name', 'accessKey', 'allowCollaboration', 'isSharing', 'searchName', 'searchDescription', 'searchText',
   'welcomeAid', 'uploadedFiles', 'lastSavedGoogleDocUrl', 'staticImage', 'staticImageTimestamp', 'staticFrameImage']
 
-// A copy is an ordinary slate: never a template, whatever its source was.
-const templateOptions = ['isTemplate', 'templateApproved', 'templateMarkdown', 'templateTags', 'tags', 'basedOnTemplate', 'templateName']
+// A copy is an ordinary slate: none of the retired template, community or featured flags, whatever its source had.
+const templateOptions = ['isTemplate', 'templateApproved', 'templateMarkdown', 'templateTags', 'tags', 'basedOnTemplate', 'templateName', 'isCommunity', 'isFeatured']
 
 /** The new slate's document, before the save core stores it. */
 export function copyDocument(source, { id, shareId, user, now, name, libraryOrigin }) {
@@ -45,7 +45,7 @@ export function copyDocument(source, { id, shareId, user, now, name, libraryOrig
   Object.assign(copy.options, {
     id,
     // Sharing belongs to the source. The new owner shares the copy separately.
-    isPrivate: true, isUnlisted: false, isPublic: false, isCommunity: false, isFeatured: false,
+    isPrivate: true, isUnlisted: false, isPublic: false,
   })
   return {
     ...copy,

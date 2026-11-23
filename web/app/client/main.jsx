@@ -13,7 +13,6 @@ import sbTheme from '../imports/ui/common/muiThemes'
 import App from '../imports/ui/App'
 import NewCreativeSlate from '../imports/ui/pages/NewCreativeSlate'
 import GetStarted from '../imports/ui/pages/GetStarted'
-import { legacyTemplateDestination } from '../imports/api/common/template-policy.mjs'
 import Login from '../imports/ui/pages/Login'
 import { globalMessage } from '../imports/ui/jotai/atoms'
 // Loads the enterprise/ browser chunk after start where the server says it is unlocked (Cloud, or a
@@ -21,7 +20,6 @@ import { globalMessage } from '../imports/ui/jotai/atoms'
 import './enterprise'
 
 // Pages a first visit to a slate never opens: each loads when its route is first opened.
-const SlateTemplates = lazy(() => import('../imports/ui/pages/SlateTemplates'))
 const Present = lazy(() => import('../imports/ui/pages/Present'))
 const Workshops = lazy(() => import('../imports/ui/pages/DecisionWorkshopPage.jsx'))
 const OAuthConsent = lazy(() => import('../imports/ui/pages/OAuthConsent'))
@@ -34,8 +32,6 @@ import './i18n/en/teamSettings.i18n.json'
 
 function CreationEntry({ alias = false }) {
   const { search, hash } = useLocation()
-  const destination = legacyTemplateDestination(search)
-  if (destination) return <Navigate replace to={destination} />
   if (alias) return <Navigate replace to={'/new' + search + hash} />
   if (hash) return <NewCreativeSlate fromBrief />
   return <GetStarted />
@@ -100,10 +96,6 @@ function AppWrapper() {
       <Router>
         <Suspense fallback={null}>
         <Routes>
-          <Route path="/templates" element={<SlateTemplates />} />
-          <Route path="/templates/:slug" element={<SlateTemplates />} />
-          <Route path="/templates/tag/:tag" element={<SlateTemplates />} />
-          <Route path="/templates/preview/:preview" element={<SlateTemplates />} />
           <Route path="/workshops" element={<Workshops />} />
           <Route path="/present/:slateShareId" element={<Present />} />
           <Route path="/start" element={<CreationEntry alias />} />

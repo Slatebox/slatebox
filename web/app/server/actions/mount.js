@@ -22,7 +22,6 @@ import { deleteOwnedSlate, embedViewerOrigin, generateSlateShareId } from '../me
 import { canCommentSlate } from '../common/slate-access'
 import { resolvePresentationSlate } from '../methods/creative-slates'
 import { slateSaveCore } from '../slate-save'
-import { publicTemplateSelector } from '../../imports/api/common/template-policy.mjs'
 import CONSTANTS from '../../imports/api/common/constants'
 import AuthManager from '../../imports/api/common/AuthManager'
 import { slateListSelector } from './slate-list.mjs'
@@ -94,10 +93,7 @@ export const deps = {
     canComment: (slate, userId) => canCommentSlate(userId, slate),
     async resolveSlateForUser(shareId, userId) {
       const access = await resolvePresentationSlate(shareId, userId)
-      if (access) return { slate: access.slateBase, canRead: Boolean(access.accessLevel), canEdit: access.canEdit }
-      // A template in the public directory can be opened (and copied) by anyone signed in.
-      const template = await Slates.findOneAsync(publicTemplateSelector({ shareId }))
-      return template && { slate: template, canRead: true, canEdit: false }
+      return access ? { slate: access.slateBase, canRead: Boolean(access.accessLevel), canEdit: access.canEdit } : null
     },
     newId: () => Random.id(),
     publishedPresentation: (shareId) => SlatePresentations.findOneAsync({ slateShareId: shareId, isPublished: true }),
@@ -110,8 +106,9 @@ export const deps = {
     // presentations.create: Present's plan, on the server (methods/presentations.js).
     createPresentation: (request) => createPresentationFor(request),
     async copyPresentation(presentation, { shareId, sourceShareId, user, now }) {
+      const { isFeatured: _retired, ...deck } = structuredClone(presentation)
       await SlatePresentations.insertAsync({
-        ...structuredClone(presentation),
+        ...deck,
         _id: Random.id(),
         slateShareId: shareId,
         originalPresentationId: presentation._id,
@@ -121,7 +118,6 @@ export const deps = {
         userId: user._id,
         orgId: user.orgId,
         author: await getExternalUserName(user._id),
-        isFeatured: false,
         isPublic: false,
       })
     },

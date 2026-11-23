@@ -1,39 +1,23 @@
 /* eslint-disable no-underscore-dangle */
-import React, { Suspense, lazy, useState } from 'react'
+import React from 'react'
 import PropTypes from 'prop-types'
-import { Meteor } from 'meteor/meteor'
 import Grid from '@mui/material/Grid2'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import Button from '@mui/material/Button'
 import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
 import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
 import { useAtom, useAtomValue } from 'jotai'
-import { useTracker } from 'meteor/react-meteor-data'
-import CONSTANTS from '../../../api/common/constants'
 import {
   currentSlate,
   slateHuddleType,
   currentSlateName,
   slateNameProblem,
-  areTemplateDetailsOpen,
 } from '../../jotai/atoms'
-
-import { ApprovalRequests, Organizations } from '../../../api/common/models'
-// The template editor (a Markdown editor) loads when it is first opened, never with the canvas.
-const TemplateDetails = lazy(() => import('../TemplateDetails'))
-import { Link } from '@mui/material'
 
 export default function SlateSettings({ onChange }) {
   const slate = useAtomValue(currentSlate)
-  const [getTemplateDetails, setTemplateDetails] = useAtom(
-    areTemplateDetailsOpen
-  )
-  // Once opened, the editor stays mounted so it closes with its own transition.
-  const [templateEditorWanted, setTemplateEditorWanted] = useState(false)
-  if (getTemplateDetails.open && !templateEditorWanted) setTemplateEditorWanted(true)
   const [getSlateName, setSlateName] = useAtom(currentSlateName)
   const [nameProblem, setNameProblem] = useAtom(slateNameProblem)
   const [getSlateHuddleType, setSlateHuddleType] = useAtom(slateHuddleType)
@@ -53,17 +37,8 @@ export default function SlateSettings({ onChange }) {
   const [mindMapMode, setSlateMindMapMode] = React.useState(
     slate?.options?.mindMapMode
   )
-  const [isTemplate, setSlateTemplate] = React.useState(
-    slate?.options?.isTemplate
-  )
-  const [savingTemplate, setSavingTemplate] = React.useState(false)
-  const [templateError, setTemplateError] = React.useState('')
   const [autoResizeNodesBasedOnText, setAutoResizeNodesBasedOnText] =
     React.useState(slate?.options?.autoResizeNodesBasedOnText)
-
-  const showTemplateProperties = (e) => {
-    setTemplateDetails({ open: true })
-  }
 
   const setShowGrid = (e) => {
     setSlateShowGrid(e.target.checked)
@@ -117,21 +92,6 @@ export default function SlateSettings({ onChange }) {
     })
   }
 
-  const setTemplate = async (e) => {
-    const enabled = e.target.checked
-    setSavingTemplate(true)
-    setTemplateError('')
-    try {
-      const committed = await Meteor.callAsync('templates.setDraft', slate.shareId, enabled)
-      setSlateTemplate(committed)
-      onChange({ type: 'onSlateTemplateChanged', data: { isTemplate: committed } })
-    } catch (err) {
-      setTemplateError(err.reason || 'Could not change the template setting.')
-    } finally {
-      setSavingTemplate(false)
-    }
-  }
-
   const setName = (e) => {
     setNameProblem('')
     setSlateName(e.target.value)
@@ -143,29 +103,6 @@ export default function SlateSettings({ onChange }) {
       type: 'onSlateDescriptionChanged',
       data: { description: e.target.value },
     })
-  }
-
-  const handleTemplateRequest = async () => {
-    await ApprovalRequests.insertAsync({
-      slateId: slate.options.id,
-      type: 'template',
-      userId: Meteor.userId(),
-      approved: false,
-      message: 'Your approval is pending…',
-    })
-  }
-
-  const templateApproval = useTracker(() => {
-    Meteor.subscribe(
-      CONSTANTS.publications.approvalRequests,
-      'template',
-      slate?.options?.id
-    )
-    return ApprovalRequests.findOne()
-  })
-
-  const cancelTemplateRequest = async () => {
-    await ApprovalRequests.removeAsync({ _id: templateApproval?._id })
   }
 
   SlateSettings.propTypes = {
@@ -284,98 +221,6 @@ export default function SlateSettings({ onChange }) {
           <Switch onChange={setFollowMe} checked={isFollowMe} />
         </Tooltip>
       </Grid>
-      <Grid size={8}>
-        <Typography variant="body2">Is Template</Typography>
-      </Grid>
-      <Grid size={4}>
-        <Tooltip
-          title="Mark slate as a template "
-          placement="top"
-          aria-label="markSlateAsTemplate"
-        >
-          <Switch onChange={setTemplate} checked={Boolean(isTemplate)}
-            disabled={savingTemplate || !slate?.shareId || slate?.userId !== Meteor.userId()} />
-        </Tooltip>
-      </Grid>
-      {templateError && <Grid size={12}><Typography role="alert">{templateError}</Typography></Grid>}
-      {isTemplate && (
-        <Grid size={12}>
-          <Button
-            fullWidth="true"
-            variant="outlined"
-            onClick={showTemplateProperties}
-          >
-            Provide Details
-          </Button>
-          <Typography variant="body2">
-            <p>
-              Templates provide re-usable slates that center around a topic
-              (e.g., product roadmap, user stories, swot analysis, etc).
-            </p>
-            {!templateApproval && (
-              <p>
-                Click the below button to request approval for this
-                template. When approved, it will be available for others to
-                use.
-              </p>
-            )}
-          </Typography>
-        </Grid>
-      )}
-      {isTemplate && (
-        <Grid size={12}>
-          {!templateApproval && (
-            <Button
-              variant="outlined"
-              color="secondary"
-              onClick={handleTemplateRequest}
-            >
-              Request Template Approval
-            </Button>
-          )}
-          {templateApproval?.approved && (
-            <p>
-              Hooray! Your template is{' '}
-              <Link href="/templates">approved and available</Link>.
-            </p>
-          )}
-          {templateApproval && !templateApproval?.approved && (
-            <>
-              <p>{templateApproval?.message}</p>
-              <Button
-                variant="outlined"
-                color="secondary"
-                onClick={() => {
-                  cancelTemplateRequest()
-                }}
-              >
-                Cancel Request
-              </Button>
-            </>
-          )}
-        </Grid>
-      )}
-      {(templateEditorWanted || getTemplateDetails.open) && <Suspense fallback={null}><TemplateDetails
-        open={getTemplateDetails.open}
-        shareId={slate?.shareId}
-        initialContent={slate?.options?.templateMarkdown || ''}
-        aiPrompt={slate?.options?.templatePrompt || ''}
-        slateTags={slate?.options?.tags || []}
-        onTemplateDetailsChanged={({ tags, markdown, templatePrompt }) => {
-          // console.log('changing', tags, markdown, templatePrompt)
-          onChange({
-            type: 'onSlateTagsAndTemplateMarkdownChanged',
-            data: {
-              tags,
-              templateMarkdown: markdown,
-              templatePrompt,
-            },
-          })
-        }}
-        onClose={(e) => {
-          setTemplateDetails({ open: false })
-        }}
-      /></Suspense>}
     </Grid>
   )
 }

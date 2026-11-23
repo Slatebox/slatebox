@@ -4,7 +4,6 @@ import { createApiLoginLink } from './methods/users'
 /* eslint-disable no-underscore-dangle */
 import { Meteor } from 'meteor/meteor'
 import app from './expressApp'
-import { featuredPresentationFeed } from './common/featuredPresentationFeed.mjs'
 import {
   APILinks,
   SlatePresentations,
@@ -18,28 +17,6 @@ import { mountOAuth } from './oauth/meteor'
 mountActions(app)
 mountMcp(app) // POST /mcp: the hosted MCP endpoint (exec, describe and one typed tool per client method)
 mountOAuth(app) // /oauth/* and /.well-known/oauth-*: how an MCP app signs a person in to /mcp
-
-app.get('/api/public-presentations', async (req, res) => {
-  res.set('Cache-Control', 'no-store')
-  const intentionId = req.query.intentionId ?? null
-  if (intentionId !== null && (typeof intentionId !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(intentionId))) {
-    return res.status(400).json({ error: 'Invalid intentionId' })
-  }
-  const requested = Number(req.query.limit ?? 4)
-  if (!Number.isSafeInteger(requested) || requested < 1) {
-    return res.status(400).json({ error: 'Invalid limit' })
-  }
-  try {
-    const items = await featuredPresentationFeed({
-      presentations: SlatePresentations.rawCollection(),
-      baseUrl: Meteor.settings.public.baseUrl, assetBase: Meteor.settings.aws?.cloudUrl,
-      intentionId, limit: Math.min(requested, 4),
-    })
-    return res.json(items)
-  } catch {
-    return res.status(503).json({ error: 'The presentation gallery is unavailable' })
-  }
-})
 
 if (Meteor.settings.public.env === 'selfhost') {
   app.get('/embed/:shareId', async (request, response) => {

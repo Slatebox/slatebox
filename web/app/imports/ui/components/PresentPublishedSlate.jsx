@@ -108,7 +108,6 @@ export default function PresentPublishedSlate({ slateShareId, surfaceId = 'prese
         showControls: !pinnedPrezi.isEmbedded,
         playOnHover: pinnedPrezi.playOnHover ?? false,
         isPublic: pinnedPrezi.isPublic ?? false,
-        isFeatured: pinnedPrezi.isFeatured ?? false,
         // The deck's own setting: a dynamic deck saved without narrative stays without it.
         showNarrative: pinnedPrezi.showNarrative ?? false,
         presentationMenuBgColorKey: pinned.presentationMenuBgColorKey,

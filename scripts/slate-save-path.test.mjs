@@ -264,8 +264,9 @@ test("a copy cannot come out approved, featured or public, and leaves the author
   const copied = await env.registry.run(stranger, "slates.copy", { shareId: "share1" });
   const copy = await env.slates.findOne({ shareId: copied.body.shareId });
   assert.deepEqual(
+    // The community list and featuring are retired too: a copy carries neither flag at all.
     [copy.options.isPrivate, copy.options.isPublic, copy.options.isUnlisted, copy.options.isCommunity, copy.options.isFeatured, copy.options.templateApproved],
-    [true, false, false, false, false, undefined],
+    [true, false, false, undefined, undefined, undefined],
   );
   assert.equal(copy.options.isTemplate, undefined);
   for (const key of ["welcomeAid", "uploadedFiles", "lastSavedGoogleDocUrl", "staticImage", "staticImageTimestamp", "staticFrameImage"])

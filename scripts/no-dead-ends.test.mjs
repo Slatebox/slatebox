@@ -90,19 +90,14 @@ test('#8 the account form says sign up to a new visitor and save your work to a 
 })
 
 test('#9 an empty list is a designed state with a next step, never an alert', () => {
-  assert.deepEqual(emptySlatesCopy({ type: 'community', signedIn: true }), {
-    title: 'Nothing shared publicly yet',
-    body: 'Make one of your slates public from Share and it shows up here for everyone.',
-    action: { label: 'Start a slate', to: '/new' },
+  // Community slates are retired (the shared library replaced them): no list has that copy any more.
+  assert.deepEqual(emptySlatesCopy({ type: 'team', signedIn: true, filter: ' retro ' }), {
+    title: 'No team slates match “retro”',
+    body: 'Try another word, or clear the filter.',
+    clear: true,
   })
-  assert.deepEqual(emptySlatesCopy({ type: 'community', signedIn: false }), {
-    title: 'See what people share',
-    body: 'Sign in to explore public slates, or start one of your own. No account needed.',
-    action: { label: 'Start a slate', to: '/new' },
-    secondary: { label: 'Sign in', to: '/login' },
-  })
-  assert.deepEqual(emptySlatesCopy({ type: 'community', signedIn: true, filter: ' retro ' }), {
-    title: 'No public slates match “retro”',
+  assert.deepEqual(emptySlatesCopy({ type: 'mine', signedIn: true, filter: ' retro ' }), {
+    title: 'No slates match “retro”',
     body: 'Try another word, or clear the filter.',
     clear: true,
   })
@@ -190,7 +185,7 @@ test('#18 a guest opens Mermaid itself: export is free to read, and a new slate 
 test('#19 sentence case and real ellipses in the copy people read', () => {
   const slates = JSON.parse(app('client/i18n/en/slates.i18n.json'))
   assert.equal(slates.mySlates, 'My slates')
-  assert.equal(slates.communitySlates, 'Community slates')
+  assert.equal(slates.communitySlates, undefined, 'Community slates are retired: the library replaced them')
   assert.equal(slates.teamSlates, 'Team slates')
   assert.equal(slates.defaultNewSlateName, 'Untitled slate')
   for (const [key, value] of Object.entries(slates)) assert.doesNotMatch(value, /!|buttton/, key)

@@ -56,7 +56,6 @@ const BasePresent = forwardRef(
     const [transform, setTransform] = useState('')
     const [initialTransform, setInitialTransform] = useState('')
     const [isLowPerformance, setIsLowPerformance] = useState(undefined)
-    const [hasPausedFeatured, setHasPausedFeatured] = useState(false)
     const [svgHasLoaded, setSVGHasLoaded] = useState(false)
     const [baseUrl, setBaseUrl] = useState(Meteor.settings.public.baseUrl)
     const [curPresentation, setCurPresentation] = useAtom(currentPresentation)
@@ -384,18 +383,6 @@ const BasePresent = forwardRef(
         !isEditable
       ) {
         startPresentation(true)
-      } else if (
-        curPresentation.autoplayOnPublish &&
-        curPresentation.isPlaying &&
-        curPresentation.isFeatured &&
-        curPresentation.playOnHover &&
-        curPresentation.currentView === 1 &&
-        !hasPausedFeatured &&
-        !isEditable
-      ) {
-        // this pauses a featured presentation once it's at the first viewpoint if all the criteria are met
-        setHasPausedFeatured(true)
-        setCurPresentation((prev) => ({ ...prev, isPlaying: false }))
       }
     }, [curPresentation])
 
@@ -493,18 +480,7 @@ const BasePresent = forwardRef(
 
       // Set up the timer for auto-progression
 
-      let { duration } = curPresentation.viewpoints[curPresentation.currentView]
-      if (curPresentation.playOnHover && curPresentation.isFeatured) {
-        if (duration <= 1000) {
-          duration *= 0.7
-        } else if (duration <= 2000) {
-          duration *= 0.6
-        } else if (duration <= 3000) {
-          duration *= 0.5
-        } else if (duration <= 10000) {
-          duration *= 0.3
-        }
-      }
+      const { duration } = curPresentation.viewpoints[curPresentation.currentView]
 
       const progressTimer = setTimeout(() => {
         if (

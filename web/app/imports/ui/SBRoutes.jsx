@@ -18,7 +18,6 @@ import CSSUnicorn from './components/ai/Unicorn'
 // Pages a first visit never opens (a slate, the start page and My Slates stay in the first load): each loads
 // when its route is first opened.
 const TeamSlates = lazy(() => import('./pages/TeamSlates'))
-const CommunitySlates = lazy(() => import('./pages/CommunitySlates'))
 const Team = lazy(() => import('./pages/Team'))
 const Profile = lazy(() => import('./pages/Profile'))
 const GetPro = lazy(() => import('./pages/GetPro'))
@@ -55,7 +54,6 @@ function SlateCreateRoute() {
   const welcomeMessage = searchparams.get('welcomeMessage')
   const extendedPrompt = searchparams.get('extendedPrompt')
   const templateId = searchparams.get('templateId')
-  const slateIdToCopy = searchparams.get('slateIdToCopy')
   const isEmbedded = searchparams.get('isEmbedded') === 'true'
   const intentionId = searchparams.get('intentionId')
   if (!bearer || !dateString) {
@@ -83,7 +81,6 @@ function SlateCreateRoute() {
     return (
       <AIPassthrough
         referralCode={!Meteor.userId() ? referralCode : null}
-        slateIdToCopy={slateIdToCopy}
         welcomeMessage={welcomeMessage}
         extendedPrompt={extendedPrompt}
         templateId={templateId}
@@ -225,7 +222,6 @@ export default function SBRoutes() {
       />
       <Route path="/recover/:email?" element={<RecoverPassword />} />
       <Route path="/reset-password/:token" element={<ResetPassword />} />
-      <Route path="/slates" element={<CommunitySlates />} />
       <Route path="/signup" element={<SignUp />} />
       {['dev', 'test'].includes(Meteor.settings.public.env) && (
         <Route

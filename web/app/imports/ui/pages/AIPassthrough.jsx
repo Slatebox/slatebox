@@ -16,12 +16,9 @@ import createAnonymousUser from '../../api/client/createAnonymousUser'
 import { aiSettingsIcon } from '../common/aiSettingsIcon'
 import { initialPrompt } from '../jotai/atoms'
 import CONSTANTS from '../../api/common/constants'
-import copySlate from '../../api/client/copySlate'
-import NotFound from './NotFound'
 
 export default function AIPassthrough({
   referralCode = null,
-  slateIdToCopy,
   welcomeMessage,
   extendedPrompt,
   templateId,
@@ -31,7 +28,6 @@ export default function AIPassthrough({
   const theme = useTheme()
   const { prompt } = useParams()
   const setInitialPrompt = useSetAtom(initialPrompt)
-  const [notFound, setNotFound] = React.useState(false)
 
   const history = useNavigate()
 
@@ -43,47 +39,25 @@ export default function AIPassthrough({
   }
 
   async function attempt() {
-    if (slateIdToCopy) {
-      // ensure an anon user is created
-      if (!Meteor.userId()) {
-        await createAnonymousUser({ referralCode })
-      }
-      // The server copies the slate when the visitor may (slates.copy), or refuses it.
+    setInitialPrompt(prompt)
+    if (!Meteor.userId()) {
       try {
-        const slateShareId = await copySlate(slateIdToCopy, { keepTemplate: true })
-        history(`/canvas/${slateShareId}`)
+        await createAnonymousUser({ referralCode })
+        await createAISlate()
       } catch (err) {
-        // A refusal (not found, not allowed, not a slate address) shows Not Found.
-        if (!(err?.details?.status < 500)) throw err
-        setNotFound(true)
+        console.error('Unable to conjure the unicorns, one moment', err)
+        setTimeout(() => {
+          attempt()
+        }, 1000)
       }
     } else {
-      setInitialPrompt(prompt)
-      if (!Meteor.userId()) {
-        try {
-          await createAnonymousUser({ referralCode })
-          await createAISlate()
-        } catch (err) {
-          console.error('Unable to conjure the unicorns, one moment', err)
-          setTimeout(() => {
-            attempt()
-          }, 1000)
-        }
-      } else {
-        await createAISlate()
-      }
+      await createAISlate()
     }
   }
   // already know it's authorized
   useEffect(() => {
     attempt()
   }, [])
-
-  // A slate that cannot be copied shows Not Found here. (Navigating to "*" from /ai landed on
-  // /ai/*, this same route without its signature: a blank page.)
-  if (notFound) {
-    return <NotFound />
-  }
 
   return (
     <Container component="main" maxWidth="xs">

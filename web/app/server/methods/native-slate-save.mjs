@@ -3,11 +3,15 @@ import { hasWorkshop, workshopNamesSlate } from '../../imports/api/common/worksh
 import { holdsManyBoards, slateBoards } from '../../imports/api/common/slate-boards.mjs'
 import { applySavePatch, validSavePatch } from '../../imports/api/common/slate-save-patch.mjs'
 
+// Flags of the retired template gallery, community list and featured presentations: the shared
+// library replaced them (server/library). A browser save never writes them, new slate or not.
+const retiredFlags = ['isTemplate', 'templateApproved', 'isCommunity', 'isFeatured']
+
 // Visibility, tenant and identity change through their own workflows. Canvas
 // autosaves update content without replacing the persisted options document.
 const protectedOptions = new Set([
   'id', 'shareId', 'userId', 'orgId', 'isPrivate', 'isUnlisted', 'isPublic',
-  'allowCollaboration', 'isSharing', 'accessKey', 'url_name', 'isTemplate', 'templateApproved', 'isCommunity', 'isFeatured',
+  'allowCollaboration', 'isSharing', 'accessKey', 'url_name', ...retiredFlags,
 ])
 
 function validKey(key) {
@@ -93,19 +97,11 @@ export async function saveNativeSlate({ slates, saveCore, access, guestViews, is
   // that sends it changes only that; one that does not (a previous release) saves its whole slate.
   const patch = request.patch
   if (patch !== undefined && !validSavePatch(patch)) throw denied()
-  const options = Object.fromEntries(Object.entries(snapshot.options).filter(([key]) => validKey(key)))
-  if (user?.isMasterUser === true && options.isTemplate) {
-    options.templateApproved = true
-    options.userNameOverride = 'Slatebox'
-  }
+  const options = Object.fromEntries(Object.entries(snapshot.options).filter(([key]) => validKey(key) && !retiredFlags.includes(key)))
   let board = await slates.findOne({ _id: id }, { projection })
   if (!board) {
     if (!user?._id || typeof snapshot.shareId !== 'string' || !snapshot.shareId) throw denied()
     if (await slates.findOne({ shareId: snapshot.shareId, _id: { $ne: id } }, { projection: { _id: 1 } })) throw denied()
-    if (user.isMasterUser !== true) {
-      delete options.templateApproved
-      delete options.isFeatured
-    }
     // Insert only, through the save core (revision 1, search fields, a create event). A racing
     // save must reauthorize against the winning document.
     const made = await saveCore.create({

@@ -88,7 +88,6 @@ export const currentPresentation = atom({
   isEmbedded: false,
   playOnHover: false,
   isPublic: false,
-  isFeatured: false,
   showNarrative: true,
   restartTrigger: -1,
 })
@@ -184,10 +183,6 @@ export const pulseCurrentHelpStatus = atomWithStorage({
 export const aiSettingsModalOpen = atom(false)
 
 export const videoGuideOpen = atom(false)
-
-export const areTemplateDetailsOpen = atom({
-  open: false,
-})
 
 export const nodeShapeDetails = atom({
   shapeItems: [],

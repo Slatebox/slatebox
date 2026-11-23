@@ -24,7 +24,6 @@ import './enterprise'
 // global methods
 import './methods/users'
 import './methods/slates'
-import './methods/template-directory'
 import './methods/workshops'
 import './methods/creative-slates'
 import './methods/native-conversation'

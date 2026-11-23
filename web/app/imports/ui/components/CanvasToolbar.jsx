@@ -119,7 +119,7 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
   async function makeCopy() {
     try {
       // The server makes the copy from the stored slate (slates.copy); no browser writes slates.
-      const shareId = await copySlate(slate.shareId, { keepTemplate: true, fromTemplate: true, name: `${name} (copy)`.slice(0, 200) })
+      const shareId = await copySlate(slate.shareId, { name: `${name} (copy)`.slice(0, 200) })
       navigate(`/canvas/${shareId}`)
     } catch { setTold('This slate could not be copied. Try again.') }
   }

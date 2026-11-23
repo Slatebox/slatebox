@@ -1,6 +1,5 @@
 /* eslint-disable no-underscore-dangle */
 import { Meteor } from 'meteor/meteor'
-import { publicTemplateSelector } from './template-policy.mjs'
 import AuthManager from './AuthManager'
 import CONSTANTS from './constants'
 import { SlateAccess } from './models'
@@ -37,23 +36,6 @@ async function slateFilter(opts) {
       } else {
         queryable.push({ userId })
       }
-      break
-    }
-    case 'templates': {
-      queryable.push(publicTemplateSelector())
-      if (opts.aiSuitable) {
-        queryable.push({ 'options.aiSuitable': true })
-      }
-      break
-    }
-    case 'community': {
-      queryable.push({ 'options.isTemplate': { $exists: false } })
-      queryable.push({ userId: { $ne: userId } })
-      const masterUser = await Meteor.users.findOneAsync({ isMasterUser: true })
-      if (masterUser) {
-        queryable.push({ userId: { $ne: masterUser._id } })
-      }
-      queryable.push({ 'options.isPublic': true })
       break
     }
     default: {

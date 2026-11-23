@@ -1,7 +1,7 @@
 /* eslint-disable no-new */
 /* eslint-disable camelcase */
 // methods.js
-import { Meteor, Assets } from 'meteor/meteor'
+import { Meteor } from 'meteor/meteor'
 import { check } from 'meteor/check'
 import { requireEditableSlate } from '../common/slate-access'
 import sharp from 'sharp'
@@ -10,7 +10,6 @@ import { google } from 'googleapis'
 import fetch from 'node-fetch'
 import CONSTANTS from '../../imports/api/common/constants'
 import { APILinks, Slates } from '../../imports/api/common/models'
-import { publicTemplateSelector } from '../../imports/api/common/template-policy.mjs'
 import { uploadImage, uploadS3Object } from '../common/s3Utils'
 
 const method = {}
@@ -114,14 +113,11 @@ method[CONSTANTS.methods.googleDocs.getToken] = async (code) => {
 //   })
 // }
 
-let frameImage = null
-let frameImageMetaData = null
-let frameBuffer = null
 method[CONSTANTS.methods.utils.getCloudLink] = async (
   slateId,
   imgData,
   isSvg,
-  addFrame,
+  _retiredFrame, // the template gallery's framed preview (retired)
   updateAPILink,
   forShare = false
 ) => {
@@ -134,11 +130,6 @@ method[CONSTANTS.methods.utils.getCloudLink] = async (
     if (imgData.length > 30 * 1024 * 1024) throw new Meteor.Error('too-large', 'That image is too large.')
     try {
       let imgBuffer = ''
-      let imgBufferWithFrame = ''
-      const getSlate = addFrame && await Slates.findOneAsync(publicTemplateSelector({ 'options.id': slateId }), {
-        fields: { 'options.isTemplate': 1, 'options.containerStyle': 1 },
-      })
-      if (addFrame && !getSlate) return null
       if (isSvg) {
         imgBuffer = imgData
       } else {
@@ -158,69 +149,17 @@ method[CONSTANTS.methods.utils.getCloudLink] = async (
           .toBuffer()
           .catch((err) => console.log('err is', err))
 
-        if (addFrame) {
-          if (!frameImage) {
-            const getFrameBuffer = Buffer.from(
-              await Assets.getBinaryAsync('sb_frame.png')
-            )
-            frameImage = await sharp(getFrameBuffer)
-            frameImageMetaData = await frameImage.metadata()
-            frameBuffer = await frameImage.toBuffer()
-          }
-
-          imgBufferWithFrame = await sharp({
-            create: {
-              width: frameImageMetaData.width,
-              height: frameImageMetaData.height,
-              channels: 3,
-              background:
-                getSlate?.options?.containerStyle?.backgroundColor || '#f3f3f3',
-            },
-          })
-            .png()
-            .composite([
-              {
-                input: await sharp(
-                  Buffer.from(
-                    imgData.replace('data:image/png;base64,', '').trim(),
-                    'base64'
-                  )
-                )
-                  .resize({
-                    width: frameImageMetaData.width,
-                    height: frameImageMetaData.height,
-                    fit: sharp.fit.inside,
-                  })
-                  .toBuffer(),
-              },
-              {
-                input: frameBuffer,
-              },
-            ])
-            .toBuffer()
-            .catch((err) => console.log('err is', err))
-        }
       }
 
       // upload image to s3 for google docs access
       // An SVG is stored to be downloaded, never shown as a page on the bucket's domain.
       const slateImageUrl = isSvg
         ? await uploadS3Object({ body: Buffer.from(imgBuffer, 'utf8'), key: `${slateId}_${Date.now()}.svg`, contentType: 'image/svg+xml', contentDisposition: 'attachment' })
-        : await uploadImage(imgBuffer, slateId, false, getSlate?.options?.isTemplate)
-      let slateImageWithFrameUrl = null
+        : await uploadImage(imgBuffer, slateId, false, false)
       const slateUpdate = {
         'options.staticImage': slateImageUrl,
         'options.staticImageTimestamp': Date.now(),
       }
-      if (imgBufferWithFrame !== '') {
-        slateImageWithFrameUrl = await uploadImage(
-          imgBufferWithFrame,
-          slateId,
-          isSvg,
-          getSlate?.options?.isTemplate
-        )
-      }
-      if (slateImageWithFrameUrl) slateUpdate['options.staticFrameImage'] = slateImageWithFrameUrl
 
       // save static images to slate
       await Slates.updateAsync(
@@ -246,7 +185,7 @@ method[CONSTANTS.methods.utils.getCloudLink] = async (
         }
       }
 
-      return { slateImageUrl, slateImageWithFrameUrl }
+      return { slateImageUrl }
     } catch (err) {
       console.log('Err is ', err.message)
       return Meteor.Error(err)
