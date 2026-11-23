@@ -8,6 +8,7 @@
   ],
   "nohoist": [],
   "scripts": {
+    "test:specs": "playwright test -c scripts/playwright.config.mjs",
     "test:port-container": "node scripts/test-port-container.mjs",
     "check:client-bundle": "node scripts/check-client-bundle.mjs",
     "test:port-package-source": "node --test scripts/slatebox-package-source.test.mjs",
@@ -29,7 +30,7 @@
     "test:mermaid": "node --test scripts/mermaid-read.test.mjs scripts/mermaid-export.test.mjs scripts/mermaid-api.test.mjs scripts/mermaid-limits.test.mjs scripts/mermaid-layout.test.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1.30.0"
+    "@playwright/test": "1.57.0"
   },
   "dependencies": {
     "react-dropzone": "^14.3.8",

@@ -6,8 +6,10 @@
 //   - Present and the exported picture carry the real board (its header row and bars), not generic columns;
 //   - My slates: the slate's card draws both boards as the canvas does: the plan's month header and its bars.
 //
-// Against a running app:
+// Against a running app (scripts/playwright.config.mjs: Playwright 1.57, its Chromium installed once with
+// `npx playwright install chromium`):
 //   cd scripts && SLATEBOX_ORIGIN=http://127.0.0.1:7660 npx playwright test one-renderer.spec.mjs
+//   SLATEBOX_ORIGIN=http://127.0.0.1:7660 npx playwright test -c scripts/playwright.config.mjs one-renderer.spec.mjs
 // SLATEBOX_SHOTS names a folder for the screenshots; SLATEBOX_CHROMIUM a Chromium executable.
 import { expect, test } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
