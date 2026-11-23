@@ -30,17 +30,31 @@ test('a draft is drawn by the same renderer as a draft', () => {
 
 test('the live canvas and the renderer agree on which boards need a kit', () => {
   assert.match(read('workshop/useWorkshopOnCanvas.js'), /import \{ KIT_KINDS \} from '\.\/boardRender'/)
-  assert.match(render, /KIT_KINDS = \['launch-plan', 'hiring-plan', 'pipeline', 'budget', 'nest'\]/)
+  // The list is the engine's (slateboxjs/boards/still), the one the still renderer loads kits by.
+  assert.match(render, /KIT_KINDS[^]*from 'slateboxjs\/boards\/still'/)
+  assert.match(render, /export \{[^}]*KIT_KINDS[^}]*\}/)
 })
 
-test('a still is the board read-only, its chrome at the board\'s size; a draft wears its frame', () => {
-  assert.match(render, /readOnly: true/)
-  assert.match(render, /how === 'draft' \? \{ draft: true \} : \{ still: true \}/)
-  // Laid out as a desktop canvas shows it, whatever the card's size.
-  assert.match(render, /width = 1440/)
+test('the app draws a board through the engine\'s one renderer (slateboxjs/boards/still), never with its own attachWorkshop', () => {
+  // The engine's tests/unit/still.test.ts proves the renderer itself: read-only stills, a draft in its frame, laid
+  // out as a desktop canvas shows it, every built-in drawn with its kit, and the kits fetched with import().
+  assert.match(render, /from 'slateboxjs\/boards\/still'/)
+  assert.doesNotMatch(render, /attachWorkshop/)
+  assert.doesNotMatch(render, /slateboxjs\/workshops\/model/)
+  for (const name of ['drawBoard', 'drawSlateBoards']) assert.match(render, new RegExp(`export function ${name}\\(`))
+  // A library picture (the gallery's cards and item page) is the same renderer: renderStill.
+  assert.match(render, /renderStill\(host, slate/)
 })
 
-test('the kits and the rulebook stay out of a first visit: fetched with import() when a board is drawn', () => {
-  assert.doesNotMatch(render, /^\s*import [^(]*['"]slateboxjs\/(boards|workshops\/behaviour)/m)
-  for (const chunk of ['slateboxjs/boards', 'slateboxjs/boards/nest', 'slateboxjs/workshops/behaviour']) assert.ok(render.includes(`import('${chunk}')`), chunk)
+test('the kits and the rulebook stay out of a first visit: the renderer\'s imports are its own chunks', () => {
+  assert.doesNotMatch(render, /^\s*import [^(]*['"]slateboxjs\/(boards|boards\/nest|workshops\/behaviour)['"]/m)
+  // The canvas class a library picture draws on is fetched with import() too.
+  assert.ok(render.includes("import('slateboxjs')"))
+})
+
+test('the gallery draws its pictures with the one renderer', () => {
+  const still = read('library/gallery/LibraryStill.jsx')
+  assert.match(still, /from '\.\.\/\.\.\/workshop\/boardRender'/)
+  assert.match(still, /drawStill\(/)
+  assert.doesNotMatch(still, /attachWorkshop|workshopToSlate|slatePreview\(/)
 })
