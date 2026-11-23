@@ -143,7 +143,28 @@ async function instance(t) {
     { nodeId: "c", description: "Gamma", metrics: box(600), childrenNodes: [] }] }] };
   const deckRow = { _id: "deck1", version: 1, name: "Probe deck", presentationData: JSON.stringify(deckLayout), ...deckRecord({ layout: deckLayout, name: "Probe" }) };
   const restyles = [];
+  // Parity (slates.list, slates.copy, slates.delete, comments.*): the app's rules have their own
+  // tests (scripts/agent-parity.test.mjs). Here: the routes and the calls, on the same store.
+  const comments = [];
+  const deletedSlates = [];
   const registry = createAppRegistry({ deps: {
+    listSlates: async ({ userId, limit }) => slates.rows.filter((row) => row.userId === userId).slice(0, limit),
+    deleteSlate: async (slate) => { deletedSlates.push(slate.shareId); return { deleted: true }; },
+    resolveSlateForUser: async (shareId, userId) => {
+      const slate = await slates.findOne({ shareId });
+      return slate && { slate, canRead: true, canEdit: slate.userId === userId };
+    },
+    publishedPresentation: async () => null,
+    newId: () => "copied-id",
+    generateShareId: async () => "copied",
+    userName: async () => "Owner",
+    comments: {
+      list: async ({ slateId, nodeId }) => comments.filter((c) => c.slateId === slateId && (!nodeId || c.nodeId === nodeId)),
+      add: async (row) => { comments.push({ ...row, _id: "k" + (comments.length + 1) }); return "k" + comments.length; },
+      resolve: async ({ slateId, nodeId, resolved }) => comments.filter((c) => c.slateId === slateId && c.nodeId === nodeId).map((c) => (c.resolved = resolved)).length,
+      get: async ({ slateId, commentId }) => comments.find((c) => c.slateId === slateId && c._id === commentId) ?? null,
+      remove: async ({ commentId }) => { comments.splice(comments.findIndex((c) => c._id === commentId), 1); return 1; },
+    },
     ai,
     latestPresentation: async (shareId, userId) => (shareId === "canvas" && userId === "owner" ? deckRow : null),
     savePresentation: async (id, set) => { restyles.push([id, set.style]); Object.assign(deckRow, set); },
@@ -248,7 +269,7 @@ async function instance(t) {
   };
   const stored = async (shareId) => slates.findOne({ shareId });
   const texts = async () => (await stored("canvas")).nodes.map((n) => n.options.text);
-  return { client, exec, ok, confirmed, called, stored, texts, invites, transfers, deckRow, restyles };
+  return { client, exec, ok, confirmed, called, stored, texts, invites, transfers, deckRow, restyles, comments, deletedSlates };
 }
 
 // Every canvas edit names the revision it was made on (required since release/agentic): the
@@ -300,7 +321,7 @@ test("canvas edits change exactly the notes they name, and only when saved", asy
 });
 
 test("every client method succeeds against the app, and refusals keep status, code and details", async (t) => {
-  const { ok, exec, confirmed, called, stored, texts, invites, transfers, deckRow, restyles } = await instance(t);
+  const { ok, exec, confirmed, called, stored, texts, invites, transfers, deckRow, restyles, comments, deletedSlates } = await instance(t);
 
   const created = await ok(`return slatebox.slates.create({ brief: "Request -> Review", kind: "diagram" })`);
   assert.equal(created.shareId, "created");
@@ -437,6 +458,20 @@ return slatebox.presence.step({ shareId: "canvas", index: 0, status: "done" })`)
   assert.deepEqual(restyled.steps.map((step) => [step.step, step.notes]), deck.steps.map((step) => [step.step, step.notes]));
   assert.deepEqual([restyled.steps[0].layout, restyled.steps.at(-1).layout], [deck.steps[0].layout, deck.steps.at(-1).layout]);
   assert.deepEqual(restyles, [["deck1", { id: "neon" }]]);
+  // Parity: list, copy and delete slates; read, add, resolve and remove comments. A removal is held.
+  const listed = await ok(`return slatebox.slates.list({})`);
+  assert.ok(listed.slates.some((slate) => slate.shareId === "canvas" && slate.owner === "you"));
+  const copy = await ok(`return slatebox.slates.copy({ shareId: "canvas", name: "Probe copy" })`);
+  assert.equal(copy.shareId, "copied");
+  assert.equal((await stored("copied")).options.name, "Probe copy");
+  await confirmed(`return slatebox.slates.delete({ shareId: "copied" })`, ["removes"]);
+  assert.deepEqual(deletedSlates, ["copied"]);
+  const comment = await ok(`return slatebox.comments.add({ shareId: "canvas", noteId: "a", text: "Is this right?" })`);
+  assert.deepEqual([comment.author, comment.text, comment.resolved], ["Owner", "Is this right?", false]);
+  assert.equal((await ok(`return slatebox.comments.list({ shareId: "canvas" })`)).comments.length, 1);
+  assert.equal((await ok(`return slatebox.comments.resolve({ shareId: "canvas", noteId: "a" })`)).comments, 1);
+  await confirmed(`return slatebox.comments.remove({ shareId: "canvas", commentId: ${JSON.stringify(comment.commentId)} })`, ["removes"]);
+  assert.equal(comments.length, 0);
 
   assert.deepEqual([...called].sort(), [...defaultGenerated().methods.keys()].sort(), "every client method was called");
 });

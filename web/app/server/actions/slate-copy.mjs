@@ -83,14 +83,19 @@ export function copyDocument(source, { id, shareId, user, now, name, project, ke
 
 export default defineAction({
   id: 'slates.copy',
-  title: 'Copy a slate',
+  title: 'Copy slate',
   description:
-    'Make a private copy of a slate you may edit, a public slate or template, or a slate whose presentation is published publicly. A view invitation alone does not allow a copy. A template becomes an ordinary slate based on it unless keepTemplate is set. A published presentation of the slate is copied with it as a private presentation of the copy.',
+    'Make a private copy of a slate you may edit, a public slate or template, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. A template becomes an ordinary slate based on it unless keepTemplate is set. A published presentation of the slate is copied with it as a private presentation of the copy.',
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:write',
-  principals: ['person', 'guest'],
-  mounts: { ddp: true },
+  principals: ['person', 'guest', 'agent'],
+  // A retried copy answers the first copy instead of making another.
+  idempotency: 'optional',
+  // A token copies by its account's rule, the one the app applies (resolveSlateForUser).
+  mounts: { ddp: true, http: { method: 'POST', path: '/slates/{shareId}/copy', operationId: 'copySlate' } },
+  tool: { name: 'copy_slate', title: 'Copy a slate', description: 'Make a private copy of a slate the person may edit, or of a public slate or template, and return the copy\'s id.' },
+  cli: { command: 'copy' },
   input: {
     type: 'object',
     properties: {

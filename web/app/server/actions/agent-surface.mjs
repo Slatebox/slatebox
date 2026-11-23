@@ -52,7 +52,7 @@ export const MCP_INSTRUCTIONS_EXEC_ONLY = [
 ].join(' ')
 
 export const EXEC_TITLE = 'Create or edit slates with a script'
-export const EXEC_LEAD = `Create and edit Slatebox slates (mind maps, flowcharts, diagrams, project plans, slides and boards) by running a short script against the typed Slatebox client. Client reference: ${CLIENT_DOCS_URL}`
+export const EXEC_LEAD = `Create and edit Slatebox slates (mind maps, flowcharts, diagrams, project plans, slides and boards). Client reference: ${CLIENT_DOCS_URL}`
 export const DESCRIBE_TITLE = 'Learn the Slatebox client'
 export const DESCRIBE_DESCRIPTION = `The typed Slatebox client that exec scripts call, for mind maps, flowcharts, diagrams, project plans, slides and boards: the rules, every client method with a one-line summary, the common error codes, the limits and three example scripts. Pass methods (names) for their full TypeScript declarations and the named types they use, or query to find methods by words. Client reference: ${CLIENT_DOCS_URL}`
 

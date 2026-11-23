@@ -6,6 +6,7 @@ import { Mongo, MongoInternals } from 'meteor/mongo'
 import { Random } from 'meteor/random'
 import {
   Comments,
+  Messages,
   SlateAccess,
   SlateOperationRuns,
   SlatePresentations,
@@ -17,11 +18,13 @@ import { createWorkshopOperations } from '../workshop-operation-api.mjs'
 import { createSlateReader } from '../slate-read.mjs'
 import { createPrivateSlateOperation } from '../create-slate-api.mjs'
 import { createSlateInviteOperation } from '../slate-invite-api.mjs'
-import { embedViewerOrigin, generateSlateShareId } from '../methods/slates'
+import { deleteOwnedSlate, embedViewerOrigin, generateSlateShareId } from '../methods/slates'
 import { resolvePresentationSlate } from '../methods/creative-slates'
 import { slateSaveCore } from '../slate-save'
 import { publicTemplateSelector } from '../../imports/api/common/template-policy.mjs'
 import CONSTANTS from '../../imports/api/common/constants'
+import AuthManager from '../../imports/api/common/AuthManager'
+import { slateListSelector } from './slate-list.mjs'
 import { API_TOKEN_SCOPES } from '../api-token-core.mjs'
 import apiTokenService from '../api-token-auth.mjs'
 import { createAppRegistry } from './index.mjs'
@@ -126,6 +129,47 @@ export const deps = {
     teamTransfer,
     // shapes.generate, shapes.list, shapes.apply (server/shapes)
     shapes: shapeService,
+    // slates.list: the Slates page's lists (imports/api/common/slateFilter.js), for a token's account.
+    async listSlates({ userId, orgId, scope, q, limit }) {
+      let isAdmin = false
+      let grantedIds = []
+      if (scope === 'team' && orgId) {
+        isAdmin = await AuthManager.userHasClaim(userId, [CONSTANTS.claims.admin._id])
+        if (!isAdmin) {
+          const grants = await SlateAccess.find({
+            userId, type: 'private', orgId,
+            slateAccessPermissionId: { $ne: CONSTANTS.slateAccessPermissions.none.id },
+          }, { fields: { slateId: 1 } }).fetchAsync()
+          grantedIds = grants.map((grant) => grant.slateId)
+        }
+      }
+      const selector = slateListSelector({ userId, orgId, scope, isAdmin, grantedIds, q })
+      if (!selector) return []
+      return Slates.rawCollection().find(selector, {
+        projection: { shareId: 1, userId: 1, lastSaved: 1, 'options.name': 1, 'options.description': 1, 'options.isPublic': 1, 'options.isUnlisted': 1, 'options.isPrivate': 1 },
+        sort: { lastSaved: -1 },
+        limit,
+      }).toArray()
+    },
+    // slates.delete: the Slates page's Delete (methods/slates.js).
+    deleteSlate: (slate) => deleteOwnedSlate(slate),
+    // comments.*: the comment drawer's collection, through Meteor so open drawers update.
+    userName: (userId) => getExternalUserName(userId),
+    comments: {
+      list: ({ slateId, nodeId, unresolved }) => Comments.find(
+        { slateId, ...(nodeId && { nodeId }), ...(unresolved && { resolved: { $ne: true } }) },
+        { sort: { timestamp: 1 }, limit: 500 }
+      ).fetchAsync(),
+      add: (row) => Comments.insertAsync(row),
+      resolve: ({ slateId, nodeId, resolved }) =>
+        Comments.updateAsync({ slateId, nodeId }, { $set: { resolved } }, { multi: true }),
+      get: ({ slateId, commentId }) => Comments.findOneAsync({ _id: commentId, slateId }),
+      async remove({ slateId, commentId }) {
+        const removed = await Comments.removeAsync({ _id: commentId, slateId })
+        if (removed) await Messages.removeAsync({ commentId })
+        return removed
+      },
+    },
 }
 
 export const limiter = createRateLimiter({ collection: RateWindows.rawCollection() })

@@ -28,6 +28,9 @@ import slatesCheckMove from './slate-check-move.mjs'
 import teamTransfer from './team-transfer.mjs'
 import shapeActions from './shapes.mjs'
 import presentationActions from './presentations.mjs'
+import slatesList from './slate-list.mjs'
+import slatesDelete from './slate-delete.mjs'
+import commentActions from './comments.mjs'
 
 export const actions = [
   slatesGet,
@@ -57,6 +60,9 @@ export const actions = [
   ...teamTransfer,
   ...shapeActions,
   ...presentationActions,
+  slatesList,
+  slatesDelete,
+  ...commentActions,
 ]
 
 export const components = { ...slateComponents }
