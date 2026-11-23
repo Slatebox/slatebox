@@ -27,8 +27,15 @@ test('a portable workshop keeps authored labels, placements and rule types in it
   }
 })
 
+test('no link data opens an empty two-lane workshop to author (the "new workshop" page)', () => {
+  const blank = portableWorkshopSlate.initial('')
+  assert.deepEqual(blank, { kind: 'workshop', version: 1, workshop: { version: 1, title: 'Untitled workshop',
+    lanes: [{ id: 'lane-1', label: 'Lane 1' }, { id: 'lane-2', label: 'Lane 2' }], cards: [] } })
+  assert.deepEqual(portableWorkshopSlate.normalize(JSON.parse(JSON.stringify(blank))), blank)
+})
+
 test('invalid, oversized and duplicated import payloads fail before creating a document', () => {
-  for (const hash of ['', '#model=%7B', '#model={}&model={}', '#model='+'x'.repeat(65536),
+  for (const hash of ['#', '#model=', '#model=%7B', '#model={}&model={}', '#model='+'x'.repeat(65536),
     '#'+new URLSearchParams({model:JSON.stringify({...caseModel,lanes:[]})})]) {
     assert.throws(() => portableWorkshopSlate.initial(hash))
   }
