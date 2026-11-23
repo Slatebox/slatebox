@@ -50,9 +50,10 @@ export default function SlateOperationListener({ slate, revision }) {
               // A saved run's plan is already carried out: ids it names that
               // this canvas already holds were made by that run.
               replay: true,
-              // A visitor with no account only draws it: their canvas neither saves what the server
-              // already holds nor passes it on to the room (each open canvas draws runs itself).
-              send: Boolean(Meteor.userId()),
+              // Every canvas only draws it: none saves what the server already holds (that raised
+              // the slate's revision behind the agent) or passes it on to the room, since every
+              // open canvas that may read the slate draws runs itself.
+              send: false,
             })
           } catch (error) {
             drawing = Promise.reject(error)

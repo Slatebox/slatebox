@@ -79,12 +79,16 @@ test("the publication serves anyone who may read the slate, a visitor with no ac
   assert.match(body, /runFields\(/);
 });
 
-test("the listener asks for runs after the loaded revision, draws them in order, and a visitor with no account only draws them", () => {
+test("the listener asks for runs after the loaded revision, draws them in order, and every canvas only draws them", () => {
   const source = app("imports/ui/components/SlateOperationListener.jsx");
   assert.doesNotMatch(source, /mountedAt/, "not the browser's clock");
   assert.match(source, /runsSince\(slate\.shareId, since\)/);
   assert.match(source, /sort: \{ revision: 1, createdAt: 1 \}/, "a Mermaid import saves its runs under one revision, in order of time");
-  assert.match(source, /send: Boolean\(Meteor\.userId\(\)\)/);
+  // Restated (fix/guest-editing): no canvas, an account holder's included, saves or passes on a run
+  // the server already holds. An account holder's canvas used to save it again, which raised the
+  // slate's revision behind the agent (app-save-path: a refusal names the current revision).
+  assert.match(source, /send: false/);
+  assert.doesNotMatch(source, /send: Boolean/);
   const canvas = app("imports/ui/pages/Canvas.jsx");
   assert.match(canvas, /<SlateOperationListener slate=\{slate\.current\} revision=\{loadedRevision\.current\} \/>/);
 });
