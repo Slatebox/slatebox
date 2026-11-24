@@ -11,7 +11,11 @@ An integration is an outside agent (any MCP server) or your Google account, conn
 - **Invite it onto any slate** from the slate's **+ Invite agent** → *Your integrations* →
   **Invite to this slate**. There is no new sign-in and you don't choose its tools again.
 - **Or let it join every slate you own** by itself: set *Joins slates* to **On every slate I own**.
-  It arrives when you open one of your slates.
+  It arrives when you open one of your slates. Everyone who can open that slate sees its name on the
+  slate (only you see its server's address). Slates anyone with the link can view are skipped: invite
+  it there yourself if you want it there.
+- **Who may bring outside agents** (a slate's owner chooses: editors, only the owner, or no one) also
+  holds for agents already on the slate: theirs stop answering until it allows them again.
 - **Remove it from one slate** from its chip. That slate remembers: your rule never brings it back
   there. You can still invite it there yourself.
 - **Disconnect it** on the Integrations page. It leaves every slate, its suggestions that are still
@@ -40,6 +44,9 @@ Connect Google on the Integrations page, then:
   folder in your Drive.
 - **Export to Google Docs**: the slate's title, each branch as a heading with its notes as bullets
   (links kept), and its picture. **Update this Doc** writes over the last Doc you made from that slate.
+  Docs and Slides export need edit rights on the slate. Google fetches the picture from this server
+  once, and the server's copy is removed straight after. If Google can't reach it (for example a
+  self-hosted install on a private network), the Doc is made without the picture and the app says so.
 - **Import from Google Drive** (the + menu): pick a Doc, sheet, Slides deck or text file. It lands as
   one suggestion of notes (headings become groups) to keep or discard, with one undo.
 - **Google Drive as an agent**: invite *Google Drive* onto a slate like any integration, choose
