@@ -30,8 +30,9 @@ export const BUILD_SHAPES = Object.freeze([
   { id: 'piles', label: 'Lists in lists', message: 'Add a board to sort the evidence', kind: 'component', makes: 'nest', layout: 'clusters' },
   { id: 'tree', label: 'A tree', message: 'Add a board to break down a problem', kind: 'component', makes: 'nest', layout: 'tree' },
   { id: 'timeline', label: 'A timeline', message: 'Add a launch plan', kind: 'component', makes: 'launch-plan' },
-  { id: 'square', label: 'A 2 by 2', message: 'Add an impact × effort board', kind: 'component', makes: 'nest', layout: 'matrix' },
 ])
+// A 2 by 2 is not offered as a start until its square has controls of its own (a corner's "holds N" badge to drag):
+// its board's rule controls today are about children, which mean nothing on a square. It can still be branched off.
 
 /** The builder's first turn: from scratch, what to make; on a branch, whose copy this is. */
 export function buildFirstTurn(library) {

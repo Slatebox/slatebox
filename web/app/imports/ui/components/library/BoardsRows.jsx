@@ -20,7 +20,7 @@ export function BoardsDock({ onDone, dark = false }) {
       {stripPicks({}).map(([id, name]) => (
         <Tooltip key={id} title={'Add ' + name} placement="top">
           <ButtonBase aria-label={'Add ' + name} onClick={() => go({ add: id })}
-            sx={{ ...look, width: 64, border: '1px solid rgba(0,0,0,.15)', background: '#faf8f2' }}>
+            sx={{ ...look, width: 64, minHeight: 44, border: '1px solid rgba(0,0,0,.15)', background: '#faf8f2' }}>
             <img src={'/library/' + id + '-still.svg'} alt="" width="64" height="36" style={{ display: 'block' }} />
           </ButtonBase>
         </Tooltip>
@@ -39,7 +39,7 @@ export function BoardsRow({ onDone, hasBoard = false }) {
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         {stripPicks({ hasBoard }).map(([id, name]) => (
           <button key={id} type="button" className="sb-btn" aria-label={'Add ' + name} title={name} onClick={() => go({ add: id })}
-            style={{ flex: '1 1 0', minWidth: 0, height: 'auto', padding: 4, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: 2 }}>
+            style={{ flex: '1 1 0', minWidth: 44, minHeight: 44, height: 'auto', padding: 4, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: 2 }}>
             <img src={'/library/' + id + '-still.svg'} alt="" style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 4 }} />
             <span style={{ fontSize: 11, lineHeight: 1.2 }}>{name}</span>
           </button>

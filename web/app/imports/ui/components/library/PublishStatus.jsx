@@ -31,6 +31,7 @@ export function useLibraryItemFor(shareId, kind, refresh = 0) {
 export default function PublishStatus({ kind, shareId, name, description, libraryOrigin, previewSlate, guest, disabled, disabledReason }) {
   const [open, setOpen] = React.useState(false)
   const [refresh, setRefresh] = React.useState(0)
+  const [sent, setSent] = React.useState(false)
   const item = useLibraryItemFor(guest ? null : shareId, kind, refresh)
   if (guest) {
     return (
@@ -52,6 +53,9 @@ export default function PublishStatus({ kind, shareId, name, description, librar
           <Button size="small" component={RouterLink} to="/library/mine">My library</Button>
         </Box>
       )}
+      {sent && <Typography variant="body2" role="status" data-testid="publish-done" sx={{ color: 'success.dark' }}>
+        Sent for review. You will hear back in your notifications and by email, and can follow it in My library.
+      </Typography>}
       {item?.lastMessage?.by === 'reviewer' && <Typography variant="body2" color="text.secondary">The reviewer wrote: {item.lastMessage.text}</Typography>}
       {canSend && (
         <Button variant="contained" onClick={() => setOpen(true)} disabled={disabled || item === undefined} data-testid="library-publish-open">{label}</Button>
@@ -59,7 +63,7 @@ export default function PublishStatus({ kind, shareId, name, description, librar
       {disabled && disabledReason && <Typography variant="caption" color="text.secondary">{disabledReason}</Typography>}
       {open && (
         <React.Suspense fallback={null}>
-          <PublishDialog open={open} onClose={() => setOpen(false)} onSubmitted={() => setRefresh((n) => n + 1)} kind={kind} shareId={shareId}
+          <PublishDialog open={open} onClose={() => setOpen(false)} onSubmitted={() => { setSent(true); setRefresh((n) => n + 1) }} kind={kind} shareId={shareId}
             name={name} description={description} libraryOrigin={libraryOrigin} existing={item} previewSlate={previewSlate} />
         </React.Suspense>
       )}

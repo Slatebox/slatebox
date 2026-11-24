@@ -82,6 +82,12 @@ async function approve(page) {
   await page.getByTestId('decision-confirm').click()
   await expect(review(page).getByTestId('review-done')).toContainText('Published as version', { timeout: 60000 })
 }
+/** A multiline field's label sits on its outline, above the text box, never over what is typed in it. */
+async function labelClear(scope, name) {
+  const label = await scope.locator('label', { hasText: name }).boundingBox()
+  const box = await scope.getByLabel(name).boundingBox()
+  expect(label.y + label.height, `the label "${name}" lies over its text`).toBeLessThanOrEqual(box.y + 2)
+}
 /** The slate a canvas shows, read through the app's own method as the person on the page. */
 const slateOf = (page, shareId) => page.evaluate(async id => {
   const s = (await window.Meteor.callAsync('slates.get', { shareId: id }))?.slateBase
@@ -121,6 +127,7 @@ test('1. an author builds a smart component from scratch by chat, saves it in Tr
   const submit = page.locator('[data-build-sheet="submit"]')
   await expect(submit.getByText('Shared under CC BY 4.0')).toBeVisible()
   await submit.getByLabel('Note for the reviewer (optional)').fill('Built in the journey test')
+  await labelClear(submit, 'Note for the reviewer (optional)')
   await shot(page, '04-build-submit-sheet')
   await submit.getByRole('button', { name: 'Submit for review' }).click()
   await expect(bar(page)).toContainText('Submitted for review', { timeout: 30000 })
@@ -247,10 +254,13 @@ test('4. a slate and a presentation go through the queue, and another person ope
   let dialog = page.getByRole('dialog', { name: /Publish this slate to the library/ })
   await dialog.getByRole('textbox', { name: 'Title' }).fill(SLATE)
   await dialog.getByRole('textbox', { name: 'One line about it' }).fill('What to check before a release goes out')
+  await dialog.getByRole('textbox', { name: 'Note for the reviewer (optional)' }).fill('From the journey test')
+  await labelClear(dialog, 'Note for the reviewer (optional)')
   await dialog.getByTestId('publish-submit').click()
-  await expect(page.getByTestId('publish-done')).toBeVisible({ timeout: 30000 })
+  // The result shows in the Share dialog's Library section: the publish dialog closes, no dialog on a dialog.
+  await expect(share.getByTestId('publish-done')).toBeVisible({ timeout: 30000 })
+  await expect(dialog).toBeHidden()
   await shot(page, '15-slate-published-from-share')
-  await dialog.getByRole('button', { name: 'Done' }).click()
   await share.getByRole('button', { name: 'Done' }).click()
   await expect(share).toBeHidden()
 
@@ -266,8 +276,8 @@ test('4. a slate and a presentation go through the queue, and another person ope
   await dialog.getByRole('textbox', { name: 'One line about it' }).fill('The release checklist, step by step')
   await shot(page, '16-presentation-publish-dialog')
   await dialog.getByTestId('publish-submit').click()
-  await expect(page.getByTestId('publish-done')).toBeVisible({ timeout: 30000 })
-  await dialog.getByRole('button', { name: 'Done' }).click()
+  await expect(library.getByTestId('publish-done')).toBeVisible({ timeout: 30000 })
+  await expect(dialog).toBeHidden()
 
   // The reviewer approves both.
   const reviewer = shared.reviewer

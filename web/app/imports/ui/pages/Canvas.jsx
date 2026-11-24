@@ -1393,9 +1393,10 @@ export default function Canvas() {
           <div style={{ position: 'relative', flex: '1 1 0', minWidth: 0, minHeight: 0, display: 'flex' }}>
             <div id={containerId} ref={canvasRef} style={{ position: 'relative', flex: '1 1 0', minWidth: 0, minHeight: 0, overflow: 'hidden',
               ...(overlayKind && { visibility: 'hidden', pointerEvents: 'none' }) }} />
-            {/* An empty slate's welcome, in the middle of the canvas, until its first note or board. */}
+            {/* An empty slate's welcome, in the middle of the canvas, until its first note or board. Not on a slate that
+                builds or reviews a smart component: its own bar says what to do first (the shapes in Ask Slatebox). */}
             <SlateWelcome slate={slate.current} canvasId={containerId} phone={phone} askOpen={conversationVisible} canPick={canShowConversation}
-              active={Boolean(boardLoaded && slate.current && !creativeKind && !overlayKind && !asEmbed && !proposing &&
+              active={Boolean(boardLoaded && slate.current && !creativeKind && !overlayKind && !asEmbed && !proposing && !nativeBoard?.library?.mode &&
                 !accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly)} />
             {/* While the slate opens (a new one, or one reopened), the same calm moment as /new, over the canvas. */}
             {!boardLoaded && !asEmbed && <SlateLoading fill={false} />}

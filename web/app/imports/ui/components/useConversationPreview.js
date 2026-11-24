@@ -35,7 +35,8 @@ export default function useConversationPreview(engine, preview) {
       return undefined
     }
     if (!artwork.bounds) return undefined
-    const caption = previewCaption(artwork.bounds)
+    // A proposal for a board already here (no canvas of its own, only that board's frame) is a change, not an addition.
+    const caption = previewCaption(artwork.bounds, { change: !preview.canvas })
     const notes = [...artwork.notes, caption]
     const wanted = new Set(notes.map(note => note.options.id))
     const owned = new Map()

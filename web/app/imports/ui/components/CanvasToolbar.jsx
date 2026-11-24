@@ -36,6 +36,8 @@ import { useLivePresentation } from './presentations/useLivePresentation'
 import { presentTarget } from './presentations/presentTarget.mjs'
 import { CreativeStates } from '../../api/client/creativeSlateStates'
 import copySlate from '../../api/client/copySlate'
+import { Slates } from '../../api/common/models'
+import { originCredit } from './library/libraryCopy.mjs'
 import confirmService from '../common/confirm'
 import { collaborationUsers, conversationArrival, conversationAvailable, conversationOpen, isPresentOpen, mermaidDialog } from '../jotai/atoms'
 import { toggledConversation } from '../../api/common/conversation-toggle.mjs'
@@ -87,6 +89,8 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
 
   const guest = Boolean(user?.isAnonymous)
   const owner = Boolean(user && user._id === slate?.userId)
+  // A slate opened from the library credits its author, as its licence asks (libraryOrigin, kept on every copy).
+  const credit = useTracker(() => originCredit(slate?.options?.id ? Slates.findOne({ _id: slate.options.id }, { fields: { libraryOrigin: 1 } })?.libraryOrigin : null), [slate?.options?.id])
   const visibility = privacy.isPrivate ? 'Private' : privacy.isUnlisted ? 'Unlisted' : privacy.isPublic ? 'Public' : ''
   const name = title || 'Untitled slate'
   const others = people.length
@@ -163,6 +167,8 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
     manage && !onWorkshop && { key: 'history', label: 'Version history', icon: <History />, run: onHistory, disabled: busy },
     'divider',
     { key: 'link', label: 'Copy link', icon: <LinkIcon />, run: copyLink },
+    // Where it came from, on a phone too (the header shows it beside the name on a wide screen).
+    credit && { key: 'origin', label: credit.text, hint: 'Open it in the library', icon: <ContentCopy />, run: () => navigate(credit.href) },
     // Mermaid: any slate as Mermaid text, and Mermaid drawn as notes. A guest and a reader use it too: the text is
     // theirs to copy; only opening a diagram as a slate of its own asks for an account (MermaidDialog).
     { key: 'mermaid', label: 'Mermaid', hint: manage ? 'Export or import a diagram' : 'Copy this slate as a diagram', icon: <AccountTree />, run: () => openMermaid('export') },
@@ -247,6 +253,9 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
         ? <ButtonBase className="sb-board-privacy" onClick={onShare} aria-label={`${visibility}. Change who can see this slate`}>
             {privacy.isPublic ? <Public /> : <Lock />}{visibility}</ButtonBase>
         : <span className="sb-board-privacy">{privacy.isPublic ? <Public /> : <Lock />}{visibility}</span>)}
+      {!narrow && credit && <Box component={Link} to={credit.href} data-library-credit="" title={credit.text}
+        sx={{ ml: 1, minWidth: 0, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, color: 'var(--sb-ink2)', textDecoration: 'underline', textUnderlineOffset: '0.15em' }}>
+        {credit.text}</Box>}
     </div>
 
     {!narrow && others > 0 && <ButtonBase className="sb-board-peers" aria-haspopup="dialog" aria-expanded={Boolean(peopleAnchor)}

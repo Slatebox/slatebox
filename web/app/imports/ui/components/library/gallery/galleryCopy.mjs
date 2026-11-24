@@ -29,7 +29,7 @@ export const authorLine = item => (item?.origin === 'builtin' ? 'Built by Slateb
 export function provenanceLine(item) {
   const { branchedFrom, forkedFrom } = item?.provenance ?? {}
   if (branchedFrom?.itemId) return { text: 'Branched from', title: branchedFrom.title || 'another component', itemId: branchedFrom.itemId }
-  if (forkedFrom?.itemId) return { text: 'Forked from', title: forkedFrom.title || 'another item', itemId: forkedFrom.itemId }
+  if (forkedFrom?.itemId) return { text: 'Copy of', title: forkedFrom.title || 'another item', itemId: forkedFrom.itemId }
   return null
 }
 
@@ -51,9 +51,9 @@ export function licenseLine(item) {
   return `Free to use, change and share under CC BY 4.0, crediting ${who}.`
 }
 
-/** "Version 2 · published 23 Nov 2026". */
-export function versionLine(item, version) {
-  const n = version?.n ?? item?.publishedVersion
+/** "Version 2 · published 23 Nov 2026": the how-manyth publication (publishedCount), never the internal number. */
+export function versionLine(item, _version) {
+  const n = item?.publishedCount ?? (item?.publishedVersion ? 1 : null)
   const date = item?.publishedAt ? new Date(item.publishedAt) : null
   const when = date && !Number.isNaN(date.valueOf()) ? date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : null
   return [n ? `Version ${n}` : null, when ? `published ${when}` : null].filter(Boolean).join(' · ')

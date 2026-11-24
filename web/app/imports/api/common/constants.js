@@ -63,12 +63,6 @@ const CONSTANTS = {
         description:
           'Engage the unicorns: Provide a concept you would like automagically mind-mapped',
       },
-      template: {
-        name: 'template',
-        display: 'Template Auto-Fill',
-        description:
-          'Engage the unicorns: Automatically map stickes to a template',
-      },
       url: {
         name: 'url',
         display: 'URL to Diagram',

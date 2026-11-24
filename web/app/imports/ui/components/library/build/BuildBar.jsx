@@ -46,15 +46,18 @@ export default function BuildBar({ slate }) {
           '@media (prefers-reduced-motion: no-preference)': { animation: 'sbBuildPulse 2.4s ease-in-out infinite' },
           '@keyframes sbBuildPulse': { '0%,100%': { opacity: 1 }, '50%': { opacity: .35 } } }} />
         <Typography variant="body2" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{phone ? 'Building' : words.heading}</Typography>
-        {!phone && <Typography variant="body2" data-build-title="" noWrap sx={{ minWidth: 0, maxWidth: 220 }}>· {words.title}</Typography>}
-        {!phone && words.from && <Typography variant="body2" noWrap sx={{ color: 'text.secondary', minWidth: 0 }}>· {words.from}</Typography>}
-        {words.state && <Typography variant="body2" role="status" data-build-status={builder.status} noWrap
-          sx={{ color: builder.status === 'submitted' ? 'success.main' : 'text.secondary', fontWeight: 600 }}>{phone ? '' : '· '}{words.state}</Typography>}
         <Box sx={{ flex: '1 1 auto' }} />
         <Button size="small" onClick={() => open('save')} disabled={Boolean(blocked) || builder.waiting || Boolean(builder.busy)} sx={{ minHeight: phone ? 44 : 32, flex: 'none' }}>Save</Button>
         <Button size="small" variant="contained" onClick={() => open('submit')} disabled={Boolean(blocked) || builder.waiting || Boolean(builder.busy)}
           sx={{ minHeight: phone ? 44 : 32, whiteSpace: 'nowrap', flex: 'none' }}>{phone ? 'Submit' : 'Submit to the library'}</Button>
       </Box>
+      {/* What it is and where it stands, on a line of its own so nothing is cut off beside the buttons (Ask Slatebox open). */}
+      {(words.state || !phone) && <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: .75, rowGap: 0, alignItems: 'baseline', minWidth: 0 }}>
+        {!phone && <Typography variant="body2" data-build-title="" sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>{words.title}</Typography>}
+        {!phone && words.from && <Typography variant="body2" sx={{ color: 'text.secondary', minWidth: 0 }}>· {words.from}</Typography>}
+        {words.state && <Typography variant="body2" role="status" data-build-status={builder.status}
+          sx={{ color: builder.status === 'submitted' ? 'success.main' : 'text.secondary', fontWeight: 600 }}>{phone ? '' : '· '}{words.state}</Typography>}
+      </Box>}
       {/* A branch's first words, until the person closes them: whose copy this is and how to change it. */}
       {greeting && first.kind === 'branch' && !sheet && <Box sx={{ display: 'flex', alignItems: 'center', gap: .5 }} data-build-greeting="">
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>{first.title} {first.line}{words.category ? ` Category: ${words.category}.` : ''}</Typography>

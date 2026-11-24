@@ -93,8 +93,8 @@ test('a slate is published from Share, refined and moved on the review canvas, a
   await shot(author.page, '01-publish-dialog')
   await dialog.getByTestId('publish-submit').click()
   await expect(author.page.getByTestId('publish-done')).toBeVisible({ timeout: 30000 })
+  await expect(dialog).toBeHidden()
   await shot(author.page, '02-publish-sent')
-  await dialog.getByRole('button', { name: 'Done' }).click()
   await expect(author.page.getByTestId('library-status')).toHaveText('Submitted for review', { timeout: 30000 })
   await shot(author.page, '03-share-status')
 

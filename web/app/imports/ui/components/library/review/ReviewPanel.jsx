@@ -78,7 +78,8 @@ export default function ReviewPanel({ slate }) {
   const shown = item ? { ...item, ...(item.pendingMeta || {}) } : null
   const state = item ? reviewStateOf(item) : null
   const reviewing = state === 'in_review'
-  const nextVersion = (item?.versionCount || 0) + 1
+  // The version people are told about: the how-manyth publication (the first is 1), never the internal number.
+  const nextVersion = (item?.publishedCount ?? (item?.publishedVersion ? 1 : 0)) + 1
   // A decision is asked about the version as it stands when the button is pressed.
   const choose = (kind) => { setAskedVersion(nextVersion); setDecision(kind) }
 
@@ -148,7 +149,7 @@ export default function ReviewPanel({ slate }) {
       const text = decisionText.trim()
       if (decision === 'approve') {
         const result = await asReviewer(libraryApi.review.approve, { itemId, ...(text && { message: text }) })
-        setDone({ kind: 'approve', url: `/library/${item.slug}`, version: result.publishedVersion })
+        setDone({ kind: 'approve', url: `/library/${item.slug}`, version: result.publishedCount ?? nextVersion })
       } else if (decision === 'changes') {
         await libraryApi.review.requestChanges({ itemId, message: text })
         setDone({ kind: 'changes' })
@@ -204,9 +205,9 @@ export default function ReviewPanel({ slate }) {
               <Chip size="small" color={reviewing ? 'info' : 'default'} label={STATE_WORDS[state] || state} data-testid="review-state" />
               {item.status === 'published' && item.pendingVersion && <Chip size="small" color="info" variant="outlined" label="Update to a published item" />}
               <Typography variant="caption" color="text.secondary">
-                by {item.authorName} · version {item.pendingVersion || item.publishedVersion || item.versionCount}
+                by {item.authorName}{item.status === 'published' ? ` · published ${item.publishedCount ?? 1} time${(item.publishedCount ?? 1) === 1 ? '' : 's'}` : ''}
                 {item.provenance?.branchedFrom ? ` · branched from ${item.provenance.branchedFrom.title}` : ''}
-                {item.provenance?.forkedFrom ? ` · based on ${item.provenance.forkedFrom.title}` : ''}
+                {item.provenance?.forkedFrom ? ` · copy of ${item.provenance.forkedFrom.title}` : ''}
               </Typography>
             </Box>
           )}
@@ -224,7 +225,7 @@ export default function ReviewPanel({ slate }) {
           {meta && item && (
             <Box component="section" aria-label="Details" sx={{ display: 'grid', gap: 1 }}>
               <TextField size="small" label="Title" value={meta.title} onChange={(e) => setMeta({ ...meta, title: e.target.value })} inputProps={{ maxLength: 80 }} disabled={!reviewing} />
-              <TextField size="small" label="One line" value={meta.summary} onChange={(e) => setMeta({ ...meta, summary: e.target.value })} inputProps={{ maxLength: 160 }} disabled={!reviewing} multiline />
+              <TextField size="small" label="One line" value={meta.summary} onChange={(e) => setMeta({ ...meta, summary: e.target.value })} inputProps={{ maxLength: 160 }} InputLabelProps={{ shrink: true }} disabled={!reviewing} multiline />
               {item.categoryLocked && item.category
                 ? <Typography variant="body2">Category: {categoryLabel(item.category)} (from {item.provenance?.branchedFrom?.title || 'its parent'}, locked)</Typography>
                 : (
@@ -240,7 +241,7 @@ export default function ReviewPanel({ slate }) {
                 <TextField size="small" label="Words people might search for" value={meta.synonyms} onChange={(e) => setMeta({ ...meta, synonyms: e.target.value })}
                   helperText="Separated by commas." disabled={!reviewing} />
               )}
-              <TextField size="small" label="Description" value={meta.description} onChange={(e) => setMeta({ ...meta, description: e.target.value })} multiline minRows={2} inputProps={{ maxLength: 2000 }} disabled={!reviewing} />
+              <TextField size="small" label="Description" value={meta.description} onChange={(e) => setMeta({ ...meta, description: e.target.value })} multiline minRows={2} inputProps={{ maxLength: 2000 }} InputLabelProps={{ shrink: true }} disabled={!reviewing} />
               {reviewing && <Box><Button size="small" variant="outlined" onClick={saveMeta} disabled={savingMeta}>{savingMeta ? 'Saving…' : 'Save the details'}</Button></Box>}
             </Box>
           )}
@@ -320,7 +321,7 @@ export default function ReviewPanel({ slate }) {
             {askedNow === 'unpublish' && 'Copies people already made stay theirs. Say why: the author is told.'}
           </Typography>
           <TextField autoFocus fullWidth multiline minRows={2} label={askedNow === 'approve' ? 'Message to the author (optional)' : 'Message to the author'}
-            value={decisionText} onChange={(event) => setDecisionText(event.target.value)} inputProps={{ maxLength: 2000, 'data-testid': 'decision-message' }} />
+            value={decisionText} onChange={(event) => setDecisionText(event.target.value)} inputProps={{ maxLength: 2000, 'data-testid': 'decision-message' }} InputLabelProps={{ shrink: true }} />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDecision(null)} disabled={deciding}>Cancel</Button>

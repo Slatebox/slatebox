@@ -95,7 +95,7 @@ export const reviewApprove = defineAction({
   confirm: true,
   mounts: { ddp: true, http: { method: 'POST', path: '/library/review/{itemId}/approve', operationId: 'approveLibraryItem' } },
   input: object({ itemId: itemRef, message: messageInput, selfReview }, ['itemId']),
-  output: { type: 'object', properties: { itemId: { type: 'string' }, status: { type: 'string' }, publishedVersion: { type: 'integer' }, url: { type: 'string' } }, required: ['itemId', 'status', 'publishedVersion'] },
+  output: { type: 'object', properties: { itemId: { type: 'string' }, status: { type: 'string' }, publishedVersion: { type: 'integer' }, publishedCount: { type: 'integer', description: 'How many times it has been published, this time included (1 the first time).' }, url: { type: 'string' } }, required: ['itemId', 'status', 'publishedVersion'] },
   tool: { name: 'approve_library_item', title: 'Approve a library submission', description: 'For administrators: publish a library submission in review, as its review copy stands. The person agrees first.' },
   handler: (principal, input, { deps }) => deps.library.review.approve(principal, input),
 })

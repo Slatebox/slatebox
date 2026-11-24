@@ -19,6 +19,8 @@ export const PREVIEW_PREFIX = 'preview-'
 export const PREVIEW_CAPTION = PREVIEW_PREFIX + 'caption'
 // The same words and colours the engine's draft frame uses (DRAFT_TAG): the brand's amber, with dark-green ink.
 export const PREVIEW_CAPTION_TEXT = 'Preview · not added yet'
+// A proposed change to a board already on the slate: nothing is being added, so it says what it is.
+export const PREVIEW_CHANGE_TEXT = 'Proposed change · not kept yet'
 const accent = '#8a6a1f'
 const tag = { fill: '#f6cf86', ink: '#1f3d33' }
 const provisional = { borderStyle: 'dashed', borderWidth: 2, borderColor: accent, opacity: 0.78 }
@@ -55,10 +57,10 @@ export function boundsOf(frames) {
 }
 
 /** The caption that marks a preview, set just above `bounds` (world units). */
-export function previewCaption(bounds) {
+export function previewCaption(bounds, { change = false } = {}) {
   return { options: {
-    id: PREVIEW_CAPTION, text: PREVIEW_CAPTION_TEXT, xPos: Math.round(bounds.x), yPos: Math.round(bounds.y - 52),
-    width: 216, height: 36, fontSize: 15, foregroundColor: tag.ink, backgroundColor: tag.fill, borderWidth: 0,
+    id: PREVIEW_CAPTION, text: change ? PREVIEW_CHANGE_TEXT : PREVIEW_CAPTION_TEXT, xPos: Math.round(bounds.x), yPos: Math.round(bounds.y - 52),
+    width: change ? 268 : 216, height: 36, fontSize: 15, foregroundColor: tag.ink, backgroundColor: tag.fill, borderWidth: 0,
   }, relationships: { associations: [] } }
 }
 

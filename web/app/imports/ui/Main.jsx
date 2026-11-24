@@ -109,8 +109,6 @@ export default function Main() {
   const setSnapshotOpen = useSetAtom(isSnapshotOpen)
   // const [chatIsOpen, setChatOpen] = useAtom(isChatOpen)
 
-  const [, setAvailableTemplates] = React.useState([])
-
   const location = useLocation()
   const isOnPresentPage = location.pathname.includes('/present/')
 
@@ -137,20 +135,6 @@ export default function Main() {
       Meteor.user() && Meteor.user().orgId ? Organizations.findOne() : null
     return org && org.name
   })
-
-  async function getTemplates() {
-    const templates = await Meteor.callAsync(CONSTANTS.methods.slates.get, {
-      skip: 0,
-      limit: 400,
-      type: 'templates',
-      aiSuitable: true,
-    })
-    setAvailableTemplates(templates?.slates || [])
-  }
-
-  useEffect(() => {
-    getTemplates()
-  }, [])
 
   const handleDrawerOpen = () => {
     if (mdmq) setMainDrawerOpen(true)

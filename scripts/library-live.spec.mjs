@@ -92,12 +92,12 @@ test('Keep adds a board and keeps a rule live on every open page; Undo and the n
   for (const [card, lane] of [['Search', 'Doing'], ['Billing', 'To do']]) {
     await say(page, `Add a card called ${card} to ${lane}`)
     await keep(page)
-    await expect(panel(page).getByText('Saved to the workshop.').last()).toBeVisible()
+    await expect(panel(page).getByText('Saved to the board.').last()).toBeVisible()
   }
   await say(page, 'Let Doing hold 1')
   await expect(panel(page).getByText(/Rules \(rev \d+ → \d+\)/)).toBeVisible()
   await keep(page)
-  await expect(panel(page).getByText('Saved to the workshop.').last()).toBeVisible()
+  await expect(panel(page).getByText('Saved to the board.').last()).toBeVisible()
   await doingHolds(page, 1)
   await doingHolds(other, 1)
 
@@ -190,7 +190,7 @@ test.describe('on a phone', () => {
     await page.locator('[data-conversation-toggle]').first().click()
     await say(page, 'Add a card called Search to Doing')
     await keep(page)
-    await expect(panel(page).getByText('Saved to the workshop.').last()).toBeVisible()
+    await expect(panel(page).getByText('Saved to the board.').last()).toBeVisible()
     await panel(page).getByRole('button', { name: 'Close' }).first().click()
     await page.waitForTimeout(1500)
     // Board polish: a column's counter is "1 / 3" on the canvas; its words for a screen reader stay "1 of 3".

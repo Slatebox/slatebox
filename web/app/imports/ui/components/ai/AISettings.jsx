@@ -39,12 +39,10 @@ export default function AISettings({
   textLabel,
   isOnCanvas,
   saveLabel,
-  templateId = null,
   shareId,
   enteredPrompt,
   onChangePrompt = null,
   userAISettings = null,
-  templates,
 }) {
   const history = useNavigate()
   const [message, setGlobalMessage] = useAtom(globalMessage)
@@ -52,9 +50,6 @@ export default function AISettings({
   const [aiSettings, setLocalAISettings] = React.useState(
     userAISettings || defaultAISettings
   )
-  if (!aiSettings.templateId && templateId) {
-    aiSettings.templateId = templateId
-  }
   const [aiDescription, setAIDescription] = React.useState('')
   const [alreadyRanPrompt, setOriginalPrompt] = React.useState(null)
   const [promptValid, setPromptValid] = React.useState(enteredPrompt)
@@ -190,7 +185,7 @@ export default function AISettings({
     )
     history(`/canvas/${newShareId}`)
     // setTimeout(() => {
-    setCustomAIOpen({ open: true, templates })
+    setCustomAIOpen({ open: true })
     // setCustomAIOpen(true)
     // }, 1500)
   }
@@ -288,18 +283,6 @@ export default function AISettings({
                   />
                 </Grid>
                 {aiSettings.layoutStrategy ===
-                  CONSTANTS.ai.layoutStrategy.template.name && (
-                  <Grid size={6}>
-                    <AISelect
-                      aiProp="templateId"
-                      aiPropDescription="Template to autopopulate?"
-                      onChange={(tid) => updatePreference('templateId', tid)}
-                      currentValue={aiSettings.templateId}
-                      availableTemplates={templates}
-                    />
-                  </Grid>
-                )}
-                {aiSettings.layoutStrategy ===
                   CONSTANTS.ai.layoutStrategy.url.name && (
                   <Grid size={12}>
                     <TextField
@@ -364,12 +347,10 @@ AISettings.propTypes = {
   showPrompt: PropTypes.bool.isRequired,
   title: PropTypes.string.isRequired,
   textLabel: PropTypes.string.isRequired,
-  templateId: PropTypes.string,
   isOnCanvas: PropTypes.bool.isRequired,
   saveLabel: PropTypes.string.isRequired,
   shareId: PropTypes.string.isRequired,
   enteredPrompt: PropTypes.string.isRequired,
-  templates: PropTypes.node.isRequired,
   onChangePrompt: PropTypes.func,
   userAISettings: PropTypes.node,
 }

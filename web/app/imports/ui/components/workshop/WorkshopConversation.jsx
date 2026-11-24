@@ -332,7 +332,7 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
       if (!mounted.current) return
       if (!saved) { setError(map ? 'Could not save. Check the latest map and try again.' : 'Could not save. Check the latest workshop and try again.'); return }
       append({ role: 'assistant', content: preview.override ? 'Moved ' + preview.override.card + ' to ' + preview.override.lane + ' anyway. The card shows who moved it and when; ' + undoWordsHere() + ' puts it back.'
-        : map ? 'Saved to the map.' : 'Saved to the workshop.' })
+        : map ? 'Saved to the map.' : 'Saved to the board.' })
       setPreview(null)
     } finally { running.current = false; if (mounted.current) setBusy(false) }
   }
@@ -505,7 +505,7 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
       {!drawingStale && (drawing.component || drawing.mode === 'play') && previewKeepSentence(drawing) && <Typography variant="body2">{previewKeepSentence(drawing)}</Typography>}
       </Box></ChatTurn>
     </Box> : preview && <Box aria-label={map ? 'Review proposed map' : 'Review proposed workshop'} aria-live="polite" sx={{ my: 2 }}>
-      <Typography sx={{ fontWeight: 600 }}>{stale ? map ? 'A teammate changed this map.' : 'A teammate changed the workshop.' : preview.override ? 'Move anyway?' : orderChanged ? 'Proposed presentation order' : 'Preview · shown on the canvas'}</Typography>
+      <Typography sx={{ fontWeight: 600 }}>{stale ? map ? 'A teammate changed this map.' : 'A teammate changed the workshop.' : preview.override ? 'Move anyway?' : orderChanged ? 'Proposed presentation order' : 'Proposed change · shown on the canvas'}</Typography>
       {/* The rule the move breaks, in the board's words: what "Move anyway" overrides. */}
       {!stale && preview.override && <Typography variant="body2" data-move-anyway-rule="" sx={{ overflowWrap: 'anywhere' }}>{preview.override.sentence}</Typography>}
       {stale ? <Typography variant="body2">Discard this preview and ask again on the latest {map ? 'map' : 'workshop'}.</Typography> : <>

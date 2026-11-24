@@ -107,7 +107,7 @@ test('#17 drawings, routes, workshops and business boards read as sentences too'
   assert.equal(keptReply({ format: 'map', labels: ['Intake', 'Review'], links: 1 }), 'Drew Intake → Review, with 1 connection.')
   assert.equal(keptReply({ format: 'map', labels: ['Idea'], links: 0 }), 'Drew Idea.')
   assert.equal(keptReply({ format: 'lanes', labels: ['To do', 'Doing', 'Done'], capacities: [{ label: 'Doing', capacity: 2 }] }),
-    'Added a workshop: To do, Doing and Done. Doing holds up to 2 cards.')
+    'Added a board: To do, Doing and Done. Doing holds up to 2 cards.')
   // A board read from a person's own words keeps the server's words, made a sentence.
   const said = 'Added a launch plan · Product → Engineering · launch day 14'
   assert.equal(keptReply({ format: 'launch-plan', said, labels: [] }), 'Added a launch plan: Product → Engineering, launch day 14.')

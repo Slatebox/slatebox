@@ -164,7 +164,8 @@ export function ConversationComposer({ shareId, inputRef, value, onChange, onSub
       // On a short screen the box is left out while it is off, so the reason and Keep and Discard fit.
       sx={held ? {[short]:{display:'none'}} : undefined}
       disabled={held} placeholder={placeholder} helperText={held ? undefined : helperText}
-      slotProps={{ htmlInput: { maxLength, 'aria-describedby': held ? reasonId : undefined } }}
+      // The label always sits on the outline: a multiline box's label otherwise lies over its placeholder or its text.
+      slotProps={{ htmlInput: { maxLength, 'aria-describedby': held ? reasonId : undefined }, inputLabel: { shrink: true } }}
       onChange={event => { waiting.current = false; onChange(event.target.value) }}
       onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.target.form?.requestSubmit() } }} />
     {error && <Typography role="alert" color="error" variant="body2" sx={{mt:.5}}>{error}</Typography>}

@@ -47,6 +47,8 @@ const readCursor = (cursor) => {
   if (!Number.isSafeInteger(n) || n < 0 || String(n) !== String(cursor)) throw fail(400, 'invalid_request', 'cursor is the next value a listing gave.', { field: 'cursor' })
   return n
 }
+// How many times an item has been published (approvals; a migrated or built-in item counts its one).
+const publishedCountOf = (item) => item?.publishedCount ?? (item?.publishedVersion ? 1 : 0)
 const boardKindOf = (workshop) => workshop?.kind ?? (workshop?.lanes?.[0]?.station ? 'map' : 'lanes')
 const builtinRefusal = () => fail(409, 'builtin', 'This is part of Slatebox and can’t be changed here. Branch off it to make your own.')
 
@@ -187,6 +189,8 @@ export function createLibraryCore(deps) {
       ...(item.description && { description: item.description }),
       synonyms: item.synonyms || [], license: item.license || LIBRARY_LICENSE, categoryLocked: Boolean(item.categoryLocked),
       versionCount: item.versionCount || 0, ...(item.publishedVersion && { publishedVersion: item.publishedVersion }),
+      // Said only once it is more than one: absent means published once (the export stays within one exec result).
+      ...(publishedCountOf(item) > 1 && { publishedCount: publishedCountOf(item) }),
       ...(privileged && {
         status: item.status, ...(item.reviewStatus && { reviewStatus: item.reviewStatus }),
         ...(item.pendingVersion && { pendingVersion: item.pendingVersion }),
@@ -313,7 +317,8 @@ export function createLibraryCore(deps) {
   async function fork(principal, input, { mode = 'save' } = {}) {
     const { item, privileged } = await readableItem(principal, input.itemId)
     const version = await visibleVersion(item, privileged, input.version)
-    const origin = { itemId: item._id, version: version.n, kind: item.kind, title: item.title }
+    // Kept on the copy and every later copy: the credit its licence asks for (whose it is, and where from).
+    const origin = { itemId: item._id, version: version.n, kind: item.kind, title: item.title, ...(item.authorName && { authorName: item.authorName }) }
     if (item.kind !== 'component') {
       if (input.targetShareId) throw fail(400, 'invalid_request', 'Only a smart component is added to a slate. A slate or presentation opens as a copy of its own.', { field: 'targetShareId' })
       const name = input.name || version.meta?.title || item.title
@@ -763,15 +768,18 @@ export function createLibraryCore(deps) {
     }
     const meta = metaOf(withPending(item))
     const version = await writeVersion(item, { source: 'review', content, createdBy: principal.userId, meta })
+    // What people are told: the how-manyth publication this is (1 for the first), not the internal version
+    // number, which also counts every submission.
+    const publishedCount = publishedCountOf(item) + 1
     const diff = { ...(pending && Object.keys(metaDiff(pending.meta, meta)).length && { meta: metaDiff(pending.meta, meta) }), ...contentDiff(pending?.content, content) }
     await items.updateOne({ _id: item._id }, {
-      $set: { ...meta, status: 'published', reviewStatus: null, publishedVersion: version.n, versionCount: version.n, publishedAt: at(), updatedAt: at(), preview: previewOf(content), ...lastMessage('reviewer', message) },
+      $set: { ...meta, status: 'published', reviewStatus: null, publishedVersion: version.n, publishedCount, versionCount: version.n, publishedAt: at(), updatedAt: at(), preview: previewOf(content), ...lastMessage('reviewer', message) },
       $unset: { pendingVersion: '', pendingMeta: '', migrationPristine: '' },
     })
     await log(item, 'approved', await reviewerActor(principal), { version: version.n, ...(self && { selfReview: true }), ...(message && { message }), ...(Object.keys(diff).length && { diff }) })
     const published = await items.findOne({ _id: item._id })
     await notify({ item: published, type: 'approved', message })
-    return { itemId: item._id, status: 'published', publishedVersion: version.n, url: url(published) }
+    return { itemId: item._id, status: 'published', publishedVersion: version.n, publishedCount, url: url(published) }
   }
 
   async function decide(principal, input, action, type, verb) {

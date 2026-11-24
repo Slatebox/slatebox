@@ -133,6 +133,8 @@ test('the caption that marks a preview sits above it and says what it is', () =>
   assert.equal(caption.options.id, PREVIEW_CAPTION)
   assert.equal(caption.options.text, PREVIEW_CAPTION_TEXT)
   assert.match(PREVIEW_CAPTION_TEXT, /^Preview/)
+  // A proposal for a board already on the slate says it is a change, not something being added.
+  assert.equal(previewCaption({ x: 100, y: 300, width: 400, height: 200 }, { change: true }).options.text, 'Proposed change · not kept yet')
   assert.ok(caption.options.yPos + caption.options.height <= 300)
 })
 

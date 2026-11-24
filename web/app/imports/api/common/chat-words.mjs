@@ -71,7 +71,7 @@ function componentReply(draft, labels, addSay) {
 
 function workshopReply(draft, labels) {
   const limits = (draft.capacities ?? []).map(({ label, capacity }) => `${label} holds up to ${capacity} ${plural(capacity, 'card')}`)
-  return [stop(`Added a workshop${labels.length ? `: ${listWords(labels)}` : ''}`), ...(limits.length ? [stop(listWords(limits))] : [])].join(' ')
+  return [stop(`Added a board${labels.length ? `: ${listWords(labels)}` : ''}`), ...(limits.length ? [stop(listWords(limits))] : [])].join(' ')
 }
 
 function drawingReply(draft, labels) {

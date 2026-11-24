@@ -73,13 +73,25 @@ function Card({ entry, playing, onOpen, onAdd, onHover, cardRef, full }) {
 // The shared library's components: read when the library opens (cached for the session, read again each time it
 // opens, so a draft saved a moment ago is under Yours). Published community components, and the person's own.
 let itemsRead = null
+// Every published community component, page by page (48 a page), up to 480: the list never stops at one page.
+async function communityComponents() {
+  const items = []
+  let cursor
+  for (let page = 0; page < 10; page++) {
+    const answer = await libraryApi.list({ kind: 'component', origin: 'user', limit: 48, ...(cursor && { cursor }) })
+    items.push(...(answer.items ?? []))
+    if (!answer.next) break
+    cursor = answer.next
+  }
+  return { items }
+}
 function useLibraryItems() {
   const [, redraw] = useState(0)
   useEffect(() => {
     let gone = false
     const signedIn = Boolean(Meteor.userId())
     itemsRead = Promise.all([
-      libraryApi.list({ kind: 'component', origin: 'user', limit: 48 }).catch(() => ({ items: [] })),
+      communityComponents().catch(() => ({ items: [] })),
       signedIn ? libraryApi.mine({}).catch(() => ({ items: [] })) : { items: [] },
     ]).then(([community, own]) => { setLibraryItems({ community: community.items ?? [], own: own.items ?? [] }) })
     itemsRead.then(() => { if (!gone) redraw(n => n + 1) })

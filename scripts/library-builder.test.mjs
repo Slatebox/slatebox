@@ -53,7 +53,8 @@ test("the builder's links: /new#build starts from scratch, /new#build=<item> bra
 });
 
 test("each first-turn shape is a plain chat message read on the slate, with no AI, as the board it names", () => {
-  assert.deepEqual(BUILD_SHAPES.map((shape) => shape.label), ["Columns", "Lists in lists", "A tree", "A timeline", "A 2 by 2"]);
+  // No 2 by 2 until its square has controls of its own (a corner's badge to drag), so every start offered has controls that mean something.
+  assert.deepEqual(BUILD_SHAPES.map((shape) => shape.label), ["Columns", "Lists in lists", "A tree", "A timeline"]);
   for (const shape of BUILD_SHAPES) {
     assert.equal(nativeRequestKind(shape.message), shape.kind, shape.label);
     if (shape.kind === "lanes") {

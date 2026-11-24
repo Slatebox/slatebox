@@ -38,9 +38,8 @@ export function WorkshopStatus({ board, docked = false, conversationOpen = false
     </>}
     {viewOnly && <Typography variant="body2">View only</Typography>}
     {/* A proposal holds the board still until it is answered. With the conversation closed, say so and offer the way back. */}
-    {previewing && <Typography variant="body2" role="status">{conversationOpen
-      ? 'Preview: a proposed change, not saved yet.'
-      : 'Preview: a proposed change is on the canvas. Cards stay where they are until you keep or discard it.'}</Typography>}
+    {/* With the conversation open, its own line says what the preview is: one notice, not two. */}
+    {previewing && !conversationOpen && <Typography variant="body2" role="status">Preview: a proposed change is on the canvas. Cards stay where they are until you keep or discard it.</Typography>}
     {previewing && !conversationOpen && onReview && <Button variant="contained" size="small" onClick={onReview}>Review proposal</Button>}
     {saving && <Typography variant="body2" role="status">{offline ? 'Offline. Your changes will be saved when the connection is back.' : 'Saving…'}</Typography>}
     {failure && <Typography variant="body2" role="alert" tabIndex={0} title={failure} sx={reasonLines}>{failure}</Typography>}

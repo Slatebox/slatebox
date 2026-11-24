@@ -32,7 +32,7 @@ export const itemDetail = {
   properties: {
     ...itemSummary.properties,
     description: { type: 'string' }, synonyms: { type: 'array', items: { type: 'string' } }, license: { type: 'string' },
-    categoryLocked: { type: 'boolean' }, versionCount: { type: 'integer' }, publishedVersion: { type: 'integer' },
+    categoryLocked: { type: 'boolean' }, versionCount: { type: 'integer' }, publishedVersion: { type: 'integer' }, publishedCount: { type: 'integer', description: 'How many times it has been published, when more than once (absent: once).' },
     status: { type: 'string', enum: [...LIBRARY_STATUSES], description: 'Its author and reviewers only.' },
     reviewStatus: { type: 'string', description: 'The state of the version waiting for review (its author and reviewers only).' },
     pendingVersion: { type: 'integer' }, pendingMeta: { type: 'object', description: 'An update to a published item: its proposed details, public once approved.' }, draftMeta: { type: 'object', description: 'A published item\'s saved draft details, not yet submitted (its author only).' }, sourceShareId: { type: 'string' }, reviewShareId: { type: 'string' }, lastMessage: { type: 'object' },

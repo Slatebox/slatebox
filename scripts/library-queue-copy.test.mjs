@@ -2,9 +2,10 @@
 // item's status (QUEUE). The same functions the pages call (components/library/libraryCopy.mjs,
 // review/refineTurns.mjs, previewSlate.mjs).
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
-  authorActions, authorStatus, diffLines, eventLine, groupMine, publishDefaults, publishInput, waitedFor, QUEUE_TABS, PUBLISH_LINE,
+  authorActions, authorStatus, originCredit, diffLines, eventLine, groupMine, publishDefaults, publishInput, waitedFor, QUEUE_TABS, PUBLISH_LINE,
 } from "../web/app/imports/ui/components/library/libraryCopy.mjs";
 import { proposalChanges, refineHistory } from "../web/app/imports/ui/components/library/review/refineTurns.mjs";
 import { previewSlateOf } from "../web/app/imports/ui/components/library/previewSlate.mjs";
@@ -65,4 +66,13 @@ test("a preview draws a component's board on an empty slate, and a slate as it i
   assert.deepEqual([board.shareId, board.creative.model.kind, board.nodes.length, board.options.workshopOrigin], ["library_builtinretro", "workshop", 0, { x: 40, y: 40 }]);
   const slate = previewSlateOf({ kind: "slate", slate: { shareId: "real", options: { name: "Kickoff" }, nodes: [{ options: { id: "n1" } }] } }, { key: "i1" });
   assert.deepEqual([slate.shareId, slate.nodes.length, slate.options.containerStyle.backgroundColor], ["library_i1", 1, "#ffffff"]);
+});
+
+test("a slate from the library credits its author: a copy names it, a board says where it came from", () => {
+  assert.deepEqual(originCredit({ itemId: "i1", kind: "slate", title: "Launch plan", authorName: "Ada Author" }), { text: "Copy of Launch plan by Ada Author", href: "/library/i1" });
+  assert.equal(originCredit({ itemId: "builtin-retro", kind: "component", title: "Retro", authorName: "Slatebox" }).text, "Retro by Slatebox, from the library");
+  assert.equal(originCredit(null), null);
+  const header = readFileSync(new URL("../web/app/imports/ui/components/CanvasToolbar.jsx", import.meta.url), "utf8");
+  assert.match(header, /data-library-credit/);
+  assert.match(header, /key: 'origin', label: credit\.text/);
 });

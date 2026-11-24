@@ -51,7 +51,7 @@ export default function SaveSheet({ submitting, defaults, locked, parentTitle, b
       helperText="Separate them with commas: standup, sprint, to do" />
     {submitting && <>
       <TextField label="Note for the reviewer (optional)" size="small" multiline minRows={2} maxRows={5} value={note} onChange={(e) => setNote(e.target.value)}
-        slotProps={{ htmlInput: { maxLength: 2000 } }} />
+        slotProps={{ htmlInput: { maxLength: 2000 }, inputLabel: { shrink: true } }} />
       <Typography variant="body2" sx={{ color: 'text.secondary' }}>{LIBRARY_LICENSE_LINE}</Typography>
     </>}
     {error && <Typography variant="body2" color="error" role="alert">{String(error.reason ?? '').replace(/\s*\(\/signup\)/, '')}

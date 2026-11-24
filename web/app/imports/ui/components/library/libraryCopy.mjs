@@ -148,3 +148,15 @@ export function publishInput(fields, { shareId }) {
     ...(fields.note.trim() && { note: fields.note.trim() }),
   }
 }
+
+/**
+ * The credit a slate made from the library carries (its libraryOrigin), as the licence asks: whose work it is
+ * and where it came from. → { text, href } or null. A slate or presentation is a copy; a component is a board added
+ * from the library.
+ */
+export function originCredit(origin) {
+  if (!origin?.itemId || !origin.title) return null
+  const by = origin.authorName ? ` by ${origin.authorName}` : ''
+  const text = origin.kind === 'component' ? `${origin.title}${by}, from the library` : `Copy of ${origin.title}${by}`
+  return { text, href: `/library/${encodeURIComponent(origin.itemId)}` }
+}

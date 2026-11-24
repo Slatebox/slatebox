@@ -240,7 +240,7 @@ test("guests use what is published and never publish: fork and branch yes, submi
   const { itemId } = await submitted(env, { title: "Pending retro" });
   const forked = await ddp("guest1", "library.fork", { itemId: "pros-cons" });
   const copy = world.slate(forked.shareId);
-  assert.deepEqual([copy.userId, copy.options.isPrivate, copy.libraryOrigin], ["guest1", true, { itemId: "builtin-pros-cons", version: 1, kind: "component", title: "Pros and cons" }]);
+  assert.deepEqual([copy.userId, copy.options.isPrivate, copy.libraryOrigin], ["guest1", true, { itemId: "builtin-pros-cons", version: 1, kind: "component", title: "Pros and cons", authorName: "Slatebox" }]);
   assert.equal(world.library.items.docs.find((doc) => doc._id === "builtin-pros-cons").counts.adds, 0, "a guest's use is never counted");
   await assert.rejects(ddp("guest1", "library.fork", { itemId }), { error: "not_found" });
   await assert.rejects(run(person("other"), "library.fork", { itemId }), { status: 404 });
@@ -264,7 +264,7 @@ test("a fork remembers its item through later copies and is credited when publis
   // Ben forks it: a private slate of his, remembering the item.
   const forked = await run(ben, "library.fork", { itemId: slateItem.itemId, name: "Ben's demo" });
   const copy = world.slate(forked.shareId);
-  assert.deepEqual([copy.userId, copy.options.name, copy.libraryOrigin], ["other", "Ben's demo", { itemId: slateItem.itemId, version: 2, kind: "slate", title: "Demo" }]);
+  assert.deepEqual([copy.userId, copy.options.name, copy.libraryOrigin], ["other", "Ben's demo", { itemId: slateItem.itemId, version: 2, kind: "slate", title: "Demo", authorName: "Ada" }]);
   assert.equal(copy.nodes.length, world.slate("demo").nodes.length);
   assert.equal(world.library.items.docs.find((doc) => doc._id === slateItem.itemId).counts.copies, 1);
   // A later copy of the fork still remembers it; a builder's mode never travels.

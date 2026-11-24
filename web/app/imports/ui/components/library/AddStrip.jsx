@@ -21,7 +21,9 @@ export default function AddStrip({ empty, hasBoard, onAdd, onBrowse, compact = f
       <Typography variant="caption" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Add to this slate</Typography>
       <Box sx={{ display: 'flex', gap: .5, minWidth: 0, flex: '1 1 auto' }}>
         {picks.map(([id, name]) => <ButtonBase key={id} aria-label={'Add ' + name} title={name} onClick={() => onAdd(id)}
-          sx={{ borderRadius: 1, overflow: 'hidden', border: 1, borderColor: 'divider', flex: '0 1 56px', minWidth: 40, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}>
+          // A finger's size: 44px tall at the least, the picture centred in it.
+          sx={{ borderRadius: 1, overflow: 'hidden', border: 1, borderColor: 'divider', flex: '0 1 72px', minWidth: 44, minHeight: 44, px: .5,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}>
           <img src={'/library/' + id + '-still.svg'} alt="" width="56" height="32" style={{ display: 'block', width: '100%', height: 'auto' }} />
         </ButtonBase>)}
       </Box>

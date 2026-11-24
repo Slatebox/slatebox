@@ -92,7 +92,7 @@ function MineRow({ item, onChanged }) {
         <Typography variant="body2" color="text.secondary">
           {KindTitle(item.kind)}{shown.category ? ` · ${categoryLabel(shown.category)}` : ''}
           {item.provenance?.branchedFrom ? ` · branched from ${item.provenance.branchedFrom.title}` : ''}
-          {item.provenance?.forkedFrom ? ` · based on ${item.provenance.forkedFrom.title}` : ''}
+          {item.provenance?.forkedFrom ? ` · copy of ${item.provenance.forkedFrom.title}` : ''}
         </Typography>
         <Typography variant="body2">{shown.summary}</Typography>
         {item.lastMessage && (

@@ -2546,6 +2546,10 @@
                         "publishedVersion": {
                           "type": "integer"
                         },
+                        "publishedCount": {
+                          "type": "integer",
+                          "description": "How many times it has been published, when more than once (absent: once)."
+                        },
                         "status": {
                           "type": "string",
                           "enum": [
@@ -2719,6 +2723,10 @@
                         "publishedVersion": {
                           "type": "integer"
                         },
+                        "publishedCount": {
+                          "type": "integer",
+                          "description": "How many times it has been published, when more than once (absent: once)."
+                        },
                         "status": {
                           "type": "string",
                           "enum": [
@@ -2888,6 +2896,10 @@
                     "publishedVersion": {
                       "type": "integer"
                     },
+                    "publishedCount": {
+                      "type": "integer",
+                      "description": "How many times it has been published, this time included (1 the first time)."
+                    },
                     "url": {
                       "type": "string"
                     }
@@ -2916,6 +2928,10 @@
                     },
                     "publishedVersion": {
                       "type": "integer"
+                    },
+                    "publishedCount": {
+                      "type": "integer",
+                      "description": "How many times it has been published, this time included (1 the first time)."
                     },
                     "url": {
                       "type": "string"
@@ -4382,6 +4398,10 @@
                         },
                         "publishedVersion": {
                           "type": "integer"
+                        },
+                        "publishedCount": {
+                          "type": "integer",
+                          "description": "How many times it has been published, when more than once (absent: once)."
                         },
                         "status": {
                           "type": "string",

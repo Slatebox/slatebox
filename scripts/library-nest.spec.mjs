@@ -24,7 +24,7 @@ async function say(page, text) {
 }
 async function keep(page) {
   await panel(page).getByRole('button', { name: 'Keep changes' }).click()
-  await expect(panel(page).getByText('Saved to the workshop.').last()).toBeVisible({ timeout: 30000 })
+  await expect(panel(page).getByText('Saved to the board.').last()).toBeVisible({ timeout: 30000 })
 }
 const canvasText = page => page.evaluate(() => [...document.querySelectorAll('svg text')].map(t => t.textContent).join(' | '))
 const box = (page, id) => page.locator(`[data-node-id="${id}"]`).first().boundingBox()

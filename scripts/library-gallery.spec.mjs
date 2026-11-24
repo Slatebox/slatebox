@@ -9,7 +9,7 @@
 //   - an unknown item says so, with a way back.
 //
 // Against a running app with published items of every kind (a slate titled "Friday launch checklist", a presentation
-// titled "Incident review walkthrough" made from a copy of that slate, so it shows "Forked from Friday launch checklist",
+// titled "Incident review walkthrough" made from a copy of that slate, so it shows "Copy of Friday launch checklist",
 // and a component titled "Weekly team retro"):
 //   cd scripts && SLATEBOX_ORIGIN=http://127.0.0.1:7650 npx playwright test library-gallery.spec.mjs
 // SLATEBOX_SHOTS names a folder for screenshots; SLATEBOX_CHROMIUM a Chromium executable.

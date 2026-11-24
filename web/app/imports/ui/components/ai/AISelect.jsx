@@ -16,7 +16,6 @@ export default function AISelect({
   aiPropDescription,
   currentValue,
   onChange,
-  availableTemplates = null,
   styleVariant,
 }) {
   const [aiVal, setAIVal] = React.useState(currentValue)
@@ -36,50 +35,31 @@ export default function AISelect({
       >
         {aiPropDescription}
       </InputLabel>
-      {aiProp === 'templateId' ? (
-        <Select
-          labelId={`ai-${aiProp}`}
-          id={`ai-${aiProp}`}
-          value={aiVal}
-          variant={styleVariant || 'standard'}
-          onChange={(e) => {
-            setAIVal(e.target.value)
-            onChange(e.target.value)
-          }}
-          fullWidth
-        >
-          {aiProp === 'templateId' &&
-            availableTemplates?.map((t) => (
-              <MenuItem value={t.shareId}>{t.options.name}</MenuItem>
-            ))}
-        </Select>
-      ) : (
-        <Select
-          labelId={`ai-${aiProp}`}
-          id={`ai-${aiProp}`}
-          value={aiVal}
-          variant={styleVariant || 'standard'}
-          onChange={(e) => {
-            setAIVal(e.target.value)
-            onChange(e.target.value)
-          }}
-          fullWidth
-        >
-          {Object.keys(CONSTANTS.ai[aiProp]).map((p) => (
-            <MenuItem
-              value={p}
-              disabled={CONSTANTS.ai[aiProp][p].comingSoon}
-            >
-              &nbsp;&nbsp;
-              {CONSTANTS.ai[aiProp][p].display}
-              {CONSTANTS.ai[aiProp][p].comingSoon && (
-                <Typography variant="subtitle2">&nbsp;(Coming Soon)</Typography>
-              )}
-            </MenuItem>
-            // </Tooltip>
-          ))}
-        </Select>
-      )}
+      <Select
+        labelId={`ai-${aiProp}`}
+        id={`ai-${aiProp}`}
+        value={aiVal}
+        variant={styleVariant || 'standard'}
+        onChange={(e) => {
+          setAIVal(e.target.value)
+          onChange(e.target.value)
+        }}
+        fullWidth
+      >
+        {Object.keys(CONSTANTS.ai[aiProp]).map((p) => (
+          <MenuItem
+            value={p}
+            disabled={CONSTANTS.ai[aiProp][p].comingSoon}
+          >
+            &nbsp;&nbsp;
+            {CONSTANTS.ai[aiProp][p].display}
+            {CONSTANTS.ai[aiProp][p].comingSoon && (
+              <Typography variant="subtitle2">&nbsp;(Coming Soon)</Typography>
+            )}
+          </MenuItem>
+          // </Tooltip>
+        ))}
+      </Select>
     </FormControl>
   )
 }
@@ -89,6 +69,5 @@ AISelect.propTypes = {
   aiPropDescription: PropTypes.string.isRequired,
   currentValue: PropTypes.string.isRequired,
   onChange: PropTypes.func.isRequired,
-  availableTemplates: PropTypes.array,
   styleVariant: PropTypes.string.isRequired,
 }
