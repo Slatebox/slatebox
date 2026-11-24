@@ -1,7 +1,7 @@
 // The library gallery in a real browser (library spec §7.6), each test in a fresh context with no login token, the
 // guest state asserted before anything is done (AGENTS.md: a reused session silently resumes a login):
 //   - a visitor browses /library, filters by kind and category, opens "Pros and cons", adds it to a new slate: they
-//     become a guest, the canvas opens with the board, and the item's add count goes up;
+//     become a guest, the canvas opens with the board (a guest's add is not counted: uses count once per signed-in person);
 //   - the same guest opens a published slate and opens a copy: a private slate of theirs, its provenance kept;
 //   - the guest adds a component beside the boards of a slate they already have (the slate picker);
 //   - slatebox.com's deep link /library/<slug>?copy=1 opens a copy once and takes the flag out of the URL;
@@ -87,7 +87,8 @@ test('a visitor browses, filters and adds a smart component to a new slate, as a
   const made = await slateOf(page, shareId)
   expect(made).toMatchObject({ isPrivate: true, isPublic: false, boards: 1 })
   expect(made.libraryOrigin).toMatchObject({ itemId: 'builtin-pros-cons', kind: 'component' })
-  expect((await api('/library/pros-cons')).item.counts.adds).toBe(before + 1)
+  // A guest's use is never counted (uses count once per signed-in person, so throwaway guests can't pump them).
+  expect((await api('/library/pros-cons')).item.counts.adds).toBe(before)
   await shot(page, 'app-canvas-after-add-1440')
 
   // The same guest opens a published slate and opens a copy: private, with where it came from.
@@ -133,7 +134,8 @@ test('the deep link from slatebox.com opens a copy once and leaves the URL clean
   await expect(page.getByRole('heading', { name: 'Friday launch checklist', level: 1 })).toBeVisible()
   await page.waitForTimeout(2000)
   expect(new URL(page.url()).search).toBe('')
-  expect((await api(`/library/${slate.id}`)).item.counts.copies).toBe(before + 1)
+  // The visitor became a guest to copy it: a guest's copy is never counted.
+  expect((await api(`/library/${slate.id}`)).item.counts.copies).toBe(before)
   expect(shareId).toBeTruthy()
 })
 
