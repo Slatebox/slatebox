@@ -4,7 +4,8 @@
 //   logo        { logoType: 'squareLogo' | 'primaryLogo', name, url }
 //   color       { name, value: '#rrggbb', role?: 'primary' | 'accent' | 'neutral' }
 //   typography  { name, value }   (older font styles: a preset may name one; the page no longer adds them)
-//   preset      intentionId 'default' or a chat intention's id, value:
+//   preset      intentionId 'default' (the one style for every slate; presets stored for one kind of
+//               AI-made slate are older data, left in place and never read), value:
 //               { background, categoryStyles: [{ backgroundColor, foregroundColor }], noteStyles,
 //                 categoryFont, categoryFontSize, noteFont, noteFontSize,
 //                 presentationMenuBgColorKey, presentationControlsColorKey }   (the last two hold colors)
@@ -12,9 +13,9 @@
 // Where it is read (the page's "Where your brand shows up" says the same, and nothing more):
 //   new slates        imports/api/client/createSlate.js: the default preset's background, and its first
 //                     heading style, heading font and size for every new note (ui/common/noteStyle.mjs)
-//   AI-made slates    server/methods/openai.js: the slate type's preset (else the default): heading and
-//                     note color pairs, fonts, sizes and background, as instructions to the AI
-//   presentations     server/methods/presentations.js: the square logo and the preset's bar colors, in the
+//   AI-made slates    server/methods/openai.js: the default preset's heading and note color pairs,
+//                     fonts, sizes and background, as instructions to the AI, whatever kind of slate
+//   presentations     server/methods/presentations.js: the square logo and the default preset's bar colors, in the
 //                     player of a published presentation (components/presentations/BasePresent.jsx)
 //   team export       server/team-export: every item, in the team's export file
 import { contrast, DEFAULT_NOTE } from '../../common/canvasTheme.mjs'
@@ -354,7 +355,7 @@ export function cleanPreset(preset) {
 // ── Where it shows up ──────────────────────────────────────────────────────────────────────────
 /**
  * What the kit changes today, item by item, for the page's "Where your brand shows up". `kit` is
- * { squareLogo, primaryLogo, palette, defaultPreset, typePresets } as the page holds them.
+ * { squareLogo, primaryLogo, palette, defaultPreset } as the page holds them.
  */
 export function brandUses(kit = {}) {
   const preset = kit.defaultPreset || null
@@ -365,7 +366,7 @@ export function brandUses(kit = {}) {
       key: 'new-slates',
       place: 'New slates',
       what: 'Background, and the color, font and size of every new note.',
-      from: 'Default style',
+      from: 'Slate style',
       state: has(style.custom.background || style.custom.headings || style.custom.headingFont || style.custom.headingSize),
       link: { to: '/new', label: 'Start a slate' },
     },
@@ -373,8 +374,8 @@ export function brandUses(kit = {}) {
       key: 'ai-slates',
       place: 'Slates made with Ask Slatebox',
       what: 'The AI is told to use your heading and note colors, fonts, sizes and background.',
-      from: kit.typePresets ? 'Default style, or the style for that kind of slate' : 'Default style',
-      state: has(!presetIsEmpty(preset) || Boolean(kit.typePresets)),
+      from: 'Slate style',
+      state: has(!presetIsEmpty(preset)),
       link: { to: '/new', label: 'Try it on a new slate' },
     },
     {

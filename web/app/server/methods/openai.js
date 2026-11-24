@@ -39,6 +39,7 @@ import {
   SLATE_OPERATION_TOOL,
 } from 'slateboxjs/operations'
 import { userSelectableTemplateSelector } from '../../imports/api/common/template-policy.mjs'
+import { DEFAULT_PRESET_QUERY, defaultPreset } from '../../imports/api/common/brandSettings.mjs'
 
 import {
   AIContent,
@@ -545,7 +546,7 @@ async function invokeTool({
           slateTemplateId,
         }
       } else {
-        // the AI is not instructed to produce colorInstructions, just regular instructions - colorInstructions should come from whether or not there is an organizationSetting for this orgId and intentionId
+        // the AI is not instructed to produce colorInstructions, just regular instructions - colorInstructions come from the team's one slate style (its default preset), if it has one
         let overrideBackground = null
         let technicalInstructions = intention?.ai?.decisionTree?.inline
           ?.defaultTechnicalInstructions
@@ -560,18 +561,12 @@ async function invokeTool({
         // )
 
         if (user.orgId) {
-          let orgPreset = await OrganizationSettings.findOneAsync({
+          // The team's one slate style (the brand kit's default preset), whatever kind of slate
+          // this is: presets once stored for one kind are not read.
+          const orgPreset = defaultPreset(await OrganizationSettings.find({
             orgId: user.orgId,
-            intentionId: intention._id,
-          })
-
-          if (!orgPreset) {
-            // fall back to the default
-            orgPreset = await OrganizationSettings.findOneAsync({
-              orgId: user.orgId,
-              intentionId: 'default',
-            })
-          }
+            ...DEFAULT_PRESET_QUERY,
+          }).fetchAsync())
 
           const techInstructions = []
           const categoryDirectives = []

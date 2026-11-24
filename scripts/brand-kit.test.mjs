@@ -12,7 +12,7 @@ import {
   effectiveStyle, fontInfo, logoFileProblem, normalHex, presetFamily, presetFromColors, presetIsEmpty, sampleSlate,
 } from '../web/app/imports/ui/components/brand/brandKit.mjs'
 import { noteAt, presetNoteStyle } from '../web/app/imports/ui/common/noteStyle.mjs'
-import { currentLogo, logoDocs, presetFor } from '../web/app/imports/api/common/brandSettings.mjs'
+import { DEFAULT_PRESET_QUERY, currentLogo, defaultPreset, logoDocs } from '../web/app/imports/api/common/brandSettings.mjs'
 
 const app = (path) => readFileSync(new URL(`../web/app/${path}`, import.meta.url), 'utf8')
 
@@ -172,15 +172,53 @@ test('one logo and one preset in use, the same pick on the page and in published
   assert.equal(currentLogo(settings, 'squareLogo')._id, 'new')
   assert.equal(currentLogo(settings.filter((s) => s._id !== 'new' && s._id !== 'old'), 'squareLogo'), null)
   assert.deepEqual(logoDocs(settings, 'squareLogo').map((s) => s._id), ['gone', 'new', 'old'])
-  assert.equal(presetFor(settings, 'persona')._id, 'p-persona')
-  assert.equal(presetFor(settings, 'other')._id, 'p-default')
-  assert.equal(presetFor([], 'default'), null)
+  assert.equal(defaultPreset(settings)._id, 'p-default')
+  assert.equal(defaultPreset([]), null)
   const server = app('server/methods/presentations.js')
   assert.match(server, /currentLogo\(orgSettings, 'squareLogo'\)/)
-  assert.match(server, /fallback\.presentationMenuBgColorKey/)
   const page = app('imports/ui/pages/BrandingSettings.jsx')
   assert.match(page, /currentLogo\(settings, t\.key\)/)
   assert.match(page, /logoDocs\(settings, key\)\[0\]/)
+})
+
+test('one style for every slate: a preset stored for one kind of AI-made slate is never read', () => {
+  const t = (n) => new Date(2026, 0, n)
+  const settings = [
+    { _id: 'p-old', type: 'preset', intentionId: 'default', value: { categoryFont: 'Old' }, updatedAt: t(1) },
+    { _id: 'p-default', type: 'preset', intentionId: 'default', value: { categoryFont: 'Inter' }, updatedAt: t(2) },
+    { _id: 'p-removed', type: 'preset', intentionId: 'default', value: { categoryFont: 'Gone' }, deleted: true, updatedAt: t(9) },
+    { _id: 'p-story', type: 'preset', intentionId: 'storyteller', value: { categoryFont: 'Lora' }, updatedAt: t(8) },
+  ]
+  assert.equal(defaultPreset(settings)._id, 'p-default')
+  assert.equal(defaultPreset(settings.filter((s) => s.intentionId !== 'default')), null, 'no fallback to a kind\'s preset')
+  assert.deepEqual({ ...DEFAULT_PRESET_QUERY }, { type: 'preset', intentionId: 'default' })
+  // AI-made slates, presentations and new slates ask only for the default preset.
+  const ai = app('server/methods/openai.js')
+  assert.match(ai, /const orgPreset = defaultPreset\(await OrganizationSettings\.find\(\{\s*orgId: user\.orgId,\s*\.\.\.DEFAULT_PRESET_QUERY,\s*\}\)\.fetchAsync\(\)\)/)
+  assert.doesNotMatch(ai, /intentionId: intention\._id/)
+  const present = app('server/methods/presentations.js')
+  assert.match(present, /defaultPreset\(orgSettings\)/)
+  assert.doesNotMatch(present, /presetFor|intentionId: \{ \$in/)
+  assert.equal([...present.matchAll(/DEFAULT_PRESET_QUERY/g)].length, 3, 'both presentation reads use the default query')
+  assert.match(app('imports/api/client/createSlate.js'), /defaultPreset = teamStyle\(matchingSettings\)/)
+  for (const file of ['server/methods/openai.js', 'server/methods/presentations.js', 'imports/api/client/createSlate.js', 'imports/ui/common/noteStyle.mjs']) {
+    assert.doesNotMatch(app(file), /presetFor\(/, file)
+  }
+  assert.doesNotMatch(app('imports/api/common/brandSettings.mjs'), /export function presetFor/)
+})
+
+test('the page has no kind selector: one slate style, saved as the default preset', () => {
+  const page = app('imports/ui/pages/BrandingSettings.jsx')
+  for (const gone of [/data-brand-style-for/, /Style for/, /Every slate \(default\)/, /Made with Ask Slatebox:/, /uses the default/, /ChatIntentions/, /chatIntentions/, /typePresets/, /MenuItem/]) {
+    assert.doesNotMatch(page, gone)
+  }
+  assert.match(page, /Fonts, note colors, background and the presentation bar for every slate\./)
+  assert.match(page, /const styleDoc = defaultPreset\(settings\)/)
+  assert.match(page, /\.\.\.DEFAULT_PRESET_QUERY, value: clean, orgId/)
+  assert.match(page, /deletePreset, \{ intentionId: DEFAULT_PRESET_QUERY\.intentionId \}/)
+  const kit = app('imports/ui/components/brand/brandKit.mjs')
+  assert.doesNotMatch(kit, /typePresets/)
+  assert.equal(brandUses({ typePresets: true }).find((u) => u.key === 'ai-slates').state, 'off', 'only the default style turns AI-made slates on')
 })
 
 test('"Use my colors" builds a readable style from the roles, keeping fonts', () => {

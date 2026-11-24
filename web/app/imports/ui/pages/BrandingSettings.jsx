@@ -1,8 +1,8 @@
 /* eslint-disable no-underscore-dangle */
-// /team/branding: the brand kit, on one page. Left, the kit: logos, colors, and the style slates get
-// (fonts, note colors, background, presentation bar), for every slate or for one kind of AI-made slate.
-// Right, a live preview that follows every edit. Under both, where the brand shows up today, and
-// where it doesn't yet. Team admins change it; everyone else in the team sees it read-only.
+// /team/branding: the brand kit, on one page. Left, the kit: logos, colors, and the one style every
+// slate gets (fonts, note colors, background, presentation bar: the default preset). Right, a live
+// preview that follows every edit. Under both, where the brand shows up today, and where it doesn't
+// yet. Team admins change it; everyone else in the team sees it read-only.
 //
 // It saves through the same calls as before (organizationSettings.save and .deletePreset, the
 // upload route and images.removeImage), with the same checks on the server. Changes save as they
@@ -18,8 +18,6 @@ import Button from '@mui/material/Button'
 import Collapse from '@mui/material/Collapse'
 import Link from '@mui/material/Link'
 import LinearProgress from '@mui/material/LinearProgress'
-import MenuItem from '@mui/material/MenuItem'
-import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
@@ -29,8 +27,8 @@ import ErrorIcon from '@mui/icons-material/ErrorOutline'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import AuthManager from '../../api/common/AuthManager'
 import CONSTANTS from '../../api/common/constants'
-import { ChatIntentions, OrganizationSettings } from '../../api/common/models'
-import { currentLogo, logoDocs } from '../../api/common/brandSettings.mjs'
+import { OrganizationSettings } from '../../api/common/models'
+import { DEFAULT_PRESET_QUERY, currentLogo, defaultPreset, logoDocs } from '../../api/common/brandSettings.mjs'
 import {
   LOGO_TYPES, LOGO_RULES, NOT_YET, ROLES, brandUses, cleanPreset, colorsFromLogo, contrastWarnings,
   LARGE_TEXT_PX, effectiveStyle, paletteOf, presetFromColors, presetIsEmpty,
@@ -82,17 +80,11 @@ export default function BrandingSettings() {
     return () => { live = false; clearTimeout(wait) }
   }, [userId])
 
-  const { ready, orgId, settings, intentions } = useTracker(() => {
+  const { ready, orgId, settings } = useTracker(() => {
     const id = Meteor.user()?.orgId
-    if (!id) return { ready: true, orgId: null, settings: [], intentions: [] }
-    const subs = [Meteor.subscribe(CONSTANTS.publications.organizationSettings), Meteor.subscribe(CONSTANTS.publications.chatIntentions)]
-    const ok = subs.every((s) => s.ready())
-    return {
-      ready: ok,
-      orgId: id,
-      settings: ok ? OrganizationSettings.find({ orgId: id }).fetch() : [],
-      intentions: ok ? ChatIntentions.find({ $or: [{ orgId: id }, { universal: true }] }, { sort: { name: 1 } }).fetch() : [],
-    }
+    if (!id) return { ready: true, orgId: null, settings: [] }
+    const ok = Meteor.subscribe(CONSTANTS.publications.organizationSettings).ready()
+    return { ready: ok, orgId: id, settings: ok ? OrganizationSettings.find({ orgId: id }).fetch() : [] }
   }, [])
 
   const live = settings.filter((s) => !s.deleted)
@@ -100,16 +92,14 @@ export default function BrandingSettings() {
   const typography = useMemo(() => Object.fromEntries(live.filter((s) => s.type === 'typography' && s.value?.name).map((s) => [s.value.name, s.value.value])), [JSON.stringify(live.filter((s) => s.type === 'typography'))])
   // The logo in use is the newest one not removed: the same pick as published presentations make.
   const logos = Object.fromEntries(LOGO_TYPES.map((t) => [t.key, currentLogo(settings, t.key)]))
-  const presetDoc = (intentionId) => settings.find((s) => s.type === 'preset' && s.intentionId === intentionId) || null
-
-  // ── The style being edited ─────────────────────────────────────────────────────────────────
-  const [selected, setSelected] = useState('default')
-  const savedPreset = presetDoc(selected)?.value || {}
+  // ── The one slate style (the default preset) ──────────────────────────────────────────────
+  const styleDoc = defaultPreset(settings)
+  const savedPreset = styleDoc?.value || {}
   const savedKey = JSON.stringify(savedPreset)
   const [draft, setDraft] = useState(savedPreset)
-  const pending = useRef(null) // { timer, intentionId, value }
-  const newIds = useRef({}) // a preset's id chosen here before the server has it
-  useEffect(() => { if (!pending.current) setDraft(savedPreset) }, [savedKey, selected])
+  const pending = useRef(null) // { timer, label, value }
+  const newId = useRef(null) // the style's id chosen here before the server has it
+  useEffect(() => { if (!pending.current) setDraft(savedPreset) }, [savedKey])
 
   const [saveState, setSaveState] = useState({ kind: 'idle' })
   const [undo, setUndo] = useState([]) // newest last: { label, run }
@@ -126,49 +116,46 @@ export default function BrandingSettings() {
     }
   }
 
-  const savePreset = async (intentionId, value) => {
-    const clean = cleanPreset(value)
-    const existing = presetDoc(intentionId)
-    if (presetIsEmpty(clean)) {
-      if (existing || newIds.current[intentionId]) await call(CONSTANTS.methods.organizationSettings.deletePreset, { intentionId })
-      delete newIds.current[intentionId]
-      return
-    }
-    if (!existing && !newIds.current[intentionId]) newIds.current[intentionId] = Random.id()
-    await call(CONSTANTS.methods.organizationSettings.save, { _id: existing?._id || newIds.current[intentionId], type: 'preset', intentionId, value: clean, orgId })
-  }
   // Timers and undo steps outlive the render that made them: they read the newest of these.
   const latest = useRef({})
-  latest.current = { savePreset, selected }
+  const savePreset = async (value) => {
+    const clean = cleanPreset(value)
+    const existing = latest.current.styleDoc
+    if (presetIsEmpty(clean)) {
+      if (existing || newId.current) await call(CONSTANTS.methods.organizationSettings.deletePreset, { intentionId: DEFAULT_PRESET_QUERY.intentionId })
+      newId.current = null
+      return
+    }
+    if (!existing && !newId.current) newId.current = Random.id()
+    await call(CONSTANTS.methods.organizationSettings.save, { _id: existing?._id || newId.current, ...DEFAULT_PRESET_QUERY, value: clean, orgId })
+  }
+  latest.current = { savePreset, styleDoc }
 
   const flush = useCallback(async () => {
     const p = pending.current
     if (!p) return
     clearTimeout(p.timer)
     pending.current = null
-    try { await latest.current.savePreset(p.intentionId, p.value) } catch { /* said in the save state */ }
+    try { await latest.current.savePreset(p.value) } catch { /* said in the save state */ }
   }, [])
 
-  // `from`: the style edited and its value before, when it is not the one open (Apply to slate style).
-  const editPreset = (next, label, from = null) => {
-    const intentionId = from?.intentionId || selected
+  const editPreset = (next, label) => {
     // One undo step per burst of edits to one field: the value before the burst.
-    if (from || !pending.current || pending.current.label !== label) {
-      const before = from ? from.before : draft
+    if (!pending.current || pending.current.label !== label) {
+      const before = draft
       pushUndo(label, async () => {
         if (pending.current) { clearTimeout(pending.current.timer); pending.current = null }
-        if (intentionId === latest.current.selected) setDraft(before)
-        await latest.current.savePreset(intentionId, before)
+        setDraft(before)
+        await latest.current.savePreset(before)
       })
     }
     setDraft(next)
     if (pending.current) clearTimeout(pending.current.timer)
-    pending.current = { label, intentionId, value: next, timer: setTimeout(flush, SAVE_DELAY) }
+    pending.current = { label, value: next, timer: setTimeout(flush, SAVE_DELAY) }
     setSaveState({ kind: 'saving' })
   }
-  // Leaving the page, or switching styles, saves what is waiting.
+  // Leaving the page saves what is waiting.
   useEffect(() => () => { flush() }, [])
-  const choose = async (id) => { await flush(); setSelected(id) }
 
   // ── Colors ────────────────────────────────────────────────────────────────────────────────
   const saveColor = (doc) => call(CONSTANTS.methods.organizationSettings.save, { ...doc, type: 'color', orgId })
@@ -242,10 +229,9 @@ export default function BrandingSettings() {
     setConfirmReset(false)
     if (pending.current) { clearTimeout(pending.current.timer); pending.current = null }
     const before = draft
-    const intentionId = selected
     setDraft({})
-    await savePreset(intentionId, {})
-    pushUndo('Reset', async () => { if (intentionId === latest.current.selected) setDraft(before); await latest.current.savePreset(intentionId, before) })
+    await savePreset({})
+    pushUndo('Reset', async () => { setDraft(before); await latest.current.savePreset(before) })
   }
 
   const runUndo = async () => {
@@ -258,14 +244,12 @@ export default function BrandingSettings() {
   // ── What the preview and the warnings show ────────────────────────────────────────────────
   const style = useMemo(() => effectiveStyle(draft, typography), [JSON.stringify(draft), typography])
   const warnings = contrastWarnings(style)
-  const typePresets = intentions.filter((i) => presetDoc(i._id))
-  const uses = brandUses({ squareLogo: logos.squareLogo, primaryLogo: logos.primaryLogo, palette, defaultPreset: selected === 'default' ? draft : presetDoc('default')?.value, typePresets: typePresets.length > 0 })
+  const uses = brandUses({ squareLogo: logos.squareLogo, primaryLogo: logos.primaryLogo, palette, defaultPreset: draft })
   const editable = admin === true
   // On a phone the preview starts folded (a "Show preview" bar), so the kit's first control is on the
   // first screen; on a wider screen it is always open beside the kit.
   const [previewChoice, setPreviewOpen] = useState(null)
   const previewOpen = previewChoice ?? !phone
-  const selectedName = selected === 'default' ? 'Every slate' : intentions.find((i) => i._id === selected)?.name || 'This kind of slate'
 
   if (!orgId && ready) {
     return (
@@ -292,12 +276,9 @@ export default function BrandingSettings() {
           onAdd={(c) => addColors([c])} onChange={changeColor} onRemove={removeColor}
           applyOffer={applyOffer ? {
             title: applyOffer.title,
-            onApply: async () => {
+            onApply: () => {
               setApplyOffer(null)
-              // "Every slate" is what new slates use: apply there, whichever style was open.
-              const before = selected === 'default' ? draft : (presetDoc('default')?.value || {})
-              if (selected !== 'default') await choose('default')
-              editPreset(presetFromColors(palette, before), 'Use my colors', { intentionId: 'default', before })
+              editPreset(presetFromColors(palette, draft), 'Use my colors')
             },
             onDismiss: () => setApplyOffer(null),
           } : null}
@@ -314,25 +295,13 @@ export default function BrandingSettings() {
       </Section>
 
       <Section id="style" title="Slate style"
-        intro="Fonts, note colors, background and the presentation bar. The default is for every slate; a kind of AI-made slate can have its own."
+        intro="Fonts, note colors, background and the presentation bar for every slate."
         action={editable && palette.length > 0 ? (
           <Button size="small" variant="outlined" onClick={() => editPreset(presetFromColors(palette, draft), 'Use my colors')} data-brand-use-colors=""
             title={`Headings in your ${ROLES[0].name.toLowerCase()} color, notes in your accent, background in your neutral`}>
             Use my colors
           </Button>
         ) : null}>
-        <TextField select size="small" label="Style for" value={selected} onChange={(e) => choose(e.target.value)} disabled={!ready} data-brand-style-for=""
-          sx={{ maxWidth: 420 }}>
-          <MenuItem value="default">Every slate (default){presetDoc('default') ? '' : ' · Slatebox defaults'}</MenuItem>
-          {intentions.map((i) => (
-            <MenuItem key={i._id} value={i._id}>Made with Ask Slatebox: {i.name}{presetDoc(i._id) ? '' : ' · uses the default'}</MenuItem>
-          ))}
-        </TextField>
-        {selected !== 'default' && !presetDoc(selected) && presetIsEmpty(draft) && (
-          <Typography variant="body2" color="text.secondary">
-            Slates made this way use the default style today. The AI follows anything you set here instead.
-          </Typography>
-        )}
         <StyleSection preset={draft} style={style} palette={palette} disabled={!editable} onChange={editPreset} />
         {warnings.length > 0 && (
           <Box role="note" data-brand-contrast-warnings={warnings.length} sx={(t) => ({ borderRadius: '10px', p: 1.5, bgcolor: '#fbefe9', ...t.applyStyles('dark', { bgcolor: '#3e2a24' }) })}>
@@ -348,7 +317,7 @@ export default function BrandingSettings() {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', pt: 0.5 }}>
             {confirmReset ? (
               <Box role="alertdialog" aria-label="Reset to Slatebox defaults?" sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                <Typography variant="body2">Reset &quot;{selectedName}&quot; to Slatebox defaults? Your logos and colors stay. You can undo it.</Typography>
+                <Typography variant="body2">Reset the slate style to Slatebox defaults? Your logos and colors stay. You can undo it.</Typography>
                 <Button size="small" onClick={() => setConfirmReset(false)}>Cancel</Button>
                 <Button size="small" variant="outlined" color="error" onClick={reset} data-brand-reset-confirm="">Reset</Button>
               </Box>
@@ -366,7 +335,7 @@ export default function BrandingSettings() {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: previewOpen ? 1.5 : 0 }}>
         <Box sx={{ flex: 1 }}>
           <Typography variant="subtitle1" component="h2" sx={{ fontWeight: 750 }}>Live preview</Typography>
-          <Typography variant="caption" color="text.secondary">{selectedName}, before it saves.</Typography>
+          <Typography variant="caption" color="text.secondary">Every slate, before it saves.</Typography>
         </Box>
         {phone && (
           <Button size="small" variant={previewOpen ? 'text' : 'outlined'} onClick={() => setPreviewOpen(!previewOpen)} aria-expanded={previewOpen} aria-controls="brand-preview-body"
@@ -388,7 +357,7 @@ export default function BrandingSettings() {
           <Link component={RouterLink} to="/team/settings" underline="hover" variant="body2">Team settings</Link>
           <Typography variant="h4" component="h1" sx={{ fontWeight: 750, fontSize: { xs: 26, sm: 32 } }}>Brand kit</Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-            Your logos, colors and fonts, and the style new slates and presentations start with.
+            Your logos, colors and fonts, and the one style every slate and presentation starts with.
           </Typography>
         </Box>
         {editable && <SaveState state={saveState} onUndo={runUndo} canUndo={undo.length > 0} undoLabel={undo[undo.length - 1]?.label || ''} />}

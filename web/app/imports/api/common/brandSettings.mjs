@@ -1,5 +1,5 @@
 // Which of a team's brand-kit items is the one in use, the same answer for the brand kit page and the
-// server (published presentations). A team that used the old branding page can have several logo
+// server (published presentations, AI-made slates). A team that used the old branding page can have several logo
 // documents of one kind (removing a logo there never worked), so "the first one Mongo returns" is not
 // an answer: the logo in use is the newest one that is not removed and has a file.
 
@@ -24,11 +24,14 @@ export function logoDocs(settings, logoType) {
 }
 
 /**
- * The preset a slate made for `intentionId` uses: that kind's own preset, else the default one (as
- * new slates and the AI already do), or null. Removed presets don't count.
+ * The brand kit has one style for every slate: the team's default preset. This is how the server
+ * asks for it; presets stored for one kind of AI-made slate are left alone and never read.
  */
-export function presetFor(settings, intentionId = 'default') {
-  const live = (settings || []).filter((s) => s?.type === 'preset' && !s.deleted && s.value)
-  const own = live.filter((s) => s.intentionId === (intentionId || 'default')).sort(newestFirst)[0]
-  return own || live.filter((s) => s.intentionId === 'default').sort(newestFirst)[0] || null
+export const DEFAULT_PRESET_QUERY = Object.freeze({ type: 'preset', intentionId: 'default' })
+
+/** The team's one slate style in use: the newest default preset not removed, or null. */
+export function defaultPreset(settings) {
+  return (settings || [])
+    .filter((s) => s?.type === 'preset' && s.intentionId === 'default' && !s.deleted && s.value)
+    .sort(newestFirst)[0] || null
 }

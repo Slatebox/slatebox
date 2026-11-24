@@ -7,6 +7,7 @@ import CONSTANTS from '../common/constants'
 import { createAINodes } from '../common/ai'
 import defaultShapes from '../../ui/components/node/defaultShapes'
 import { presetNoteStyle } from '../../ui/common/noteStyle.mjs'
+import { DEFAULT_PRESET_QUERY, defaultPreset as teamStyle } from '../common/brandSettings.mjs'
 
 async function createSlate(
   slateBase,
@@ -41,19 +42,13 @@ async function createSlate(
   const fonts = {}
 
   if (Meteor.user() && Meteor.user().orgId) {
-    // Fetch the default preset setting via specific query method
+    // The team's one slate style: the brand kit's default preset (the newest one not removed).
     try {
-      // Fetch settings matching type and intentionId 'default'
       const matchingSettings = await Meteor.callAsync(
         CONSTANTS.methods.organizationSettings.getByQuery,
-        {
-          type: 'preset',
-          intentionId: 'default',
-        }
+        { ...DEFAULT_PRESET_QUERY }
       )
-
-      // Get the first match (should be unique for default preset)
-      defaultPreset = matchingSettings?.[0] || null
+      defaultPreset = teamStyle(matchingSettings)
     } catch (error) {
       console.error('Error fetching default organization preset:', error)
       defaultPreset = null // Ensure it's null on error

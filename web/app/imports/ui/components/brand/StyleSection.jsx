@@ -1,4 +1,4 @@
-// A style (a preset): the fonts, note colors, background and presentation bar a kind of slate gets.
+// The slate style (the default preset): the fonts, note colors, background and presentation bar every slate gets.
 // It edits the same preset value as before; every field shows what slates get when it is left unset.
 import React, { useState } from 'react'
 import PropTypes from 'prop-types'

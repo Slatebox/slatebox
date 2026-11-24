@@ -8,7 +8,7 @@ import { fetchPublicImage } from '../common/safe-fetch.mjs'
 import { Random } from 'meteor/random'
 import { deleteStoredFile, storeFile, storedFileBase } from '../common/fileStore'
 import { finishSnapshot, ownedSnapshotKey } from '../common/presentationSnapshot.mjs'
-import { currentLogo, presetFor } from '../../imports/api/common/brandSettings.mjs'
+import { DEFAULT_PRESET_QUERY, currentLogo, defaultPreset } from '../../imports/api/common/brandSettings.mjs'
 import CONSTANTS from '../../imports/api/common/constants'
 import {
   SlatePresentations,
@@ -156,16 +156,12 @@ Meteor.startup(async () => {
   }
 })
 
-/**
- * A presentation's bar colors from the team's presets: the slate kind's own, each falling back to the
- * default preset's (a kind with no bar colors of its own shows the default bar, as its notes do).
- */
-function barColors(orgSettings, intentionId) {
-  const own = presetFor(orgSettings, intentionId)?.value || {}
-  const fallback = presetFor(orgSettings, 'default')?.value || {}
+/** A presentation's bar colors: the team's one slate style (the default preset), whatever made the slate. */
+function barColors(orgSettings) {
+  const style = defaultPreset(orgSettings)?.value || {}
   return {
-    presentationMenuBgColorKey: own.presentationMenuBgColorKey || fallback.presentationMenuBgColorKey || null,
-    presentationControlsColorKey: own.presentationControlsColorKey || fallback.presentationControlsColorKey || null,
+    presentationMenuBgColorKey: style.presentationMenuBgColorKey || null,
+    presentationControlsColorKey: style.presentationControlsColorKey || null,
   }
 }
 
@@ -193,22 +189,18 @@ method[CONSTANTS.methods.presentations.get] = async ({
     )
 
     if (slateDetails?.userId) {
-      const intentionId =
-        slateDetails?.options?.ai?.isConversation?.intentionInitialData
-          ?.intentionId || 'default'
-
       const author = await Meteor.users.findOneAsync(slateDetails.userId, { fields: { orgId: 1 } })
       const orgId = author?.orgId
-      // The slate kind's preset (else the default one) for the bar colors, and the square logo in
-      // use: the newest one not removed (brandSettings.mjs, the same pick as the brand kit page).
+      // The team's one slate style for the bar colors, and the square logo in use: the newest one
+      // not removed (brandSettings.mjs, the same pick as the brand kit page).
       const orgSettings = orgId ? await OrganizationSettings.find({
         orgId,
         $or: [
-          { type: 'preset', intentionId: { $in: [intentionId, 'default'] } },
+          { ...DEFAULT_PRESET_QUERY },
           { type: 'logo', 'value.logoType': 'squareLogo' },
         ],
       }).fetchAsync() : []
-      const bar = barColors(orgSettings, intentionId)
+      const bar = barColors(orgSettings)
       presentationMenuBgColorKey = bar.presentationMenuBgColorKey
       presentationControlsColorKey = bar.presentationControlsColorKey
       logoUrl = currentLogo(orgSettings, 'squareLogo')?.value?.url || null
@@ -256,7 +248,6 @@ method[CONSTANTS.methods.presentations.get] = async ({
     {
       fields: {
         lastSaved: 1,
-        'options.ai.isConversation.intentionInitialData.intentionId': 1,
       },
     }
   )
@@ -265,16 +256,8 @@ method[CONSTANTS.methods.presentations.get] = async ({
     presentations[0]?.timestamp <= slateDetails?.lastSaved
 
   if (user?.orgId) {
-    const intentionId =
-      slateDetails?.options?.ai?.isConversation?.intentionInitialData
-        ?.intentionId || 'default'
-
-    const orgSettings = await OrganizationSettings.find({
-      orgId: user.orgId,
-      type: 'preset',
-      intentionId: { $in: [intentionId, 'default'] },
-    }).fetchAsync()
-    const bar = barColors(orgSettings, intentionId)
+    const orgSettings = await OrganizationSettings.find({ orgId: user.orgId, ...DEFAULT_PRESET_QUERY }).fetchAsync()
+    const bar = barColors(orgSettings)
     presentationMenuBgColorKey = bar.presentationMenuBgColorKey
     presentationControlsColorKey = bar.presentationControlsColorKey
   }
