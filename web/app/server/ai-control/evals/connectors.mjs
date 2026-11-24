@@ -4,5 +4,6 @@ export default [
   { name: 'A second planning round', sample: 'planNext', assert: ['renders', 'noPlaceholders', 'answered', 'toolCalled', 'parses', { maxLatencyMs: 20000 }] },
   { name: 'Choosing lookups for a GitHub agent', sample: 'plan-github', assert: ['renders', 'noPlaceholders', 'answered', 'toolCalled', 'parses', { maxLatencyMs: 20000 }] },
   { name: 'Laying out exactly what was asked', sample: 'layoutBudget', assert: ['renders', 'noPlaceholders', 'answered', 'toolCalled', 'parses', { maxLatencyMs: 20000 }] },
+  { name: 'Proposing a change the person asked for', sample: 'planWrites', assert: ['renders', 'noPlaceholders', 'answered', 'toolCalled', 'parses', { maxLatencyMs: 20000 }] },
   { name: 'Laying out results', sample: 'layout', assert: ['renders', 'noPlaceholders', 'answered', 'toolCalled', 'parses', { maxLatencyMs: 20000 }] },
 ]

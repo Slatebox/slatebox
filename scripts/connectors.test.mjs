@@ -362,11 +362,12 @@ test('the walkthrough: plain summary, sanitized name, consent to hashes, a hello
   const found = await world.service.discover(world.ada, { shareId: 'share1', address: servers.url('/open/mcp') })
   assert.deepEqual(found.summary.lookups.map((t) => t.name), ['read_me', 'create_view', 'search'])
   assert.equal(found.summary.changes[0].name, 'post_message')
-  assert.equal(found.tools.find((t) => t.name === 'post_message').policy, 'off')
+  // Owner, 2026-11-24: agents read and write. A change starts allowed (each one waits on an action card).
+  assert.equal(found.tools.find((t) => t.name === 'post_message').policy, 'allow')
   await refusedWith(world.service.connect(world.ada, { shareId: 'share1', address: found.address, name: 'Slatebox Admin', tools: found.tools }), 'bad_name')
   await refusedWith(world.service.connect(world.ada, { shareId: 'share1', address: found.address, name: 'Diagrams', tools: found.tools.map((t) => ({ ...t, hash: 'f'.repeat(64) })) }), 'tools_changed')
-  const conn = await world.service.connect(world.ada, { shareId: 'share1', address: found.address, name: 'Diagrams', tools: found.tools.map(({ name, hash, policy }) => ({ name, hash, policy: name === 'post_message' ? 'allow' : policy })) })
-  assert.equal(world.connections.rows[0].tools.find((t) => t.name === 'post_message').policy, 'off', 'an outside change cannot be switched on in S2a')
+  const conn = await world.service.connect(world.ada, { shareId: 'share1', address: found.address, name: 'Diagrams', tools: found.tools.map(({ name, hash, policy }) => ({ name, hash, policy: name === 'post_message' ? 'off' : policy })) })
+  assert.equal(world.connections.rows[0].tools.find((t) => t.name === 'post_message').policy, 'off', 'the person may turn a change off at consent')
   assert.equal(conn.name, 'Diagrams')
   const hello = world.presenceCalls.find(([kind]) => kind === 'saved')
   assert.equal(hello[1].connector.name, 'Diagrams')
@@ -526,12 +527,13 @@ test('the connector actions join the one registry: Meteor method, /api/v1 route,
   const { connectorActions } = await import('../enterprise/server/actions.mjs')
   const registry = createAppRegistry({ extraActions: connectorActions(() => ({})) })
   const ids = registry.list().map((a) => a.id).filter((id) => id.startsWith('connectors.'))
-  assert.deepEqual(ids.sort(), ['connectors.call', 'connectors.connect', 'connectors.disconnect', 'connectors.discover', 'connectors.gallery', 'connectors.list', 'connectors.signIn', 'connectors.signInStatus', 'connectors.useKey'])
+  assert.deepEqual(ids.sort(), ['connectors.approve', 'connectors.call', 'connectors.connect', 'connectors.decline', 'connectors.disconnect', 'connectors.discover', 'connectors.gallery', 'connectors.list', 'connectors.outsideActions', 'connectors.setActing', 'connectors.signIn', 'connectors.signInStatus', 'connectors.useKey'])
   // keeping, discarding and undoing what they suggest is the app's one suggestions.decide
   assert.ok(registry.get('suggestions.decide'))
   // Starting a sign-in is finished in the person's own signed-in browser, so it (and its status)
   // is the app's alone: no token, route or tool can hand out a sign-in to forward to someone else.
-  const appOnly = ['connectors.signIn', 'connectors.signInStatus']
+  // Letting an agent act without asking (or others approve its changes) widens an agent's rights: a person's choice in the app.
+  const appOnly = ['connectors.signIn', 'connectors.signInStatus', 'connectors.setActing']
   for (const action of registry.list().filter((a) => a.id.startsWith('connectors.'))) {
     if (appOnly.includes(action.id)) {
       assert.ok(action.mounts.ddp && !action.mounts.http && !action.tool, action.id)

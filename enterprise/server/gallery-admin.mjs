@@ -7,8 +7,10 @@
 //   - The built-in cards (common/gallery.mjs) serve until a card is edited; a card's address never
 //     changes here (consent is to an address), and only built-in cards are listed (no new servers).
 //   - A recipe is checked (checkRecipe) before it is saved; at run time a recipe only ever calls a
-//     tool the inviter allowed, and only lookups are ever callable, so no recipe can make a change
-//     outside Slatebox.
+//     tool the inviter allowed. Its intents run lookups only; its writes only offer a change to the
+//     change planner, and every change is an action card a person approves (outside.mjs), unless
+//     the inviter lets the agent act without asking. Its tools word (lookup, change, destructive)
+//     corrects how a tool is grouped: an administrator's call, audited like every edit.
 //   - Only a person saves or reorders (an agent may read). The hint the planner gets for a card is a
 //     prompt (connectors.recipe.<id>) in the Prompts tab, versioned and published there.
 import { defineAction } from '/server/actions/registry.mjs'

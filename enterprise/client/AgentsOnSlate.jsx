@@ -8,6 +8,10 @@
 // 2026-11-24): the chip has no ask box of its own. Keep all / Discard all, the activity with Undo
 // and Edit directly are the roster's own, and each answer's ghosts (one framed group, Keep all /
 // Discard all on it) are the app's live suggestions (AgentPresenceListener).
+// Its changes outside Slatebox (agents read and write, owner 2026-11-24): each lands in its answer as
+// an action card (a ghost note: Keep approves, Discard declines); the chip lists them too, with
+// Approve and Decline, their links once done, and, for its inviter (or the slate's owner, to narrow
+// it), whether it acts without asking here and who may approve.
 // The canvas.agents slot holds "+ Invite agent" and the walkthrough.
 import React, { useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
@@ -16,6 +20,8 @@ import { useTracker } from 'meteor/react-meteor-data'
 import { atom, useAtom, useSetAtom } from 'jotai'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import MenuItem from '@mui/material/MenuItem'
+import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { McpConnections } from './collections'
 import InviteWalkthrough from './InviteWalkthrough'
@@ -176,6 +182,80 @@ AgentsOnSlate.propTypes = {
  * agents.chip: an invited agent's own part of its roster chip's popover: what it adds and sees, how to
  * ask it (Ask in chat opens Ask Slatebox replying to it), and Sign in again, Renew Pro, Remove.
  */
+const CARD_WORDS = { waiting: 'Waiting', running: 'Sending', done: 'Done', failed: 'Failed', declined: 'Declined' }
+
+/** An invited agent's changes outside Slatebox on this slate, and how they are approved. */
+export function AgentChanges({ c, shareId, canEdit, waiting }) {
+  const [state, setState] = useState(null)
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const live = useRef(true)
+  useEffect(() => () => { live.current = false }, [])
+  const load = () => Meteor.callAsync('connectors.outsideActions', { shareId, connectionId: c._id })
+    .then((answer) => live.current && setState(answer)).catch((e) => live.current && setNote(errorText(e)))
+  // Read again whenever its waiting suggestions change (a card kept or discarded on the canvas).
+  useEffect(() => { load() }, [c._id, waiting]) // eslint-disable-line react-hooks/exhaustive-deps
+  const run = (fn) => async () => {
+    setBusy(true)
+    setNote('')
+    try {
+      const answer = await fn()
+      if (answer?.say) setNote(answer.say)
+    } catch (e) {
+      setNote(errorText(e))
+    }
+    await load()
+    if (live.current) setBusy(false)
+  }
+  const agent = state?.agents?.find((a) => a.connectionId === c._id)
+  const cards = (state?.cards || []).slice(0, 6)
+  const owner = c.removable && !c.mine // the slate's owner, who may narrow how it acts here
+  const mayApprove = c.mine || (agent?.approvers === 'editors' && canEdit)
+  if (!state || (!cards.length && !c.mine && !owner)) return null
+  return (
+    <Box sx={{ mt: 1.25 }} data-agent-changes={c.name}>
+      {cards.length > 0 && <Typography variant="overline" component="div">Changes outside Slatebox</Typography>}
+      {cards.map((card) => (
+        <Box key={card.cardId} sx={{ py: 0.5, borderTop: '1px solid', borderColor: 'divider' }} data-agent-change={card.state}>
+          <Typography variant="body2"><b>{CARD_WORDS[card.state] || card.state}</b> · {card.label}{card.preview?.item ? ` ${card.preview.item}` : ''}{card.preview?.title ? `: ${card.preview.title}` : ''}</Typography>
+          {card.preview?.target && <Typography variant="caption" color="text.secondary" component="div">{card.preview.target}</Typography>}
+          {card.destructive && card.state === 'waiting' && <Typography variant="caption" color="error" component="div">Deletes, closes or merges something; Slatebox cannot undo it.</Typography>}
+          {card.state === 'failed' && <Typography variant="caption" component="div">{card.error}</Typography>}
+          {card.link && <Typography variant="caption" component="div"><a href={card.link} target="_blank" rel="noopener noreferrer">{card.link}</a></Typography>}
+          {card.actedWithoutAsking && <Typography variant="caption" color="text.secondary" component="div">Done without asking.</Typography>}
+          {(card.state === 'waiting' || card.state === 'failed') && canEdit && (
+            <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+              {mayApprove && <Button size="small" variant="contained" disabled={busy} data-agent-change-approve="" onClick={run(() => Meteor.callAsync('connectors.approve', { cardId: card.cardId }))}>{card.state === 'failed' ? 'Try again' : 'Approve'}</Button>}
+              <Button size="small" disabled={busy} data-agent-change-decline="" onClick={run(() => Meteor.callAsync('connectors.decline', { cardId: card.cardId }))}>Decline</Button>
+            </Box>
+          )}
+          {(card.state === 'waiting' || card.state === 'failed') && !mayApprove && <Typography variant="caption" color="text.secondary" component="div">Only {c.inviterName || 'the person who invited it'} can approve it.</Typography>}
+        </Box>
+      ))}
+      {(c.mine || owner) && agent && (
+        <Box sx={{ display: 'grid', gap: 1, mt: 1 }} data-agent-acting-settings="">
+          <TextField select size="small" label="Changes outside Slatebox" value={c.mine ? (agent.actWithoutAsking ? 'on' : 'off') : agent.actWithoutAsking ? 'on' : 'off'}
+            inputProps={{ 'data-agent-acting': '' }}
+            onChange={(e) => run(() => Meteor.callAsync('connectors.setActing', { connectionId: c._id, actWithoutAsking: e.target.value }))()}>
+            <MenuItem value="off">Ask first: each waits on a card</MenuItem>
+            <MenuItem value="on" disabled={!c.mine}>Act without asking (not deleting, closing or merging)</MenuItem>
+          </TextField>
+          <TextField select size="small" label="Who approves" value={agent.approvers} inputProps={{ 'data-agent-approvers': '' }}
+            onChange={(e) => run(() => Meteor.callAsync('connectors.setActing', { connectionId: c._id, approvers: e.target.value }))()}>
+            <MenuItem value="inviter">{c.mine ? 'Only me' : `Only ${c.inviterName || 'its inviter'}`}</MenuItem>
+            <MenuItem value="editors" disabled={!c.mine}>Anyone who can edit</MenuItem>
+          </TextField>
+        </Box>
+      )}
+      {(state.activity || []).slice(0, 3).map((row) => (
+        <Typography key={row.at + row.text} variant="caption" color="text.secondary" component="div">{row.by}: {row.text}</Typography>
+      ))}
+      {note && <Typography role="status" variant="body2" sx={{ mt: 0.5 }}>{note}</Typography>}
+    </Box>
+  )
+}
+AgentChanges.propTypes = { c: PropTypes.shape({ _id: PropTypes.string, name: PropTypes.string, mine: PropTypes.bool, removable: PropTypes.bool, inviterName: PropTypes.string }).isRequired, shareId: PropTypes.string, canEdit: PropTypes.bool, waiting: PropTypes.number }
+
 export function InvitedAgentControls({ agentId, shareId, canEdit = false, paused = false, waiting = 0 }) {
   const connections = useConnections(shareId)
   const c = connections.find((doc) => doc.agentId === agentId)
@@ -230,6 +310,7 @@ export function InvitedAgentControls({ agentId, shareId, canEdit = false, paused
           </Typography>
         )}
       </Box>
+      <AgentChanges c={c} shareId={shareId} canEdit={canEdit} waiting={waiting} />
       {c.joinedBy === 'rule' && <Typography variant="caption" color="text.secondary" component="div" data-agent-joined-by-rule="">{c.mine ? 'Joined by your standing rule (Integrations).' : `Joined by ${c.inviterName || 'its owner'}'s rule.`}</Typography>}
       {!c.mine && <Typography variant="body2" color="text.secondary">Only {c.inviterName || 'the person who invited it'} can ask {c.name}.</Typography>}
       {note && <Typography role="status" variant="body2" sx={{ mt: 1 }}>{note}</Typography>}

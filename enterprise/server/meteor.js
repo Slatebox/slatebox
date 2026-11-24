@@ -59,6 +59,9 @@ const IntegrationSlateSettings = new Mongo.Collection('integrationSlateSettings'
 // Google: each person's last Doc per slate, and the Drive files they picked for a slate (ids and names only).
 const GoogleDocLinks = new Mongo.Collection('googleDocLinks')
 const GoogleSlateFiles = new Mongo.Collection('googleSlateFiles')
+// Action cards (an invited agent's changes outside Slatebox, waiting, done, failed or declined) and
+// act-without-asking choices: read through connectors.outsideActions, never published.
+const OutsideActions = new Mongo.Collection('mcpOutsideActions')
 
 const drawable = (slate) => !slate.creative || slate.nativeCanvasDrawing || slate.creative.model?.kind === 'workshop'
 
@@ -112,6 +115,30 @@ const suggestionsStore = {
   // The slate's answers still waiting: the next answer lands beside their ghosts, and the same ask
   // while its answer waits is that answer.
   waiting: async (slate) => waitingActions(await suggestionStore.list(slate._id)),
+  // Action cards: their notes say what became of them, are found by their answer, and are kept or
+  // discarded through the app's own decide (keeping runs its checks and saves as the person).
+  retext: (slate, change) => suggestionStore.retext(slate, change),
+  actionOf: async (slate, actionId) => (await suggestionStore.list(slate._id)).find((action) => action._id === actionId) || null,
+  keep: (person, slate, actionId, itemIds) => registry.run(person, 'suggestions.decide', { shareId: slate.shareId, decision: 'keep', actionId, itemIds }),
+  discardItems: (person, slate, actionId, itemIds) => suggestionStore.discard(person, slate, { actionId, itemIds }),
+}
+
+const outsideStore = {
+  ...storeOfLater(() => OutsideActions),
+  // Taken once: only a card still in one of these states becomes running (two approvals make it once).
+  async claim(id, from, set) {
+    const changed = await OutsideActions.updateAsync({ _id: id, state: { $in: from } }, { $set: set })
+    return changed > 0
+  },
+}
+function storeOfLater(collection) {
+  return {
+    insert: (doc) => collection().insertAsync(doc),
+    findOne: (query) => collection().findOneAsync(query),
+    find: (query) => collection().find(query, { sort: { createdAt: 1 } }).fetchAsync(),
+    update: (id, set) => collection().updateAsync({ _id: id }, { $set: set }),
+    remove: (id) => collection().removeAsync({ _id: id }),
+  }
 }
 
 const credentialsStore = {
@@ -306,7 +333,11 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     // Google's card off in /admin/ai (or its client or key gone): Drive agents stop, and none joins.
     nativeOn: (address) => (address === GOOGLE_ADDRESS ? googleService.usable() : true),
     forget: (integration) => (integration.address === GOOGLE_ADDRESS ? googleService.forget(integration.ownerId) : null),
+    outside: outsideStore,
   })
+  // Keeping an action card's note approves its change: the app's suggestions.decide asks the service
+  // first (only while the license holds; a locked install has no cards).
+  deps.suggestionGate = (principal, slate, choice) => (isUnlocked() ? service.gate(principal, slate, choice) : null)
   resumeGoogle = (integration) => service.resumeIntegration(integration)
   Meteor.startup(async () => {
     await McpConnections.rawCollection().createIndex({ slateId: 1, status: 1 })
@@ -317,6 +348,9 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     await McpConnections.rawCollection().createIndex({ integrationId: 1, status: 1 })
     await Integrations.rawCollection().createIndex({ ownerId: 1, address: 1 }, { unique: true })
     await Integrations.rawCollection().createIndex({ ownerId: 1, rule: 1 })
+    await OutsideActions.rawCollection().createIndex({ slateId: 1, actionId: 1 })
+    await OutsideActions.rawCollection().createIndex({ connectionId: 1 })
+    await OutsideActions.rawCollection().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
     // Connect once: each person's agents already on slates become their integrations (idempotent).
     const moved = await migrateIntegrations({ connections: connectionsStore, integrations: integrationsStore }).catch((error) => {
       console.warn('[connectors] integrations migration failed', error?.message)

@@ -23,8 +23,16 @@
 //              Discard all on the answer's frame and the agent's chip, Keep and Discard on a ghost
 //              under the pointer, Undo per action),
 //              by anyone who can edit the slate; an agent a person lets edit directly saves at once.
+//              When the person's own words ask for a change elsewhere ("file the retry bug"), the
+//              change planner proposes it with the agent's allowed change tools; nothing is changed
+//              during the ask: each change lands in the same answer as an action card (outside.mjs)
+//              that its inviter approves by keeping it (or declines by discarding it), unless they
+//              let the agent act without asking (never for a destructive change).
+//   approve    an action card's change is made, as its inviter, after its tool is checked again
+//              against the consented hash; the card then says it was done, with its link.
 //   disconnect the inviter (or the slate's owner) removes the agent from one slate; its waiting
-//              suggestions are discarded. The integration and its sign-in stay (connect once).
+//              suggestions are discarded, its waiting cards declined. The integration and its
+//              sign-in stay (connect once).
 //
 // Integrations (owner, 2026-11-24: "connect once, invite anywhere"): a person's connected agent
 // servers are kept once (the `integrations` store: one row per person and address, with the tools
@@ -49,17 +57,19 @@ import { checkMcpUrl, McpFetchRefused } from './mcp-fetch.mjs'
 import { SignInNeeded } from './credentials.mjs'
 import { SignInProblem } from './oauth.mjs'
 import { KEY_PATTERN } from './signin.mjs'
-import { capabilitySummary, defaultPolicy, normalizeTools, plainText, POLICIES, reconcile } from './tools.mjs'
+import { asksForChange, capabilitySummary, defaultPolicy, normalizeTools, plainText, POLICIES, reconcile } from './tools.mjs'
 import { quarantine } from './results.mjs'
+import { actsWithoutAsking, APPROVERS, CARD_LIMITS, cardLabel, cardText, failureOf, linkOf, previewOf, publicCard } from './outside.mjs'
 import { CONTEXT_LEVELS, packContext } from './context.mjs'
 // The plan and layout words: the registry's (a version an administrator published, else the code's).
 import { promptText } from '/server/ai-control/prompts/index.mjs'
 import {
-  checkArguments, checkLayout, checkPlan, excalidrawElements, fitArgs, itemsFromLayout, layoutTool, linksIn, PLAN_LIMITS, planPrompt, planTool, recipeHint, translatePrompt,
+  checkArguments, checkLayout, checkPlan, checkWrites, excalidrawElements, fitArgs, itemsFromLayout, layoutTool, linksIn, PLAN_LIMITS, planPrompt, planTool, recipeHint, translatePrompt,
+  writePlanPrompt,
 } from './translate.mjs'
 import { excalidrawGroup } from './excalidraw.mjs'
 import {
-  checkRecipe, cutWords, dedupeGroups, extract, interleave, isReferenceTool, matchIntent, outputNotes, planLimits, rawData, rawText, RECIPE_LIMITS, requestBudget, requestValues,
+  checkRecipe, cutWords, dedupeGroups, extract, interleave, isReferenceTool, matchIntent, matchWrite, outputNotes, planLimits, rawData, rawText, RECIPE_LIMITS, requestBudget, requestValues,
   stepCalls, stepTool, trimToBudget,
 } from './recipes.mjs'
 
@@ -125,7 +135,8 @@ export function publicIntegration(doc, { slates = [], cards = GALLERY, pro = tru
     signedIn: Boolean(doc.auth),
     ...(doc.auth && { auth: { kind: doc.auth.kind } }),
     scopes: Array.isArray(doc.scopes) ? doc.scopes.slice(0, 24) : [],
-    tools: (doc.tools || []).map(({ name, title, group, policy }) => ({ name, title, group, policy })),
+    tools: (doc.tools || []).map(({ name, title, group, policy, destructive }) => ({ name, title, group, policy, ...(destructive && { destructive: true }) })),
+    actWithoutAsking: doc.actWithoutAsking === true,
     ...(doc.changed?.length && { changed: doc.changed.map((c) => c.name) }),
     colorIndex: doc.colorIndex ?? 1,
     lastUsedAt: doc.lastUsedAt || null,
@@ -180,9 +191,12 @@ export function publicConnection(doc, viewerId, cards = GALLERY) {
       host: doc.host,
       address: doc.address,
       contextLevel: doc.contextLevel,
-      tools: (doc.tools || []).map(({ name, title, group, policy }) => ({ name, title, group, policy })),
+      tools: (doc.tools || []).map(({ name, title, group, policy, destructive }) => ({ name, title, group, policy, ...(destructive && { destructive: true }) })),
       ...(doc.changed?.length && { changed: doc.changed }),
     }),
+    // Who approves its action cards, and whether it acts without asking here (on, off, or its integration's choice).
+    approvers: APPROVERS.includes(doc.approvers) ? doc.approvers : 'inviter',
+    acting: doc.acting === 'on' || doc.acting === 'off' ? doc.acting : 'inherit',
   }
 }
 
@@ -214,6 +228,7 @@ export function createConnectorService({
   slateList = async () => [], // async (slateIds, viewerId) -> [{ slateId, shareId, name }]: those slates the viewer can still open
   nativeOn = async () => true, // async (address) -> whether a native integration (Google) works on this server now
   forget = async () => {}, // async (integration): what a native integration kept per slate, forgotten when it is disconnected
+  outside = memoryStore(), // { insert, findOne, find, update, claim?(id, fromStates, set) -> bool }: action cards (kind 'card') and act-without-asking changes (kind 'setting')
 }) {
   // How many outside reaches each person has running now: a few at once, never a flood.
   const running = new Map()
@@ -268,6 +283,12 @@ export function createConnectorService({
     const found = principal?.userId ? await accessOf(principal, shareId) : null
     if (!found?.slate || !found.canRead) refuse(404, 'not_found', 'Slate not found or unavailable.')
     return found
+  }
+
+  // A server's tools as Slatebox treats them, with the gallery recipe's word for what each does (recipe.tools).
+  async function toolsFrom(address, raw) {
+    const recipe = checkRecipe(cardFor(address, await gallery())?.recipe)
+    return normalizeTools(raw, recipe?.tools || null)
   }
 
   function checkAddress(raw) {
@@ -373,7 +394,7 @@ export function createConnectorService({
       return { ...head, suggestedName: slateName(card?.name || host.split('.').slice(-2, -1)[0] || 'Agent', sanitizeName) || 'Agent', signIn: { ...plan, again: reached.again }, tools: [], summary: null }
     }
     const { found } = reached
-    const tools = normalizeTools(found.tools)
+    const tools = await toolsFrom(address, found.tools)
     if (!tools.length) refuse(422, 'no_tools', `${host} answered, but offers no tools Slatebox can use.`)
     // Nothing it was allowed is offered any more: the same, look at its tools again.
     if (alreadyHere && !alreadyHere.lookAgain && !reconcile(here.tools, tools).allowed.length)
@@ -395,7 +416,7 @@ export function createConnectorService({
       // Self-reported: shown as the server's claim, never used as the name on the slate.
       serverName: plainText(found.serverInfo?.title || found.serverInfo?.name || '', 60),
       suggestedName: slateName(card?.name || found.serverInfo?.title || found.serverInfo?.name || host.split('.').slice(-2, -1)[0] || 'Agent', sanitizeName) || 'Agent',
-      tools: tools.map(({ name, title, description, group, hash, annotations }) => ({ name, title, description, group, hash, annotations, policy: defaultPolicy({ group }) })),
+      tools: tools.map(({ name, title, description, group, hash, annotations, destructive }) => ({ name, title, description, group, hash, annotations, ...(destructive && { destructive: true }), policy: defaultPolicy({ group, destructive }) })),
       summary: capabilitySummary(tools),
     }
   }
@@ -404,17 +425,18 @@ export function createConnectorService({
     return oneAtATime(principal, () => connectNow(principal, input))
   }
 
-  // What the person consented to: each tool the server lists now, with the hash they saw. An
-  // outside change is never switched on; at least one lookup must be allowed.
+  // What the person consented to: each tool the server lists now, with the hash they saw, allowed
+  // or off as they chose (a tool they did not send: lookups and changes allowed, destructive ones
+  // off). An allowed change is only ever proposed, as an action card. At least one tool is allowed.
   function consented(name, tools, chosen) {
     const seen = new Map((Array.isArray(chosen) ? chosen : []).map((entry) => [entry?.name, entry]))
     const stored = tools.map((tool) => {
       const choice = seen.get(tool.name)
       if (choice && choice.hash !== tool.hash) refuse(409, 'tools_changed', `${name}'s tools changed while you were choosing. Look at them again.`)
-      const policy = choice && POLICIES.includes(choice.policy) && tool.group === 'lookup' ? choice.policy : choice ? 'off' : defaultPolicy(tool)
-      return { name: tool.name, title: tool.title, description: tool.description, group: tool.group, hash: tool.hash, policy }
+      const policy = choice ? (POLICIES.includes(choice.policy) ? choice.policy : 'off') : defaultPolicy(tool)
+      return { name: tool.name, title: tool.title, description: tool.description, group: tool.group, ...(tool.destructive && { destructive: true }), hash: tool.hash, policy }
     })
-    if (!stored.some((tool) => tool.policy === 'allow')) refuse(400, 'no_tools', 'Allow at least one thing it may look up.')
+    if (!stored.some((tool) => tool.policy === 'allow')) refuse(400, 'no_tools', 'Allow at least one thing it may look up or do.')
     return stored
   }
 
@@ -483,7 +505,7 @@ export function createConnectorService({
     if (reached.needsSignIn) refuse(401, 'needs_sign_in', `Sign in to ${host} first.`)
     const { found } = reached
     const auth = reached.token ? await vault.describe(principal.userId, address) : null
-    const stored = consented(name, normalizeTools(found.tools), chosen)
+    const stored = consented(name, await toolsFrom(address, found.tools), chosen)
     const galleryId = cardFor(address, await gallery())?.id || null
     // Connect once: the consent is kept as the person's integration, so any other slate can have it without asking again.
     const integration = await ensureIntegration(principal.userId, { address, host, name, tools: stored, auth: auth ? { kind: auth.kind, issuer: auth.issuer } : null, galleryId, serverName: plainText(found.serverInfo?.name || '', 60) })
@@ -531,7 +553,8 @@ export function createConnectorService({
     try {
       const reached = await discoverAs(principal.userId, doc.address)
       if (reached.needsSignIn) return false
-      return !reconcile(doc.tools, normalizeTools(reached.found.tools)).allowed.length
+      const now = reconcile(doc.tools, await toolsFrom(doc.address, reached.found.tools))
+      return !now.allowed.length && !now.writable.length
     } catch {
       return false
     }
@@ -541,7 +564,7 @@ export function createConnectorService({
   async function consentAgain(principal, doc, { address, chosen, contextLevel }) {
     const reached = await discoverAs(principal.userId, address)
     if (reached.needsSignIn) refuse(401, 'needs_sign_in', `Sign in to ${doc.host} first.`)
-    const stored = consented(doc.name, normalizeTools(reached.found.tools), chosen)
+    const stored = consented(doc.name, await toolsFrom(address, reached.found.tools), chosen)
     const auth = reached.token ? await vault.describe(principal.userId, address) : null
     // The consent is the integration's: every slate it is on resumes with it.
     const integration = await ensureIntegration(principal.userId, { address, host: doc.host, name: doc.name, tools: stored, auth: auth ? { kind: auth.kind, issuer: auth.issuer } : null, galleryId: doc.galleryId })
@@ -642,6 +665,7 @@ export function createConnectorService({
       const agentId = doc.agentId || (await suggestions.agentIdOf(connectorPrincipal(doc, 'remove:' + doc._id), found.slate))
       await suggestions.withdraw(principal, found.slate, agentId).catch(() => {})
     }
+    await declineWaiting(doc, principal)
     await presence.end('hello:' + doc._id, 'done').catch(() => {})
     // Its integration and sign-in stay: the person connected it once and may invite it anywhere.
     // Disconnecting the integration (Integrations page) is what revokes the sign-in.
@@ -731,9 +755,9 @@ export function createConnectorService({
     // A native integration an administrator turned off (Google's card in /admin/ai): its stored sign-in is not used.
     if (!(await nativeOn(doc.address))) refuse(403, 'disabled', `${doc.name} is turned off on this server.`)
     // The slate owner's choice holds for agents already here too, not only for new invitations.
-    const outside = await outsideAgentsOf(slate)
-    if (outside === 'off') refuse(403, 'agents_off', 'This slate\'s owner turned off outside agents here.')
-    if (outside === 'owner' && doc.ownerId !== slate.userId) refuse(403, 'owner_only', 'This slate\'s owner now lets only their own outside agents work here.')
+    const setting = await outsideAgentsOf(slate)
+    if (setting === 'off') refuse(403, 'agents_off', 'This slate\'s owner turned off outside agents here.')
+    if (setting === 'owner' && doc.ownerId !== slate.userId) refuse(403, 'owner_only', 'This slate\'s owner now lets only their own outside agents work here.')
     // Paused: refused before anything reaches the outside server or the model. The asker can edit
     // the slate, so they may resume agents themselves.
     if (await suggestions.paused?.(slate)) refuse(423, 'agents_paused', `Agents are paused on this slate. Resume agents to ask ${doc.name}.`)
@@ -760,7 +784,7 @@ export function createConnectorService({
         // The tools it may call now; a definition that moved since consent pauses the agent.
         let listedTools = null
         const check = (listed) => {
-          listedTools = normalizeTools(listed)
+          listedTools = normalizeTools(listed, recipe?.tools || null)
           const { changed } = reconcile(doc.tools, listedTools)
           if (changed.length) {
             // The error names the tools only: their new descriptions are the server's words, kept for the inviter's screen.
@@ -787,12 +811,15 @@ export function createConnectorService({
           throw fromSignIn(error)
         }
         if (doc.status !== 'active') await setStatus(doc, 'active')
-        const { allowed } = reconcile(doc.tools, listedTools)
-        if (!allowed.length) refuse(409, 'no_tools', `${doc.name} has nothing it may look up now. Invite it again from + Invite agent to choose what it may use.`)
-        const toolOf = new Map(allowed.map((tool) => [tool.name, tool]))
+        const { allowed, writable } = reconcile(doc.tools, listedTools)
+        const nothing = `${doc.name} has nothing it may look up or do now. Invite it again from + Invite agent to choose what it may use.`
+        if (!allowed.length && !writable.length) refuse(409, 'no_tools', nothing)
+        const toolOf = new Map([...allowed, ...writable].map((tool) => [tool.name, tool]))
         // Read-me tools only explain the others: never offered, never laid out.
         const offered = allowed.filter((tool) => !isReferenceTool(tool, recipe))
-        if (!offered.length) refuse(409, 'no_tools', `${doc.name} has nothing it may look up now. Invite it again from + Invite agent to choose what it may use.`)
+        // A change elsewhere is planned only when the person's own words ask for one these tools make.
+        const wantsChange = writable.length > 0 && asksForChange(text, writable)
+        if (!offered.length && !wantsChange) refuse(409, 'no_tools', writable.length ? `${doc.name} only makes changes. Ask it for one, such as "file an issue for this".` : nothing)
         const offeredNames = new Set(offered.map((tool) => tool.name))
         const entries = []
         let say = ''
@@ -806,7 +833,7 @@ export function createConnectorService({
           const { system, user } = planPrompt({ serverName: doc.name, tools, packed, previous: entries, text: promptOf, calls: limit, history: said, hint })
           return checkPlan(await model({ feature: 'connectors', tool: planTool(promptOf), system, user, userId: principal.userId, shareId: slate.shareId }), tools, { limit, used })
         }
-        const intent = recipe && matchIntent(recipe, text, requestValues(text))
+        const intent = recipe && offered.length ? matchIntent(recipe, text, requestValues(text)) : null
         // A merge step (one more source for a list) may be missing or fail without stopping the recipe.
         const runnable = intent && intent.steps.every((step) => step.merge || stepTool(step, offeredNames))
         if (runnable) {
@@ -859,8 +886,9 @@ export function createConnectorService({
             else say = `${doc.name} found nothing for that.`
           }
           if (stopped && !entries.some((entry) => !entry.result.isError)) say = say || `${doc.name} couldn't find what that needs.${intent.missing ? ' ' + intent.missing : ' Try asking in other words.'}`
-        } else {
+        } else if (!wantsChange && offered.length) {
           // Anything else: the planner, within the limits (one round of two calls unless its recipe says more).
+          // An ask for a change goes to the change planner alone (it never reads a server's answers anyway).
           const used = new Set()
           for (let round = 0; round < limits.rounds; round++) {
             const planned = await plan(offered, limits.calls, used)
@@ -876,7 +904,23 @@ export function createConnectorService({
             if (planned.done) break
           }
         }
-        if (!entries.length) return { groups: [], say: say || `${doc.name} had nothing to look up for that.`, entries }
+        // The changes asked for: proposed, never made here (each lands as an action card).
+        const proposals = []
+        if (wantsChange) {
+          const names = new Set(writable.map((tool) => tool.name))
+          const known = recipe ? matchWrite(recipe, text, names) : null
+          const tools = known ? [toolOf.get(known.tool)] : writable
+          const limit = Math.min(limits.calls, PLAN_LIMITS.writes, CARD_LIMITS.perAsk)
+          const { system, user } = writePlanPrompt({ serverName: doc.name, tools, packed, text: promptOf, calls: limit, history: said, hint })
+          const planned = checkWrites(await model({ feature: 'connectors', tool: planTool(promptOf), system, user, userId: principal.userId, shareId: slate.shareId }), tools, { limit, fixed: known?.write.args || null })
+          for (const call of planned.calls) {
+            const tool = toolOf.get(call.tool)
+            const write = known?.write || (recipe?.writes || []).find((w) => [].concat(w.tool).includes(call.tool)) || null
+            proposals.push({ tool: call.tool, args: call.args, hash: tool.hash, title: tool.title, destructive: Boolean(tool.destructive), write })
+          }
+          if (!proposals.length) say = say || planned.say || `${doc.name} needs more to make that change. Say what it should be called and where it goes.`
+        }
+        if (!entries.length) return { groups: [], say: say || (proposals.length ? '' : `${doc.name} had nothing to look up for that.`), entries, proposals }
         await presence.step(agent, slate, 1, 'doing').catch(() => {})
         // One output per ask: the recipe's notes, else a drawing by the Excalidraw recipe, else the
         // translator over the last step's answers (never a read-me tool's text).
@@ -913,16 +957,20 @@ export function createConnectorService({
         if (cut) left.push(cut)
         const errors = entries.filter((entry) => entry.result.isError)
         if (!trimmed.groups.length && errors.length) say = say || `${doc.name} couldn't find results for that.`
-        return { groups: trimmed.groups, say, entries, left }
+        return { groups: trimmed.groups, say, entries, left, proposals }
       }, { userId: principal.userId, shareId: slate.shareId })
       const left = [...new Set([...result.entries.flatMap((entry) => entry.result.left), ...(result.left || [])])]
+      // Each proposed change: an action card, in the same answer (its own group of notes). One its
+      // inviter lets act without asking (never a destructive one) is made now, and its card says so.
+      const cards = await cardsFor(doc, slate, result.proposals || [], principal)
+      const groups = cards.length ? [...result.groups, { label: cards.some((c) => c.state !== 'done') ? 'For approval' : `Done in ${plainText(doc.name, 32)}`, layout: 'column', notes: await cardNotes(doc, cards), lines: [] }] : result.groups
       await presence.step(agent, slate, 2, 'doing').catch(() => {})
       // The whole answer is saved ONCE as the agent: the app files it as one live suggestion (one
       // frame of ghosts on every screen, the cursor moving to them, Keep all / Discard all, one
       // Undo), or saves it at once when a person lets this agent edit directly.
       // Earlier answers still waiting take their space too, so this one never lands on their ghosts.
       const busy = ((await suggestions.waiting?.(slate).catch(() => [])) || []).flatMap((action) => action.boxes || [])
-      const items = itemsFromLayout({ groups: result.groups, slate, aliases: packed.aliases, selection: ids, serverName: doc.name, view: viewOf(view), message, busy })
+      const items = itemsFromLayout({ groups, slate, aliases: packed.aliases, selection: ids, serverName: doc.name, view: viewOf(view), message, busy })
       const actions = []
       let saved = 0
       let dropped = 0
@@ -946,21 +994,372 @@ export function createConnectorService({
             if (error?.code !== 'slate_changed') break
           }
         }
-        if (answer?.body?.suggestion?.actionId) actions.push(answer.body.suggestion.actionId)
+        const actionId = answer?.body?.suggestion?.actionId || null
+        if (actionId) actions.push(actionId)
         else if (answer?.body?.outcome === 'saved') saved++
         else dropped++
+        // Each card knows its note (the last group's notes, in order) and the answer it waits in.
+        const cardGroup = cards.length ? item.groups.at(-1) : null
+        for (const [index, card] of cards.entries()) {
+          const nodeId = cardGroup?.created?.[index] || null
+          const placed = Boolean(actionId || answer?.body?.outcome === 'saved')
+          const set = placed ? { nodeId, actionId, updatedAt: new Date(now()) } : { state: card.state === 'waiting' ? 'declined' : card.state, error: card.state === 'waiting' ? 'It could not be placed on the slate.' : card.error || null, updatedAt: new Date(now()) }
+          await outside.update(card._id, set)
+          Object.assign(card, set)
+        }
       }
       if (dropped) left.push('The suggestion could not be placed: the slate changed while it was being made. Ask again to try it.')
-      const notes = result.groups.reduce((sum, group) => sum + group.notes.length, 0)
-      const lines = result.groups.reduce((sum, group) => sum + (group.lines || []).length, 0)
+      const notes = groups.reduce((sum, group) => sum + group.notes.length, 0)
+      const lines = groups.reduce((sum, group) => sum + (group.lines || []).length, 0)
       outcome = 'done'
       if (doc.integrationId) await integrations.update(doc.integrationId, { lastUsedAt: new Date(now()) })
-      return { items: actions.length + saved, actions, saved, say: plainText(result.say, 240), left, added: dropped ? { notes: 0, lines: 0 } : { notes, lines } }
+      const waiting = cards.filter((card) => card.state === 'waiting').length
+      const sayWords = plainText(result.say, 240) || (waiting ? `${waiting === 1 ? 'One change waits' : `${waiting} changes wait`} for your approval: Keep a card to approve it, Discard to decline.` : '')
+      return { items: actions.length + saved, actions, saved, say: sayWords, left, added: dropped ? { notes: 0, lines: 0 } : { notes, lines }, ...(cards.length && { cards: cards.map((card) => publicCard(card, principal.userId)) }) }
     } catch (error) {
       throw fromProblem(error)
     } finally {
       await presence.end(runId, outcome).catch(() => {})
     }
+  }
+
+  // ---------- action cards: changes outside Slatebox ----------
+
+  const cardRow = (id) => (typeof id === 'string' && /^o[A-Za-z0-9_-]{6,40}$/.test(id) ? outside.findOne({ _id: id }) : null)
+  const integrationOf = (doc) => (doc.integrationId ? integrations.findOne({ _id: doc.integrationId }) : null)
+
+  // The cards for one answer's proposed changes: kept (waiting), or made at once when the agent
+  // acts without asking here (never a destructive change).
+  async function cardsFor(doc, slate, proposals, principal) {
+    if (!proposals.length) return []
+    const acting = actsWithoutAsking(doc, await integrationOf(doc))
+    const at = new Date(now())
+    const cards = []
+    for (const proposal of proposals.slice(0, CARD_LIMITS.perAsk)) {
+      const card = {
+        _id: newId('o'),
+        kind: 'card',
+        slateId: slate._id,
+        shareId: slate.shareId,
+        connectionId: doc._id,
+        agentId: doc.agentId || null,
+        ownerId: doc.ownerId,
+        integrationId: doc.integrationId || null,
+        system: doc.name,
+        host: doc.host,
+        tool: proposal.tool,
+        hash: proposal.hash,
+        args: proposal.args,
+        label: cardLabel({ tool: proposal.tool, title: proposal.title, system: doc.name, label: proposal.write?.label || null }),
+        preview: previewOf(proposal.args, proposal.write?.fields || {}),
+        destructive: proposal.destructive,
+        state: 'waiting',
+        nodeId: null,
+        actionId: null,
+        createdAt: at,
+        updatedAt: at,
+        expiresAt: new Date(at.getTime() + CARD_LIMITS.keepDays * 86400000),
+      }
+      await outside.insert(card)
+      audit({ kind: 'outside_proposed', userId: principal.userId, host: doc.host, connectionId: doc._id, cardId: card._id, tool: card.tool })
+      if (acting && !card.destructive) await performNow(card, doc, { acted: true, by: null, slate })
+      cards.push(card)
+    }
+    return cards
+  }
+
+  async function cardNotes(doc, cards) {
+    const inviter = doc.inviterName || 'its inviter'
+    return cards.map((card, index) => ({ key: 'card' + index, text: cardText(card, { inviter, approvers: doc.approvers }), ...(card.result?.link && { link: card.result.link }) }))
+  }
+
+  // The card's note says what became of it (only while its note still waits as a ghost).
+  async function retextCard(card, doc, slate) {
+    if (!card.actionId || !card.nodeId || !suggestions.retext) return
+    await suggestions.retext(slate, { actionId: card.actionId, nodeId: card.nodeId, text: cardText(card, { inviter: doc.inviterName, approvers: doc.approvers }), link: card.result?.link || null }).catch(() => {})
+  }
+
+  // Taken once: a card is made by one approval at a time (two people pressing Keep make it once).
+  async function claimCard(card) {
+    const set = { state: 'running', updatedAt: new Date(now()) }
+    if (outside.claim) {
+      if (!(await outside.claim(card._id, ['waiting', 'failed'], set))) return false
+    } else {
+      const fresh = await outside.findOne({ _id: card._id })
+      if (!fresh || !['waiting', 'failed'].includes(fresh.state)) return false
+      await outside.update(card._id, set)
+    }
+    Object.assign(card, set)
+    return true
+  }
+
+  /**
+   * Make one card's change, as its inviter: the tool is checked again against the hash they
+   * consented to (a moved definition pauses the agent everywhere, as an ask does), then called once.
+   * The card ends done (with the server's link) or failed (with plain words); it never retries itself.
+   */
+  async function performNow(card, doc, { acted = false, by = null, slate = null }) {
+    if (!(await claimCard(card))) refuse(409, 'card_busy', 'That change is already being made, or was decided.')
+    let raw = null
+    let problem = null
+    try {
+      const reached = await discoverAs(doc.ownerId, doc.address)
+      if (reached.needsSignIn) {
+        await setStatus(doc, 'needs_sign_in')
+        throw new ConnectorRefused(401, 'needs_sign_in', `${doc.name} needs ${doc.inviterName || 'its inviter'} to sign in to ${doc.host} again.`)
+      }
+      const recipe = checkRecipe(cardFor(doc.address, await gallery())?.recipe)
+      const listed = normalizeTools(reached.found.tools, recipe?.tools || null)
+      const { writable, changed } = reconcile(doc.tools, listed)
+      if (changed.length) {
+        await pauseEverywhere(doc, changed)
+        throw new ConnectorRefused(409, 'tools_changed', `${doc.name}'s tools changed since they were allowed. Look at them again before approving.`)
+      }
+      const tool = writable.find((t) => t.name === card.tool)
+      if (!tool || tool.hash !== card.hash) throw new ConnectorRefused(403, 'not_allowed', `${doc.name} may no longer make that change.`)
+      const check = (now) => {
+        if (reconcile(doc.tools, normalizeTools(now, recipe?.tools || null)).changed.length)
+          throw new ConnectorRefused(409, 'tools_changed', `${doc.name}'s tools changed since they were allowed. Look at them again before approving.`)
+      }
+      raw = await session.callTool(doc.address, fetch, { name: card.tool, args: card.args, check }, { token: reached.token, ownerId: doc.ownerId, slateId: doc.slateId })
+    } catch (error) {
+      const known = fromSignIn(error)
+      problem = known instanceof ConnectorRefused || known?.name === 'McpProblem' ? known.message : 'The server could not be reached. Try again.'
+    }
+    const at = new Date(now())
+    const failed = problem || raw?.isError === true
+    const set = failed
+      ? { state: 'failed', error: plainText(problem || failureOf(raw), CARD_LIMITS.reason), updatedAt: at }
+      : { state: 'done', error: null, result: { link: linkOf(raw) }, actedWithoutAsking: acted, decidedBy: by, decidedAt: at, updatedAt: at }
+    await outside.update(card._id, set)
+    Object.assign(card, set)
+    audit({ kind: 'outside_write', userId: doc.ownerId, host: doc.host, connectionId: doc._id, cardId: card._id, tool: card.tool, ok: !failed, acted, ...(by && { by }) })
+    if (slate) await retextCard(card, doc, slate)
+    return card
+  }
+
+  // Who may approve a card: its inviter (the same rule as asking), or anyone who may edit the slate
+  // when the inviter lets them. A token only for an agent its inviter lets act without asking.
+  function mayApprove(principal, card, doc, canEdit, acting) {
+    if (!principal?.userId) return false
+    if (principal.kind === 'person') return principal.userId === doc.ownerId || (doc.approvers === 'editors' && canEdit)
+    if (principal.kind === 'agent' && !principal.connector) return principal.userId === doc.ownerId && acting && !card.destructive
+    return false
+  }
+
+  // Everything an approval needs, refused in plain words: the agent still here and allowed to work.
+  async function approvable(principal, card) {
+    const doc = await connections.findOne({ _id: card.connectionId })
+    if (!doc || doc.status === 'removed') refuse(404, 'not_found', 'That agent is not on this slate any more.')
+    const found = principal?.userId ? await accessOf(principal, doc.shareId) : null
+    if (!found?.slate || !found.canRead) refuse(404, 'not_found', 'Slate not found or unavailable.')
+    if (!found.canEdit) refuse(403, 'forbidden', 'Only people who can edit this slate approve its agents\' changes.')
+    const slate = found.slate
+    const acting = actsWithoutAsking(doc, await integrationOf(doc))
+    if (!mayApprove(principal, card, doc, found.canEdit, acting))
+      refuse(403, 'approver_only', principal.kind === 'person' ? `Only ${doc.inviterName || 'the person who invited it'} can approve ${doc.name}'s changes.` : 'Only a person approves an agent\'s changes on the slate, unless its inviter lets it act without asking.')
+    if (!(await pro(doc.ownerId))) refuse(402, 'pro_required', PRO_REQUIRED)
+    if (!(await nativeOn(doc.address))) refuse(403, 'disabled', `${doc.name} is turned off on this server.`)
+    const setting = await outsideAgentsOf(slate)
+    if (setting === 'off') refuse(403, 'agents_off', 'This slate\'s owner turned off outside agents here.')
+    if (setting === 'owner' && doc.ownerId !== slate.userId) refuse(403, 'owner_only', 'This slate\'s owner now lets only their own outside agents work here.')
+    if (await suggestions.paused?.(slate)) refuse(423, 'agents_paused', `Agents are paused on this slate. Resume agents to approve ${doc.name}'s changes.`)
+    if (doc.status === 'paused') refuse(409, 'tools_changed', `${doc.name}'s tools changed since you invited it. Invite it again from + Invite agent to look at them.`)
+    return { doc, slate, found }
+  }
+
+  /** Approve one card from the slate (Keep on its note) or any surface: its change is made now. */
+  async function approveCard(principal, card, { fromSlate = false } = {}) {
+    const { doc, slate } = await approvable(principal, card)
+    if (card.state === 'done') return { card, doc, slate }
+    if (card.state === 'declined') refuse(409, 'declined', 'That change was declined. Ask the agent again for a new one.')
+    if (card.state === 'running') refuse(409, 'card_busy', 'That change is already being made.')
+    // Its note was discarded (or expired) meanwhile: the change is not made.
+    if (!fromSlate && card.actionId && suggestions.actionOf) {
+      const action = await suggestions.actionOf(slate, card.actionId).catch(() => null)
+      const item = action?.items?.find((i) => i.kind === 'add' && i.nodeId === card.nodeId)
+      if (!item || item.state !== 'pending') {
+        await outside.update(card._id, { state: 'declined', error: 'Its card left the slate.', updatedAt: new Date(now()) })
+        refuse(409, 'declined', 'That change\'s card is no longer on the slate. Ask the agent again for a new one.')
+      }
+    }
+    const by = principal.kind === 'person' ? await firstName(principal.userId).catch(() => 'Someone') : `${doc.inviterName || 'Its inviter'}'s token`
+    await oneAtATime({ userId: doc.ownerId }, () => performNow(card, doc, { acted: false, by, slate }))
+    return { card, doc, slate }
+  }
+
+  /** connectors.approve: make a card's change; a person's approval also keeps its note (its record). */
+  async function approve(principal, { cardId }) {
+    const card = await cardRow(cardId)
+    if (!card || card.kind !== 'card') refuse(404, 'not_found', 'There is no such change waiting.')
+    const { doc, slate } = await approveCard(principal, card)
+    let kept = false
+    if (card.state === 'done' && principal.kind === 'person' && card.actionId && suggestions.keep && suggestions.actionOf) {
+      const action = await suggestions.actionOf(slate, card.actionId).catch(() => null)
+      const item = action?.items?.find((i) => i.kind === 'add' && i.nodeId === card.nodeId && i.state === 'pending')
+      if (item) kept = Boolean(await suggestions.keep(principal, slate, card.actionId, [item.id]).catch(() => null))
+    }
+    return { card: publicCard(card, principal.userId), kept, ...(card.state === 'failed' && { say: `${doc.name} couldn't do it: ${card.error}` }) }
+  }
+
+  // A card declined: nothing is changed outside; who declined is remembered.
+  async function declineRow(card, principal) {
+    if (!['waiting', 'failed'].includes(card.state)) return false
+    const set = { state: 'declined', decidedBy: principal?.userId ? await firstName(principal.userId).catch(() => 'Someone') : null, decidedAt: new Date(now()), updatedAt: new Date(now()) }
+    await outside.update(card._id, set)
+    Object.assign(card, set)
+    audit({ kind: 'outside_declined', userId: principal?.userId || null, cardId: card._id, connectionId: card.connectionId, tool: card.tool })
+    return true
+  }
+
+  /** connectors.decline: anyone who may edit the slate declines a waiting change (its note goes too). */
+  async function decline(principal, { cardId }) {
+    const card = await cardRow(cardId)
+    if (!card || card.kind !== 'card') refuse(404, 'not_found', 'There is no such change waiting.')
+    const found = principal?.userId ? await accessOf(principal, card.shareId) : null
+    if (!found?.slate || !found.canRead) refuse(404, 'not_found', 'Slate not found or unavailable.')
+    if (!found.canEdit) refuse(403, 'forbidden', 'Only people who can edit this slate decline its agents\' changes.')
+    if (card.state === 'done') refuse(409, 'already_done', 'That change was already made. Change it where it was made.')
+    await declineRow(card, principal)
+    if (card.actionId && suggestions.actionOf && suggestions.discardItems) {
+      const action = await suggestions.actionOf(found.slate, card.actionId).catch(() => null)
+      const item = action?.items?.find((i) => i.kind === 'add' && i.nodeId === card.nodeId && i.state === 'pending')
+      if (item) await suggestions.discardItems(principal, found.slate, card.actionId, [item.id]).catch(() => {})
+    }
+    return { card: publicCard(card, principal.userId) }
+  }
+
+  /**
+   * The app's suggestions.decide asks this first (deps.suggestionGate). Keep: a card note kept on its
+   * own approves its change (made now, by whoever may approve); Keep all holds cards back; a card
+   * whose change failed or was refused stays waiting with its reason. Discard declines cards. Undo
+   * leaves done cards (nothing outside can be undone) and says so. → null when no card is involved.
+   */
+  async function gate(principal, slate, { decision, actionId, itemIds }) {
+    const cards = (await outside.find({ slateId: slate._id, actionId })).filter((card) => card.kind === 'card')
+    if (!cards.length || !suggestions.actionOf) return null
+    const action = await suggestions.actionOf(slate, actionId).catch(() => null)
+    if (!action) return null
+    const byNode = new Map(cards.filter((c) => c.nodeId).map((c) => [c.nodeId, c]))
+    const cardOf = new Map(action.items.filter((i) => i.kind === 'add' && byNode.has(i.nodeId)).map((i) => [i.id, byNode.get(i.nodeId)]))
+    if (!cardOf.size) return null
+    const pending = action.items.filter((i) => i.state === 'pending').map((i) => i.id)
+    const named = Array.isArray(itemIds) && itemIds.length ? itemIds : null
+    if (decision === 'discard') {
+      for (const id of named || pending) if (cardOf.has(id)) await declineRow(cardOf.get(id), principal)
+      return null
+    }
+    if (decision === 'undo') {
+      const left = []
+      for (const [itemId, card] of cardOf) {
+        const item = action.items.find((i) => i.id === itemId)
+        if (card.state === 'done' && (item?.state === 'kept' || item?.state === 'applied'))
+          left.push({ itemId, reason: `${card.label} stays done in ${card.system}: Slatebox can't undo a change made outside it.${card.result?.link ? ' Open it there to change it.' : ''}` })
+      }
+      return { skip: [...cardOf.keys()], left }
+    }
+    const out = []
+    const held = []
+    for (const id of named || pending) {
+      const card = cardOf.get(id)
+      if (!card || card.state === 'done') {
+        out.push(id)
+        continue
+      }
+      if (!named) {
+        held.push({ itemId: id, cardId: card._id, reason: 'Approve each change outside Slatebox on its own card.' })
+        continue
+      }
+      if (principal.kind !== 'person') {
+        held.push({ itemId: id, cardId: card._id, reason: 'Only a person approves a change outside Slatebox on the slate (connectors.approve for an agent that acts without asking).' })
+        continue
+      }
+      try {
+        await approveCard(principal, card, { fromSlate: true })
+        if (card.state === 'done') out.push(id)
+        else held.push({ itemId: id, cardId: card._id, reason: card.error || 'It could not be done.' })
+      } catch (error) {
+        if (!(error instanceof ConnectorRefused)) throw error
+        held.push({ itemId: id, cardId: card._id, reason: error.message })
+      }
+    }
+    return { itemIds: out, held }
+  }
+
+  // An act-without-asking choice, kept in the agent's activity for everyone on the slate.
+  async function recordSetting(principal, doc, text) {
+    await outside.insert({ _id: newId('o'), kind: 'setting', slateId: doc.slateId, shareId: doc.shareId, connectionId: doc._id, agentId: doc.agentId || null, ownerId: doc.ownerId, text: plainText(text, 200), by: await firstName(principal.userId).catch(() => 'Someone'), createdAt: new Date(now()), expiresAt: new Date(now() + 90 * 86400000) })
+  }
+
+  /**
+   * On one slate: whether this agent acts without asking (on, off, or its integration's choice) and
+   * who approves its cards. Turning either wider is its inviter's alone (their account does the
+   * change); its inviter or the slate's owner may narrow it. Audited, and shown in its activity.
+   */
+  async function setActing(principal, { connectionId, actWithoutAsking, approvers }) {
+    if (!principal?.userId || principal.kind !== 'person') refuse(403, 'person_required', 'Only a signed-in person changes how an agent acts.')
+    const doc = typeof connectionId === 'string' ? await connections.findOne({ _id: connectionId }) : null
+    if (!doc || doc.status === 'removed') refuse(404, 'not_found', 'That agent is not on this slate any more.')
+    const found = await accessOf(principal, doc.shareId)
+    if (!found?.slate || !found.canRead) refuse(404, 'not_found', 'Slate not found or unavailable.')
+    const inviter = doc.ownerId === principal.userId
+    const owner = found.slate.userId === principal.userId
+    if (!inviter && !owner) refuse(403, 'inviter_only', `Only ${doc.inviterName || 'the person who invited it'} or this slate's owner can change how ${doc.name} acts.`)
+    const integration = await integrationOf(doc)
+    const set = {}
+    if (actWithoutAsking !== undefined) {
+      if (!['on', 'off', 'inherit'].includes(actWithoutAsking)) refuse(400, 'invalid_request', 'Choose on, off or inherit.')
+      const wider = actWithoutAsking === 'on' || (actWithoutAsking === 'inherit' && integration?.actWithoutAsking === true)
+      if (wider && !inviter) refuse(403, 'inviter_only', `Only ${doc.inviterName || 'the person who invited it'} can let ${doc.name} act without asking.`)
+      set.acting = actWithoutAsking === 'inherit' ? null : actWithoutAsking
+    }
+    if (approvers !== undefined) {
+      if (!APPROVERS.includes(approvers)) refuse(400, 'invalid_request', 'Choose inviter or editors.')
+      if (approvers === 'editors' && !inviter) refuse(403, 'inviter_only', `Only ${doc.inviterName || 'the person who invited it'} can let others approve ${doc.name}'s changes.`)
+      set.approvers = approvers
+    }
+    if (!Object.keys(set).length) refuse(400, 'invalid_request', 'Send actWithoutAsking or approvers.')
+    await connections.update(doc._id, { ...set, updatedAt: new Date(now()) })
+    Object.assign(doc, set)
+    const acting = actsWithoutAsking(doc, integration)
+    audit({ kind: 'act_without_asking', userId: principal.userId, connectionId: doc._id, acting: doc.acting ?? 'inherit', approvers: doc.approvers || 'inviter', byOwner: !inviter })
+    if (set.acting !== undefined) await recordSetting(principal, doc, acting ? `${doc.name} acts without asking here: its changes are made at once (destructive ones still wait).` : `${doc.name} asks first here: each change waits on a card.`)
+    if (set.approvers !== undefined) await recordSetting(principal, doc, set.approvers === 'editors' ? `Anyone who can edit may approve ${doc.name}'s changes here.` : `Only ${doc.inviterName || 'its inviter'} approves ${doc.name}'s changes here.`)
+    return { connectionId: doc._id, actWithoutAsking: acting, acting: doc.acting === 'on' || doc.acting === 'off' ? doc.acting : 'inherit', approvers: APPROVERS.includes(doc.approvers) ? doc.approvers : 'inviter' }
+  }
+
+  /** On the Integrations page: whether this integration acts without asking on every slate (unless a slate says otherwise). */
+  async function integrationSetActing(principal, { integrationId, actWithoutAsking }) {
+    if (!principal?.userId || principal.kind !== 'person') refuse(403, 'person_required', 'Only a signed-in person changes how an agent acts.')
+    const doc = await ownIntegration(principal, integrationId)
+    if (typeof actWithoutAsking !== 'boolean') refuse(400, 'invalid_request', 'Send actWithoutAsking true or false.')
+    await integrations.update(doc._id, { actWithoutAsking, updatedAt: new Date(now()) })
+    doc.actWithoutAsking = actWithoutAsking
+    audit({ kind: 'integration_act_without_asking', userId: principal.userId, integrationId: doc._id, actWithoutAsking })
+    for (const agent of await agentsOf(doc))
+      if (agent.acting !== 'on' && agent.acting !== 'off')
+        await recordSetting(principal, agent, actWithoutAsking ? `${agent.name} acts without asking (set for the integration): its changes are made at once (destructive ones still wait).` : `${agent.name} asks first (set for the integration): each change waits on a card.`)
+    return publicIntegration(doc, { cards: await gallery() })
+  }
+
+  /** connectors.outsideActions: a slate's action cards (newest first) and the act-without-asking changes, for anyone who can read it. */
+  async function outsideList(principal, { shareId, connectionId }) {
+    const { slate } = await requireReader(principal, shareId)
+    const rows = (await outside.find({ slateId: slate._id })).filter((row) => !connectionId || row.connectionId === connectionId)
+    rows.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    const docs = await connections.find({ slateId: slate._id, status: { $ne: 'removed' } })
+    const agents = []
+    for (const doc of docs) agents.push({ connectionId: doc._id, agentId: doc.agentId || null, name: doc.name, actWithoutAsking: actsWithoutAsking(doc, await integrationOf(doc)), approvers: APPROVERS.includes(doc.approvers) ? doc.approvers : 'inviter', mine: doc.ownerId === principal.userId })
+    return {
+      cards: rows.filter((row) => row.kind === 'card').slice(0, 50).map((row) => publicCard(row, principal.userId)),
+      activity: rows.filter((row) => row.kind === 'setting').slice(0, 50).map((row) => ({ connectionId: row.connectionId, agentId: row.agentId, text: row.text, by: row.by, at: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt })),
+      agents,
+    }
+  }
+
+  // Its waiting cards go with an agent that leaves a slate.
+  async function declineWaiting(doc, principal) {
+    for (const card of await outside.find({ connectionId: doc._id })) if (card.kind === 'card') await declineRow(card, principal)
   }
 
   // ---------- signing in ----------
@@ -1104,7 +1503,7 @@ export function createConnectorService({
     if (rule !== null && !RULES.includes(rule)) refuse(400, 'invalid_request', 'Choose when it joins: when you invite it, or on every slate you own.')
     const reached = await discoverAs(principal.userId, address)
     if (reached.needsSignIn) refuse(401, 'needs_sign_in', `Sign in to ${host} first.`)
-    const stored = consented(name, normalizeTools(reached.found.tools), chosen)
+    const stored = consented(name, await toolsFrom(address, reached.found.tools), chosen)
     const auth = reached.token ? await vault.describe(principal.userId, address) : null
     const existing = await integrations.findOne({ ownerId: principal.userId, address })
     const doc = await ensureIntegration(principal.userId, { address, host, name, tools: stored, auth: auth ? { kind: auth.kind, issuer: auth.issuer } : null, galleryId: cardFor(address, await gallery())?.id || null, serverName: plainText(reached.found.serverInfo?.name || '', 60) })
@@ -1129,7 +1528,7 @@ export function createConnectorService({
         if (doc.status !== 'needs_sign_in') await integrations.update(doc._id, { status: 'needs_sign_in', updatedAt: new Date(now()) })
         return { integrationId: doc._id, address: doc.address, host: doc.host, needsSignIn: true, tools: [], changed: [] }
       }
-      const listed = normalizeTools(reached.found.tools)
+      const listed = await toolsFrom(doc.address, reached.found.tools)
       const { changed } = reconcile(doc.tools, listed)
       const policyOf = new Map((doc.tools || []).map((tool) => [tool.name, tool]))
       return {
@@ -1137,9 +1536,9 @@ export function createConnectorService({
         address: doc.address,
         host: doc.host,
         name: doc.name,
-        tools: listed.map(({ name, title, description, group, hash, annotations }) => {
+        tools: listed.map(({ name, title, description, group, hash, annotations, destructive }) => {
           const before = policyOf.get(name)
-          return { name, title, description, group, hash, annotations, policy: before && before.hash === hash ? before.policy : defaultPolicy({ group }), ...(!before && { added: true }), ...(before && before.hash !== hash && { changed: true }) }
+          return { name, title, description, group, hash, annotations, ...(destructive && { destructive: true }), policy: before && before.hash === hash ? before.policy : defaultPolicy({ group, destructive }), ...(!before && { added: true }), ...(before && before.hash !== hash && { changed: true }) }
         }),
         changed: changed.map((c) => c.name),
         summary: capabilitySummary(listed),
@@ -1170,6 +1569,7 @@ export function createConnectorService({
         const agentId = agent.agentId || (await suggestions.agentIdOf(connectorPrincipal(agent, 'remove:' + agent._id), found.slate))
         await suggestions.withdraw(principal, found.slate, agentId).catch(() => {})
       }
+      await declineWaiting(agent, principal)
       await presence.end('hello:' + agent._id, 'done').catch(() => {})
     }
     const signedOut = vault ? (await vault.remove(doc.ownerId, doc.address).catch(() => ({ removed: false }))).removed : false
@@ -1334,5 +1734,11 @@ export function createConnectorService({
     integrationInvite,
     applyRules,
     slateSetting,
+    approve,
+    decline,
+    gate,
+    setActing,
+    integrationSetActing,
+    outsideList,
   }
 }

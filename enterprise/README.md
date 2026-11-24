@@ -11,6 +11,7 @@ Outside agent connections: Slatebox as an MCP *client*.
 - Inviting an outside MCP server onto a slate as a named cursor, from the gallery or a pasted address.
 - Its suggestions, shown live on the slate as ghost notes that anyone can Keep or Discard.
 - Connectors and the integrations built on them, with their OAuth sign-in (callback `/connectors/oauth/callback`).
+- Agents read and write: a change the person asks for lands as an action card a person approves (see below).
 
 ### What is built (S2a: open servers)
 
@@ -19,7 +20,7 @@ Outside agent connections: Slatebox as an MCP *client*.
 - `server/tools.mjs`, `results.mjs`, `context.mjs`, `translate.mjs`: consent to tool hashes, quarantine of results, the context packer ("what leaves Slatebox"), and the two-step translator (plan lookups, then lay out notes; its words live in the prompt registry, `connectors.*`).
 - `server/recipes.mjs`, `excalidraw.mjs`: exactly what was asked (the request's number of notes, one answer per ask, read-me tools never offered), each gallery agent's known asks as fixed steps, and Excalidraw elements drawn by a fixed recipe (shared with Import from Excalidraw).
 - `server/gallery-admin.mjs`: the gallery as data in /admin/ai › Agent gallery (aiAgents, audited, people only).
-- `server/service.mjs`, `actions.mjs`, `meteor.js`: `connectors.list/discover/connect/disconnect/call/keep/discard`, each a Meteor method, `/api/v1` route, exec call and MCP tool. On Cloud the inviter needs Pro; only the inviter asks; any editor keeps.
+- `server/service.mjs`, `actions.mjs`, `meteor.js`: `connectors.list/discover/connect/disconnect/call`, each a Meteor method, `/api/v1` route, exec call and MCP tool. On Cloud the inviter needs Pro; only the inviter asks; any editor keeps its notes (only the inviter approves its changes elsewhere, unless they let editors).
 - `client/`: "+ Invite agent", the walkthrough, each invited agent's chip on the people strip (ask it there, or by `@name` in Ask Slatebox) and the live ghosts on the canvas with Keep and Discard on each.
 - Tests: `npm run test:enterprise` (with the hostile server in `scripts/mcp-test-servers.mjs`).
 
@@ -30,6 +31,16 @@ Outside agent connections: Slatebox as an MCP *client*.
 - `server/credentials.mjs`: the vault. Tokens, pasted keys and registration secrets are sealed (AES-256-GCM, `web/app/server/metering/vault.mjs`) under the app's existing `SLATEBOX_KEY_ENCRYPTION_KEY`, bound to person, address, issuer and field. Refresh runs under a lease; a refused refresh shows "needs sign-in" on the agent. Removing the last agent on a server revokes and forgets its sign-in.
 - `connectors.signIn`, `connectors.signInStatus`, `connectors.useKey` (pasted keys and tokens, `writeOnly`): Meteor method, `/api/v1` route, exec call and MCP tool, like the others.
 - Settings (`server/connector-settings.mjs`): `settings.connectors.oauthApps.<provider>.{clientId, clientSecret, scopes?}`. GitHub is a known provider (issuer `https://github.com/login/oauth`, scopes `public_repo read:org` unless `scopes` widens them, pinned to `https://api.githubcopilot.com`); any other provider also gives `issuer` and `resources`.
+
+### What is built (agents read and write, 2026-11-24)
+
+- `server/tools.mjs`: `classifyTool` (annotations first, then the tool's name, then the gallery recipe's `tools` word: lookup, change or destructive). Lookups and changes start allowed; destructive ones off. `reconcile` answers `allowed` (lookups, run during an ask) and `writable` (changes, only ever proposed). `asksForChange`: a change is planned only when the person's own words ask for one an allowed tool makes.
+- `server/translate.mjs`: `writePlanPrompt` / `checkWrites`, the change planner (prompt `connectors.plan.writes`), capped like lookups; a recipe's fixed values (`"method": "create"`) win over the planner's.
+- `server/outside.mjs`: action cards. Their words (label, title, body, where, item), built from typed arguments; the done link (a checked https link from the answer) and plain failure words.
+- `server/service.mjs`: cards in the answer (one more group of notes in the same suggestion); `approve` (the tool checked again against the consented hash, then called once, as the inviter; claimed once), `decline`, `gate` (the app's `suggestions.decide` asks it first: Keep on a card alone approves it, Keep all holds cards, Discard declines, Undo leaves done cards and says so), `setActing` / `integrationSetActing` (act without asking, who approves: wider only by the inviter; audited; kept in the agent's activity), `outsideList`.
+- `common/gallery.mjs`: Linear at its full address (the read-only one is an alias), write recipes for Linear (create issue, comment, update status) and GitHub (open issue, comment, open a pull request from an existing branch), `tools` corrections (GitHub's merge and file writes are destructive).
+- Actions: `connectors.outsideActions` (`list_agent_changes`), `connectors.approve` (`approve_agent_change`; a token only for an agent that acts without asking, never destructive), `connectors.decline` (`decline_agent_change`), and the person-only `connectors.setActing`, `integrations.setActing`.
+- Tests: `scripts/agents-read-write.test.mjs` (in `npm run test:enterprise`) and the gate in `scripts/agent-suggestions.test.mjs`.
 
 Slatebox as an MCP *server* (`/mcp`, the CLI, `/api/v1`) is not here. It is MIT and works on every install.
 

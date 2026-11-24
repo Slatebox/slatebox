@@ -11,7 +11,9 @@ import { shareIdInput } from '/server/actions/slate-schemas.mjs'
 
 const id = (description) => ({ type: 'string', minLength: 1, maxLength: 40, pattern: '^[A-Za-z0-9_-]+$', description })
 const connectionId = id('The invited agent\'s id, as connectors.list gives it.')
-const addressInput = { type: 'string', minLength: 8, maxLength: 500, description: 'The server\'s https address, such as https://mcp.linear.app/mcp/readonly' }
+const addressInput = { type: 'string', minLength: 8, maxLength: 500, description: 'The server\'s https address, such as https://mcp.linear.app/mcp' }
+const cardIdInput = { type: 'string', minLength: 7, maxLength: 41, pattern: '^o[A-Za-z0-9_-]+$', description: 'The change\'s card, as list_agent_changes (connectors.outsideActions) or ask_invited_agent (cards[].cardId) gives it.' }
+const cardOut = { type: 'object', description: 'An action card: cardId, connectionId, agentId, system, label ("Create Linear issue"), tool, preview { title, body, target, item }, destructive, state (waiting, running, done, failed, declined), link (when done), error (when failed), decidedBy, actedWithoutAsking, mine.' }
 const obj = (properties) => ({ type: 'object', properties })
 const OUT = {
   list: obj({ connections: { type: 'array', items: { type: 'object' } }, pro: { type: 'boolean' }, canInvite: { type: 'boolean' } }),
@@ -30,7 +32,11 @@ const OUT = {
     say: { type: 'string' },
     left: { type: 'array', items: { type: 'string' } },
     repeated: { type: 'boolean', description: 'true: the same ask\'s answer is still waiting on the slate, so it is the answer (actions names it) and nothing new was made.' },
+    cards: { type: 'array', items: cardOut, description: 'The changes outside Slatebox the ask asked for, each an action card in the answer: waiting for approval (approve_agent_change, or Keep on its card), or done at once when its inviter lets it act without asking.' },
   }),
+  changes: obj({ cards: { type: 'array', items: cardOut }, activity: { type: 'array', items: { type: 'object' }, description: 'Act-without-asking and approver changes: connectionId, agentId, text, by, at.' }, agents: { type: 'array', items: { type: 'object' }, description: 'Each agent here: connectionId, agentId, name, actWithoutAsking, approvers (inviter or editors), mine.' } }),
+  card: obj({ card: cardOut, kept: { type: 'boolean', description: 'approve: its card note was kept on the slate as the record of what was done.' }, say: { type: 'string' } }),
+  acting: obj({ connectionId: { type: 'string' }, actWithoutAsking: { type: 'boolean', description: 'Whether it acts without asking here now.' }, acting: { type: 'string', enum: ['on', 'off', 'inherit'] }, approvers: { type: 'string', enum: ['inviter', 'editors'] } }),
 }
 
 const toolChoice = {
@@ -209,7 +215,7 @@ export function connectorActions(service) {
     defineAction({
       id: 'connectors.call',
       title: 'Ask an invited agent',
-      description: 'Ask an outside agent you invited. Slatebox chooses its lookups, sends only what you allowed, and turns what comes back into one live suggestion on the slate (ghosts everyone there sees) that anyone who can edit may keep, discard or undo with suggestions.decide. Only the person who invited it can ask it. Needs Slatebox Pro.',
+      description: 'Ask an outside agent you invited. Slatebox chooses its lookups, sends only what you allowed, and turns what comes back into one live suggestion on the slate (ghosts everyone there sees) that anyone who can edit may keep, discard or undo with suggestions.decide. When you ask for a change elsewhere ("file an issue for this"), the change is not made: it lands in the answer as an action card (cards[]) you approve with approve_agent_change or Keep on its card, unless you let the agent act without asking. Only the person who invited it can ask it. Needs Slatebox Pro.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
@@ -237,6 +243,67 @@ export function connectorActions(service) {
       output: OUT.call,
       tool: { name: 'ask_invited_agent', title: 'Ask an outside agent you invited; its answer lands as ghost suggestions', description: 'Ask an outside agent you invited a question; its answer appears on the slate as ghost suggestions to keep or discard.' },
       handler: run('call'),
+    }),
+    defineAction({
+      id: 'connectors.outsideActions',
+      title: 'List an agent\'s changes outside Slatebox',
+      description: 'The action cards on a slate (changes outside Slatebox its invited agents proposed or made, such as a new Linear issue or a GitHub comment), newest first, with their state and link; who may approve each agent\'s cards; whether each acts without asking; and the history of those choices. Anyone who can read the slate.',
+      toolset: 'connectors',
+      kind: 'read',
+      scope: 'slates:read',
+      principals: ['person', 'agent'],
+      mounts: { ddp: true, http: { method: 'GET', path: '/slates/{shareId}/agent-changes', operationId: 'listAgentChanges' } },
+      input: { type: 'object', properties: { shareId: shareIdInput, connectionId: { ...connectionId, description: 'Only this agent\'s.' } }, required: ['shareId'], additionalProperties: false },
+      output: OUT.changes,
+      tool: { name: 'list_agent_changes', title: 'List the changes outside Slatebox an invited agent proposed or made', description: 'See the action cards on a slate: changes outside Slatebox (a new issue, a comment) waiting for approval, done, failed or declined.' },
+      handler: run('outsideList'),
+    }),
+    defineAction({
+      id: 'connectors.approve',
+      title: 'Approve an agent\'s change outside Slatebox',
+      description: 'Approve one action card: its change is made now (a new Linear issue, a comment, a status), as the agent\'s inviter, after its tool is checked against what they allowed; the card then says it was done, with a link. People approve: only the inviter, unless they let the slate\'s editors approve; a token (exec, MCP, API) approves only for an agent its inviter lets act without asking, and never a destructive change. What is made outside Slatebox cannot be undone from Slatebox.',
+      toolset: 'connectors',
+      kind: 'write',
+      idempotency: 'optional',
+      openWorld: true,
+      scope: 'slates:write',
+      principals: ['person', 'agent'],
+      mounts: { ddp: true, http: { method: 'POST', path: '/agent-changes/{cardId}/approve', operationId: 'approveAgentChange' } },
+      input: { type: 'object', properties: { cardId: cardIdInput }, required: ['cardId'], additionalProperties: false },
+      output: OUT.card,
+      tool: { name: 'approve_agent_change', title: 'Approve an invited agent\'s change outside Slatebox', description: 'Approve one action card so its change outside Slatebox is made. A token may only for an agent that acts without asking.' },
+      handler: run('approve'),
+    }),
+    defineAction({
+      id: 'connectors.decline',
+      title: 'Decline an agent\'s change outside Slatebox',
+      description: 'Decline one action card: nothing is changed outside Slatebox, and its card leaves the slate. Anyone who can edit the slate.',
+      toolset: 'connectors',
+      kind: 'write',
+      idempotency: 'optional',
+      scope: 'slates:write',
+      principals: ['person', 'agent'],
+      mounts: { ddp: true, http: { method: 'POST', path: '/agent-changes/{cardId}/decline', operationId: 'declineAgentChange' } },
+      input: { type: 'object', properties: { cardId: cardIdInput }, required: ['cardId'], additionalProperties: false },
+      output: OUT.card,
+      tool: { name: 'decline_agent_change', title: 'Decline an invited agent\'s change outside Slatebox', description: 'Decline one action card: nothing is changed outside Slatebox.' },
+      handler: run('decline'),
+    }),
+    defineAction({
+      id: 'connectors.setActing',
+      title: 'Choose how an agent\'s changes are approved on a slate',
+      // People only, like agents.control's Edit directly: an agent never widens an agent's rights.
+      description: 'On one slate: actWithoutAsking on (its changes outside Slatebox are made at once; destructive ones still wait), off (each waits on a card), or inherit (its integration\'s choice); approvers inviter (default) or editors (anyone who can edit may approve). Turning either wider is the inviter\'s alone; the inviter or the slate\'s owner may narrow it. Audited and shown in the agent\'s activity.',
+      toolset: 'connectors',
+      kind: 'write',
+      idempotency: 'optional',
+      changesNoSlate: true,
+      scope: 'slates:write',
+      principals: ['person'],
+      mounts: { ddp: true },
+      input: { type: 'object', properties: { connectionId, actWithoutAsking: { type: 'string', enum: ['on', 'off', 'inherit'] }, approvers: { type: 'string', enum: ['inviter', 'editors'] } }, required: ['connectionId'], additionalProperties: false },
+      output: OUT.acting,
+      handler: run('setActing'),
     }),
   ]
 }
@@ -364,6 +431,22 @@ export function integrationActions(service) {
       input: { type: 'object', properties: { integrationId, rule: ruleInput }, required: ['integrationId', 'rule'], additionalProperties: false },
       output: INT_OUT.integration,
       handler: run('integrationSetRule'),
+    }),
+    defineAction({
+      id: 'integrations.setActing',
+      title: 'Let an integration act without asking',
+      // People only: an agent never widens an agent's rights.
+      description: 'Whether an integration\'s changes outside Slatebox are made at once on every slate it is on (destructive ones still wait for approval), unless a slate chooses otherwise. Off by default. Audited and shown in each slate\'s agent activity.',
+      toolset: 'connectors',
+      kind: 'write',
+      idempotency: 'optional',
+      changesNoSlate: true,
+      scope: 'slates:write',
+      principals: ['person'],
+      mounts: { ddp: true },
+      input: { type: 'object', properties: { integrationId, actWithoutAsking: { type: 'boolean' } }, required: ['integrationId', 'actWithoutAsking'], additionalProperties: false },
+      output: INT_OUT.integration,
+      handler: run('integrationSetActing'),
     }),
     defineAction({
       id: 'integrations.disconnect',

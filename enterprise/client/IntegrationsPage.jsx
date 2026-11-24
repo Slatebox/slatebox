@@ -3,8 +3,9 @@
 //
 // The Integrations page (/integrations, the integrations.page slot): every outside agent and Google
 // account a person connected once (owner, 2026-11-24). Each row says what it is, whether it works
-// now, what it may use, which slates it is on and when it joins slates (its standing rule), with
-// Review tools, Sign in again and Disconnect (revoked, and removed from every slate). "Connect an
+// now, what it may use (lookups, and changes that wait on a card for approval), which slates it is
+// on, when it joins slates (its standing rule) and whether it acts without asking, with Review
+// tools, Sign in again and Disconnect (revoked, and removed from every slate). "Connect an
 // agent" is the invite walkthrough without a slate. Free accounts on Slatebox Cloud see every row
 // marked Pro, and connecting opens the in-app Pro sheet (prices live on /plans/, never here).
 import React, { useCallback, useEffect, useRef, useState } from 'react'
@@ -22,6 +23,7 @@ import DialogTitle from '@mui/material/DialogTitle'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import LinearProgress from '@mui/material/LinearProgress'
 import MenuItem from '@mui/material/MenuItem'
+import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx'
@@ -67,6 +69,12 @@ function ReviewDialog({ integration, onClose, onDone }) {
     return () => { live = false }
   }, [integration.integrationId])
   const lookups = (review?.tools || []).filter((tool) => tool.group === 'lookup')
+  const changes = (review?.tools || []).filter((tool) => tool.group === 'change')
+  const toolRow = (tool) => (
+    <FormControlLabel key={tool.name} data-review-tool={tool.name}
+      control={<Checkbox checked={Boolean(allowed[tool.name])} onChange={(e) => setAllowed({ ...allowed, [tool.name]: e.target.checked })} />}
+      label={<span><b>{tool.title || tool.name}</b>{tool.changed ? ' (changed)' : tool.added ? ' (new)' : ''}{tool.destructive ? ' · deletes, closes or merges: each one still waits for your approval' : ''}<br /><Typography component="span" variant="caption" color="text.secondary">{tool.description || '(no description)'}</Typography></span>} />
+  )
   const save = async () => {
     setSaving(true)
     setError('')
@@ -89,11 +97,10 @@ function ReviewDialog({ integration, onClose, onDone }) {
             <Typography variant="body2" sx={{ mb: 1 }}>
               {review.changed?.length ? `Changed since you allowed them: ${review.changed.join(', ')}. Look at them again before it works anywhere.` : 'Nothing changed since you allowed these.'}
             </Typography>
-            {lookups.map((tool) => (
-              <FormControlLabel key={tool.name} data-review-tool={tool.name}
-                control={<Checkbox checked={Boolean(allowed[tool.name])} onChange={(e) => setAllowed({ ...allowed, [tool.name]: e.target.checked })} />}
-                label={<span><b>{tool.title || tool.name}</b>{tool.changed ? ' (changed)' : tool.added ? ' (new)' : ''}<br /><Typography component="span" variant="caption" color="text.secondary">{tool.description || '(no description)'}</Typography></span>} />
-            ))}
+            {lookups.length > 0 && <Typography variant="overline">Look things up</Typography>}
+            {lookups.map(toolRow)}
+            {changes.length > 0 && <Typography variant="overline" sx={{ mt: 1 }}>Change things outside Slatebox (each waits on a card you approve)</Typography>}
+            {changes.map(toolRow)}
             <Typography variant="caption" color="text.secondary">Saving resumes {integration.name} on every slate it is on. A tool you turned off on one slate stays off there.</Typography>
           </Box>
         )}
@@ -101,7 +108,7 @@ function ReviewDialog({ integration, onClose, onDone }) {
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" data-review-save="" disabled={!review || review.needsSignIn || saving || !lookups.some((tool) => allowed[tool.name])} onClick={save}>Save</Button>
+        <Button variant="contained" data-review-save="" disabled={!review || review.needsSignIn || saving || !(review.tools || []).some((tool) => allowed[tool.name])} onClick={save}>Save</Button>
       </DialogActions>
     </Dialog>
   )
@@ -113,6 +120,8 @@ function IntegrationRow({ integration, pro, cloud, onChanged, onReview, onSignIn
   const [note, setNote] = useState('')
   const allowedTools = integration.tools.filter((tool) => tool.policy === 'allow')
   const setRule = (rule) => Meteor.callAsync('integrations.setRule', { integrationId: integration.integrationId, rule }).then(onChanged).catch((e) => setNote(errorText(e)))
+  const writes = integration.tools.filter((tool) => tool.group === 'change' && tool.policy === 'allow')
+  const setActing = (actWithoutAsking) => Meteor.callAsync('integrations.setActing', { integrationId: integration.integrationId, actWithoutAsking }).then(onChanged).catch((e) => setNote(errorText(e)))
   const disconnect = () => Meteor.callAsync('integrations.disconnect', { integrationId: integration.integrationId })
     .then((answer) => { setNote(''); onChanged(answer) }).catch((e) => setNote(errorText(e)))
   return (
@@ -147,6 +156,17 @@ function IntegrationRow({ integration, pro, cloud, onChanged, onReview, onSignIn
           {Object.entries(RULE_WORDS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
         </TextField>
       </Box>
+      {integration.kind === 'mcp' && writes.length > 0 && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.75, flexWrap: 'wrap' }} data-integration-acting={integration.name}>
+          <FormControlLabel sx={{ m: 0 }} control={<Switch size="small" checked={Boolean(integration.actWithoutAsking)} disabled={cloud && !pro} onChange={(e) => setActing(e.target.checked)} inputProps={{ 'data-integration-acting-switch': '' }} />}
+            label={<Typography variant="body2">Act without asking</Typography>} />
+          <Typography variant="caption" color="text.secondary">
+            {integration.actWithoutAsking
+              ? 'Its changes outside Slatebox are made at once on its slates (a slate can turn this off). Deleting, closing or merging still waits for you.'
+              : 'Each change outside Slatebox waits on a card you approve on the slate.'}
+          </Typography>
+        </Box>
+      )}
       {integration.rule === 'my_slates' && (
         <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.75 }} data-integration-rule-note="">
           It shows on those slates to everyone who can open them. Slates anyone with the link can view get it only when you invite it.

@@ -5,6 +5,10 @@
 //   1. plan:      the model reads the request, the packed slate context and the server's tools
 //                 (clamped, framed as the server's words) and picks at most 3 lookup calls. It can
 //                 name only tools the person allowed; arguments are checked against the schema.
+//   1b. changes: only when the person's own words ask for a change elsewhere (tools.mjs
+//                 asksForChange), the change planner (writePlanPrompt) proposes at most a few calls
+//                 of the agent's allowed change tools, checked the same way. None is made here: each
+//                 becomes an action card a person approves (outside.mjs).
 //   2. translate: a quarantined model with no outside tools and no slate tools reads the
 //                 quarantined results (framed as data) and answers one schema-checked layout:
 //                 groups of notes and lines. The server turns that into canvas operations; the
@@ -19,7 +23,7 @@ import { inertJson, inertText, plainText, toolsEnvelope } from './tools.mjs'
 import { contextEnvelope } from './context.mjs'
 import { resultsEnvelope, resultsSummary, safeLink } from './results.mjs'
 
-export const PLAN_LIMITS = Object.freeze({ calls: 3, rounds: 2, groups: 6, notesPerGroup: 12, linesPerGroup: 24, noteChars: 400, labelChars: 60, sayChars: 240 })
+export const PLAN_LIMITS = Object.freeze({ calls: 3, writes: 3, rounds: 2, groups: 6, notesPerGroup: 12, linesPerGroup: 24, noteChars: 400, labelChars: 60, sayChars: 240 })
 export const SHAPES = ['rectangle', 'roundedrectangle', 'ellipse', 'diamond']
 const NOTE = Object.freeze({ width: 200, height: 90, gap: 40, columns: 3, groupGap: 120 })
 
@@ -90,6 +94,41 @@ export function planPrompt({ serverName, tools, packed, previous = [], text, cal
     ...(previous.length ? [resultsSummary(previous), text('connectors.plan.next')] : []),
   ].join('\n\n')
   return { system, user }
+}
+
+/**
+ * The change planner's turn (owner, 2026-11-24: agents read and write): the person's request, the
+ * packed slate context and the agent's allowed change tools. It proposes at most `calls` changes;
+ * none happens until a person approves its action card (outside.mjs). Never sees a server's answers.
+ */
+export function writePlanPrompt({ serverName, tools, packed, text, calls = PLAN_LIMITS.writes, history = [], hint = '' }) {
+  const said = conversationEnvelope(history)
+  const system = text('connectors.plan.writes', { serverName: plainText(serverName, 40), calls }) + (hint ? '\n' + hint : '')
+  const user = [
+    `<request>${inertText(packed.request)}</request>`,
+    ...(said ? [said] : []),
+    contextEnvelope(packed),
+    toolsEnvelope(serverName, tools),
+  ].join('\n\n')
+  return { system, user }
+}
+
+/**
+ * The proposed changes, checked like a plan: only allowed change tools, valid arguments, at most
+ * `limit`. fixed: a recipe's values ("method": "create") put over the planner's, then checked.
+ */
+export function checkWrites(raw, writableTools, { limit = PLAN_LIMITS.writes, fixed = null } = {}) {
+  const byName = new Map(writableTools.map((tool) => [tool.name, tool]))
+  const calls = []
+  for (const call of Array.isArray(raw?.calls) ? raw.calls : []) {
+    if (calls.length >= Math.min(limit, PLAN_LIMITS.writes)) break
+    const tool = byName.get(call?.tool)
+    if (!tool) continue
+    const args = { ...(call.arguments && typeof call.arguments === 'object' && !Array.isArray(call.arguments) ? call.arguments : {}), ...(fixed ? fitArgs(tool.inputSchema, fixed) : {}) }
+    if (checkArguments(tool.inputSchema, args)) continue
+    calls.push({ tool: tool.name, args })
+  }
+  return { calls, say: plainText(raw?.say || '', PLAN_LIMITS.sayChars) }
 }
 
 // A small, strict check of arguments against a tool's input schema: an object, required keys

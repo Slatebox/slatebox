@@ -356,12 +356,12 @@ test('the integration actions join the one registry, with typed MCP tools for th
   const { createAppRegistry } = await import('../web/app/server/actions/index.mjs')
   const registry = createAppRegistry({ extraActions: [...connectorActions(() => ({})), ...integrationActions(() => ({}))] })
   const ids = registry.list().map((a) => a.id).filter((id) => id.startsWith('integrations.')).sort()
-  assert.deepEqual(ids, ['integrations.applyRules', 'integrations.connect', 'integrations.disconnect', 'integrations.discover', 'integrations.invite', 'integrations.list', 'integrations.review', 'integrations.setRule', 'integrations.setSlateSetting', 'integrations.slateSetting', 'integrations.useKey'])
+  assert.deepEqual(ids, ['integrations.applyRules', 'integrations.connect', 'integrations.disconnect', 'integrations.discover', 'integrations.invite', 'integrations.list', 'integrations.review', 'integrations.setActing', 'integrations.setRule', 'integrations.setSlateSetting', 'integrations.slateSetting', 'integrations.useKey'])
   const tools = registry.list().filter((a) => a.id.startsWith('integrations.') && a.tool).map((a) => a.tool.name).sort()
   assert.deepEqual(tools, ['invite_integration_to_slate', 'list_integrations'])
   // What reaches every slate a person owns, or ends a sign-in, is a person's own choice in the app:
   // connecting, pasting a key, a standing rule, disconnecting. No token (API, exec, MCP) may do it.
-  const personOnly = ['integrations.connect', 'integrations.disconnect', 'integrations.setRule', 'integrations.useKey']
+  const personOnly = ['integrations.connect', 'integrations.disconnect', 'integrations.setActing', 'integrations.setRule', 'integrations.useKey']
   for (const id of personOnly) {
     const action = registry.get(id)
     assert.deepEqual(action.principals, ['person'], id)

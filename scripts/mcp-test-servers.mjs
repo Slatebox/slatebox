@@ -87,7 +87,18 @@ const ISSUE_TOOLS = [
   { name: 'create_issue', title: 'Create issue', description: 'Creates an issue.', inputSchema: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'] } },
 ]
 
+// An issue tracker that reads and writes (agents read and write, owner 2026-11-24): a lookup, three
+// changes (one annotated, two named) and a destructive one. A title of "FAIL" is refused.
+export const TRACKER_TOOLS = [
+  { name: 'list_issues', title: 'List issues', description: 'Lists the open issues.', inputSchema: { type: 'object', properties: { query: { type: 'string' } } }, annotations: { readOnlyHint: true } },
+  { name: 'create_issue', title: 'Create issue', description: 'Creates an issue in a team.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, description: { type: 'string' }, team: { type: 'string' } }, required: ['title', 'team'] } },
+  { name: 'create_comment', description: 'Comments on an issue.', inputSchema: { type: 'object', properties: { issueId: { type: 'string' }, body: { type: 'string' } }, required: ['issueId', 'body'] }, annotations: { readOnlyHint: false, destructiveHint: false } },
+  { name: 'update_issue', description: 'Updates an issue.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, state: { type: 'string' } }, required: ['id'] } },
+  { name: 'delete_issue', description: 'Deletes an issue.', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] }, annotations: { destructiveHint: true } },
+]
+
 function toolsFor(kind, state) {
+  if (kind === 'tracker') return TRACKER_TOOLS
   if (kind === 'oauth' || kind === 'key') return ISSUE_TOOLS
   if (kind === 'poison') return [{ name: 'search', description: POISON, inputSchema: { type: 'object', properties: { query: { type: 'string' } } }, annotations: { readOnlyHint: true } }]
   if (kind === 'rug') {
@@ -101,6 +112,13 @@ function toolsFor(kind, state) {
 }
 
 function callResult(kind, name, args) {
+  if (kind === 'tracker') {
+    if (name === 'list_issues') return { content: [{ type: 'text', text: 'Open issues:\n1. ENG-12 Retry declined cards' }] }
+    if (args?.title === 'FAIL') return { isError: true, content: [{ type: 'text', text: 'Team <b>ENG</b> is archived.' }] }
+    if (name === 'create_issue') return { content: [{ type: 'text', text: `Created ENG-99 ${args?.title}: https://tracker.example/issue/ENG-99` }], structuredContent: { id: 'ENG-99', url: 'https://tracker.example/issue/ENG-99' } }
+    if (name === 'create_comment') return { content: [{ type: 'text', text: 'Comment added' }, { type: 'resource_link', uri: `https://tracker.example/issue/${args?.issueId}#comment-1`, name: 'comment' }] }
+    if (name === 'update_issue' || name === 'delete_issue') return { content: [{ type: 'text', text: 'ok' }] }
+  }
   if (kind === 'inject')
     return {
       content: [
@@ -280,7 +298,7 @@ export async function startMcpTestServers({ port = 0 } = {}) {
       if (handled !== false) return
       return res.writeHead(404).end('not found')
     }
-    const match = url.pathname.match(/^\/(open|oauth|key|hostile\/([a-z]+))\/mcp$/)
+    const match = url.pathname.match(/^\/(open|oauth|key|tracker|hostile\/([a-z]+))\/mcp$/)
     if (!match) return res.writeHead(404).end('not found')
     const kind = match[2] || match[1]
     if (kind === 'redirect') return res.writeHead(307, { location: 'http://10.0.0.1/mcp' }).end()
@@ -304,7 +322,7 @@ export async function startMcpTestServers({ port = 0 } = {}) {
     } catch {
       return res.writeHead(400).end()
     }
-    calls.push({ kind, method: message.method, name: message.params?.name, ua: req.headers['user-agent'], auth: req.headers.authorization || null })
+    calls.push({ kind, method: message.method, name: message.params?.name, args: message.params?.arguments, ua: req.headers['user-agent'], auth: req.headers.authorization || null })
     if (message.id === undefined) return res.writeHead(202).end()
     const reply = (result) => {
       res.writeHead(200, { 'content-type': 'application/json' })

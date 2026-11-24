@@ -442,5 +442,64 @@ export function checkRecipe(raw) {
     calls: Math.min(RECIPE_LIMITS.calls, Math.max(1, Number(raw.calls) || DEFAULT_PLAN.calls)),
     referenceTools: (Array.isArray(raw.referenceTools) ? raw.referenceTools : []).filter((t) => typeof t === 'string').slice(0, 20),
     intents,
+    ...checkWriteParts(raw),
   }
+}
+
+const TOOL_KINDS = ['lookup', 'change', 'destructive']
+const FIELD_KEYS = ['title', 'body', 'target', 'item']
+const toolNameOk = (name) => typeof name === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(name)
+
+/**
+ * The write half of a recipe (owner, 2026-11-24: agents read and write):
+ *   tools   { toolName: 'lookup' | 'change' | 'destructive' }: an administrator's word for what a
+ *           tool does, over its annotations and name (enterprise/server/tools.mjs classifyTool).
+ *   writes  the changes the agent is known for, each { key, label, tool (or alternatives), keywords,
+ *           fields }: when the request's words match, the change planner is offered only that tool,
+ *           and its action card says label ("Create Linear issue") and shows the arguments named in
+ *           fields (title, body, target, item) first.
+ */
+export function checkWriteParts(raw) {
+  const out = {}
+  if (raw?.tools && typeof raw.tools === 'object' && !Array.isArray(raw.tools)) {
+    const tools = Object.fromEntries(Object.entries(raw.tools).filter(([name, kind]) => toolNameOk(name) && TOOL_KINDS.includes(kind)).slice(0, 64))
+    if (Object.keys(tools).length) out.tools = tools
+  }
+  const writes = []
+  for (const write of Array.isArray(raw?.writes) ? raw.writes.slice(0, 12) : []) {
+    const key = typeof write?.key === 'string' && /^[a-z0-9-]{1,40}$/.test(write.key) ? write.key : null
+    const tool = Array.isArray(write?.tool) ? (write.tool.length && write.tool.length <= 4 && write.tool.every(toolNameOk) ? write.tool : null) : toolNameOk(write?.tool) ? write.tool : null
+    const keywords = (Array.isArray(write?.keywords) ? write.keywords : []).filter(safePattern)
+    if (!key || !tool || !keywords.length) continue
+    const fields = {}
+    for (const field of FIELD_KEYS) {
+      const names = [].concat(write.fields?.[field] || []).filter((n) => typeof n === 'string' && /^[A-Za-z0-9_.-]{1,40}$/.test(n)).slice(0, 6)
+      if (names.length) fields[field] = names
+    }
+    // Fixed values (strings, numbers, booleans) the planner's arguments never override.
+    const args = write.args && typeof write.args === 'object' && !Array.isArray(write.args)
+      ? Object.fromEntries(Object.entries(write.args).filter(([k, v]) => /^[A-Za-z0-9_.-]{1,40}$/.test(k) && (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && v.length <= RECIPE_LIMITS.valueChars))).slice(0, 8))
+      : {}
+    writes.push({ key, tool, keywords, label: plainText(write.label || '', 60) || null, ...(Object.keys(fields).length && { fields }), ...(Object.keys(args).length && { args }) })
+  }
+  if (writes.length) out.writes = writes
+  return out
+}
+
+/** The known change a request asks for (its keywords, any one matching), whose tool the agent may use: { write, tool } or null. */
+export function matchWrite(recipe, request, writableNames) {
+  const text = String(request || '').slice(0, 1000)
+  for (const write of Array.isArray(recipe?.writes) ? recipe.writes : []) {
+    const ok = write.keywords.some((pattern) => {
+      try {
+        return new RegExp(pattern, 'i').test(text)
+      } catch {
+        return false
+      }
+    })
+    if (!ok) continue
+    const tool = stepTool(write, writableNames)
+    if (tool) return { write, tool }
+  }
+  return null
 }

@@ -4,7 +4,8 @@
 // "Invite an agent": pick from the gallery or paste an address → (free account: the in-app Pro
 // sheet, then straight on) → discovery → (a server that needs sign-in: a popup on its own page,
 // a pasted client id, or a pasted key or token) → what it can do, in plain words → which lookups
-// it may use → what it may see, and what leaves Slatebox → it arrives as a named cursor.
+// and changes it may use (changes start on, each waiting on a card you approve; destructive ones
+// start off, with a warning) → what it may see, and what leaves Slatebox → it arrives as a named cursor.
 // With `reconnect` (an agent that needs sign-in again) it stops after the sign-in.
 // `invited`: the agents already on this slate. A gallery card for one of yours says ✓ On this slate
 // and offers Manage (its chip) instead of inviting it again; a pasted address of one says so too.
@@ -350,7 +351,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
 
   const lookups = found?.tools.filter((tool) => tool.group === 'lookup') || []
   const changes = found?.tools.filter((tool) => tool.group === 'change') || []
-  const chosen = lookups.filter((tool) => allowed[tool.name])
+  const chosen = found?.tools.filter((tool) => allowed[tool.name]) || []
   const card = found?.card ? cardFor(found.address) : null
   const plan = found?.signIn
   const signInWith = plan?.provider || plan?.authHost || found?.host
@@ -577,15 +578,23 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                   <Typography component="div" sx={(t) => ({ ...heading(t), mt: 2 })}>Change things outside Slatebox</Typography>
                   <Box sx={{ display: 'grid', gap: 1 }}>
                     {changes.map((tool) => (
-                      <FormControlLabel key={tool.name} disabled control={<Checkbox checked={false} />} sx={(t) => option(t, false, true)}
+                      <FormControlLabel key={tool.name} sx={(t) => option(t, Boolean(allowed[tool.name]), tool.destructive)} data-invite-change={tool.name}
+                        control={<Checkbox checked={Boolean(allowed[tool.name])} onChange={(e) => setAllowed({ ...allowed, [tool.name]: e.target.checked })} />}
                         label={(
                           <>
                             <Typography component="span" sx={{ display: 'block', fontWeight: 700, fontSize: 14.5, lineHeight: 1.35 }}>{toolLabel(tool)}</Typography>
-                            <Typography component="span" variant="body2" sx={{ display: 'block', lineHeight: 1.4 }}>Off. Changes outside Slatebox are not available yet.</Typography>
+                            <Typography component="span" variant="body2" color={tool.destructive ? 'error' : 'text.secondary'} sx={{ display: 'block', lineHeight: 1.4 }} data-invite-change-words="">
+                              {tool.destructive
+                                ? 'Deletes, closes or merges things outside Slatebox. Off unless you turn it on; even then each one waits for your approval and cannot be undone from Slatebox.'
+                                : '→ lands as a card on the slate: nothing changes until you approve it'}
+                            </Typography>
                           </>
                         )} />
                     ))}
                   </Box>
+                  <Callout kind="info" sx={{ mt: 1.25 }}>
+                    <Box component="span" sx={{ display: 'block' }}>When you ask for a change (“file an issue for this”), it lands on the slate as a card saying exactly what would happen. Keep the card to approve it, Discard to decline. Only you approve, unless you let others on its chip.</Box>
+                  </Callout>
                 </>
               )}
               <Button size="small" onClick={() => setShowAll(!showAll)} sx={{ mt: 1.25, ml: -0.75 }}>{showAll ? 'Hide' : 'Show'} all tools as the server describes them</Button>
@@ -598,6 +607,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
             <Box sx={section}>
               <Typography component="div" sx={heading}>On this slate it may</Typography>
               <Typography variant="body2" sx={{ lineHeight: 1.5 }}><b>Suggest:</b> its work arrives as ghost notes anyone who can edit may keep or discard.</Typography>
+              {changes.length > 0 && <Typography variant="body2" sx={{ lineHeight: 1.5, mt: 0.5 }}><b>Ask before changing things elsewhere:</b> each change waits on a card for you. You can let it act without asking later, on its chip.</Typography>}
             </Box>
             {integrationMode && (
               <Box sx={section} data-invite-rule="">

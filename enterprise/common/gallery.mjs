@@ -4,9 +4,11 @@
 // The curated gallery of outside agents (first-party servers only, no gateways). The cards say
 // what lands on the slate, never how many tools a server has. `featured` cards come first.
 // signIn: 'oauth' cards need the person to sign in to the vendor (a popup on the vendor's own
-// page); keyHint says what they may paste instead. Linear is listed by its read-only address
-// while invited agents only suggest (S2b); GitHub signs in with Slatebox's registered GitHub app
-// (settings.connectors.oauthApps.github) or a pasted personal access token.
+// page); keyHint says what they may paste instead. Agents read and write (owner, 2026-11-24): Linear
+// is listed by its full address (its read-only one, where earlier agents were invited, is an alias
+// of the same card); GitHub signs in with Slatebox's registered GitHub app
+// (settings.connectors.oauthApps.github) or a pasted personal access token. Every change an agent
+// proposes lands as an action card a person approves (enterprise/server/outside.mjs).
 //
 // Curated by what an agent adds that Slatebox cannot do itself (owner, 2026-11-24): Slatebox draws
 // diagrams, flows, mind maps and boards, so a drawing agent (Excalidraw) is not listed: bringing in
@@ -18,7 +20,13 @@
 // are filled from the request ({owner}, {repo}, {topic}, {org}, {request}) or from an earlier
 // step's extraction ({login}); `each` runs a step once per value; `output` turns the last step's
 // answer into notes. A tool may name alternatives (the first the agent may use wins); a server
-// that offers none of a step's tools falls back to the planner. Administrators edit the recipe in
+// that offers none of a step's tools falls back to the planner. writes: the changes it is known for
+// (tool names checked against each server's published tool list, 2026-11-24: Linear's
+// mcp.linear.app create_issue/update_issue/create_comment, save_* in newer releases; GitHub's
+// github-mcp-server issue_write, add_issue_comment, create_pull_request), each offered to the change
+// planner alone when the request's words match; args are fixed values the planner cannot change
+// ("method": "create"); tools: an administrator's word for what a tool does (lookup, change,
+// destructive) over its annotations. Administrators edit the recipe in
 // /admin/ai › Gallery (aiAgents); this list is the built-in copy and the fallback.
 
 // Commits from every repository asked, newest first across them (not the first repository's only).
@@ -27,6 +35,8 @@ const REPO = 'Try naming the repository (owner/name).'
 // The repositories a pull request search names (organization repositories included), from its text.
 const PR_REPOS = 're:"repository_url"\\s*:\\s*"https://api\\.github\\.com/repos/([A-Za-z0-9-]+/[A-Za-z0-9._-]+)"'
 const ITEM_NOTE = (label) => ({ list: 'items[*]', text: '{repo} #{number} · {title}', link: 'html_url', maxNotes: 6, label })
+const ISSUE_WORDS = '\\b(file|open|create|log|raise|add|make|report|track|write up)\\b.*\\b(issues?|bugs?|tickets?|tasks?)\\b'
+const COMMENT_WORDS = '\\b(comment|reply)\\b'
 
 export const GALLERY = Object.freeze([
   {
@@ -84,19 +94,36 @@ export const GALLERY = Object.freeze([
         { key: 'issues-assigned', label: 'Issues assigned to me', keywords: ['\\bissues?\\b.*\\b(assigned|for) (to )?me\\b', '\\bmy (open )?issues\\b'],
           steps: [{ tool: 'search_issues', args: { query: 'is:open is:issue assignee:@me', perPage: 6 } }], output: ITEM_NOTE('Issues assigned to me') },
       ],
+      writes: [
+        { key: 'create-issue', label: 'Open GitHub issue', tool: ['issue_write', 'create_issue'], keywords: [ISSUE_WORDS], args: { method: 'create' }, fields: { title: ['title'], body: ['body'], target: ['owner', 'repo'] } },
+        { key: 'comment', label: 'Comment on GitHub', tool: ['add_issue_comment'], keywords: [COMMENT_WORDS], fields: { body: ['body'], item: ['issue_number'], target: ['owner', 'repo'] } },
+        // Only where the server offers it, and from a branch that already exists (head): Slatebox never pushes code.
+        { key: 'create-pr', label: 'Open GitHub pull request', tool: ['create_pull_request'], keywords: ['\\b(open|create|make|raise)\\b.*\\b(prs?|pull requests?)\\b'], fields: { title: ['title'], body: ['body'], target: ['owner', 'repo', 'head', 'base'] } },
+      ],
+      tools: { merge_pull_request: 'destructive', delete_file: 'destructive', push_files: 'destructive', create_or_update_file: 'destructive' },
     },
   },
   {
     id: 'linear',
     name: 'Linear',
-    url: 'https://mcp.linear.app/mcp/readonly',
+    url: 'https://mcp.linear.app/mcp',
+    aliases: ['https://mcp.linear.app/mcp/readonly'],
     job: 'Issues',
-    lands: 'Brings your team\'s issues and cycles onto the slate as linked notes. Reads only.',
+    lands: 'Brings your team\'s issues and cycles onto the slate as linked notes, and files issues, comments and status changes you approve.',
     try: 'What is in the current cycle?',
     featured: true,
     signIn: 'oauth',
     cost: 'Uses your Linear account',
-    recipe: { rounds: 1, calls: 2, intents: [] },
+    recipe: {
+      rounds: 1,
+      calls: 2,
+      intents: [],
+      writes: [
+        { key: 'create-issue', label: 'Create Linear issue', tool: ['create_issue', 'save_issue'], keywords: [ISSUE_WORDS], fields: { title: ['title'], body: ['description'], target: ['team', 'teamId', 'project', 'projectId'] } },
+        { key: 'comment', label: 'Comment on Linear issue', tool: ['create_comment', 'save_comment'], keywords: [COMMENT_WORDS], fields: { body: ['body'], item: ['issueId', 'issue', 'id'] } },
+        { key: 'update-status', label: 'Update Linear issue status', tool: ['update_issue', 'save_issue'], keywords: ['\\b(mark|move|set|change|update)\\b.*\\b(done|status|state|in progress|todo|backlog|canceled|cancelled|started)\\b'], fields: { item: ['id', 'issueId'], target: ['state', 'stateId', 'status'], title: ['title'] } },
+      ],
+    },
   },
   {
     id: 'deepwiki',
@@ -186,7 +213,8 @@ export function canonicalAddress(raw) {
 /** The gallery card a pasted address is, or null (cards: the live gallery, else the built-in one). */
 export const cardFor = (address, cards = GALLERY) => {
   const canonical = canonicalAddress(address)
-  return cards.find((card) => canonicalAddress(card.url) === canonical) || null
+  if (!canonical) return null
+  return cards.find((card) => canonicalAddress(card.url) === canonical) || cards.find((card) => (card.aliases || []).some((alias) => canonicalAddress(alias) === canonical)) || null
 }
 
 /** The retired listing an address is (an invited copy still works; its chip says why it is not listed), or null. */

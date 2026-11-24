@@ -36,6 +36,43 @@ Connecting a server from a slate's walkthrough makes the integration too, so the
 - When an agent's tools change, it pauses on every slate at once. **Review tools** on the
   Integrations page, then save, and it resumes everywhere.
 
+## Agents read and write
+
+Every agent you connect can look things up **and** change things in the system it connects to (a
+Linear issue, a GitHub comment), as much as its server allows. Nothing changes without a person:
+
+- **What it may do.** When you connect or invite it, its tools come in two groups: *Look things up*
+  and *Change things outside Slatebox*. Changes start **on**; ones that delete, close or merge
+  something start **off**, with a warning. Slatebox reads each tool's own annotations
+  (`readOnlyHint`, `destructiveHint`) first, then its name; an administrator can correct a tool in
+  the gallery recipe (`recipe.tools`, /admin/ai › Agent gallery).
+- **Ask for a change in plain words**: "@Linear file the retry bug", "@GitHub open an issue for this",
+  "@Linear mark ENG-12 done". The agent proposes it only when your own words ask for a change; never
+  because a note or a server's description says so.
+- **It lands as an action card**, in the same frame as the agent's other suggestions: what would
+  happen, where, and with what ("Create Linear issue: Retry fails on 502 · Team: ENG", then the start
+  of its description). **Keep** the card to approve it, **Discard** to decline. Keep all never
+  approves a card: each one is approved on its own. The agent's chip lists its cards too, with
+  **Approve** and **Decline**.
+- **When you approve**, the change is made then, as you, after Slatebox checks the tool is still the
+  one you allowed. The card then says *Done*, with a link to what was made. If the server refuses,
+  the card says why in plain words and stays, to try again or discard.
+- **Undo** takes back the agent's notes on the slate, never what was done outside it: the card stays,
+  and the undo says so. Change it where it was made (the card links there).
+- **Who approves.** Only the person who invited the agent (the same rule as asking), unless they let
+  anyone who can edit the slate approve (its chip: *Who approves*). The slate's owner can narrow that
+  back, never widen it.
+- **Act without asking** (off by default): for one slate on the agent's chip, or for every slate on
+  its row on the Integrations page. Its changes are then made during the ask and its cards say *Done
+  without asking*. Deleting, closing or merging still waits for a person. Only the person who
+  invited it turns this on; they or the slate's owner can turn it off. Every change of this setting
+  is kept in the agent's activity and the audit log.
+- **Gallery recipes.** Linear (connected at `https://mcp.linear.app/mcp`; agents invited earlier at
+  its read-only address keep working and show the same card): create an issue, comment, update an
+  issue's status. GitHub: open an issue, comment, and open a pull request from a branch that already
+  exists, where its server offers it (Slatebox never pushes code). Any other server: whatever change
+  tools it lists.
+
 ## Google
 
 Connect Google on the Integrations page, then:
@@ -71,6 +108,9 @@ another person, an agent's prompt or a log.
 | `integrations.invite` | `POST /api/v1/slates/{shareId}/integrations/{integrationId}` | `invite_integration_to_slate` |
 | `integrations.applyRules` | `POST /api/v1/slates/{shareId}/integrations/apply-rules` | |
 | `integrations.slateSetting` / `setSlateSetting` | `GET`/`POST /api/v1/slates/{shareId}/agent-settings` | |
+| `connectors.outsideActions` | `GET /api/v1/slates/{shareId}/agent-changes` | `list_agent_changes` |
+| `connectors.approve` | `POST /api/v1/agent-changes/{cardId}/approve` | `approve_agent_change` |
+| `connectors.decline` | `POST /api/v1/agent-changes/{cardId}/decline` | `decline_agent_change` |
 | `google.status` | `GET /api/v1/google` | |
 | `google.saveToDrive` | `POST /api/v1/slates/{shareId}/google/drive` | |
 | `google.exportDoc` / `lastDoc` | `POST`/`GET /api/v1/slates/{shareId}/google/doc` | |
@@ -81,7 +121,12 @@ another person, an agent's prompt or a log.
 Connecting, pasting a key, setting a standing rule and disconnecting (`integrations.connect`,
 `integrations.useKey`, `integrations.setRule`, `integrations.disconnect`) are for people in their own
 signed-in browser only: they decide what reaches every slate you own, so no token can do them.
-Removing an agent from one slate is `connectors.disconnect` (`remove_agent`). Signing in (to an MCP
+Removing an agent from one slate is `connectors.disconnect` (`remove_agent`). A token approves an
+action card only for an agent its inviter lets act without asking, and never one that deletes,
+closes or merges; any token that may edit the slate may decline one. Letting an agent act without
+asking, or letting others approve its changes (`connectors.setActing`, `integrations.setActing`), is
+a person's choice in the app only. `suggestions.decide` keeps an action card's note (approving it)
+only when the note is named on its own (`itemIds`); its answer's `held[]` says why a card waits. Signing in (to an MCP
 server or to Google) happens only in your own signed-in browser: no token, route or tool can start
 one. The Google Picker is browser-only, so over exec or the API `google.importFile` works on files
 Slatebox may already open (ones it made, or ones picked before).

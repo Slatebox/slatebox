@@ -306,6 +306,12 @@ function recordConnectors({ translate, context, promptText }) {
     for (const id of ['github', 'linear', 'huggingface', 'deepwiki', 'context7', 'wolfram', 'firecrawl', 'exa'])
       out['connectors:plan:' + id] = clone(translate.planPrompt({ serverName: 'Agent', tools, packed, text: promptText, calls: 2, history, hint: translate.recipeHint({ galleryId: id, serverName: 'Agent', text: promptText }) }))
   }
+  // pass 3 (agents read and write): the change planner, with a change tool and the Linear hint
+  if (translate.writePlanPrompt) {
+    const writes = [{ name: 'create_issue', description: 'Creates an issue in a team.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, description: { type: 'string' }, team: { type: 'string' } }, required: ['title', 'team'] } }]
+    const asked = context.packContext({ slate, level: 'selection', selection: ['n2'], request: 'file the retry bug', viewerId: 'ana' })
+    out['connectors:planWrites'] = { ...clone(translate.writePlanPrompt({ serverName: 'Linear', tools: writes, packed: asked, text: promptText, calls: 2, hint: translate.recipeHint({ galleryId: 'linear', serverName: 'Linear', text: promptText }) })), tool: tool(planTool) }
+  }
   return out
 }
 
