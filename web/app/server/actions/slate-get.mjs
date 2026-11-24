@@ -23,7 +23,7 @@ export default defineAction({
   },
   output: ref('SlateRead'),
   load: loadSlate(false),
-  tool: { name: 'get_slate', title: 'Read a slate', description: 'Read a slate\'s notes, lines, boards, comments and revision. Read before editing: an edit names the revision it was made on.' },
+  tool: { name: 'get_slate', title: 'Read a slate', description: 'Read a slate\'s notes, lines, boards, comments and revision. An edit names the revision it was made on (expectedRevision).' },
   handler(_principal, input, { deps, resource: slate, access }) {
     return deps.readSlate(slate, access, input)
   },

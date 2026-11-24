@@ -66,7 +66,7 @@ export const teamExport = defineAction({
   id: 'team.export',
   title: 'Export team',
   description:
-    'For a team admin: a one-time address (15 minutes) to download everything the team owns as one archive, in the open team export format: slates with their boards and smart components, recent versions and events, comments, presentations, files, people and roles, published-link settings, AI connections (never keys) and the names and scopes of API tokens (never secrets). POST to downloadUrl to download; send a passphrase (form or JSON field "passphrase", the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or the Slatebox-Export-Passphrase header when it is plain ASCII; at least 12 characters, not starting or ending with a space) to encrypt the archive. The archive is signed and checked; import it with teamImports.start on any Slatebox server.',
+    'For a team admin: a one-time address (15 minutes) to download everything the team owns as one archive, in the open team export format: slates with their boards and smart components, recent versions and events, comments, presentations, files, people and roles, published-link settings, AI connections (never keys) and the names and scopes of API tokens (never secrets). A POST to downloadUrl downloads it; a passphrase (form or JSON field "passphrase", the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or the Slatebox-Export-Passphrase header when it is plain ASCII; at least 12 characters, not starting or ending with a space) encrypts the archive. The archive is signed and checked; teamImports.start imports it on any Slatebox server.',
   toolset: 'team',
   kind: 'write',
   scope: 'team:export',
@@ -100,7 +100,7 @@ export const teamImportsStart = defineAction({
   id: 'teamImports.start',
   title: 'Start import',
   description:
-    'For an administrator of this server: a one-time address (1 hour) to upload a team export to. POST the archive to uploadUrl as application/octet-stream, with its passphrase when it is encrypted: in the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes (any passphrase), or in the Slatebox-Export-Passphrase header when it is plain ASCII. The upload becomes a new hidden team, with new ids for everything, people as placeholders who cannot sign in, slates private, board rules switched off, no keys and no tokens; the answer is the report. Confirm or discard it with teamImports.confirm or teamImports.discard; a pending import is discarded after 14 days.',
+    'For an administrator of this server: a one-time address (1 hour) to upload a team export to. uploadUrl takes the archive as a POST of application/octet-stream, with its passphrase when it is encrypted: in the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes (any passphrase), or in the Slatebox-Export-Passphrase header when it is plain ASCII. The upload becomes a new hidden team, with new ids for everything, people as placeholders who cannot sign in, slates private, board rules switched off, no keys and no tokens; the answer is the report. teamImports.confirm or teamImports.discard confirms or discards it; a pending import is discarded after 14 days.',
   toolset: 'team',
   kind: 'write',
   scope: 'team:import',
@@ -123,7 +123,7 @@ export const teamImportsStart = defineAction({
     },
     required: ['uploadUrl', 'method', 'expiresAt'],
   },
-  tool: { name: 'start_team_import', title: 'Import a team', description: 'For an administrator of this server: get a one-time address (1 hour) to upload a team export to. The upload becomes a hidden team to check, then confirm_team_import or discard_team_import.' },
+  tool: { name: 'start_team_import', title: 'Import a team', description: 'For an administrator of this server: get a one-time address (1 hour) to upload a team export to. The upload becomes a hidden team to check, which confirm_team_import makes live or discard_team_import deletes.' },
   handler: (principal, _input, { deps }) => deps.teamTransfer.startImport(principal.userId),
 })
 
@@ -165,7 +165,7 @@ export const teamImportsConfirm = defineAction({
   id: 'teamImports.confirm',
   title: 'Confirm import',
   description:
-    'For an administrator of this server: makes a pending import\'s team live. Its slates and presentations get back the visibility they had (public, unlisted or private). With invite true, each person whose address the source had verified, and no account here uses in any letter case, gets an email to claim their placeholder; the answer lists addresses that already have an account (they must agree to move) and addresses the source had not verified (invite each with teamImports.invite once you have checked it). Board rules stay switched off until a team admin reviews them.',
+    'For an administrator of this server: makes a pending import\'s team live. Its slates and presentations get back the visibility they had (public, unlisted or private). With invite true, each person whose address the source had verified, and no account here uses in any letter case, gets an email to claim their placeholder; the answer lists addresses that already have an account (they must agree to move) and addresses the source had not verified (teamImports.invite invites each once its address is checked). Board rules stay switched off until a team admin reviews them.',
   toolset: 'team',
   kind: 'write',
   scope: 'team:import',

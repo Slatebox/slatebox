@@ -9,7 +9,7 @@ export default defineAction({
   id: 'presence.plan',
   title: 'Show a plan',
   description:
-    'Show the people on a slate what this run will do: 1 to 8 short steps, as a checklist beside your named pointer. The first step is under way; tick steps with presence.step. Saves move the pointer to what they change. At most 3 plans per run. A preview run shows nothing.',
+    'Show the people on a slate what this run will do: 1 to 8 short steps, as a checklist beside your named pointer. The first step is under way; presence.step ticks the steps. Saves move the pointer to what they change. At most 3 plans per run. A preview run shows nothing.',
   toolset: 'presence',
   kind: 'write',
   scope: 'slates:write',

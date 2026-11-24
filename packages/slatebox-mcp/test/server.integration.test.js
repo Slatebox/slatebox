@@ -56,7 +56,7 @@ test("tools/list starts with exec and describe, byte-equal to the generated defi
     assert.deepEqual(tool, expected);
   }
   const exec = tools[0];
-  assert.deepEqual(exec.annotations, { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+  assert.deepEqual(exec.annotations, { title: exec.title, readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
   assert.ok(exec.description.length <= 3500, String(exec.description.length));
   assert.equal(tools[1].annotations.readOnlyHint, true);
   assert.equal(client.getInstructions(), file.instructions);
@@ -108,7 +108,7 @@ test("describe lists every method with rules and recipes, and slices declaration
   assert.equal(all.recipes.length, 3);
   assert.ok(all.errors.some((e) => e.code === "confirmation_required"));
   assert.equal(all.limits.callsPerScript, 64);
-  assert.match(all.rules, /^Run a short JavaScript or TypeScript program against Slatebox\./);
+  assert.match(all.rules, /^Runs a short JavaScript or TypeScript program against Slatebox\./);
   assert.equal(all.methods[0].dts, undefined, "the index carries no declarations");
   const sliced = (await client.callTool({ name: "describe", arguments: { methods: ["slates.applyOperations"] } })).structuredContent;
   assert.deepEqual(sliced.methods.map((m) => m.name), ["slates.applyOperations"]);

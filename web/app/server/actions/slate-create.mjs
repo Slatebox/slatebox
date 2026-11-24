@@ -62,7 +62,7 @@ export default defineAction({
     ],
   },
   failure: { code: 'slate_create_failed', message: 'The slate could not be created. Retry with the same key.' },
-  tool: { name: 'create_slate', title: 'Create a flowchart or decision map', description: 'Create a new private slate and return its link: a flowchart or process diagram from steps written as "A -> B" (kind "diagram"), or a decision map from a one-line question. For a mind map or a project plan, use import_mermaid.' },
+  tool: { name: 'create_slate', title: 'Create a flowchart or decision map', description: 'Create a new private slate and return its link: a flowchart or process diagram from steps written as "A -> B" (kind "diagram"), or a decision map from a one-line question. Mind maps and project plans are drawn from Mermaid by import_mermaid.' },
   handler: (principal, input, { deps, idempotencyKey }) =>
     deps.createPrivateSlate({ token: tokenLike(principal), key: idempotencyKey, body: input }),
 })

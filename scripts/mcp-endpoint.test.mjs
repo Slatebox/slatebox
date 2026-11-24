@@ -245,8 +245,8 @@ test("the AI tools' hints say what they do: a change that can remove is destruct
   const { connect } = await setup(t);
   const client = await connect();
   const byName = new Map((await client.listTools()).tools.map((tool) => [tool.name, tool.annotations]));
-  assert.deepEqual(byName.get("update_ai_settings"), { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
-  assert.deepEqual(byName.get("check_ai_connection"), { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true });
+  assert.deepEqual(byName.get("update_ai_settings"), { title: "Change AI connections and choices", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
+  assert.deepEqual(byName.get("check_ai_connection"), { title: "Test an AI connection", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true });
 });
 
 test("prompts list and fill; resources give the client docs and a slate as JSON or Mermaid", async (t) => {

@@ -40,7 +40,7 @@ export const shapesGenerate = defineAction({
   id: 'shapes.generate',
   title: 'Draw shapes',
   description:
-    'Draw 1 to 4 outlines for notes from a description ("a rocket", "a speech bubble with the tail on the left"), using the AI feature shape (counted like other AI use). Each candidate is one checked SVG path; pass its candidateId (good for 30 days) to shapes.apply, or put {name, d, fillRule} as the shape in an applyOperations update_nodes or add_nodes plan. The same description again returns the same candidates at no cost unless fresh is true. At most 20 drawings per person per hour.',
+    'Draw 1 to 4 outlines for notes from a description ("a rocket", "a speech bubble with the tail on the left"), using the AI feature shape (counted like other AI use). Each candidate is one checked SVG path: shapes.apply takes its candidateId (good for 30 days), and an applyOperations update_nodes or add_nodes plan takes {name, d, fillRule} as the shape. The same description again returns the same candidates at no cost unless fresh is true. At most 20 drawings per person per hour.',
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:write',
@@ -85,7 +85,7 @@ export const shapesList = defineAction({
   id: 'shapes.list',
   title: 'List shapes',
   description:
-    'The shapes in your library and your team\'s (newest used first): id, name, proportions, visibility, and the outline when 24 or fewer come back. Put one on notes with shapes.apply and shape "lib:<id>".',
+    'The shapes in your library and your team\'s (newest used first): id, name, proportions, visibility, and the outline when 24 or fewer come back. shapes.apply takes one as shape "lib:<id>".',
   toolset: 'slates',
   kind: 'read',
   scope: 'slates:read',

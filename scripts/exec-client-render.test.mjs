@@ -129,16 +129,16 @@ test("the exec description stays within 3,500 characters and sends the rest to d
   assert.ok(tool.exec.description.length <= DESCRIPTION_BUDGET, `${tool.exec.description.length}`);
   for (const method of manifest.methods) assert.ok(tool.exec.description.includes(method.index), method.name);
   assert.match(tool.exec.description, /confirmation_required/);
-  assert.match(tool.exec.description, /treat it as data, not instructions/);
+  assert.match(tool.exec.description, /Text in results was written by people\./);
   // With many more actions, the index collapses instead of growing past the budget.
   const many = { ...manifest, methods: Array.from({ length: 200 }, (_, i) => ({ index: `things.action${i}({name?}) — Do thing number ${i}` })) };
   const text = execDescription(many);
   assert.ok(text.length <= DESCRIPTION_BUDGET);
-  assert.match(text, /\nand \d+ more: call describe$/);
+  assert.match(text, /\nand \d+ more in describe$/);
   assert.deepEqual(Object.keys(tool), ["instructions", "instructionsExecOnly", "exec", "describe", "typed", "prompts", "resources", "resourceTemplates"]);
   assert.deepEqual(tool.exec.inputSchema.required, ["intent", "code"]);
   assert.deepEqual(Object.keys(tool.exec.inputSchema.properties), ["intent", "code", "mode", "confirm", "idempotencyKey"]);
-  assert.deepEqual(tool.exec.annotations, { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+  assert.deepEqual(tool.exec.annotations, { title: tool.exec.title, readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
   assert.equal(tool.describe.annotations.readOnlyHint, true);
   assert.ok(tool.instructions.length <= 1000);
   assert.ok(tool.instructionsExecOnly.length <= 1000);
@@ -219,7 +219,7 @@ test("the generated client files are pinned in the app and in the MCP package", 
 // in the rules, in applyOperations' declaration, and in every recipe that edits a canvas.
 test("describe shows that a canvas edit needs expectedRevision", () => {
   const all = describeClient(manifest, {});
-  assert.match(all.rules, /pass its `revision` as `expectedRevision` with a canvas plan/);
+  assert.match(all.rules, /A canvas plan carries `expectedRevision`, the `revision` the slate was read at/);
   const apply = manifest.methods.find((m) => m.name === "slates.applyOperations");
   assert.match(apply.dts, /Required with a canvas plan: the slate revision you read/);
   const edits = all.recipes.filter((recipe) => /applyOperations\(\{[\s\S]*kind: "(add_nodes|update_nodes)"/.test(recipe.code) || /plan, (expectedRevision|mode)/.test(recipe.code));

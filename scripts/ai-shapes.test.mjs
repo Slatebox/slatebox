@@ -309,7 +309,7 @@ test("drawing is published as a write that spends: not read-only, not idempotent
   assert.equal(action.changesNoSlate, true);
   assert.equal(action.openWorld, true);
   const tool = renderExecTool(buildClientManifest(registry)).typed.find((t) => t.method === "shapes.generate");
-  assert.deepEqual(tool.annotations, { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true });
+  assert.deepEqual(tool.annotations, { title: tool.title, readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true });
   assert.match(action.description, /good for 30 days/);
 });
 

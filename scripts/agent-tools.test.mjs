@@ -49,7 +49,7 @@ test("one typed tool per client method, generated from the contract", () => {
   }
   // A long field is named with a pointer to describe, never cut silently.
   const edit = tools.typed.find((tool) => tool.method === "slates.applyOperations");
-  assert.match(edit.inputSchema.properties.plan.description, /call describe with methods \["slates\.applyOperations"\]/);
+  assert.match(edit.inputSchema.properties.plan.description, /in describe, methods \["slates\.applyOperations"\]/);
 });
 
 test("tool names are unique, snake_case and at most 64 characters", () => {
@@ -68,14 +68,15 @@ test("every tool carries a title and all four annotations as booleans, true to i
   for (const tool of tools.typed) {
     const action = registry.get(tool.method);
     assert.deepEqual(tool.annotations, {
+      title: tool.title,
       readOnlyHint: action.readOnly,
       destructiveHint: !action.readOnly && action.destructive,
       idempotentHint: action.idempotent,
       openWorldHint: action.openWorld,
     }, tool.name);
   }
-  assert.deepEqual(tools.exec.annotations, { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
-  assert.deepEqual(tools.describe.annotations, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+  assert.deepEqual(tools.exec.annotations, { title: tools.exec.title, readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+  assert.deepEqual(tools.describe.annotations, { title: tools.describe.title, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
   const byName = Object.fromEntries(tools.typed.map((tool) => [tool.name, tool]));
   assert.equal(byName.get_slate.annotations.readOnlyHint, true);
   assert.equal(byName.edit_slate.annotations.destructiveHint, true);
@@ -113,7 +114,7 @@ test("tool text, instructions, prompts and resources carry no promotional words"
 
 test("the instructions state facts and name only tools that exist", () => {
   const names = new Set(listedTools(tools).map((tool) => tool.name));
-  const mentioned = (text) => [...text.matchAll(/\b([a-z]+_[a-z_]+)\b/g)].map((m) => m[1]).filter((w) => !["confirmation_required"].includes(w));
+  const mentioned = (text) => [...text.matchAll(/\b([a-z]+_[a-z_]+)\b/g)].map((m) => m[1]).filter((w) => !["confirmation_required", "slate_changed"].includes(w));
   for (const name of mentioned(tools.instructions)) assert.ok(names.has(name), `instructions name ${name}`);
   for (const p of PROMPTS) for (const name of mentioned(p.template)) assert.ok(names.has(name), `${p.name} names ${name}`);
   // The words each action gives its tool may point to another tool; that tool must exist.

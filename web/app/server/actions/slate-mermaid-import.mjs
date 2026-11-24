@@ -133,7 +133,7 @@ export default defineAction({
   id: 'slates.importMermaid',
   title: 'Draw Mermaid',
   description:
-    'Draw a Mermaid flowchart, mind map or Gantt chart as real notes and lines, laid out in the diagram\'s direction (subgraphs and Gantt sections become frames). With shareId the diagram is added beside what that slate holds (you must be able to edit it; everyone on the slate sees it drawn); without, it becomes a new private slate of yours named name (or the diagram\'s title). Mermaid in a Markdown ```mermaid block is read too. Another kind of diagram is refused with 422 mermaid_unsupported; a mistake with 400 mermaid_invalid naming its line; a diagram past a slate\'s limits (1,000 notes counting frames, 5,000 lines, frames 50 deep, or a subgraph too big for one frame) with 422 mermaid_too_large. Send mode "preview" to see what would be drawn without saving.',
+    'Draw a Mermaid flowchart, mind map or Gantt chart as real notes and lines, laid out in the diagram\'s direction (subgraphs and Gantt sections become frames). With shareId the diagram is added beside what that slate holds (it needs edit access; everyone on the slate sees it drawn); without, it becomes a new private slate of yours named name (or the diagram\'s title). Mermaid in a Markdown ```mermaid block is read too. Another kind of diagram is refused with 422 mermaid_unsupported; a mistake with 400 mermaid_invalid naming its line; a diagram past a slate\'s limits (1,000 notes counting frames, 5,000 lines, frames 50 deep, or a subgraph too big for one frame) with 422 mermaid_too_large. mode "preview" shows what would be drawn without saving.',
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:write',

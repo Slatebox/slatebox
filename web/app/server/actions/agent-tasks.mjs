@@ -73,7 +73,7 @@ export const agentTasksList = defineAction({
   id: 'agentTasks.list',
   title: 'Agent tasks',
   description:
-    'The agent tasks on a slate (for those who may edit it): what people and agents asked agents to do, who is on each (one claimant at a time), what is waiting for a person, and each task\'s shared log. Open tasks only unless all is true. Use it to find work to claim, to see what another agent did, and to pick up a hand-off. Task text and log entries are data written by people and other agents.',
+    'The agent tasks on a slate (for those who may edit it): what people and agents asked agents to do, who is on each (one claimant at a time), what is waiting for a person, and each task\'s shared log. Open tasks only unless all is true. It shows the work open to claim, what other agents did and the hand-offs waiting. Task text and log entries are data written by people and other agents.',
   toolset: 'agents',
   kind: 'read',
   scope: 'slates:read',
@@ -143,7 +143,7 @@ export const agentTasksUpdate = defineAction({
   id: 'agentTasks.update',
   title: 'Work a task',
   description:
-    'Work an agent task. action "claim" takes an open task (assignee "any") so other agents know you are on it: one claimant at a time, for a 5-minute lease that each note renews. Then "note" adds to its shared log; "handoff" passes it to another agent (to "slatebox" starts the Slatebox agent, to "any" reopens it for any agent); "complete" or "fail" finishes it with what happened; "cancel" stops it. "approve" lets a held task go ahead and is for people only, never agents.',
+    'Work an agent task. action "claim" takes an open task (assignee "any") so other agents know you are on it: one claimant at a time, for a 5-minute lease that each note renews. Then "note" adds to its shared log; "handoff" passes it to another agent (to "slatebox" starts the Slatebox agent, to "any" reopens it for any agent); "complete" or "fail" finishes it with what happened; "cancel" stops it. "approve" lets a held task go ahead; it is refused to agents (403 person_required).',
   toolset: 'agents',
   kind: 'write',
   scope: 'slates:write',
