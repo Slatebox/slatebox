@@ -64,6 +64,9 @@ export const reviewRefine = defineAction({
     required: ['itemId', 'reply'],
   },
   tool: { name: 'refine_library_item', title: 'Refine a library submission', description: 'For administrators: change a library submission in review by asking in plain words; preview the change, then keep it.' },
+  // When the AI fails (a provider error, an answer that could not be read), the reviewer is told so in
+  // plain words, with the changes that need no AI, instead of a bare "could not be completed".
+  failure: { code: 'refine_failed', message: 'The AI could not answer just now. Ask again, or say the change itself: "rename it to …", "put it in Decide", "summary: …".' },
   handler: (principal, input, { deps, mode }) => deps.library.review.refine(principal, input, { mode }),
 })
 

@@ -179,6 +179,36 @@ test("an AI refinement is a proposal until Keep, kept exactly as previewed, and 
   assert.equal(published.item.summary, "What went well, what to change, what to try");
 });
 
+test("when the AI fails, the reviewer is told so in plain words, with the changes that need no AI, and nothing changes", async (t) => {
+  // A provider that is not set up answers an abort naming itself; the reviewer never sees that, nor a bare "could not be completed".
+  const refineWithAI = createRefineAI({
+    request: async () => ({ abort: true, abortMessage: "provider-x is not configured for this AI request." }),
+    meter: (_opts, fn) => fn(),
+  });
+  const env = await setup(t, { refineWithAI });
+  const { run, person, item } = env;
+  const itemId = await component(env);
+  const root = person("admin");
+  await run(root, "library.review.open", { itemId });
+  for (const call of [
+    () => run(root, "library.review.refine", { itemId, message: "Write a clearer one-line summary", mode: "preview" }),
+    () => env.ddp("admin", "library.review.refine", { itemId, message: "Write a clearer one-line summary", mode: "preview" }),
+  ]) {
+    await assert.rejects(call(), (error) => {
+      const code = error.code ?? error.error, message = error.message ?? error.reason;
+      assert.equal(code, "refine_failed");
+      assert.match(message, /The AI could not answer just now/);
+      assert.match(message, /rename it to/);
+      assert.doesNotMatch(message, /provider-x|could not be completed/);
+      return true;
+    });
+  }
+  assert.equal(item(itemId).summary, "Went well, change, try");
+  // The changes that need no AI still work.
+  const renamed = await run(root, "library.review.refine", { itemId, message: "rename it to Friday retro", mode: "save" });
+  assert.equal(renamed.kept, true);
+});
+
 test("a presentation is published with its deck through the same queue, and a copy brings the deck along, private", async (t) => {
   const decks = new Map();
   const copies = [];
