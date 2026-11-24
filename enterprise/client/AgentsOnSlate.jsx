@@ -50,7 +50,7 @@ export function cannotAskText(c) {
   if (!c.mine) return `Only ${c.inviterName || 'the person who invited it'} can ask ${c.name}.`
   if (c.status === 'needs_sign_in') return `${c.name} needs you to sign in again. Open its chip under the canvas and choose Sign in again.`
   if (c.status === 'pro_ended') return `Asking ${c.name} is part of Slatebox Pro and Slatebox Business. Open its chip under the canvas to renew Pro.`
-  if (c.status === 'paused') return `${c.name}'s tools changed. Open its chip under the canvas to look at them again.`
+  if (c.status === 'paused') return `${c.name}'s tools changed. Invite it again from + Invite agent to look at them.`
   return ''
 }
 
@@ -71,13 +71,25 @@ export function askableEntries(connections, { readSelection, readView } = {}) {
       canAsk: Boolean(c.mine) && c.status === 'active',
       why: cannotAskText(c),
       // history: its last turns in Ask Slatebox, so a follow-up has context (sent as data).
-      ask: (request, history = []) => {
+      // askId: the conversation turn's id. The same turn sent again (Meteor after a reconnect, or Try
+      // again) is the same ask, answered once: the server keeps the first answer under that key.
+      ask: async (request, history = [], { askId = null } = {}) => {
         const view = readView?.() || null
-        return Meteor.callAsync('connectors.call', { connectionId: c._id, request, selection: readSelection?.() || [], ...(view && { view }), ...(history.length && { history: history.slice(-3) }) })
-          .catch((error) => {
+        const input = { connectionId: c._id, request, selection: readSelection?.() || [], ...(view && { view }), ...(history.length && { history: history.slice(-3) }) }
+        const key = askId ? ('ask-' + c._id + '-' + askId).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 120) : undefined
+        for (let waited = 0; ; waited++) {
+          try {
+            return await Meteor.callAsync('connectors.call', input, ...(key ? [{ idempotencyKey: key }] : []))
+          } catch (error) {
+            // The first send of this ask is still running (the page reconnected meanwhile): wait for its answer.
+            if (error?.error === 'request_in_progress' && waited < 30) {
+              await new Promise((resolve) => setTimeout(resolve, 2000))
+              continue
+            }
             enterpriseSlots.lockIfRefused(error)
             throw error
-          })
+          }
+        }
       },
     }))
 }
@@ -185,6 +197,8 @@ export function InvitedAgentControls({ agentId, shareId, canEdit = false, paused
     <Box sx={{ mt: 1.5 }} data-agent-invited-controls={c.name}>
       <Box data-agent-summary={c.name}>
         {card?.lands && <Typography variant="body2">{card.lands}</Typography>}
+        {/* Invited before it left the gallery: it still works; the chip says why it is not listed. */}
+        {!card && c.retired && <Typography variant="body2" data-agent-retired="">No longer in the gallery: {c.retired}</Typography>}
         {c.mine && <Typography variant="caption" color="text.secondary" component="div">{seesText(c.contextLevel)}</Typography>}
         {c.mine && c.status === 'active' && (
           <>

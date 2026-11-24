@@ -24,6 +24,17 @@ const libraryModule=()=>import('../../api/common/library.mjs')
 // Import from Excalidraw (the + menu): its own chunk, loaded when someone picks it.
 const ImportExcalidraw=lazy(()=>import('./library/ImportExcalidraw'))
 
+// What landed for an agent's turn, as counts only (null when nothing did).
+const addedOf=added=>{
+  const notes=Math.max(0,Math.min(99,Math.floor(Number(added?.notes)||0))), lines=Math.max(0,Math.min(99,Math.floor(Number(added?.lines)||0)))
+  return notes||lines ? {notes,lines} : null
+}
+// An agent's turn as Slatebox's AI hears it: who was asked and what landed, in this page's words.
+const agentSummary=(name,added)=>{
+  const a=addedOf(added), what=a ? [a.notes && `${a.notes} ${a.notes===1?'note':'notes'}`,a.lines && `${a.lines} ${a.lines===1?'line':'lines'}`].filter(Boolean).join(' and ') : ''
+  return `(${name} was asked this${what ? ` and suggested ${what} on the slate` : ''}.)`
+}
+
 // Drawing requests run on exec (canvasConversation.*); workshop and interactive-route requests
 // keep their own methods (nativeCanvas.*) until the registry has actions for them.
 const methodsFor=message=>nativeRequestKind(message)==='draw' ? 'canvasConversation' : 'nativeCanvas'
@@ -77,12 +88,14 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
   // A refusal the pay sheet answers (Get Pro, top up…), with the message it refused, to send again after.
   const [refusal,setRefusal]=useState(null)
   const inFlight=useRef(false), asked=useRef(0), before=useRef(''), input=useRef(null)
+  // The turn waiting for its answer (its "thinking" bubble goes if the person cancels).
+  const pendingTurn=useRef(null)
   const historyKey = 'slatebox:native-chat:' + Meteor.userId() + ':' + shareId
   const [history,setHistory] = useState(() => {
     try {
       const rows = JSON.parse(localStorage.getItem(historyKey) || '[]')
       return Array.isArray(rows) ? rows.filter(turn => typeof turn?.message === 'string' && typeof turn?.reply === 'string')
-        .map(({id,message,reply,attach,agent,failed}) => ({id,message,reply,...(attach?.type==='catalog' && Array.isArray(attach.entries) && {attach:{type:'catalog',entries:attach.entries.filter(e=>typeof e==='string').slice(0,10)}}),...(agentOfTurn(agent) && {agent:agentOfTurn(agent)}),...(failed===true && {failed:true})})).slice(-6) : []
+        .map(({id,message,reply,attach,agent,failed,added}) => ({id,message,reply,...(agentOfTurn(agent) && addedOf(added) && {added:addedOf(added)}),...(attach?.type==='catalog' && Array.isArray(attach.entries) && {attach:{type:'catalog',entries:attach.entries.filter(e=>typeof e==='string').slice(0,10)}}),...(agentOfTurn(agent) && {agent:agentOfTurn(agent)}),...(failed===true && {failed:true})})).slice(-6) : []
     } catch {return []}
   })
   const brief=board.options?.creationBrief
@@ -91,10 +104,10 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
   const agents=useAtomValue(askableAgentsAtom)
   const openChip=useSetAtom(openAgentAtom)
   // Who the conversation is with: after "@GitHub", follow-ups go to GitHub until the person clears it
-  // ("Replying to GitHub ×") or names someone else ("@Slatebox", "@Linear"). Kept per slate.
-  const toKey=historyKey+':to'
-  const [replyingTo,setReplyingToState]=useState(() => {try {return localStorage.getItem(toKey) || null} catch {return null}})
-  const setReplyingTo=agentId => {setReplyingToState(agentId || null);try {agentId ? localStorage.setItem(toKey,agentId) : localStorage.removeItem(toKey)} catch {}}
+  // ("Replying to GitHub ×") or names someone else ("@Slatebox", "@Linear"). For this visit only: a
+  // reload starts with Slatebox, so a message is never sent to an agent the person can't see chosen.
+  const [replyingTo,setReplyingToState]=useState(null)
+  const setReplyingTo=agentId => setReplyingToState(agentId || null)
   const replying=replyingTo ? agents.find(a=>a.agentId===replyingTo && a.canAsk) ?? null : null
   // "Ask in chat" on an agent's chip: replying to it, the box ready to type.
   const [chatWith,setChatWith]=useAtom(openChatWithAtom)
@@ -104,11 +117,13 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     setChatWith(null)
     requestAnimationFrame(()=>input.current?.focus())
   }, [chatWith?.nonce])
-  // What Slatebox's AI is told of the conversation: its own turns, and an agent's as a summary
-  // ("GitHub: Added 2 notes …"), so "make notes about those" has something to point at.
-  const aiHistory=()=>history.filter(turn=>!turn.pending && !turn.failed).map(({message,reply,agent})=>({message,reply:agent ? `${agent.name}: ${reply}`.slice(0,4000) : reply}))
-  // An agent's own thread: its last turns, for a follow-up's context (sent as data).
-  const agentHistory=name=>history.filter(turn=>!turn.pending && !turn.failed && turn.agent && sameAgentName(turn.agent.name,name)).slice(-3).map(({message,reply})=>({message:message.slice(0,1200),reply:reply.slice(0,1200)}))
+  // What Slatebox's AI is told of the conversation: its own turns, and an agent's as what this page
+  // knows for certain ("GitHub was asked this and suggested 2 notes"), so "make notes about those"
+  // has something to point at. Never the agent's own words: they were written from an outside
+  // server's answer, and Slatebox's AI must not take them as its own.
+  const aiHistory=()=>history.filter(turn=>!turn.pending && !turn.failed).map(({message,reply,agent,added})=>({message,reply:agent ? agentSummary(agent.name,added) : reply}))
+  // An agent's own thread: the person's last messages to it and what landed (counts), for a follow-up's context.
+  const agentHistory=name=>history.filter(turn=>!turn.pending && !turn.failed && turn.agent && sameAgentName(turn.agent.name,name)).slice(-3).map(({message,added})=>({message:message.slice(0,1200),...(addedOf(added) && {added:addedOf(added)})}))
   // A preview is made against the drawing as it was asked about. Once the drawing has moved on
   // (a note moved, renamed or deleted, by this person or a teammate) Keep would be refused, so it
   // is not offered, and the preview, drawn against the old drawing, leaves the canvas.
@@ -148,10 +163,12 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     if(!agent.canAsk) return answer(agent.why || `Only ${agent.inviterName || 'the person who invited it'} can ask ${agent.name}.`)
     if(request.length<2) return answer(`What should ${agent.name} do? Write it after @${agent.name}.`)
     remember({id,message,reply:'',agent:who,pending:true})
+    pendingTurn.current=id
     try {
-      const result=await agent.ask(request,agentHistory(agent.name))
+      // The turn's id is the ask's key: sent again (a reconnect, Try again), it is answered once.
+      const result=await agent.ask(request,agentHistory(agent.name),{askId:id})
       if(turn!==asked.current) return
-      answer(agentChatReply(agent.name,result))
+      answer(agentChatReply(agent.name,result),addedOf(result?.added) ? {added:addedOf(result.added)} : {})
     } catch(e) {
       if(turn!==asked.current) return
       const {text:reply,next}=agentErrorReply(agent.name,e)
@@ -177,6 +194,7 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
         return
       }
       remember({id,message,reply:'',pending:true})
+      pendingTurn.current=id
       // The library reads "Add a retro" and answers "what can I add?" here, with no AI call.
       const lib=await libraryModule().catch(()=>null)
       if(turn!==asked.current) return
@@ -218,6 +236,10 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
   function cancel() {
     asked.current++
     inFlight.current=false;setBusy(null)
+    // Its waiting bubble goes with it (the person's message goes back in the box to edit or send again).
+    const waiting=historyNow.current.find(turn=>turn.id===pendingTurn.current && turn.pending)
+    if(waiting) {forget(waiting.id);setText(waiting.message)}
+    pendingTurn.current=null
   }
   async function keep() {
     if(inFlight.current) return
@@ -290,7 +312,7 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     const found=typeof entry==='string' ? lib.catalogEntry(entry) : entry
     if(!found) return
     setView(null)
-    ask(found.addSay[0])
+    ask(found.addSay[0],{to:'slatebox'})
   }
   const browse = (start={}) => setView({start})
   const say = value => { setView(null); suggest({text:value}) }
@@ -314,21 +336,22 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     </>}
     prompt={empty ? null : 'What should happen on this slate?'}
     starters={!empty && <Box aria-label="Starter messages" sx={{display:'flex',flexWrap:'wrap',gap:.5,my:1}}>
-      {canvasStarters(board.nodes).map(({label},i)=><Button key={label} size="small" onClick={()=>suggest(canvasStarters(liveNodes())[i])}>{label}</Button>)}
+      {/* Slatebox's own starters: the message they fill goes to Slatebox, not the agent the conversation was with. */}
+      {canvasStarters(board.nodes).map(({label},i)=><Button key={label} size="small" onClick={()=>{setReplyingTo(null);suggest(canvasStarters(liveNodes())[i])}}>{label}</Button>)}
       {/* Your invited agents: "@GitHub " starts a message to one. */}
       {agents.filter(a=>a.canAsk).map(a=><Button key={'agent-'+a.agentId} size="small" data-mention-agent={a.name} sx={{color:a.color}} onClick={()=>{setReplyingTo(a.agentId);suggest({text:''})}}>@{a.name}</Button>)}
       <AddShort onBrowse={()=>browse()} />
     </Box>} />
   if(view) return <ConversationPanel anchor="top" onClose={onClose} composer={composer}>
     <Suspense fallback={<Typography variant="body2" sx={{my:2}}>Opening the library…</Typography>}>
-      <LibraryView start={view.start} onBack={()=>setView(null)} onAdd={addEntry} onSay={say} onSend={value=>{setView(null);ask(value)}} />
+      <LibraryView start={view.start} onBack={()=>setView(null)} onAdd={addEntry} onSay={say} onSend={value=>{setView(null);ask(value,{to:'slatebox'})}} />
     </Suspense>
   </ConversationPanel>
   return <ConversationPanel anchor={firstTurn ? 'top' : 'bottom'} onClose={onClose} composer={composer}>
     {about}
     {brief && <Box aria-label="Opening message" sx={{my:1}}>
       <ChatTurn who="you" as="div" after={!draft && !history.some(turn=>turn.message===brief) &&
-        <Button size="small" disabled={Boolean(busy)} onClick={()=>ask(brief)}>Draft from this brief</Button>}>{brief}</ChatTurn></Box>}
+        <Button size="small" disabled={Boolean(busy)} onClick={()=>ask(brief,{to:'slatebox'})}>Draft from this brief</Button>}>{brief}</ChatTurn></Box>}
     {importing && !draft && <Suspense fallback={<Typography variant="body2" sx={{my:2}}>Opening the import…</Typography>}>
       <ImportExcalidraw shareId={shareId} onBack={()=>setImporting(false)} onPreview={(res,message)=>{
         before.current=readNodes()
@@ -337,7 +360,7 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
       }} />
     </Suspense>}
     {firstTurn && !importing && <Suspense fallback={null}><FirstTurn onAdd={addEntry} onOpen={entry=>browse({entry:entry.id})} onBrowse={browse} onGoal={value=>suggest({text:value})}
-      build={board.library?.mode==='build' ? board.library : null} onSend={ask} /></Suspense>}
+      build={board.library?.mode==='build' ? board.library : null} onSend={value=>ask(value,{to:'slatebox'})} /></Suspense>}
     {history.length>0 && <Box component="ol" aria-label="Kept conversation" sx={{listStyle:'none',p:0,my:1}}>
       {history.map(turn=><Box component="li" key={turn.id} data-turn-failed={turn.failed ? '' : undefined}>
         {turn.message!==brief && <ChatTurn who="you" as="div">{turn.message}</ChatTurn>}

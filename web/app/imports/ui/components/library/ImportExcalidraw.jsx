@@ -11,9 +11,10 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { decryptShare, sceneElements, sceneToLayout, shareLinkParts, skippedWords, SCENE_LIMITS } from '../../../api/common/excalidraw-scene.mjs'
+import { decryptShare, inflateCapped, sceneElements, sceneToLayout, shareLinkParts, skippedWords, SCENE_LIMITS } from '../../../api/common/excalidraw-scene.mjs'
 
-const inflate = async (bytes) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer())
+// Inflated with a cap: a crafted link cannot inflate without end in this tab.
+const inflate = (bytes) => inflateCapped(bytes)
 
 /** onPreview(result, message): the server's preview, shown by the conversation as its draft. */
 export default function ImportExcalidraw({ shareId, onPreview, onBack }) {

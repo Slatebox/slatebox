@@ -138,7 +138,8 @@ const errorText = (error) => {
 
 /** The gallery card's state for this person: { here } when one of their agents on this slate came from it. */
 export function cardState(item, invited = []) {
-  const here = invited.find((c) => c.galleryId === item.id && c.mine && c.status !== 'removed') || null
+  // A paused copy (its tools changed) is invited again to look at them, so its card stays open.
+  const here = invited.find((c) => c.galleryId === item.id && c.mine && c.status !== 'removed' && c.status !== 'paused') || null
   return { here }
 }
 
@@ -158,8 +159,9 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
   // A pasted address (or a card) for an agent of yours already here: { agentId, name, text }.
   const [already, setAlready] = useState(null)
   // The gallery as administrators set it (/admin/ai › Gallery), and whether this person may invite;
-  // the built-in cards until it answers.
-  const [gallery, setGallery] = useState({ cards: GALLERY, canInvite: null })
+  // null until it answers (cards an administrator turned off are never shown), the built-in cards
+  // only if it cannot be asked.
+  const [gallery, setGallery] = useState({ cards: null, canInvite: null })
   const { open: openPay, prefetch } = usePaySheet()
   // On a phone the walkthrough is a full-height sheet; its footer stays in reach.
   const theme = useTheme()
@@ -171,8 +173,8 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
   useEffect(() => () => { live.current = false }, [])
   useEffect(() => {
     if (open && !reconnect) Meteor.callAsync('connectors.gallery', {}).then((answer) => {
-      if (live.current && Array.isArray(answer?.cards)) setGallery({ cards: answer.cards, canInvite: Boolean(answer.canInvite) })
-    }).catch(() => {})
+      if (live.current) setGallery(Array.isArray(answer?.cards) ? { cards: answer.cards, canInvite: Boolean(answer.canInvite) } : { cards: GALLERY, canInvite: null })
+    }).catch(() => { if (live.current) setGallery({ cards: GALLERY, canInvite: null }) })
     if (!open) {
       pending.current?.cancel()
       setStep('choose'); setFound(null); setError(''); setAddress(''); setShowAll(false); setKey(''); setClientId(''); setShowKey(false); setAlready(null)
@@ -196,7 +198,7 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
       const result = await Meteor.callAsync('connectors.discover', { shareId, address: target })
       if (!live.current) return
       // Already one of yours here: say so and offer its chip, never a second copy.
-      if (result.alreadyHere && !reconnect) {
+      if (result.alreadyHere && !result.alreadyHere.lookAgain && !reconnect) {
         setStep('choose')
         setAlready(result.alreadyHere)
         return
@@ -211,7 +213,7 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
         setStep('reconnected')
         return
       }
-      setName(result.suggestedName)
+      setName(result.alreadyHere?.lookAgain ? result.alreadyHere.name : result.suggestedName)
       setAllowed(Object.fromEntries(result.tools.map((tool) => [tool.name, tool.policy === 'allow'])))
       setStep('consent')
     } catch (e) {
@@ -341,7 +343,8 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
               </Box>
             )}
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fill, minmax(200px, 1fr))' }, gap: 1.5 }}>
-              {gallery.cards.map((item) => {
+              {!gallery.cards && <Box data-gallery-loading="" sx={{ gridColumn: '1 / -1' }}><LinearProgress aria-label="Loading the gallery" /></Box>}
+              {(gallery.cards || []).map((item) => {
                 const { here } = cardState(item, invited)
                 return (
                   <Box key={item.id} component="button" type="button" data-gallery-card={item.id} data-gallery-here={here ? '' : undefined}
@@ -447,6 +450,7 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
         )}
         {(step === 'consent' || step === 'inviting') && found && (
           <Box data-invite-consent="" sx={{ display: 'grid', gap: 1.5 }}>
+            {found.alreadyHere?.lookAgain && <Box sx={section} data-invite-look-again=""><Typography variant="body2">{found.alreadyHere.text}</Typography></Box>}
             <Box sx={success}>
               <Found>Reached <b>{found.host}</b>{found.serverName ? ` · it calls itself “${found.serverName}” (self-reported)` : ''}</Found>
               <Found>{found.signedIn ? `Signed in${found.signedIn.kind === 'key' ? ' with your key' : ''}: it acts as you on ${found.host}, and only you can ask it` : 'No sign-in: anyone with this address can use this server'}</Found>

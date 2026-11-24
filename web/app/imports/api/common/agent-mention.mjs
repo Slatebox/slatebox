@@ -80,7 +80,7 @@ export function agentErrorReply(name, error = {}) {
   const reason = typeof (error?.reason ?? error?.message) === 'string' ? String(error.reason ?? error.message).trim() : ''
   switch (code) {
     case 'needs_sign_in': return { text: `${name} needs you to sign in again before it can look anything up.`, next: 'signIn' }
-    case 'tools_changed': return { text: `${name}'s tools changed since you invited it. Look at the changes on its chip under the canvas, then ask again.`, next: 'chip' }
+    case 'tools_changed': return { text: `${name}'s tools changed since you invited it. Invite it again from + Invite agent to look at them, then ask again.`, next: null }
     case 'agents_paused': return { text: `Agents are paused on this slate. Resume agents on the roster under the canvas, then ask ${name} again.`, next: 'chip' }
     case 'pro_required': return { text: `Asking ${name} is part of Slatebox Pro and Slatebox Business.`, next: 'pay' }
     case 'busy': return { text: `${name} is still working on your last ask. Wait for it to finish, then ask again.`, next: null }
@@ -96,12 +96,14 @@ export function agentErrorReply(name, error = {}) {
 }
 
 // Words that need an outside agent's data, by gallery card: Slatebox's own AI cannot read them.
+// Only words that mean that service's records: "the issues with this plan" or "a branch of the tree"
+// are everyday words, and "issues" counts only as someone's issues or a repository's.
 const NEEDS = {
-  github: /\b(commits?|pull requests?|PRs?|issues?|repos?|repositor(?:y|ies)|branch(?:es)?|github)\b/i,
-  linear: /\b(cycles?|tickets?|linear|sprint)\b/i,
+  github: /\b(commits?|pull requests?|PRs|repos|repositor(?:y|ies)|github)\b|\b(my|our|open|assigned)\s+(?:open\s+)?issues\b|\bissues\s+(?:assigned|on github|in (?:the |our |my )?repo)/i,
+  linear: /\b(linear|(?:current|this|next|last) cycle|my tickets|tickets assigned)\b/i,
   huggingface: /\b(hugging ?face|datasets?|models? on hugging)\b/i,
 }
-const ASKS_FOR_DATA = /\b(my|our|latest|recent|open|assigned|pending|waiting|what are|which|list|show me|find)\b/i
+const ASKS_FOR_DATA = /\b(my|our|latest|recent|open|assigned|pending|waiting|what are|what is|what's|which|list|show me|find)\b/i
 const DRAWS = /^\s*(draw|sketch|diagram|map out|make a (diagram|flow|chart|mind ?map)|add a (diagram|flow))/i
 
 /**
