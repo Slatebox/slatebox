@@ -47,6 +47,7 @@ test('the common phrasings, each one look', () => {
     'make the cards smaller': { density: 'compact' },
     'roomier cards': { density: 'normal' },
     'make the columns subtler': { emphasis: 'subtle' },
+    'make the columns in the sprint board more pronounced': { emphasis: 'strong' },
     'reset the look': { emphasis: 'normal', headerSize: 'normal', lines: false, density: 'normal' },
   }
   for (const [said, fields] of Object.entries(cases)) assert.deepEqual(edits(board, said), [{ kind: 'set_appearance', ...fields }], said)
@@ -113,4 +114,26 @@ test('the look is data on the board: a library version and a fork carry it, and 
   const { prepareLaneReply } = await import('../web/app/server/methods/lane-chat.mjs')
   const made = prepareLaneReply({ reply: 'Done.', commands: ['Make the headers bigger', 'color Do now green'] }, matrix(), null)
   assert.deepEqual(made.workshop.appearance, { headerSize: 'large', colors: { 'q-do-now': 'green' } })
+})
+
+test('on a slate of several boards the owner’s sentence names its board: "the columns in impact x effort"', async () => {
+  const { pickBoard } = await import('../web/app/imports/api/common/board-pick.mjs')
+  const boards = [{ boardId: 'main', model: team() }, { boardId: 'b2', model: matrix() }]
+  const picked = pickBoard(boards, 'can you make the columns in impact x effort more pronounced?')
+  assert.equal(picked.board.boardId, 'b2')
+  assert.deepEqual(proposeLaneReply(matrix(), picked.message).workshop.appearance, { borders: 'strong', headers: 'strong', fill: 'strong' })
+  // A message that names no board in that place still asks which.
+  assert.ok(pickBoard(boards, 'make the columns more pronounced').ask)
+})
+
+test('keeping a look on a business board saves: the server makes the whole save again as its set_appearance edits', async () => {
+  const { replaceWorkshop } = await import('../web/app/server/methods/workshop-replace.mjs')
+  const board = matrix()
+  const next = proposeLaneReply(board, 'can you make the columns in impact x effort more pronounced?').workshop
+  const saved = replaceWorkshop(board, next, { revision: 3, current: 3, userId: 'u1', actor: { by: 'Bea' } })
+  assert.ok(saved.workshop, JSON.stringify(saved.refused))
+  assert.deepEqual(saved.workshop.appearance, { borders: 'strong', headers: 'strong', fill: 'strong' })
+  const plan = validateWorkshop(catalogSamples['launch-plan']())
+  const colored = proposeAppearance(plan, 'color ' + plan.lanes[0].label + ' green').workshop
+  assert.deepEqual(replaceWorkshop(plan, colored, { revision: 1, current: 1, userId: 'u1' }).workshop.appearance, { colors: { [plan.lanes[0].id]: 'green' } })
 })

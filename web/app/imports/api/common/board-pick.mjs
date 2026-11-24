@@ -9,7 +9,8 @@
 import { noteRequest, noteRequestProblem } from './note-requests.mjs'
 import { asksWhatElse } from './board-focus.mjs'
 
-const words = text => String(text ?? '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
+// "Impact × effort" is said "impact x effort": the sign is the letter.
+const words = text => String(text ?? '').toLowerCase().replace(/×/g, ' x ').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
 const escape = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /** What a person may call a board: its title, and the part before a colon ("Retro" of "Retro: Q3 launch"). */
@@ -32,7 +33,9 @@ export function boardInMessage(boards, message) {
       const said = name.split(' ').map(escape).join('[^a-z0-9]+')
       const start = new RegExp('^(?:on|in|to|for)\\s+(?:the\\s+)?' + said + '(?:\\s+board)?\\s*[,:\\-–—]\\s*', 'i')
       const end = new RegExp('\\s+(?:on|in|to|for)\\s+(?:the\\s+)?' + said + '(?:\\s+board)?\\s*[.!]?$', 'i')
-      const hit = start.exec(text) ?? end.exec(text)
+      // Or after the board's parts it names ("make the columns in Impact × effort more pronounced").
+      const middle = new RegExp('(?<=\\b(?:columns?|lanes?|cards?|quadrants?|squares?|headers?|borders?|stages?))\\s+(?:on|in|of)\\s+(?:the\\s+)?' + said + '(?:\\s+board)?(?=\\s)', 'i')
+      const hit = start.exec(text) ?? end.exec(text) ?? middle.exec(text)
       if (hit) { found.push({ board, rest: (text.slice(0, hit.index) + ' ' + text.slice(hit.index + hit[0].length)).trim() }); break }
     }
   }

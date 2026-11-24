@@ -65,7 +65,9 @@ function partNamed(board, name, selection) {
  * a thrown error with code 'appearance-choices' (and `choices`) when it could mean more than one look.
  */
 export function appearanceEdits(board, message, selection = null) {
-  const text = aboutBoard(board, plainRequest(String(message ?? '')).replace(/\?$/, ''))
+  const said = aboutBoard(board, plainRequest(String(message ?? '')).replace(/\?$/, ''))
+  // "the columns in the sprint board more pronounced": the board named after its parts is this one (the chat picked it).
+  const text = said.replace(new RegExp('\\b(' + COLS + '|' + HEAD + '|' + BORDER + ')\\s+(?:in|on|of)\\s+(?:the\\s+)?[^,]+?\\s+(?=' + MORE + '|' + LESS + ')', 'i'), '$1 ')
   const is = pattern => new RegExp('^' + pattern + '$', 'i').exec(text)
   const edit = fields => [{ kind: 'set_appearance', ...fields }]
   const make = '(?:make|turn|set|give|have|let|i want|we want|could|want)?\\s*'
