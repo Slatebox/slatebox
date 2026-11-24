@@ -207,3 +207,7 @@ export const askAboutNotes = atom(null)
 // ask(request) }. ask resolves to what the agent did ({ items, say, left }); canAsk is true only on
 // its inviter's screen while it can be asked.
 export const askableAgentsAtom = atom([])
+
+// "Ask in chat" on an invited agent's chip: open Ask Slatebox replying to that agent. { agentId, nonce },
+// taken (set back to null) by the conversation once it has read it.
+export const openChatWithAtom = atom(null)

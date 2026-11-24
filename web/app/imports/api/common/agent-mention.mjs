@@ -126,3 +126,29 @@ export function agentOfTurn(agent) {
   const color = typeof agent.color === 'string' && /^#[0-9a-f]{3,8}$/i.test(agent.color) ? agent.color : '#6d28d9'
   return { name: agent.name.trim().slice(0, 40), color }
 }
+
+/**
+ * Who a message in Ask Slatebox goes to (owner, 2026-11-24: after "@GitHub", the conversation stays
+ * with GitHub until the person clears it or names someone else):
+ *   to         'slatebox' or an agentId the page already chose (a button: "Ask @GitHub", "Try again")
+ *   replyingTo the agentId the conversation is with, or null
+ * → { kind: 'agent', agent, request, replyingTo } | { kind: 'hint', agent, replyingTo } | { kind: 'slatebox', replyingTo }
+ *   (replyingTo: who the conversation is with after this message)
+ */
+export function routeMessage(message, { agents = [], replyingTo = null, to = null } = {}) {
+  const text = String(message || '')
+  const toSlatebox = to === 'slatebox' || /(^|[\s(])@slatebox\b/i.test(text)
+  const askable = (agent) => agent?.canAsk === true
+  if (to && to !== 'slatebox') {
+    const agent = agents.find((a) => a.agentId === to)
+    if (agent) return { kind: 'agent', agent, request: mentionedAgent(text, [agent])?.request ?? text.trim(), replyingTo: askable(agent) ? agent.agentId : replyingTo }
+  }
+  if (toSlatebox) return { kind: 'slatebox', replyingTo: null }
+  const mention = mentionedAgent(text, agents)
+  if (mention) return { kind: 'agent', agent: mention.agent, request: mention.request, replyingTo: askable(mention.agent) ? mention.agent.agentId : replyingTo }
+  const current = replyingTo ? agents.find((a) => a.agentId === replyingTo && askable(a)) : null
+  if (current) return { kind: 'agent', agent: current, request: text.trim().slice(0, 1000), replyingTo: current.agentId }
+  const hinted = agentHint(text, agents)
+  if (hinted) return { kind: 'hint', agent: hinted, replyingTo: null }
+  return { kind: 'slatebox', replyingTo: null }
+}

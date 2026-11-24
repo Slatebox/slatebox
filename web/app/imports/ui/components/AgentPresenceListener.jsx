@@ -4,8 +4,9 @@
 // sets there can draw an agent here. The roster shows an agent chip with the full plan.
 //
 // What an agent suggests is published too (agentSuggestions.forSlate) and drawn live, in place, as
-// ghosts on every screen (the engine's createAgentSuggestions): Keep and Discard sit right on each
-// ghost for people who may edit, and Keep all, Discard all, the agent's activity with Undo, and
+// ghosts on every screen (the engine's createAgentSuggestions): each answer is one framed group with
+// Keep all / Discard all on it, a ghost's own Keep and Discard show under the pointer for people who
+// may edit, and Keep all, Discard all, the agent's activity with Undo, and
 // Edit directly sit on its chip. Each choice calls suggestions.decide or agents.control, the same
 // actions a token calls; the server checks the edit right again.
 import React, { useEffect, useMemo, useRef, useState } from 'react'
@@ -145,6 +146,9 @@ export default function AgentPresenceListener({ slate, canEdit = false }) {
           canAct: () => canAct.current,
           onKeep: ({ actionId, itemId }) => decide(shareId, { decision: 'keep', actionId, itemIds: [itemId] }).catch(said),
           onDiscard: ({ actionId, itemId }) => decide(shareId, { decision: 'discard', actionId, itemIds: [itemId] }).catch(said),
+          // Keep all / Discard all on an answer's frame: its waiting items at once (one save, one Undo).
+          onKeepAll: (actionId) => decide(shareId, { decision: 'keep', actionId }).catch(said),
+          onDiscardAll: (actionId) => decide(shareId, { decision: 'discard', actionId }).catch(said),
           toNode: compat.v1NodeToV2,
         })
         ghosts.current.set(latest.current.actions)

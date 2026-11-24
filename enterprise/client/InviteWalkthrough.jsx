@@ -6,6 +6,8 @@
 // a pasted client id, or a pasted key or token) → what it can do, in plain words → which lookups
 // it may use → what it may see, and what leaves Slatebox → it arrives as a named cursor.
 // With `reconnect` (an agent that needs sign-in again) it stops after the sign-in.
+// `invited`: the agents already on this slate. A gallery card for one of yours says ✓ On this slate
+// and offers Manage (its chip) instead of inviting it again; a pasted address of one says so too.
 import React, { useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
@@ -134,7 +136,13 @@ const errorText = (error) => {
   return error?.reason || error?.message || 'That did not work. Try again.'
 }
 
-export default function InviteWalkthrough({ open, onClose, shareId, slateName, onInvited, reconnect }) {
+/** The gallery card's state for this person: { here } when one of their agents on this slate came from it. */
+export function cardState(item, invited = []) {
+  const here = invited.find((c) => c.galleryId === item.id && c.mine && c.status !== 'removed') || null
+  return { here }
+}
+
+export default function InviteWalkthrough({ open, onClose, shareId, slateName, onInvited, reconnect, invited = [], onManage = null }) {
   const [step, setStep] = useState('choose') // choose | discovering | signin | waiting | consent | inviting | reconnected
   const [clientId, setClientId] = useState('')
   const [key, setKey] = useState('')
@@ -147,6 +155,11 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
   const [sees, setSees] = useState('request')
   const [showAll, setShowAll] = useState(false)
   const [error, setError] = useState('')
+  // A pasted address (or a card) for an agent of yours already here: { agentId, name, text }.
+  const [already, setAlready] = useState(null)
+  // The gallery as administrators set it (/admin/ai › Gallery), and whether this person may invite;
+  // the built-in cards until it answers.
+  const [gallery, setGallery] = useState({ cards: GALLERY, canInvite: null })
   const { open: openPay, prefetch } = usePaySheet()
   // On a phone the walkthrough is a full-height sheet; its footer stays in reach.
   const theme = useTheme()
@@ -157,9 +170,12 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
   const live = useRef(true)
   useEffect(() => () => { live.current = false }, [])
   useEffect(() => {
+    if (open && !reconnect) Meteor.callAsync('connectors.gallery', {}).then((answer) => {
+      if (live.current && Array.isArray(answer?.cards)) setGallery({ cards: answer.cards, canInvite: Boolean(answer.canInvite) })
+    }).catch(() => {})
     if (!open) {
       pending.current?.cancel()
-      setStep('choose'); setFound(null); setError(''); setAddress(''); setShowAll(false); setKey(''); setClientId(''); setShowKey(false)
+      setStep('choose'); setFound(null); setError(''); setAddress(''); setShowAll(false); setKey(''); setClientId(''); setShowKey(false); setAlready(null)
     } else if (reconnect?.address) {
       setAddress(reconnect.address)
       discover(reconnect.address)
@@ -174,10 +190,17 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
     const target = (raw ?? address).trim()
     if (!target) return
     setError('')
+    setAlready(null)
     setStep('discovering')
     try {
       const result = await Meteor.callAsync('connectors.discover', { shareId, address: target })
       if (!live.current) return
+      // Already one of yours here: say so and offer its chip, never a second copy.
+      if (result.alreadyHere && !reconnect) {
+        setStep('choose')
+        setAlready(result.alreadyHere)
+        return
+      }
       setFound(result)
       if (result.signIn) {
         setShowKey(result.signIn.method === 'key')
@@ -259,6 +282,11 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
         setError(errorText(e))
         return discover(found.address)
       }
+      if (e?.error === 'already_here') {
+        setStep('choose')
+        setAlready({ ...(e.details || {}), text: e.reason })
+        return
+      }
       setError(errorText(e))
     }
   }
@@ -306,37 +334,51 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
               <Button type="submit" variant="contained" onPointerEnter={prefetch} disabled={!address.trim()} sx={{ px: 2.5, flexShrink: 0 }}>Next</Button>
             </Box>
             {error && <Problem text={error} />}
+            {already && (
+              <Box role="status" data-invite-already={already.name} sx={(t) => ({ ...section(t), display: 'flex', alignItems: 'center', gap: 1 })}>
+                <Typography variant="body2" sx={{ flex: 1 }}>✓ {already.text || `${already.name} is already on this slate.`}</Typography>
+                {onManage && <Button size="small" variant="outlined" data-invite-manage="" onClick={() => onManage(already.agentId)}>Manage</Button>}
+              </Box>
+            )}
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fill, minmax(200px, 1fr))' }, gap: 1.5 }}>
-              {GALLERY.map((item) => (
-                <Box key={item.id} component="button" type="button" data-gallery-card={item.id} onClick={() => { setAddress(item.url); discover(item.url) }} onPointerEnter={prefetch}
-                  sx={(t) => ({
-                    ...surface(t), textAlign: 'left', p: 1.75, cursor: 'pointer', font: 'inherit', color: 'inherit', display: 'flex', flexDirection: 'column', gap: 0.75,
-                    transition: 'transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease',
-                    ...(item.featured && { bgcolor: '#f3f8ee', borderColor: '#b9d2b0' }),
-                    '&:hover': { borderColor: '#7fa78a', boxShadow: '0 2px 4px rgba(32,61,50,0.08), 0 10px 24px rgba(32,61,50,0.10)', transform: 'translateY(-1px)' },
-                    '&:focus-visible': { outline: '2px solid #254b3b', outlineOffset: 2 },
-                    '@media (prefers-reduced-motion: reduce)': { transition: 'none', '&:hover': { transform: 'none' } },
-                    ...t.applyStyles('dark', {
-                      ...(item.featured && { bgcolor: '#26402f', borderColor: '#4f6e59' }),
-                      '&:hover': { borderColor: '#8fb39a', boxShadow: '0 10px 26px rgba(0,0,0,0.35)', transform: 'translateY(-1px)' },
-                      '&:focus-visible': { outline: '2px solid #f2ce8b', outlineOffset: 2 },
-                    }),
-                  })}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                    <Box aria-hidden="true" sx={(t) => ({ width: 34, height: 34, borderRadius: '10px', display: 'grid', placeItems: 'center', flexShrink: 0, bgcolor: '#e6efdf', ...t.applyStyles('dark', { bgcolor: 'rgba(190,215,181,0.12)' }) })}>
-                      <Hexagon color={item.featured ? MARK : '#6f8d78'} size={20} style={{}} />
+              {gallery.cards.map((item) => {
+                const { here } = cardState(item, invited)
+                return (
+                  <Box key={item.id} component="button" type="button" data-gallery-card={item.id} data-gallery-here={here ? '' : undefined}
+                    aria-label={here ? `${item.name}: on this slate. Manage it.` : undefined}
+                    onClick={() => (here ? onManage?.(here.agentId) : (setAddress(item.url), discover(item.url)))} onPointerEnter={here ? undefined : prefetch}
+                    sx={(t) => ({
+                      ...surface(t), textAlign: 'left', p: 1.75, cursor: 'pointer', font: 'inherit', color: 'inherit', display: 'flex', flexDirection: 'column', gap: 0.75,
+                      transition: 'transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease',
+                      ...(item.featured && { bgcolor: '#f3f8ee', borderColor: '#b9d2b0' }),
+                      ...(here && { borderColor: '#2e7d32' }),
+                      '&:hover': { borderColor: '#7fa78a', boxShadow: '0 2px 4px rgba(32,61,50,0.08), 0 10px 24px rgba(32,61,50,0.10)', transform: 'translateY(-1px)' },
+                      '&:focus-visible': { outline: '2px solid #254b3b', outlineOffset: 2 },
+                      '@media (prefers-reduced-motion: reduce)': { transition: 'none', '&:hover': { transform: 'none' } },
+                      ...t.applyStyles('dark', {
+                        ...(item.featured && { bgcolor: '#26402f', borderColor: '#4f6e59' }),
+                        ...(here && { borderColor: '#81c784' }),
+                        '&:hover': { borderColor: '#8fb39a', boxShadow: '0 10px 26px rgba(0,0,0,0.35)', transform: 'translateY(-1px)' },
+                        '&:focus-visible': { outline: '2px solid #f2ce8b', outlineOffset: 2 },
+                      }),
+                    })}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                      <Box aria-hidden="true" sx={(t) => ({ width: 34, height: 34, borderRadius: '10px', display: 'grid', placeItems: 'center', flexShrink: 0, bgcolor: '#e6efdf', ...t.applyStyles('dark', { bgcolor: 'rgba(190,215,181,0.12)' }) })}>
+                        <Hexagon color={item.featured ? MARK : '#6f8d78'} size={20} style={{}} />
+                      </Box>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 750, lineHeight: 1.3 }}>{item.name}</Typography>
+                        <Typography variant="caption" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>{item.job} · {cardCost(item)}</Typography>
+                      </Box>
                     </Box>
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 750, lineHeight: 1.3 }}>{item.name}</Typography>
-                      <Typography variant="caption" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>{item.job} · {cardCost(item)}</Typography>
-                    </Box>
+                    {here && <Typography variant="caption" component="div" data-gallery-on-slate="" sx={(t) => ({ color: '#1b5e20', fontWeight: 650, ...t.applyStyles('dark', { color: '#a5d6a7' }) })}>✓ On this slate · Manage</Typography>}
+                    <Typography variant="body2" sx={{ lineHeight: 1.45 }}>{item.lands}</Typography>
+                    {cloud && gallery.canInvite === false && <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 'auto', pt: 0.25 }}>Needs Slatebox Pro or Business</Typography>}
                   </Box>
-                  <Typography variant="body2" sx={{ lineHeight: 1.45 }}>{item.lands}</Typography>
-                  {cloud && <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 'auto', pt: 0.25 }}>Needs Slatebox Pro or Business</Typography>}
-                </Box>
-              ))}
+                )
+              })}
             </Box>
-            <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0, lineHeight: 1.5 }}>Any MCP server works: open ones straight away, others after you sign in on their own page or paste a key. Slatebox AI turns what it answers into notes on your slate.{cloud ? ' Inviting agents is part of Slatebox Pro and Slatebox Business.' : ''}</Typography>
+            <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0, lineHeight: 1.5 }} data-invite-footer="">Any MCP server works: open ones straight away, others after you sign in on their own page or paste a key. Each agent&apos;s answers become suggestions on your slate.{cloud && gallery.canInvite === false ? ' Inviting agents is part of Slatebox Pro and Slatebox Business.' : ''}</Typography>
           </Box>
         )}
         {step === 'discovering' && (
@@ -520,4 +562,6 @@ InviteWalkthrough.propTypes = {
   slateName: PropTypes.string,
   onInvited: PropTypes.func,
   reconnect: PropTypes.shape({ connectionId: PropTypes.string, address: PropTypes.string, name: PropTypes.string }),
+  invited: PropTypes.arrayOf(PropTypes.shape({ agentId: PropTypes.string, name: PropTypes.string, galleryId: PropTypes.string, mine: PropTypes.bool, status: PropTypes.string })),
+  onManage: PropTypes.func,
 }

@@ -26,6 +26,8 @@ export function BoardsDock({ onDone, dark = false }) {
         </Tooltip>
       ))}
       <ButtonBase onClick={() => go({})} sx={{ ...look, whiteSpace: 'nowrap', fontSize: 13, px: 1, py: .5, color: accent, fontWeight: 600 }}>See all ›</ButtonBase>
+      {/* A person's own Excalidraw drawing, as notes and lines (ImportExcalidraw, in Ask Slatebox). */}
+      <ButtonBase onClick={() => go({ import: 'excalidraw' })} data-import-excalidraw-open="" sx={{ ...look, whiteSpace: 'nowrap', fontSize: 13, px: 1, py: .5, color: accent, fontWeight: 600 }}>Import from Excalidraw</ButtonBase>
     </span>
   )
 }
@@ -46,6 +48,7 @@ export function BoardsRow({ onDone, hasBoard = false }) {
         ))}
         <button type="button" className="sb-btn" onClick={() => go({})} style={{ flex: '0 0 auto', height: 'auto' }}>See all ›</button>
       </div>
+      <button type="button" className="sb-btn" data-import-excalidraw-open="" onClick={() => go({ import: 'excalidraw' })} style={{ marginTop: 6, height: 'auto' }}>Import from Excalidraw</button>
     </div>
   )
 }

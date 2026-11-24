@@ -91,3 +91,27 @@ test('a drawing request that brought no change says why, never "try again" alone
   assert.equal(chatUnavailableWords({ reason: 'failed', message: 'No note is called Budget.' }), 'Slatebox couldn\'t make that change: No note is called Budget. Try saying it another way.')
   assert.doesNotMatch(chatUnavailableWords({}), /Revise the request/)
 })
+
+test('after "@GitHub", follow-ups stay with GitHub until cleared or someone else is named (prod, slate 3b38bdf775)', async () => {
+  const { routeMessage } = await import('../web/app/imports/api/common/agent-mention.mjs')
+  const github = { agentId: 'gh', name: 'GitHub', canAsk: true, galleryId: 'github' }
+  const linear = { agentId: 'li', name: 'Linear', canAsk: true, galleryId: 'linear' }
+  const agents = [github, linear]
+  // "@GitHub hey" goes to GitHub, and the conversation is with GitHub after it
+  assert.deepEqual(routeMessage('@GitHub hey', { agents }), { kind: 'agent', agent: github, request: 'hey', replyingTo: 'gh' })
+  // the follow-up with no @ goes to GitHub too (it went to Slatebox's canvas chat on prod)
+  const follow = routeMessage('what are my latest commits? can you make a couple notes on the slate about those?', { agents, replyingTo: 'gh' })
+  assert.equal(follow.kind, 'agent')
+  assert.equal(follow.agent, github)
+  assert.equal(follow.request, 'what are my latest commits? can you make a couple notes on the slate about those?')
+  // naming someone else switches; @Slatebox hands it back
+  assert.equal(routeMessage('@Linear current cycle', { agents, replyingTo: 'gh' }).replyingTo, 'li')
+  assert.deepEqual(routeMessage('@Slatebox make a mind map', { agents, replyingTo: 'gh' }), { kind: 'slatebox', replyingTo: null })
+  // cleared (×): a question only GitHub can answer is named, not sent to Slatebox's canvas chat
+  assert.deepEqual(routeMessage('what are my latest commits?', { agents }), { kind: 'hint', agent: github, replyingTo: null })
+  // buttons choose: "Ask @GitHub" and "Ask Slatebox anyway"
+  assert.equal(routeMessage('what are my latest commits?', { agents, to: 'gh' }).agent, github)
+  assert.deepEqual(routeMessage('what are my latest commits?', { agents, replyingTo: 'gh', to: 'slatebox' }), { kind: 'slatebox', replyingTo: null })
+  // an agent that can no longer be asked (removed, Pro ended) does not hold the conversation
+  assert.deepEqual(routeMessage('add three ideas', { agents: [{ ...github, canAsk: false }], replyingTo: 'gh' }), { kind: 'slatebox', replyingTo: null })
+})

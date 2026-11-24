@@ -14,6 +14,6 @@ export function register(api, context) {
   if (!context?.agentInvite) return
   // The slate's invited agents: each one chip on the app's roster, "+ Invite agent" and the walkthrough.
   api.fill('canvas.agents', AgentsOnSlate)
-  // Inside an invited agent's roster chip: the ask box (the inviter's only), Sign in again, Renew Pro, Remove.
+  // Inside an invited agent's roster chip: its summary, Ask in chat (Ask Slatebox, replying to it), Sign in again, Renew Pro, Remove.
   api.fill('agents.chip', InvitedAgentControls)
 }
