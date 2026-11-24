@@ -35,11 +35,16 @@ function marker(action) {
 
 const secretsFile = () => join(home, 'installs', name, 'secrets.env')
 
-test('an image without SLATEBOX_KEY_ENCRYPTION_KEY: the plan says own keys stay off', { skip }, async () => {
+// Restated (the one-container image on prod accepts SLATEBOX_KEY_ENCRYPTION_KEY and lists its settings): the plan
+// reads what the image accepts from the image itself, and warns about own keys only for an image without the key.
+// (The warning for an older image is pinned in render.test.mjs.)
+test('the plan reads what the image accepts from the image: own keys on when it takes SLATEBOX_KEY_ENCRYPTION_KEY', { skip }, async () => {
   const result = await slatebox(['plan', '--name', name, '--image', images.base, '--ai', 'none', '--port', String(port), '--backups', 'off', '--json'], { env })
   assert.equal(result.code, 0, result.stderr)
   const plan = result.events.find(event => event.event === 'plan')
-  assert.match(plan.warnings.join('\n'), /does not accept SLATEBOX_KEY_ENCRYPTION_KEY/)
+  const listed = JSON.parse(docker(['run', '--rm', '--network', 'none', '--entrypoint', '/opt/slatebox/bin/slatebox', images.base, 'settings', '--json']).stdout)
+  if (listed.settings.includes('SLATEBOX_KEY_ENCRYPTION_KEY')) assert.doesNotMatch(plan.warnings.join('\n'), /does not accept SLATEBOX_KEY_ENCRYPTION_KEY/)
+  else assert.match(plan.warnings.join('\n'), /does not accept SLATEBOX_KEY_ENCRYPTION_KEY/)
 })
 
 test('install as an agent would: healthy, answering, the key generated and kept out of every output', { skip, timeout: 900_000 }, async () => {
@@ -80,7 +85,9 @@ test('an AI endpoint on this computer: added, reached from inside the container,
     const added = await slatebox(['ai', 'add', `id=local,kind=openai-compatible,url=http://localhost:${endpoint.port}/v1,model=fake-model`, '--name', name, '--yes', '--json'], { env })
     assert.equal(added.code, 0, added.stderr)
     const settings = parseEnvFile(readFileSync(join(home, 'installs', name, 'slatebox.env'), 'utf8'))
-    assert.equal(settings.SLATEBOX_AI_URL, `http://host.docker.internal:${endpoint.port}/v1`)
+    // Restated (the image takes several providers): the endpoint is written in SLATEBOX_AI_PROVIDERS, not SLATEBOX_AI_URL.
+    const providers = JSON.parse(settings.SLATEBOX_AI_PROVIDERS)
+    assert.deepEqual(providers.map(provider => [provider.id, provider.baseUrl, provider.model]), [['local', `http://host.docker.internal:${endpoint.port}/v1`, 'fake-model']])
     assert.match(docker(['logs', name]).stdout, new RegExp(`AI drafts: on, using host\\.docker\\.internal:${endpoint.port}`))
     const tested = await slatebox(['ai', 'test', '--name', name, '--json'], { env })
     assert.equal(tested.code, 0, tested.stderr)
