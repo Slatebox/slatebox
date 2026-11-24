@@ -34,6 +34,8 @@ import { isInstanceAdmin } from '../permissions'
 import { cloudOn, paymentsOn } from '../cloud-lock-meteor'
 import { creditsForPool, inPool, poolMonthKey, teamPool } from './pool.mjs'
 import { MEMBER_FIELDS, billableMembers } from '../business-billing.mjs'
+import { emailLogoUrl } from '../email/setup'
+import { meterAlert } from '../email/templates.mjs'
 
 // Decided once at startup: a Cloud server without metering.enabled stops here (policy.mjs), and
 // the meter runs only on Slatebox Cloud by its signed Cloud key (cloud-lock.mjs): a self-hosted
@@ -324,7 +326,9 @@ async function sendAlert(text, now) {
   const settings = await meterSettings()
   const to = Meteor.settings.metering?.alertEmail || settings.alertEmail
   if (to && (process.env.MAIL_URL || Meteor.settings.packages?.email?.service)) {
-    await Email.sendAsync({ from: Meteor.settings.mailFrom || 'no-reply@slatebox.com', to, subject: 'Slatebox meter and billing', text }).catch(() => {})
+    const origin = String(Meteor.settings.public?.baseUrl || Meteor.absoluteUrl()).replace(/\/+$/, '')
+    const mail = meterAlert({ text, adminUrl: `${origin}/admin`, logoUrl: emailLogoUrl() })
+    await Email.sendAsync({ from: Meteor.settings.mailFrom || 'no-reply@slatebox.com', to, subject: mail.subject, text: mail.text, html: mail.html }).catch(() => {})
   }
 }
 export const alert = text => sendAlert(text, Date.now())

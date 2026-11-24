@@ -1,13 +1,15 @@
 // Telling an author what happened to their library item: an in-app notification (the Messages
-// collection, shown in the bell's list) and a plain-text email with a link to My library. Pure, with
-// injected senders; server/library/meteor.js wires the real ones.
+// collection, shown in the bell's list) and an email (HTML and plain text, server/email/templates.mjs)
+// with a link to My library. Pure, with injected senders; server/library/meteor.js wires the real ones.
 //
 //   createLibraryNotifier({ insertMessage, sendEmail, loadAuthor, appOrigin, now }) → notify({ item, type, message })
 //
 // insertMessage(row)              writes one Messages row ({ userId, text, type: 'system', action: { type: 'link', url } })
-// sendEmail({ to, subject, text })  sends one email; optional (no mail server: no email, the in-app note still goes)
-// loadAuthor(userId)              → { email?, isAnonymous? } | null
+// sendEmail({ to, subject, text, html })  sends one email; optional (no mail server: no email, the in-app note still goes)
+// loadAuthor(userId)              → { email?, isAnonymous?, firstName? } | null
+// logoUrl()                       → the email logo's address (templates.mjs logoUrlFor)
 import { KIND_LABELS } from '../../imports/api/common/library-model.mjs'
+import { libraryDecision, logoUrlFor } from '../email/templates.mjs'
 
 export const MY_LIBRARY_PATH = '/library/mine'
 
@@ -19,26 +21,27 @@ const OUTCOMES = Object.freeze({
   comment: { line: 'has a new message from the reviewer', subject: 'has a new message' },
 })
 
-/** The notification's words for an outcome: { text, subject, body }. */
-export function libraryNotice({ item, type, message, origin = '' }) {
+/** The notification's words for an outcome: { text, subject, body, html } (body is the email's plain text). */
+export function libraryNotice({ item, type, message, origin = '', firstName = null, logoUrl = logoUrlFor(origin) }) {
   const outcome = OUTCOMES[type]
   if (!outcome || !item) return null
   const kind = KIND_LABELS[item.kind] || 'item'
   const title = String(item.title || 'Untitled').slice(0, 80)
   const text = `Your ${kind} "${title}" ${outcome.line}.`
-  const link = `${String(origin || '').replace(/\/$/, '')}${MY_LIBRARY_PATH}`
-  const said = typeof message === 'string' && message.trim() ? `\n\nThe reviewer wrote:\n${message.trim().slice(0, 2000)}\n` : '\n'
-  const next = type === 'approved'
-    ? `Anyone can find it in the library now${item.slug ? `: ${String(origin || '').replace(/\/$/, '')}/library/${item.slug}` : ''}.`
+  const base = String(origin || '').replace(/\/$/, '')
+  const link = `${base}${MY_LIBRARY_PATH}`
+  const publicUrl = type === 'approved' && item.slug ? `${base}/library/${item.slug}` : null
+  const nextLine = type === 'approved'
+    ? 'Anyone can find it in the library now.'
     : type === 'changes_requested' ? 'Change it, then submit it again from My library.' : 'See the whole thread in My library.'
-  return {
-    text,
-    subject: `Slatebox: your ${kind} "${title}" ${outcome.subject}`,
-    body: `${text}${said}\n${next}\n\nMy library: ${link}\n`,
-  }
+  const mail = libraryDecision({
+    firstName, subject: `Your ${kind} "${title}" ${outcome.subject}`, headline: text.replace(/\.$/, ''),
+    message, publicUrl, nextLine, libraryUrl: link, logoUrl,
+  })
+  return { text, subject: mail.subject, body: mail.text, html: mail.html }
 }
 
-export function createLibraryNotifier({ insertMessage, sendEmail = null, loadAuthor = async () => null, appOrigin = () => '', now = Date.now, log = console }) {
+export function createLibraryNotifier({ insertMessage, sendEmail = null, loadAuthor = async () => null, appOrigin = () => '', logoUrl = null, now = Date.now, log = console }) {
   return async function notify({ item, type, message }) {
     if (!item?.authorId || item.origin === 'builtin') return
     const notice = libraryNotice({ item, type, message, origin: appOrigin() })
@@ -55,7 +58,9 @@ export function createLibraryNotifier({ insertMessage, sendEmail = null, loadAut
     try {
       const author = await loadAuthor(item.authorId)
       if (!author?.email || author.isAnonymous) return
-      await sendEmail({ to: author.email, subject: notice.subject, text: notice.body })
+      const origin = appOrigin()
+      const mail = libraryNotice({ item, type, message, origin, firstName: author.firstName ?? null, logoUrl: logoUrl ? logoUrl() : logoUrlFor(origin) })
+      await sendEmail({ to: author.email, subject: mail.subject, text: mail.body, html: mail.html })
     } catch (error) {
       log.error?.('[library] email', error?.message)
     }

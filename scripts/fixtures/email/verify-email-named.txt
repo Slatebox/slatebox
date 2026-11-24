@@ -1,0 +1,16 @@
+Subject: Confirm your email for Slatebox
+Preheader: One click to confirm your address and finish setting up Slatebox.
+
+Hi Ada,
+
+Confirm your email
+
+Confirm this address for your Slatebox account. Once it's confirmed, every Slatebox feature is open to you.
+
+Confirm your email: https://app.slatebox.com/verify-email/sample-token
+
+If you didn't create a Slatebox account or change your address, you can ignore this email.
+
+--
+You got this email because this address was used for a Slatebox account.
+Slatebox LLC · Privacy: https://slatebox.com/privacy/

@@ -18,6 +18,8 @@ import { alert, meterOn, meterSettings, setProCardReader } from '../metering/met
 import { BILLING_CONTACT_URL } from '../../imports/api/common/contact.mjs'
 import { handleBusiness } from './business'
 import { requireCloudLicense } from '../cloud-lock-meteor'
+import { emailLogoUrl } from '../email/setup'
+import { firstNameOf, proMergeLink as proMergeLinkEmail } from '../email/templates.mjs'
 
 // Mongo store for pro-billing.mjs.
 export const billingStore = {
@@ -110,20 +112,11 @@ async function sendMergeLink({ guestId, targetId, email, sessionId }) {
     _id: linkId, userId: targetId, email, mergeFrom: guestId, sessionId, createdAt,
     expiresAt: createdAt.getTime() + MERGE_LINK_DAYS * 86_400_000,
   })
-  await Email.sendAsync({
-    from: 'no-reply@slatebox.com',
-    to: email,
-    subject: 'Slatebox - Move your Slatebox Pro into your account',
-    text: [
-      'Hi! Slatebox Pro was just bought with this email address, by someone who was not signed in.',
-      '',
-      'This address already has a Slatebox account. If it was you, open this link to move Slatebox Pro and the slates you made into your account:',
-      '',
-      `${Meteor.settings.public.baseUrl}/login-link/${linkId}`,
-      '',
-      `The link works once, for ${MERGE_LINK_DAYS} days. If it was not you, ignore this email: nothing changes in your account, and nobody was signed in to it.`,
-    ].join('\n'),
+  const target = await Meteor.users.findOneAsync(targetId, { fields: { profile: 1 } })
+  const mail = proMergeLinkEmail({
+    firstName: firstNameOf(target), url: `${Meteor.settings.public.baseUrl}/login-link/${linkId}`, days: MERGE_LINK_DAYS, logoUrl: emailLogoUrl(),
   })
+  await Email.sendAsync({ from: 'no-reply@slatebox.com', to: email, subject: mail.subject, text: mail.text, html: mail.html })
 }
 
 export const claimDeps = () => ({

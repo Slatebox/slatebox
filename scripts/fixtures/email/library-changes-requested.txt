@@ -1,0 +1,18 @@
+Subject: Your smart component "Retro board" needs changes
+Preheader: Your smart component "Retro board" needs changes. The reviewer left a note.
+
+Hi Ada,
+
+Your smart component "Retro board" needs changes
+
+The reviewer wrote:
+Add a "Try" column.
+Then submit it again.
+
+Change it, then submit it again from My library.
+
+My library: https://app.slatebox.com/library/mine
+
+--
+You got this email because you submitted this item to the Slatebox library.
+Slatebox LLC · Privacy: https://slatebox.com/privacy/

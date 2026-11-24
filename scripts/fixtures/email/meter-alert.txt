@@ -1,0 +1,14 @@
+Subject: Slatebox meter and billing
+Preheader: Today's free spend reached the daily ceiling. Free calls pause until midnight UTC.
+
+Hi there,
+
+Meter and billing alert
+
+Today's free spend reached the daily ceiling. Free calls pause until midnight UTC.
+
+Admin area: https://app.slatebox.com/admin
+
+--
+You got this email because this address is set as this Slatebox instance's meter alert address.
+Slatebox LLC · Privacy: https://slatebox.com/privacy/

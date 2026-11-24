@@ -1,6 +1,10 @@
 import { Meteor } from 'meteor/meteor'
 import { Accounts } from 'meteor/accounts-base'
 import { Organizations } from '../../imports/api/common/models'
+import { enrollAccount, firstNameOf, logoUrlFor, resetPassword, verifyEmail } from './templates.mjs'
+
+/** The logo's address for this instance's emails (templates.mjs logoUrlFor). */
+export const emailLogoUrl = () => logoUrlFor(Meteor.settings.public?.baseUrl || Meteor.absoluteUrl())
 
 export default async function setup() {
   // eslint-disable-next-line no-undef
@@ -10,142 +14,27 @@ export default async function setup() {
   // one its mail service accepts.
   Accounts.emailTemplates.from = Meteor.settings.mailFrom || 'Slatebox <info@slatebox.com>'
 
-  async function compileEmail(user, url, type, asText) {
-    const address = user.emails?.[0]?.address
-    let userName = address ? ` ${address.split('@')[0]}` : ''
-    if (user.profile && user.profile.firstName) {
-      userName = ` ${user.profile.firstName} ${user.profile.lastName}`
-    }
-    let org = null
-    let name = ''
-    if (user.orgId) {
-      org = await Organizations.findOneAsync(user.orgId)
-      name = org && org.name ? org.name : org.subdomain
-    }
-
-    let welcomeMessage = `Hi${userName}, welcome to Slatebox.`
-    if (type === 'forgot') {
-      welcomeMessage = `Hi${userName}, reset your password`
-    }
-
-    let header = `<div style="width:800px;margin-right:auto;margin-left:auto;">
-        <div style="clear:both;height:90px;">
-          <div style="float:left;width:40%;padding:10px;">
-            <h5>Slatebox - Visual Team Collaboration</h5>
-          </div>
-          <div style="padding:10px;float:left;font-family:Helvetica;color:#333;font-size:16pt;line-height:35px;width:55%">${welcomeMessage}</div>
-        </div>`
-
-    if (asText) {
-      header = `${welcomeMessage}\n\n`
-    }
-
-    const footer = ''
-    // let footer = `<div style="padding:3px;margin:3px;">
-    //       <a href="https://twitter.com/intent/user?screenname=slatebox">
-    //         twitter
-    //       </a>
-    //       &nbsp;&nbsp;
-    //       <a href="https://fb.me/slatebox">
-    //         facebook
-    //       </a>
-    //     </div>
-    //   </div>`;
-
-    // if (asText) {
-    //   footer = "";
-    // }
-
-    let body = ''
-
-    switch (type) {
-      case 'verify':
-        if (asText) {
-          body = `Yay for joining Slatebox! Please verify your email below.\n\n
-              Click here to verify your email: ${url}\n
-              Once verified, you'll be able to access all the Slatebox features.\n
-              Go forth and build!`
-        } else {
-          body = `<div style="padding:3px;margin:3px;font-family:Helvetica;font-size:13pt;">
-            <h2>Yay for joining Slatebox! Please verify your email below.</h2>
-            <p><a href="${url}">Click here to verify your email</a>. Once verified, you'll be able to access all the Slatebox features.</p>
-            <p>Go forth and build!</p>
-          </div>`
-        }
-        break
-      // case "enrollAdmin":
-      //   if (asText) {
-      //     body = `Your new Slatebox ${name} team is ready!\n\n
-      //         Thanks for signing up! Slatebox is super easy to start using. The next step is to set a password for your new administrator account, and after you create the password and log in, then you can start inviting users.\n\n
-      //         Click here to set the password on your administrator account: ${url}.\n
-      //         Once created, you'll be able to log in and start sending invites.\n
-      //         Go forth and build!`;
-      //   } else {
-      //     body = `<div style="padding:3px;margin:3px;font-family:Helvetica;font-size:13pt;">
-      //         <h2>Your new Slatebox ${name} team is ready!</h2>
-      //         <p>Thanks for signing up! Slatebox is super easy to start using. The next step is to set a password for your new administrator account, and after you create the password and log in, then you can start inviting users.</p>
-      //         <p><a href="${url}">Click here to set the password on your administrator account</a>. Once created, you'll be able to log in and start sending invites.</p>
-      //         <p>Go forth and build!</p>
-      //       </div>`;
-      //     }
-      //   break;
-      case 'enrollInvite':
-        if (asText) {
-          body = `Hooray! You've been invited to join the ${name} team.\n\n
-                Slatebox is built for real-time visual collaboration with your team. Build a "slate" and easily share your creations.\n\n
-                Click here to join ${name} and start building: ${url}\n
-                Go forth and build!`
-        } else {
-          body = `<div style="padding:3px;margin:3px;font-family:Helvetica;font-size:13pt;">
-                <h2>Hooray! You've been invited to join the ${name} team.</h2>
-                <p>Slatebox is built for real-time visual collaboration with your team. Build a "slate" and easily share your creations.</p>
-                <p><a href="${url}">Click here to join ${name} and start building!</a>.</p>
-                <p>Go forth and build!</p>
-              </div>`
-        }
-        break
-      case 'forgot':
-        if (asText) {
-          body = `Hi ${userName}, forget your password? No problem.\n\n
-          Click here to reset your password: ${url}`
-        } else {
-          body = `<div style="padding:3px;margin:3px;font-family:Helvetica;font-size:13pt;">
-              <h2>Hi ${userName}, forget your password? No problem.</h2>
-              <p><a href="${url}">Click here to reset your password</a>.</p>
-            </div>`
-        }
-        break
-      default:
-        break
-    }
-
-    const ret = `${header}${body}${footer}`
-    return ret
+  // The team an invitation is for: its name, else its subdomain.
+  async function teamNameOf(user) {
+    if (!user.orgId) return ''
+    const org = await Organizations.findOneAsync(user.orgId)
+    return (org && (org.name || org.subdomain)) || ''
   }
 
-  Accounts.emailTemplates.verifyEmail.subject = (user) => 'Welcome to Slatebox!'
-
-  Accounts.emailTemplates.verifyEmail.html = async (user, url) =>
-    compileEmail(user, url, 'verify')
-
-  Accounts.emailTemplates.verifyEmail.text = async (user, url) =>
-    compileEmail(user, url, 'verify', true)
-
-  Accounts.emailTemplates.resetPassword.html = async (user, url) =>
-    compileEmail(user, url, 'forgot')
-
-  Accounts.emailTemplates.resetPassword.text = async (user, url) =>
-    compileEmail(user, url, 'forgot', true)
-
-  // only org admins send enrollment emails
-  Accounts.emailTemplates.enrollAccount.subject = (user) =>
-    'Welcome to Slatebox!'
-
-  Accounts.emailTemplates.enrollAccount.text = async (user, url) =>
-    compileEmail(user, url, 'enrollInvite', true)
-
-  Accounts.emailTemplates.enrollAccount.html = async (user, url) =>
-    compileEmail(user, url, 'enrollInvite')
+  // Each email's subject, HTML and text come from one render (templates.mjs).
+  const accountEmail = {
+    verifyEmail: async (user, url) => verifyEmail({ firstName: firstNameOf(user), url, logoUrl: emailLogoUrl() }),
+    resetPassword: async (user, url) => resetPassword({ firstName: firstNameOf(user), url, logoUrl: emailLogoUrl() }),
+    // only org admins send enrollment emails
+    enrollAccount: async (user, url) => enrollAccount({
+      firstName: firstNameOf(user), teamName: await teamNameOf(user), url, logoUrl: emailLogoUrl(),
+    }),
+  }
+  for (const [type, render] of Object.entries(accountEmail)) {
+    Accounts.emailTemplates[type].subject = async (user, url) => (await render(user, url)).subject
+    Accounts.emailTemplates[type].html = async (user, url) => (await render(user, url)).html
+    Accounts.emailTemplates[type].text = async (user, url) => (await render(user, url)).text
+  }
 
   // strips the # from the genned urls
   Accounts.urls.resetPassword = (token) =>

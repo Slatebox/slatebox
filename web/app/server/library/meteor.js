@@ -19,6 +19,8 @@ import req from '../methods/ai/req'
 import { runAIAction } from '../metering/context.mjs'
 import { aiRefusal, canStartAI } from '../metering/meteor'
 import { resolveAIFeatureConfig } from '../methods/ai/feature-config.mjs'
+import { emailLogoUrl } from '../email/setup'
+import { firstNameOf } from '../email/templates.mjs'
 
 const raw = (collection) => collection.rawCollection()
 
@@ -51,10 +53,11 @@ const notifyAuthor = (appOrigin) => createLibraryNotifier({
   insertMessage: (row) => Messages.insertAsync(row),
   sendEmail: (mail) => (mailAvailable() ? Email.sendAsync({ from: Meteor.settings.mailFrom || 'no-reply@slatebox.com', ...mail }) : null),
   loadAuthor: async (userId) => {
-    const user = await Meteor.users.findOneAsync(userId, { fields: { emails: 1, isAnonymous: 1 } })
-    return user && { email: user.emails?.[0]?.address, isAnonymous: Boolean(user.isAnonymous) }
+    const user = await Meteor.users.findOneAsync(userId, { fields: { emails: 1, isAnonymous: 1, 'profile.firstName': 1 } })
+    return user && { email: user.emails?.[0]?.address, isAnonymous: Boolean(user.isAnonymous), firstName: firstNameOf(user) }
   },
   appOrigin,
+  logoUrl: emailLogoUrl,
 })
 
 const isTeamAdmin = async (userId, orgId) =>

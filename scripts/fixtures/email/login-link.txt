@@ -1,0 +1,16 @@
+Subject: Your Slatebox sign-in link
+Preheader: Use this one-time link to sign back in to Slatebox.
+
+Hi Ada,
+
+Sign in to Slatebox
+
+Can't remember your password? No problem. Use this one-time link to sign back in.
+
+Sign in: https://app.slatebox.com/login-link/sample-link
+
+If you didn't ask for this link, you can ignore this email. Nobody can sign in without it.
+
+--
+You got this email because a sign-in link was requested for this Slatebox account.
+Slatebox LLC · Privacy: https://slatebox.com/privacy/

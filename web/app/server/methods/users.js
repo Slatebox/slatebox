@@ -41,6 +41,8 @@ import {
 import utils from '../../imports/api/common/utils'
 import { accounts, enrollmentMailAvailable, verificationMailAvailable } from '../instance/meteor'
 import { membersChanged } from './business'
+import { emailLogoUrl } from '../email/setup'
+import { firstNameOf, loginLink as loginLinkEmail } from '../email/templates.mjs'
 
 
 async function sendVerification(userId) {
@@ -459,11 +461,13 @@ async function issueLoginToken(opts) {
           createdAt: new Date(),
           token: loginToken.token,
         })
+        const mail = loginLinkEmail({ firstName: firstNameOf(user), url: `${Meteor.settings.public.baseUrl}/login-link/${llId}`, logoUrl: emailLogoUrl() })
         await Email.sendAsync({
           from: Meteor.settings.mailFrom || 'no-reply@slatebox.com',
           to: opts.email,
-          subject: `Slatebox - Login Link`,
-          text: `Hi! Can't remember your password? No problem. Log back into Slatebox with this one-time link:\n\n${Meteor.settings.public.baseUrl}/login-link/${llId}`,
+          subject: mail.subject,
+          text: mail.text,
+          html: mail.html,
         })
         return true
       }
