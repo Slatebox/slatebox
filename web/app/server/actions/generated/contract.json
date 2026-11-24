@@ -11186,6 +11186,222 @@
       }
     },
     {
+      "id": "presentations.create",
+      "title": "Present",
+      "description": "Create a presentation of a slate with the planner the Present button uses: the AI (feature presentation, counted like other AI use) groups the notes into steps and chooses each step's layout, kicker and caption, played on the live canvas with camera moves. Optional: a style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), a palette (3 to 6 colours) and a brief (what to focus on). Needs edit access to the slate. Each call plans a new version; mode \"preview\" plans and returns the steps and saves nothing. Returns the presentation id, its steps and a link that opens the slate and plays it.",
+      "action": "presentations.create",
+      "toolset": "slates",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": true,
+      "confirm": false,
+      "principals": [
+        "agent"
+      ],
+      "modes": [
+        "save",
+        "preview"
+      ],
+      "idempotency": "optional",
+      "scope": "slates:write",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/slates/{shareId}/presentation",
+        "pathParams": [
+          "shareId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "style",
+          "palette",
+          "brief"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "shareId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The slate ID from its address: /canvas/<shareId>."
+          },
+          "style": {
+            "type": "string",
+            "enum": [
+              "voyage",
+              "stage",
+              "editorial",
+              "neon",
+              "sketch",
+              "blueprint",
+              "journey",
+              "calm"
+            ],
+            "description": "The style to play it in. Left out, the AI chooses."
+          },
+          "palette": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 6,
+            "items": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "description": "Your own colours, with a style: the first three lead, the background stays the style's."
+          },
+          "brief": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "What the presentation should focus on or bring out, in plain words."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "save",
+              "preview"
+            ],
+            "default": "save",
+            "description": "save (the default) writes; preview returns what would change and saves nothing. The response says which happened."
+          }
+        },
+        "required": [
+          "shareId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "presentationId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The new presentation (null in a preview, which saves nothing)."
+          },
+          "version": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "published": {
+            "type": "boolean"
+          },
+          "style": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "voyage",
+              "stage",
+              "editorial",
+              "neon",
+              "sketch",
+              "blueprint",
+              "journey",
+              "calm",
+              null
+            ],
+            "description": "The style it plays in."
+          },
+          "styles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every style it can play in."
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "step": {
+                  "type": "integer"
+                },
+                "layout": {
+                  "type": "string",
+                  "enum": [
+                    "title",
+                    "overview",
+                    "dive",
+                    "hero",
+                    "treeBuild",
+                    "trace",
+                    "sweep",
+                    "group",
+                    "bigNumber",
+                    "quote",
+                    "split",
+                    "compare",
+                    "cover",
+                    "finale"
+                  ]
+                },
+                "kicker": {
+                  "type": "string"
+                },
+                "caption": {
+                  "type": "string"
+                },
+                "notes": {
+                  "type": "integer",
+                  "description": "How many of the slate's notes the step shows."
+                }
+              },
+              "required": [
+                "step",
+                "layout",
+                "caption"
+              ]
+            }
+          },
+          "link": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opens the slate and plays this presentation (null in a preview)."
+          },
+          "automatic": {
+            "type": "boolean",
+            "description": "True when Slatebox grouped the notes itself because the AI could not plan the slate; reason says why."
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "presentationId",
+          "style",
+          "steps",
+          "link",
+          "automatic"
+        ]
+      },
+      "tool": {
+        "name": "create_presentation",
+        "title": "Create a presentation",
+        "description": "Create a presentation of a slate: the AI plans its steps, layouts and captions. Returns the steps and a link that plays it.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": true
+        }
+      }
+    },
+    {
       "id": "presentations.get",
       "title": "Deck",
       "description": "Read your latest presentation of a slate: its style, and each step's layout (title, overview, dive, hero, treeBuild, trace, sweep, group, bigNumber, quote, split, compare, cover, finale), kicker and caption. The deck plays on the live canvas with Prezi-style camera moves.",

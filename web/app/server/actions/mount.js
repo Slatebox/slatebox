@@ -42,6 +42,7 @@ import { aiSettings } from '../methods/ai/ai-settings'
 import { presence } from '../presence/meteor'
 import { mountTeamExport, teamTransfer } from '../team-export/meteor'
 import { shapeService } from '../shapes/meteor'
+import { createPresentationFor } from '../methods/presentations'
 
 const IdempotencyRecords = new Mongo.Collection('apiIdempotencyRecords')
 const RateWindows = new Mongo.Collection('apiRateWindows')
@@ -102,6 +103,8 @@ export const deps = {
       { sort: { version: -1 } }
     ),
     savePresentation: (id, set) => SlatePresentations.updateAsync({ _id: id }, { $set: set }),
+    // presentations.create: Present's plan, on the server (methods/presentations.js).
+    createPresentation: (request) => createPresentationFor(request),
     async copyPresentation(presentation, { shareId, sourceShareId, user, now }) {
       await SlatePresentations.insertAsync({
         ...structuredClone(presentation),

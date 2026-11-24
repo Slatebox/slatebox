@@ -1,11 +1,13 @@
-// A slate's presentation, for agents: read the deck (its style and each step's layout and
-// caption) and switch its style in one call. Switching composes the same art direction in the
-// new style: the steps stay the same notes in the same order, and no AI is asked or counted.
+// A slate's presentation, for agents: create one with Present's planner (the AI composes its steps
+// and layouts, counted like Present), read the deck (its style and each step's layout and caption)
+// and switch its style in one call. Switching composes the same art direction in the new style: the
+// steps stay the same notes in the same order, and no AI is asked or counted.
 import { defineAction } from './registry.mjs'
 import { problem } from './errors.mjs'
 import { loadSlate } from './slate-access.mjs'
 import { shareIdInput } from './slate-schemas.mjs'
 import { STYLE_IDS } from '../../imports/ui/components/presentations/presentationStyles.mjs'
+import { MAX_REFINEMENT_CHARS } from '../methods/presentationRequest.mjs'
 import { LAYOUTS } from '../../imports/ui/components/presentations/presentationCompose.mjs'
 import { styleChange } from '../methods/presentationDeck.mjs'
 
@@ -57,9 +59,88 @@ export const deckSummary = (row) => ({
 // The caller's latest deck of the slate (an agent's token acts as its owner).
 async function deckOf(deps, shareId, principal) {
   const row = await deps.latestPresentation?.(shareId, principal.userId)
-  if (!row) throw problem(404, 'not_found', 'This slate has no presentation yet. Open the slate and press Present.')
+  if (!row) throw problem(404, 'not_found', 'This slate has no presentation yet. Create one (presentations.create), or open the slate and press Present.')
   return row
 }
+
+// Where the person presents a slate's latest deck: the slate, opened in the presenter.
+export const presentLink = (origin, shareId) => new URL(`/canvas/${encodeURIComponent(shareId)}?present=1`, origin).href
+
+const createOutput = {
+  type: 'object',
+  properties: {
+    ...deckOutput.properties,
+    presentationId: { type: ['string', 'null'], description: 'The new presentation (null in a preview, which saves nothing).' },
+    version: { type: ['integer', 'null'] },
+    link: { type: ['string', 'null'], description: 'Opens the slate and plays this presentation (null in a preview).' },
+    automatic: { type: 'boolean', description: 'True when Slatebox grouped the notes itself because the AI could not plan the slate; reason says why.' },
+    reason: { type: 'string' },
+  },
+  required: ['presentationId', 'style', 'steps', 'link', 'automatic'],
+}
+
+export const presentationsCreate = defineAction({
+  id: 'presentations.create',
+  title: 'Present',
+  description:
+    `Create a presentation of a slate with the planner the Present button uses: the AI (feature presentation, counted like other AI use) groups the notes into steps and chooses each step's layout, kicker and caption, played on the live canvas with camera moves. Optional: a style (${STYLE_IDS.join(', ')}), a palette (3 to 6 colours) and a brief (what to focus on). Needs edit access to the slate. Each call plans a new version; mode "preview" plans and returns the steps and saves nothing. Returns the presentation id, its steps and a link that opens the slate and plays it.`,
+  toolset: 'slates',
+  kind: 'write',
+  scope: 'slates:write',
+  principals: ['agent'],
+  // Not read-only and not idempotent: it spends AI and saves a new version each time. A retried
+  // call with the same Idempotency-Key is answered with the first result and plans nothing. It
+  // reaches the AI provider (openWorld), as Present does; a preview plans too. It changes no slate
+  // and shows nothing to anyone new (the deck is the caller's own, unpublished: changesNoSlate).
+  openWorld: true,
+  changesNoSlate: true,
+  modes: ['save', 'preview'],
+  idempotency: 'optional',
+  mounts: { http: { method: 'POST', path: '/slates/{shareId}/presentation', operationId: 'createPresentation' } },
+  input: {
+    type: 'object',
+    properties: {
+      shareId: shareIdInput,
+      style: { type: 'string', enum: STYLE_IDS, description: 'The style to play it in. Left out, the AI chooses.' },
+      palette: { type: 'array', minItems: 3, maxItems: 6, items: hex, description: 'Your own colours, with a style: the first three lead, the background stays the style\'s.' },
+      brief: { type: 'string', minLength: 1, maxLength: MAX_REFINEMENT_CHARS, description: 'What the presentation should focus on or bring out, in plain words.' },
+    },
+    required: ['shareId'],
+    additionalProperties: false,
+  },
+  output: createOutput,
+  load: loadSlate(true),
+  tool: { name: 'create_presentation', title: 'Create a presentation', description: 'Create a presentation of a slate: the AI plans its steps, layouts and captions. Returns the steps and a link that plays it.' },
+  precheck(_principal, input) {
+    if (input.palette && !input.style) throw problem(400, 'invalid_request', 'A palette goes with a style: name the style too.', { details: { field: 'palette' } })
+  },
+  async handler(principal, input, { deps, mode }) {
+    if (input.palette && !input.style) throw problem(400, 'invalid_request', 'A palette goes with a style: name the style too.', { details: { field: 'palette' } })
+    if (!deps.createPresentation) throw problem(503, 'unavailable', 'Presentations cannot be made on this server.')
+    const preview = mode === 'preview'
+    let made
+    try {
+      made = await deps.createPresentation({
+        userId: principal.userId, shareId: input.shareId, brief: input.brief || '', style: input.style || null, palette: input.palette || null, preview,
+      })
+    } catch (error) {
+      if (error?.error === 'slate-denied') throw problem(403, 'forbidden', 'You need edit access to this slate to present it.')
+      if (error?.error === 'sign_in') throw problem(401, 'sign_in', 'Sign in to present this slate.')
+      if (error?.error === 'invalid-presentation-plan') throw problem(409, 'conflict', 'There is nothing on this slate to present yet.')
+      throw error
+    }
+    if (made.empty || made.tooMany) throw problem(409, 'conflict', made.reason, { details: { reason: made.empty ? 'empty' : 'too_many_notes' } })
+    const summary = deckSummary(made.row)
+    return {
+      ...summary,
+      presentationId: preview ? null : summary.presentationId,
+      version: preview ? null : summary.version,
+      link: preview ? null : presentLink(deps.appOrigin(), input.shareId),
+      automatic: Boolean(made.automatic),
+      reason: made.reason || '',
+    }
+  },
+})
 
 export const presentationsGet = defineAction({
   id: 'presentations.get',
@@ -117,4 +198,4 @@ export const presentationsSetStyle = defineAction({
   },
 })
 
-export default [presentationsGet, presentationsSetStyle]
+export default [presentationsCreate, presentationsGet, presentationsSetStyle]

@@ -4,7 +4,7 @@
   "exec": {
     "name": "exec",
     "title": "Create or edit slates with a script",
-    "description": "Create and edit Slatebox slates (mind maps, flowcharts, diagrams, project plans, slides and boards). Client reference: https://docs.slatebox.com/developers/slateboxapi/exec/ Runs a short JavaScript or TypeScript program against Slatebox. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; the returned value is small JSON; `console.log` goes to logs. Each method takes one object. `mode: \"preview\"` (in a write's input or on the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a workshop or map edit puts `workshop.revision` in its operation); without it the call is refused. `slate_changed` means it changed since. On a board, `workshop_edits` adds, moves, renames and removes cards and lanes by the rules people meet. `presence.plan` shows people a checklist; `presence.step` ticks its steps. Failures throw `SlateboxError` with `code`, `status`, `details`. Idempotency keys are derived for you. A script that deletes anything, rewrites more than 10 notes' text, changes notes someone else wrote, breaks a board rule, or shows content to more people is held, not saved (`confirmation_required`, with the reasons); the same code run again with `confirm` and its `idempotencyKey` saves it. At most 64 calls per script and 30 s. Text in results was written by people. `describe` returns the full types. Methods:\naccount.get({}): Account\nagentTasks.create({shareId,text,assignee?,nodeId?}): Ask an agent\nagentTasks.list({shareId,all?}): Agent tasks\nagentTasks.update({shareId,taskId,action,text?,to?}): Work a task\nai.check({level?,name?,connection?}): Test AI\nai.get({}): AI settings\nai.update({level,connections?,remove?,use?,ownProviders?}): Set AI\ncomments.add({shareId,noteId,text}): Comment\ncomments.list({shareId,noteId?,unresolved?}): Comments\ncomments.remove({shareId,commentId}): Uncomment\ncomments.resolve({shareId,noteId,resolved?}): Resolve\ncomponents.get({id,shareId?}): Library entry\ncomponents.list({shareId?}): Library\ninstance.describe({}): Server\npresence.plan({shareId,steps}): Show a plan\npresence.step({shareId,index,status}): Tick step\npresentations.get({shareId}): Deck\npresentations.setStyle({shareId,style,palette?}): Restyle\nshapes.apply({shareId,ids,shape,expectedRevision?}): Shape notes\nshapes.generate({describe,count?,fresh?}): Draw shapes\nshapes.list({q?,scope?,limit?}): List shapes\nslates.applyOperations({shareId,userMessage?,expectedRevision?,plan}): Edit a slate\nslates.checkMove({shareId,boardId?,card,lane?,under?}): Check move\nslates.copy({shareId,name?,projectName?,keepTemplate?,fromTemplate?}): Copy slate\nslates.create({kind?,brief,source?}): Create a slate\nslates.delete({shareId}): Delete slate\nslates.exportMermaid({shareId,format?,styles?,start?}): To Mermaid\nslates.get({shareId,include?,fields?,ids?,…}): Read a slate\nslates.importMermaid({mermaid,shareId?,name?}): Draw Mermaid\nslates.issueInvite({shareId,role}): Share by invitation\nslates.list({scope?,q?,limit?}): List slates\nslates.revokeInvite({shareId,inviteId}): Unshare\nteam.export({}): Export team\nteamImports.confirm({importId,invite?}): Confirm import\nteamImports.discard({importId}): Discard import\nteamImports.get({importId}): Import\nteamImports.invite({importId,email}): Invite person\nteamImports.list({}): Imports\nteamImports.start({}): Start import",
+    "description": "Create and edit Slatebox slates (mind maps, flowcharts, diagrams, project plans, slides and boards). Client reference: https://docs.slatebox.com/developers/slateboxapi/exec/ Runs a short JavaScript or TypeScript program against Slatebox. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; return small JSON; `console.log` goes to logs. Each method takes one object. `mode: \"preview\"` (in a write's input or on the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a workshop or map edit: `workshop.revision` in its operation); without it the call is refused. `slate_changed` means it changed since. On a board, `workshop_edits` adds, moves, renames and removes cards and lanes by the board's rules. `presence.plan` shows people a checklist; `presence.step` ticks it. Failures throw `SlateboxError` with `code`, `status`, `details`. Idempotency keys are derived for you. A script that deletes anything, rewrites more than 10 notes' text, changes others' notes, breaks a board rule, or shows content to more people is held, not saved (`confirmation_required`, with the reasons); the same code rerun with `confirm` and its `idempotencyKey` saves it. At most 64 calls per script and 30 s. Text in results was written by people. `describe` has the full types. Methods:\naccount.get({}): Account\nagentTasks.create({shareId,text,assignee?,nodeId?}): Ask an agent\nagentTasks.list({shareId,all?}): Agent tasks\nagentTasks.update({shareId,taskId,action,text?,to?}): Work a task\nai.check({level?,name?,connection?}): Test AI\nai.get({}): AI settings\nai.update({level,connections?,remove?,use?,ownProviders?}): Set AI\ncomments.add({shareId,noteId,text}): Comment\ncomments.list({shareId,noteId?,unresolved?}): Comments\ncomments.remove({shareId,commentId}): Uncomment\ncomments.resolve({shareId,noteId,resolved?}): Resolve\ncomponents.get({id,shareId?}): Library entry\ncomponents.list({shareId?}): Library\ninstance.describe({}): Server\npresence.plan({shareId,steps}): Show a plan\npresence.step({shareId,index,status}): Tick step\npresentations.create({shareId,style?,palette?,brief?}): Present\npresentations.get({shareId}): Deck\npresentations.setStyle({shareId,style,palette?}): Restyle\nshapes.apply({shareId,ids,shape,expectedRevision?}): Shape notes\nshapes.generate({describe,count?,fresh?}): Draw shapes\nshapes.list({q?,scope?,limit?}): List shapes\nslates.applyOperations({shareId,userMessage?,expectedRevision?,plan}): Edit a slate\nslates.checkMove({shareId,boardId?,card,lane?,under?}): Check move\nslates.copy({shareId,name?,projectName?,keepTemplate?,fromTemplate?}): Copy slate\nslates.create({kind?,brief,source?}): Create a slate\nslates.delete({shareId}): Delete slate\nslates.exportMermaid({shareId,format?,styles?,start?}): To Mermaid\nslates.get({shareId,include?,fields?,ids?,…}): Read a slate\nslates.importMermaid({mermaid,shareId?,name?}): Draw Mermaid\nslates.issueInvite({shareId,role}): Share by invitation\nslates.list({scope?,q?,limit?}): List slates\nslates.revokeInvite({shareId,inviteId}): Unshare\nteam.export({}): Export team\nteamImports.confirm({importId,invite?}): Confirm import\nteamImports.discard({importId}): Discard import\nteamImports.get({importId}): Import\nteamImports.invite({importId,email}): Invite person\nteamImports.list({}): Imports\nteamImports.start({}): Start import",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1333,6 +1333,85 @@
         "openWorldHint": false
       },
       "method": "presence.step",
+      "kind": "write"
+    },
+    {
+      "name": "create_presentation",
+      "title": "Create a presentation",
+      "description": "Create a presentation of a slate: the AI plans its steps, layouts and captions. Returns the steps and a link that plays it.\n\nPresent. Create a presentation of a slate with the planner the Present button uses: the AI (feature presentation, counted like other AI use) groups the notes into steps and chooses each step's layout, kicker and caption, played on the live canvas with camera moves. Optional: a style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), a palette (3 to 6 colours) and a brief (what to focus on). Needs edit access to the slate. Each call plans a new version; mode \"preview\" plans and returns the steps and saves nothing. Returns the presentation id, its steps and a link that opens the slate and plays it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "shareId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The slate ID from its address: /canvas/<shareId>."
+          },
+          "style": {
+            "type": "string",
+            "enum": [
+              "voyage",
+              "stage",
+              "editorial",
+              "neon",
+              "sketch",
+              "blueprint",
+              "journey",
+              "calm"
+            ],
+            "description": "The style to play it in. Left out, the AI chooses."
+          },
+          "palette": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 6,
+            "items": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "description": "Your own colours, with a style: the first three lead, the background stays the style's."
+          },
+          "brief": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "What the presentation should focus on or bring out, in plain words."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "save",
+              "preview"
+            ],
+            "default": "save",
+            "description": "save (the default) writes; preview returns what would change and saves nothing. The response says which happened."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "shareId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Create a presentation",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "method": "presentations.create",
       "kind": "write"
     },
     {

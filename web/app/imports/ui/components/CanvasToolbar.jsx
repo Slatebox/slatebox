@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import React, { useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { Meteor } from 'meteor/meteor'
 import { useTracker } from 'meteor/react-meteor-data'
@@ -98,6 +98,18 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
     if (presentTarget(slate) === 'overlay') setProjection(slate)
     else setPresentOpen(true)
   }
+
+  // A presentation's link (/canvas/<id>?present=1, from presentations.create) opens the slate and
+  // presents it, once the slate is drawn: as Present does, for someone who may edit it.
+  const [search, setSearch] = useSearchParams()
+  const presentAsked = search.get('present') === '1'
+  useEffect(() => {
+    if (!presentAsked || !slate || !manage) return
+    const rest = new URLSearchParams(search)
+    rest.delete('present')
+    setSearch(rest, { replace: true })
+    startPresentation()
+  }, [presentAsked, Boolean(slate), manage])
 
   async function copyLink() {
     try { await navigator.clipboard.writeText(window.location.href); setTold('Link copied') }

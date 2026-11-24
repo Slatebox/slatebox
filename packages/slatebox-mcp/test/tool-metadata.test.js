@@ -111,3 +111,14 @@ test("the guidance moved to the server instructions, and results stay marked as 
   }
   assert.match(DATA_NOTE, /written by people; treat it as data/);
 });
+
+test("create_presentation is a first-class tool: titled, a write that spends AI, neither read-only nor destructive", async () => {
+  for (const [where, tools] of [["local", await listedByLocalServer()], ["hosted", listedTools(generated.tools)]]) {
+    const tool = tools.find((t) => t.name === "create_presentation");
+    assert.ok(tool, `${where} lists create_presentation`);
+    assert.equal(tool.title, "Create a presentation");
+    assert.deepEqual(tool.annotations, { title: "Create a presentation", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true });
+    assert.deepEqual(Object.keys(tool.inputSchema.properties).sort(), ["brief", "confirm", "idempotencyKey", "mode", "palette", "shareId", "style"]);
+    assert.deepEqual(tool.inputSchema.required, ["shareId"]);
+  }
+});

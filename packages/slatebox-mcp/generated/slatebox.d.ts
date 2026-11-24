@@ -462,6 +462,47 @@ declare namespace slatebox.presence {
 }
 
 declare namespace slatebox.presentations {
+  /** Present. Create a presentation of a slate with the planner the Present button uses: the AI (feature presentation, counted like other AI use) groups the notes into steps and chooses each step's layout, kicker and caption, played on the live canvas with camera moves. Optional: a style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), a palette (3 to 6 colours) and a brief (what to focus on). Needs edit access to the slate. Each call plans a new version; mode "preview" plans and returns the steps and saves nothing. Returns the presentation id, its steps and a link that opens the slate and plays it. @scope slates:write @modes save|preview @openWorld */
+  function create(input: {
+    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
+    shareId: string;
+    /** The style to play it in. Left out, the AI chooses. */
+    style?: "voyage" | "stage" | "editorial" | "neon" | "sketch" | "blueprint" | "journey" | "calm";
+    /** Your own colours, with a style: the first three lead, the background stays the style's. (3–6 items) */
+    palette?: string[];
+    /** What the presentation should focus on or bring out, in plain words. (1–4000 characters) */
+    brief?: string;
+    /** preview returns what would change and saves nothing. (default "save") */
+    mode?: "save" | "preview";
+  }): Promise<({
+    /** The new presentation (null in a preview, which saves nothing). */
+    presentationId: string | null;
+    version?: number | null;
+    name?: string;
+    published?: boolean;
+    /** The style it plays in. */
+    style: "voyage" | "stage" | "editorial" | "neon" | "sketch" | "blueprint" | "journey" | "calm" | null;
+    /** Every style it can play in. */
+    styles?: string[];
+    steps: Array<{
+      step: number;
+      layout: "title" | "overview" | "dive" | "hero" | "treeBuild" | "trace" | "sweep" | "group" | "bigNumber" | "quote" | "split" | "compare" | "cover" | "finale";
+      kicker?: string;
+      caption: string;
+      /** How many of the slate's notes the step shows. */
+      notes?: number;
+      [key: string]: unknown;
+    }>;
+    /** Opens the slate and plays this presentation (null in a preview). */
+    link: string | null;
+    /** True when Slatebox grouped the notes itself because the AI could not plan the slate; reason says why. */
+    automatic: boolean;
+    reason?: string;
+    [key: string]: unknown;
+  }) & { mode: "save" | "preview" }>;
+}
+
+declare namespace slatebox.presentations {
   /** Deck. Read your latest presentation of a slate: its style, and each step's layout (title, overview, dive, hero, treeBuild, trace, sweep, group, bigNumber, quote, split, compare, cover, finale), kicker and caption. The deck plays on the live canvas with Prezi-style camera moves. @scope slates:read */
   function get(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */

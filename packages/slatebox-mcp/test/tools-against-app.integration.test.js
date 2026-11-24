@@ -145,6 +145,7 @@ async function instance(t) {
     { nodeId: "c", description: "Gamma", metrics: box(600), childrenNodes: [] }] }] };
   const deckRow = { _id: "deck1", version: 1, name: "Probe deck", presentationData: JSON.stringify(deckLayout), ...deckRecord({ layout: deckLayout, name: "Probe" }) };
   const restyles = [];
+  const planned = [];
   // Parity (slates.list, slates.copy, slates.delete, comments.*): the app's rules have their own
   // tests (scripts/agent-parity.test.mjs). Here: the routes and the calls, on the same store.
   const comments = [];
@@ -170,6 +171,11 @@ async function instance(t) {
     ai,
     latestPresentation: async (shareId, userId) => (shareId === "canvas" && userId === "owner" ? deckRow : null),
     savePresentation: async (id, set) => { restyles.push([id, set.style]); Object.assign(deckRow, set); },
+    // presentations.create: Present's planner, stood in for (the AI is not reached here).
+    createPresentation: async (request) => {
+      planned.push(request);
+      return { row: { ...deckRow, _id: request.preview ? null : "deck2", version: request.preview ? null : 2 }, automatic: false, reason: "" };
+    },
     instance: describer,
     accounts,
     // Wave 2 (P07): the service also says what the caller may do; the probe owns every slate.
@@ -278,7 +284,7 @@ async function instance(t) {
   };
   const stored = async (shareId) => slates.findOne({ shareId });
   const texts = async () => (await stored("canvas")).nodes.map((n) => n.options.text);
-  return { client, exec, ok, confirmed, called, stored, texts, invites, transfers, deckRow, restyles, comments, deletedSlates, handedOff };
+  return { client, exec, ok, confirmed, called, stored, texts, invites, transfers, deckRow, restyles, planned, comments, deletedSlates, handedOff };
 }
 
 // Every canvas edit names the revision it was made on (required since release/agentic): the
@@ -330,7 +336,7 @@ test("canvas edits change exactly the notes they name, and only when saved", asy
 });
 
 test("every client method succeeds against the app, and refusals keep status, code and details", async (t) => {
-  const { ok, exec, confirmed, called, stored, texts, invites, transfers, deckRow, restyles, comments, deletedSlates, handedOff } = await instance(t);
+  const { ok, exec, confirmed, called, stored, texts, invites, transfers, deckRow, restyles, planned, comments, deletedSlates, handedOff } = await instance(t);
 
   const created = await ok(`return slatebox.slates.create({ brief: "Request -> Review", kind: "diagram" })`);
   assert.equal(created.shareId, "created");
@@ -456,7 +462,15 @@ return slatebox.presence.step({ shareId: "canvas", index: 0, status: "done" })`)
   assert.deepEqual([shaped.mode, shaped.shape.name], ["save", "Box"]);
   const boxed = (await stored("canvas")).nodes.find((n) => n.options.id === "b").options;
   assert.deepEqual([boxed.shape, boxed.shapeRef], ["custom", { id: "s1", name: "Box" }]);
-  // Presentations (new): read a slate's deck, and restyle it in one call (the same steps, no AI).
+  // Presentations: create one with Present's planner (a preview saves nothing and has no link).
+  const made = await ok(`return slatebox.presentations.create({ shareId: "canvas", style: "calm", brief: "the risks" })`);
+  assert.deepEqual([made.presentationId, made.version, made.link, made.automatic, made.mode], ["deck2", 2, "http://127.0.0.1/canvas/canvas?present=1", false, "save"]);
+  assert.equal(made.steps[0].layout, "title");
+  const tried = await ok(`return slatebox.presentations.create({ shareId: "canvas", mode: "preview" })`);
+  assert.deepEqual([tried.presentationId, tried.link, tried.mode], [null, null, "preview"]);
+  assert.deepEqual(planned.map(({ userId, shareId, style, brief, preview }) => [userId, shareId, style, brief, preview]),
+    [["owner", "canvas", "calm", "the risks", false], ["owner", "canvas", null, "", true]]);
+  // Read a slate's deck, and restyle it in one call (the same steps, no AI).
   const deck = await ok(`return slatebox.presentations.get({ shareId: "canvas" })`);
   assert.equal(deck.style, deckRow.style.id);
   assert.equal(deck.steps[0].layout, "title");

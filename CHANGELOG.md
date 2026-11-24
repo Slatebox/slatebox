@@ -14,6 +14,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- Agents create presentations: `presentations.create` (`POST /api/v1/slates/{shareId}/presentation`,
+  the MCP tool `create_presentation`, `slatebox.presentations.create` in exec and so `slatebox exec`)
+  plans a presentation of a slate with the Present button's planner (the AI feature `presentation`,
+  counted like Present: Pro credits on Cloud, the guest allowance, or the person's own key), for
+  someone who may edit the slate. Optional style (voyage, stage, editorial, neon, sketch, blueprint,
+  journey, calm), palette and brief; `mode: "preview"` plans without saving. It answers with the
+  presentation id, its steps (layout, kicker, caption) and a link, `/canvas/<shareId>?present=1`,
+  that opens the slate and plays it.
+
 - Agents reach what a person does on the Slates page and in the comment drawer, with the app's own
   rules: list your slates or your team's (`slates.list`, `GET /api/v1/slates`, `list_slates`), copy a
   slate (`slates.copy`, now also `POST /api/v1/slates/{shareId}/copy`, `copy_slate`), delete your own
