@@ -35,7 +35,7 @@ export const itemDetail = {
     categoryLocked: { type: 'boolean' }, versionCount: { type: 'integer' }, publishedVersion: { type: 'integer' },
     status: { type: 'string', enum: [...LIBRARY_STATUSES], description: 'Its author and reviewers only.' },
     reviewStatus: { type: 'string', description: 'The state of the version waiting for review (its author and reviewers only).' },
-    pendingVersion: { type: 'integer' }, pendingMeta: { type: 'object', description: 'An update to a published item: its proposed details, public once approved.' }, sourceShareId: { type: 'string' }, reviewShareId: { type: 'string' }, lastMessage: { type: 'object' },
+    pendingVersion: { type: 'integer' }, pendingMeta: { type: 'object', description: 'An update to a published item: its proposed details, public once approved.' }, draftMeta: { type: 'object', description: 'A published item\'s saved draft details, not yet submitted (its author only).' }, sourceShareId: { type: 'string' }, reviewShareId: { type: 'string' }, lastMessage: { type: 'object' },
   },
   required: itemSummary.required,
 }

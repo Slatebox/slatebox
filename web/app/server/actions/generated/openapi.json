@@ -2419,6 +2419,10 @@
                       "maxLength": 40
                     },
                     "description": "Smart components only: words people might search for."
+                  },
+                  "selfReview": {
+                    "type": "boolean",
+                    "description": "Review your own submission. Allowed only on a server with one administrator; the thread records it."
                   }
                 },
                 "additionalProperties": false
@@ -2565,6 +2569,10 @@
                         "pendingMeta": {
                           "type": "object",
                           "description": "An update to a published item: its proposed details, public once approved."
+                        },
+                        "draftMeta": {
+                          "type": "object",
+                          "description": "A published item's saved draft details, not yet submitted (its author only)."
                         },
                         "sourceShareId": {
                           "type": "string"
@@ -2735,6 +2743,10 @@
                           "type": "object",
                           "description": "An update to a published item: its proposed details, public once approved."
                         },
+                        "draftMeta": {
+                          "type": "object",
+                          "description": "A published item's saved draft details, not yet submitted (its author only)."
+                        },
                         "sourceShareId": {
                           "type": "string"
                         },
@@ -2848,6 +2860,10 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 2000
+                  },
+                  "selfReview": {
+                    "type": "boolean",
+                    "description": "Review your own submission. Allowed only on a server with one administrator; the thread records it."
                   }
                 },
                 "additionalProperties": false
@@ -3155,7 +3171,12 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {},
+                "properties": {
+                  "selfReview": {
+                    "type": "boolean",
+                    "description": "Review your own submission. Allowed only on a server with one administrator; the thread records it."
+                  }
+                },
                 "additionalProperties": false
               }
             }
@@ -3247,7 +3268,7 @@
       "post": {
         "operationId": "refineLibraryItem",
         "summary": "Refine by chat",
-        "description": "For administrators: ask for a change to an item in review in plain words (\"rename it to Weekly retro\", \"put it in Meetings\", \"Write a clearer one-line summary\", \"What should I check?\"). Preview answers the proposal (metadata from and to, rule lines for a component's board, things to check); save keeps it, on the item and on the review copy. Simple renames, categories and summaries are read without AI.",
+        "description": "For administrators: ask for a change to an item in review in plain words (\"rename it to Weekly retro\", \"put it in Meetings\", \"Write a clearer one-line summary\", \"What should I check?\"). Preview answers the proposal (metadata from and to, rule lines for a component's board, things to check) and its previewId; save with that previewId keeps exactly it, on the item and on the review copy. Simple renames, categories and summaries are read without AI.",
         "x-required-scope": "library:review",
         "x-slatebox": {
           "action": "library.review.refine",
@@ -3315,6 +3336,15 @@
                     "minLength": 1,
                     "maxLength": 2000
                   },
+                  "selfReview": {
+                    "type": "boolean",
+                    "description": "Review your own submission. Allowed only on a server with one administrator; the thread records it."
+                  },
+                  "previewId": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "Save: the previewId a preview answered. Keeps exactly that proposal (no second AI answer)."
+                  },
                   "history": {
                     "type": "array",
                     "maxItems": 6,
@@ -3378,6 +3408,9 @@
                     "diff": {
                       "type": "object"
                     },
+                    "previewId": {
+                      "type": "string"
+                    },
                     "kept": {
                       "type": "boolean"
                     },
@@ -3411,6 +3444,9 @@
                     },
                     "diff": {
                       "type": "object"
+                    },
+                    "previewId": {
+                      "type": "string"
                     },
                     "kept": {
                       "type": "boolean"
@@ -4370,6 +4406,10 @@
                         "pendingMeta": {
                           "type": "object",
                           "description": "An update to a published item: its proposed details, public once approved."
+                        },
+                        "draftMeta": {
+                          "type": "object",
+                          "description": "A published item's saved draft details, not yet submitted (its author only)."
                         },
                         "sourceShareId": {
                           "type": "string"

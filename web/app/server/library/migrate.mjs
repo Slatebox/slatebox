@@ -1,5 +1,6 @@
 // Community slates, approved public templates and featured public presentations become library
-// items (spec §5.4). One-shot and idempotent: each item remembers what it came from (migratedFrom,
+// items (spec §5.4). What waits in the queue is marked migrationPristine until its owner sends it
+// again: until then a reviewer may publish it only while its slate is still public (core.mjs). One-shot and idempotent: each item remembers what it came from (migratedFrom,
 // also written as its `migrated` event), so a second run adds nothing. The source slates are not
 // changed: a public slate stays link-public.
 import { LIBRARY_LICENSE, LIBRARY_LIMITS, UNNAMED_AUTHOR, plainText, slugify } from '../../imports/api/common/library-model.mjs'
@@ -39,7 +40,7 @@ export async function migrateCommunity({ slates, presentations, items, versions,
   const at = () => new Date(now())
   const day = today || new Date(now()).toISOString().slice(0, 10)
 
-  async function make({ key, kind, status, title, summary, authorId, authorName, content, message, sourceShareId }) {
+  async function make({ key, kind, status, title, summary, authorId, authorName, content, message, sourceShareId, pristine = false }) {
     if (await items.findOne({ migratedFrom: key })) {
       report.skipped += 1
       return
@@ -57,7 +58,7 @@ export async function migrateCommunity({ slates, presentations, items, versions,
       _id: id, kind, origin: 'user', status, reviewStatus: status === 'published' ? null : status, slug: slugify(clean, id),
       title: clean, summary: firstLine(summary) || clean, categoryLocked: false, synonyms: [], authorId: authorId ?? null, authorName,
       provenance: {}, sourceShareId, versionCount: 1, counts: { copies: 0, adds: 0, branches: 0 }, popularity: 0, license: LIBRARY_LICENSE,
-      preview: previewOf(content), migratedFrom: key, createdAt: at(), updatedAt: at(),
+      preview: previewOf(content), migratedFrom: key, ...(pristine && { migrationPristine: true }), createdAt: at(), updatedAt: at(),
       ...(status === 'published' ? { publishedVersion: 1, publishedAt: at() } : { pendingVersion: 1, submittedAt: at() }),
     }
     report.items.push({ key, kind, status, title: clean })
@@ -78,23 +79,31 @@ export async function migrateCommunity({ slates, presentations, items, versions,
       content: { kind: 'slate', slate: snapshotSlate(slate) }, message: `Moved from the template gallery on ${day}.`,
     })
   }
+  // A featured deck publishes what its player already showed everyone: the deck's own copy of the
+  // slate (slateJSON: each note's place, words and look, nothing else), never the slate as it stands
+  // now. A deck without that copy waits for review; a deleted slate's deck is left out.
   for (const deck of await presentations.find(featuredSelector()).toArray()) {
     const slate = await slates.findOne({ shareId: deck.slateShareId })
-    if (!slate) {
-      report.failed += 1
+    if (!slate || slate.archivedDate) {
+      if (!slate) report.failed += 1
+      else report.skipped += 1
       continue
     }
+    let played = null
+    try { played = typeof deck.slateJSON === 'string' ? JSON.parse(deck.slateJSON) : null } catch { played = null }
+    const status = played && Array.isArray(played.nodes) ? 'published' : MIGRATE_COMMUNITY_STATUS
     await make({
-      key: 'presentation:' + deck._id, kind: 'presentation', status: 'published', title: deck.name || slate.options?.name, sourceShareId: slate.shareId,
+      key: 'presentation:' + deck._id, kind: 'presentation', status, title: deck.name || slate.options?.name, sourceShareId: slate.shareId,
       summary: deck.description || slate.options?.description, authorId: deck.userId ?? slate.userId, authorName: await userName(deck.userId ?? slate.userId),
-      content: { kind: 'presentation', slate: snapshotSlate(slate), deck: snapshotDeck(deck) }, message: `Moved from featured presentations on ${day}.`,
+      content: { kind: 'presentation', slate: snapshotSlate(status === 'published' ? played : slate), deck: snapshotDeck(deck) }, message: `Moved from featured presentations on ${day}.`,
+      pristine: status !== 'published',
     })
   }
   for (const slate of await slates.find(communitySelector(masterUserId)).toArray()) {
     await make({
       key: 'community:' + slate._id, kind: 'slate', status: MIGRATE_COMMUNITY_STATUS, title: slate.options?.name, sourceShareId: slate.shareId,
       summary: slate.options?.description, authorId: slate.userId, authorName: await userName(slate.userId),
-      content: { kind: 'slate', slate: snapshotSlate(slate) }, message: `Moved from Community slates on ${day}.`,
+      content: { kind: 'slate', slate: snapshotSlate(slate) }, message: `Moved from Community slates on ${day}.`, pristine: true,
     })
   }
   return report

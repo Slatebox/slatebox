@@ -65,7 +65,7 @@ test('the list filters by kind and category, and a visitor sees published items 
   assert.equal(countLine(await env.run(visitor, 'library.stats', {})), '19 smart components, 1 slate, 0 presentations')
 })
 
-test('a guest opens a copy of a published slate: a private slate of theirs, its provenance kept, the copy counted', async (t) => {
+test('a guest opens a copy of a published slate: a private slate of theirs, its provenance kept; copies count once per signed-in person', async (t) => {
   const env = await setup(t)
   const itemId = await publishedSlate(env)
   const guest = env.person('guest1')
@@ -76,12 +76,16 @@ test('a guest opens a copy of a published slate: a private slate of theirs, its 
   assert.notEqual(copy.options.isPublic, true)
   assert.deepEqual(copy.libraryOrigin, { itemId, version: 2, kind: 'slate', title: 'Demo' })
   assert.equal(copy.library, undefined)
-  assert.equal((await env.run(visitor, 'library.get', { itemId })).item.counts.copies, 1)
+  assert.equal((await env.run(visitor, 'library.get', { itemId })).item.counts.copies, 0, 'a guest is never counted')
+  const ben = env.person('other')
+  await env.run(ben, 'library.fork', { itemId })
+  await env.run(ben, 'library.fork', { itemId })
+  assert.equal((await env.run(visitor, 'library.get', { itemId })).item.counts.copies, 1, 'one person counts once, however often they copy')
   // The visitor's page makes them a guest before it forks; a visitor principal itself is refused.
   await assert.rejects(env.run(visitor, 'library.fork', { itemId }), err => err.status === 401 || err.status === 403)
 })
 
-test('a component goes on a new slate, or beside a slate\'s boards after a preview, at most 8 boards; each add is counted', async (t) => {
+test('a component goes on a new slate, or beside a slate\'s boards after a preview, at most 8 boards; each person\'s adds count once', async (t) => {
   const env = await setup(t)
   const ada = env.person('owner')
   const before = (await env.run(visitor, 'library.get', { itemId: 'pros-cons' })).item.counts.adds
@@ -106,7 +110,7 @@ test('a component goes on a new slate, or beside a slate\'s boards after a previ
   assert.match(full.message, /This slate holds 8 boards/)
   assert.match(forkErrorText({ error: full.code, reason: full.message }), /This slate holds 8 boards/)
   assert.equal((await env.run(visitor, 'library.get', { itemId: 'pros-cons' })).item.counts.adds, before + 1)
-  assert.equal((await env.run(visitor, 'library.get', { itemId: 'triage' })).item.counts.adds, 6)
+  assert.equal((await env.run(visitor, 'library.get', { itemId: 'triage' })).item.counts.adds, 1, 'six adds by one person count once')
 })
 
 test('slatebox.com\'s ?copy=1 runs once: the page reads the flag, then puts the URL back without it', () => {

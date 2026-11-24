@@ -15,10 +15,11 @@ const fixtures = () => [
   { _id: "c2", shareId: "master-public", userId: "master", options: { name: "Master's", isPublic: true }, nodes: [] },
   { _id: "c3", shareId: "archived", userId: "ben", archivedDate: new Date(0), options: { name: "Gone", isPublic: true }, nodes: [] },
   { _id: "p1", shareId: "private", userId: "ben", options: { name: "Mine", isPrivate: true }, nodes: [] },
-  { _id: "d1", shareId: "deck-slate", userId: "cy", options: { name: "Deck slate", isPrivate: true }, nodes: [note("c", "Slide")] },
+  { _id: "d1", shareId: "deck-slate", userId: "cy", options: { name: "Deck slate", isPrivate: true, creationBrief: "Plan Q1 layoffs" }, nodes: [note("c", "Slide"), note("x", "secret note not in deck")] },
 ];
 const decks = () => [
-  { _id: "pr1", slateShareId: "deck-slate", userId: "cy", name: "Launch story", isPublished: true, isPublic: true, isFeatured: true, viewpoints: [{ nodeIds: ["c"] }], style: { id: "neon" } },
+  { _id: "pr1", slateShareId: "deck-slate", userId: "cy", name: "Launch story", isPublished: true, isPublic: true, isFeatured: true, viewpoints: [{ nodeIds: ["c"] }], style: { id: "neon" },
+    slateJSON: JSON.stringify({ options: { name: "Deck slate" }, nodes: [note("c", "Slide")] }) },
   { _id: "pr2", slateShareId: "deck-slate", userId: "cy", name: "Not featured", isPublished: true, isPublic: true, isFeatured: false },
 ];
 
@@ -45,6 +46,9 @@ test("templates and featured presentations are published; community slates wait 
   const deckVersion = stores.versions.docs.find((v) => v.itemId === deck._id);
   assert.equal(deckVersion.content.deck.style.id, "neon");
   assert.equal(deckVersion.content.slate.nodes[0].options.text, "Slide");
+  // What the deck's player showed, never the slate as it stands: no later note, no creation brief.
+  assert.deepEqual(deckVersion.content.slate.nodes.map((node) => node.options.text), ["Slide"]);
+  assert.equal(deckVersion.content.slate.options.creationBrief, undefined);
   const community = byKey["community:c1"];
   assert.deepEqual([community.kind, community.status, community.reviewStatus, community.pendingVersion, community.publishedVersion, community.authorId],
     ["slate", "submitted", "submitted", 1, undefined, "ben"]);
@@ -79,4 +83,23 @@ test("a template the app seeds itself (owned by no account) is credited to Slate
   assert.deepEqual(report.created, { published: 1, submitted: 0 });
   const [item] = stores.items.docs;
   assert.deepEqual([item.migratedFrom, item.status, item.authorName, item.authorId], ["template:tplprocon001", "published", "Slatebox", null]);
+});
+
+test("a featured deck of a deleted slate is left out; one without the player's copy waits for review, never published as the whole slate", async () => {
+  const slates = libraryCollection([
+    { _id: "g1", shareId: "gone", userId: "cy", archivedDate: new Date(0), options: { name: "Gone", isPrivate: true }, nodes: [note("s", "secret note not in deck")] },
+    { _id: "o1", shareId: "old", userId: "cy", options: { name: "Old deck slate", isPrivate: true, creationBrief: "my prompt" }, nodes: [note("o", "Old")] },
+  ]);
+  const presentations = libraryCollection([
+    { _id: "pg", slateShareId: "gone", userId: "cy", name: "Deleted", isPublished: true, isPublic: true, isFeatured: true, slateJSON: JSON.stringify({ nodes: [note("s", "secret note not in deck")] }) },
+    { _id: "po", slateShareId: "old", userId: "cy", name: "Old deck", isPublished: true, isPublic: true, isFeatured: true },
+  ]);
+  const stores = { slates, presentations, items: libraryCollection(), versions: libraryCollection(), events: libraryCollection() };
+  const report = await run(stores);
+  assert.deepEqual(report.created, { published: 0, submitted: 1 });
+  assert.equal(stores.items.docs.some((item) => item.migratedFrom === "presentation:pg"), false, "a deleted slate's deck is not moved");
+  const [old] = stores.items.docs;
+  assert.deepEqual([old.migratedFrom, old.status, old.migrationPristine], ["presentation:po", "submitted", true]);
+  const version = stores.versions.docs.find((v) => v.itemId === old._id);
+  assert.equal(version.content.slate.options.creationBrief, undefined, "the creation brief never goes into a version");
 });

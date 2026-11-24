@@ -42,13 +42,17 @@ export default function LibraryReview() {
     return () => { live = false }
   }, [tab, kind, migrated, refresh])
 
-  async function open(item) {
+  const [ownItem, setOwnItem] = React.useState(null)
+  async function open(item, { selfReview = false } = {}) {
     setBusy(item.id)
     setProblem('')
+    setOwnItem(null)
     try {
-      const opened = await libraryApi.review.open({ itemId: item.id })
+      const opened = await libraryApi.review.open({ itemId: item.id, ...(selfReview && { selfReview: true }) })
       navigate(`/canvas/${opened.reviewShareId}`)
     } catch (error) {
+      // Your own submission: another administrator reviews it, unless you are the only one.
+      if (error?.error === 'self_review' && !selfReview) setOwnItem(item)
       setProblem(error?.reason || 'It could not be opened for review.')
       setBusy(null)
     }
@@ -112,7 +116,8 @@ export default function LibraryReview() {
           <Button variant="outlined" onClick={approveAll} disabled={busy !== null}>Approve all shown ({items.length})</Button>
         </Box>
       )}
-      {problem && <Alert severity={/approved\.$/.test(problem) ? 'success' : 'error'} sx={{ mt: SPACE.text }} role="status">{problem}</Alert>}
+      {problem && <Alert severity={/approved\.$/.test(problem) ? 'success' : 'error'} sx={{ mt: SPACE.text }} role="status"
+        action={ownItem && <Button color="inherit" size="small" onClick={() => open(ownItem, { selfReview: true })} data-testid="self-review-open">Review it myself</Button>}>{problem}</Alert>}
       <Box component="ul" data-testid="queue-list" sx={{ listStyle: 'none', p: 0, m: 0, mt: SPACE.block, display: 'grid', gap: SPACE.group }}>
         {answer === null && <Typography component="li" color="text.secondary">Loading…</Typography>}
         {answer && items.length === 0 && <Typography component="li" color="text.secondary">Nothing here.</Typography>}

@@ -11,6 +11,7 @@ import CONSTANTS from '../../imports/api/common/constants'
 import { catalogSamples } from 'slateboxjs/workshops/samples'
 import { createLibraryCore } from './core.mjs'
 import { seedBuiltins } from './builtins.mjs'
+import { LibraryCounters } from './counters'
 import { migrateCommunity } from './migrate.mjs'
 import { createRefineAI } from './refine-ai.mjs'
 import { createLibraryNotifier } from './notify.mjs'
@@ -63,9 +64,11 @@ export function createAppLibrary(shared) {
     items: raw(LibraryItems),
     versions: raw(LibraryVersions),
     events: raw(LibraryEvents),
+    counters: raw(LibraryCounters),
     slates: raw(Slates),
     saveCore: shared.saveCore,
     isLibraryReviewer,
+    countReviewers: async () => (await Permissions.rawCollection().distinct('userId', { claimId: CONSTANTS.claims.uberMensch._id })).length,
     loadUser,
     isTeamAdmin,
     resolveSlateForUser: shared.resolveSlateForUser,
@@ -96,7 +99,10 @@ export async function ensureLibraryIndexes() {
   await raw(LibraryVersions).createIndex({ itemId: 1, n: 1 }, { unique: true })
   await raw(LibraryEvents).createIndex({ itemId: 1, at: 1 })
   await raw(LibraryEvents).createIndex({ type: 1, 'actor.userId': 1, at: -1 })
+  // A day's allowance is gone two days later; a "used by" mark stays.
+  await raw(LibraryCounters).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, partialFilterExpression: { kind: 'limit' } })
 }
+
 
 /** The built-in catalogue entries as library items, refreshed at every start. */
 export function seedLibraryBuiltins() {

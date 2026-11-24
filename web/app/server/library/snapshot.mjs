@@ -10,8 +10,14 @@ import { LIBRARY_LIMITS, libraryError } from '../../imports/api/common/library-m
 // its library fields, an import's bookkeeping and the directory flags.
 const PRIVATE_FIELDS = ['comments', 'collaborators', 'chatHistory', 'aiHistory', 'messages', 'conversation', 'nativeConversation',
   'library', 'libraryOrigin', 'teamImportId', 'importedVisibility', 'importedFrom', 'boardSeq', 'guestEditKey', 'invitationLease']
+// creationBrief is the prompt the person first wrote to make the slate; collabBaseline is the slate as
+// a collaboration session started; the search fields index the author's own copy.
 const PRIVATE_OPTIONS = ['isPrivate', 'isPublic', 'isUnlisted', 'isTemplate', 'templateApproved', 'templateMarkdown', 'templateTags',
-  'tags', 'basedOnTemplate', 'templateName', 'userNameOverride', 'eligibleForThemeCompilation', 'id']
+  'tags', 'basedOnTemplate', 'templateName', 'templatePrompt', 'userNameOverride', 'eligibleForThemeCompilation', 'id',
+  'creationBrief', 'collabBaseline', 'textSearch', 'nameSearch', 'descriptionSearch']
+// Who set a rule is a person on the author's slate (a collaborator, a reviewer): the published board
+// says "The author" instead. A rule that came with the board keeps its preset mark.
+export const RULE_SETTER = 'The author'
 // The fields of a published deck the player needs (PresentPublishedSlate), never who made it or its links.
 const DECK_FIELDS = ['name', 'description', 'showNarrative', 'viewpoints', 'direction', 'style', 'presentationData', 'slateJSON', 'playOnHover', 'autoplayOnPublish']
 
@@ -50,10 +56,14 @@ export function snapshotDeck(row) {
   return scrubSecrets(deck)
 }
 
-/** A board's workshop for a component version: without its Undo records or trades. */
+/** A board's workshop for a component version: the names of who set its rules replaced (RULE_SETTER). */
 export function snapshotWorkshop(workshop) {
   if (!workshop || typeof workshop !== 'object') throw libraryError(409, 'no_board', 'There is no board to save yet. Make one by chat first.')
-  return scrubSecrets(structuredClone(workshop))
+  const copy = structuredClone(workshop)
+  for (const rule of Array.isArray(copy.behaviour?.rules) ? copy.behaviour.rules : []) {
+    if (rule?.set && typeof rule.set === 'object' && rule.set.via !== 'preset') rule.set.by = RULE_SETTER
+  }
+  return scrubSecrets(copy)
 }
 
 export const contentHash = (content) => createHash('sha256').update(canonicalJson(content)).digest('hex')

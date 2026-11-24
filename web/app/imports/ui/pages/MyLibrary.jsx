@@ -63,7 +63,7 @@ function MineRow({ item, onChanged }) {
   const [problem, setProblem] = React.useState('')
   const status = authorStatus(item)
   const can = authorActions(item)
-  const shown = { ...item, ...(item.pendingMeta || {}) }
+  const shown = { ...item, ...(item.pendingMeta || {}), ...(item.draftMeta || {}) }
 
   async function act(run) {
     setBusy(true)
@@ -108,7 +108,7 @@ function MineRow({ item, onChanged }) {
             {item.status === 'published' ? 'Send the update' : item.status === 'draft' ? 'Submit for review' : 'Send it again'}
           </Button>}
           {can.withdraw && <Button size="small" onClick={() => act(() => libraryApi.withdraw({ itemId: item.id }))} disabled={busy}>
-            {item.status === 'published' ? 'Take it out of the library' : 'Withdraw'}
+            {item.status === 'published' ? (item.reviewStatus ? 'Withdraw the update' : 'Take it out of the library') : 'Withdraw'}
           </Button>}
           {can.discard && <Button size="small" color="error" onClick={() => act(() => libraryApi.discard({ itemId: item.id }))} disabled={busy}>Discard</Button>}
           {item.events?.length > 0 && <Button size="small" onClick={() => setOpen((now) => !now)} aria-expanded={open}>{open ? 'Hide the thread' : `Thread (${item.events.length})`}</Button>}

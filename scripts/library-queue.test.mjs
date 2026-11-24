@@ -155,8 +155,9 @@ test("an AI refinement is a proposal until Keep, kept exactly as previewed, and 
   const had = rulesOf().length;
   const added = () => rulesOf().find((rule) => rule.kind === "path" && rule.noSkip === true);
   assert.equal(added(), undefined);
-  // Keep: the same proposal (no second AI call), on the item and the review board.
-  const kept = await run(root, "library.review.refine", { itemId, message: "Tighten the rules", mode: "save" });
+  // Keep names the preview: the same proposal (no second AI call), on the item and the review board.
+  assert.ok(preview.previewId, "a preview answers the id Keep names");
+  const kept = await run(root, "library.review.refine", { itemId, message: "Tighten the rules", mode: "save", previewId: preview.previewId });
   assert.equal(kept.kept, true);
   assert.equal(requests.length, 1, "Keep applies what was previewed, without asking the AI again");
   assert.equal(item(itemId).summary, "What went well, what to change, what to try");

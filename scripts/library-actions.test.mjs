@@ -241,7 +241,7 @@ test("guests use what is published and never publish: fork and branch yes, submi
   const forked = await ddp("guest1", "library.fork", { itemId: "pros-cons" });
   const copy = world.slate(forked.shareId);
   assert.deepEqual([copy.userId, copy.options.isPrivate, copy.libraryOrigin], ["guest1", true, { itemId: "builtin-pros-cons", version: 1, kind: "component", title: "Pros and cons" }]);
-  assert.equal(world.library.items.docs.find((doc) => doc._id === "builtin-pros-cons").counts.adds, 1);
+  assert.equal(world.library.items.docs.find((doc) => doc._id === "builtin-pros-cons").counts.adds, 0, "a guest's use is never counted");
   await assert.rejects(ddp("guest1", "library.fork", { itemId }), { error: "not_found" });
   await assert.rejects(run(person("other"), "library.fork", { itemId }), { status: 404 });
   const branch = await ddp("guest1", "library.branch", { itemId: "retro" });

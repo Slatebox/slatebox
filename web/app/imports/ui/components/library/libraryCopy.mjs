@@ -70,7 +70,7 @@ export function authorActions(item) {
   const review = item.reviewStatus
   return {
     submit: ['draft', 'changes_requested', 'rejected', 'unpublished'].includes(status) || (status === 'published' && (!review || review === 'changes_requested' || review === 'rejected')),
-    withdraw: (status === 'submitted' && review === 'submitted') || (status === 'published' && !review),
+    withdraw: (status === 'submitted' && review === 'submitted') || (status === 'published' && (!review || ['submitted', 'changes_requested', 'rejected'].includes(review))),
     discard: status === 'draft',
     reply: status !== 'draft',
   }

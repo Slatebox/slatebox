@@ -53,6 +53,13 @@ export default function ReviewPanel({ slate }) {
   const [deciding, setDeciding] = React.useState(false)
   const [done, setDone] = React.useState(null)
   const composer = React.useRef(null)
+  // Reviewing your own submission: refused unless this server has one administrator and you say so.
+  const [selfReview, setSelfReview] = React.useState(false)
+  const [selfAsk, setSelfAsk] = React.useState(false)
+  const asReviewer = (call, input) => call({ ...input, ...(selfReview && { selfReview: true }) }).catch((error) => {
+    if (error?.error === 'self_review') setSelfAsk(true)
+    throw error
+  })
 
   React.useEffect(() => {
     if (!itemId) return undefined
@@ -83,7 +90,7 @@ export default function ReviewPanel({ slate }) {
     setMessage('')
     setAsking(true)
     try {
-      const answer = await libraryApi.review.refine({ itemId, message: said, history, mode: 'preview' })
+      const answer = await asReviewer(libraryApi.review.refine, { itemId, message: said, history, mode: 'preview' })
       setTurns((now) => [...now, { role: 'assistant', text: answer.reply || 'Here is what I would change.', ask: said, history, answer, state: proposalChanges(answer) ? 'pending' : 'reply' }])
     } catch (error) {
       setTurns((now) => [...now, { role: 'assistant', text: error?.reason || 'That could not be done. Ask in another way.', state: 'error' }])
@@ -96,7 +103,7 @@ export default function ReviewPanel({ slate }) {
     const turn = turns[index]
     setTurns((now) => now.map((row, i) => (i === index ? { ...row, state: 'keeping' } : row)))
     try {
-      const kept = await libraryApi.review.refine({ itemId, message: turn.ask, history: turn.history, mode: 'save' })
+      const kept = await asReviewer(libraryApi.review.refine, { itemId, message: turn.ask, history: turn.history, mode: 'save', ...(turn.answer?.previewId && { previewId: turn.answer.previewId }) })
       setTurns((now) => now.map((row, i) => (i === index ? { ...row, state: kept.kept ? 'kept' : 'reply' } : row)))
       setReload((n) => n + 1)
     } catch (error) {
@@ -110,7 +117,7 @@ export default function ReviewPanel({ slate }) {
     setProblem('')
     try {
       const synonyms = meta.synonyms.split(',').map((word) => word.trim()).filter(Boolean)
-      await libraryApi.review.update({
+      await asReviewer(libraryApi.review.update, {
         itemId, title: meta.title.trim(), summary: meta.summary.trim(), ...(meta.description.trim() && { description: meta.description.trim() }),
         ...(meta.category && !item.categoryLocked && { category: meta.category }), ...(item.kind === 'component' && { synonyms }),
       })
@@ -140,7 +147,7 @@ export default function ReviewPanel({ slate }) {
     try {
       const text = decisionText.trim()
       if (decision === 'approve') {
-        const result = await libraryApi.review.approve({ itemId, ...(text && { message: text }) })
+        const result = await asReviewer(libraryApi.review.approve, { itemId, ...(text && { message: text }) })
         setDone({ kind: 'approve', url: `/library/${item.slug}`, version: result.publishedVersion })
       } else if (decision === 'changes') {
         await libraryApi.review.requestChanges({ itemId, message: text })
@@ -185,6 +192,12 @@ export default function ReviewPanel({ slate }) {
       {(wide || open) && (
         <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', px: 2, py: 1.5, display: 'grid', gap: 1.5, alignContent: 'start' }}>
           {problem && <Alert severity="error" role="alert" onClose={() => setProblem('')}>{problem}</Alert>}
+          {selfAsk && !selfReview && (
+            <Alert severity="info" data-testid="self-review-ask"
+              action={<Button color="inherit" size="small" onClick={() => { setSelfReview(true); setSelfAsk(false); setProblem('') }}>Review it myself</Button>}>
+              You sent this one. If you are this server’s only administrator, you can review it yourself; the thread records it.
+            </Alert>
+          )}
           {item && (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }} data-testid="review-header">
               <Chip size="small" label={KindTitle(item.kind)} />

@@ -71,8 +71,8 @@ export default function useBuilder(slate) {
     locked: library?.parent?.category ?? (item?.categoryLocked ? item.category : null),
     // What the save sheet starts from: what was saved, or the board's own name.
     defaults: {
-      title: item?.pendingMeta?.title ?? item?.title ?? boardName(board) ?? '',
-      summary: item?.pendingMeta?.summary ?? item?.summary ?? '',
+      title: item?.draftMeta?.title ?? item?.pendingMeta?.title ?? item?.title ?? boardName(board) ?? '',
+      summary: item?.draftMeta?.summary ?? item?.pendingMeta?.summary ?? item?.summary ?? '',
       category: item?.category ?? null,
       synonyms: (item?.synonyms ?? []).join(', '),
     },

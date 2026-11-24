@@ -22,6 +22,8 @@ import {
 } from '../../imports/api/common/library-model.mjs'
 import { checkSize, contentHash, snapshotDeck, snapshotSlate, snapshotWorkshop } from './snapshot.mjs'
 import { checkProposal, localRefinement } from './refine.mjs'
+import { personalDataChecks } from './refine-ai.mjs'
+import { countUse, spendAllowance } from './uses.mjs'
 import { copyDocument } from '../actions/slate-copy.mjs'
 import { privateSlateDocument } from '../private-slate-document.mjs'
 import { componentPlacing, componentSet } from '../../imports/api/common/component-add.mjs'
@@ -30,7 +32,12 @@ import { sharedSaveConditions } from '../methods/native-slate-save.mjs'
 import { applyWorkshopEdits, validateWorkshop, rulebook } from 'slateboxjs/workshops/model'
 import 'slateboxjs/workshops/behaviour'
 
-const DAY = 86400000
+// Events only reviewers read: the refine chat's turns. The kept result reaches the author as refine_kept (its diff, no chat).
+const REVIEWER_ONLY_EVENTS = new Set(['refine_proposed'])
+// A refine preview waits to be kept for half an hour; an item keeps its last few.
+const REFINE_PREVIEW_MS = 30 * 60 * 1000
+const REFINE_PREVIEWS = 8
+const REVIEWER_ONLY_MESSAGES = new Set(['refine_proposed', 'refine_kept'])
 const fail = libraryError
 const notFound = () => fail(404, 'not_found', 'There is no such item in the library.')
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -91,10 +98,11 @@ function contentDiff(before, after) {
 
 export function createLibraryCore(deps) {
   const {
-    items, versions, events, slates, saveCore, isLibraryReviewer, loadUser,
+    items, versions, events, counters = null, slates, saveCore, isLibraryReviewer, loadUser,
     isTeamAdmin = async () => false, resolveSlateForUser, latestPresentation = async () => null, publishedPresentation = async () => null,
     copyPresentation = async () => {}, applyWorkshopOperations = null, refineWithAI = async () => ({ reply: '' }), notify = async () => {},
     listingGate = null, generateShareId, newId, now = Date.now, appOrigin = () => '', samples = {},
+    countReviewers = async () => Number.POSITIVE_INFINITY,
   } = deps
   const at = () => new Date(now())
 
@@ -183,6 +191,7 @@ export function createLibraryCore(deps) {
         status: item.status, ...(item.reviewStatus && { reviewStatus: item.reviewStatus }),
         ...(item.pendingVersion && { pendingVersion: item.pendingVersion }),
         ...(item.pendingMeta && { pendingMeta: item.pendingMeta }),
+        ...(item.draftMeta && { draftMeta: item.draftMeta }),
         ...(item.sourceShareId && { sourceShareId: item.sourceShareId }),
         ...(item.reviewShareId && { reviewShareId: item.reviewShareId }),
         ...(item.lastMessage && { lastMessage: { ...item.lastMessage, at: new Date(item.lastMessage.at).toISOString() } }),
@@ -190,8 +199,17 @@ export function createLibraryCore(deps) {
     }
   }
   const versionShape = (version) => ({ n: version.n, meta: version.meta, content: version.content, ...(version.createdAt && { createdAt: new Date(version.createdAt).toISOString() }) })
-  const eventShape = (row) => ({ id: row._id, at: new Date(row.at).toISOString(), actor: row.actor, type: row.type,
-    ...(row.message && { message: row.message }), ...(row.diff && { diff: row.diff }), ...(row.version !== undefined && { version: row.version }) })
+  // The thread as its reader may see it. Reviewers see everything. An author sees what was decided and
+  // said to them, never the reviewer's own refine chat (refine_proposed), what a review copy was, or
+  // anyone's account id.
+  const eventShape = (row, { reviewer = false } = {}) => {
+    const actor = reviewer || !row.actor ? row.actor : { kind: row.actor.kind, name: row.actor.name }
+    const message = row.message && (reviewer || !REVIEWER_ONLY_MESSAGES.has(row.type)) ? row.message : undefined
+    const diff = row.diff && (reviewer || row.type !== 'review_opened') ? row.diff : undefined
+    return { id: row._id, at: new Date(row.at).toISOString(), actor, type: row.type,
+      ...(message && { message }), ...(diff && { diff }), ...(row.version !== undefined && { version: row.version }) }
+  }
+  const threadFor = (rows, reviewer) => rows.filter((row) => reviewer || !REVIEWER_ONLY_EVENTS.has(row.type)).map((row) => eventShape(row, { reviewer }))
 
   async function page(selector, sort, cursor, limit) {
     const skip = readCursor(cursor)
@@ -218,11 +236,11 @@ export function createLibraryCore(deps) {
   }
 
   async function get(principal, input) {
-    const { item, privileged } = await readableItem(principal, input.itemId)
+    const { item, privileged, reviewer } = await readableItem(principal, input.itemId)
     const version = await visibleVersion(item, privileged, input.version)
     // Its author and reviewers also read the review thread (the review panel and My library show it).
     const thread = privileged && item.origin !== 'builtin'
-      ? (await events.find({ itemId: item._id }, { sort: { at: -1, _id: -1 }, limit: 100 }).toArray()).reverse().map(eventShape)
+      ? threadFor((await events.find({ itemId: item._id }, { sort: { at: -1, _id: -1 }, limit: 100 }).toArray()).reverse(), reviewer)
       : null
     return { item: detail(item, privileged), version: versionShape(version), ...(thread && { thread }) }
   }
@@ -257,10 +275,12 @@ export function createLibraryCore(deps) {
     const selector = { authorId: principal.userId }
     if (input.status) selector.$or = [{ status: input.status }, { reviewStatus: input.status }]
     const rows = await items.find(selector, { sort: { updatedAt: -1 }, limit: 200 }).toArray()
+    const reviewer = await isReviewer(principal.userId)
     const out = []
     for (const item of rows) {
-      const thread = await events.find({ itemId: item._id }, { sort: { at: -1, _id: -1 }, limit: LIBRARY_LIMITS.mineEvents }).toArray()
-      out.push({ ...detail(item, true), events: thread.reverse().map(eventShape) })
+      const selectorFor = { itemId: item._id, ...(!reviewer && { type: { $nin: [...REVIEWER_ONLY_EVENTS] } }) }
+      const thread = await events.find(selectorFor, { sort: { at: -1, _id: -1 }, limit: LIBRARY_LIMITS.mineEvents }).toArray()
+      out.push({ ...detail(item, true), events: threadFor(thread.reverse(), reviewer) })
     }
     return { items: out }
   }
@@ -286,7 +306,9 @@ export function createLibraryCore(deps) {
   // A component's board is called what its item is called (a built-in's is its entry's name).
   const boardTitle = (item, version) => version.meta?.title || item.title || version.content.workshop?.title || 'Board'
   const named = (title, topic) => (topic ? `${title}: ${topic.replace(/\s+/g, ' ').trim()}`.slice(0, 120) : title)
-  const bump = (item, field) => items.updateOne({ _id: item._id }, { $inc: { [`counts.${field}`]: 1, popularity: 1 } })
+  // One use counted per signed-in person and item (uses.mjs): never a guest, never twice.
+  const bump = (item, field, principal) => countUse({ items, counters, itemId: item._id, field, userId: principal?.userId, guest: principal?.kind === 'guest' })
+  const spend = (principal, action) => spendAllowance({ counters, userId: principal?.userId, action, now })
 
   async function fork(principal, input, { mode = 'save' } = {}) {
     const { item, privileged } = await readableItem(principal, input.itemId)
@@ -296,17 +318,19 @@ export function createLibraryCore(deps) {
       if (input.targetShareId) throw fail(400, 'invalid_request', 'Only a smart component is added to a slate. A slate or presentation opens as a copy of its own.', { field: 'targetShareId' })
       const name = input.name || version.meta?.title || item.title
       if (mode === 'preview') return { shareId: null, itemId: item._id, version: version.n, name, notes: version.content.slate?.nodes?.length ?? 0 }
+      await spend(principal, 'fork')
       const made = await newSlate(principal, version.content, { name, libraryOrigin: origin })
       if (item.kind === 'presentation' && version.content.deck)
         await copyPresentation({ ...version.content.deck, isPublished: false, isPublic: false }, { shareId: made.shareId, sourceShareId: null, user: made.user, now: now() })
-      await bump(item, 'copies')
+      await bump(item, 'copies', principal)
       return { shareId: made.shareId, revision: made.revision, itemId: item._id, version: version.n }
     }
     const workshop = validateWorkshop({ ...structuredClone(version.content.workshop), title: named(boardTitle(item, version), input.topic) })
     if (!input.targetShareId) {
       if (mode === 'preview') return { shareId: null, itemId: item._id, version: version.n, canvas: { workshop, origin: { x: 40, y: 40 } } }
+      await spend(principal, 'fork')
       const made = await newSlate(principal, boardSlateContent(workshop, input.name || workshop.title), { libraryOrigin: origin })
-      await bump(item, 'adds')
+      await bump(item, 'adds', principal)
       return { shareId: made.shareId, revision: made.revision, boardId: MAIN_BOARD, itemId: item._id, version: version.n }
     }
     const found = await resolveSlateForUser(input.targetShareId, principal.userId)
@@ -339,12 +363,13 @@ export function createLibraryCore(deps) {
       if (error?.name === 'SlateSaveRefused' || error?.code === 'save_refused') throw fail(409, 'slate_changed', 'The slate changed since you read it. Try again.')
       throw error
     }
-    await bump(item, 'adds')
+    await bump(item, 'adds', principal)
     return { shareId: slate.shareId, revision: saved.revision, boardId: made.boardId, itemId: item._id, version: version.n }
   }
 
   async function branch(principal, input = {}) {
     if (!input.itemId || input.itemId === 'new') {
+      await spend(principal, 'branch')
       const made = await newSlate(principal, { row: { options: { name: 'Untitled smart component', description: '' }, nodes: [] } }, { library: { mode: 'build' } })
       return { shareId: made.shareId, revision: made.revision }
     }
@@ -353,8 +378,9 @@ export function createLibraryCore(deps) {
     const version = await visibleVersion(item, privileged, input.version)
     const workshop = validateWorkshop(structuredClone(version.content.workshop))
     const parent = { itemId: item._id, version: version.n, title: item.title, ...(item.category && { category: item.category }) }
+    await spend(principal, 'branch')
     const made = await newSlate(principal, boardSlateContent(workshop, workshop.title || item.title), { library: { mode: 'build', boardId: MAIN_BOARD, parent } })
-    await bump(item, 'branches')
+    await bump(item, 'branches', principal)
     return { shareId: made.shareId, revision: made.revision }
   }
 
@@ -390,14 +416,18 @@ export function createLibraryCore(deps) {
     const locked = await lockCategory(meta, parent, input.category)
     const draft = { kind: 'component', workshop: snapshotWorkshop(board.model.workshop) }
     checkSize(draft)
+    await spend(principal, 'saveDraft')
     const ref = input.itemId || slate.library.itemId
     const actor = await authorActor(principal)
     if (ref) {
       const item = await authoredItem(principal, ref)
       if (item.kind !== 'component') throw fail(400, 'invalid_request', 'That item is not a smart component.', { field: 'itemId' })
-      if (!['draft', 'changes_requested', 'rejected', 'unpublished', 'published'].includes(item.status))
+      if (!['draft', 'changes_requested', 'rejected', 'unpublished', 'published'].includes(item.status) || ['submitted', 'in_review'].includes(item.reviewStatus))
         throw fail(409, 'invalid_transition', 'It is waiting for review. Withdraw it first to change it.')
-      await items.updateOne({ _id: item._id }, { $set: { ...meta, categoryLocked: locked || Boolean(item.categoryLocked), draft, sourceShareId: slate.shareId, sourceBoardId: board.id, updatedAt: at() } })
+      // A published item's details are what the public reads: a draft's details wait beside them
+      // (draftMeta) and reach the public only through a submitted update a reviewer approves.
+      const details = item.status === 'published' ? { draftMeta: meta } : meta
+      await items.updateOne({ _id: item._id }, { $set: { ...details, categoryLocked: locked || Boolean(item.categoryLocked), draft, sourceShareId: slate.shareId, sourceBoardId: board.id, updatedAt: at() } })
       await log(item, 'draft_saved', actor)
       if (slate.library.itemId !== item._id) await slates.updateOne({ _id: slate._id }, { $set: { 'library.itemId': item._id } })
       return { itemId: item._id, slug: item.slug, status: item.status }
@@ -417,12 +447,6 @@ export function createLibraryCore(deps) {
     return { itemId: id, slug: item.slug, status: 'draft' }
   }
 
-  async function submitLimit(principal) {
-    const since = new Date(now() - DAY)
-    const recent = await events.countDocuments({ type: 'submitted', 'actor.userId': principal.userId, at: { $gte: since } })
-    if (recent >= LIBRARY_LIMITS.submissionsPerDay)
-      throw fail(429, 'submit_limit', `You can submit ${LIBRARY_LIMITS.submissionsPerDay} items a day. Try again tomorrow.`)
-  }
   async function ownsOrAdmins(principal, slate) {
     if (slate.userId === principal.userId) return true
     return Boolean(slate.orgId && (await isTeamAdmin(principal.userId, slate.orgId)))
@@ -431,7 +455,6 @@ export function createLibraryCore(deps) {
   async function submit(principal, input) {
     if (principal.kind === 'guest') throw fail(403, 'sign_in_to_publish', 'Sign up to publish to the library (/signup). Your slates come with you.')
     if (!LIBRARY_KINDS.includes(input.kind)) throw fail(400, 'invalid_request', 'kind is component, slate or presentation.', { field: 'kind' })
-    await submitLimit(principal)
     const note = readMessage(input.note, { required: false })
     const actor = await authorActor(principal)
     let item, content, created = false
@@ -476,14 +499,16 @@ export function createLibraryCore(deps) {
       }
     }
     const next = transition(created ? null : item, 'submit', 'author')
-    if (!next) throw fail(409, 'invalid_transition', item.status === 'in_review' ? 'It is being reviewed now.' : 'It is already waiting for review.')
+    if (!next) throw fail(409, 'invalid_transition', reviewStateOf(item) === 'in_review' ? 'It is being reviewed now.' : 'It is already waiting for review.')
     const given = readMeta(input, { kind: item.kind, partial: true })
-    const meta = { ...metaOf(item), ...given }
+    const meta = { ...metaOf(item), ...(item.draftMeta || {}), ...given }
     if (!meta.title) throw fail(400, 'invalid_request', 'Give it a title.', { field: 'title' })
     if (!meta.summary) throw fail(400, 'invalid_request', 'Give it a one-line summary.', { field: 'summary' })
     if (item.categoryLocked && given.category && given.category !== item.category) throw fail(409, 'category_locked', categoryLockSentence(item.category))
     if (item.kind === 'component' && !meta.category) throw fail(400, 'category_required', `Choose a category: ${LIBRARY_CATEGORIES.map(categoryLabel).join(', ')}.`, { field: 'category' })
     checkSize(content)
+    // Today's allowance is taken atomically, just before anything is written: parallel submits can't beat it.
+    await spend(principal, 'submit')
     if (created) await items.insertOne({ ...item, ...meta, status: 'draft' })
     const version = await writeVersion(item, { source: 'submit', content, createdBy: principal.userId, meta })
     const updating = item.status === 'published'
@@ -492,7 +517,8 @@ export function createLibraryCore(deps) {
       submittedAt: at(), updatedAt: at(), authorName: actor.name, ...lastMessage('author', note),
       ...(item.status !== 'published' && { preview: previewOf(content) }),
     }
-    await items.updateOne({ _id: item._id }, { $set: set, $unset: { draft: '' } })
+    // Sent by its owner: no longer the untouched copy a migration made (the queue's "From Community slates").
+    await items.updateOne({ _id: item._id }, { $set: set, $unset: { draft: '', draftMeta: '', migrationPristine: '' } })
     await log(item, 'submitted', actor, { version: version.n, ...(note && { message: note }) })
     return { itemId: item._id, slug: item.slug, status: next.status, reviewStatus: next.reviewStatus, version: version.n }
   }
@@ -500,10 +526,11 @@ export function createLibraryCore(deps) {
   async function withdraw(principal, input) {
     const item = await authoredItem(principal, input.itemId)
     const next = transition(item, 'withdraw', 'author')
-    if (!next) throw fail(409, 'invalid_transition', item.status === 'in_review' ? 'It is being reviewed now. Write to the reviewer instead.' : 'There is nothing to withdraw.')
+    if (!next) throw fail(409, 'invalid_transition', reviewStateOf(item) === 'in_review' ? 'It is being reviewed now. Write to the reviewer instead.' : 'There is nothing to withdraw.')
     const set = { status: next.status, reviewStatus: null, updatedAt: at() }
-    // A submission taken back is a draft again, with the content it was submitted with.
-    if (next.status === 'draft' && item.pendingVersion) {
+    // A submission taken back is a draft again, with the content it was submitted with (an update
+    // taken back too: the published version stays live, the update is the author's draft again).
+    if ((next.status === 'draft' || next.status === 'published') && item.pendingVersion) {
       const pending = await versionOf(item, item.pendingVersion)
       if (pending && item.kind === 'component') set.draft = pending.content
     }
@@ -531,6 +558,7 @@ export function createLibraryCore(deps) {
       throw notFound()
     }
     const message = readMessage(input.message)
+    if (!reviewer) await spend(principal, 'comment')
     const by = author ? 'author' : 'reviewer'
     const row = await log(item, 'comment', author ? await authorActor(principal) : await reviewerActor(principal), { message })
     await items.updateOne({ _id: item._id }, { $set: { ...lastMessage(by, message), updatedAt: at() } })
@@ -548,14 +576,14 @@ export function createLibraryCore(deps) {
     else if (status === 'published') selector.status = 'published'
     else if (QUEUE_STATUSES.includes(status)) selector.reviewStatus = status
     if (input.kind) selector.kind = input.kind
-    if (input.source === 'migration') selector.migratedFrom = { $exists: true }
+    if (input.source === 'migration') selector.migrationPristine = true
     const sort = status === 'published' ? { publishedAt: -1, _id: 1 } : { submittedAt: 1, _id: 1 }
     const { rows, next, total } = await page(selector, sort, input.cursor, LIBRARY_LIMITS.listLimit)
     return {
       items: rows.map((item) => ({
         ...detail(item, true), authorId: item.authorId, isUpdate: item.status === 'published' && Boolean(item.pendingVersion),
         ...(item.submittedAt && { waitingSince: new Date(item.submittedAt).toISOString(), waitingMs: Math.max(0, now() - new Date(item.submittedAt).getTime()) }),
-        ...(item.migratedFrom && { migrated: true }),
+        ...(item.migrationPristine && { migrated: true }),
       })),
       ...(next && { next }), total,
     }
@@ -568,11 +596,29 @@ export function createLibraryCore(deps) {
     if (item.origin === 'builtin') throw builtinRefusal()
     return item
   }
+  // A second person reviews what someone publishes: an administrator never opens, refines, edits or
+  // approves their own submission. A server with one administrator may, by saying so (selfReview),
+  // and the event log records it. → whether this is a self-review.
+  // A slate moved from Community slates that its owner never sent: published only while the slate is
+  // still public. Made private or deleted since, it is not theirs to give any more.
+  async function checkSourceStillPublic(item) {
+    if (!item.migrationPristine || !item.sourceShareId) return
+    const source = await slates.findOne({ shareId: item.sourceShareId })
+    if (!source || source.archivedDate || source.options?.isPublic !== true || source.options?.isPrivate === true)
+      throw fail(409, 'source_not_public', 'Its owner has made the slate private or deleted it since it was moved here, so it can’t be published. Turn it down instead.')
+  }
+  async function checkNotOwn(principal, item, input = {}) {
+    if (!item.authorId || item.authorId !== principal.userId) return false
+    if (input.selfReview === true && (await countReviewers()) <= 1) return true
+    throw fail(403, 'self_review', 'Another administrator reviews what you submit. On a server with one administrator, say so with selfReview.')
+  }
   const refused = (item, action) =>
     fail(409, 'invalid_transition', `It is ${String(reviewStateOf(item)).replace('_', ' ')}, so it can’t be ${action}.`, { status: item.status, reviewStatus: item.reviewStatus ?? null })
 
   async function open(principal, input) {
     const item = await reviewItem(principal, input.itemId)
+    const self = await checkNotOwn(principal, item, input)
+    await checkSourceStillPublic(item)
     const next = transition(item, 'review.open', 'reviewer')
     if (!next || !item.pendingVersion) throw refused(item, 'opened for review')
     const version = await versionOf(item, item.pendingVersion)
@@ -594,7 +640,7 @@ export function createLibraryCore(deps) {
     }
     await items.updateOne({ _id: item._id }, { $set: { status: next.status, reviewStatus: next.reviewStatus, reviewShareId, reviewerId: principal.userId, updatedAt: at() } })
     if (reviewStateOf(item) !== 'in_review' || archived || reviewShareId !== item.reviewShareId)
-      await log(item, 'review_opened', await reviewerActor(principal), { version: version.n, ...(archived && { diff: { notes: `Archived review copy ${archived}` } }) })
+      await log(item, 'review_opened', await reviewerActor(principal), { version: version.n, ...(self && { selfReview: true }), ...(archived && { diff: { notes: `Archived review copy ${archived}` } }) })
     return { itemId: item._id, reviewShareId, status: next.status, reviewStatus: next.reviewStatus, version: version.n }
   }
 
@@ -606,12 +652,25 @@ export function createLibraryCore(deps) {
 
   async function refine(principal, input, { mode = 'save' } = {}) {
     const item = await reviewItem(principal, input.itemId)
+    await checkNotOwn(principal, item, input)
     if (reviewStateOf(item) !== 'in_review') throw refused(item, 'refined')
     const slate = await reviewSlate(item)
     const board = item.kind === 'component' ? boardOn(slate, slate.library.boardId) : null
     const message = readMessage(input.message)
+    const history = (input.history || []).slice(-LIBRARY_LIMITS.history)
     const local = localRefinement(message)
-    const raw = local || (await refineWithAI({ item, board: board?.model?.workshop ?? null, message, history: (input.history || []).slice(-LIBRARY_LIMITS.history), principal }))
+    // Keep names the preview it keeps (previewId): exactly that proposal is applied, stored with the item,
+    // never a second AI answer. Without a previewId, save asks afresh (a direct call that previews nothing).
+    let raw
+    let kept = null
+    if (mode === 'save' && input.previewId) {
+      kept = (item.refinePreviews || []).find((row) => row.id === input.previewId)
+      if (!kept || kept.userId !== principal.userId || kept.message !== message || now() - new Date(kept.at).getTime() > REFINE_PREVIEW_MS)
+        throw fail(409, 'preview_expired', 'That proposal is no longer there to keep. Ask again to see it, then keep it.')
+      raw = kept.raw
+    } else {
+      raw = local || (await refineWithAI({ item, board: board?.model?.workshop ?? null, message, history, principal }))
+    }
     const actor = await reviewerActor(principal)
     let proposal
     try {
@@ -647,8 +706,17 @@ export function createLibraryCore(deps) {
     await log(item, 'refine_proposed', { kind: local ? 'system' : 'ai', userId: null, name: 'Slatebox' }, {
       message: message, ...(Object.keys(diff).length && { diff }), ...(raw?.ai && { ai: raw.ai }),
     })
-    const out = { itemId: item._id, reply: proposal.reply, proposal: { meta: proposal.meta, edits: proposal.edits, check: proposal.check }, diff }
-    if (mode !== 'save') return out
+    // The server's own scan for personal data comes first, whatever the AI said.
+    const check = [...personalDataChecks(withPending(item), board?.model?.workshop ?? null), ...proposal.check].slice(0, 12)
+    const out = { itemId: item._id, reply: proposal.reply, proposal: { meta: proposal.meta, edits: proposal.edits, check }, diff }
+    if (mode !== 'save') {
+      const previewId = newId()
+      const fresh = (item.refinePreviews || []).filter((row) => now() - new Date(row.at).getTime() <= REFINE_PREVIEW_MS)
+      const row = { id: previewId, userId: principal.userId, message, at: at(), raw: { reply: raw?.reply ?? '', ...(raw?.meta && { meta: raw.meta }), ...(raw?.edits && { edits: raw.edits }), ...(raw?.check && { check: raw.check }), ...(raw?.ai && { ai: raw.ai }) } }
+      await items.updateOne({ _id: item._id }, { $set: { refinePreviews: [...fresh, row].slice(-REFINE_PREVIEWS) } })
+      return { ...out, previewId }
+    }
+    if (kept) await items.updateOne({ _id: item._id }, { $set: { refinePreviews: (item.refinePreviews || []).filter((row) => row.id !== kept.id) } })
     if (Object.keys(proposal.meta).length) await items.updateOne({ _id: item._id }, { $set: { ...pendingSet(item, proposal.meta), updatedAt: at() } })
     if (Object.keys(proposal.meta).length || proposal.edits.length) await log(item, 'refine_kept', actor, { ...(Object.keys(diff).length && { diff }) })
     return { ...out, kept: Boolean(Object.keys(proposal.meta).length || proposal.edits.length), ...(applied?.body?.revision !== undefined && { revision: applied.body.revision }) }
@@ -656,7 +724,8 @@ export function createLibraryCore(deps) {
 
   async function update(principal, input) {
     const item = await reviewItem(principal, input.itemId)
-    const { itemId: _id, ...fields } = input
+    await checkNotOwn(principal, item, input)
+    const { itemId: _id, selfReview: _self, ...fields } = input
     const meta = readMeta(fields, { kind: item.kind, partial: true })
     if (meta.category && item.categoryLocked && meta.category !== item.category) throw fail(409, 'category_locked', categoryLockSentence(item.category))
     const shown = withPending(item)
@@ -670,6 +739,8 @@ export function createLibraryCore(deps) {
 
   async function approve(principal, input) {
     const item = await reviewItem(principal, input.itemId)
+    const self = await checkNotOwn(principal, item, input)
+    await checkSourceStillPublic(item)
     const next = transition(item, 'review.approve', 'reviewer')
     if (!next) throw refused(item, 'approved')
     const message = readMessage(input.message, { required: false })
@@ -695,9 +766,9 @@ export function createLibraryCore(deps) {
     const diff = { ...(pending && Object.keys(metaDiff(pending.meta, meta)).length && { meta: metaDiff(pending.meta, meta) }), ...contentDiff(pending?.content, content) }
     await items.updateOne({ _id: item._id }, {
       $set: { ...meta, status: 'published', reviewStatus: null, publishedVersion: version.n, versionCount: version.n, publishedAt: at(), updatedAt: at(), preview: previewOf(content), ...lastMessage('reviewer', message) },
-      $unset: { pendingVersion: '', pendingMeta: '' },
+      $unset: { pendingVersion: '', pendingMeta: '', migrationPristine: '' },
     })
-    await log(item, 'approved', await reviewerActor(principal), { version: version.n, ...(message && { message }), ...(Object.keys(diff).length && { diff }) })
+    await log(item, 'approved', await reviewerActor(principal), { version: version.n, ...(self && { selfReview: true }), ...(message && { message }), ...(Object.keys(diff).length && { diff }) })
     const published = await items.findOne({ _id: item._id })
     await notify({ item: published, type: 'approved', message })
     return { itemId: item._id, status: 'published', publishedVersion: version.n, url: url(published) }
@@ -717,10 +788,10 @@ export function createLibraryCore(deps) {
   }
 
   // ---------- board adds from the catalogue ----------
-  /** One more add of a built-in board (the chat's Keep and add_component): counted on builtin-<id>. */
-  async function countBuiltinAdd(catalogId) {
+  /** One more add of a built-in board (add_component): counted on builtin-<id>, once per signed-in person. */
+  async function countBuiltinAdd(catalogId, principal) {
     if (typeof catalogId !== 'string' || !catalogId) return
-    await items.updateOne({ _id: 'builtin-' + catalogId }, { $inc: { 'counts.adds': 1, popularity: 1 } })
+    await countUse({ items, counters, itemId: 'builtin-' + catalogId, field: 'adds', userId: principal?.userId, guest: principal?.kind === 'guest' })
   }
 
   /** The workshop a library item adds to a slate, for add_component { library: { itemId, version? } }. */
@@ -729,7 +800,7 @@ export function createLibraryCore(deps) {
     if (item.kind !== 'component') throw fail(400, 'invalid_component', 'That library item is not a smart component.')
     const found = await visibleVersion(item, privileged, version)
     const workshop = validateWorkshop({ ...structuredClone(found.content.workshop), title: boardTitle(item, found) })
-    return { item, version: found.n, workshop, count: () => bump(item, 'adds') }
+    return { item, version: found.n, workshop, count: () => bump(item, 'adds', principal) }
   }
 
   return {

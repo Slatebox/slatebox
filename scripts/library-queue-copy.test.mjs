@@ -31,7 +31,7 @@ test("an author sees where each item stands, grouped, with only the actions the 
   assert.deepEqual(can("c"), { submit: false, withdraw: false, discard: false, reply: true }, "in review: write to the reviewer instead");
   assert.deepEqual(can("d").submit, true);
   assert.deepEqual([can("e").submit, can("e").withdraw], [true, true], "a published item takes an update, or comes out");
-  assert.deepEqual([can("f").submit, can("f").withdraw], [false, false], "an update waiting: nothing to send, nothing to pull");
+  assert.deepEqual([can("f").submit, can("f").withdraw], [false, true], "an update waiting: nothing to send; the update can be taken back (the published version stays)");
 });
 
 test("the queue's words: tabs, waiting time, the thread and a diff", () => {

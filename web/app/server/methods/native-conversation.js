@@ -20,6 +20,8 @@ import {MAX_BOARDS,slateBoards} from '../../imports/api/common/slate-boards.mjs'
 
 import {slateSaveCore} from '../slate-save'
 import {LibraryItems} from '../../imports/api/common/models'
+import {LibraryCounters} from '../library/counters'
+import {countUse} from '../library/uses.mjs'
 
 // The slate's boards are part of what a preview was made against: a board added meanwhile (here or by a
 // teammate) moves where Keep would put this one, so it is asked again.
@@ -130,8 +132,8 @@ Meteor.methods({
     }
     const origin=made.origin
     this.connection.slateboxNativeCanvasDraft=null
-    // One more add of a catalogue board, counted on its built-in library item (never fails the Keep).
-    if(draft.component) await LibraryItems.rawCollection().updateOne({_id:'builtin-'+draft.component},{$inc:{'counts.adds':1,popularity:1}}).catch(()=>{})
+    // One more add of a catalogue board, counted on its built-in library item once per signed-in person (never fails the Keep).
+    if(draft.component) await countUse({items:LibraryItems.rawCollection(),counters:LibraryCounters.rawCollection(),itemId:'builtin-'+draft.component,field:'adds',userId:this.userId,guest:Boolean((await Meteor.users.findOneAsync(this.userId,{fields:{isAnonymous:1}}))?.isAnonymous)}).catch(()=>{})
     if (board.userId!==this.userId) await rememberInvitedEdit(this.userId,board,shareId).catch(()=>{})
     // The page takes the board live (no reload): where it sits, and the revision its saves now name.
     // `name`: the slate's new name, when the board named it (the page shows it, and its saves keep it).

@@ -106,8 +106,16 @@ export function libraryCollection(rows = []) {
       };
     },
     async countDocuments(selector = {}) { return docs.filter((doc) => matches(doc, selector)).length; },
-    async updateOne(selector, update) {
+    async updateOne(selector, update, options = {}) {
       const found = first(selector);
+      if (!found && options.upsert) {
+        // As MongoDB does: the selector's plain fields, then the update with $setOnInsert; a taken _id fails.
+        const doc = {};
+        for (const [path, want] of Object.entries(selector)) if (!path.startsWith("$") && !isOperatorObject(want)) set(doc, path, structuredClone(want));
+        applyUpdate(doc, update, true);
+        await this.insertOne(doc);
+        return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1, upsertedId: doc._id };
+      }
       if (!found) return { matchedCount: 0, modifiedCount: 0 };
       applyUpdate(found, update, false);
       return { matchedCount: 1, modifiedCount: 1 };
@@ -131,12 +139,14 @@ export function makeLibrary({ slates, saveCore, reviewers = ["admin"], users = {
   const items = libraryCollection();
   const versions = libraryCollection();
   const events = libraryCollection();
+  const counters = libraryCollection();
   const notices = [];
   const decks = [];
   let share = 0;
   const library = createLibraryCore({
-    items, versions, events, slates, saveCore,
+    items, versions, events, counters, slates, saveCore,
     isLibraryReviewer: async (userId) => reviewers.includes(userId),
+    countReviewers: async () => reviewers.length,
     loadUser: async (userId) => (userId ? { _id: userId, orgId: users[userId]?.orgId ?? null, isAnonymous: Boolean(users[userId]?.isAnonymous), name: users[userId]?.name ?? "" } : null),
     isTeamAdmin: async (userId, orgId) => teamAdmins.some((admin) => admin.userId === userId && admin.orgId === orgId),
     resolveSlateForUser: resolveSlateForUser || (async (shareId, userId) => {
@@ -158,5 +168,5 @@ export function makeLibrary({ slates, saveCore, reviewers = ["admin"], users = {
     appOrigin: () => "https://slatebox.test",
   });
   const ready = seed ? seedBuiltins({ items, versions, events, newId: () => "ev" + String(++counter).padStart(8, "0"), now }) : Promise.resolve(null);
-  return { library, items, versions, events, notices, decks, ready };
+  return { library, items, versions, events, counters, notices, decks, ready };
 }

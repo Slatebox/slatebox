@@ -95,7 +95,7 @@ export async function applyAddComponent(principal, input, { deps, mode, now, ide
   // One more add, counted on the library item (a catalogue entry's is its built-in item). Never fails the add.
   try {
     if (fromLibrary) await fromLibrary.count()
-    else await deps.library?.countBuiltinAdd(op.component)
+    else await deps.library?.countBuiltinAdd(op.component, principal)
   } catch (error) { console.error('[library] count', error?.message) }
   const response = respond(made, saved.revision)
   await deps.operationRuns.insertAsync({

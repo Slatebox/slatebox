@@ -24,6 +24,8 @@ export const LIBRARY_LIMITS = Object.freeze({
   message: 2000,
   versionBytes: 1000000,
   submissionsPerDay: 10,
+  // What one person may do in a day (server/library/uses.mjs spendAllowance).
+  perDay: Object.freeze({ submit: 10, saveDraft: 200, branch: 50, fork: 100, comment: 100 }),
   listLimit: 48,
   exportPage: 50,
   history: 6,
@@ -154,7 +156,17 @@ export function transition(item, action, role) {
     if (!to) return null
     return { status: 'published', reviewStatus: to === 'published' ? null : to }
   }
-  if (status === 'published' && action === 'submit') return role === 'author' ? { status, reviewStatus: 'submitted' } : null
+  // Withdrawing an update takes back only the update: the published version stays live. An update a
+  // reviewer has open can't be taken back (write to the reviewer instead).
+  if (updating && action === 'withdraw') {
+    return role === 'author' && ['submitted', 'changes_requested', 'rejected'].includes(item.reviewStatus) ? { status: 'published', reviewStatus: null } : null
+  }
+  // A new update replaces the waiting one only once it is no longer waiting on a reviewer: never while
+  // it is submitted or in review (that would wipe the reviewer's refinements).
+  if (status === 'published' && action === 'submit') {
+    if (role !== 'author' || (item?.pendingVersion && ['submitted', 'in_review'].includes(item?.reviewStatus))) return null
+    return { status, reviewStatus: 'submitted' }
+  }
   const to = nextStatus(status, action, role)
   if (!to) return null
   return { status: to, reviewStatus: PENDING_STATUSES.includes(to) ? to : null }

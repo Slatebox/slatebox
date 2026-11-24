@@ -12,6 +12,8 @@ const review = {
   load: requireReviewer,
 }
 const write = { ...review, kind: 'write', idempotency: 'optional', replay: 'stored' }
+// Another administrator reviews what you submit; a server with one administrator says so here (recorded).
+const selfReview = { type: 'boolean', description: 'Review your own submission. Allowed only on a server with one administrator; the thread records it.' }
 
 export const reviewQueue = defineAction({
   ...review,
@@ -39,7 +41,7 @@ export const reviewOpen = defineAction({
   description:
     'For administrators: make (or refresh) your private review copy of a submission\'s waiting version, a slate you can change on the canvas, and mark it in review. Approving publishes that copy as it stands. Opening again for the same version answers the same copy.',
   mounts: { ddp: true, http: { method: 'POST', path: '/library/review/{itemId}/open', operationId: 'openLibraryReview' } },
-  input: object({ itemId: itemRef }, ['itemId']),
+  input: object({ itemId: itemRef, selfReview }, ['itemId']),
   output: { type: 'object', properties: { itemId: { type: 'string' }, reviewShareId: { type: 'string' }, status: { type: 'string' }, reviewStatus: { type: ['string', 'null'] }, version: { type: 'integer' } }, required: ['itemId', 'reviewShareId'] },
   tool: { name: 'open_library_review', title: 'Open a library submission', description: 'For administrators: open a library submission for review as a private copy you can change on the canvas.' },
   handler: (principal, input, { deps }) => deps.library.review.open(principal, input),
@@ -50,17 +52,19 @@ export const reviewRefine = defineAction({
   id: 'library.review.refine',
   title: 'Refine by chat',
   description:
-    'For administrators: ask for a change to an item in review in plain words ("rename it to Weekly retro", "put it in Meetings", "Write a clearer one-line summary", "What should I check?"). Preview answers the proposal (metadata from and to, rule lines for a component\'s board, things to check); save keeps it, on the item and on the review copy. Simple renames, categories and summaries are read without AI.',
+    'For administrators: ask for a change to an item in review in plain words ("rename it to Weekly retro", "put it in Meetings", "Write a clearer one-line summary", "What should I check?"). Preview answers the proposal (metadata from and to, rule lines for a component\'s board, things to check) and its previewId; save with that previewId keeps exactly it, on the item and on the review copy. Simple renames, categories and summaries are read without AI.',
   modes: ['save', 'preview'],
   mounts: { ddp: true, http: { method: 'POST', path: '/library/review/{itemId}/refine', operationId: 'refineLibraryItem' } },
   input: object({
     itemId: itemRef,
     message: messageInput,
+    selfReview,
+    previewId: { type: 'string', maxLength: 64, description: 'Save: the previewId a preview answered. Keeps exactly that proposal (no second AI answer).' },
     history: { type: 'array', maxItems: 6, items: { type: 'object', properties: { role: { type: 'string', enum: ['user', 'assistant'] }, text: { type: 'string', maxLength: 2000 } }, required: ['role', 'text'], additionalProperties: false } },
   }, ['itemId', 'message']),
   output: {
     type: 'object',
-    properties: { itemId: { type: 'string' }, reply: { type: 'string' }, proposal: { type: 'object' }, diff: { type: 'object' }, kept: { type: 'boolean' }, revision: { type: 'integer' } },
+    properties: { itemId: { type: 'string' }, reply: { type: 'string' }, proposal: { type: 'object' }, diff: { type: 'object' }, previewId: { type: 'string' }, kept: { type: 'boolean' }, revision: { type: 'integer' } },
     required: ['itemId', 'reply'],
   },
   tool: { name: 'refine_library_item', title: 'Refine a library submission', description: 'For administrators: change a library submission in review by asking in plain words; preview the change, then keep it.' },
@@ -76,7 +80,7 @@ export const reviewUpdate = defineAction({
   title: 'Edit details',
   description: 'For administrators: change a library item\'s title, summary, description, category or search words directly. A branch\'s category stays its parent\'s.',
   mounts: { ddp: true, http: { method: 'PATCH', path: '/library/review/{itemId}', operationId: 'updateLibraryItem' } },
-  input: object({ itemId: itemRef, ...metaInputs }, ['itemId']),
+  input: object({ itemId: itemRef, ...metaInputs, selfReview }, ['itemId']),
   output: { type: 'object', properties: { item: itemDetail }, required: ['item'] },
   tool: { name: 'update_library_item', title: 'Edit a library item\'s details', description: 'For administrators: change a library item\'s title, summary, description, category or search words.' },
   handler: (principal, input, { deps }) => deps.library.review.update(principal, input),
@@ -90,7 +94,7 @@ export const reviewApprove = defineAction({
     'For administrators: publish an item in review as its review copy stands now (your refinements included), as a new version. Anyone can then find, use and change it. The author is told. The person agrees first.',
   confirm: true,
   mounts: { ddp: true, http: { method: 'POST', path: '/library/review/{itemId}/approve', operationId: 'approveLibraryItem' } },
-  input: object({ itemId: itemRef, message: messageInput }, ['itemId']),
+  input: object({ itemId: itemRef, message: messageInput, selfReview }, ['itemId']),
   output: { type: 'object', properties: { itemId: { type: 'string' }, status: { type: 'string' }, publishedVersion: { type: 'integer' }, url: { type: 'string' } }, required: ['itemId', 'status', 'publishedVersion'] },
   tool: { name: 'approve_library_item', title: 'Approve a library submission', description: 'For administrators: publish a library submission in review, as its review copy stands. The person agrees first.' },
   handler: (principal, input, { deps }) => deps.library.review.approve(principal, input),

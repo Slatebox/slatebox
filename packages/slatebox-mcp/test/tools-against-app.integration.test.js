@@ -568,7 +568,8 @@ return slatebox.agentTasks.update({ shareId: "canvas", taskId: ${JSON.stringify(
   assert.ok(added.nodeId);
 
   // The shared library (new): browse and use it, build and submit a component, review and publish it,
-  // through scripts. Submitting and approving widen who sees something, so they wait for the person;
+  // through scripts. The probe's owner is this server's only administrator, so it reviews its own
+  // submissions by saying so (selfReview); a second administrator would review them instead. Submitting and approving widen who sees something, so they wait for the person;
   // discarding and unpublishing take something away, so they do too.
   assert.equal((await ok(`return slatebox.library.stats({})`)).components.total, 19);
   assert.deepEqual((await ok(`return slatebox.library.list({ kind: "component", category: "meetings" })`)).items.map((item) => item.slug).sort(), ["incident-review", "retro"]);
@@ -581,11 +582,11 @@ return slatebox.agentTasks.update({ shareId: "canvas", taskId: ${JSON.stringify(
   assert.ok((await ok(lib(`return slatebox.library.comment({ itemId: ITEM, message: "One more thing" })`))).eventId);
   assert.equal((await ok(`return slatebox.library.mine({})`)).items[0].status, "submitted");
   assert.deepEqual((await ok(`return slatebox.library.review.queue({})`)).items.map((item) => item.id), [draft.itemId]);
-  assert.equal((await ok(lib(`return slatebox.library.review.open({ itemId: ITEM })`))).status, "in_review");
-  assert.deepEqual((await ok(lib(`return slatebox.library.review.refine({ itemId: ITEM, message: "rename it to Probe retro board", mode: "preview" })`))).diff.meta.title, ["Probe retro", "Probe retro board"]);
-  assert.equal((await ok(lib(`return slatebox.library.review.refine({ itemId: ITEM, message: "put it in Meetings" })`))).kept, false, "already in Meetings: nothing to keep");
-  assert.equal((await ok(lib(`return slatebox.library.review.update({ itemId: ITEM, summary: "Three columns, one rule" })`))).item.summary, "Three columns, one rule");
-  const approved = await confirmed(lib(`return slatebox.library.review.approve({ itemId: ITEM, message: "Published" })`), ["widens_access"]);
+  assert.equal((await ok(lib(`return slatebox.library.review.open({ itemId: ITEM, selfReview: true })`))).status, "in_review");
+  assert.deepEqual((await ok(lib(`return slatebox.library.review.refine({ itemId: ITEM, message: "rename it to Probe retro board", mode: "preview", selfReview: true })`))).diff.meta.title, ["Probe retro", "Probe retro board"]);
+  assert.equal((await ok(lib(`return slatebox.library.review.refine({ itemId: ITEM, message: "put it in Meetings", selfReview: true })`))).kept, false, "already in Meetings: nothing to keep");
+  assert.equal((await ok(lib(`return slatebox.library.review.update({ itemId: ITEM, summary: "Three columns, one rule", selfReview: true })`))).item.summary, "Three columns, one rule");
+  const approved = await confirmed(lib(`return slatebox.library.review.approve({ itemId: ITEM, message: "Published", selfReview: true })`), ["widens_access"]);
   assert.deepEqual([approved.status, approved.publishedVersion], ["published", 2]);
   const use = await ok(lib(`return slatebox.library.fork({ itemId: ITEM, mode: "preview" })`));
   assert.equal(use.canvas.workshop.title, "Probe retro");
@@ -600,7 +601,7 @@ return slatebox.library.saveDraft({ shareId, title: "Probe triage", summary: "So
   assert.equal((await confirmed(lib2(`return slatebox.library.discard({ itemId: ITEM })`), ["removes"])).discarded, true);
   const slateItem = await confirmed(`return slatebox.library.submit({ kind: "slate", shareId: "canvas", summary: "The probe's canvas" })`, ["widens_access"]);
   const lib3 = (code) => code.replaceAll("ITEM", JSON.stringify(slateItem.itemId));
-  await ok(lib3(`return slatebox.library.review.open({ itemId: ITEM })`));
+  await ok(lib3(`return slatebox.library.review.open({ itemId: ITEM, selfReview: true })`));
   assert.equal((await ok(lib3(`return slatebox.library.review.requestChanges({ itemId: ITEM, message: "Name the notes" })`))).status, "changes_requested");
   await confirmed(lib3(`return slatebox.library.submit({ kind: "slate", shareId: "canvas" })`), ["widens_access"]);
   assert.equal((await ok(lib3(`return slatebox.library.review.reject({ itemId: ITEM, message: "Not for the library" })`))).status, "rejected");
