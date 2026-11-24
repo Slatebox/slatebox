@@ -318,3 +318,24 @@ test("a collaborator's setting is refused when sharing changed after it was read
     (error) => error.status === 404);
   assert.equal((await findOne({ _id: "s1" })).options.welcomeAid, "aid-1");
 });
+
+// A signed copy link (/ai?slateIdToCopy=) asks slates.copy, the same action the API and an exec
+// script reach. Once the owner makes a public slate private, a stranger's copy is refused on every
+// path, as Not Found, and nothing is stored; the owner may still copy their own slate.
+test("a slate made private stops being copied: the session, the HTTP API and an agent's call are all refused", async (t) => {
+  const env = await seeded(t);
+  const agent = { kind: "agent", userId: "stranger", tokenId: "token-stranger", tokenName: "Planner", scopes: ["slates:read", "slates:write"] };
+  const http = () => env.call("/api/v1/slates/share1/copy", { token: "stranger", method: "POST", body: {} });
+  await env.slates.updateOne({ _id: "s1" }, { $set: { "options.isPublic": true, "options.isPrivate": false } });
+  assert.equal((await env.registry.run(stranger, "slates.copy", { shareId: "share1" })).status, 201);
+  assert.equal((await http()).status, 201);
+  const copies = env.slates.docs().length;
+  await env.slates.updateOne({ _id: "s1" }, { $set: { "options.isPublic": false, "options.isPrivate": true } });
+  await assert.rejects(env.registry.run(stranger, "slates.copy", { shareId: "share1" }), (error) => error.status === 404 && error.code === "not_found");
+  await assert.rejects(env.registry.run(agent, "slates.copy", { shareId: "share1" }), (error) => error.status === 404 && error.code === "not_found");
+  const refused = await http();
+  assert.equal(refused.status, 404);
+  assert.equal(refused.body.error.code, "not_found");
+  assert.equal(env.slates.docs().length, copies, "nothing is stored for a refused copy");
+  assert.equal((await env.registry.run(owner, "slates.copy", { shareId: "share1" })).status, 201);
+});
