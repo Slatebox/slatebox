@@ -108,7 +108,7 @@ test("describe lists every method with rules and recipes, and slices declaration
   assert.equal(all.recipes.length, 3);
   assert.ok(all.errors.some((e) => e.code === "confirmation_required"));
   assert.equal(all.limits.callsPerScript, 64);
-  assert.match(all.rules, /^Runs a short JavaScript or TypeScript program against Slatebox\./);
+  assert.match(all.rules, /^Runs a short JavaScript or TypeScript program\. The global `slatebox` is a typed client/);
   assert.equal(all.methods[0].dts, undefined, "the index carries no declarations");
   const sliced = (await client.callTool({ name: "describe", arguments: { methods: ["slates.applyOperations"] } })).structuredContent;
   assert.deepEqual(sliced.methods.map((m) => m.name), ["slates.applyOperations"]);

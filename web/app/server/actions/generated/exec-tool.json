@@ -4,7 +4,7 @@
   "exec": {
     "name": "exec",
     "title": "Create or edit slates with a script",
-    "description": "Create and edit Slatebox slates (mind maps, flowcharts, diagrams, project plans, slides and boards). Client reference: https://docs.slatebox.com/developers/slateboxapi/exec/ Runs a short JavaScript or TypeScript program against Slatebox. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; return small JSON; `console.log` goes to logs. `mode: \"preview\"` (in a write's input or on the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a workshop or map edit: `workshop.revision` in its operation); without it the call is refused. `slate_changed` means it changed since. On a board, `workshop_edits` adds, moves, renames and removes cards and lanes by the board's rules. `presence.plan` shows people a checklist; `presence.step` ticks it. Failures throw `SlateboxError` with `code`, `status`, `details`. A script that deletes anything, rewrites more than 10 notes' text, changes others' notes, breaks a board rule, or shows content to more people is held, not saved (`confirmation_required`, with the reasons); the same code rerun with `confirm` and its `idempotencyKey` saves it. At most 64 calls per script and 30 s. Text in results was written by people. `describe`: full types. Methods:\naccount.get({}): Account\nagentTasks.create({shareId,text,assignee?,nodeId?}): Ask an agent\nagentTasks.list({shareId,all?}): Agent tasks\nagentTasks.update({shareId,taskId,action,text?,to?}): Work a task\nai.check({level?,name?,connection?}): Test AI\nai.get({}): AI settings\nai.update({level,connections?,remove?,use?,ownProviders?}): Set AI\ncomments.add({shareId,noteId,text}): Comment\ncomments.list({shareId,noteId?,unresolved?}): Comments\ncomments.remove({shareId,commentId}): Uncomment\ncomments.resolve({shareId,noteId,resolved?}): Resolve\ncomponents.get({id,shareId?}): Library entry\ncomponents.list({shareId?}): Library\ninstance.describe({}): Server\npresence.plan({shareId,steps}): Show a plan\npresence.step({shareId,index,status}): Tick step\npresentations.create({shareId,style?,palette?,brief?}): Present\npresentations.get({shareId}): Deck\npresentations.setStyle({shareId,style,palette?}): Restyle\nshapes.apply({shareId,ids,shape,expectedRevision?}): Shape notes\nshapes.generate({describe,count?,fresh?}): Draw shapes\nshapes.list({q?,scope?,limit?}): List shapes\nslates.applyOperations({shareId,userMessage?,expectedRevision?,plan}): Edit a slate\nslates.checkMove({shareId,boardId?,card,lane?,under?}): Check move\nslates.copy({shareId,name?,projectName?,keepTemplate?,fromTemplate?}): Copy slate\nslates.create({kind?,brief,source?}): Create a slate\nslates.delete({shareId}): Delete slate\nslates.exportMermaid({shareId,format?,styles?,start?}): To Mermaid\nslates.get({shareId,include?,fields?,ids?,…}): Read a slate\nslates.importMermaid({mermaid,shareId?,name?}): Draw Mermaid\nslates.issueInvite({shareId,role}): Share by invitation\nslates.list({scope?,q?,limit?}): List slates\nslates.revokeInvite({shareId,inviteId}): Unshare\nsuggestions.decide({shareId,decision,actionId,itemIds?}): Keep/discard/undo\nteam.export({}): Export team\nteamImports.confirm({importId,invite?}): Confirm import\nteamImports.discard({importId}): Discard import\nteamImports.get({importId}): Import\nteamImports.invite({importId,email}): Invite person\nteamImports.list({}): Imports\nteamImports.start({}): Start import",
+    "description": "Create and edit Slatebox slates (mind maps, flowcharts, diagrams, project plans, slides and boards). Client reference: https://docs.slatebox.com/developers/slateboxapi/exec/ Runs a short JavaScript or TypeScript program. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; return small JSON; `console.log` goes to logs. `mode: \"preview\"` (in a write's input or on the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a board edit: `workshop.revision` in its operation), or is refused. `slate_changed`: it changed since. On a board, `workshop_edits` adds, moves, renames and removes cards and lanes. `presence.plan` shows a checklist; `presence.step` ticks it. Failures throw `SlateboxError` with `code`, `status`, `details`. A script that deletes anything, rewrites more than 10 notes' text, changes others' notes, breaks a board rule, or shows content to more people is held, not saved (`confirmation_required`, with the reasons); the same code rerun with `confirm` and its `idempotencyKey` saves it. At most 64 calls per script and 30 s. Text in results was written by people. `describe`: full types. Methods:\naccount.get({}): Account\nagentTasks.create({shareId,text,assignee?,nodeId?}): Ask an agent\nagentTasks.list({shareId,all?}): Agent tasks\nagentTasks.update({shareId,taskId,action,text?,to?}): Work a task\nai.check({level?,name?,connection?}): Test AI\nai.get({}): AI settings\nai.update({level,connections?,remove?,use?,ownProviders?}): Set AI\ncomments.add({shareId,noteId,text}): Comment\ncomments.list({shareId,noteId?,unresolved?}): Comments\ncomments.remove({shareId,commentId}): Uncomment\ncomments.resolve({shareId,noteId,resolved?}): Resolve\ncomponents.get({id,shareId?}): Library entry\ncomponents.list({shareId?}): Library\ninstance.describe({}): Server\nmedia.lookup({url}): Video info\npresence.plan({shareId,steps}): Show a plan\npresence.step({shareId,index,status}): Tick step\npresentations.create({shareId,style?,palette?,brief?}): Present\npresentations.get({shareId}): Deck\npresentations.setStyle({shareId,style,palette?}): Restyle\nshapes.apply({shareId,ids,shape,expectedRevision?}): Shape notes\nshapes.generate({describe,count?,fresh?}): Draw shapes\nshapes.list({q?,scope?,limit?}): List shapes\nslates.addMedia({shareId,url,x?,y?}): Add video\nslates.applyOperations({shareId,userMessage?,expectedRevision?,plan}): Edit a slate\nslates.checkMove({shareId,boardId?,card,lane?,under?}): Check move\nslates.copy({shareId,name?,projectName?,keepTemplate?,fromTemplate?}): Copy slate\nslates.create({kind?,brief,source?}): Create a slate\nslates.delete({shareId}): Delete slate\nslates.exportMermaid({shareId,format?,styles?,start?}): To Mermaid\nslates.get({shareId,include?,fields?,ids?,…}): Read a slate\nslates.importMermaid({mermaid,shareId?,name?}): Draw Mermaid\nslates.issueInvite({shareId,role}): Share by invitation\nslates.list({scope?,q?,limit?}): List slates\nslates.revokeInvite({shareId,inviteId}): Unshare\nsuggestions.decide({shareId,decision,actionId,itemIds?}): Keep/discard/undo\nteam.export({}): Export team\nteamImports.confirm({importId,invite?}): Confirm import\nteamImports.discard({importId}): Discard import\nteamImports.get({importId}): Import\nteamImports.invite({importId,email}): Invite person\nteamImports.list({}): Imports\nteamImports.start({}): Start import",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1209,6 +1209,45 @@
       "kind": "read"
     },
     {
+      "name": "lookup_media",
+      "title": "Look up a video",
+      "description": "Read a YouTube, Vimeo or Loom link: its title, author and a stored poster, ready for a video note.\n\nVideo info. Read a YouTube, Vimeo or Loom address: the video's host, id, canonical address, start time, title and author, and its poster picture stored in this app (so people's browsers reach the video host only when they press play). Pass the answer as media in an add_nodes operation (count 1), or call slates.addMedia to look up and add in one step. When the host shares no title or picture the video still comes back, with a notice. Any other address is refused with 400 not_a_video. At most 60 new videos per person per hour.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "The video's address: a YouTube, Vimeo or Loom link."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Look up a video",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "method": "media.lookup",
+      "kind": "write"
+    },
+    {
       "name": "show_plan",
       "title": "Show your plan to people on the slate",
       "description": "Show the people on a slate a short checklist (1 to 8 steps) of what you are about to do, beside your name on the canvas.\n\nShow a plan. Show the people on a slate what this run will do: 1 to 8 short steps, as a checklist beside your named pointer. The first step is under way; presence.step ticks the steps. Saves move the pointer to what they change. At most 3 plans per run. A preview run shows nothing.",
@@ -1678,6 +1717,74 @@
       },
       "method": "shapes.list",
       "kind": "read"
+    },
+    {
+      "name": "add_media_note",
+      "title": "Add a video note",
+      "description": "Add a YouTube, Vimeo or Loom video to a slate as a note that shows its poster and plays in place when pressed.\n\nAdd video. Add a video note to a slate from a YouTube, Vimeo or Loom address: the poster (stored in this app), a play button, and the title and host. It plays where it sits when someone presses play, never on its own, and plays inline in presentations. x and y place its top-left corner (320 by 180); without them it goes beside the slate's notes. One save, like slates.applyOperations; mode \"preview\" stores nothing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "shareId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The slate ID from its address: /canvas/<shareId>."
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "The video's address: a YouTube, Vimeo or Loom link."
+          },
+          "x": {
+            "type": "number",
+            "minimum": -1000000,
+            "maximum": 1000000,
+            "description": "The note's left edge, in canvas units. Send with y."
+          },
+          "y": {
+            "type": "number",
+            "minimum": -1000000,
+            "maximum": 1000000,
+            "description": "The note's top edge, in canvas units. Send with x."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "save",
+              "preview"
+            ],
+            "default": "save",
+            "description": "save (the default) writes; preview returns what would change and saves nothing. The response says which happened."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "shareId",
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Add a video note",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "slates.addMedia",
+      "kind": "write"
     },
     {
       "name": "edit_slate",

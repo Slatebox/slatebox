@@ -20,6 +20,8 @@ function TemplateCanvas({ board }) {
     const slate = new Slate(surface.current, {
       enabled: false, showbirdsEye: false, showZoom: false, allowCollaboration: false,
       showMultiSelect: false, showUndoRedo: false, panZoom: { enabled: false }, events: { isReadOnly: () => true },
+      // A gallery tile is a picture: a video note shows its poster and never plays here.
+      mediaPlayback: false,
     })
     setError(false)
     Serialization.deserialize(board, slate, false, true).then(() => {

@@ -26,6 +26,7 @@
     "test:save-fence:live": "node --test --test-concurrency=1 scripts/slate-save-fence.live.test.mjs",
     "test:exec": "node --test --test-concurrency=1 scripts/exec-client-render.test.mjs scripts/exec-redact.test.mjs scripts/exec-gate.test.mjs scripts/exec-runner.test.mjs scripts/exec-api.integration.test.mjs scripts/mcp-endpoint.test.mjs scripts/mcp-oauth.test.mjs scripts/agent-tools.test.mjs scripts/canvas-conversation-exec.test.mjs scripts/exec-hardening.test.mjs scripts/exec-app-hardening.test.mjs scripts/canvas-conversation-review.test.mjs scripts/workshop-edits-exec.test.mjs scripts/business-boards-exec.test.mjs scripts/slate-operation-listener.test.mjs scripts/agent-presence.test.mjs scripts/library-exec.test.mjs scripts/library-components.test.mjs scripts/many-boards.test.mjs scripts/agent-tasks.test.mjs scripts/create-presentation.test.mjs scripts/agent-suggestions.test.mjs",
     "test:enterprise": "node --import ./scripts/enterprise-resolve.mjs --test scripts/enterprise-carveout.test.mjs scripts/connectors.test.mjs scripts/connectors-signin.test.mjs",
+    "test:media": "node --test scripts/media-notes.test.mjs",
     "test:stripe-catalog": "node --test scripts/stripe-catalog.test.mjs",
     "test:pro-instant-pay:live": "node --test --test-concurrency=1 scripts/pro-instant-pay.live.test.mjs",
     "test:pro": "node --test scripts/pro-now-and-credits.test.mjs scripts/pro-billing.test.mjs scripts/pro-instant-pay.test.mjs scripts/meter-pro.test.mjs scripts/stripe-catalog.test.mjs",

@@ -65,7 +65,9 @@ export function isPublicAddress(address) {
 
 export class FetchRefused extends Error {}
 
-export function checkUrl(raw) {
+// allowHosts: when set, the only host names this fetch may reach, on the first request and on
+// every redirect (an outside service's fixed endpoints, such as a video host's oEmbed).
+export function checkUrl(raw, allowHosts) {
   let url
   try {
     url = new URL(raw)
@@ -79,6 +81,7 @@ export function checkUrl(raw) {
     throw new FetchRefused('That address is not public.')
   }
   if (net.isIP(host) && !isPublicAddress(host)) throw new FetchRefused('That address is not public.')
+  if (allowHosts && !allowHosts.includes(host.toLowerCase())) throw new FetchRefused('That address is not one this fetch may reach.')
   return url
 }
 
@@ -97,13 +100,13 @@ export function publicLookup(resolve = dns.lookup) {
   }
 }
 
-function requestOnce(url, { maxBytes, deadline, lookup, accept }) {
+function requestOnce(url, { maxBytes, deadline, lookup, accept, userAgent }) {
   return new Promise((resolve, reject) => {
     const remaining = deadline - Date.now()
     if (remaining <= 0) return reject(new FetchRefused('The address took too long to answer.'))
     const req = https.request(url, {
       method: 'GET', lookup, timeout: remaining,
-      headers: { 'user-agent': 'Slatebox image fetch', accept: accept || '*/*' },
+      headers: { 'user-agent': userAgent || 'Slatebox image fetch', accept: accept || '*/*' },
     }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         res.resume()
@@ -138,13 +141,13 @@ function requestOnce(url, { maxBytes, deadline, lookup, accept }) {
   })
 }
 
-export async function safeFetch(raw, { maxBytes = DEFAULT_MAX_BYTES, timeoutMs = DEFAULT_TIMEOUT_MS, contentTypes, lookup = publicLookup(), accept } = {}) {
+export async function safeFetch(raw, { maxBytes = DEFAULT_MAX_BYTES, timeoutMs = DEFAULT_TIMEOUT_MS, contentTypes, lookup = publicLookup(), accept, allowHosts, userAgent } = {}) {
   const deadline = Date.now() + timeoutMs
-  let url = checkUrl(raw)
+  let url = checkUrl(raw, allowHosts)
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const result = await requestOnce(url, { maxBytes, deadline, lookup, accept })
+    const result = await requestOnce(url, { maxBytes, deadline, lookup, accept, userAgent })
     if (result.redirect) {
-      url = checkUrl(result.redirect)
+      url = checkUrl(result.redirect, allowHosts)
       continue
     }
     if (contentTypes && !contentTypes.includes(result.contentType)) {

@@ -44,6 +44,7 @@ import { presence } from '../presence/meteor'
 import { mountTeamExport, teamTransfer } from '../team-export/meteor'
 import { shapeService } from '../shapes/meteor'
 import { createPresentationFor } from '../methods/presentations'
+import { mediaLookup } from '../media/meteor'
 
 const IdempotencyRecords = new Mongo.Collection('apiIdempotencyRecords')
 const RateWindows = new Mongo.Collection('apiRateWindows')
@@ -176,6 +177,8 @@ export const deps = {
         return removed
       },
     },
+    // media.lookup and slates.addMedia (server/media): video titles and posters
+    media: mediaLookup,
 }
 
 export const limiter = createRateLimiter({ collection: RateWindows.rawCollection() })

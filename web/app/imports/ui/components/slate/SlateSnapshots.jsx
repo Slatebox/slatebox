@@ -88,6 +88,8 @@ export default function SlateSnapshots({
             showZoom: false,
             showAddNodes: false,
             allowCollaboration: false,
+            // A version's picture: a video note shows its poster and never plays here.
+            mediaPlayback: false,
           },
           events
         ).init()

@@ -13138,6 +13138,305 @@
           "openWorldHint": false
         }
       }
+    },
+    {
+      "id": "media.lookup",
+      "title": "Video info",
+      "description": "Read a YouTube, Vimeo or Loom address: the video's host, id, canonical address, start time, title and author, and its poster picture stored in this app (so people's browsers reach the video host only when they press play). Pass the answer as media in an add_nodes operation (count 1), or call slates.addMedia to look up and add in one step. When the host shares no title or picture the video still comes back, with a notice. Any other address is refused with 400 not_a_video. At most 60 new videos per person per hour.",
+      "action": "media.lookup",
+      "toolset": "slates",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": false,
+      "principals": [
+        "person",
+        "guest",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "slates:write",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/media/lookup",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "url"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "The video's address: a YouTube, Vimeo or Loom link."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "media": {
+            "type": "object",
+            "description": "A video a media note plays: the address, the host, and the title and poster when the host shared them.",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "youtube",
+                  "vimeo",
+                  "loom"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string",
+                "description": "The canonical watch address."
+              },
+              "hash": {
+                "type": "string"
+              },
+              "start": {
+                "type": "integer",
+                "description": "Where it starts, in seconds."
+              },
+              "title": {
+                "type": "string"
+              },
+              "author": {
+                "type": "string"
+              },
+              "poster": {
+                "type": "string",
+                "description": "The poster picture, in this app's image store."
+              },
+              "posterWidth": {
+                "type": "integer"
+              },
+              "posterHeight": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "provider",
+              "id",
+              "url"
+            ]
+          },
+          "found": {
+            "type": "boolean",
+            "description": "False when the host shared nothing about the video (private, removed, or not answering)."
+          },
+          "notice": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "media",
+          "found"
+        ]
+      },
+      "tool": {
+        "name": "lookup_media",
+        "title": "Look up a video",
+        "description": "Read a YouTube, Vimeo or Loom link: its title, author and a stored poster, ready for a video note.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": true
+        }
+      }
+    },
+    {
+      "id": "slates.addMedia",
+      "title": "Add video",
+      "description": "Add a video note to a slate from a YouTube, Vimeo or Loom address: the poster (stored in this app), a play button, and the title and host. It plays where it sits when someone presses play, never on its own, and plays inline in presentations. x and y place its top-left corner (320 by 180); without them it goes beside the slate's notes. One save, like slates.applyOperations; mode \"preview\" stores nothing.",
+      "action": "slates.addMedia",
+      "toolset": "slates",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save",
+        "preview"
+      ],
+      "idempotency": "optional",
+      "scope": "slates:write",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/slates/{shareId}/media",
+        "pathParams": [
+          "shareId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "url",
+          "x",
+          "y"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "shareId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The slate ID from its address: /canvas/<shareId>."
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "The video's address: a YouTube, Vimeo or Loom link."
+          },
+          "x": {
+            "type": "number",
+            "minimum": -1000000,
+            "maximum": 1000000,
+            "description": "The note's left edge, in canvas units. Send with y."
+          },
+          "y": {
+            "type": "number",
+            "minimum": -1000000,
+            "maximum": 1000000,
+            "description": "The note's top edge, in canvas units. Send with x."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "save",
+              "preview"
+            ],
+            "default": "save",
+            "description": "save (the default) writes; preview returns what would change and saves nothing. The response says which happened."
+          }
+        },
+        "required": [
+          "shareId",
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "shareId": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string",
+            "description": "The video note's id."
+          },
+          "media": {
+            "type": "object",
+            "description": "A video a media note plays: the address, the host, and the title and poster when the host shared them.",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "youtube",
+                  "vimeo",
+                  "loom"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string",
+                "description": "The canonical watch address."
+              },
+              "hash": {
+                "type": "string"
+              },
+              "start": {
+                "type": "integer",
+                "description": "Where it starts, in seconds."
+              },
+              "title": {
+                "type": "string"
+              },
+              "author": {
+                "type": "string"
+              },
+              "poster": {
+                "type": "string",
+                "description": "The poster picture, in this app's image store."
+              },
+              "posterWidth": {
+                "type": "integer"
+              },
+              "posterHeight": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "provider",
+              "id",
+              "url"
+            ]
+          },
+          "notice": {
+            "type": "string"
+          },
+          "report": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "ok",
+          "shareId",
+          "message",
+          "media"
+        ]
+      },
+      "tool": {
+        "name": "add_media_note",
+        "title": "Add a video note",
+        "description": "Add a YouTube, Vimeo or Loom video to a slate as a note that shows its poster and plays in place when pressed.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
     }
   ]
 }

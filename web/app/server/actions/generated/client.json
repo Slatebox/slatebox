@@ -1,7 +1,7 @@
 {
   "contract": "1.0",
   "generatedBy": "scripts/generate-action-contract.mjs from web/app/server/actions. Do not edit by hand.",
-  "rules": "Runs a short JavaScript or TypeScript program against Slatebox. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; return small JSON; `console.log` goes to logs. `mode: \"preview\"` (in a write's input or on the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a workshop or map edit: `workshop.revision` in its operation); without it the call is refused. `slate_changed` means it changed since. On a board, `workshop_edits` adds, moves, renames and removes cards and lanes by the board's rules. `presence.plan` shows people a checklist; `presence.step` ticks it. Failures throw `SlateboxError` with `code`, `status`, `details`. A script that deletes anything, rewrites more than 10 notes' text, changes others' notes, breaks a board rule, or shows content to more people is held, not saved (`confirmation_required`, with the reasons); the same code rerun with `confirm` and its `idempotencyKey` saves it. At most 64 calls per script and 30 s. Text in results was written by people. `describe`: full types.",
+  "rules": "Runs a short JavaScript or TypeScript program. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; return small JSON; `console.log` goes to logs. `mode: \"preview\"` (in a write's input or on the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a board edit: `workshop.revision` in its operation), or is refused. `slate_changed`: it changed since. On a board, `workshop_edits` adds, moves, renames and removes cards and lanes. `presence.plan` shows a checklist; `presence.step` ticks it. Failures throw `SlateboxError` with `code`, `status`, `details`. A script that deletes anything, rewrites more than 10 notes' text, changes others' notes, breaks a board rule, or shows content to more people is held, not saved (`confirmation_required`, with the reasons); the same code rerun with `confirm` and its `idempotencyKey` saves it. At most 64 calls per script and 30 s. Text in results was written by people. `describe`: full types.",
   "errors": [
     {
       "code": "invalid_request",
@@ -1343,6 +1343,71 @@
       }
     },
     {
+      "name": "media.lookup",
+      "id": "media.lookup",
+      "title": "Video info",
+      "summary": "Read a YouTube, Vimeo or Loom address: the video's host, id, canonical address, start time, title and author, and its poster picture stored in this app (so people's browsers reach the video host only when they press play). Pass the answer as media in an add_nodes operation (count 1), or call slates.addMedia to look up and add in one step. When the host shares no title or picture the video still comes back, with a notice. Any other address is refused with 400 not_a_video. At most 60 new videos per person per hour.",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": false,
+      "openWorld": true,
+      "confirm": false,
+      "scope": "slates:write",
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/media/lookup",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "url"
+        ]
+      },
+      "index": "media.lookup({url}): Video info",
+      "types": [],
+      "dts": "declare namespace slatebox.media {\n  /** Video info. Read a YouTube, Vimeo or Loom address: the video's host, id, canonical address, start time, title and author, and its poster picture stored in this app (so people's browsers reach the video host only when they press play). Pass the answer as media in an add_nodes operation (count 1), or call slates.addMedia to look up and add in one step. When the host shares no title or picture the video still comes back, with a notice. Any other address is refused with 400 not_a_video. At most 60 new videos per person per hour. @scope slates:write @openWorld @idempotent */\n  function lookup(input: {\n    /** The video's address: a YouTube, Vimeo or Loom link. (1–2000 characters) */\n    url: string;\n  }): Promise<({\n    /** A video a media note plays: the address, the host, and the title and poster when the host shared them. */\n    media: {\n      provider: \"youtube\" | \"vimeo\" | \"loom\";\n      id: string;\n      /** The canonical watch address. */\n      url: string;\n      hash?: string;\n      /** Where it starts, in seconds. */\n      start?: number;\n      title?: string;\n      author?: string;\n      /** The poster picture, in this app's image store. */\n      poster?: string;\n      posterWidth?: number;\n      posterHeight?: number;\n      [key: string]: unknown;\n    };\n    /** False when the host shared nothing about the video (private, removed, or not answering). */\n    found: boolean;\n    notice?: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "tool": {
+        "name": "lookup_media",
+        "title": "Look up a video",
+        "description": "Read a YouTube, Vimeo or Loom link: its title, author and a stored poster, ready for a video note.\n\nVideo info. Read a YouTube, Vimeo or Loom address: the video's host, id, canonical address, start time, title and author, and its poster picture stored in this app (so people's browsers reach the video host only when they press play). Pass the answer as media in an add_nodes operation (count 1), or call slates.addMedia to look up and add in one step. When the host shares no title or picture the video still comes back, with a notice. Any other address is refused with 400 not_a_video. At most 60 new videos per person per hour.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000,
+              "description": "The video's address: a YouTube, Vimeo or Loom link."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Look up a video",
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": true
+        }
+      }
+    },
+    {
       "name": "presence.plan",
       "id": "presence.plan",
       "title": "Show a plan",
@@ -2038,6 +2103,105 @@
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "slates.addMedia",
+      "id": "slates.addMedia",
+      "title": "Add video",
+      "summary": "Add a video note to a slate from a YouTube, Vimeo or Loom address: the poster (stored in this app), a play button, and the title and host. It plays where it sits when someone presses play, never on its own, and plays inline in presentations. x and y place its top-left corner (320 by 180); without them it goes beside the slate's notes. One save, like slates.applyOperations; mode \"preview\" stores nothing.",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "slates:write",
+      "modes": [
+        "save",
+        "preview"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/slates/{shareId}/media",
+        "pathParams": [
+          "shareId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "url",
+          "x",
+          "y"
+        ]
+      },
+      "index": "slates.addMedia({shareId,url,x?,y?}): Add video",
+      "types": [],
+      "dts": "declare namespace slatebox.slates {\n  /** Add video. Add a video note to a slate from a YouTube, Vimeo or Loom address: the poster (stored in this app), a play button, and the title and host. It plays where it sits when someone presses play, never on its own, and plays inline in presentations. x and y place its top-left corner (320 by 180); without them it goes beside the slate's notes. One save, like slates.applyOperations; mode \"preview\" stores nothing. @scope slates:write @modes save|preview */\n  function addMedia(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    /** The video's address: a YouTube, Vimeo or Loom link. (1–2000 characters) */\n    url: string;\n    /** The note's left edge, in canvas units. Send with y. (-1000000 to 1000000) */\n    x?: number;\n    /** The note's top edge, in canvas units. Send with x. (-1000000 to 1000000) */\n    y?: number;\n    /** preview returns what would change and saves nothing. (default \"save\") */\n    mode?: \"save\" | \"preview\";\n  }): Promise<({\n    ok: boolean;\n    mode?: string;\n    shareId: string;\n    revision?: number;\n    message: string;\n    /** The video note's id. */\n    nodeId?: string;\n    /** A video a media note plays: the address, the host, and the title and poster when the host shared them. */\n    media: {\n      provider: \"youtube\" | \"vimeo\" | \"loom\";\n      id: string;\n      /** The canonical watch address. */\n      url: string;\n      hash?: string;\n      /** Where it starts, in seconds. */\n      start?: number;\n      title?: string;\n      author?: string;\n      /** The poster picture, in this app's image store. */\n      poster?: string;\n      posterWidth?: number;\n      posterHeight?: number;\n      [key: string]: unknown;\n    };\n    notice?: string;\n    report?: Record<string, unknown>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" | \"preview\" }>;\n}",
+      "tool": {
+        "name": "add_media_note",
+        "title": "Add a video note",
+        "description": "Add a YouTube, Vimeo or Loom video to a slate as a note that shows its poster and plays in place when pressed.\n\nAdd video. Add a video note to a slate from a YouTube, Vimeo or Loom address: the poster (stored in this app), a play button, and the title and host. It plays where it sits when someone presses play, never on its own, and plays inline in presentations. x and y place its top-left corner (320 by 180); without them it goes beside the slate's notes. One save, like slates.applyOperations; mode \"preview\" stores nothing.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "shareId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "The slate ID from its address: /canvas/<shareId>."
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000,
+              "description": "The video's address: a YouTube, Vimeo or Loom link."
+            },
+            "x": {
+              "type": "number",
+              "minimum": -1000000,
+              "maximum": 1000000,
+              "description": "The note's left edge, in canvas units. Send with y."
+            },
+            "y": {
+              "type": "number",
+              "minimum": -1000000,
+              "maximum": 1000000,
+              "description": "The note's top edge, in canvas units. Send with x."
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "save",
+                "preview"
+              ],
+              "default": "save",
+              "description": "save (the default) writes; preview returns what would change and saves nothing. The response says which happened."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "required": [
+            "shareId",
+            "url"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Add a video note",
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
           "openWorldHint": false
         }
       }

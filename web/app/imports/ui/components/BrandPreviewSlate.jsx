@@ -178,6 +178,8 @@ export default function BrandPreviewSlate({
               snapToObjects: false,
             },
             name: 'Brand Preview',
+            // A picture of the brand: a video note shows its poster and never plays here.
+            mediaPlayback: false,
             allowDrag: true,
             showbirdsEye: false,
             showLocks: false,

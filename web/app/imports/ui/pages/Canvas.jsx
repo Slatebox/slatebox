@@ -21,6 +21,7 @@ import omit from 'lodash.omit'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { dailyCall } from '../components/huddle/daily-call.mjs'
 import createSlate from '../../api/client/createSlate'
+import addMediaNote from '../../api/client/addMediaNote'
 import saveSlateLite, { rememberSaveBase } from '../../api/client/saveSlateLite'
 import { watchCanvasKeys } from '../../api/client/canvasKeys'
 import CONSTANTS from '../../api/common/constants'
@@ -265,6 +266,8 @@ export default function Canvas() {
   const [selectionFrame, setSelectionFrame] = React.useState(null)
   // The line tool is drawing (see LineToolStatus).
   const [drawingLine, setDrawingLine] = React.useState(false)
+  // What happened to a pasted video address, said once (a host that shared no picture, too many lookups).
+  const [mediaNotice, setMediaNotice] = React.useState(null)
   // Bumped by every change from someone else, so an open style bar reads its note again.
   const [barTick, setBarTick] = React.useState(0)
   const [getHuddleEnabled, setHuddleEnabled] = useAtom(huddleEnabled)
@@ -707,6 +710,20 @@ export default function Canvas() {
         else slate.current?.v2?.selectNodes?.([node.v2 ?? node])
       },
       onSelectionFrame: (frame) => setSelectionFrame(frame),
+      // A YouTube, Vimeo or Loom address pasted or dropped on the canvas: a video note, its title
+      // and poster looked up on the server (addMediaNote.js).
+      onMediaRequested: (request) => {
+        addMediaNote({
+          slate: slate.current,
+          request,
+          lookup: (input) => Meteor.callAsync('media.lookup', input),
+          notify: (text) => setMediaNotice({ key: Date.now(), text }),
+        }).catch((error) => {
+          // eslint-disable-next-line no-console
+          console.error('Unable to add the video note', error)
+          setMediaNotice({ key: Date.now(), text: 'The video note could not be added. Try pasting the link again.' })
+        })
+      },
       onLineToolChanged: (on) => setDrawingLine(Boolean(on)),
       onBase64ImageRequested: (imgUrl, docType, cb) => {
         async function get() {
@@ -1383,6 +1400,9 @@ export default function Canvas() {
               is for the eye only. On a phone it sits at the top, clear of the message box and zoom. */}
           {/* A drop the board's rules refuse, which the person may make anyway: the rule's sentence, Move anyway or Cancel. */}
           {workshopSlate && (asking => asking ? <MoveAnywayDialog ask={asking.moveAnyway} onAnswer={asking.answerMoveAnyway} /> : null)(boards.find(board => board.moveAnyway))}
+          <Snackbar data-media-notice key={mediaNotice?.key} open={Boolean(mediaNotice)} message={mediaNotice?.text}
+            onClose={(_, reason) => { if (reason !== 'clickaway') setMediaNotice(null) }} autoHideDuration={5000}
+            anchorOrigin={{ vertical: phone ? 'top' : 'bottom', horizontal: 'center' }} sx={phone ? { top: '64px !important' } : undefined} />
           {workshopSlate && (shaped => <Snackbar data-shape-notice key={shaped.shapeNotice?.key} open={Boolean(shaped.shapeNotice)} message={shaped.shapeNotice?.text}
             onClose={(_, reason) => { if (reason !== 'clickaway') shaped.clearShapeNotice?.() }} autoHideDuration={5000} aria-hidden="true"
             anchorOrigin={{ vertical: phone ? 'top' : 'bottom', horizontal: 'center' }} sx={phone ? { top: '64px !important' } : undefined} />)(boards.find(board => board.shapeNotice) ?? workshop)}

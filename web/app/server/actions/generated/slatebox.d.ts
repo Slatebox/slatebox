@@ -406,6 +406,36 @@ declare namespace slatebox.instance {
   }>;
 }
 
+declare namespace slatebox.media {
+  /** Video info. Read a YouTube, Vimeo or Loom address: the video's host, id, canonical address, start time, title and author, and its poster picture stored in this app (so people's browsers reach the video host only when they press play). Pass the answer as media in an add_nodes operation (count 1), or call slates.addMedia to look up and add in one step. When the host shares no title or picture the video still comes back, with a notice. Any other address is refused with 400 not_a_video. At most 60 new videos per person per hour. @scope slates:write @openWorld @idempotent */
+  function lookup(input: {
+    /** The video's address: a YouTube, Vimeo or Loom link. (1–2000 characters) */
+    url: string;
+  }): Promise<({
+    /** A video a media note plays: the address, the host, and the title and poster when the host shared them. */
+    media: {
+      provider: "youtube" | "vimeo" | "loom";
+      id: string;
+      /** The canonical watch address. */
+      url: string;
+      hash?: string;
+      /** Where it starts, in seconds. */
+      start?: number;
+      title?: string;
+      author?: string;
+      /** The poster picture, in this app's image store. */
+      poster?: string;
+      posterWidth?: number;
+      posterHeight?: number;
+      [key: string]: unknown;
+    };
+    /** False when the host shared nothing about the video (private, removed, or not answering). */
+    found: boolean;
+    notice?: string;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
 declare namespace slatebox.presence {
   /** Show a plan. Show the people on a slate what this run will do: 1 to 8 short steps, as a checklist beside your named pointer. The first step is under way; presence.step ticks the steps. Saves move the pointer to what they change. At most 3 plans per run. A preview run shows nothing. @scope slates:write @modes save|preview */
   function plan(input: {
@@ -648,6 +678,50 @@ declare namespace slatebox.shapes {
     }>;
     [key: string]: unknown;
   }>;
+}
+
+declare namespace slatebox.slates {
+  /** Add video. Add a video note to a slate from a YouTube, Vimeo or Loom address: the poster (stored in this app), a play button, and the title and host. It plays where it sits when someone presses play, never on its own, and plays inline in presentations. x and y place its top-left corner (320 by 180); without them it goes beside the slate's notes. One save, like slates.applyOperations; mode "preview" stores nothing. @scope slates:write @modes save|preview */
+  function addMedia(input: {
+    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
+    shareId: string;
+    /** The video's address: a YouTube, Vimeo or Loom link. (1–2000 characters) */
+    url: string;
+    /** The note's left edge, in canvas units. Send with y. (-1000000 to 1000000) */
+    x?: number;
+    /** The note's top edge, in canvas units. Send with x. (-1000000 to 1000000) */
+    y?: number;
+    /** preview returns what would change and saves nothing. (default "save") */
+    mode?: "save" | "preview";
+  }): Promise<({
+    ok: boolean;
+    mode?: string;
+    shareId: string;
+    revision?: number;
+    message: string;
+    /** The video note's id. */
+    nodeId?: string;
+    /** A video a media note plays: the address, the host, and the title and poster when the host shared them. */
+    media: {
+      provider: "youtube" | "vimeo" | "loom";
+      id: string;
+      /** The canonical watch address. */
+      url: string;
+      hash?: string;
+      /** Where it starts, in seconds. */
+      start?: number;
+      title?: string;
+      author?: string;
+      /** The poster picture, in this app's image store. */
+      poster?: string;
+      posterWidth?: number;
+      posterHeight?: number;
+      [key: string]: unknown;
+    };
+    notice?: string;
+    report?: Record<string, unknown>;
+    [key: string]: unknown;
+  }) & { mode: "save" | "preview" }>;
 }
 
 declare namespace slatebox.slates {

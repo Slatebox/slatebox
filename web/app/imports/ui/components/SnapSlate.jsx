@@ -53,6 +53,8 @@ export default function SnapSlate({
         showLocks: false,
         showAddNodes: false,
         allowCollaboration: !disableCollab,
+        // A slate's card is a picture of it: a video note shows its poster and never plays here.
+        mediaPlayback: false,
       },
       {
         onSlateChanged: async (pkg) => {

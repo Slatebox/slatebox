@@ -86,7 +86,7 @@ async function applyToWorkshop(principal, input, { deps, mode, idempotencyKey, r
 
 // Everyone on the slate sees the agent that saved: its pointer goes to what the save touched.
 // Only a save does this (never a preview or a held plan), and it never fails the save.
-async function showAgent(principal, slate, body, deps) {
+export async function showAgent(principal, slate, body, deps) {
   if (!deps.presence) return
   const report = body?.report || {}
   const created = new Set(report.created || [])

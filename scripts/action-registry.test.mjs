@@ -405,12 +405,14 @@ test("the Developer tab and the API run one handler for list, create and revoke"
   // Restated (Mermaid): the app's Mermaid dialog imports through slates.importMermaid, the action tokens call.
   // Restated (team export): Team settings › Export everything calls team.export, and Admin tools ›
   // Import a team export calls teamImports.start, list, get, confirm, invite and discard.
-  // Restated (agent teammates): the canvas's Agent tasks panel lists, asks and approves through
+// Restated (agent teammates): the canvas's Agent tasks panel lists, asks and approves through
   // agentTasks.list, agentTasks.create and agentTasks.update, the actions tokens call.
   // Restated (agent suggestions): the canvas reads what agents suggest through suggestions.list, keeps,
   // discards and undoes through suggestions.decide (the action tokens call), and people pause agents or
   // let one edit directly through agents.control.
-  assert.deepEqual(names.sort(), ["account.get", "agentTasks.create", "agentTasks.list", "agentTasks.update", "agents.control", "ai.check", "ai.get", "ai.update", "apiTokens.create", "apiTokens.list", "apiTokens.revoke", "comments.add", "instance.describe", "slates.copy", "slates.importMermaid", "slates.updateSettings", "suggestions.decide", "suggestions.list", "team.export", "teamImports.confirm", "teamImports.discard", "teamImports.get", "teamImports.invite", "teamImports.list", "teamImports.start"]);
+// Restated (video notes): a video address pasted on the canvas is looked up through media.lookup,
+  // and slates.addMedia is the same add the API, exec and MCP make.
+  assert.deepEqual(names.sort(), ["account.get", "agentTasks.create", "agentTasks.list", "agentTasks.update", "agents.control", "ai.check", "ai.get", "ai.update", "apiTokens.create", "apiTokens.list", "apiTokens.revoke", "comments.add", "instance.describe", "media.lookup", "slates.addMedia", "slates.copy", "slates.importMermaid", "slates.updateSettings", "suggestions.decide", "suggestions.list", "team.export", "teamImports.confirm", "teamImports.discard", "teamImports.get", "teamImports.invite", "teamImports.list", "teamImports.start"]);
   const asOwner = { userId: "owner" };
   const created = await methods["apiTokens.create"].call(asOwner, { name: "From the tab", scopes: ["slates:read"] });
   assert.match(created.token, /^sbx_/);

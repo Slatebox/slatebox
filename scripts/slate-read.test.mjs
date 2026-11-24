@@ -133,7 +133,10 @@ test("open-slate: every key a write accepts reads back equal through the route",
   const { body } = await call("/api/v1/slates/demo?ids=c", { token });
   // Restated (integrate-w2): groupId and link are write keys now (P10), so they are part of the
   // round trip; only image and comments are read-only extras.
-  const { id, comments, image, ...keys } = body.nodes[0];
+  // Restated (video notes): media is a read-only extra too (a video note reads as its video; any
+  // other note reads null). A video is added by add_nodes media or slates.addMedia, never changed.
+  const { id, comments, image, media, ...keys } = body.nodes[0];
+  assert.equal(media, null);
   assert.deepEqual(keys, { ...changes, locked: true });
 });
 

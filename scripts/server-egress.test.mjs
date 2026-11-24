@@ -47,7 +47,7 @@ test('a public-looking name that resolves to a private address is refused before
 
 test('the server fetch follows a redirect only through the same checks', async () => {
   const source = (await import('node:fs')).readFileSync(new URL('../web/app/server/common/safe-fetch.mjs', import.meta.url), 'utf8')
-  assert.match(source, /url = checkUrl\(result\.redirect\)/)
+  assert.match(source, /url = checkUrl\(result\.redirect, allowHosts\)/)
   assert.match(source, /MAX_REDIRECTS = 3/)
 })
 
