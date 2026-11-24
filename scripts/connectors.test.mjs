@@ -361,6 +361,17 @@ test('the walkthrough: plain summary, sanitized name, consent to hashes, a hello
   await refusedWith(world.service.discover(world.ada, { shareId: 'share1', address: 'https://10.0.0.1/mcp' }), 'private_address')
 })
 
+test('one agent per name on a slate (case and spaces ignored), so @name always means one agent', async () => {
+  const world = makeWorld({ pro: ['ada', 'sam'] })
+  const found = await world.service.discover(world.sam, { shareId: 'share1', address: servers.url('/open/mcp') })
+  const tools = found.tools.map(({ name, hash, policy }) => ({ name, hash, policy }))
+  await world.service.connect(world.sam, { shareId: 'share1', address: found.address, name: 'GitHub', tools })
+  await refusedWith(world.service.connect(world.ada, { shareId: 'share1', address: found.address, name: 'github', tools }), 'name_taken')
+  await refusedWith(world.service.connect(world.ada, { shareId: 'share1', address: found.address, name: 'Git Hub', tools }), 'name_taken')
+  const other = await world.service.connect(world.ada, { shareId: 'share1', address: found.address, name: 'GitHub issues', tools })
+  assert.equal(other.name, 'GitHub issues')
+})
+
 test('only the inviter can ask the agent; everyone who reads the slate sees it', async () => {
   const world = makeWorld({ pro: ['ada', 'sam'] })
   const conn = await world.inviteTo('/open/mcp')

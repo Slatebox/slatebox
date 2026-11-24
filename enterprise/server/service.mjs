@@ -28,6 +28,7 @@
 // everyone who can read the slate sees its cursor and ghosts; the person who keeps must be able
 // to edit the slate.
 import { randomBytes } from 'node:crypto'
+import { sameAgentName } from '/imports/api/common/agent-mention.mjs'
 import { canonicalAddress, cardFor, DEAD_HOSTS, lookalikeHost } from '../common/gallery.mjs'
 import { checkMcpUrl, McpFetchRefused } from './mcp-fetch.mjs'
 import { SignInNeeded } from './credentials.mjs'
@@ -286,6 +287,9 @@ export function createConnectorService({
     if (live.length >= AGENT_LIMITS.perSlate) refuse(429, 'agent_limit', `A slate can have ${AGENT_LIMITS.perSlate} invited agents. Remove one first.`)
     if (live.filter((doc) => doc.ownerId === principal.userId).length >= AGENT_LIMITS.perOwnerPerSlate)
       refuse(429, 'agent_limit', `You can invite ${AGENT_LIMITS.perOwnerPerSlate} agents onto one slate. Remove one first.`)
+    // One agent per name on a slate, so "@name" in Ask Slatebox always means one agent.
+    if (live.some((doc) => sameAgentName(doc.name, name)))
+      refuse(409, 'name_taken', `An agent on this slate is already called ${name}. Choose another name.`)
     // Consent is to what the server says now: the hashes the person saw must still be the server's.
     const reached = await discoverAs(principal.userId, address)
     if (reached.needsSignIn) refuse(401, 'needs_sign_in', `Sign in to ${host} first.`)

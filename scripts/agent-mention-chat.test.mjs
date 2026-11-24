@@ -25,6 +25,20 @@ test('no mention, a partial name or an email address asks no agent', () => {
   assert.equal(mentionedAgent(null, agents), null)
 })
 
+test('your own agent wins @name over someone else\'s with the same or a longer name; theirs only explains the refusal', async () => {
+  const { sameAgentName } = await import('../web/app/imports/api/common/agent-mention.mjs')
+  const bobs = { name: 'GitHub', canAsk: false, inviterName: 'Bob' }
+  const bobsLonger = { name: 'GitHub issues', canAsk: false, inviterName: 'Bob' }
+  const adas = { name: 'GitHub', canAsk: true }
+  // Bob invited first, so his agent comes first in the list.
+  assert.equal(mentionedAgent('@GitHub open issues', [bobs, adas]).agent, adas)
+  assert.deepEqual(mentionedAgent('@GitHub issues about login', [bobsLonger, adas]), { agent: adas, request: 'issues about login' })
+  // Only someone else's agent by that name: it is found, so the answer can say who may ask it.
+  assert.equal(mentionedAgent('@GitHub issues about login', [bobsLonger]).agent, bobsLonger)
+  assert.equal(sameAgentName('Git Hub', 'github'), true)
+  assert.equal(sameAgentName('GitHub', 'GitHub issues'), false)
+})
+
 test('@Slatebox stays Slatebox, even if an agent were named so', () => {
   assert.equal(mentionedAgent('@Slatebox make a mind map', [...agents, { name: 'Slatebox' }]), null)
   assert.equal(slateboxRequest('@Slatebox make a mind map'), 'make a mind map')

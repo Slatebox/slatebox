@@ -14,20 +14,13 @@ export function slateboxRequest(text) {
 const fold = (text) => String(text).toLowerCase().replace(/\s+/g, '')
 const NAME_END = /^($|[\s:,.!?;)])/
 
-/**
- * The agent a message mentions and the request without the mention, or null.
- * @param {string} text
- * @param {{ name: string }[]} agents
- * @returns {{ agent: object, request: string } | null}
- */
-export function mentionedAgent(text, agents) {
-  if (typeof text !== 'string' || !Array.isArray(agents) || !agents.length) return null
-  const named = agents.filter((agent) => typeof agent?.name === 'string' && agent.name.trim() && fold(agent.name) !== 'slatebox')
+// The first @ in the text that names one of these agents (the longest name there wins).
+function firstMatch(text, agents) {
   let best = null
   for (const match of text.matchAll(/(^|[\s(])@/g)) {
     const at = match.index + match[0].length
     const rest = text.slice(at)
-    for (const agent of named) {
+    for (const agent of agents) {
       for (const form of new Set([agent.name.trim(), agent.name.replace(/\s+/g, '')])) {
         if (rest.slice(0, form.length).toLowerCase() !== form.toLowerCase() || !NAME_END.test(rest.slice(form.length))) continue
         if (!best || form.length > best.length) best = { agent, start: at - 1, length: form.length }
@@ -35,11 +28,30 @@ export function mentionedAgent(text, agents) {
     }
     if (best) break
   }
+  return best
+}
+
+/**
+ * The agent a message mentions and the request without the mention, or null. The agents this
+ * person may ask (canAsk: the ones they invited) are matched first, so someone else's agent with
+ * the same or a longer name never takes a message meant for theirs; the others are matched after,
+ * only so the answer can say who may ask them.
+ * @param {string} text
+ * @param {{ name: string, canAsk?: boolean }[]} agents
+ * @returns {{ agent: object, request: string } | null}
+ */
+export function mentionedAgent(text, agents) {
+  if (typeof text !== 'string' || !Array.isArray(agents) || !agents.length) return null
+  const named = agents.filter((agent) => typeof agent?.name === 'string' && agent.name.trim() && fold(agent.name) !== 'slatebox')
+  const best = firstMatch(text, named.filter((agent) => agent.canAsk === true)) || firstMatch(text, named)
   if (!best) return null
   const request = (text.slice(0, best.start) + ' ' + text.slice(best.start + 1 + best.length).replace(/^[:,]/, ''))
     .replace(/\s+/g, ' ').trim().slice(0, 1000)
   return { agent: best.agent, request }
 }
+
+/** Whether two agent names are the same for @name (case and spaces ignored). */
+export const sameAgentName = (a, b) => fold(a) === fold(b)
 
 /** What an invited agent's turn in Ask Slatebox says about what it did (connectors.call's answer). */
 export function agentChatReply(name, result = {}) {

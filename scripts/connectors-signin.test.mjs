@@ -521,9 +521,9 @@ async function signInThroughService(world, path = '/oauth/mcp') {
   return started
 }
 
-async function inviteSignedIn(world, path = '/oauth/mcp') {
+async function inviteSignedIn(world, path = '/oauth/mcp', name = 'Issues') {
   const found = await world.service.discover(world.ada, { shareId: 'share1', address: servers.url(path) })
-  return world.service.connect(world.ada, { shareId: 'share1', address: found.address, name: 'Issues', tools: found.tools.map(({ name, hash, policy }) => ({ name, hash, policy })), contextLevel: 'request' })
+  return world.service.connect(world.ada, { shareId: 'share1', address: found.address, name, tools: found.tools.map(({ name, hash, policy }) => ({ name, hash, policy })), contextLevel: 'request' })
 }
 
 test('the walkthrough: "sign-in needed" with how, then the popup, then the tools; calls carry the token, nothing else ever holds it', async () => {
@@ -603,7 +603,8 @@ test('remove: the sign-in is revoked and forgotten when no other slate uses that
   const world = makeWorld()
   await signInThroughService(world)
   const one = await inviteSignedIn(world)
-  const two = await inviteSignedIn(world)
+  // a second agent on the same server (names are one per slate)
+  const two = await inviteSignedIn(world, '/oauth/mcp', 'Issues two')
   const revoked = servers.oauth.revoked.length
   await world.service.disconnect(world.ada, { connectionId: one.connectionId })
   assert.equal(world.credentials.rows.size, 1)
