@@ -39,11 +39,15 @@ export function readWorkshopChanges(input) {
       // A business board's change: its edits, with the card or lane it shows on.
       const { edits, cardId, laneId } = change
       if (Array.isArray(edits) && edits.length >= 1 && edits.length <= 50 && edits.every(plain) && !unsafeKeyPath(edits) &&
-          JSON.stringify(edits).length <= 20000 && (cardId === undefined || key(cardId)) && (laneId === undefined || key(laneId))) {
+          JSON.stringify(edits).length <= 20000 && (cardId === undefined || key(cardId)) && (laneId === undefined || key(laneId)) &&
+          (change.override === undefined || change.override === true)) {
         const rename = change.rename
         const named = rename && (words(rename.title) ? { title: rename.title } : key(rename.laneId) && words(rename.label) ? { laneId: rename.laneId, label: rename.label }
           : key(rename.cardId) && words(rename.label) ? { cardId: rename.cardId, label: rename.label } : null)
-        return { edits, ...(cardId && { cardId }), ...(laneId && { laneId }), ...(named && { rename: named }) }
+        // `override`: an edit made anyway (a deal past its stages, a task past its rule, a card under another), once the
+        // person confirmed it. The edit itself carries override true; the server marks who and when (playWorkshopChanges).
+        const anyway = change.override === true || edits.some(edit => edit.override === true)
+        return { edits, ...(cardId && { cardId }), ...(laneId && { laneId }), ...(named && { rename: named }), ...(anyway && { override: true }) }
       }
       throw new Error('Expected a list of edits.')
     }
@@ -123,11 +127,12 @@ export function playWorkshopChanges(workshop, changes, noteIds, trades, actor = 
       // focus (its grips, a path removed): the path edits chat and exec make (boards S2b).
       const paths = board.lanes[0]?.station && change.edits.every(edit => edit?.kind === 'connect_stations' || edit?.kind === 'disconnect_stations')
       if (!businessKind(board) && !paths) return refuse(at, { reason: 'This workshop is played by moves and renames.', laneId: null })
-      const made = applyWorkshopEdits(board, change.edits)
+      // An edit made anyway is marked with who (the server's name for them, never the page's) and when.
+      const made = applyWorkshopEdits(board, change.edits, change.override ? { actor: { by: actor?.by || 'Someone', via: 'chat' }, ...(actor?.at && { now: actor.at }) } : {})
       if ('refused' in made) {
-        const { reason, laneId, cardId, limits } = made.refused
+        const { reason, laneId, cardId, limits, overridable } = made.refused
         const lane = laneId ?? board.cards.find(item => item.id === (cardId ?? change.cardId))?.laneId ?? change.laneId ?? null
-        return refuse(at, { reason, laneId: lane, ...(limits && { limits }) })
+        return refuse(at, { reason, laneId: lane, ...(limits && { limits }), ...(overridable && { overridable: true }) })
       }
       board = made.workshop
       continue

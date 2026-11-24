@@ -1888,7 +1888,7 @@ interface WorkshopEditsPlan {
         /** (1–64 characters) */
         id: string;
       };
-      /** True to move it anyway when a rule refuses it (lane boards and maps), once the person agreed to break that rule. The card shows who moved it anyway and when. */
+      /** True to move it anyway when a rule refuses it, once the person agreed to break that rule (every board but release plans and startup experiences). The card shows who moved it anyway and when. */
       override?: boolean;
     } | {
       kind: "advance_card";
@@ -2146,8 +2146,10 @@ interface WorkshopEditsPlan {
       };
       /** Its days, 1 to 60. (1 to 60) */
       duration?: number;
-      /** Days it waits, 0 or more. (0 to 120) */
+      /** Days it waits after what it waits on ends, 0 or more (below 0, with override: it starts before what it waits on ends). (-120 to 120) */
       lag?: number;
+      /** True to set it anyway when a rule refuses it (a lock, a freeze, an overlap, the line, what it waits on), once the person agreed to break that rule. The task shows who moved it anyway and when. */
+      override?: boolean;
     } | {
       kind: "link_tasks";
       /** The task that waits. */
@@ -2347,6 +2349,8 @@ interface WorkshopEditsPlan {
         /** (1–64 characters) */
         id: string;
       };
+      /** True to nest it anyway when a rule refuses it (a role, a depth, a parent’s limit), once the person agreed to break that rule. The card shows who moved it anyway and when. */
+      override?: boolean;
     } | {
       kind: "start_pile";
       /** The card. */

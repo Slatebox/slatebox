@@ -92,14 +92,15 @@ test("a board change is played as its edits on the board as it stands: two peopl
   assert.deepEqual(both.workshop.cards.map((card) => [card.id, card.duration, card.lag ?? 0]), [["design", 4, 0], ["build", 7, 0], ["copy", 2, 3], ["qa", 2, 0]]);
   // Ben stretches Build past what launch allows: refused with the canvas's sentence, on Build's lane.
   const late = playWorkshopChanges(plan, readWorkshopChanges([{ cardId: "build", edits: [{ kind: "set_task", card: { id: "build" }, duration: 9 }] }]));
+  // It is a rule the person may break once they agree ("Move anyway": the same set_task with override true).
   assert.deepEqual(late.refused, { reason: "That pushes QA to day 15, after launch on day 14.", laneId: "engineering",
-    limits: { field: "duration", min: 1, max: 8, reasons: { min: "A task takes at least 1 day.", max: "That pushes QA to day 15, after launch on day 14." } } });
+    limits: { field: "duration", min: 1, max: 8, reasons: { min: "A task takes at least 1 day.", max: "That pushes QA to day 15, after launch on day 14." } }, overridable: true });
   const pipeline = playWorkshopChanges(validateWorkshop(samplePipeline()), readWorkshopChanges([{ cardId: "northwind", laneId: "won",
     edits: [{ kind: "move_card", card: { id: "northwind" }, lane: { id: "won" } }] }]));
   assert.equal(pipeline.refused.reason, "Deals move one stage at a time. Northwind is in Lead, so Qualified comes first.");
   const budget = playWorkshopChanges(validateWorkshop(sampleBudget()), readWorkshopChanges([{ cardId: "contractor", laneId: "design",
     edits: [{ kind: "move_card", card: { id: "contractor" }, lane: { id: "design" } }] }]));
-  assert.deepEqual(budget.refused, { reason: "Design has $30k left. Contractor costs $45k.", laneId: "design" });
+  assert.deepEqual(budget.refused, { reason: "Design has $30k left. Contractor costs $45k.", laneId: "design", overridable: true });
   // A plain workshop is still played by moves and renames.
   const lanes = { version: 1, title: "Week", lanes: [{ id: "a", label: "A" }, { id: "b", label: "B" }], cards: [{ id: "x", label: "X", laneId: "a" }] };
   assert.equal(playWorkshopChanges(lanes, readWorkshopChanges([{ edits: [{ kind: "move_card", card: "X", lane: "B" }] }])).refused.reason, "This workshop is played by moves and renames.");

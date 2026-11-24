@@ -9873,7 +9873,7 @@
                           },
                           "override": {
                             "type": "boolean",
-                            "description": "True to move it anyway when a rule refuses it (lane boards and maps), once the person agreed to break that rule. The card shows who moved it anyway and when."
+                            "description": "True to move it anyway when a rule refuses it, once the person agreed to break that rule (every board but release plans and startup experiences). The card shows who moved it anyway and when."
                           }
                         }
                       },
@@ -11177,9 +11177,13 @@
                           },
                           "lag": {
                             "type": "integer",
-                            "minimum": 0,
+                            "minimum": -120,
                             "maximum": 120,
-                            "description": "Days it waits, 0 or more."
+                            "description": "Days it waits after what it waits on ends, 0 or more (below 0, with override: it starts before what it waits on ends)."
+                          },
+                          "override": {
+                            "type": "boolean",
+                            "description": "True to set it anyway when a rule refuses it (a lock, a freeze, an overlap, the line, what it waits on), once the person agreed to break that rule. The task shows who moved it anyway and when."
                           }
                         }
                       },
@@ -12148,6 +12152,10 @@
                               }
                             ],
                             "description": "The sibling it goes before. Left out, last."
+                          },
+                          "override": {
+                            "type": "boolean",
+                            "description": "True to nest it anyway when a rule refuses it (a role, a depth, a parent’s limit), once the person agreed to break that rule. The card shows who moved it anyway and when."
                           }
                         }
                       },

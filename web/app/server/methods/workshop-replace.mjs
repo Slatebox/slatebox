@@ -1,4 +1,4 @@
-import { applyWorkshopEdits, businessKind, checkWorkshopReplacement, rulebook, validateWorkshop, workshopStampOverrides } from 'slateboxjs/workshops/model'
+import { applyWorkshopEdits, businessKind, checkWorkshopReplacement, rulebook, validateWorkshop, workshopFreshOverride, workshopStampOverrides } from 'slateboxjs/workshops/model'
 // A launch plan's, pipeline's or budget's rules, and a rulebook's whole-save helpers (a rule change
 // said as its rule edits, an earlier board put back); the edits between two business boards.
 import { behaviourEditsBetween, restoreWorkshop } from 'slateboxjs/workshops/rules'
@@ -90,18 +90,24 @@ export function replaceWorkshop(stored, next, { undo = null, revision, current =
   else delete board.behaviour
   // A card moved anyway (a kept "Move anyway"): marked by the one who saves it, now, and with the rule the stored
   // board refuses it by; a mark the page wrote on anything else is not kept (the engine's workshopStampOverrides).
-  board = workshopStampOverrides(saved, board, { by: actor?.by || 'Someone', at: new Date().toISOString() })
-  return changeBoard(saved, board)
+  const who = { by: actor?.by || 'Someone', at: new Date().toISOString() }
+  board = workshopStampOverrides(saved, board, who)
+  return changeBoard(saved, board, who)
 }
 
-/** A save that changes no rule: held to what the kind keeps, and on a business board made again as its edits. */
-function changeBoard(saved, board) {
+/**
+ * A save that changes no rule: held to what the kind keeps, and on a business board made again as its edits. A card the
+ * save moved anyway (marked by workshopStampOverrides with `who`) is made again by its edit with override true, by the
+ * same person at the same time, so the board the edits make is the one sent.
+ */
+function changeBoard(saved, board, who = null) {
   const kept = checkWorkshopReplacement(saved, board)
   if (kept) return { refused: { reason: kept } }
   if (!businessKind(saved)) return { workshop: board }
-  const edits = editsBetween(saved, board)
+  const anyway = new Set(board.cards.filter(card => workshopFreshOverride(saved, card)).map(card => card.id))
+  const edits = editsBetween(saved, board).map(edit => ['move_card', 'set_task', 'nest_card'].includes(edit.kind) && anyway.has(edit.card?.id ?? edit.card) ? { ...edit, override: true } : edit)
   if (!edits.length) return sameBoard(saved, board) ? { workshop: board } : { refused: { reason: notTheBoards } }
-  const made = applyWorkshopEdits(saved, edits)
+  const made = applyWorkshopEdits(saved, edits, anyway.size && who ? { actor: { by: who.by, via: 'chat' }, now: who.at } : {})
   if ('refused' in made) {
     const { reason, laneId, cardId, limits } = made.refused
     return { refused: { reason, laneId: laneId ?? saved.cards.find(card => card.id === cardId)?.laneId ?? null, ...(limits && { limits }) } }
