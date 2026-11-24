@@ -23,6 +23,7 @@ import RadioGroup from '@mui/material/RadioGroup'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx'
+import { isCloudEdition } from '/imports/api/common/edition.mjs'
 import { GALLERY, cardFor } from '../common/gallery.mjs'
 import { followSignIn, openSignInWindow } from './signin'
 
@@ -52,6 +53,8 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
   const [showAll, setShowAll] = useState(false)
   const [error, setError] = useState('')
   const { open: openPay, prefetch } = usePaySheet()
+  // Slatebox Pro is Slatebox Cloud's; a licensed self-hosted install has no Pro to mention.
+  const cloud = isCloudEdition(Meteor.settings)
   const live = useRef(true)
   useEffect(() => () => { live.current = false }, [])
   useEffect(() => {
@@ -187,12 +190,12 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
                   sx={{ textAlign: 'left', p: 1.5, border: '1px solid', borderColor: item.featured ? 'primary.main' : 'divider', borderRadius: 2, bgcolor: 'background.paper', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
                   <Typography variant="subtitle2">⬡ {item.name}</Typography>
                   <Typography variant="caption" color="text.secondary" component="div">{item.job} · {cardCost(item)}</Typography>
-                  <Typography variant="caption" color="text.secondary" component="div">Needs Slatebox Pro</Typography>
+                  {cloud && <Typography variant="caption" color="text.secondary" component="div">Needs Slatebox Pro</Typography>}
                   <Typography variant="body2" sx={{ mt: 0.5 }}>{item.lands}</Typography>
                 </Box>
               ))}
             </Box>
-            <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 2 }}>Any MCP server works: open ones straight away, others after you sign in on their own page or paste a key. Slatebox AI turns what it answers into notes on your slate. Inviting agents is part of Slatebox Pro.</Typography>
+            <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 2 }}>Any MCP server works: open ones straight away, others after you sign in on their own page or paste a key. Slatebox AI turns what it answers into notes on your slate.{cloud ? ' Inviting agents is part of Slatebox Pro.' : ''}</Typography>
           </>
         )}
         {step === 'discovering' && (
