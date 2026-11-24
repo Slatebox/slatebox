@@ -16,7 +16,9 @@ Outside agent connections: Slatebox as an MCP *client*.
 
 - `server/mcp-fetch.mjs`: the only network path (https only, every resolved address public, redirects re-checked, size and time caps, a real User-Agent, no listening stream).
 - `server/mcp-session.mjs`: one short `@modelcontextprotocol/client` session per job (2026 servers through `server/discover`, older ones through `initialize`). A signed-in server gets the asking person's token, bound to that server's origin only.
-- `server/tools.mjs`, `results.mjs`, `context.mjs`, `translate.mjs`: consent to tool hashes, quarantine of results, the context packer ("what leaves Slatebox"), and the two-step translator (plan lookups, then lay out notes; Excalidraw diagrams by a fixed recipe).
+- `server/tools.mjs`, `results.mjs`, `context.mjs`, `translate.mjs`: consent to tool hashes, quarantine of results, the context packer ("what leaves Slatebox"), and the two-step translator (plan lookups, then lay out notes; its words live in the prompt registry, `connectors.*`).
+- `server/recipes.mjs`, `excalidraw.mjs`: exactly what was asked (the request's number of notes, one answer per ask, read-me tools never offered), each gallery agent's known asks as fixed steps, and Excalidraw elements drawn by a fixed recipe (shared with Import from Excalidraw).
+- `server/gallery-admin.mjs`: the gallery as data in /admin/ai › Agent gallery (aiAgents, audited, people only).
 - `server/service.mjs`, `actions.mjs`, `meteor.js`: `connectors.list/discover/connect/disconnect/call/keep/discard`, each a Meteor method, `/api/v1` route, exec call and MCP tool. On Cloud the inviter needs Pro; only the inviter asks; any editor keeps.
 - `client/`: "+ Invite agent", the walkthrough, each invited agent's chip on the people strip (ask it there, or by `@name` in Ask Slatebox) and the live ghosts on the canvas with Keep and Discard on each.
 - Tests: `npm run test:enterprise` (with the hostile server in `scripts/mcp-test-servers.mjs`).

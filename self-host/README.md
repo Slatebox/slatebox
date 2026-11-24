@@ -137,7 +137,7 @@ your own server. Slatebox Pro exists only on Slatebox Cloud.
 ## Enterprise features (Upgrade on prem)
 
 The image includes Slatebox's enterprise features (inviting outside agents such
-as GitHub, Linear or Excalidraw onto a slate, and the connectors behind them),
+as GitHub, Linear or Hugging Face onto a slate, and the connectors behind them),
 locked. An on-prem license from Slatebox unlocks them on one install, without
 moving to Slatebox Cloud. Single sign-on with the bundled Keycloak needs no
 license and is never locked. To ask for a license, use **Admin tools → Upgrade
