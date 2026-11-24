@@ -16,7 +16,7 @@ import { usePaySheet, prefetchPaySheet } from '../billing/pay/PaySheetHost'
 import { newAttempt, paymentsHere } from '../billing/pay/pay-env'
 import { billingDate } from '../billing/billing-date.mjs'
 
-// Slatebox Business on the team page, as a compact card (status, plan, seats, renewal): get it for the team (owner or admin, where the server sells
+// Slatebox Business on the team page, as a compact card (status, plan, members, renewal): get it for the team (owner or admin, where the server sells
 // it), see where it stands, stop or keep renewing, and the card and receipts. No amount is written
 // here: the sheet shows Stripe's, and "See pricing" links the pricing page.
 // chip colors with AA contrast on the cream card, light and dark
@@ -78,7 +78,7 @@ export default function BusinessPanel() {
   } else if (summary?.source === 'stripe' && summary.status !== 'ended') {
     const when = billingDate(summary.endsOn || summary.renewsOn)
     const parts = [summary.interval === 'year' ? 'Yearly' : 'Monthly']
-    if (summary.members) parts.push(`${summary.members} ${summary.members === 1 ? 'seat' : 'seats'}`)
+    if (summary.members) parts.push(`${summary.members} ${summary.members === 1 ? 'member' : 'members'}`)
     if (summary.pastDue) parts.push('The last payment did not go through: update the card to keep it.')
     else if (summary.endsOn) parts.push(`Stops on ${when}`)
     else if (when) parts.push(`Renews on ${when}`)
