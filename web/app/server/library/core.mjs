@@ -39,6 +39,8 @@ const REFINE_PREVIEW_MS = 30 * 60 * 1000
 const REFINE_PREVIEWS = 8
 const REVIEWER_ONLY_MESSAGES = new Set(['refine_proposed', 'refine_kept'])
 const fail = libraryError
+// What a person is told when they open their own submission: plain words, never the API's parameter name.
+export const SELF_REVIEW_SENTENCE = 'You sent this one. Ask another administrator to review it, or review it yourself if you are the only one.'
 const notFound = () => fail(404, 'not_found', 'There is no such item in the library.')
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const readCursor = (cursor) => {
@@ -623,7 +625,7 @@ export function createLibraryCore(deps) {
   async function checkNotOwn(principal, item, input = {}) {
     if (!item.authorId || item.authorId !== principal.userId) return false
     if (input.selfReview === true && (await countReviewers()) <= 1) return true
-    throw fail(403, 'self_review', 'Another administrator reviews what you submit. On a server with one administrator, say so with selfReview.')
+    throw fail(403, 'self_review', SELF_REVIEW_SENTENCE)
   }
   const refused = (item, action) =>
     fail(409, 'invalid_transition', `It is ${String(reviewStateOf(item)).replace('_', ' ')}, so it can’t be ${action}.`, { status: item.status, reviewStatus: item.reviewStatus ?? null })

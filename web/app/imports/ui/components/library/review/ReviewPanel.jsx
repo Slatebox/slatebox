@@ -196,7 +196,7 @@ export default function ReviewPanel({ slate }) {
           {selfAsk && !selfReview && (
             <Alert severity="info" data-testid="self-review-ask"
               action={<Button color="inherit" size="small" onClick={() => { setSelfReview(true); setSelfAsk(false); setProblem('') }}>Review it myself</Button>}>
-              You sent this one. If you are this server’s only administrator, you can review it yourself; the thread records it.
+              You sent this one. Ask another administrator to review it, or review it yourself if you are the only one. The thread records it.
             </Alert>
           )}
           {item && (

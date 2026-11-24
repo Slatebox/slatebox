@@ -7,6 +7,7 @@
 // people who made them; an update in review can't be sent again, and withdrawing it keeps the item live.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import { makeExecWorld } from "./exec-test-world.mjs";
 import { principalFromUser } from "../web/app/server/actions/principal.mjs";
 import { API_TOKEN_SCOPES } from "../web/app/server/api-token-core.mjs";
@@ -111,6 +112,12 @@ test("an administrator can't open, refine, edit or approve their own submission,
   await assert.rejects(run(root, "library.review.open", { itemId: draft.itemId }), { status: 403, code: "self_review" });
   await assert.rejects(run(root, "library.review.approve", { itemId: draft.itemId }), { status: 403, code: "self_review" });
   await assert.rejects(run(root, "library.review.update", { itemId: draft.itemId, title: "X" }), { status: 403, code: "self_review" });
+  // The refusal is shown as it is in the queue's alert: plain words, never the API's parameter name.
+  const said = await run(root, "library.review.open", { itemId: draft.itemId }).catch((error) => error);
+  assert.equal(said.message, "You sent this one. Ask another administrator to review it, or review it yourself if you are the only one.");
+  assert.doesNotMatch(said.message, /selfReview/);
+  const panel = readFileSync(new URL("../web/app/imports/ui/components/library/review/ReviewPanel.jsx", import.meta.url), "utf8");
+  assert.match(panel, /Ask another administrator to review it, or review it yourself if you are the only one\./);
   // This server has one administrator: saying so is allowed, and recorded.
   await run(root, "library.review.open", { itemId: draft.itemId, selfReview: true });
   await assert.rejects(run(root, "library.review.refine", { itemId: draft.itemId, message: "rename it to X" }), { status: 403, code: "self_review" });
