@@ -7,6 +7,7 @@ import { check, Match } from 'meteor/check'
 import { runAIAction, chargeFixed } from '../metering/context.mjs'
 import { FIXED_PRICES } from '../metering/prices.mjs'
 import { aiProviders } from '../config/index.cjs'
+import { auxCredential } from './ai/ai-settings'
 import { guardedFetch, resolveRequestConnection } from './ai/ai-settings'
 import { generateImages } from './ai/image-connection.mjs'
 
@@ -78,12 +79,16 @@ export async function generateImagesFor(user, opts) {
       text: p,
       weight: 1,
     }))
+    // a Stability key an administrator connected in AI control (sealed, read for each picture) wins
+    // over the settings file's
+    const fromApp = await auxCredential('stability')
     const imgOpts = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `${Meteor.settings.stabilityai.apiKey}`,
+        Authorization: `${fromApp?.apiKey || Meteor.settings.stabilityai?.apiKey}`,
       },
+      redirect: 'error',
     }
     imgOpts.body = JSON.stringify(body)
 

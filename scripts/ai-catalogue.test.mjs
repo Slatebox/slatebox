@@ -38,9 +38,6 @@ const ESTIMATES_BEFORE = {
   workshop: 5000, 'lane-chat': 3000, 'map-chat': 3000, welcome: 2000, generation: 30000,
   presentation: 10000, 'image-search': 5000, 'image-generation': 30000, shape: 8000,
 }
-// Library refinement and connectors were estimated at the workshop estimate before (no row of their
-// own: meter-core falls back to ESTIMATES.workshop); the catalogue names that same figure for them.
-const LANDED_ESTIMATES = { 'library-refine': ESTIMATES_BEFORE.workshop, connectors: ESTIMATES_BEFORE.workshop }
 const CEILINGS_BEFORE = { generation: 200_000, vision: 200_000, presentation: 200_000, shape: 60_000 }
 
 test('every request feature reaches the same choice as before the catalogue', () => {
@@ -116,7 +113,7 @@ test('the features people choose first are the catalogue rows that follow defaul
 })
 
 test('the meter keeps every estimate and ceiling', () => {
-  assert.deepEqual({ ...ESTIMATES }, { ...ESTIMATES_BEFORE, ...LANDED_ESTIMATES })
+  assert.deepEqual({ ...ESTIMATES }, ESTIMATES_BEFORE)
   assert.equal(ESTIMATES, METER_ESTIMATES)
   for (const feature of [...Object.keys(ESTIMATES_BEFORE), 'vision', 'canvas', 'agent', 'library-refine', 'connectors', 'unknown']) {
     assert.equal(actionCeilingMicros(feature), CEILINGS_BEFORE[feature] ?? 50_000, feature)

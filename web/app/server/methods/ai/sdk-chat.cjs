@@ -48,7 +48,9 @@ function sdkMessages(prompts) {
   return result
 }
 
-async function sdkChatRequest({ provider, endpoint, apiKey, body, functions, signal, local, fetcher }) {
+// headers and queryParams: an administrator's provider's extra headers and where its key goes
+// when it is not a bearer key (connection-request.mjs); never set for the built-in types.
+async function sdkChatRequest({ provider, endpoint, apiKey, body, functions, signal, local, fetcher, headers, queryParams }) {
   const anthropic = provider === 'anthropic'
   // the Anthropic SDK falls back to the server's ANTHROPIC_API_KEY when no key is given: a
   // request that brought no key of its own must not be paid with the platform's
@@ -57,7 +59,9 @@ async function sdkChatRequest({ provider, endpoint, apiKey, body, functions, sig
   const fetch = local ? (url, init) => (fetcher || globalThis.fetch)(url, { ...init, redirect: 'error' }) : fetcher
   const model = anthropic
     ? createAnthropic({ apiKey, baseURL, fetch, headers: { 'anthropic-beta': 'output-128k-2025-02-19' } })(body.model)
-    : createOpenAICompatible({ name: provider, baseURL, apiKey: apiKey || undefined, fetch, transformRequestBody: body.user ? args => ({ ...args, user: body.user }) : undefined })(body.model)
+    : createOpenAICompatible({ name: provider, baseURL, apiKey: apiKey || undefined, fetch,
+      ...(headers && Object.keys(headers).length && { headers }), ...(queryParams && Object.keys(queryParams).length && { queryParams }),
+      transformRequestBody: body.user ? args => ({ ...args, user: body.user }) : undefined })(body.model)
   const tools = Object.fromEntries((functions || []).map(def => [def.name,
     tool({ description: def.description, inputSchema: jsonSchema(def.parameters) })]))
   const chosen = body.tool_choice?.function?.name || body.tool_choice?.name || body.function_call?.name

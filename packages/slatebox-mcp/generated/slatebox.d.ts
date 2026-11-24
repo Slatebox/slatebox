@@ -178,8 +178,8 @@ declare namespace slatebox.ai {
     connection?: {
       /** Your name for it, for example desk-model. */
       name: string;
-      /** openai-compatible covers any host or local server (Ollama, llama.cpp, vLLM, LM Studio and others). */
-      type: "openai-compatible" | "openai" | "anthropic" | "deepinfra";
+      /** The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), openai, anthropic, deepinfra, or one an administrator added (ai.control.get lists them). */
+      type: string;
       /** For openai-compatible: the address up to /v1, for example http://host.docker.internal:11434/v1. (at most 500 characters) */
       baseUrl?: string;
       /** The model name the endpoint serves. (at most 200 characters) */
@@ -205,6 +205,62 @@ declare namespace slatebox.ai {
     chat?: "ok" | "failed";
     tools: "yes" | "no" | "unknown";
     message: string;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.ai.connections {
+  /** AI connections. Lists the server's AI connections: the settings file's (read-only) and the ones saved in the app, including the services beside the models (Stability, Google picture search, Noun Project, Deepgram). For each: its provider, address, model, where its key lives (sealed, an environment variable, the settings file or none), which key it is (a fingerprint, never the key), its last test and whether it is turned off. Administrators only. @scope ai:admin:read */
+  function list(input: Record<string, unknown>): Promise<{
+    connections?: Array<Record<string, unknown>>;
+    keysAvailable?: boolean;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.ai.connections {
+  /** Save AI connections. Adds or changes server connections: a provider, address, model and key. A key is sealed with the server's key and never returned; keyRef env reads it from an environment variable named SLATEBOX_AI_KEY_… for each request; rotate {graceHours} keeps the old key working for 1 or 24 hours. status disabled keeps a connection but sends nothing to it. Also connects the services beside the models (stability, google-cse with its search engine ID as model, nounproject as key:secret, deepgram). Only a person sends a key, names an environment variable or changes an address or provider; an agent may save a keyless connection to a provider with a fixed address. Administrators only. @scope ai:admin @destructive @confirm @idempotent */
+  function save(input: {
+    /** (1–20 items) */
+    connections: Array<{
+      /** The connection's name, for example gemini-main. */
+      name: string;
+      /** The provider: openai-compatible, openai, anthropic, deepinfra, one an administrator added, or a service beside the models (stability, google-cse, nounproject, deepgram). */
+      type: string;
+      /** For a provider without a fixed address: the address up to /v1. (at most 500 characters) */
+      baseUrl?: string;
+      /** The model it serves. For google-cse, the search engine ID (cx). (at most 200 characters) */
+      model?: string;
+      /** Stored encrypted with the server's key and never shown again. Leave it out to keep the saved key. For nounproject: key:secret. (at most 400 characters) */
+      apiKey?: string;
+      /** env: read the key from an environment variable named SLATEBOX_AI_KEY_… (or one the settings file allows) for each request; none: no key. Sending apiKey seals the key instead. */
+      keyRef?: {
+        kind: "env" | "none";
+        name?: string;
+      };
+      /** With a new apiKey: the old key keeps working for this many hours, in case the provider has not taken the new one yet. */
+      rotate?: {
+        graceHours: 0 | 1 | 24;
+      };
+      /** What the model can do, where you know it. Unset means try it; making images needs images: true. */
+      capabilities?: {
+        tools?: boolean;
+        vision?: boolean;
+        json?: boolean;
+        images?: boolean;
+        reasoning?: boolean;
+      };
+      /** (256 to 200000) */
+      maxTokens?: number;
+      toolChoice?: "auto" | "named" | "required";
+      /** disabled: kept, but nothing is sent to it. */
+      status?: "active" | "disabled";
+    }>;
+    /** Why, for the change history. (1–500 characters) */
+    reason?: string;
+  }): Promise<({
+    connections?: string[];
+    fingerprints?: Record<string, unknown>;
     [key: string]: unknown;
   }) & { mode: "save" }>;
 }
@@ -236,11 +292,12 @@ declare namespace slatebox.ai.control {
 }
 
 declare namespace slatebox.ai.control {
-  /** AI control health. Lists AI control problems: documents skipped because they failed their checks (that surface falls back to the settings file and built-in defaults), and published prompts that fell back to their built-in text. An empty list means nothing is wrong. Administrators only. @scope ai:admin:read */
+  /** AI control health. Lists AI control problems: documents skipped because they failed their checks (that surface falls back to the settings file and built-in defaults), and published prompts that fell back to their built-in text. warnings lists models with no price (charged at the dearest rate) and connections whose last test failed. An empty list means nothing is wrong. Administrators only. @scope ai:admin:read */
   function health(input: Record<string, unknown>): Promise<{
     generation?: number;
     dbLayer?: string;
     health?: unknown[];
+    warnings?: unknown[];
     [key: string]: unknown;
   }>;
 }
@@ -279,6 +336,107 @@ declare namespace slatebox.ai {
   }>;
 }
 
+declare namespace slatebox.ai.models {
+  /** Find AI models. Lists the models a server connection reports (GET <address>/models, OpenAI-compatible providers only), to fill in the model registry. Writes nothing; the key goes only to the connection's own address, with no redirects. Administrators only. @scope ai:admin:read @openWorld */
+  function discover(input: {
+    connection: string;
+  }): Promise<{
+    connection?: string;
+    ok?: boolean;
+    models?: Array<Record<string, unknown>>;
+    message?: string;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.ai.models {
+  /** Save AI models. Adds or changes models: the connection that serves each (server:<name> or builtin:<provider>), what it can do (tools, vision, json, images, reasoning), its context and output limits, and its prices in dollars per million input and output tokens (or per image). Metering charges these prices from the next call; a model with no price is charged at the dearest known rate and shown as unpriced. status disabled keeps a model out of bindings. Administrators only. @scope ai:admin @confirm @idempotent */
+  function save(input: {
+    /** (1–50 items) */
+    models: Array<{
+      /** server:<connection> or builtin:deepinfra|openai|anthropic|stabilityai. */
+      connection: string;
+      /** (1–200 characters) */
+      model: string;
+      /** (at most 80 characters) */
+      label?: string | null;
+      /** What the model can do. A binding refuses a model whose flags miss what its surface needs. */
+      capabilities?: {
+        tools?: boolean;
+        vision?: boolean;
+        json?: boolean;
+        images?: boolean;
+        reasoning?: boolean;
+      };
+      /** (at least 1) */
+      maxContext?: number | null;
+      /** (at least 1) */
+      maxOutput?: number | null;
+      prices?: {
+        /** Dollars per million input tokens. (at least 0) */
+        inputPerM?: number | null;
+        /** Dollars per million output tokens. (at least 0) */
+        outputPerM?: number | null;
+        /** Dollars per generated image. (at least 0) */
+        imageEach?: number | null;
+        currency?: "USD";
+      } | null;
+      status?: "enabled" | "disabled";
+    }>;
+    /** Why, for the change history. (1–500 characters) */
+    reason?: string;
+  }): Promise<({
+    models?: Array<Record<string, unknown>>;
+    generation?: number | null;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.ai.providers {
+  /** Save AI provider. Adds or changes a provider template: its wire protocol (openai-chat, anthropic-messages or openai-images), address, how the key is sent (bearer, a header, a query parameter or none), extra headers (nothing secret) and what its models can usually do. Built-in providers cannot be changed. Changing an address removes the keys of the connections that use it, after dropKeys true; a key is never sent to a new address. Only a person sets an address, key style or headers. Administrators only. @scope ai:admin @confirm @idempotent */
+  function save(input: {
+    provider: {
+      /** The provider's id, for example gemini. Built-in ids cannot be used. */
+      id: string;
+      /** (1–80 characters) */
+      label: string;
+      /** The wire protocol it speaks. Gemini, Meta, Mistral, OpenRouter, Groq, Together, Ollama and vLLM speak openai-chat. */
+      protocol: "openai-chat" | "anthropic-messages" | "openai-images";
+      /** The address up to /v1. null: each connection gives its own. (at most 500 characters) */
+      baseUrl?: string | null;
+      /** Connections of this provider keep its address (default true when an address is given). */
+      baseUrlLocked?: boolean;
+      /** How the key is sent: bearer (Authorization: Bearer), header { name }, query { name } or none. */
+      auth?: {
+        style: "bearer" | "header" | "query" | "none";
+        /** (at most 64 characters) */
+        name?: string;
+      };
+      /** Headers sent with every request. Nothing secret: names that look like credentials are refused. */
+      extraHeaders?: Record<string, string>;
+      keyRequired?: boolean;
+      modelOptional?: boolean;
+      /** What its models can usually do; a connection or model may say otherwise. */
+      defaultCapabilities?: {
+        tools?: boolean;
+        vision?: boolean;
+        json?: boolean;
+        images?: boolean;
+        reasoning?: boolean;
+      };
+    };
+    /** Go ahead with an address change that removes connections' keys. */
+    dropKeys?: boolean;
+    /** Why, for the change history. (1–500 characters) */
+    reason?: string;
+  }): Promise<({
+    provider?: Record<string, unknown>;
+    droppedKeys?: string[];
+    generation?: number | null;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
 declare namespace slatebox.ai {
   /** Set AI. Adds or changes AI connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins), server this server's (administrators; ownProviders on or off lets people use their own). Mix freely: a choice names me:<name>, team:<name>, server:<name> or builtin. Keys are stored encrypted and never returned, and a run's record keeps its code with the apiKey replaced. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI (levels me and team) is for self-hosted Slatebox: Slatebox Cloud refuses it, as AI there comes with Slatebox Pro credits and top-ups. @scope ai:settings @destructive @confirm @idempotent */
   function update(input: {
@@ -288,8 +446,8 @@ declare namespace slatebox.ai {
     connections?: Array<{
       /** Your name for it, for example desk-model. */
       name: string;
-      /** openai-compatible covers any host or local server (Ollama, llama.cpp, vLLM, LM Studio and others). */
-      type: "openai-compatible" | "openai" | "anthropic" | "deepinfra";
+      /** The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), openai, anthropic, deepinfra, or one an administrator added (ai.control.get lists them). */
+      type: string;
       /** For openai-compatible: the address up to /v1, for example http://host.docker.internal:11434/v1. (at most 500 characters) */
       baseUrl?: string;
       /** The model name the endpoint serves. (at most 200 characters) */

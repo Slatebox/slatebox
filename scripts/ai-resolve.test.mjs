@@ -406,7 +406,7 @@ test('the snapshot never holds a key, and the admin views never show one', async
   const { ai } = service(FILE)
   const control = createAIControl({ holder: fixedHolder(s), choiceHolders: (id) => ai.choiceHolders(id), settings: FILE })
   const view = control.get()
-  assert.deepEqual(view.connections[0], { name: 'deck', provider: 'openai-compatible', baseUrl: 'https://deck.example.com/v1', model: null, capabilities: {}, status: 'active', hasKey: true, keyFingerprint: 'sha256:abcd1234…a91f', keyRef: null })
+  assert.deepEqual(view.connections[0], { name: 'deck', provider: 'openai-compatible', baseUrl: 'https://deck.example.com/v1', model: null, capabilities: {}, status: 'active', hasKey: true, keyFingerprint: 'sha256:abcd1234…a91f', keyRef: null, lastCheck: null })
   assert.equal(view.surfaces.length, SURFACES.length)
   assert.deepEqual(view.global, { aiEnabled: true, aiDisabledMessage: null })
   // a file connection whose key is in the settings file: its key never reaches the effective view

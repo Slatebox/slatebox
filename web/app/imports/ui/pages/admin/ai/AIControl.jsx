@@ -7,19 +7,24 @@ import Tab from '@mui/material/Tab'
 import Tabs from '@mui/material/Tabs'
 import Typography from '@mui/material/Typography'
 import Overview from './Overview'
+import Providers from './Providers'
+import Models from './Models'
 import Audit from './Audit'
 
 // Admin › AI control (/admin/ai): which AI answers each part of Slatebox and where that choice
-// comes from, and every change to the AI configuration. The page calls only the ai.control.* and
+// comes from, the providers, keys and models it can use, and every change to the AI configuration. The page calls only the ai.control.* and
 // ai.audit.* actions, the same ones an administrator's token, exec, MCP and the CLI call; the
 // server checks the administrator on every call.
 const TABS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'audit', label: 'Changes' },
+  { id: 'overview', label: 'Overview', Panel: Overview },
+  { id: 'providers', label: 'Providers and keys', Panel: Providers },
+  { id: 'models', label: 'Models', Panel: Models },
+  { id: 'audit', label: 'Changes', Panel: Audit },
 ]
 
 export default function AIControl() {
   const [tab, setTab] = useState('overview')
+  const { Panel } = TABS.find((t) => t.id === tab) || TABS[0]
   return (
     <Container maxWidth="xl">
       <Box py={2}>
@@ -33,7 +38,7 @@ export default function AIControl() {
         {TABS.map((t) => <Tab key={t.id} value={t.id} label={t.label} id={`ai-control-tab-${t.id}`} aria-controls={`ai-control-panel-${t.id}`} />)}
       </Tabs>
       <Box role="tabpanel" id={`ai-control-panel-${tab}`} aria-labelledby={`ai-control-tab-${tab}`} py={3}>
-        {tab === 'overview' ? <Overview /> : <Audit />}
+        <Panel />
       </Box>
     </Container>
   )

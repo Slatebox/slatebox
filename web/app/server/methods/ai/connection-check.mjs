@@ -2,17 +2,22 @@
 // it list (where it lists them), does the chosen model answer, and does it call tools (which the
 // canvas features need). Two small requests at most, plus the model list. The key is sent only to
 // the connection's own address and never appears in the answer.
+import { authFor, protocolOf, withQuery } from './connection-request.mjs'
+import { redactText } from '../../exec/redact.mjs'
+
 const PROBE_TOOL = { name: 'ping', description: 'Call this tool to answer.', parameters: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] } }
 const PROBE_PROMPT = 'Call the ping tool with ok set to true.'
 
+// The key and the provider's extra headers as the provider wants them (connection-request.mjs):
+// a bearer key, a named header, a query parameter, or Anthropic's x-api-key.
 function headersFor(connection) {
-  const headers = { 'Content-Type': 'application/json', Accept: 'application/json' }
-  if (connection.type === 'anthropic') return { ...headers, 'x-api-key': connection.apiKey || '', 'anthropic-version': '2023-06-01' }
-  return connection.apiKey ? { ...headers, Authorization: `Bearer ${connection.apiKey}` } : headers
+  return { 'Content-Type': 'application/json', Accept: 'application/json', ...authFor(connection).headers }
 }
+const urlFor = (connection, url) => withQuery(url, authFor(connection).query)
+const isAnthropic = (connection) => protocolOf(connection) === 'anthropic-messages'
 
 function chatBody(connection, withTools) {
-  if (connection.type === 'anthropic') {
+  if (isAnthropic(connection)) {
     return {
       model: connection.model, max_tokens: 64, messages: [{ role: 'user', content: PROBE_PROMPT }],
       ...(withTools && { tools: [{ name: PROBE_TOOL.name, description: PROBE_TOOL.description, input_schema: PROBE_TOOL.parameters }] }),
@@ -24,19 +29,16 @@ function chatBody(connection, withTools) {
   }
 }
 
-const calledTool = (connection, json) => connection.type === 'anthropic'
+const calledTool = (connection, json) => isAnthropic(connection)
   ? Boolean(json?.content?.some?.((part) => part.type === 'tool_use'))
   : Boolean(json?.choices?.[0]?.message?.tool_calls?.length || json?.choices?.[0]?.message?.function_call)
 
-const answered = (connection, json) => connection.type === 'anthropic'
+const answered = (connection, json) => isAnthropic(connection)
   ? Array.isArray(json?.content)
   : Array.isArray(json?.choices) && json.choices.length > 0
 
-const scrub = (text, connection) => {
-  let out = String(text ?? '').slice(0, 300)
-  if (connection.apiKey) out = out.split(connection.apiKey).join('***')
-  return out
-}
+// a provider's error text, without the key, any key-like value or a query string (spec 6.2)
+const scrub = (text, connection) => redactText(text, { keys: [connection.apiKey], max: 300 })
 
 async function call(fetcher, url, init, timeoutMs) {
   const controller = new AbortController()
@@ -49,7 +51,7 @@ async function call(fetcher, url, init, timeoutMs) {
     } catch {}
     return { status: response.status, ok: response.ok, json }
   } catch (error) {
-    return { status: null, ok: false, json: null, error: error.name === 'AbortError' ? 'timeout' : (['EndpointRefused', 'ResponseTooLarge'].includes(error.name) ? error.message : 'unreachable') }
+    return { status: null, ok: false, json: null, error: error.name === 'AbortError' ? 'timeout' : (['EndpointRefused', 'ResponseTooLarge'].includes(error.name) ? redactText(error.message) : 'unreachable') }
   } finally {
     clearTimeout(timer)
   }
@@ -79,7 +81,7 @@ export async function checkConnection(connection, { fetch: fetcher, timeoutMs = 
   const headers = headersFor(connection)
   const out = { ok: false, reachable: false, models: null, modelListed: null, chat: 'failed', tools: 'unknown', message: '' }
 
-  const listed = await call(fetcher, `${base}/models`, { method: 'GET', headers }, timeoutMs)
+  const listed = await call(fetcher, urlFor(connection, `${base}/models`), { method: 'GET', headers }, timeoutMs)
   if (listed.status === null && listed.error) {
     out.message = unreachableMessage(connection, listed)
     return out
@@ -100,7 +102,7 @@ export async function checkConnection(connection, { fetch: fetcher, timeoutMs = 
     return out
   }
 
-  const chatUrl = connection.type === 'anthropic' ? `${base}/messages` : `${base}/chat/completions`
+  const chatUrl = urlFor(connection, isAnthropic(connection) ? `${base}/messages` : `${base}/chat/completions`)
   let probe = await call(fetcher, chatUrl, { method: 'POST', headers, body: JSON.stringify(chatBody(connection, true)) }, timeoutMs)
   if (probe.status === null) {
     out.message = unreachableMessage(connection, probe)
@@ -130,4 +132,23 @@ export async function checkConnection(connection, { fetch: fetcher, timeoutMs = 
   if (out.tools === 'unknown') notes.push('The model answered without calling the test tool. Features that edit the canvas may not work with it.')
   out.message = ['Connected.', ...notes].join(' ')
   return out
+}
+
+/**
+ * The models a connection lists (ai.models.discover): GET <base>/models, OpenAI-compatible
+ * providers only, through the guarded fetch (no redirects). Writes nothing.
+ * → { ok, models: [{ id, ownedBy? }], message }
+ */
+export async function listModels(connection, { fetch: fetcher, timeoutMs = 20000 }) {
+  if (protocolOf(connection) !== 'openai-chat') return { ok: false, models: [], message: 'Only OpenAI-compatible providers list their models.' }
+  const base = connection.baseUrl.replace(/\/+$/, '')
+  const listed = await call(fetcher, urlFor(connection, `${base}/models`), { method: 'GET', headers: headersFor(connection) }, timeoutMs)
+  if (listed.status === null) return { ok: false, models: [], message: unreachableMessage(connection, listed) }
+  if (listed.status === 401 || listed.status === 403) return { ok: false, models: [], message: 'The endpoint did not accept the key.' }
+  if (!listed.ok || !Array.isArray(listed.json?.data)) return { ok: false, models: [], message: `The endpoint answered HTTP ${listed.status} for its model list.` }
+  const models = listed.json.data
+    .filter((m) => typeof m?.id === 'string' && m.id.length <= 200 && !/[\r\n]/.test(m.id))
+    .slice(0, 500)
+    .map((m) => ({ id: m.id, ...(typeof m.owned_by === 'string' && { ownedBy: m.owned_by.slice(0, 80) }) }))
+  return { ok: true, models, message: `${models.length} model${models.length === 1 ? '' : 's'} listed.` }
 }

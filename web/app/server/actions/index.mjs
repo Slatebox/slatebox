@@ -24,6 +24,9 @@ import aiCheck from './ai-check.mjs'
 import aiControlActions from './ai-control-get.mjs'
 import aiAuditList from './ai-control-audit.mjs'
 import aiControlReset from './ai-control-reset.mjs'
+import aiProviderActions from './ai-providers.mjs'
+import aiConnectionActions from './ai-connections.mjs'
+import aiModelActions from './ai-models.mjs'
 import presencePlan from './presence-plan.mjs'
 import presenceStep from './presence-step.mjs'
 import componentsList, { componentsGet } from './components-list.mjs'
@@ -65,6 +68,9 @@ export const actions = [
   ...aiControlActions,
   aiAuditList,
   aiControlReset,
+  ...aiProviderActions,
+  ...aiConnectionActions,
+  ...aiModelActions,
   presencePlan,
   presenceStep,
   componentsList,

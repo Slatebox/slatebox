@@ -25,7 +25,7 @@ import { assertPublicHost, checkOwnEndpoint, ownEndpointAgent } from './own-endp
 import { describeKey, keyDocument, loadMasterKey, open as openKey, PROVIDERS } from './vault.mjs'
 import { minutesLeftFor, roomRequest, tick, transcriptionAllowed } from './calls.mjs'
 import { runM1, runM2, runM4 } from './migrations.mjs'
-import { aiSettings } from '../methods/ai/ai-settings'
+import { aiSettings, auxCredential } from '../methods/ai/ai-settings'
 import { dailyClient } from '../methods/huddle-provider.mjs'
 import { TOP_UP_AMOUNTS, cardFeeMode } from '../../imports/api/billing/top-up.mjs'
 import { refusalPay } from './refusal-pay.mjs'
@@ -658,10 +658,11 @@ async function takeLease(now) {
   } catch { return false }
 }
 
-export function callClient(call, ownKey) {
+export async function callClient(call, ownKey) {
   const base = Meteor.settings.daily?.apiBase
-  // the Deepgram secret goes only into rooms the operator runs unmetered (calls.mjs transcriptionAllowed)
-  const transcriptionKey = transcriptionAllowed(call) ? Meteor.settings.deepgram?.secret : null
+  // the Deepgram secret goes only into rooms the operator runs unmetered (calls.mjs transcriptionAllowed);
+  // a Deepgram key an administrator connected in AI control wins over the settings file's
+  const transcriptionKey = transcriptionAllowed(call) ? ((await auxCredential('deepgram'))?.apiKey || Meteor.settings.deepgram?.secret) : null
   return dailyClient(fetch, ownKey || Meteor.settings.daily?.apiKey, transcriptionKey, base)
 }
 
@@ -682,7 +683,7 @@ export async function tickCall(call, now = Date.now()) {
   const settings = await meterSettings()
   let ownKey = null
   if (call.provider === 'own-key') ownKey = (await credentialsFor(call.keyOwner, 'daily').catch(() => null))?.apiKey
-  const client = callClient(call, ownKey)
+  const client = await callClient(call, ownKey)
   const count = await client.presence(call.roomName)
   // a call started on Pro credits is never paused by the shared budget (calls.mjs startCall)
   const level = call.pro ? 0 : budgetLevel({ ...await globalTotals(now), budget: settings.budget }).level

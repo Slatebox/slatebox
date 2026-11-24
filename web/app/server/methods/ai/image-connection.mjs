@@ -1,6 +1,8 @@
 // Generating an image through a chosen connection: the OpenAI images API
 // (POST <base>/images/generations), which OpenAI and many hosts and local servers serve.
 // Only a connection marked as able to make images is called (connections.mjs capabilityGap).
+import { authFor, withQuery } from './connection-request.mjs'
+
 const SIZES = [256, 512, 1024]
 const nearest = (value) => SIZES.reduce((best, size) => (Math.abs(size - value) < Math.abs(best - value) ? size : best), 512)
 
@@ -16,14 +18,16 @@ export async function generateImages(connection, { prompt, width = 512, height =
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   let response
   try {
-    response = await fetcher(`${connection.baseUrl.replace(/\/+$/, '')}/images/generations`, {
+    const { headers, query } = authFor(connection)
+    response = await fetcher(withQuery(`${connection.baseUrl.replace(/\/+$/, '')}/images/generations`, query), {
       method: 'POST',
       redirect: 'error',
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        ...(connection.apiKey && { Authorization: `Bearer ${connection.apiKey}` }),
+        // the key as the provider wants it: a bearer key unless an administrator's provider says otherwise
+        ...headers,
       },
       body: JSON.stringify({ model: connection.model, prompt: String(prompt).slice(0, 2000), n: 1, size: `${side}x${side}`, response_format: 'b64_json' }),
     })

@@ -5,6 +5,7 @@
 // rule ties a feature to a kind of provider, and Slatebox never routes a request somewhere the
 // person did not choose. Nothing here names a model.
 import { EndpointRefused, checkEndpointUrl, endpointRules } from './endpoint-policy.mjs'
+import { chatConnectionTypes } from '../../ai-control/providers.mjs'
 
 import {
   BUILTIN_ONLY_FEATURES, SURFACES, USE_SURFACES, followChain, rootSurface, surface as surfaceById, surfaceForRequest,
@@ -54,12 +55,41 @@ export function carriesImages(prompts) {
 }
 
 // Cloud presets fill in their own address. Any other host is an OpenAI-compatible endpoint.
-export const CONNECTION_TYPES = Object.freeze({
-  'openai-compatible': Object.freeze({ label: 'OpenAI-compatible endpoint' }),
-  deepinfra: Object.freeze({ label: 'DeepInfra', baseUrl: 'https://api.deepinfra.com/v1/openai', keyRequired: true, modelOptional: true }),
-  openai: Object.freeze({ label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', keyRequired: true }),
-  anthropic: Object.freeze({ label: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1', keyRequired: true }),
-})
+// The four built-in types are the code layer of the providers (ai-control/providers.mjs); the
+// providers an administrator adds (aiProviders, through the AI control snapshot) are types too,
+// read through connectionTypes() once ai-control/index.mjs has set the source.
+export const CONNECTION_TYPES = Object.freeze(Object.fromEntries(Object.entries(chatConnectionTypes({}))
+  .filter(([, type]) => type.builtin)
+  .map(([id, type]) => [id, Object.freeze({
+    label: type.label, ...(type.baseUrl && { baseUrl: type.baseUrl }), ...(type.keyRequired && { keyRequired: true }),
+    ...(type.modelOptional && { modelOptional: true }), protocol: type.protocol,
+  })])))
+
+// Where the administrators' providers come from: () → the snapshot's providers ({ [id]: doc }).
+let providerSource = () => null
+let typesCache = { from: undefined, types: null }
+export function setProviderSource(source) {
+  providerSource = typeof source === 'function' ? source : () => null
+  typesCache = { from: undefined, types: null }
+}
+
+/**
+ * Every connection type in use: the built-in ones and the providers an administrator added for
+ * model choices. → { [id]: { label, baseUrl?, baseUrlLocked, keyRequired?, modelOptional?, protocol,
+ * auth, extraHeaders, defaultCapabilities, toolChoice?, builtin } }
+ */
+export function connectionTypes() {
+  let stored = null
+  try {
+    stored = providerSource()
+  } catch {
+    stored = null
+  }
+  if (typesCache.from !== stored || !typesCache.types) typesCache = { from: stored, types: Object.freeze(chatConnectionTypes(stored || {})) }
+  return typesCache.types
+}
+export const connectionType = (id) => (typeof id === 'string' && Object.hasOwn(connectionTypes(), id) ? connectionTypes()[id] : null)
+
 const CAPABILITIES = ['tools', 'vision', 'images']
 
 export class ConnectionError extends Error {
@@ -88,10 +118,14 @@ export function normalizeConnection(input, { hosted, level, privateEndpoints = t
   if (!input || typeof input !== 'object') throw new ConnectionError('A connection is an object with a name, type, address and model.')
   const { name, type } = input
   if (typeof name !== 'string' || !NAME.test(name)) throw new ConnectionError('Name the connection with lowercase letters, digits and dashes, for example my-model.')
-  const preset = CONNECTION_TYPES[type]
-  if (!preset) throw new ConnectionError(`Choose a type: ${Object.keys(CONNECTION_TYPES).join(', ')}.`)
+  const preset = connectionType(type)
+  if (!preset) throw new ConnectionError(`Choose a type: ${Object.keys(connectionTypes()).join(', ')}.`)
   let baseUrl
-  if (preset.baseUrl) {
+  // a provider with its own address keeps it; one with a default address takes another the endpoint rules allow
+  const fixed = preset.baseUrl && preset.baseUrlLocked !== false
+  if (!fixed && preset.baseUrl && (input.baseUrl === undefined || input.baseUrl === null || input.baseUrl === '')) {
+    baseUrl = preset.baseUrl
+  } else if (fixed) {
     if (input.baseUrl !== undefined && input.baseUrl !== null && input.baseUrl.replace?.(/\/+$/, '') !== preset.baseUrl) {
       throw new ConnectionError(`${preset.label} has its own address. For another host, use the type openai-compatible.`)
     }
@@ -119,7 +153,8 @@ export function normalizeConnection(input, { hosted, level, privateEndpoints = t
     if (apiKey) throw new ConnectionError('Give apiKey or apiKeyEnv, not both.')
   }
   if (preset.keyRequired && !apiKey && !apiKeyEnv && !input.keepKey) throw new ConnectionError(`${preset.label} needs a key.`)
-  const capabilities = {}
+  // what the provider's models can usually do, unless the connection says otherwise
+  const capabilities = Object.fromEntries(Object.entries(preset.defaultCapabilities || {}).filter(([key]) => CAPABILITIES.includes(key)))
   if (input.capabilities !== undefined) {
     if (!input.capabilities || typeof input.capabilities !== 'object' || Array.isArray(input.capabilities)) throw new ConnectionError('capabilities is an object of tools, vision and images, each true or false.')
     for (const [key, value] of Object.entries(input.capabilities)) {
@@ -284,12 +319,12 @@ export const featureTitle = (feature) => surfaceById(feature)?.title || feature
 // leaves the host out: the operator's network is not theirs to see.
 export function connectionLabel(connection, { withHost = true } = {}) {
   if (!connection) return 'the built-in AI'
-  if (!withHost) return connection.model ? `${connection.model} (this server's AI)` : `${CONNECTION_TYPES[connection.type]?.label || connection.name} (this server's AI)`
+  if (!withHost) return connection.model ? `${connection.model} (this server's AI)` : `${connectionType(connection.type)?.label || connection.name} (this server's AI)`
   let host = connection.baseUrl
   try {
     host = new URL(connection.baseUrl).host
   } catch {}
-  return connection.model ? `${connection.model} at ${host}` : `${CONNECTION_TYPES[connection.type]?.label || connection.name} (${host})`
+  return connection.model ? `${connection.model} at ${host}` : `${connectionType(connection.type)?.label || connection.name} (${host})`
 }
 
 /**

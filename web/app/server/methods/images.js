@@ -16,6 +16,8 @@ import { renderSvgToPng } from '../common/render-svg.mjs'
 import { searchImagesForNote, PictureSearchRefused } from './note-image-search.mjs'
 import { chargeFixed, runAIAction } from '../metering/context.mjs'
 import { FIXED_PRICES } from '../metering/prices.mjs'
+import { auxCredential } from './ai/ai-settings'
+import { redactText } from '../exec/redact.mjs'
 
 const method = {}
 
@@ -29,8 +31,11 @@ export async function searchGoogleImages(opts) {
   const filter = typeof opts?.filter === 'string' && /^(&[a-zA-Z]+=[a-zA-Z0-9_|-]{1,60}){0,4}$/.test(opts.filter) ? opts.filter.replace(/\|/g, '%7C') : ''
   const limit = Math.min(Math.max(Number(opts?.limit) || 10, 1), 10)
   const page = Math.min(Math.max(Number(opts?.page) || 0, 0), 9)
-  // The keys live in the server's own settings only; no browser ever receives them.
-  const keys = Meteor.settings.googleImageSearch
+  // The keys live on the server only: a picture search key an administrator connected in AI control
+  // (sealed, read for each search, so a rotated key works at once), else the settings file's. No
+  // browser ever receives them.
+  const fromApp = query ? await auxCredential('google-cse') : null
+  const keys = fromApp ? { apiKey: fromApp.apiKey, engineKey: fromApp.model } : Meteor.settings.googleImageSearch
   if (query && (!keys?.apiKey || !keys?.engineKey)) throw new Meteor.Error('not-configured', 'Picture search is not set up on this server.')
   if (query) await chargeFixed({ ref: `search_${Random.id()}`, kind: 'imageSearch', costMicros: FIXED_PRICES.imageSearch, model: 'google-cse' })
   if (query) {
@@ -45,6 +50,8 @@ export async function searchGoogleImages(opts) {
         await fetch(url, {
           // Ensure this referer is whitelisted in your Google Cloud Console
           headers: { Referer: 'https://slatebox.com' },
+          // the key is in the URL: it never follows a redirect elsewhere
+          redirect: 'error',
         })
       ).json()
 
@@ -60,8 +67,10 @@ export async function searchGoogleImages(opts) {
       }
       return imgSearchResult
     } catch (err) {
-      console.error('Unable to search for images', err)
-      throw new Meteor.Error('Unable to search for images: ', err.message)
+      // a fetch error names the URL, and the URL carries the key: logged and returned without it
+      const said = redactText(err.message, { keys: [keys.apiKey] })
+      console.error('Unable to search for images', said)
+      throw new Meteor.Error('Unable to search for images: ', said)
     }
   }
   return null

@@ -19,6 +19,7 @@ import {
 } from '../../imports/api/common/models'
 import rawMongoSearch from '../common/rawMongoSearch'
 import CONSTANTS from '../../imports/api/common/constants'
+import { auxCredential } from './ai/ai-settings'
 
 const method = {}
 
@@ -167,11 +168,15 @@ method[CONSTANTS.methods.nounProject.get] = async (input) => {
       ? null
       : NounProjectResults.rawCollection().initializeUnorderedBulkOp()
 
+    // an icon key an administrator connected in AI control (key:secret, sealed, read for each search)
+    // wins over the settings file's
+    const fromApp = await auxCredential('nounproject')
+    const [appKey, appSecret] = fromApp ? fromApp.apiKey.split(':') : []
     const oauth = new OAuth.OAuth(
       'https://api.thenounproject.com',
       'https://api.thenounproject.com',
-      Meteor.settings.nounProject.key,
-      Meteor.settings.nounProject.secret,
+      appKey || Meteor.settings.nounProject?.key,
+      appSecret || Meteor.settings.nounProject?.secret,
       '1.0',
       null,
       'HMAC-SHA1'

@@ -12,8 +12,9 @@
 // Pure apart from the injected readers and timers: index.mjs gives it the Meteor collections.
 import { SURFACES, surface as surfaceById } from './catalogue.mjs'
 import { checkVariables, parseTemplate } from './render.mjs'
+import { BUILTIN_PROVIDERS, PROTOCOLS, ProviderError, normalizeProvider } from './providers.mjs'
 
-export const PROTOCOLS = Object.freeze(['openai-chat', 'anthropic-messages', 'openai-images', 'stability-images'])
+export { PROTOCOLS }
 export const SCOPE_LEVELS = Object.freeze(['server', 'plan', 'team', 'me'])
 export const FAILURE_CLASSES = Object.freeze(['infra', 'shape', 'context', 'any'])
 export const PROMPT_KINDS = Object.freeze(['system', 'user', 'retry', 'tool-description', 'mcp-instructions', 'mcp-prompt', 'envelope'])
@@ -67,9 +68,17 @@ export const bindingId = (surfaceId, scope) => `${surfaceId}|${scopeKey(scope)}`
 // ---------- per-document checks: each returns a problem sentence, or null ----------
 function providerProblem(doc) {
   if (!SLUG.test(doc._id || '')) return 'a provider id is lowercase letters, digits and dashes'
+  if (BUILTIN_PROVIDERS[doc._id]) return `${doc._id} is a built-in provider; the built-in one applies`
   if (!PROTOCOLS.includes(doc.protocol)) return `protocol ${doc.protocol} is not one this build speaks`
   if (doc.baseUrl != null && typeof doc.baseUrl !== 'string') return 'baseUrl is an address'
   if (doc.status !== undefined && !['active', 'archived'].includes(doc.status)) return 'status is active or archived'
+  // the same checks as a save (the address was checked against the endpoint rules when saved)
+  try {
+    normalizeProvider(doc)
+  } catch (error) {
+    if (error instanceof ProviderError) return error.message
+    throw error
+  }
   return null
 }
 
@@ -224,6 +233,7 @@ export function buildSnapshot(raw = {}, { fileConnections = [], codePromptIds = 
     name: doc.name, provider: doc.provider, baseUrl: doc.baseUrl ?? null, model: doc.model ?? null,
     capabilities: doc.capabilities || {}, status: doc.status ?? 'active', keyFingerprint: doc.keyFingerprint ?? null,
     hasKey: Boolean(doc.cipher || doc.hasKey), keyRef: doc.keyRef?.kind ? { kind: doc.keyRef.kind, ...(doc.keyRef.kind === 'env' && { name: doc.keyRef.name }) } : null,
+    lastCheck: doc.lastCheck ? { at: doc.lastCheck.at ?? null, ok: Boolean(doc.lastCheck.ok), latencyMs: doc.lastCheck.latencyMs ?? null, error: doc.lastCheck.error ?? null } : null,
   } : doc)), 'connection', connectionProblem, (doc) => doc.name)
   const connectionRefs = new Set([
     ...Object.keys(connections).map((name) => `server:${name}`),

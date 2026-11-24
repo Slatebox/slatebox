@@ -8,6 +8,7 @@ import { CALL_COPY, CALL_LIMITS, admit, callRoomName, endCharge, roomRequest, st
 import { callClient, credentialsFor, meterOn, recordCallMinutes, refusalError, routeFor, usageFor, meterSettings, settingsForUser, userFields } from '../metering/meteor'
 import { videoRefusal } from '../metering/refusal-pay.mjs'
 import { canReadSlate, findSlate } from '../common/slate-access'
+import { aiSettings } from './ai/ai-settings'
 
 // One Daily room per call. The person who starts a call pays for it from their included calls (Pro credits),
 // their own Daily key or their balance; people who join pay nothing. Rooms expire unless the
@@ -19,7 +20,7 @@ async function authorize(shareId) {
   }
   const record = await Meteor.callAsync(CONSTANTS.methods.slates.get, { shareId, forHuddle: true })
   const user = await Meteor.userAsync()
-  const grant = huddleGrant(record, user, Boolean(Meteor.settings.deepgram?.secret))
+  const grant = huddleGrant(record, user, Boolean(Meteor.settings.deepgram?.secret) || await aiSettings.hasAuxKey('deepgram').catch(() => false))
   if (!grant) throw new Meteor.Error('huddle-forbidden', 'You cannot join a call on this slate.')
   if (!Meteor.settings.daily?.apiKey) {
     const reason = Meteor.settings.public.env === 'selfhost'
@@ -64,7 +65,7 @@ async function openCall({ grant, user, mode, now }) {
   }
   try {
     const metered = call.provider === 'slatebox'
-    call.roomUrl = await callClient(call, ownKey).createRoom(metered ? roomRequest({ name: call.roomName, now }) : unmeteredRoom(call.roomName, now))
+    call.roomUrl = await (await callClient(call, ownKey)).createRoom(metered ? roomRequest({ name: call.roomName, now }) : unmeteredRoom(call.roomName, now))
     await HuddleCalls.updateAsync({ _id: callId }, { $set: { roomUrl: call.roomUrl } })
   } catch {
     await HuddleCalls.updateAsync({ _id: callId }, { $set: { state: 'ended', endedReason: 'provider', endedAt: Date.now() } })
@@ -121,7 +122,7 @@ async function join({ shareId, mode } = {}) {
   const canTranscribe = grant.canTranscribe && transcriptionAllowed(call)
   let token
   try {
-    token = await callClient(call, ownKey).token(tokenRequest({ call, grant: { ...grant, canTranscribe }, now }))
+    token = await (await callClient(call, ownKey)).token(tokenRequest({ call, grant: { ...grant, canTranscribe }, now }))
   } catch {
     throw new Meteor.Error('huddle-unavailable', 'The call could not be opened. Please try again.')
   }
@@ -164,7 +165,7 @@ async function useVideo({ callId } = {}) {
   const index = (call.videoSwitches || 0) + 1
   const roomName = callRoomName(call.shareId, call._id, '-video' + index)
   const ownKey = call.provider === 'own-key' ? (await credentialsFor(call.keyOwner, 'daily')).apiKey : null
-  const client = callClient(call, ownKey)
+  const client = await callClient(call, ownKey)
   const roomUrl = await client.createRoom(call.provider === 'slatebox' ? roomRequest({ name: roomName, now }) : unmeteredRoom(roomName, now))
   await HuddleCalls.updateAsync({ _id: call._id, state: 'open' }, { $set: { mode: 'video', roomName, roomUrl, roomExpAt: now + CALL_LIMITS.windowMinutes * 60_000, videoSwitches: index, previousRoomName: call.roomName } })
   client.deleteRoom(call.roomName).catch(() => {})
@@ -177,7 +178,7 @@ async function leave({ callId } = {}) {
   const call = await HuddleCalls.findOneAsync({ _id: callId, state: 'open' })
   if (!call) return true
   const ownKey = call.provider === 'own-key' ? (await credentialsFor(call.keyOwner, 'daily').catch(() => null))?.apiKey : null
-  const client = callClient(call, ownKey)
+  const client = await callClient(call, ownKey)
   const present = await client.presence(call.roomName)
   if (present !== null && present <= 1) {
     if (await endOpenCall(call, { reason: 'left', presenceCount: present, now: Date.now() })) await client.deleteRoom(call.roomName).catch(() => {})

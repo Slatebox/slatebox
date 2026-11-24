@@ -169,3 +169,43 @@ test('a fresh installation gets the new indexes from M1 and M2 changes nothing',
   const providerIndexes = M1_INDEXES.filter(([collection]) => collection === 'providerKeys')
   assert.ok(providerIndexes.every(([, , options]) => options.unique && options.partialFilterExpression && options.name))
 })
+
+// AI control S3: the fields a server connection gained (where its key lives, its fingerprint, the
+// key a rotation replaced, on/off, its last test) against a real database, with the M1 indexes.
+test('S3 connection fields round-trip in MongoDB: sealed and env keys, rotation grace, last test, services beside the models', { skip }, async (t) => {
+  const db = await database(t)
+  await db.collection('aiAudit').insertOne({ _id: 'x' })
+  await runM1(migrationIo(db))
+  const master = loadMasterKey({ SLATEBOX_KEY_ENCRYPTION_KEY: randomBytes(32).toString('base64') })
+  const keys = db.collection('providerKeys')
+  const store = createConnectionStore({ keys, choices: db.collection('aiChoices') })
+  let clock = Date.parse('2026-11-24T10:00:00Z')
+  const env = { SLATEBOX_AI_KEY_META: 'meta-env-key-1234' }
+  const ai = createAISettings({
+    store, master, settings: { public: { env: 'selfhost' } }, hosted: false, env, now: () => clock,
+    loadUser: async (id) => people[id] || null, isAdmin: async (id) => id === 'root', isTeamAdmin: async () => false,
+    check: async () => ({ ok: false, message: 'HTTP 401 for sk-proj-0000000000000000000000' }),
+  })
+  await ai.saveServerConnections('root', [
+    { name: 'oa', type: 'openai', model: 'gpt-x', apiKey: 'sk-proj-0000000000000000000000' },
+    { name: 'meta', type: 'openai-compatible', baseUrl: 'https://api.meta.example/v1', model: 'muse-ember-1.0', keyRef: { kind: 'env', name: 'SLATEBOX_AI_KEY_META' } },
+    { name: 'search', type: 'google-cse', model: 'cx-1', apiKey: 'AIza-search-000000000000000000' },
+  ])
+  await ai.saveServerConnections('root', [{ name: 'oa', type: 'openai', model: 'gpt-x', apiKey: 'sk-proj-1111111111111111111111', rotate: { graceHours: 1 } }])
+  const oa = await keys.findOne({ ownerType: 'server', name: 'oa' })
+  assert.deepEqual([oa.keyRef, oa.keyFingerprint.startsWith('sha256:'), oa.previousCipher.until instanceof Date, oa.status], [{ kind: 'sealed' }, true, true, undefined])
+  assert.deepEqual((await keys.findOne({ name: 'meta' })).keyRef, { kind: 'env', name: 'SLATEBOX_AI_KEY_META' })
+  await ai.check('root', { level: 'server', name: 'oa' })
+  const checked = await keys.findOne({ name: 'oa' })
+  assert.equal(checked.lastCheck.ok, false)
+  assert.ok(!checked.lastCheck.error.includes('sk-proj'))
+  assert.equal((await ai.auxCredential('google-cse')).model, 'cx-1')
+  const listed = await ai.serverConnections('root')
+  assert.deepEqual(listed.connections.map((c) => [c.name, c.keyRef.kind]).sort(), [['meta', 'env'], ['oa', 'sealed'], ['search', 'sealed']])
+  assert.equal(await store.clearExpiredGrace(new Date(clock)), 0)
+  clock += 2 * 3600 * 1000
+  assert.equal(await store.clearExpiredGrace(new Date(clock)), 1)
+  assert.equal((await keys.findOne({ name: 'oa' })).previousCipher, null)
+  // the unique (owner, name) index holds for the new kinds too
+  await assert.rejects(keys.insertOne({ _id: randomUUID(), ownerType: 'server', ownerId: 'server', provider: 'deepgram', name: 'search' }), /E11000/)
+})

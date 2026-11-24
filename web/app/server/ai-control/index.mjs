@@ -7,10 +7,14 @@
 import { Meteor } from 'meteor/meteor'
 import { Random } from 'meteor/random'
 import {
-  AIAudit, AIAgents, AIBindingVersions, AIBindings, AIControlAudit, AIControlState, AIModels, AIPromptVersions, AIPrompts, AIProviders, ProviderKeys,
+  AIAudit, AIAgents, AIBindingVersions, AIBindings, AIChoices, AIControlAudit, AIControlState, AIModels, AIPromptVersions, AIPrompts, AIProviders, ProviderKeys,
 } from '../../imports/api/common/models'
-import { aiSettings, isServerAdmin, setAISettingsAudit } from '../methods/ai/ai-settings'
-import { aiCostMicros } from '../metering/prices.mjs'
+import { aiSettings, hosted, isServerAdmin, setAISettingsAudit } from '../methods/ai/ai-settings'
+import { aiCostMicros, isPriced, setDbPriceSource } from '../metering/prices.mjs'
+import { setProviderSource } from '../methods/ai/connections.mjs'
+import { assertEndpointHost, checkEndpointUrl, endpointRules } from '../methods/ai/endpoint-policy.mjs'
+import { createConnectionStore } from '../methods/ai/connection-store.mjs'
+import { createCatalogOps, createWriteLimit, dbPriceFor, providersView } from './models.mjs'
 import { SURFACES } from './catalogue.mjs'
 import { createAdminOps, surfacesStatus } from './admin.mjs'
 import { resolveBinding } from './resolve.mjs'
@@ -77,7 +81,32 @@ export const aiControl = createAIControl({
   holder: snapshotHolder,
   choiceHolders: (userId) => aiSettings.choiceHolders(userId),
   settings: Meteor.settings,
+  isPriced,
+  providerView: (snap) => providersView(snap),
 })
+
+// The providers an administrator added are connection types (connections.mjs), and the prices set
+// on models win in the meter (metering/prices.mjs): both read the snapshot, so a change reaches
+// every pod within one poll, with no restart.
+setProviderSource(() => snapshotHolder.current().providers)
+setDbPriceSource((model) => dbPriceFor(snapshotHolder.current(), model))
+
+// The endpoint rules for the server's own configuration (an administrator's provider address).
+const serverRules = () => endpointRules({ hosted, level: 'server', privateEndpoints: operatorConfig(Meteor.settings).privateEndpoints })
+
+/** ai.providers.save / archive and ai.models.save (models.mjs). */
+export const aiCatalog = createCatalogOps({
+  store: aiControlStore,
+  snapshot: () => snapshotHolder.current(),
+  aiSettings,
+  checkUrl: (url) => checkEndpointUrl(url, serverRules()),
+  assertHost: (url) => assertEndpointHost(url, serverRules()),
+  // archived providers are not in the snapshot; a change reads the stored document
+  readProvider: (id) => raw.providers.findOne({ _id: id }),
+})
+
+/** AI control writes per administrator: 60 in 10 minutes (spec 4). */
+export const aiControlWriteLimit = createWriteLimit()
 
 /** Whether a person may read and change AI control: an administrator of this server. */
 export const isAIControlAdmin = isServerAdmin
@@ -137,4 +166,10 @@ Meteor.startup(() => {
   AIAudit.rawCollection().createIndex({ created: -1 }, { name: 'created_desc' })
     .catch((error) => console.error('ai-control: could not create the aiAudit index:', error.message))
   snapshotHolder.start()
+  // a rotated key's grace period ends: the key it replaced is dropped (spec 6.3), checked hourly
+  const keyStore = createConnectionStore({ keys: ProviderKeys.rawCollection(), choices: AIChoices.rawCollection() })
+  const clearGrace = () => keyStore.clearExpiredGrace(new Date())
+    .catch((error) => console.warn('ai-control: expired key grace not cleared:', error.message))
+  clearGrace()
+  Meteor.setInterval(clearGrace, 60 * 60 * 1000)
 })

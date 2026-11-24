@@ -9206,13 +9206,8 @@
                 },
                 "type": {
                   "type": "string",
-                  "enum": [
-                    "openai-compatible",
-                    "openai",
-                    "anthropic",
-                    "deepinfra"
-                  ],
-                  "description": "openai-compatible covers any host or local server (Ollama, llama.cpp, vLLM, LM Studio and others)."
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+                  "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), openai, anthropic, deepinfra, or one an administrator added (ai.control.get lists them)."
                 },
                 "baseUrl": {
                   "type": "string",
@@ -9543,13 +9538,8 @@
               },
               "type": {
                 "type": "string",
-                "enum": [
-                  "openai-compatible",
-                  "openai",
-                  "anthropic",
-                  "deepinfra"
-                ],
-                "description": "openai-compatible covers any host or local server (Ollama, llama.cpp, vLLM, LM Studio and others)."
+                "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+                "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), openai, anthropic, deepinfra, or one an administrator added (ai.control.get lists them)."
               },
               "baseUrl": {
                 "type": "string",
@@ -9806,7 +9796,7 @@
     {
       "id": "ai.control.health",
       "title": "AI control health",
-      "description": "Lists AI control problems: documents skipped because they failed their checks (that surface falls back to the settings file and built-in defaults), and published prompts that fell back to their built-in text. An empty list means nothing is wrong. Administrators only.",
+      "description": "Lists AI control problems: documents skipped because they failed their checks (that surface falls back to the settings file and built-in defaults), and published prompts that fell back to their built-in text. warnings lists models with no price (charged at the dearest rate) and connections whose last test failed. An empty list means nothing is wrong. Administrators only.",
       "action": "ai.control.health",
       "toolset": "admin",
       "readOnly": true,
@@ -9842,6 +9832,9 @@
             "type": "string"
           },
           "health": {
+            "type": "array"
+          },
+          "warnings": {
             "type": "array"
           }
         }
@@ -10069,6 +10062,701 @@
           "destructiveHint": true,
           "idempotentHint": true,
           "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "ai.providers.save",
+      "title": "Save AI provider",
+      "description": "Adds or changes a provider template: its wire protocol (openai-chat, anthropic-messages or openai-images), address, how the key is sent (bearer, a header, a query parameter or none), extra headers (nothing secret) and what its models can usually do. Built-in providers cannot be changed. Changing an address removes the keys of the connections that use it, after dropKeys true; a key is never sent to a new address. Only a person sets an address, key style or headers. Administrators only.",
+      "action": "ai.providers.save",
+      "toolset": "admin",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": true,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "ai:admin",
+      "http": {
+        "method": "PUT",
+        "path": "/api/v1/ai/control/providers",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "provider",
+          "dropKeys",
+          "reason"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+                "description": "The provider's id, for example gemini. Built-in ids cannot be used."
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "protocol": {
+                "type": "string",
+                "enum": [
+                  "openai-chat",
+                  "anthropic-messages",
+                  "openai-images"
+                ],
+                "description": "The wire protocol it speaks. Gemini, Meta, Mistral, OpenRouter, Groq, Together, Ollama and vLLM speak openai-chat."
+              },
+              "baseUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 500,
+                "description": "The address up to /v1. null: each connection gives its own."
+              },
+              "baseUrlLocked": {
+                "type": "boolean",
+                "description": "Connections of this provider keep its address (default true when an address is given)."
+              },
+              "auth": {
+                "type": "object",
+                "properties": {
+                  "style": {
+                    "type": "string",
+                    "enum": [
+                      "bearer",
+                      "header",
+                      "query",
+                      "none"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 64
+                  }
+                },
+                "required": [
+                  "style"
+                ],
+                "additionalProperties": false,
+                "description": "How the key is sent: bearer (Authorization: Bearer), header { name }, query { name } or none."
+              },
+              "extraHeaders": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "maxProperties": 10,
+                "description": "Headers sent with every request. Nothing secret: names that look like credentials are refused."
+              },
+              "keyRequired": {
+                "type": "boolean"
+              },
+              "modelOptional": {
+                "type": "boolean"
+              },
+              "defaultCapabilities": {
+                "type": "object",
+                "properties": {
+                  "tools": {
+                    "type": "boolean"
+                  },
+                  "vision": {
+                    "type": "boolean"
+                  },
+                  "json": {
+                    "type": "boolean"
+                  },
+                  "images": {
+                    "type": "boolean"
+                  },
+                  "reasoning": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false,
+                "description": "What its models can usually do; a connection or model may say otherwise."
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "protocol"
+            ],
+            "additionalProperties": false
+          },
+          "dropKeys": {
+            "type": "boolean",
+            "description": "Go ahead with an address change that removes connections' keys."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Why, for the change history."
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "object"
+          },
+          "droppedKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "generation": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "tool": {
+        "name": "save_ai_provider",
+        "title": "Save an AI provider",
+        "description": "Add or change an AI provider template (wire protocol, address, key style). Administrators only; a person agrees first.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "ai.connections.list",
+      "title": "AI connections",
+      "description": "Lists the server's AI connections: the settings file's (read-only) and the ones saved in the app, including the services beside the models (Stability, Google picture search, Noun Project, Deepgram). For each: its provider, address, model, where its key lives (sealed, an environment variable, the settings file or none), which key it is (a fingerprint, never the key), its last test and whether it is turned off. Administrators only.",
+      "action": "ai.connections.list",
+      "toolset": "admin",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "ai:admin:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/ai/control/connections",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "connections": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "keysAvailable": {
+            "type": "boolean"
+          }
+        }
+      },
+      "tool": {
+        "name": "list_ai_connections",
+        "title": "List AI connections",
+        "description": "List this server's AI connections and which key each uses, never the key itself. Administrators only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "ai.connections.save",
+      "title": "Save AI connections",
+      "description": "Adds or changes server connections: a provider, address, model and key. A key is sealed with the server's key and never returned; keyRef env reads it from an environment variable named SLATEBOX_AI_KEY_… for each request; rotate {graceHours} keeps the old key working for 1 or 24 hours. status disabled keeps a connection but sends nothing to it. Also connects the services beside the models (stability, google-cse with its search engine ID as model, nounproject as key:secret, deepgram). Only a person sends a key, names an environment variable or changes an address or provider; an agent may save a keyless connection to a provider with a fixed address. Administrators only.",
+      "action": "ai.connections.save",
+      "toolset": "admin",
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": true,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "ai:admin",
+      "http": {
+        "method": "PUT",
+        "path": "/api/v1/ai/control/connections",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "connections",
+          "reason"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "connections": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+                  "description": "The connection's name, for example gemini-main."
+                },
+                "type": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+                  "description": "The provider: openai-compatible, openai, anthropic, deepinfra, one an administrator added, or a service beside the models (stability, google-cse, nounproject, deepgram)."
+                },
+                "baseUrl": {
+                  "type": "string",
+                  "maxLength": 500,
+                  "description": "For a provider without a fixed address: the address up to /v1."
+                },
+                "model": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "The model it serves. For google-cse, the search engine ID (cx)."
+                },
+                "apiKey": {
+                  "type": "string",
+                  "maxLength": 400,
+                  "writeOnly": true,
+                  "description": "Stored encrypted with the server's key and never shown again. Leave it out to keep the saved key. For nounproject: key:secret."
+                },
+                "keyRef": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "env",
+                        "none"
+                      ]
+                    },
+                    "name": {
+                      "type": "string",
+                      "pattern": "^[A-Z][A-Z0-9_]{1,63}$"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false,
+                  "description": "env: read the key from an environment variable named SLATEBOX_AI_KEY_… (or one the settings file allows) for each request; none: no key. Sending apiKey seals the key instead."
+                },
+                "rotate": {
+                  "type": "object",
+                  "properties": {
+                    "graceHours": {
+                      "type": "integer",
+                      "enum": [
+                        0,
+                        1,
+                        24
+                      ]
+                    }
+                  },
+                  "required": [
+                    "graceHours"
+                  ],
+                  "additionalProperties": false,
+                  "description": "With a new apiKey: the old key keeps working for this many hours, in case the provider has not taken the new one yet."
+                },
+                "capabilities": {
+                  "type": "object",
+                  "properties": {
+                    "tools": {
+                      "type": "boolean"
+                    },
+                    "vision": {
+                      "type": "boolean"
+                    },
+                    "json": {
+                      "type": "boolean"
+                    },
+                    "images": {
+                      "type": "boolean"
+                    },
+                    "reasoning": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "What the model can do, where you know it. Unset means try it; making images needs images: true."
+                },
+                "maxTokens": {
+                  "type": "integer",
+                  "minimum": 256,
+                  "maximum": 200000
+                },
+                "toolChoice": {
+                  "type": "string",
+                  "enum": [
+                    "auto",
+                    "named",
+                    "required"
+                  ]
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "disabled"
+                  ],
+                  "description": "disabled: kept, but nothing is sent to it."
+                }
+              },
+              "required": [
+                "name",
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Why, for the change history."
+          }
+        },
+        "required": [
+          "connections"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "connections": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fingerprints": {
+            "type": "object"
+          }
+        }
+      },
+      "tool": {
+        "name": "save_ai_connections",
+        "title": "Save AI connections",
+        "description": "Add or change this server's AI connections and their keys. Keys are stored encrypted and never returned. Administrators only; a person agrees first.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "ai.models.save",
+      "title": "Save AI models",
+      "description": "Adds or changes models: the connection that serves each (server:<name> or builtin:<provider>), what it can do (tools, vision, json, images, reasoning), its context and output limits, and its prices in dollars per million input and output tokens (or per image). Metering charges these prices from the next call; a model with no price is charged at the dearest known rate and shown as unpriced. status disabled keeps a model out of bindings. Administrators only.",
+      "action": "ai.models.save",
+      "toolset": "admin",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": true,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "ai:admin",
+      "http": {
+        "method": "PUT",
+        "path": "/api/v1/ai/control/models",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "models",
+          "reason"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "models": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "properties": {
+                "connection": {
+                  "type": "string",
+                  "pattern": "^(server|builtin):[a-z0-9][a-z0-9-]{0,39}$",
+                  "description": "server:<connection> or builtin:deepinfra|openai|anthropic|stabilityai."
+                },
+                "model": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 80
+                },
+                "capabilities": {
+                  "type": "object",
+                  "properties": {
+                    "tools": {
+                      "type": "boolean"
+                    },
+                    "vision": {
+                      "type": "boolean"
+                    },
+                    "json": {
+                      "type": "boolean"
+                    },
+                    "images": {
+                      "type": "boolean"
+                    },
+                    "reasoning": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "What the model can do. A binding refuses a model whose flags miss what its surface needs."
+                },
+                "maxContext": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "maxOutput": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "prices": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "inputPerM": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": 0,
+                      "description": "Dollars per million input tokens."
+                    },
+                    "outputPerM": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": 0,
+                      "description": "Dollars per million output tokens."
+                    },
+                    "imageEach": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": 0,
+                      "description": "Dollars per generated image."
+                    },
+                    "currency": {
+                      "type": "string",
+                      "enum": [
+                        "USD"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "enabled",
+                    "disabled"
+                  ]
+                }
+              },
+              "required": [
+                "connection",
+                "model"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Why, for the change history."
+          }
+        },
+        "required": [
+          "models"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "generation": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "tool": {
+        "name": "save_ai_models",
+        "title": "Save AI models",
+        "description": "Add or change AI models with what they can do and their prices. Administrators only; a person agrees first.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "ai.models.discover",
+      "title": "Find AI models",
+      "description": "Lists the models a server connection reports (GET <address>/models, OpenAI-compatible providers only), to fill in the model registry. Writes nothing; the key goes only to the connection's own address, with no redirects. Administrators only.",
+      "action": "ai.models.discover",
+      "toolset": "admin",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "ai:admin:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/ai/control/models/discover",
+        "pathParams": [],
+        "queryParams": [
+          "connection"
+        ],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+          }
+        },
+        "required": [
+          "connection"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "tool": {
+        "name": "discover_ai_models",
+        "title": "Find AI models",
+        "description": "List the models an AI connection reports. Writes nothing. Administrators only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": true
         }
       }
     },

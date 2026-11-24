@@ -1,7 +1,8 @@
 // What AI, calls and image search cost Slatebox, in micro-dollars (1 dollar = 1,000,000).
 // Each row names where the price came from and when it was read. Estimates and ceilings per
-// feature come from the surface catalogue (ai-control/catalogue.mjs). An operator prices a model this table lacks, or reprices one,
-// in settings.metering.prices (configurePrices, applied once at start). An unknown model is
+// feature come from the surface catalogue (ai-control/catalogue.mjs). An administrator prices a
+// model in AI control (aiModels, read from the next call); an operator prices a model this table
+// lacks, or reprices one, in settings.metering.prices (configurePrices, applied once at start). An unknown model is
 // priced at the dearest known row, so a settings change to a new model can never be counted
 // as cheap.
 
@@ -115,8 +116,31 @@ export function actionCeilingMicros(feature) {
   return CEILINGS[feature] ?? DEFAULT_CEILING
 }
 
+// Prices an administrator set on a model in AI control (aiModels, spec 1.3), read from the
+// snapshot: they win over the settings file and the table from the next call, with no restart.
+// source(model) → { inPerMillion, outPerMillion, id } or null; ai-control/index.mjs sets it.
+let dbPrices = () => null
+export function setDbPriceSource(source) {
+  dbPrices = typeof source === 'function' ? source : () => null
+}
+
+const dbPriceOf = (model) => {
+  try {
+    const row = model ? dbPrices(model) : null
+    if (!row || !Number.isFinite(row.inPerMillion) || !Number.isFinite(row.outPerMillion)) return null
+    return Object.freeze({ model, inPerMillion: row.inPerMillion, outPerMillion: row.outPerMillion, source: 'db', read: null, ...(row.id && { id: row.id }) })
+  } catch {
+    return null
+  }
+}
+
+/** Whether a model has a price of its own (AI control, the settings file or the table). Unpriced is charged at the dearest row. */
+export function isPriced(model) {
+  return Boolean(dbPriceOf(model) || prices.some(row => row.model === model))
+}
+
 export function aiPrice(model) {
-  return prices.find(row => row.model === model) || dearest
+  return dbPriceOf(model) || prices.find(row => row.model === model) || dearest
 }
 
 // DeepInfra returns usage.estimated_cost. Its unit is not yet confirmed from a recorded
@@ -128,7 +152,7 @@ export function aiCostMicros({ model, usage = {} }) {
   const table = Math.ceil(perToken / 1e6)
   const provider = typeof usage.providerCostUsd === 'number' && usage.providerCostUsd > 0 ? Math.ceil(usage.providerCostUsd * 1_000_000) : 0
   if (provider > table) return { costMicros: provider, source: 'provider', priceModel: model }
-  return { costMicros: table, source: 'table', priceModel: price.model }
+  return { costMicros: table, source: price.source === 'db' ? 'db' : 'table', priceModel: price.model }
 }
 
 export function callCostMicros(kind, participantMinutes) {

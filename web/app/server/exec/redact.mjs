@@ -85,3 +85,38 @@ export function createCodeRedactor(registry) {
     return code.replace(literal, (_, lead, _quote, open) => `${lead}${open}${REDACTED}${open}`)
   }
 }
+
+// ---------- text that may carry a key: provider error bodies, logged URLs (spec 6.2) ----------
+// A provider's error body is untrusted: it may echo the key or the headers it was sent. Before an
+// error is stored (lastCheck, aiAudit) or returned (Test connection, a test run), every URL loses
+// its query string (a provider whose key goes in the query would otherwise log it), every value
+// that looks like a key is replaced, and the text is cut to 500 characters.
+const URL_QUERY = /(\bhttps?:\/\/[^\s"'<>?#]+)\?[^\s"'<>#]*/gi
+// [pattern, replacement]: a scheme or a field name before the value is kept, the value is not
+const KEY_VALUES = [
+  [/\bsk-ant-[A-Za-z0-9_-]{8,}/g, REDACTED],
+  [/\bsk-[A-Za-z0-9_-]{16,}/g, REDACTED],
+  [/\bAIza[0-9A-Za-z_-]{20,}/g, REDACTED],
+  [/\b(Bearer|Token|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, `$1 ${REDACTED}`],
+  [/\b((?:api[_-]?key|key|token|secret|password|authorization|x-api-key)["']?\s*[:=]\s*["']?)[^\s"'&,;}]{6,}/gi, `$1${REDACTED}`],
+  // a long run of base64 or hex (a slash ends a run, so a model path such as Qwen/Qwen3-… stays)
+  [/\b[A-Za-z0-9+_-]{32,}={0,2}(?![A-Za-z0-9+_=-])/g, REDACTED],
+]
+
+/** A URL without its query string or fragment (or the text unchanged when it is no URL). */
+export function stripQuery(url) {
+  if (typeof url !== 'string') return url
+  return url.replace(URL_QUERY, '$1').replace(/#.*$/, '')
+}
+
+/**
+ * Text fit to store or show: no query strings, no key-like values (and none of the given keys,
+ * wherever they appear), at most max characters.
+ */
+export function redactText(text, { keys = [], max = 500 } = {}) {
+  let out = String(text ?? '')
+  for (const key of keys) if (typeof key === 'string' && key.length >= 4) out = out.split(key).join(REDACTED)
+  out = out.replace(URL_QUERY, '$1')
+  for (const [rule, replacement] of KEY_VALUES) out = out.replace(rule, replacement)
+  return out.length > max ? out.slice(0, max) : out
+}

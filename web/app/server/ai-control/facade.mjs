@@ -15,8 +15,26 @@ const publicSurface = (s) => ({
 // What an administrator may read about a connection in the snapshot: never a key or a cipher.
 const publicConnection = (c) => ({
   name: c.name, provider: c.provider, baseUrl: c.baseUrl, model: c.model, capabilities: c.capabilities || {},
-  status: c.status, hasKey: Boolean(c.hasKey), keyFingerprint: c.keyFingerprint ?? null, keyRef: c.keyRef ?? null,
+  status: c.status, hasKey: Boolean(c.hasKey), keyFingerprint: c.keyFingerprint ?? null, keyRef: c.keyRef ?? null, lastCheck: c.lastCheck ?? null,
 })
+
+/**
+ * What needs an administrator's attention without breaking anything (the amber banner, spec 3.1):
+ * models with no price (charged at the dearest rate) and connections whose last test failed.
+ * isPriced(model) → whether the model has a price anywhere (metering/prices.mjs isPriced).
+ */
+export function warningsOf(snapshot, { isPriced = () => true } = {}) {
+  const out = []
+  for (const model of Object.values(snapshot.models || {})) {
+    if (model.status === 'disabled') continue
+    const own = model.prices && ((Number.isFinite(model.prices.inputPerM) && Number.isFinite(model.prices.outputPerM)) || Number.isFinite(model.prices.imageEach))
+    if (!own && !isPriced(model.model)) out.push({ kind: 'unpriced', id: model._id, problem: `${model.label || model.model} has no price. Until you add one, Slatebox charges it at its highest rate.` })
+  }
+  for (const c of Object.values(snapshot.connections || {})) {
+    if (c.status !== 'disabled' && c.lastCheck && c.lastCheck.ok === false) out.push({ kind: 'connection', id: c.name, problem: `Its last test failed: ${c.lastCheck.error || 'no answer'}` })
+  }
+  return out
+}
 
 /**
  * deps: {
@@ -28,7 +46,7 @@ const publicConnection = (c) => ({
  *   innerBindings?(userId, orgId) → { me, team } team and person bindings (read per request)
  * }
  */
-export function createAIControl({ holder, choiceHolders, settings = {}, codePrompts = {}, codeSlots = {}, innerBindings = async () => null }) {
+export function createAIControl({ holder, choiceHolders, settings = {}, codePrompts = {}, codeSlots = {}, innerBindings = async () => null, isPriced = () => true, providerView = null }) {
   // Problems found while serving (a published prompt that would not render), newest last; shown
   // with the snapshot's own health. Per pod, in memory, bounded.
   const runtimeHealth = []
@@ -74,13 +92,15 @@ export function createAIControl({ holder, choiceHolders, settings = {}, codeProm
       loadedAt: snap.loadedAt,
       global: { aiEnabled: snap.state.aiEnabled !== false, aiDisabledMessage: snap.state.aiDisabledMessage ?? null },
       surfaces: SURFACES.map(publicSurface),
-      providers: Object.values(snap.providers),
+      // the built-in providers with the administrators' (providers.mjs), when the caller gives the view
+      providers: providerView ? providerView(snap) : Object.values(snap.providers),
       connections: Object.values(snap.connections).map(publicConnection),
       models: Object.values(snap.models),
       bindings: Object.values(snap.bindings),
       agents: Object.values(snap.agents),
       prompts: Object.values(snap.prompts).map((p) => ({ id: p._id, surface: p.surface ?? null, kind: p.kind ?? null, title: p.title ?? null, labels: p.labels ?? { published: null } })),
       health: [...snap.health, ...runtimeHealth],
+      warnings: warningsOf(snap, { isPriced }),
     }
   }
 
@@ -110,6 +130,7 @@ export function createAIControl({ holder, choiceHolders, settings = {}, codeProm
     effective,
     get,
     health: () => [...holder.current().health, ...runtimeHealth],
+    warnings: () => warningsOf(holder.current(), { isPriced }),
     render: renderPrompt,
     snapshot: () => holder.current(),
     refresh: (options) => holder.refresh(options),

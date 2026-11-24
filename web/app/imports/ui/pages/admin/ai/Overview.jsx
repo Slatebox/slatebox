@@ -136,6 +136,14 @@ export default function Overview() {
       ) : (
         <Alert severity="success" sx={{ mb: 2 }} data-testid="ai-control-health">No problems found in the AI settings.</Alert>
       )}
+      {(snapshot.warnings || []).length > 0 && (
+        <Alert severity="warning" sx={{ mb: 2 }} data-testid="ai-control-warnings">
+          <Typography variant="subtitle2">Worth a look</Typography>
+          <ul style={{ margin: '4px 0 0', paddingLeft: 20 }}>
+            {snapshot.warnings.map((w) => <li key={`${w.kind}:${w.id}`}><span style={mono}>{w.id}</span>: {w.problem}</li>)}
+          </ul>
+        </Alert>
+      )}
       {snapshot.dbLayer === 'off' && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           AI control&apos;s own settings are switched off on this server. Every part uses AI settings, the settings file and the built-in AI.

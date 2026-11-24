@@ -91,8 +91,10 @@ export const SURFACES = defineSurfaces([
   { id: 'agent.slatebox', title: 'The Slatebox agent (tasks, ask_agent, @mentions)', follows: 'canvas', needs: ['tools'], builtinFrom: 'generation', requestFeatures: ['agent'] },
   // Library refinement (server/library/refine-ai.mjs) has a row on the settings page of its own and its
   // own built-in block in ai-defaults.json (a copy of generation's); unset, it follows the conversation.
-  { id: 'library', title: 'Library review and refinement', follows: 'chat', ownRow: true, needs: ['tools'], builtinFrom: 'library', requestFeatures: ['library-refine'], meterFeatures: ['library-refine'], estimate: 5000, ceiling: 50000 },
-  { id: 'connectors', title: 'Outside agents: planning and laying out results', follows: 'chat', needs: ['tools'], builtinFrom: 'generation', requestFeatures: ['connectors'], meterFeatures: ['connectors'], estimate: 5000, ceiling: 50000, edition: 'cloud' },
+  // Library and connectors meter as they did when they landed: no estimate or ceiling of their own, so
+  // the meter's workshop estimate and default ceiling apply (5,000 and 50,000 µ$).
+  { id: 'library', title: 'Library review and refinement', follows: 'chat', ownRow: true, needs: ['tools'], builtinFrom: 'library', requestFeatures: ['library-refine'], meterFeatures: ['library-refine'] },
+  { id: 'connectors', title: 'Outside agents: planning and laying out results', follows: 'chat', needs: ['tools'], builtinFrom: 'generation', requestFeatures: ['connectors'], meterFeatures: ['connectors'], edition: 'cloud' },
   // Prompt test runs and eval gates name their model per call; the row keeps them out of `chat`.
   { id: 'admin.test', title: 'Admin test runs', follows: null, useKey: false, estimate: 30000, ceiling: 200000 },
 ])

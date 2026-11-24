@@ -60,7 +60,7 @@ export const aiControlHealth = defineAction({
   id: 'ai.control.health',
   title: 'AI control health',
   description:
-    'Lists AI control problems: documents skipped because they failed their checks (that surface falls back to the settings file and built-in defaults), and published prompts that fell back to their built-in text. An empty list means nothing is wrong. Administrators only.',
+    'Lists AI control problems: documents skipped because they failed their checks (that surface falls back to the settings file and built-in defaults), and published prompts that fell back to their built-in text. warnings lists models with no price (charged at the dearest rate) and connections whose last test failed. An empty list means nothing is wrong. Administrators only.',
   toolset: 'admin',
   kind: 'read',
   scope: 'ai:admin:read',
@@ -68,11 +68,11 @@ export const aiControlHealth = defineAction({
   mounts: { ddp: true, http: { method: 'GET', path: '/ai/control/health', operationId: 'getAIControlHealth' } },
   tool: { name: 'get_ai_control_health', title: 'Read AI control problems', description: 'Read the problems with this server\'s AI set-up: settings that were skipped and prompts that fell back to built-in text. Administrators only.' },
   input: { type: 'object', properties: {}, additionalProperties: false },
-  output: { type: 'object', properties: { generation: { type: 'integer' }, dbLayer: { type: 'string' }, health: { type: 'array' } } },
+  output: { type: 'object', properties: { generation: { type: 'integer' }, dbLayer: { type: 'string' }, health: { type: 'array' }, warnings: { type: 'array' } } },
   handler: async (principal, _input, { deps }) => {
     await requireAIControlAdmin(principal, deps)
     const snap = deps.aiControl.snapshot()
-    return { generation: snap.generation, dbLayer: snap.dbLayer, source: snap.source, health: deps.aiControl.health() }
+    return { generation: snap.generation, dbLayer: snap.dbLayer, source: snap.source, health: deps.aiControl.health(), warnings: deps.aiControl.warnings?.() ?? [] }
   },
 })
 

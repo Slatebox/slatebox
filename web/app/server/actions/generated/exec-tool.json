@@ -636,13 +636,8 @@
               },
               "type": {
                 "type": "string",
-                "enum": [
-                  "openai-compatible",
-                  "openai",
-                  "anthropic",
-                  "deepinfra"
-                ],
-                "description": "openai-compatible covers any host or local server (Ollama, llama.cpp, vLLM, LM Studio and others)."
+                "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+                "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), openai, anthropic, deepinfra, or one an administrator added (ai.control.get lists them)."
               },
               "baseUrl": {
                 "type": "string",
@@ -768,13 +763,8 @@
                 },
                 "type": {
                   "type": "string",
-                  "enum": [
-                    "openai-compatible",
-                    "openai",
-                    "anthropic",
-                    "deepinfra"
-                  ],
-                  "description": "openai-compatible covers any host or local server (Ollama, llama.cpp, vLLM, LM Studio and others)."
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+                  "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), openai, anthropic, deepinfra, or one an administrator added (ai.control.get lists them)."
                 },
                 "baseUrl": {
                   "type": "string",

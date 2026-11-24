@@ -267,6 +267,8 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
     const maxInfraRetries =
       aiOpts.infraRetries ?? Meteor.settings?.ai?.providerInfraRetries ?? INFRA_RETRY_LIMIT
     let attempt = 0
+    // the previous key of a connection whose key was rotated, once it has been tried (spec 6.3)
+    let previousKeyInUse = null
 
     while (true) {
       attempt += 1
@@ -280,9 +282,11 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
         if (sdkPath) {
           try {
             const fetcher = viaConnection?.fetcher || (localWorkshop?.agent && ((url, init) => fetch(url, { ...init, agent: localWorkshop.agent })))
-            response = await sdkChatRequest({ provider, endpoint, apiKey: localWorkshop?.apiKey || apiKey,
+            // during a key rotation's grace the previous key is tried once after a refusal (spec 6.3)
+            const wire = previousKeyInUse ? connectionRequest({ ...chosenConnection, apiKey: previousKeyInUse }) : viaConnection
+            response = await sdkChatRequest({ provider, endpoint, apiKey: previousKeyInUse ? wire.apiKey : (localWorkshop?.apiKey || apiKey),
               body: JSON.parse(ai.body), functions: aiOpts.functions, local: Boolean(localWorkshop || anthropicConnection), signal: abortController.signal,
-              ...(fetcher && { fetcher }) })
+              ...(fetcher && { fetcher }), ...(wire?.headers && { headers: wire.headers }), ...(wire?.queryParams && { queryParams: wire.queryParams }) })
             responseStatus = 200
           } catch (error) {
             if (!error.statusCode) throw error
@@ -354,6 +358,13 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
       if (!responseError) break
 
       const errorCode = responseError.code
+      // a rotated key the provider does not take yet: the previous one, still in its grace period, once
+      if ((responseStatus === 401 || responseStatus === 403) && chosenConnection?.previousApiKey && !previousKeyInUse) {
+        previousKeyInUse = chosenConnection.previousApiKey
+        response = null
+        responseStatus = null
+        continue
+      }
       // a 5xx (or no status) after the request went out may still have been billed
       if (typeof responseStatus !== 'number' || responseStatus >= 500) {
         const charged = await chargeUnansweredAttempt({ provider, model, unpaid: aiOpts.unpaid })

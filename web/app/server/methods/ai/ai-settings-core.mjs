@@ -17,12 +17,18 @@ import { OWN_KEYS_CLOUD } from '../../../imports/api/common/own-keys.mjs'
 import { NOT_AVAILABLE, last4, open as openKey, seal } from '../../metering/vault.mjs'
 import { EndpointRefused, checkEndpointUrl, endpointRules } from './endpoint-policy.mjs'
 import {
-  AI_FEATURES, CONNECTION_TYPES, ConnectionError, USE_KEYS, capabilityGap, checkUse, connectionLabel,
+  AI_FEATURES, ConnectionError, USE_KEYS, capabilityGap, checkUse, connectionLabel, connectionType,
   featureTitle, keyFromEnv, normalizeConnection, operatorConfig, parseRef, publicConnection, resolveAIChoice, surfaceFor,
 } from './connections.mjs'
 import { USE_SURFACES } from '../../ai-control/catalogue.mjs'
+import { AUX_PROVIDER_IDS, BUILTIN_PROVIDERS } from '../../ai-control/providers.mjs'
+import { envKeyRefusal } from '../../ai-control/key-policy.mjs'
+import { redactText } from '../../exec/redact.mjs'
 
 const RULE_LEVEL = { me: 'person', team: 'team', server: 'server' }
+// the services beside the models (picture search, icons, transcription, Stability): server only
+const isAux = (provider) => AUX_PROVIDER_IDS.includes(provider)
+const AUX_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/
 const SERVER = { type: 'server', id: 'server' }
 const invalid = (message) => problem(400, 'invalid_request', message)
 
@@ -33,6 +39,9 @@ const invalid = (message) => problem(400, 'invalid_request', message)
  *   master (vault master key or null), settings (Meteor.settings), hosted (boolean),
  *   loadUser(id), isAdmin(userId), isTeamAdmin(user),
  *   check(connection, rules) → Test connection result (connection-check.mjs through a guarded fetch),
+ *   listModels?(connection, rules) → { ok, models, message } (connection-check.mjs listModels),
+ *   checkAux?(connection, rules) → Test connection result for a service beside the models
+ *     (ai-control/aux-check.mjs: picture search, icons, transcription, Stability),
  *   assertHost?(baseUrl, rules) → resolves when every address of the name is allowed,
  *   checkLimit?: { count, windowMs } Test connection calls per person (it reaches outside
  *     addresses on the server's behalf, unmetered),
@@ -44,6 +53,7 @@ const invalid = (message) => problem(400, 'invalid_request', message)
  */
 export function createAISettings({
   store, master, settings, hosted, loadUser, isAdmin, isTeamAdmin, check, assertHost = async () => {}, now = Date.now,
+  listModels = null, checkAux = null,
   env = globalThis.process?.env || {}, checkLimit = { count: 20, windowMs: 10 * 60 * 1000 }, audit = null,
 }) {
   const file = () => operatorConfig(settings)
@@ -73,35 +83,67 @@ export function createAISettings({
 
   // One stored document as a connection. Keys saved before choices existed have no name; one that
   // failed its check when saved (lastError) serves nothing, as it did before choices existed.
+  // A key lives sealed in the document (keyRef sealed, the default), in an environment variable the
+  // key policy allows (keyRef env, read for each request), or nowhere. During a rotation's grace the
+  // previous sealed key is opened too, for one retry after a refusal (spec 6.3).
   function fromDoc(doc, owner, withKey) {
     const legacy = doc.name || doc.lastError ? null : doc.provider === 'deepinfra' ? 'all' : doc.provider === 'openai-compatible' ? 'chat' : null
+    const envName = doc.keyRef?.kind === 'env' ? doc.keyRef.name : null
+    const envRefused = envName ? envKeyRefusal(envName, settings) : null
+    const envValue = envName && !envRefused && typeof env[envName] === 'string' ? env[envName].trim() : ''
     const connection = {
       name: doc.name || (doc.provider === 'openai-compatible' ? 'own-model' : doc.provider),
       type: doc.provider,
-      baseUrl: doc.baseUrl || CONNECTION_TYPES[doc.provider]?.baseUrl,
+      baseUrl: doc.baseUrl || connectionType(doc.provider)?.baseUrl || BUILTIN_PROVIDERS[doc.provider]?.baseUrl,
       ...(doc.model && { model: doc.model }),
       capabilities: doc.capabilities || {},
       ...(doc.maxTokens && { maxTokens: doc.maxTokens }),
       ...(doc.toolChoice && { toolChoice: doc.toolChoice }),
-      hasKey: Boolean(doc.cipher && doc.last4),
+      hasKey: envName ? Boolean(envValue) : Boolean(doc.cipher && doc.last4),
       ...(legacy && { legacy }),
       lastError: doc.lastError ?? null,
       source: 'app',
+      ...(doc.status === 'disabled' && { disabled: true }),
+    }
+    if (envName) {
+      connection.keyEnv = envName
+      if (envRefused) connection.keyError = `its key cannot be read: ${envRefused}`
+      else if (!envValue) connection.keyError = `its key is not set: the environment variable ${envName} is empty or missing on this server`
+      else if (withKey) connection.apiKey = envValue
+      return connection
     }
     if (withKey && connection.hasKey) {
+      const ownerKey = { ownerType: owner.type, ownerId: owner.id, provider: doc.provider }
       try {
-        connection.apiKey = openKey({ master, owner: { ownerType: owner.type, ownerId: owner.id, provider: doc.provider }, cipher: doc.cipher }) || undefined
+        connection.apiKey = openKey({ master, owner: ownerKey, cipher: doc.cipher }) || undefined
       } catch {
         connection.unreadable = true
+      }
+      const grace = doc.previousCipher
+      if (grace?.cipher && grace.until && new Date(grace.until).getTime() > now()) {
+        try {
+          connection.previousApiKey = openKey({ master, owner: ownerKey, cipher: grace.cipher }) || undefined
+        } catch {}
       }
     }
     return connection
   }
 
+  // What an administrator reads about the server's own connections: where each key lives and which
+  // key it is (its fingerprint), its last test and whether it is turned off. Never the key.
+  const adminExtras = (doc) => ({
+    keyRef: doc.keyRef?.kind === 'env' ? { kind: 'env', name: doc.keyRef.name } : { kind: doc.cipher && doc.last4 ? 'sealed' : 'none' },
+    keyFingerprint: doc.keyRef?.kind === 'env' ? null : doc.keyFingerprint ?? (doc.cipher && doc.last4 ? `…${doc.last4}` : null),
+    keyRotatedAt: doc.keyRotatedAt ?? null,
+    previousKeyUntil: doc.previousCipher?.until && new Date(doc.previousCipher.until).getTime() > now() ? doc.previousCipher.until : null,
+    status: doc.status === 'disabled' ? 'disabled' : 'active',
+    lastCheck: doc.lastCheck ?? null,
+  })
+
   async function connectionsOf(owner, withKeys = false) {
     if (!owner) return []
     const docs = await store.listConnections(owner)
-    return docs.filter((doc) => doc.provider !== 'daily' && CONNECTION_TYPES[doc.provider]).map((doc) => fromDoc(doc, owner, withKeys))
+    return docs.filter((doc) => doc.provider !== 'daily' && connectionType(doc.provider)).map((doc) => fromDoc(doc, owner, withKeys))
   }
 
   async function useOf(owner) {
@@ -213,7 +255,7 @@ export function createAISettings({
   // Checks and seals every connection of one change before anything is written, so a change that
   // fails leaves the settings as they were. A saved key stays only while the connection keeps its
   // type and address: a key is never carried to a new host without being sent again.
-  async function prepareConnections(owner, level, inputs, removing = []) {
+  async function prepareConnections(owner, level, inputs, removing = [], { extended = false } = {}) {
     const existing = (await store.listConnections(owner)).filter((doc) => !removing.includes(legacyName(doc)))
     const fileNames = level === 'server' ? file().connections.map((c) => c.name) : []
     const rules = rulesFor(RULE_LEVEL[level])
@@ -224,36 +266,74 @@ export function createAISettings({
       if (names.has(input?.name)) throw invalid(`${input.name} appears twice in this change.`)
       names.add(input?.name)
       const previous = existing.find((doc) => legacyName(doc) === input?.name && doc.provider !== 'daily')
-      const keepKey = input?.apiKey === undefined && Boolean(previous?.cipher && previous?.last4)
+      const previousEnv = previous?.keyRef?.kind === 'env' ? previous.keyRef : null
+      const keyRef = extended ? input?.keyRef : undefined
+      // a key that stays: none was sent and none was named; the saved one (sealed, or its environment variable) is kept
+      const keepKey = input?.apiKey === undefined && keyRef === undefined && Boolean((previous?.cipher && previous?.last4) || previousEnv)
+      const envRef = keyRef?.kind === 'env' ? keyRef : null
+      if (envRef) {
+        const refused = envKeyRefusal(envRef.name, settings)
+        if (refused) throw invalid(refused)
+        if (typeof input.apiKey === 'string') throw invalid('Send a key or name its environment variable, not both.')
+      }
+      if (keyRef?.kind === 'none' && typeof input.apiKey === 'string' && input.apiKey) throw invalid('keyRef none saves the connection without a key: leave the key out.')
+      if (extended && input?.rotate && !(typeof input.apiKey === 'string' && input.apiKey)) throw invalid('A rotation goes with the new key: send apiKey.')
+      const aux = isAux(input?.type)
+      if (aux && level !== 'server') throw invalid(`${input.type} is a service of the server: only an administrator connects it.`)
       let connection
       try {
-        connection = normalizeConnection({ ...input, keepKey }, contextFor(RULE_LEVEL[level]))
-        if (connection.type === 'openai-compatible') await assertHost(connection.baseUrl, rules)
+        connection = aux
+          ? normalizeAuxConnection({ ...input, keepKey: keepKey || Boolean(envRef) })
+          : normalizeConnection({ ...input, ...(keyRef?.kind === 'none' && { apiKey: undefined }), keepKey: keepKey || Boolean(envRef) }, contextFor(RULE_LEVEL[level]))
+        const type = connectionType(connection.type)
+        // an address the provider does not fix is checked against every address its name resolves to
+        if (!aux && !(type?.baseUrl && type.baseUrlLocked && sameAddress(type.baseUrl, connection.baseUrl))) await assertHost(connection.baseUrl, rules)
+        // a key named by environment variable goes only to an address a person fixed: the provider's
+        // locked address, or one sent in this same change
+        if (envRef && !aux && !(type?.baseUrlLocked) && input.baseUrl === undefined) throw new ConnectionError('A key from an environment variable needs the address in the same change.')
       } catch (error) {
         if (error instanceof ConnectionError || error instanceof EndpointRefused) throw invalid(error.message)
         throw error
       }
       let cipher = null, keyTail = ''
+      const keyFields = {}
       if (keepKey && previous.provider !== connection.type) {
         throw invalid('Send the key again: the connection changed type.')
-      } else if (keepKey && !sameAddress(previous.baseUrl || CONNECTION_TYPES[previous.provider]?.baseUrl, connection.baseUrl)) {
+      } else if (keepKey && !sameAddress(previous.baseUrl || connectionType(previous.provider)?.baseUrl || BUILTIN_PROVIDERS[previous.provider]?.baseUrl, connection.baseUrl)) {
         throw invalid('Send the key again: the connection has a new address. Send an empty key to save it without one.')
+      } else if (keepKey && previousEnv) {
+        keyFields.keyRef = previousEnv
       } else if (keepKey) {
         ;({ cipher } = previous)
         keyTail = previous.last4
+      } else if (envRef) {
+        keyFields.keyRef = { kind: 'env', name: envRef.name }
+        keyFields.keyFingerprint = null
+        keyFields.previousCipher = null
       } else if (connection.apiKey) {
         if (!master) throw problem(503, 'unavailable', `${NOT_AVAILABLE} A connection without a key can still be saved.`)
         cipher = seal({ master, owner: { ownerType: owner.type, ownerId: owner.id, provider: connection.type }, plaintext: connection.apiKey })
         keyTail = last4(connection.apiKey)
+        Object.assign(keyFields, { keyRef: { kind: 'sealed' }, keyFingerprint: keyFingerprint(connection.apiKey), keyRotatedAt: new Date(now()), previousCipher: null })
+        // a rotation keeps the key it replaces working for the grace period (spec 6.3)
+        const graceHours = extended ? input.rotate?.graceHours : undefined
+        if (graceHours) {
+          if (!previous?.cipher || previous.provider !== connection.type) throw invalid('There is no saved key to rotate from.')
+          keyFields.previousCipher = { cipher: previous.cipher, keyId: previous.cipher.keyId ?? null, until: new Date(now() + graceHours * 3600 * 1000) }
+        }
+      } else {
+        Object.assign(keyFields, { keyRef: { kind: 'none' }, keyFingerprint: null, previousCipher: null })
       }
+      if (extended && input.status !== undefined) keyFields.status = input.status
       const { apiKey: _key, ...stored } = connection
       prepared.push({
         replacesLegacy: Boolean(previous && !previous.name),
         doc: {
           provider: stored.type, name: stored.name, baseUrl: stored.baseUrl, ...(stored.model && { model: stored.model }),
           capabilities: stored.capabilities, ...(stored.maxTokens && { maxTokens: stored.maxTokens }), ...(stored.toolChoice && { toolChoice: stored.toolChoice }),
-          cipher, last4: keyTail, created: previous?.created ?? now(), updated: now(), lastError: null,
+          cipher, last4: keyTail, created: previous?.created ?? now(), updated: now(), lastError: null, ...keyFields,
         },
+        fresh: typeof input?.apiKey === 'string' && input.apiKey ? keyFingerprint(input.apiKey) : null,
       })
     }
     return prepared
@@ -283,12 +363,15 @@ export function createAISettings({
   // A level's settings as the audit trail keeps them: names, addresses, models and choices, and for
   // each key only which key it is (its fingerprint, or its last four characters), never the key.
   const keyMark = (doc, fresh = {}) => {
+    if (doc.keyRef?.kind === 'env') return `env:${doc.keyRef.name}`
     if (!doc.cipher || !doc.last4) return null
-    return fresh[legacyName(doc)] || `…${doc.last4}`
+    return fresh[legacyName(doc)] || doc.keyFingerprint || `…${doc.last4}`
   }
   const auditView = (docs, stored, fresh = {}) => ({
     connections: docs.filter((doc) => doc.provider !== 'daily').map((doc) => ({
       name: legacyName(doc), provider: doc.provider, baseUrl: doc.baseUrl ?? null, model: doc.model ?? null, keyFingerprint: keyMark(doc, fresh),
+      ...(doc.status === 'disabled' && { status: 'disabled' }),
+      ...(doc.previousCipher?.until && { previousKeyUntil: doc.previousCipher.until }),
     })).sort((a, b) => a.name.localeCompare(b.name)),
     use: { ...(stored?.use || {}) },
     ...(stored?.ownProviders !== undefined && { ownProviders: stored.ownProviders }),
@@ -371,6 +454,148 @@ export function createAISettings({
     return view(userId)
   }
 
+  // ---------- the server's connections, as AI control manages them (spec 1.2, 3.2) ----------
+  async function requireAdmin(userId, doing) {
+    const user = await signedIn(userId)
+    if (!(await isAdmin(user._id))) throw problem(403, 'forbidden', `Only an administrator can ${doing}.`)
+    return user
+  }
+
+  /**
+   * The server's connections for the Providers and keys page: the settings file's (read-only) and
+   * the app's, including the services beside the models, each with where its key lives, which key
+   * it is (fingerprint), its last test and whether it is turned off. Never a key.
+   */
+  async function serverConnections(userId) {
+    await requireAdmin(userId, 'read the server\'s connections')
+    const config = file()
+    const docs = (await store.listConnections(SERVER)).filter((doc) => doc.name && doc.provider !== 'daily')
+    const fromFile = config.connections.map((c) => ({
+      ...publicConnection(keyFromEnv(c, env)), provider: c.type,
+      keyRef: c.apiKeyEnv ? { kind: 'env', name: c.apiKeyEnv } : { kind: c.apiKey ? 'file' : 'none' },
+      keyFingerprint: null, status: 'active', lastCheck: null, editable: false,
+    }))
+    const fromApp = docs.filter((doc) => !config.connections.some((c) => c.name === doc.name)).map((doc) => {
+      const connection = fromDoc(doc, SERVER, false)
+      return { ...publicConnection(connection), provider: doc.provider, ...adminExtras(doc), editable: true, aux: isAux(doc.provider), known: Boolean(connectionType(doc.provider) || isAux(doc.provider)) }
+    })
+    return { connections: [...fromFile, ...fromApp], keysAvailable: Boolean(master), hosted: Boolean(hosted) }
+  }
+
+  /**
+   * Adds or changes server connections (ai.connections.save): what ai.update does at level server,
+   * plus where a key comes from (keyRef: sealed by sending apiKey, env with an allowed name, or
+   * none), a rotation that keeps the old key working for graceHours, and on/off (status). Every
+   * connection is checked before anything is written. → { connections: [names], fingerprints }
+   */
+  async function saveServerConnections(userId, inputs, { actor = null, reason = null } = {}) {
+    await requireAdmin(userId, 'change the server\'s AI')
+    if (!Array.isArray(inputs) || !inputs.length) throw invalid('Send at least one connection.')
+    const before = await store.listConnections(SERVER)
+    const prepared = await prepareConnections(SERVER, 'server', inputs, [], { extended: true })
+    const stored = (await store.getUse(SERVER)) || { use: {} }
+    await writeConnections(SERVER, prepared)
+    const fresh = Object.fromEntries(prepared.filter((p) => p.fresh).map((p) => [p.doc.name, p.fresh]))
+    await recordChange({
+      action: 'ai.connections.save', actor: actorFor(userId, actor), target: { kind: 'connection', id: prepared.map((p) => p.doc.name).join(',') }, reason,
+      before: auditView(before, stored), after: auditView(await store.listConnections(SERVER), stored, fresh),
+    })
+    return { connections: prepared.map((p) => p.doc.name), fingerprints: Object.fromEntries(prepared.map((p) => [p.doc.name, p.doc.keyRef?.kind === 'env' ? null : (fresh[p.doc.name] || (p.doc.last4 ? `…${p.doc.last4}` : null))])) }
+  }
+
+  /**
+   * Removes server connections (ai.connections.remove). A choice that names one is cleared, as
+   * ai.update does. inUse(names) → [binding ids] that still use them; those refuse the removal
+   * unless force lists every one of them.
+   */
+  async function removeServerConnections(userId, { names, force = [], reason, actor = null, inUse = async () => [] }) {
+    await requireAdmin(userId, 'change the server\'s AI')
+    const docs = await store.listConnections(SERVER)
+    const fileNames = file().connections.map((c) => c.name)
+    for (const name of names) {
+      if (fileNames.includes(name)) throw invalid(`${name} is set in the server's settings file. Remove it there.`)
+      if (!docs.some((doc) => legacyName(doc) === name && doc.provider !== 'daily')) throw problem(404, 'not_found', `There is no connection ${name} here.`)
+    }
+    const using = await inUse(names)
+    const unforced = using.filter((id) => !force.includes(id))
+    if (unforced.length) throw problem(409, 'conflict', `Published bindings still use ${names.join(', ')}: ${unforced.join(', ')}. Change them first, or send force with those bindings to let them fall back.`, { details: { bindings: unforced } })
+    const stored = (await store.getUse(SERVER)) || { use: {} }
+    const use = { ...(stored.use || {}) }
+    for (const name of names) for (const [key, ref] of Object.entries(use)) if (ref === `server:${name}`) delete use[key]
+    for (const name of names) await store.removeConnection(SERVER, name)
+    const next = { ...stored, use }
+    await store.setUse(SERVER, next)
+    await recordChange({
+      action: 'ai.connections.remove', actor: actorFor(userId, actor), target: { kind: 'connection', id: names.join(',') }, reason,
+      before: auditView(docs, stored), after: auditView(await store.listConnections(SERVER), next),
+    })
+    return { removed: names, clearedChoices: Object.keys(stored.use || {}).filter((key) => !(key in use)) }
+  }
+
+  /** Changes a provider's address: every server connection of that provider loses its sealed key. → [names] */
+  async function dropProviderKeys(provider) {
+    const docs = (await store.listConnections(SERVER)).filter((doc) => doc.provider === provider && doc.name && doc.cipher)
+    for (const doc of docs) {
+      await store.saveConnection(SERVER, { ...doc, cipher: null, last4: '', keyRef: { kind: 'none' }, keyFingerprint: null, previousCipher: null, updated: now() })
+    }
+    return docs.map((doc) => doc.name)
+  }
+
+  /** Server connections of a provider (for ai.providers.archive and an address change). */
+  async function connectionsOfProvider(provider) {
+    return (await store.listConnections(SERVER)).filter((doc) => doc.provider === provider && doc.name)
+      .map((doc) => ({ name: doc.name, hasKey: Boolean(doc.cipher && doc.last4) || doc.keyRef?.kind === 'env' }))
+  }
+
+  /**
+   * The models a server connection lists (ai.models.discover), through the guarded fetch. Writes
+   * nothing; counts as a connection test for the rate limit.
+   */
+  async function discoverModels(userId, { name }) {
+    const user = await requireAdmin(userId, 'list a connection\'s models')
+    if (!listModels) throw problem(503, 'unavailable', 'Listing models is not available on this server.')
+    takeCheck(user._id)
+    const saved = [...file().connections.map((c) => keyFromEnv(c, env)), ...(await connectionsOf(SERVER, true))]
+    const connection = saved.find((c) => c.name === name)
+    if (!connection) throw problem(404, 'not_found', `There is no connection ${name} here.`)
+    if (connection.unreadable) throw invalid('The key of this connection could not be read. Add it again.')
+    if (connection.keyError) throw invalid(`${connection.name}: ${connection.keyError}.`)
+    const rules = rulesFor(connection.source === 'file' ? 'file' : 'server')
+    try {
+      checkEndpointUrl(connection.baseUrl, rules)
+    } catch (error) {
+      throw invalid(error.message)
+    }
+    const out = await listModels(connection, rules)
+    return { connection: `server:${name}`, ...out, message: redactText(out.message, { keys: [connection.apiKey] }) }
+  }
+
+  /**
+   * The key of a service beside the models (picture search, icons, transcription, Stability) for
+   * one request: the server's active connection of that provider, its sealed key opened now, so a
+   * key rotated in the app is used without a restart. → { name, apiKey, model, baseUrl,
+   * previousApiKey? } or null (then the settings file applies).
+   */
+  async function auxCredential(provider) {
+    if (!isAux(provider)) return null
+    const docs = (await store.listConnections(SERVER))
+      .filter((doc) => doc.provider === provider && doc.name && doc.status !== 'disabled')
+      .sort((a, b) => a.name.localeCompare(b.name))
+    for (const doc of docs) {
+      const connection = fromDoc(doc, SERVER, true)
+      if (connection.apiKey) {
+        return { name: connection.name, apiKey: connection.apiKey, model: connection.model ?? null, baseUrl: connection.baseUrl, ...(connection.previousApiKey && { previousApiKey: connection.previousApiKey }) }
+      }
+    }
+    return null
+  }
+
+  /** Whether the server has a usable key for a service beside the models, in the app (not the settings file). */
+  async function hasAuxKey(provider) {
+    const docs = (await store.listConnections(SERVER)).filter((doc) => doc.provider === provider && doc.name && doc.status !== 'disabled')
+    return docs.some((doc) => fromDoc(doc, SERVER, false).hasKey)
+  }
+
   // ---------- Test connection ----------
   async function checkOne(userId, input) {
     const user = await signedIn(userId)
@@ -387,6 +612,17 @@ export function createAISettings({
     const saved = level === 'server'
       ? [...file().connections.map((c) => keyFromEnv(c, env)), ...(await connectionsOf(SERVER, true))]
       : await connectionsOf(owner, true)
+    // a service beside the models (picture search, icons, transcription, Stability): its own probe
+    if (level === 'server' && input.name && !saved.some((c) => c.name === input.name)) {
+      const doc = (await store.listConnections(SERVER)).find((d) => d.name === input.name && isAux(d.provider))
+      if (doc) {
+        if (!checkAux) throw problem(503, 'unavailable', 'Testing this kind of key is not available on this server.')
+        const aux = fromDoc(doc, SERVER, true)
+        if (aux.unreadable) throw invalid('The key of this connection could not be read. Add it again.')
+        if (aux.keyError) throw invalid(`${aux.name}: ${aux.keyError}.`)
+        return timedCheck(aux, () => checkAux(aux, rulesFor('server')))
+      }
+    }
     let connection
     if (input.name) {
       connection = saved.find((c) => c.name === input.name)
@@ -414,7 +650,23 @@ export function createAISettings({
     } catch (error) {
       throw invalid(error.message)
     }
+    // a saved server connection keeps its last test (lastCheck), for the Providers and keys page
+    if (level === 'server' && input.name && connection.source === 'app') return timedCheck(connection, () => check(connection, rules))
     return check(connection, rules)
+  }
+
+  // Runs a test of a saved server connection and keeps the outcome on it: when, whether it worked,
+  // how long it took, and the message with anything key-like taken out (spec 6.2).
+  async function timedCheck(connection, run) {
+    const started = now()
+    const result = await run()
+    const lastCheck = { at: new Date(now()), ok: Boolean(result?.ok), latencyMs: Math.max(0, now() - started), error: result?.ok ? null : redactText(result?.message, { keys: [connection.apiKey, connection.previousApiKey] }) }
+    try {
+      await store.setLastCheck?.(SERVER, connection.name, lastCheck)
+    } catch (error) {
+      console.warn(`ai-settings: could not keep the last test of ${connection.name}: ${error.message}`)
+    }
+    return { ...result, ...(typeof result?.message === 'string' && { message: redactText(result.message, { keys: [connection.apiKey, connection.previousApiKey] }) }), latencyMs: lastCheck.latencyMs }
   }
 
   // ---------- the request path ----------
@@ -446,7 +698,8 @@ export function createAISettings({
     const withHost = choice.scope !== 'server' || Boolean(user && await isAdmin(user._id))
     const label = connectionLabel(connection, { withHost })
     let error = null
-    if (connection.unreadable) error = `The key for ${label} could not be read. Add it again in your AI settings.`
+    if (connection.disabled) error = `${label} is turned off by your administrator. Choose another model in your AI settings.`
+    else if (connection.unreadable) error = `The key for ${label} could not be read. Add it again in your AI settings.`
     else if (connection.keyError) error = `${label} is not configured: ${connection.keyError}.`
     else {
       try {
@@ -474,10 +727,37 @@ export function createAISettings({
     }
   }
 
-  return { view, update, resetServerUse, check: checkOne, resolveFor, serverState, choiceHolders }
+  return {
+    view, update, resetServerUse, check: checkOne, resolveFor, serverState, choiceHolders,
+    serverConnections, saveServerConnections, removeServerConnections, dropProviderKeys, connectionsOfProvider, discoverModels,
+    auxCredential, hasAuxKey,
+  }
 }
 
 export { parseRef }
+
+
+/**
+ * A service beside the models as an administrator connects it: a built-in provider (Stability,
+ * Google picture search, Noun Project, Deepgram) at its own address, with a key and, for picture
+ * search, the search engine ID (model). Throws ConnectionError.
+ */
+export function normalizeAuxConnection(input) {
+  const provider = BUILTIN_PROVIDERS[input?.type]
+  if (!provider?.aux) throw new ConnectionError(`Choose a service: ${AUX_PROVIDER_IDS.join(', ')}.`)
+  if (typeof input.name !== 'string' || !AUX_NAME.test(input.name)) throw new ConnectionError('Name the connection with lowercase letters, digits and dashes, for example picture-search.')
+  if (input.baseUrl !== undefined && input.baseUrl !== null && String(input.baseUrl).replace(/\/+$/, '') !== provider.baseUrl) {
+    throw new ConnectionError(`${provider.label} has its own address.`)
+  }
+  const model = typeof input.model === 'string' ? input.model.trim() : null
+  if (model && (model.length > 200 || /[\r\n]/.test(model))) throw new ConnectionError(`${provider.modelLabel || 'The model'} is one line of at most 200 characters.`)
+  if (!model && !provider.modelOptional) throw new ConnectionError(`Enter the ${(provider.modelLabel || 'model').toLowerCase()}.`)
+  const apiKey = input.apiKey
+  if (apiKey !== undefined && apiKey !== null && (typeof apiKey !== 'string' || /[\r\n]/.test(apiKey) || apiKey.length > 400)) throw new ConnectionError('Paste the key on one line.')
+  if (apiKey && provider.keyParts && apiKey.split(':').length !== provider.keyParts.length) throw new ConnectionError(`${provider.label} takes ${provider.keyParts.join(' and ')}: paste them as ${provider.keyParts.join(':')}.`)
+  if (!apiKey && !input.keepKey) throw new ConnectionError(`${provider.label} needs a key.`)
+  return { name: input.name, type: input.type, baseUrl: provider.baseUrl, ...(model && { model }), capabilities: {}, ...(apiKey && { apiKey }) }
+}
 
 /** Which key this is, without the key (spec 1.2): sha256: + the first 8 hex of its sha256 + …last 4. */
 export function keyFingerprint(key) {

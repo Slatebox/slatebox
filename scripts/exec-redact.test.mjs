@@ -54,3 +54,26 @@ test("a key written as a literal in a hand-written script is replaced in every q
   assert.match(kept, /"apiKey" : `\[redacted\]`/);
   assert.match(kept, /myapiKey: "keep-me"/);
 });
+
+// ---------- AI control S3: keys in AI control actions and in provider error text (spec 6.2) ----------
+test("a key sent to ai.connections.save is replaced in a run's record", () => {
+  const code = 'await slatebox.ai.connections.save({ connections: [{ name: "gem", type: "gemini", model: "m", apiKey: "AIzaSyExample000000000000000000000" }] })';
+  const kept = redact(code);
+  assert.doesNotMatch(kept, /AIzaSyExample/);
+  assert.match(kept, /apiKey: "\[redacted\]"/);
+});
+
+test("provider error text loses query strings, the keys it was sent and anything key-like, and is cut to 500 characters", async () => {
+  const { redactText, stripQuery } = await import("../web/app/server/exec/redact.mjs");
+  assert.equal(stripQuery("https://customsearch.googleapis.com/customsearch/v1?cx=1&key=AIzaSecret#frag"), "https://customsearch.googleapis.com/customsearch/v1");
+  const text = redactText(
+    'request to https://gen.example.com/v1/models?key=AIzaSy0123456789012345678901 failed; echoed headers: {"authorization":"Bearer sk-live-0123456789abcdefghijklmn","x-api-key":"anthropic-key-0123456789"} my-own-key-0123456789 and Qwen/Qwen3-235B-A22B-Instruct-2507',
+    { keys: ["my-own-key-0123456789"] },
+  );
+  for (const secret of ["AIzaSy0", "sk-live", "anthropic-key-0123456789", "my-own-key-0123456789", "?key="]) assert.ok(!text.includes(secret), `${secret} in ${text}`);
+  assert.match(text, /https:\/\/gen\.example\.com\/v1\/models failed/);
+  // a model path is not a key
+  assert.match(text, /Qwen\/Qwen3-235B-A22B-Instruct-2507/);
+  assert.equal(redactText("word ".repeat(200)).length, 500);
+  assert.equal(redactText(null), "");
+});

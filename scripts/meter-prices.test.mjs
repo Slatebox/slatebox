@@ -72,3 +72,32 @@ test('fixed prices, estimates and per-action ceilings', () => {
   assert.equal(actionCeilingMicros('shape'), 60_000)
   assert.equal(actionCeilingMicros('workshop'), 50_000)
 })
+
+// ---------- AI control S3: prices set on models in AI control (spec 1.3) ----------
+test('a price set in AI control wins from the next call; without one the settings file and the table apply; unpriced is the dearest', async () => {
+  const { setDbPriceSource, isPriced } = await import('../web/app/server/metering/prices.mjs')
+  const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000 }
+  const before = aiCostMicros({ model: 'muse-ember-1.0', usage })
+  assert.equal(before.source, 'table')
+  try {
+    setDbPriceSource((model) => (model === 'muse-ember-1.0' ? { inPerMillion: 0.4, outPerMillion: 1.2, id: 'muse:muse-ember-1.0' } : null))
+    assert.deepEqual(aiCostMicros({ model: 'muse-ember-1.0', usage }), { costMicros: 1_600_000, source: 'db', priceModel: 'muse-ember-1.0' })
+    assert.equal(aiPrice('muse-ember-1.0').id, 'muse:muse-ember-1.0')
+    // the provider's own reported cost can still raise it, never lower it
+    assert.equal(aiCostMicros({ model: 'muse-ember-1.0', usage: { ...usage, providerCostUsd: 5 } }).source, 'provider')
+    // a model only AI control prices is priced; one nobody prices is not, and costs the dearest
+    setDbPriceSource((model) => (model === 'brand-new' ? { inPerMillion: 1, outPerMillion: 2 } : null))
+    assert.equal(isPriced('brand-new'), true)
+    assert.equal(isPriced('nobody-priced-me'), false)
+    const dearest = AI_PRICES.reduce((a, b) => (b.inPerMillion + b.outPerMillion > a.inPerMillion + a.outPerMillion ? b : a))
+    assert.equal(aiPrice('nobody-priced-me').model, dearest.model)
+    // a broken source never breaks the meter: the table applies
+    setDbPriceSource(() => { throw new Error('snapshot gone') })
+    assert.equal(aiCostMicros({ model: 'muse-ember-1.0', usage }).costMicros, before.costMicros)
+    setDbPriceSource(() => ({ inPerMillion: 'cheap', outPerMillion: 1 }))
+    assert.equal(aiCostMicros({ model: 'muse-ember-1.0', usage }).source, 'table')
+  } finally {
+    setDbPriceSource(null)
+  }
+  assert.deepEqual(aiCostMicros({ model: 'muse-ember-1.0', usage }), before)
+})

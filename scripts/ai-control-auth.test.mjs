@@ -33,9 +33,24 @@ import { createGate } from '../web/app/server/exec/gate.mjs'
 import { createExecStore } from '../web/app/server/exec/audit.mjs'
 import { memoryCollection as driverCollection } from './exec-test-world.mjs'
 
-const ADMIN_ACTIONS = ['ai.audit.list', 'ai.control.effective', 'ai.control.get', 'ai.control.health', 'ai.control.reset']
+// S3 added providers, connections and models (ai-providers/connections/models.mjs); their own
+// rules are tested in ai-providers.test.mjs. Restated here: every admin action is listed.
+const ADMIN_ACTIONS = ['ai.audit.list', 'ai.connections.list', 'ai.connections.remove', 'ai.connections.save', 'ai.control.effective', 'ai.control.get',
+  'ai.control.health', 'ai.control.reset', 'ai.models.discover', 'ai.models.save', 'ai.providers.archive', 'ai.providers.save']
 const READS = { 'ai.audit.list': {}, 'ai.control.effective': { surface: 'chat' }, 'ai.control.get': {}, 'ai.control.health': {} }
 const RESET = { target: 'use', reason: 'back to the settings file' }
+// inputs for the S3 actions in the "who may call" test
+const S3_INPUTS = {
+  'ai.connections.list': {},
+  'ai.connections.save': { connections: [{ name: 'gem', type: 'openai-compatible', baseUrl: 'https://gem.example/v1', model: 'g1' }] },
+  'ai.connections.remove': { names: ['gem'], reason: 'gone' },
+  'ai.models.discover': { connection: 'gem' },
+  'ai.models.save': { models: [{ connection: 'builtin:deepinfra', model: 'm1' }] },
+  'ai.providers.archive': { id: 'gemini', reason: 'gone' },
+  'ai.providers.save': { provider: { id: 'gemini', label: 'Gemini', protocol: 'openai-chat' } },
+}
+// a person only: a token is refused by the registry before the administrator check
+const PERSON_ONLY = ['ai.connections.remove', 'ai.providers.archive']
 
 // ---------- in-memory stores ----------
 const get = (doc, path) => path.split('.').reduce((value, key) => (value == null ? undefined : value[key]), doc)
@@ -163,9 +178,9 @@ test('every AI control action is an administrator\'s: a non-admin with every sco
   const listed = registry.list().filter((action) => action.toolset === 'admin').map((action) => action.id).sort()
   assert.deepEqual(listed, ADMIN_ACTIONS)
   for (const id of ADMIN_ACTIONS) {
-    const input = READS[id] ?? RESET
+    const input = READS[id] ?? S3_INPUTS[id] ?? RESET
     await assert.rejects(registry.run(person('ana'), id, input), { status: 403, code: 'forbidden' }, `${id} person`)
-    await assert.rejects(registry.run(token('ana', [...API_TOKEN_SCOPES]), id, input), { status: 403, code: 'forbidden' }, `${id} token`)
+    await assert.rejects(registry.run(token('ana', [...API_TOKEN_SCOPES]), id, input), { status: 403, code: PERSON_ONLY.includes(id) ? 'session_required' : 'forbidden' }, `${id} token`)
     // a guest (an anonymous account) is refused by the registry before the handler
     await assert.rejects(registry.run(person('ana', 'guest'), id, input), { status: 403 }, `${id} guest`)
   }
@@ -209,6 +224,12 @@ test('the admin toolset is in the exec client, describe and OpenAPI, but not the
   const openapi = buildOpenApi(registry)
   for (const id of ADMIN_ACTIONS) {
     const method = manifest.methods.find((m) => m.name === id)
+    // a person-only action is the app's alone: no HTTP route, so no exec method or tool either
+    if (PERSON_ONLY.includes(id)) {
+      assert.equal(method, undefined, id)
+      assert.ok(!registry.get(id).mounts.http, id)
+      continue
+    }
     assert.equal(method?.toolset, 'admin', id)
     assert.ok(!tools.exec.description.includes(method.index), id)
     assert.ok(!tools.typed.some((t) => t.method === id), id)
@@ -315,8 +336,9 @@ test('ai.update writes an audit row at every level, with keys only as fingerprin
   assert.equal(saved.keyFingerprint, keyFingerprint(key))
   assert.match(saved.keyFingerprint, /^sha256:[0-9a-f]{8}…/)
   assert.equal(first.after.use.shape, 'server:gem')
-  // the key that stays shows as its last four characters; the change is the choice
-  assert.equal(second.before.connections[0].keyFingerprint, `…${key.slice(-4)}`)
+  // the key that stays shows as the fingerprint it was saved with (S3 keeps keyFingerprint on the
+  // connection, spec 1.2); the change is the choice
+  assert.equal(second.before.connections[0].keyFingerprint, keyFingerprint(key))
   assert.deepEqual([second.actor.principal, second.actor.via, second.actor.tokenId, second.after.use.generation], ['agent', 'http', 't-root', 'server:gem'])
   assert.deepEqual(third.target, { kind: 'aiSettings', id: 'me:ana' })
   // the key appears nowhere in the trail

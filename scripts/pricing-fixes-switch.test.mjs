@@ -103,7 +103,9 @@ test('#2: transcription (and the Deepgram secret) only on unmetered operator cal
   assert.equal(transcriptionAllowed(call('balance')), false)
   assert.equal(transcriptionAllowed(call('operator')), true)
   const meteor = source('server/metering/meteor.js')
-  assert.match(meteor, /const transcriptionKey = transcriptionAllowed\(call\) \? Meteor\.settings\.deepgram\?\.secret : null/)
+  // Restated (AI control S3): a Deepgram key an administrator connected in AI control is read first,
+  // then the settings file's; either way only behind transcriptionAllowed.
+  assert.match(meteor, /const transcriptionKey = transcriptionAllowed\(call\) \? \(\(await auxCredential\('deepgram'\)\)\?\.apiKey \|\| Meteor\.settings\.deepgram\?\.secret\) : null/)
   assert.doesNotMatch(meteor, /dailyClient\(fetch, ownKey \|\| Meteor\.settings\.daily\?\.apiKey, Meteor\.settings\.deepgram/)
   const daily = source('server/methods/daily.js')
   assert.match(daily, /const canTranscribe = grant\.canTranscribe && transcriptionAllowed\(call\)/)

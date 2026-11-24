@@ -10,8 +10,9 @@ import { loadMasterKey } from '../../metering/vault.mjs'
 import { currentAIAction } from '../../metering/context.mjs'
 import { createAISettings } from './ai-settings-core.mjs'
 import { MAX_CHECK_RESPONSE_BYTES, assertEndpointHost, connectionFetch } from './endpoint-policy.mjs'
+import { checkAuxConnection } from '../../ai-control/aux-check.mjs'
 import { createConnectionStore } from './connection-store.mjs'
-import { checkConnection } from './connection-check.mjs'
+import { checkConnection, listModels } from './connection-check.mjs'
 import { operatorConfig } from './connections.mjs'
 import { selfHosted } from '../../../imports/api/common/own-keys.mjs'
 import { isInstanceAdmin } from '../../permissions'
@@ -52,6 +53,10 @@ export const aiSettings = createAISettings({
   isAdmin: isServerAdmin,
   isTeamAdmin: async (user) => Boolean(user?.orgId && await Permissions.findOneAsync({ userId: user._id, orgId: user.orgId, claimId: CONSTANTS.claims.admin._id }, { fields: { _id: 1 } })),
   check: (connection, rules) => checkConnection(connection, { fetch: guardedFetch(rules, { maxBytes: MAX_CHECK_RESPONSE_BYTES }) }),
+  // ai.models.discover: a provider's model list can be long (the default cap of an answer applies)
+  listModels: (connection, rules) => listModels(connection, { fetch: guardedFetch(rules) }),
+  // the services beside the models (picture search, icons, transcription, Stability)
+  checkAux: (connection, rules) => checkAuxConnection(connection, { fetch: guardedFetch(rules, { maxBytes: MAX_CHECK_RESPONSE_BYTES }) }),
   assertHost: (baseUrl, rules) => assertEndpointHost(baseUrl, rules),
   // a settings-file connection's apiKeyEnv is read here for each request
   env: process.env,
@@ -71,4 +76,18 @@ function callerId() {
 // The connection that serves this AI request (see ai-settings-core.mjs resolveFor).
 export function resolveRequestConnection({ feature, request = {}, userId = callerId() }) {
   return aiSettings.resolveFor({ userId, feature, request })
+}
+
+/**
+ * The key of a service beside the models for one request (ai-settings-core.mjs auxCredential): the
+ * server's connection in the app when there is one, so a key rotated there is used at once, else
+ * null and the caller reads the settings file as before. Never throws: a broken row falls back.
+ */
+export async function auxCredential(provider) {
+  try {
+    return await aiSettings.auxCredential(provider)
+  } catch (error) {
+    console.warn(`ai-settings: the ${provider} key in the app could not be read; the settings file applies: ${error.message}`)
+    return null
+  }
 }

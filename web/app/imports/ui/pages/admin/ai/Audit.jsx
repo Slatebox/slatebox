@@ -22,11 +22,19 @@ const AREAS = [
   { value: '', label: 'Every change' },
   { value: 'ai.update', label: 'AI settings (connections and choices)' },
   { value: 'ai.control.', label: 'AI control' },
+  { value: 'ai.providers.', label: 'Providers' },
+  { value: 'ai.connections.', label: 'Server connections and keys' },
+  { value: 'ai.models.', label: 'Models and prices' },
   { value: 'chatIntentions.', label: 'Personas' },
 ]
 const ACTIONS = {
   'ai.update': 'Changed AI settings',
   'ai.control.reset': 'Reset AI control',
+  'ai.providers.save': 'Saved a provider',
+  'ai.providers.archive': 'Archived a provider',
+  'ai.connections.save': 'Saved server connections',
+  'ai.connections.remove': 'Removed server connections',
+  'ai.models.save': 'Saved models',
   'chatIntentions.save': 'Saved a persona',
   'chatIntentions.delete': 'Deleted a persona',
 }

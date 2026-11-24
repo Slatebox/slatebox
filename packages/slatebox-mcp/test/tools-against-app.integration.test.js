@@ -617,6 +617,19 @@ return slatebox.library.saveDraft({ shareId, title: "Probe triage", summary: "So
   }
   const refusedReset = await exec(`return slatebox.ai.control.reset({ target: "use", reason: "probe" })`);
   assert.deepEqual([refusedReset.status, refusedReset.error.status, refusedReset.error.code, refusedReset.error.details?.requiredScope], ["failed", 403, "insufficient_scope", "ai:admin"]);
+  // AI control S3: providers, connections and models, the same way (their rules: scripts/ai-providers.test.mjs)
+  for (const call of ["ai.connections.list({})", "ai.models.discover({ connection: \"gem\" })"]) {
+    const refusedRead = await exec(`return slatebox.${call}`);
+    assert.deepEqual([refusedRead.error.status, refusedRead.error.code, refusedRead.error.details?.requiredScope], [403, "insufficient_scope", "ai:admin:read"], call);
+  }
+  for (const call of [
+    "ai.providers.save({ provider: { id: \"gemini\", label: \"Gemini\", protocol: \"openai-chat\" } })",
+    "ai.connections.save({ connections: [{ name: \"gem\", type: \"deepinfra\" }] })",
+    "ai.models.save({ models: [{ connection: \"builtin:deepinfra\", model: \"m\" }] })",
+  ]) {
+    const refusedWrite = await exec(`return slatebox.${call}`);
+    assert.deepEqual([refusedWrite.status, refusedWrite.error.status, refusedWrite.error.code, refusedWrite.error.details?.requiredScope], ["failed", 403, "insufficient_scope", "ai:admin"], call);
+  }
 
   assert.deepEqual([...called].sort(), [...defaultGenerated().methods.keys()].sort(), "every client method was called");
 });
