@@ -101,8 +101,8 @@ function makeSignIn({ apps = {}, origin = ORIGIN, master = newMaster(), now = Da
 }
 
 // The popup, end to end: the start route's claim, the server's page, Allow (or Deny), the callback.
-async function popup(signIn, started, { choose = 'allow', binding: override } = {}) {
-  const { authorizeUrl, binding } = await signIn.begin({ flowId: started.flowId })
+async function popup(signIn, started, { choose = 'allow', binding: override, userId = 'ada' } = {}) {
+  const { authorizeUrl, binding } = await signIn.begin({ flowId: started.flowId, userId })
   const page = await fetch(authorizeUrl)
   const html = await page.text()
   assert.equal(page.status, 200, html)
@@ -166,7 +166,8 @@ test('registration order: pre-registered app, pasted client id, CIMD (https orig
   const pre = chooseRegistration({ server, apps, origin: 'https://app.slatebox.com' })
   assert.equal(pre.kind, 'preregistered')
   assert.equal(pre.clientId, 'Iv1.public')
-  assert.deepEqual(pre.app.scopes, ['repo'])
+  // GitHub: public repositories and organisation names only, never every private repository
+  assert.deepEqual(pre.app.scopes, ['public_repo', 'read:org'])
   assert.equal(chooseRegistration({ server, apps: {}, origin: 'https://app.slatebox.com' }).kind, 'needs_client_id')
   assert.equal(chooseRegistration({ server, apps: {}, origin: 'https://app.slatebox.com', pastedClientId: 'mine' }).kind, 'pasted')
   const linear = { issuer: 'https://mcp.linear.app', cimd: true, registrationEndpoint: 'https://mcp.linear.app/register' }
@@ -180,7 +181,34 @@ test('registration order: pre-registered app, pasted client id, CIMD (https orig
   assert.equal(doc.token_endpoint_auth_method, 'none')
 })
 
-test('scopes: the app\'s own (GitHub: repo only); else the challenge narrowed to what the resource lists', () => {
+test('hostile: a server that names a pre-registered provider (GitHub) as its sign-in never gets that provider\'s token', async () => {
+  const github = { issuer: 'https://github.com/login/oauth', cimd: false }
+  const apps = { github: { clientId: 'Iv1.public', clientSecret: 'from-settings' } }
+  // GitHub's own MCP server: the Slatebox GitHub app is used
+  assert.equal(chooseRegistration({ server: github, apps, origin: 'https://app.slatebox.com', resource: 'https://api.githubcopilot.com/mcp/' }).kind, 'preregistered')
+  // anyone else's server naming github.com as its sign-in server: refused before any popup, in plain words
+  assert.throws(() => chooseRegistration({ server: github, apps, origin: 'https://app.slatebox.com', resource: 'https://evil.example/mcp' }),
+    (e) => e.code === 'sign_in_unsafe' && /only sends GitHub sign-ins to GitHub's own server/.test(e.message))
+  assert.deepEqual(appFor(github.issuer, apps, 'https://evil.example/mcp'), { refused: 'GitHub' })
+  // a custom app reaches only the servers settings name for it (none named: never used)
+  const custom = { fake: { clientId: 'c', issuer: 'https://as.example', resources: ['https://mcp.example'] } }
+  assert.equal(appFor('https://as.example', custom, 'https://mcp.example/mcp').clientId, 'c')
+  assert.deepEqual(appFor('https://as.example', custom, 'https://other.example/mcp'), { refused: 'fake' })
+  assert.deepEqual(appFor('https://as.example', { fake: { clientId: 'c', issuer: 'https://as.example' } }, 'https://mcp.example/mcp'), { refused: 'fake' })
+  // settings may add servers for a known provider; only https origins (or local test origins) count
+  const parsed = connectorSettings({ public: { env: 'prod' }, connectors: { oauthApps: { github: { clientId: 'Iv1.abc', resources: ['https://ghe.example.com/mcp', 'http://evil.example', 'nope'] } } } })
+  assert.deepEqual(parsed.oauthApps.github.resources, ['https://ghe.example.com/mcp'])
+})
+
+test('the consent screen says what a sign-in reaches, in plain words', async () => {
+  const { reachOf } = await import('../enterprise/server/oauth.mjs')
+  assert.equal(reachOf(['public_repo', 'read:org']), 'It lets Slatebox read and change your public repositories (code, issues and pull requests) and see which organisations you belong to.')
+  assert.match(reachOf(['repo']), /private ones too/)
+  assert.equal(reachOf(['read', 'offline_access']), 'It asks for: read.')
+  assert.equal(reachOf([]), '')
+})
+
+test('scopes: the app\'s own (GitHub: public_repo and read:org); else the challenge narrowed to what the resource lists', () => {
   const server = { offlineAccess: true }
   assert.deepEqual(chooseScopes({ app: { scopes: ['repo'] }, scopes: { challenge: [], resource: ['repo', 'gist', 'notifications'] }, server }), ['repo'])
   assert.deepEqual(chooseScopes({ app: null, scopes: { challenge: ['read', 'write'], resource: ['read'] }, server: { offlineAccess: false } }), ['read'])
@@ -237,7 +265,9 @@ test('hostile sign-in: every planted address or weak setting is refused, and not
 test('a sign-in, end to end: DCR (web), single-use state tied to the browser, iss checked, code for tokens with the verifier and resource', async () => {
   const { signIn, credentials, clients } = makeSignIn()
   const started = await signIn.start({ userId: 'ada', address: servers.url('/oauth/mcp'), challenge: null })
-  assert.match(started.startUrl, /^http:\/\/localhost:3000\/connectors\/oauth\/start\?flow=f/)
+  // a flow id only: no address a token holder could forward to someone else
+  assert.match(started.flowId, /^f[A-Za-z0-9_-]{20,}$/)
+  assert.equal(started.startUrl, undefined)
   assert.equal(servers.oauth.registrations.at(-1).application_type, 'web')
   assert.deepEqual(servers.oauth.registrations.at(-1).redirect_uris, ['http://localhost:3000/connectors/oauth/callback'])
   assert.equal(clients.rows.size, 1)
@@ -273,8 +303,30 @@ test('a callback from another browser (no binding cookie) is refused and its flo
   assert.equal(credentials.rows.size, 0)
   assert.equal((await signIn.status({ userId: 'ada', flowId: started.flowId })).status, 'failed')
   // and the start link works once only
-  await refusedWith(signIn.begin({ flowId: started.flowId }), 'unverified')
-  await refusedWith(signIn.begin({ flowId: 'not-a-flow' }), 'unverified')
+  await refusedWith(signIn.begin({ flowId: started.flowId, userId: 'ada' }), 'unverified')
+  await refusedWith(signIn.begin({ flowId: 'not-a-flow', userId: 'ada' }), 'unverified')
+})
+
+test('hostile: a flow sent to someone else cannot be opened; only its owner, signed in, may start it', async () => {
+  const { signIn, credentials, flows } = makeSignIn()
+  // Mallory starts a flow for her own vault and sends its id to Ada
+  const started = await signIn.start({ userId: 'mallory', address: servers.url('/oauth/mcp'), challenge: null })
+  const authorizeBefore = servers.oauth.authorizeRequests.length
+  // Ada's browser: signed out, then signed in as Ada. Neither may claim Mallory's flow.
+  await refusedWith(signIn.begin({ flowId: started.flowId, userId: null }), 'signed_out')
+  await refusedWith(signIn.begin({ flowId: started.flowId, userId: 'ada' }), 'unverified')
+  // nothing was claimed: no cookie, no redirect to the sign-in server, the flow still waits for its owner
+  assert.equal(flows.rows.get(started.flowId).status, 'created')
+  assert.equal(servers.oauth.authorizeRequests.length, authorizeBefore)
+  // a flow opened by anyone but its owner never finishes, even with the right cookie
+  const row = flows.rows.get(started.flowId)
+  const { authorizeUrl, binding } = await signIn.begin({ flowId: started.flowId, userId: 'mallory' })
+  row.openedBy = 'ada'
+  const html = await (await fetch(authorizeUrl)).text()
+  const query = Object.fromEntries(new URL(html.match(/id="allow" href="([^"]+)"/)[1].replace(/&amp;/g, '&')).searchParams)
+  const result = await signIn.finish({ query, bindingFor: () => binding })
+  assert.equal(result.code, 'unverified')
+  assert.equal(credentials.rows.size, 0)
 })
 
 test('hostile: an iss mismatch in the callback is refused, nothing is stored, the state is discarded', async () => {
@@ -302,11 +354,11 @@ test('a sign-in left open past 10 minutes expires', async () => {
   const { signIn } = makeSignIn({ now: () => clock })
   const started = await signIn.start({ userId: 'ada', address: servers.url('/oauth/mcp'), challenge: null })
   clock += 11 * 60000
-  await refusedWith(signIn.begin({ flowId: started.flowId }), 'expired')
+  await refusedWith(signIn.begin({ flowId: started.flowId, userId: 'ada' }), 'expired')
 })
 
 test('a pre-registered app (settings.connectors.oauthApps): its client id, its secret at the token endpoint, its scopes, no registration', async () => {
-  const apps = { fake: { clientId: PRE_CLIENT.clientId, clientSecret: PRE_CLIENT.clientSecret, issuer: servers.origin + '/as', scopes: ['read'] } }
+  const apps = { fake: { clientId: PRE_CLIENT.clientId, clientSecret: PRE_CLIENT.clientSecret, issuer: servers.origin + '/as', scopes: ['read'], resources: [servers.origin] } }
   const { signIn, vault } = makeSignIn({ apps })
   const registrations = servers.oauth.registrations.length
   assert.equal((await signIn.plan({ address: servers.url('/oauth/mcp'), challenge: null })).registration, 'preregistered')
@@ -322,7 +374,7 @@ test('a pre-registered app (settings.connectors.oauthApps): its client id, its s
 test('CIMD on an https origin: the client id is Slatebox\'s published document address', async () => {
   const { signIn } = makeSignIn({ origin: 'https://app.example' })
   const started = await signIn.start({ userId: 'ada', address: servers.url('/oauth/mcp'), challenge: null })
-  const { authorizeUrl } = await signIn.begin({ flowId: started.flowId })
+  const { authorizeUrl } = await signIn.begin({ flowId: started.flowId, userId: 'ada' })
   const url = new URL(authorizeUrl)
   assert.equal(url.searchParams.get('client_id'), 'https://app.example/oauth/mcp-client.json')
   assert.equal(url.searchParams.get('redirect_uri'), 'https://app.example/connectors/oauth/callback')
@@ -603,9 +655,12 @@ function fakeRes() {
   return res
 }
 
+// The route's login-token lookup, as meteor.js does it against Meteor.users.
+const userFromToken = async (req) => ({ 'ada-token': 'ada', 'sam-token': 'sam' })[req.headers?.['x-slatebox-login-token']] || null
+
 test('routes: the client document, the start (HttpOnly cookie, then the server\'s page) and the callback (a safe page)', async () => {
   const { signIn } = makeSignIn()
-  const routes = signInRoutes({ signIn: () => signIn, origin: () => 'https://app.example' })
+  const routes = signInRoutes({ signIn: () => signIn, origin: () => 'https://app.example', userFor: userFromToken })
   const byPath = Object.fromEntries(routes.map((r) => [r.path, r]))
   assert.deepEqual(Object.keys(byPath).sort(), ['/connectors/oauth/callback', '/connectors/oauth/start', '/oauth/mcp-client.json'])
   const doc = fakeRes()
@@ -613,16 +668,24 @@ test('routes: the client document, the start (HttpOnly cookie, then the server\'
   assert.equal(doc.body.client_id, 'https://app.example/oauth/mcp-client.json')
 
   const started = await signIn.start({ userId: 'ada', address: servers.url('/oauth/mcp'), challenge: null })
+  // a link to the start address does nothing: there is no GET start route
+  assert.equal(routes.find((r) => r.path === '/connectors/oauth/start').method, 'POST')
+  // someone signed out, or signed in as someone else, is refused (and nothing is claimed)
+  const stranger0 = fakeRes()
+  await byPath['/connectors/oauth/start'].handler({ body: { flow: started.flowId }, headers: {} }, stranger0)
+  assert.equal(stranger0.statusCode, 401)
+  assert.equal(stranger0.headers['set-cookie'], undefined)
   const start = fakeRes()
-  await byPath['/connectors/oauth/start'].handler({ query: { flow: started.flowId } }, start)
-  assert.equal(start.statusCode, 302)
-  assert.ok(start.headers.location.startsWith(servers.origin + '/as/authorize?'))
+  await byPath['/connectors/oauth/start'].handler({ body: { flow: started.flowId }, headers: { 'x-slatebox-login-token': 'ada-token' } }, start)
+  assert.equal(start.statusCode, 200)
+  const location = start.body.authorizeUrl
+  assert.ok(location.startsWith(servers.origin + '/as/authorize?'))
   const cookie = start.headers['set-cookie']
   assert.match(cookie, new RegExp(`^${COOKIE_PREFIX}${started.flowId}=[A-Za-z0-9_-]+; Path=/connectors/oauth; HttpOnly; SameSite=Lax; Max-Age=600; Secure$`))
   assert.equal(start.headers['referrer-policy'], 'no-referrer')
 
   // a callback without this browser's cookie: refused, in Slatebox's words, under a strict CSP
-  const html = await (await fetch(start.headers.location)).text()
+  const html = await (await fetch(location)).text()
   const query = Object.fromEntries(new URL(html.match(/id="allow" href="([^"]+)"/)[1].replace(/&amp;/g, '&')).searchParams)
   const stranger = fakeRes()
   await byPath['/connectors/oauth/callback'].handler({ query, headers: {} }, stranger)
@@ -633,13 +696,13 @@ test('routes: the client document, the start (HttpOnly cookie, then the server\'
 
 test('routes: the real browser\'s callback signs in and tells the walkthrough; Deny never shows the server\'s text', async () => {
   const { signIn } = makeSignIn()
-  const routes = Object.fromEntries(signInRoutes({ signIn: () => signIn, origin: () => ORIGIN }).map((r) => [r.path, r]))
+  const routes = Object.fromEntries(signInRoutes({ signIn: () => signIn, origin: () => ORIGIN, userFor: userFromToken }).map((r) => [r.path, r]))
   const finishWith = async (choose) => {
     const started = await signIn.start({ userId: 'ada', address: servers.url('/oauth/mcp'), challenge: null })
     const start = fakeRes()
-    await routes['/connectors/oauth/start'].handler({ query: { flow: started.flowId } }, start)
+    await routes['/connectors/oauth/start'].handler({ body: { flow: started.flowId }, headers: { 'x-slatebox-login-token': 'ada-token' } }, start)
     assert.ok(!/Secure/.test(start.headers['set-cookie']), 'no Secure flag on a plain-http local origin')
-    const html = await (await fetch(start.headers.location)).text()
+    const html = await (await fetch(start.body.authorizeUrl)).text()
     const query = Object.fromEntries(new URL(html.match(new RegExp(`id="${choose}" href="([^"]+)"`))[1].replace(/&amp;/g, '&')).searchParams)
     const res = fakeRes()
     await routes['/connectors/oauth/callback'].handler({ query, headers: { cookie: `other=1; ${start.headers['set-cookie'].split(';')[0]}` } }, res)

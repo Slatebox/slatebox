@@ -2,13 +2,30 @@
 // Not MIT: see enterprise/README.md.
 //
 // The sign-in popup, from the walkthrough. The window is opened at once on the click (so the
-// browser allows it), pointed at Slatebox's own start address once the server has made the flow,
-// and cut off from this page (opener = null) before it reaches the outside server's sign-in page.
+// browser allows it). Once the server has made the flow, this page (signed in) claims it at
+// Slatebox's start route with its login token, which ties the flow to this browser and answers the
+// server's sign-in address; the window is cut off from this page (opener = null) and sent there.
 // The callback page tells us how it went over a BroadcastChannel (and localStorage, for browsers
 // without one); we also ask the server every 1.5 s, and notice when the window is closed.
 import { Meteor } from 'meteor/meteor'
+import { Accounts } from 'meteor/accounts-base'
 
 export const CHANNEL = 'slatebox-agent-sign-in'
+
+export const START_PATH = '/connectors/oauth/start'
+
+/** Claims the flow as the signed-in person. → the server's sign-in address, or throws { code, message }. */
+export async function claimFlow(flowId) {
+  const response = await fetch(START_PATH, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json', 'X-Slatebox-Login-Token': Accounts._storedLoginToken() || '' },
+    body: JSON.stringify({ flow: flowId }),
+  })
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok || typeof body.authorizeUrl !== 'string') throw { code: body.error || 'failed', message: body.message || 'Sign-in didn\'t start. Try again.' }
+  return body.authorizeUrl
+}
 
 const FAILURES = {
   blocked: 'Your browser blocked the sign-in window. Allow pop-ups for Slatebox, then sign in again.',
@@ -36,7 +53,7 @@ export function openSignInWindow() {
  * Sends the window to Slatebox's start address and waits for the outcome.
  * → Promise<{ ok: true } | { ok: false, code, message }>; cancel() stops waiting.
  */
-export function followSignIn(win, { flowId, startUrl }, { timeoutMs = 10 * 60000 } = {}) {
+export function followSignIn(win, { flowId }, { timeoutMs = 10 * 60000 } = {}) {
   let cancel = () => {}
   const promise = new Promise((resolve) => {
     let done = false
@@ -71,13 +88,19 @@ export function followSignIn(win, { flowId, startUrl }, { timeoutMs = 10 * 60000
       }
     }
     if (!win) return finish({ ok: false, code: 'blocked', message: FAILURES.blocked })
-    try {
-      // From here on the outside page cannot reach this one.
-      win.opener = null
-      win.location.replace(startUrl)
-    } catch {
-      return finish({ ok: false, code: 'blocked', message: FAILURES.blocked })
-    }
+    claimFlow(flowId).then((authorizeUrl) => {
+      if (done) return
+      try {
+        // From here on the outside page cannot reach this one.
+        win.opener = null
+        win.location.replace(authorizeUrl)
+      } catch {
+        finish({ ok: false, code: 'blocked', message: FAILURES.blocked })
+      }
+    }, (problem) => {
+      try { win.close() } catch {}
+      finish({ ok: false, code: problem?.code || 'failed', message: problem?.message || 'Sign-in didn\'t start. Try again.' })
+    })
     try {
       channel = new BroadcastChannel(CHANNEL)
       channel.onmessage = (event) => onMessage(event.data)

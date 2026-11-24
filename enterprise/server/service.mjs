@@ -502,7 +502,7 @@ export function createConnectorService({
 
   // ---------- signing in ----------
 
-  /** A popup sign-in for this person and server. → { flowId, startUrl, authHost } */
+  /** A popup sign-in for this person and server. → { flowId, authHost } (the signed-in page claims it at the start route) */
   async function startSignIn(principal, { shareId, address: raw, clientId = null }) {
     await requireEditor(principal, shareId)
     await requirePro(principal.userId)

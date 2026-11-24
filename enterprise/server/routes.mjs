@@ -3,8 +3,12 @@
 //
 // The three web addresses sign-in needs (Express handlers, registered through api.addRoute):
 //   GET /oauth/mcp-client.json        Slatebox's Client ID Metadata Document (CIMD)
-//   GET /connectors/oauth/start       the popup's first stop: ties the flow to this browser with
-//                                     an HttpOnly cookie, then sends it to the server's sign-in page
+//   POST /connectors/oauth/start      from the signed-in Slatebox page (its login token in a
+//                                     header, never a cookie): only the flow's owner may claim it;
+//                                     ties it to this browser with an HttpOnly cookie and answers
+//                                     the server's sign-in address for the popup. There is no GET:
+//                                     a link to Slatebox can never start someone's sign-in or send
+//                                     a browser on to another site.
 //   GET /connectors/oauth/callback    where the server sends the popup back: finishes the sign-in
 //                                     and tells the walkthrough (BroadcastChannel; it also polls)
 // Pages carry no third-party content, a strict Content-Security-Policy with a nonce for their one
@@ -66,7 +70,7 @@ function sendPage(res, status, page) {
  * The routes, over a getter for the running sign-in service and this Slatebox's origin.
  * → [{ method, path, handler }] for api.addRoute.
  */
-export function signInRoutes({ signIn, origin, log = () => {} }) {
+export function signInRoutes({ signIn, origin, userFor = async () => null, log = () => {} }) {
   const secure = () => /^https:/.test(origin())
   const cookie = (flowId, value, maxAge) =>
     `${COOKIE_PREFIX}${flowId}=${value}; Path=/connectors/oauth; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure() ? '; Secure' : ''}`
@@ -83,18 +87,20 @@ export function signInRoutes({ signIn, origin, log = () => {} }) {
       },
     },
     {
-      method: 'GET',
+      method: 'POST',
       path: START_PATH,
       async handler(req, res) {
+        noStore(res)
         try {
           const service = signIn()
-          const { authorizeUrl, binding, flowId } = await service.begin({ flowId: typeof req.query?.flow === 'string' ? req.query.flow : '' })
-          noStore(res)
+          const userId = await userFor(req).catch(() => null)
+          const flowId = typeof req.body?.flow === 'string' ? req.body.flow : ''
+          const { authorizeUrl, binding } = await service.begin({ flowId, userId })
           res.setHeader('Set-Cookie', cookie(flowId, binding, 600))
-          res.redirect(302, authorizeUrl)
+          res.status(200).json({ authorizeUrl })
         } catch (error) {
           log({ kind: 'sign_in_start_refused', code: error?.code || 'error' })
-          sendPage(res, 400, resultPage({ ok: false, title: 'Sign-in didn\'t start', message: error?.code ? error.message : 'Start the sign-in again from Slatebox.', code: error?.code || 'error' }))
+          res.status(error?.code === 'signed_out' ? 401 : 400).json({ error: error?.code || 'error', message: error?.code ? error.message : 'Start the sign-in again from Slatebox.' })
         }
       },
     },

@@ -217,8 +217,11 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
                     helperText="This server needs a registered app. Paste the client id it gave you." inputProps={{ maxLength: 500, 'data-invite-client-id': '' }} />
                 )}
                 <Button variant="contained" data-invite-sign-in="" disabled={plan.needsClientId && !clientId.trim()} onClick={signIn}>Sign in to {signInWith} →</Button>
-                <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1 }}>
-                  A window opens on {plan.authHost || found.host}'s own page. Slatebox never sees your password. What it gives Slatebox is kept encrypted for you alone, never shown to anyone on the slate, and removed when you remove the agent.
+                <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1 }} data-invite-sign-in-reach="">
+                  A window opens on {plan.authHost || found.host}'s own page. Slatebox never sees your password.
+                  {plan.sendsTo && plan.sendsTo !== plan.authHost ? ` Your ${signInWith} sign-in will be sent to ${plan.sendsTo}, and only there.` : ''}
+                  {plan.reach ? ` ${plan.reach}` : ''}
+                  {' '}What it gives Slatebox is kept encrypted for you alone, never shown to anyone on the slate, and removed when you remove the agent.
                 </Typography>
               </Box>
             )}

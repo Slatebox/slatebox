@@ -36,6 +36,7 @@ export function register(api, context) {
       return started.signIn
     },
     origin: () => (started ? started.origin() : ''),
+    userFor: async (req) => (started ? started.userFor(req) : null),
     log: (entry) => console.log('[connectors]', JSON.stringify(entry)),
   })) api.addRoute(route)
   api.onStartup(async () => {

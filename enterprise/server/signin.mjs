@@ -6,12 +6,14 @@
 //   plan    what signing in takes (read from the server's own metadata, every check in oauth.mjs)
 //   start   a sign-in flow for one person and one address: PKCE verifier (sealed), a single-use
 //           state, the registration (pre-registered app, CIMD, DCR or a pasted client id).
-//           → a Slatebox start address for the popup: <origin>/connectors/oauth/start?flow=<id>
-//   begin   the start route: claims the flow once, ties it to this browser (an HttpOnly cookie,
-//           so a callback link sent to someone else cannot finish it), and sends the popup to the
-//           server's sign-in page
+//           → a flow id. Nothing a token holder could forward: no address to open.
+//   begin   the start route (POST, from the signed-in Slatebox page itself, with its login token):
+//           only the person the flow belongs to may claim it, once; it is tied to this browser (an
+//           HttpOnly cookie, so a callback link sent to someone else cannot finish it), and the
+//           page sends its popup to the server's sign-in page. Someone sent a flow id cannot open
+//           it: their browser is not signed in as the flow's owner.
 //   finish  the callback route (<origin>/connectors/oauth/callback): the state is taken once, the
-//           browser must be the one that began, `iss` is checked, the code is exchanged with the
+//           browser must be the one that began, and the one that began must be the flow's owner, `iss` is checked, the code is exchanged with the
 //           verifier and the resource, and the tokens go into the vault (credentials.mjs)
 //   status  the walkthrough's poll: pending, done or failed (with plain words)
 //
@@ -20,7 +22,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { open, seal } from '/server/metering/vault.mjs'
 import {
   authorizationUrl, checkCallback, chooseRegistration, chooseScopes, discoverSignIn, exchangeCode, knownProvider, KNOWN_PROVIDERS, newState,
-  OAUTH_LIMITS, parseChallenge, pkcePair, redirectUriFor, registerClient, SignInProblem, START_PATH,
+  OAUTH_LIMITS, parseChallenge, pkcePair, reachOf, redirectUriFor, registerClient, SignInProblem,
 } from './oauth.mjs'
 import { McpFetchRefused } from './mcp-fetch.mjs'
 
@@ -75,19 +77,25 @@ export function createSignIn({ flows, clients, vault, master, fetch, apps = () =
   async function plan({ address, challenge }) {
     if (!vault.available()) fail('vault_off', 'Agents that need sign-in are not available on this server.')
     const found = await discoverFor(address, challenge)
-    const registration = chooseRegistration({ server: found.server, apps: apps(), origin: origin() })
+    const registration = chooseRegistration({ server: found.server, apps: apps(), origin: origin(), resource: found.resource })
     const provider = knownProvider(found.issuer)
     let authHost = ''
+    let sendsTo = ''
     try {
       authHost = new URL(found.server.authorizationEndpoint).host
+      sendsTo = new URL(found.resource).host
     } catch {}
+    const scopes = chooseScopes({ app: registration.app, scopes: found.scopes, server: found.server })
     return {
       method: 'oauth',
       authHost,
+      // Where what the sign-in issues is sent: always the invited server itself (shown beside the sign-in host).
+      sendsTo,
+      reach: reachOf(scopes),
       provider: provider ? KNOWN_PROVIDERS[provider].name : null,
       registration: registration.kind,
       needsClientId: registration.kind === 'needs_client_id',
-      scopes: chooseScopes({ app: registration.app, scopes: found.scopes, server: found.server }),
+      scopes,
     }
   }
 
@@ -109,12 +117,12 @@ export function createSignIn({ flows, clients, vault, master, fetch, apps = () =
     return registered
   }
 
-  /** A sign-in flow for this person and address. → { flowId, startUrl, authHost } */
+  /** A sign-in flow for this person and address. → { flowId, authHost } */
   async function start({ userId, address, challenge, clientId: pasted = null }) {
     if (!vault.available()) fail('vault_off', 'Agents that need sign-in are not available on this server.')
     if (pasted !== null && (typeof pasted !== 'string' || !CLIENT_ID_PATTERN.test(pasted))) fail('bad_client_id', 'That client id doesn\'t look right.')
     const found = await discoverFor(address, challenge)
-    let registration = chooseRegistration({ server: found.server, apps: apps(), origin: origin(), pastedClientId: pasted })
+    let registration = chooseRegistration({ server: found.server, apps: apps(), origin: origin(), pastedClientId: pasted, resource: found.resource })
     if (registration.kind === 'needs_client_id') fail('needs_client_id', 'This server needs a registered app. Paste a client id from the server, or paste a key or token.')
     if (registration.kind === 'dcr') registration = { kind: 'dcr', ...(await dcrClient(found.server)) }
     const scopes = chooseScopes({ app: registration.app, scopes: found.scopes, server: found.server })
@@ -152,14 +160,22 @@ export function createSignIn({ flows, clients, vault, master, fetch, apps = () =
     try {
       authHost = new URL(found.server.authorizationEndpoint).host
     } catch {}
-    return { flowId, startUrl: origin().replace(/\/+$/, '') + START_PATH + '?flow=' + flowId, authHost }
+    return { flowId, authHost }
   }
 
-  /** The start route: once per flow. → { authorizeUrl, binding } (binding goes in an HttpOnly cookie) */
-  async function begin({ flowId }) {
+  /**
+   * The start route: once per flow, and only by the person it belongs to (userId: whoever the
+   * request's login token signs in, or null). → { authorizeUrl, binding } (binding goes in an
+   * HttpOnly cookie)
+   */
+  async function begin({ flowId, userId }) {
     if (typeof flowId !== 'string' || !FLOW_ID.test(flowId)) fail('unverified', 'This sign-in link is not valid. Start again from Slatebox.')
+    if (typeof userId !== 'string' || !userId) fail('signed_out', 'Sign in to Slatebox in this browser, then start again from your slate.')
+    const owned = await flows.get(flowId)
+    // Someone else's flow looks exactly like a missing one: nothing about it is told.
+    if (!owned || owned.userId !== userId) fail('unverified', 'This sign-in link is not valid. Start again from Slatebox.')
     const binding = random(32).toString('base64url')
-    const flow = await flows.claim(flowId, 'created', { status: 'opened', bindingHash: hash(binding), openedAt: new Date(now()) })
+    const flow = await flows.claim(flowId, 'created', { status: 'opened', bindingHash: hash(binding), openedBy: userId, openedAt: new Date(now()) })
     if (!flow) fail('unverified', 'This sign-in link was already used. Start again from Slatebox.')
     if (now() > new Date(flow.expiresAt).getTime()) fail('expired', 'That sign-in took too long. Start again from Slatebox.')
     return { authorizeUrl: flow.authorizeUrl, binding, flowId }
@@ -184,6 +200,7 @@ export function createSignIn({ flows, clients, vault, master, fetch, apps = () =
     try {
       const binding = bindingFor(flow._id)
       if (!binding || !sameHash(hash(binding), flow.bindingHash)) fail('unverified', 'Sign-in couldn\'t be verified. Finish it in the window Slatebox opened.')
+      if (!flow.openedBy || flow.openedBy !== flow.userId) fail('unverified', 'Sign-in couldn\'t be verified. Start again from Slatebox.')
       const { code } = checkCallback(query, flow, now())
       const verifier = opened(flowOwner(flow), flow.verifier)
       const app = flow.registration.kind === 'preregistered' ? (apps() || {})[flow.registration.provider] : null

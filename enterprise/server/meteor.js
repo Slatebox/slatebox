@@ -12,6 +12,7 @@
 /* eslint-disable no-console */
 import { Meteor } from 'meteor/meteor'
 import { Mongo } from 'meteor/mongo'
+import { Accounts } from 'meteor/accounts-base'
 import { createAppRegistry } from '/server/actions/index.mjs'
 import { deps, idempotency, limiter } from '/server/actions/mount'
 import { sessionAuthorization } from '/server/exec/conversation.mjs'
@@ -120,10 +121,19 @@ const connectionsStore = {
   update: (id, set) => McpConnections.updateAsync({ _id: id }, { $set: set }),
 }
 
+// Who a request to the sign-in start route is: the Slatebox page sends its login token in a header
+// (never a cookie, so no other site can make a browser send it).
+async function userFor(req) {
+  const token = typeof req.get === 'function' ? req.get('x-slatebox-login-token') : req.headers?.['x-slatebox-login-token']
+  if (typeof token !== 'string' || token.length < 20 || token.length > 200) return null
+  const user = await Meteor.users.findOneAsync({ 'services.resume.loginTokens.hashedToken': Accounts._hashLoginToken(token) }, { fields: { _id: 1 } })
+  return user?._id || null
+}
+
 export const appOrigin = () => String(Meteor.settings.public?.baseUrl || Meteor.absoluteUrl()).replace(/\/+$/, '')
 
 export function startConnectors() {
-  const settings = connectorSettings(Meteor.settings)
+  const settings = connectorSettings(Meteor.settings, { development: Meteor.isDevelopment })
   const fetch = createMcpFetch({ devOrigins: settings.devOrigins, userAgent: settings.userAgent })
   // Sign-in's own fetch: the same checks, may GET metadata, follows no redirect, small answers.
   const signInFetch = createMcpFetch({ devOrigins: settings.devOrigins, userAgent: settings.userAgent, methods: ['GET', 'POST'], maxRedirects: 0, maxBytes: 256 * 1024, timeoutMs: 10000 })
@@ -194,5 +204,5 @@ export function startConnectors() {
     return McpConnections.find({ slateId, status: { $ne: 'removed' } }, { fields: { name: 1, inviterName: 1, host: 1, status: 1, ownerId: 1, slateId: 1, contextLevel: 1, colorIndex: 1, agentId: 1, createdAt: 1 } })
   })
 
-  return { service, signIn, origin: appOrigin }
+  return { service, signIn, origin: appOrigin, userFor }
 }

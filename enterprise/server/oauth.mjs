@@ -35,9 +35,16 @@ export const KNOWN_PROVIDERS = Object.freeze({
   github: Object.freeze({
     issuer: 'https://github.com/login/oauth',
     name: 'GitHub',
-    // Issues and pull requests, read and write, in the repositories the person can reach. Nothing
-    // about their profile, organisations, packages, gists or notifications.
-    scopes: Object.freeze(['repo']),
+    // The only MCP servers a GitHub sign-in is ever sent to (by origin). GitHub tokens are not
+    // tied to one audience (GitHub ignores `resource`), so a server that merely names GitHub as
+    // its sign-in server must never receive one.
+    resources: Object.freeze(['https://api.githubcopilot.com']),
+    // GitHub's OAuth apps have no read-only scope for code. public_repo reaches public
+    // repositories only (read and write: code, issues, pull requests); read:org lets lookups see
+    // which organisations the person belongs to. Nothing private, no profile email, packages,
+    // gists or notifications. settings.connectors.oauthApps.github.scopes may widen it (e.g.
+    // "repo" for private repositories) on purpose; the consent screen then says so (reachOf).
+    scopes: Object.freeze(['public_repo', 'read:org']),
     // GitHub's token endpoint answers form-encoded unless asked for JSON.
     tokenAccept: 'application/json',
   }),
@@ -220,13 +227,32 @@ export async function discoverSignIn({ address, challenge = null, fetch, devOrig
   }
 }
 
-/** The pre-registered app for an issuer, from settings (an exact issuer match), or null. */
-export function appFor(issuer, apps = {}) {
+const originOf = (url) => {
+  try {
+    return new URL(url).origin
+  } catch {
+    return null
+  }
+}
+
+/** The MCP server origins a provider's sign-in may be sent to: the known provider's, plus settings' own. */
+export function resourcesOf(provider, app = {}) {
+  const known = KNOWN_PROVIDERS[provider]
+  return [...new Set([...(known?.resources || []), ...(Array.isArray(app?.resources) ? app.resources : [])].map(originOf).filter(Boolean))]
+}
+
+/**
+ * The pre-registered app for an issuer, from settings (an exact issuer match), or null. With
+ * `resource` (the server being invited), the app also has to be allowed to serve that server:
+ * → the app, or { refused: name } when the issuer is the app's but the server is not one of its.
+ */
+export function appFor(issuer, apps = {}, resource = undefined) {
   for (const [provider, app] of Object.entries(apps || {})) {
     if (!app || typeof app.clientId !== 'string' || !app.clientId) continue
     const known = KNOWN_PROVIDERS[provider]
     const appIssuer = known?.issuer || (typeof app.issuer === 'string' ? app.issuer : null)
     if (appIssuer && appIssuer === issuer) {
+      if (resource !== undefined && !resourcesOf(provider, app).includes(originOf(resource))) return { refused: known?.name || provider }
       return {
         provider,
         clientId: app.clientId,
@@ -238,6 +264,24 @@ export function appFor(issuer, apps = {}) {
     }
   }
   return null
+}
+
+/**
+ * What a sign-in lets Slatebox do, in plain words, for the consent screen. Known scopes are named;
+ * anything else is shown as the server's scope names.
+ */
+const SCOPE_WORDS = Object.freeze({
+  public_repo: 'read and change your public repositories (code, issues and pull requests)',
+  repo: 'read and change all your repositories, private ones too (code, issues, pull requests and settings)',
+  'read:org': 'see which organisations you belong to',
+  'read:user': 'read your profile',
+})
+export function reachOf(scopes = []) {
+  const words = scopes.filter((s) => s !== 'offline_access').map((s) => SCOPE_WORDS[s] || null)
+  if (!words.length) return ''
+  if (words.some((w) => w === null)) return `It asks for: ${scopes.filter((s) => s !== 'offline_access').join(', ')}.`
+  const list = words.length > 1 ? words.slice(0, -1).join(', ') + ' and ' + words.at(-1) : words[0]
+  return `It lets Slatebox ${list}.`
 }
 
 /** The known provider an issuer belongs to (for its name and the fact that it needs an app), or null. */
@@ -277,8 +321,10 @@ export const cimdUsable = (origin) => /^https:\/\//.test(String(origin))
  * → { kind: 'preregistered'|'cimd'|'dcr'|'pasted', clientId?, clientSecret?, app? } or
  *   { kind: 'needs_client_id' } (the person must paste one).
  */
-export function chooseRegistration({ server, apps, origin, pastedClientId = null }) {
-  const app = appFor(server.issuer, apps)
+export function chooseRegistration({ server, apps, origin, pastedClientId = null, resource = undefined }) {
+  const app = appFor(server.issuer, apps, resource)
+  // A server naming a pre-registered provider's sign-in for itself: its token would go to that server.
+  if (app?.refused) fail('sign_in_unsafe', `This server asks for your ${app.refused} sign-in, but Slatebox only sends ${app.refused} sign-ins to ${app.refused}'s own server.`)
   if (app) return { kind: 'preregistered', clientId: app.clientId, ...(app.clientSecret && { clientSecret: app.clientSecret }), app }
   if (pastedClientId) return { kind: 'pasted', clientId: pastedClientId }
   if (server.cimd && cimdUsable(origin)) return { kind: 'cimd', clientId: clientDocument(origin).client_id }

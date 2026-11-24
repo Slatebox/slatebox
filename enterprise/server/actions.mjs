@@ -16,7 +16,7 @@ const obj = (properties) => ({ type: 'object', properties })
 const OUT = {
   list: obj({ connections: { type: 'array', items: { type: 'object' } }, pro: { type: 'boolean' } }),
   discover: obj({ address: { type: 'string' }, host: { type: 'string' }, suggestedName: { type: 'string' }, tools: { type: 'array', items: { type: 'object' } }, summary: { type: ['object', 'null'] }, signIn: { type: 'object', description: 'Present when the server needs sign-in first: method (oauth or key), authHost, needsClientId, keyAllowed.' } }),
-  signIn: obj({ flowId: { type: 'string' }, startUrl: { type: 'string' }, authHost: { type: 'string' } }),
+  signIn: obj({ flowId: { type: 'string' }, authHost: { type: 'string' } }),
   signInStatus: obj({ status: { type: 'string', enum: ['pending', 'done', 'failed', 'unknown'] }, code: { type: 'string' }, message: { type: 'string' }, opened: { type: 'boolean' } }),
   key: obj({ ok: { type: 'boolean' }, host: { type: 'string' } }),
   connection: obj({ connectionId: { type: 'string' }, name: { type: 'string' }, invitedBy: { type: 'string' }, status: { type: 'string' } }),
@@ -84,15 +84,17 @@ export function connectorActions(service) {
     defineAction({
       id: 'connectors.signIn',
       title: 'Sign in to an outside agent\'s server',
-      description: 'Start signing in to an MCP server that needs it. Returns a Slatebox address to open in a browser: it sends you to the server\'s own sign-in page, and what the server issues is kept encrypted for you alone, never shown to anyone on the slate. Needs Slatebox Pro.',
+      description: 'Start signing in to an MCP server that needs it, from the slate in your own signed-in browser: Slatebox opens the server\'s own sign-in page in a window, and what the server issues is kept encrypted for you alone, never shown to anyone on the slate. People only: an agent token cannot start a sign-in. Needs Slatebox Pro.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
       changesNoSlate: true,
       openWorld: true,
       scope: 'slates:write',
-      principals: ['person', 'agent'],
-      mounts: { ddp: true, http: { method: 'POST', path: '/slates/{shareId}/agents/sign-in', operationId: 'signInToAgent' } },
+      principals: ['person'],
+      // The app's own page only: a sign-in is finished in the person's own signed-in browser, so no
+      // route or tool hands one out (an exception to exec everywhere, kept on purpose).
+      mounts: { ddp: true },
       input: {
         type: 'object',
         properties: {
@@ -104,7 +106,6 @@ export function connectorActions(service) {
         additionalProperties: false,
       },
       output: OUT.signIn,
-      tool: { name: 'sign_in_to_agent', title: 'Start signing in to an outside MCP server', description: 'Start signing in to an outside MCP server that needs it; open the returned address in a browser to finish.' },
       handler: run('startSignIn'),
     }),
     defineAction({
@@ -114,11 +115,10 @@ export function connectorActions(service) {
       toolset: 'connectors',
       kind: 'read',
       scope: 'slates:read',
-      principals: ['person', 'agent'],
-      mounts: { ddp: true, http: { method: 'GET', path: '/agent-sign-ins/{flowId}', operationId: 'agentSignInStatus' } },
+      principals: ['person'],
+      mounts: { ddp: true },
       input: { type: 'object', properties: { flowId: { type: 'string', minLength: 21, maxLength: 70, pattern: '^f[A-Za-z0-9_-]+$' } }, required: ['flowId'], additionalProperties: false },
       output: OUT.signInStatus,
-      tool: { name: 'agent_sign_in_status', title: 'Check whether a sign-in to an outside MCP server finished', description: 'Check whether a sign-in you started to an outside MCP server has finished.' },
       handler: run('signInStatus'),
     }),
     defineAction({

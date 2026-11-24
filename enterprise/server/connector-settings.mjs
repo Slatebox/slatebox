@@ -3,14 +3,17 @@
 //
 // settings.connectors (server-only), all optional:
 //   devOrigins   exact http origins on this machine an outside-agent test may reach, such as
-//                ["http://127.0.0.1:8765"] for scripts/mcp-test-servers.mjs. Dropped whenever
-//                settings.public.env is 'prod' or 'test', so a deployed Slatebox never allows them.
+//                ["http://127.0.0.1:8765"] for scripts/mcp-test-servers.mjs. Kept only when
+//                settings.public.env is exactly 'dev' AND the server runs in development
+//                (Meteor.isDevelopment): a missing, misspelt or other env drops them (fail closed).
 //   userAgent    the User-Agent sent to outside servers (default MCP_USER_AGENT).
 //   oauthApps    apps Slatebox registered with a vendor ahead of time, per provider:
 //                { "github": { "clientId": "...", "clientSecret": "..." } }
 //                A known provider (oauth.mjs KNOWN_PROVIDERS: github) brings its own issuer and
-//                minimal scopes; "scopes" overrides them. Any other provider name must also give
-//                "issuer" (https; a devOrigins origin in local development only). The client id
+//                minimal scopes and the only MCP servers its sign-in is sent to; "scopes"
+//                overrides the scopes, "resources" (https origins) adds servers. Any other
+//                provider name must also give "issuer" (https; a devOrigins origin in local
+//                development only) and "resources", or its sign-in is never used. The client id
 //                is public; the secret lives only here (or the environment that fills settings),
 //                never in code or the database.
 // The vault's master key is not a setting: it is SLATEBOX_KEY_ENCRYPTION_KEY in the environment
@@ -30,6 +33,18 @@ function appsOf(raw, devOrigins) {
     if (typeof app.clientId !== 'string' || !/^[\x21-\x7e]{1,500}$/.test(app.clientId)) continue
     const entry = { clientId: app.clientId }
     if (typeof app.clientSecret === 'string' && /^[\x21-\x7e]{1,500}$/.test(app.clientSecret)) entry.clientSecret = app.clientSecret
+    // The MCP servers (origins) this app's sign-in may be sent to; a known provider brings its own.
+    if (Array.isArray(app.resources)) {
+      const resources = app.resources.filter((r) => {
+        try {
+          const url = new URL(r)
+          return url.protocol === 'https:' || devOrigins.includes(url.origin)
+        } catch {
+          return false
+        }
+      }).slice(0, 16)
+      if (resources.length) entry.resources = resources
+    }
     if (Array.isArray(app.scopes)) entry.scopes = app.scopes.filter((s) => typeof s === 'string' && /^[\x21-\x7e]{1,100}$/.test(s)).slice(0, 24)
     if (!KNOWN_PROVIDERS[name]) {
       let issuer = null
@@ -44,10 +59,10 @@ function appsOf(raw, devOrigins) {
   return out
 }
 
-export function connectorSettings(settings = {}) {
+export function connectorSettings(settings = {}, { development = false } = {}) {
   const raw = settings.connectors || {}
-  const deployed = ['prod', 'test'].includes(settings.public?.env)
-  const devOrigins = deployed ? [] : (Array.isArray(raw.devOrigins) ? raw.devOrigins : []).filter((origin) => typeof origin === 'string' && ORIGIN.test(origin))
+  const local = settings.public?.env === 'dev' && development === true
+  const devOrigins = !local ? [] : (Array.isArray(raw.devOrigins) ? raw.devOrigins : []).filter((origin) => typeof origin === 'string' && ORIGIN.test(origin))
   const userAgent = typeof raw.userAgent === 'string' && /^[\x20-\x7e]{8,200}$/.test(raw.userAgent) ? raw.userAgent : MCP_USER_AGENT
   return { devOrigins, userAgent, oauthApps: appsOf(raw.oauthApps, devOrigins) }
 }

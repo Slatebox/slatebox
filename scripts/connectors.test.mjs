@@ -75,8 +75,14 @@ test('the fetch sends a real User-Agent, opens no GET stream, and drops cookies'
   assert.ok(servers.calls.some((c) => /^Slatebox\/1\.0 \(MCP client/.test(c.ua)))
 })
 
-test('settings: test origins are dropped on a deployed Slatebox', () => {
-  assert.deepEqual(connectorSettings({ connectors: { devOrigins: ['http://127.0.0.1:8765', 'http://10.0.0.1:80'] } }).devOrigins, ['http://127.0.0.1:8765'])
+test('settings: test origins only in local development (env "dev" on a development server); everything else fails closed', () => {
+  const dev = { development: true }
+  assert.deepEqual(connectorSettings({ public: { env: 'dev' }, connectors: { devOrigins: ['http://127.0.0.1:8765', 'http://10.0.0.1:80'] } }, dev).devOrigins, ['http://127.0.0.1:8765'])
+  // env missing, misspelt or another name: dropped, even on a development server
+  for (const env of [undefined, '', 'staging', 'production', 'Dev', 'develop'])
+    assert.deepEqual(connectorSettings({ public: { env }, connectors: { devOrigins: ['http://127.0.0.1:8765'] } }, dev).devOrigins, [], String(env))
+  // env "dev" on a production build: dropped
+  assert.deepEqual(connectorSettings({ public: { env: 'dev' }, connectors: { devOrigins: ['http://127.0.0.1:8765'] } }).devOrigins, [])
   assert.deepEqual(connectorSettings({ public: { env: 'prod' }, connectors: { devOrigins: ['http://127.0.0.1:8765'] } }).devOrigins, [])
   assert.deepEqual(connectorSettings({ public: { env: 'test' }, connectors: { devOrigins: ['http://127.0.0.1:8765'] } }).devOrigins, [])
 })
@@ -481,7 +487,15 @@ test('the connector actions join the one registry: Meteor method, /api/v1 route,
   assert.deepEqual(ids.sort(), ['connectors.call', 'connectors.connect', 'connectors.disconnect', 'connectors.discover', 'connectors.list', 'connectors.signIn', 'connectors.signInStatus', 'connectors.useKey'])
   // keeping, discarding and undoing what they suggest is the app's one suggestions.decide
   assert.ok(registry.get('suggestions.decide'))
+  // Starting a sign-in is finished in the person's own signed-in browser, so it (and its status)
+  // is the app's alone: no token, route or tool can hand out a sign-in to forward to someone else.
+  const appOnly = ['connectors.signIn', 'connectors.signInStatus']
   for (const action of registry.list().filter((a) => a.id.startsWith('connectors.'))) {
+    if (appOnly.includes(action.id)) {
+      assert.ok(action.mounts.ddp && !action.mounts.http && !action.tool, action.id)
+      assert.deepEqual(action.principals, ['person'], action.id)
+      continue
+    }
     assert.ok(action.mounts.ddp && action.mounts.http && action.tool, action.id)
     assert.ok(action.principals.includes('agent') && action.principals.includes('person'))
   }
