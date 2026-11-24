@@ -15,6 +15,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { createAppRegistry } from '../web/app/server/actions/index.mjs'
 import { SURFACES } from '../web/app/server/ai-control/catalogue.mjs'
 import { primaryOf, resolveBinding } from '../web/app/server/ai-control/resolve.mjs'
@@ -295,6 +296,43 @@ test('a surface turned off answers with the administrator\'s message; the global
   assert.equal((await route(w, 'welcome')).disabled, undefined)
   const rows = w.auditRows().filter((r) => r.action === 'ai.control.setGlobal')
   assert.deepEqual(rows.map((r) => [r.outcome, r.reason]), [['ok', 'provider incident'], ['ok', 'resolved']])
+})
+
+test('chat turned off: the parts that follow it (canvas, the agent, board chat) are off with its message, read up front, and the admin pages say "Off (follows …)"', async () => {
+  const w = world()
+  await withConnections(w)
+  await w.ops.publish({ actor: ACTOR, input: { surface: 'chat', enabled: false, disabledMessage: 'Ask Slatebox is paused for an upgrade.' }, reason: 'pause' })
+  for (const feature of ['welcome', 'canvas', 'agent', 'lane-chat', 'workshop', 'library-refine']) {
+    const r = await route(w, feature)
+    assert.deepEqual([r.disabled, r.message], [true, 'Ask Slatebox is paused for an upgrade.'], feature)
+    // the up-front check (before a lock or rate limit) says the same, and opens no key
+    assert.deepEqual(await w.ai.surfaceOff({ userId: 'ana', feature }), { surface: r.feature, message: 'Ask Slatebox is paused for an upgrade.' }, feature)
+  }
+  for (const feature of ['generation', 'shape', 'image-search']) assert.equal(await w.ai.surfaceOff({ userId: 'ana', feature }), null, feature)
+  // the publication every page reads
+  const status = await surfacesStatus({ surfaces: SURFACES, snapshot: w.holder.current(), bind: (surface) => resolveBinding(w.holder.current(), { surface, holders: { ownProviders: false }, settings: w.settings }) })
+  assert.deepEqual(status.surfaces.canvas, { enabled: false, message: 'Ask Slatebox is paused for an upgrade.' })
+  // the Overview, Bindings and Effective tabs
+  const view = await import('../web/app/imports/ui/pages/admin/ai/bindings-view.mjs')
+  const titles = Object.fromEntries(SURFACES.map((s) => [s.id, s.title]))
+  const eff = await w.aiControl.effective({})
+  const of = (id) => eff.surfaces.find((s) => s.id === id).binding
+  assert.equal(view.offText(of('canvas'), titles), 'Off (follows Conversation and edits)')
+  assert.equal(view.offText(of('agent.slatebox'), titles), 'Off (follows Conversation and edits)')
+  assert.equal(view.offText(of('chat'), titles), 'Off')
+  assert.equal(view.offText(of('generation'), titles), null)
+  assert.equal(view.effectiveRows(of('canvas'), [], titles)[0].value, 'Off (follows Conversation and edits): Ask Slatebox is paused for an upgrade.')
+  const source = (file) => readFileSync(new URL(`../web/app/imports/ui/pages/admin/ai/${file}`, import.meta.url), 'utf8')
+  assert.match(source('Overview.jsx'), /offText\(s\.binding, titles\)/)
+  assert.match(source('Bindings.jsx'), /offText\(eff, titles\)/)
+  // canvas bound on its own wins: on, and the agent (which follows canvas) with it
+  await w.ops.publish({ actor: ACTOR, input: { surface: 'canvas', chain: [{ connection: 'server:chatbox' }] }, reason: 'drawing chat stays on' })
+  assert.equal(await w.ai.surfaceOff({ userId: 'ana', feature: 'canvas' }), null)
+  assert.equal(await w.ai.surfaceOff({ userId: 'ana', feature: 'agent' }), null)
+  assert.equal((await w.ai.surfaceOff({ userId: 'ana', feature: 'lane-chat' })).message, 'Ask Slatebox is paused for an upgrade.')
+  // AI for everyone off: every part, with its message
+  await w.registry.run(person('root'), 'ai.control.setGlobal', { aiEnabled: false, message: 'All AI is paused.', reason: 'incident' })
+  assert.equal((await w.ai.surfaceOff({ userId: 'ana', feature: 'canvas' })).message, 'All AI is paused.')
 })
 
 // ---------- the request path ----------

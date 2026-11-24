@@ -11,6 +11,8 @@ export const RESET_TARGETS = Object.freeze(['use', 'binding', 'bindings', 'dbLay
 export const GLOBAL_MESSAGE_MAX = 300
 export const AUDIT_PAGE = 50
 export const AUDIT_PAGE_MAX = 200
+/** Who a Changes row names when the account that made it no longer exists. */
+export const DELETED_ACCOUNT = 'a deleted account'
 // aiAudit statuses that are not a failed call: an answer, or a call the meter never sent.
 const NOT_ERRORS = new Set(['success', 'unmetered'])
 
@@ -24,10 +26,28 @@ const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  *   aiSettings?   ai-settings-core.mjs (resetServerUse)
  *   costOf?({ model, usage }) → { costMicros } (metering/prices.mjs aiCostMicros)
  *   bindings?     bindings.mjs createBindingOps (heads, remove) for the binding targets
+ *   namesOf?(userIds) → { [userId]: name } the people's names, for the Changes tab (an account
+ *                 that no longer exists is left out)
  *   now?()        → ms
  * }
  */
-export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null, costOf = () => ({ costMicros: 0 }), bindings = null, now = Date.now }) {
+export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null, costOf = () => ({ costMicros: 0 }), bindings = null, namesOf = null, now = Date.now }) {
+  // Each row's actor with the person's name (actor.name): an account that is gone reads "a deleted
+  // account", and a row with no account (the server's own) keeps no name. Only administrators read
+  // the list, so the names never reach anyone else.
+  async function withNames(rows) {
+    const ids = [...new Set(rows.map((row) => row.actor?.userId).filter(Boolean))]
+    let names = {}
+    if (ids.length && namesOf) {
+      try {
+        names = (await namesOf(ids)) || {}
+      } catch {
+        names = {}
+      }
+    }
+    return rows.map((row) => (row.actor?.userId ? { ...row, actor: { ...row.actor, name: names[row.actor.userId] || DELETED_ACCOUNT } } : row))
+  }
+
   /**
    * The audit trail, newest first, filtered. filter: { limit, before (the next page: a previous
    * answer's next, '<ISO time>|<row id>', or an ISO time alone for rows older than it), since (ISO
@@ -52,7 +72,7 @@ export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null
     const rows = await audit.find(selector).sort({ at: -1, _id: -1 }).limit(limit + 1).toArray()
     const page = rows.slice(0, limit)
     const next = rows.length > limit ? `${new Date(page.at(-1).at).toISOString()}|${page.at(-1)._id}` : null
-    return { rows: page, next }
+    return { rows: await withNames(page), next }
   }
 
   /**

@@ -329,6 +329,9 @@ export default function QuickNodeActions({
               ))}
             </ButtonGroup>
           }
+          // Real buttons in a group, not a button holding buttons: this action's own Fab is drawn as a plain group.
+          slotProps={{ fab: { component: 'div', role: 'group', tabIndex: -1, 'aria-label': 'Add a note', disableRipple: true, disableFocusRipple: true,
+            sx: { backgroundColor: 'transparent', boxShadow: 'none', cursor: 'default', '&:hover': { backgroundColor: 'transparent' } } } }}
         />
         {/* The top row: boards and starters from the library (it opens in Ask Slatebox). */}
         {!commentAccessOnly && (

@@ -80,3 +80,17 @@ export function connectionFormDefaults(open = null) {
 export function providerFormDefaults() {
   return { id: '', label: '', protocol: 'openai-chat', baseUrl: '', baseUrlLocked: true, authStyle: 'bearer', authName: '', headers: '', caps: { tools: true } }
 }
+
+/**
+ * The Add a model / Change form as it opens (open: { model?, connection?, modelName? } or null
+ * while closed). Every field a Select or text field reads is set from the first render, so no
+ * field turns from uncontrolled to controlled when the dialog fills.
+ */
+export function modelFormDefaults(open = null, connections = [], builtin = []) {
+  const m = open?.model || {}
+  return {
+    connection: m.connection || open?.connection || connections[0] || builtin[0] || '', model: m.model || open?.modelName || '', label: m.label || '',
+    caps: m.capabilities || { tools: true }, maxContext: m.maxContext ?? '', maxOutput: m.maxOutput ?? '',
+    inputPerM: m.prices?.inputPerM ?? '', outputPerM: m.prices?.outputPerM ?? '', status: m.status || 'enabled', existing: Boolean(open?.model),
+  }
+}

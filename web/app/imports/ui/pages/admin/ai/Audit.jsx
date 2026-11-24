@@ -12,7 +12,7 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { actionText, actorText, auditCsv, diffRows } from './audit-diff.mjs'
+import { actionText, actorText, auditCsv, diffRows, targetText } from './audit-diff.mjs'
 
 // Every change to the AI configuration (ai.audit.list), newest first: AI control's own changes,
 // AI settings at every level and persona saves. A row opens to what changed; keys show only as
@@ -30,11 +30,23 @@ const AREAS = [
 ]
 const failure = (err, fallback) => err?.reason || err?.message || fallback
 
+// The row's details for an administrator: the action's id and what it was made to, as the API,
+// exec and the CSV name them.
+function Details({ row }) {
+  return (
+    <Typography component="div" variant="caption" color="text.secondary" sx={{ mt: 1 }} data-testid="audit-details">
+      Action <span style={mono}>{row.action}</span>
+      {row.target?.kind && <> on <span style={mono}>{row.target.kind} {row.target.id}</span></>}
+    </Typography>
+  )
+}
+
 function Changes({ row }) {
   const rows = diffRows(row.before, row.after)
-  if (row.outcome === 'refused') return <Typography variant="body2">Refused: {row.error || 'not allowed'}. Nothing changed.</Typography>
-  if (!rows.length) return <Typography variant="body2" color="text.secondary">No field changed.</Typography>
+  if (row.outcome === 'refused') return <><Typography variant="body2">Refused: {row.error || 'not allowed'}. Nothing changed.</Typography><Details row={row} /></>
+  if (!rows.length) return <><Typography variant="body2" color="text.secondary">No field changed.</Typography><Details row={row} /></>
   return (
+    <>
     <Table size="small" aria-label="What changed">
       <TableHead>
         <TableRow>
@@ -53,6 +65,8 @@ function Changes({ row }) {
         ))}
       </TableBody>
     </Table>
+    <Details row={row} />
+    </>
   )
 }
 
@@ -63,6 +77,13 @@ export default function Audit() {
   const [next, setNext] = useState(null)
   const [open, setOpen] = useState(null)
   const [error, setError] = useState('')
+  // the plain titles of the parts of Slatebox, for "Changed"
+  const [titles, setTitles] = useState({})
+  useEffect(() => {
+    Meteor.callAsync('ai.control.get', {})
+      .then((snap) => setTitles(Object.fromEntries((snap.surfaces || []).map((s) => [s.id, s.title]))))
+      .catch(() => {})
+  }, [])
 
   const load = async (before = null) => {
     try {
@@ -132,13 +153,11 @@ export default function Audit() {
                   >
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{new Date(row.at).toLocaleString()}</TableCell>
                     <TableCell>{actorText(row.actor)}</TableCell>
-                    <TableCell>
+                    <TableCell title={row.action}>
                       {actionText(row)}
                       {row.outcome === 'refused' && <Typography component="span" color="error" variant="body2"> (refused)</Typography>}
-                      <br />
-                      <Typography component="span" sx={mono} color="text.secondary">{row.action}</Typography>
                     </TableCell>
-                    <TableCell><Typography component="span" sx={mono}>{row.target?.kind}: {row.target?.id}</Typography></TableCell>
+                    <TableCell>{targetText(row.target, titles)}</TableCell>
                     <TableCell>{row.reason || ''}</TableCell>
                   </TableRow>
                   {open === row._id && (

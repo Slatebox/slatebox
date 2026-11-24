@@ -52,9 +52,12 @@ export function diffRows(before, after) {
   return rows
 }
 
-/** Who made a change, in words. */
+/**
+ * Who made a change, in words: the person's name (ai.audit.list adds actor.name), never an account
+ * id. An account that is gone reads "a deleted account"; a change with no account, the server.
+ */
 export function actorText(actor = {}) {
-  const who = actor.userId || 'unknown account'
+  const who = actor.name || (actor.userId ? 'a deleted account' : actor.via === 'system' ? 'Slatebox' : 'an unknown account')
   const how = { ddp: 'in the app', http: 'with a token', exec: 'from a script', mcp: 'over MCP', cli: 'from the CLI', system: 'by the server' }[actor.via] || ''
   return `${who}${actor.principal === 'agent' ? ' (agent)' : ''}${how ? ` ${how}` : ''}`
 }
@@ -66,11 +69,11 @@ const cell = (value) => {
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 
-/** The rows as CSV: when, who, via, action, what, reason, outcome, changes. */
+/** The rows as CSV: when, who (account and name), via, action, what, reason, outcome, changes. */
 export function auditCsv(rows) {
-  const head = ['when', 'account', 'principal', 'via', 'token', 'action', 'kind', 'id', 'reason', 'outcome', 'changes']
+  const head = ['when', 'account', 'name', 'principal', 'via', 'token', 'action', 'kind', 'id', 'reason', 'outcome', 'changes']
   const lines = rows.map((row) => [
-    new Date(row.at).toISOString(), row.actor?.userId, row.actor?.principal, row.actor?.via, row.actor?.tokenId, row.action,
+    new Date(row.at).toISOString(), row.actor?.userId, row.actor?.name, row.actor?.principal, row.actor?.via, row.actor?.tokenId, row.action,
     row.target?.kind, row.target?.id, row.reason, row.outcome || 'ok',
     diffRows(row.before, row.after).map((d) => `${d.path}: ${d.before} -> ${d.after}`).join('; '),
   ].map(cell).join(','))
@@ -107,4 +110,33 @@ export function actionText(row = {}) {
   const doc = row.after
   if (doc.bindingId) return `${base}: version ${doc.version} saved${doc.status === 'draft' ? ' as a draft' : ''}`
   return `${base}: version ${doc.version} live`
+}
+
+// What a reset target, a state row and the other kinds of change are, in words.
+const RESETS = { use: 'the server\'s AI choices', binding: 'one binding', bindings: 'every binding', dbLayer: 'AI control\'s own settings', all: 'everything in AI control' }
+const STATES = { global: 'AI for everyone', dbLayer: 'AI control\'s own settings' }
+const list = (id) => String(id || '').split(',').filter(Boolean).join(', ')
+
+/**
+ * What a change was made to, in words: a binding as the plain title of its part of Slatebox
+ * ("Conversation and edits"), never "binding: chat|server". titles: { [surfaceId]: title }
+ */
+export function targetText(target = {}, titles = {}) {
+  const { kind, id } = target || {}
+  if (!kind) return ''
+  if (kind === 'binding' || kind === 'bindings' || kind === 'bindingVersions') {
+    const surface = String(id || '').split('|')[0]
+    return titles[surface] || surface
+  }
+  if (kind === 'state') return STATES[id] || 'AI control'
+  if (kind === 'reset') return `Reset: ${RESETS[id] || id}`
+  if (kind === 'aiSettings') {
+    if (id === 'server') return 'The server\'s AI settings'
+    return String(id).startsWith('team:') ? 'A team\'s AI settings' : 'A person\'s own AI settings'
+  }
+  if (kind === 'providers') return `Provider ${id}`
+  if (kind === 'connection' || kind === 'connections') return `Server connection${String(id).includes(',') ? 's' : ''} ${list(id)}`
+  if (kind === 'models') return `Model list: ${list(id)}`
+  if (kind === 'intention') return 'A persona'
+  return `${kind}${id ? ` ${id}` : ''}`
 }

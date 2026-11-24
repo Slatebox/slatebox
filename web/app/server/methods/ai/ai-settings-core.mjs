@@ -779,6 +779,21 @@ export function createAISettings({
     return { ref: entry.connection, scope: 'server', own: false, feature, on, ...chosen }
   }
 
+  /**
+   * Whether an administrator turned the surface of a request feature off (its own binding, the
+   * part it follows, or AI for everyone), read before anything else a request does: a lock, a
+   * rate limit or a key. No key is opened. → null (on, or not a model choice) or { surface, message }
+   */
+  async function surfaceOff({ userId, feature }) {
+    const surface = surfaceFor(feature)
+    if (!surface) return null
+    const user = userId ? await loadUser(userId) : null
+    const server = await serverState()
+    const { person, team } = await holders(user, server)
+    const binding = await controlBinding({ surface, user, person, team, server })
+    return binding?.enabled === false ? { surface, message: binding.disabledMessage || 'This feature is turned off by your administrator.' } : null
+  }
+
   // The resolved AI control binding for a surface, or null without the control plane (tests, or
   // before ai-control/index.mjs set its source). Never throws: a broken binding is skipped.
   async function controlBinding({ surface, user, person, team, server }) {
@@ -810,7 +825,7 @@ export function createAISettings({
   }
 
   return {
-    view, update, resetServerUse, check: checkOne, resolveFor, serverState, choiceHolders,
+    view, update, resetServerUse, check: checkOne, resolveFor, surfaceOff, serverState, choiceHolders,
     setBindingSource: (source) => { bindingSource = typeof source === 'function' ? source : null },
     setAuxKeysOn: (fn) => { auxKeysOn = typeof fn === 'function' ? fn : () => true },
     setServerUseSync: (sync) => { useSync = typeof sync === 'function' ? sync : null },

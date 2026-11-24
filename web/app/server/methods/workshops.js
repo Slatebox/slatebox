@@ -13,6 +13,7 @@ import { runAIAction } from '../metering/context.mjs'
 import { canStartAI } from '../metering/meteor'
 import { resolveAIFeatureConfig } from './ai/feature-config.mjs'
 import req from './ai/req'
+import { surfaceOffFor } from './ai/ai-settings'
 import { prepareConstraintProposal } from '../../imports/api/common/workshop-constraints.mjs'
 import { constraintTool, constraintInstructions } from './workshop-constraint-draft.mjs'
 import { releasePlanFromDraft, releaseInstructions, releaseTool } from './workshop-release-draft.mjs'
@@ -175,6 +176,10 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
       if (!(format === 'map' && base.lanes[0].station || format === 'release-plan' && base.kind === format)) throw new Error()
     } catch { throw new Meteor.Error('invalid-workshop', 'Review the current workshop rules before asking for a revision.') }
   }
+
+  // A part an administrator turned off says so in their words before the one-draft-a-minute lock.
+  const off = await surfaceOffFor({ feature: 'workshop', userId: user._id })
+  if (off) throw new Meteor.Error('draft-unavailable', off.message)
 
   // A conditional write covers simultaneous requests from multiple tabs or app replicas.
   const now = Date.now()

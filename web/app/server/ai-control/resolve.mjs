@@ -13,7 +13,8 @@
 // Merge rules between scopes: chain, prompts and params come from the innermost scope that sets
 // them; enabled is AND across scopes (an inner scope can turn a surface off, never on); limits and
 // tools.allow only tighten (the lowest limit, the intersection of allow-lists). Team and person
-// bindings may set only their models and on/off.
+// bindings may set only their models and on/off. A surface with no server or plan binding of its
+// own takes the on/off of what it follows, as it takes its models.
 //
 // With no DB documents (an empty snapshot, or the DB layer switched off) the result is exactly
 // what the AI settings resolve today.
@@ -193,15 +194,15 @@ function resolvePromptRef(snapshot, ref, codePrompts) {
  *   codePrompts?   { [promptId]: { body, variables } } built-in prompt text (v0)
  *   codeSlots?     { [surface]: { slot: promptId } } the prompts a surface uses by default
  * }
- * → { surface, enabled, disabledMessage, chain, params, prompts, tools, limits, provenance,
- *     followed, bindingVersion, builtinOnly }
+ * → { surface, enabled, disabledMessage, disabledBy, chain, params, prompts, tools, limits,
+ *     provenance, followed, bindingVersion, builtinOnly }
  */
 export function resolveBinding(snapshot, args = {}) {
   const snap = snapshot && snapshot.dbLayer !== 'off' ? snapshot : EMPTY_SNAPSHOT
   const { userId = null, orgId = null, plan = null, holders = {}, inner = null, settings = {}, codePrompts = {}, codeSlots = {} } = args
   const id = toSurface(args.surface)
   if (id === null) {
-    return { surface: args.surface, builtinOnly: true, enabled: true, disabledMessage: null, chain: [], params: { ...CODE_PARAMS }, prompts: {}, tools: { mode: null, allow: null }, limits: { estimate: surfaceById(args.surface)?.estimate ?? null, ceiling: surfaceById(args.surface)?.ceiling ?? null }, provenance: { chain: 'code' }, followed: null, bindingVersion: null }
+    return { surface: args.surface, builtinOnly: true, enabled: true, disabledMessage: null, disabledBy: null, chain: [], params: { ...CODE_PARAMS }, prompts: {}, tools: { mode: null, allow: null }, limits: { estimate: surfaceById(args.surface)?.estimate ?? null, ceiling: surfaceById(args.surface)?.ceiling ?? null }, provenance: { chain: 'code' }, followed: null, bindingVersion: null }
   }
   const at = surfaceById(id)
   const ownProviders = holders.ownProviders !== false
@@ -211,9 +212,14 @@ export function resolveBinding(snapshot, args = {}) {
   const docsBySurface = surfaces.map((sid) => ({ sid, docs: scopedDocs(snap, sid, scope) }))
   const provenance = {}
 
-  // enabled: the global switch, then AND over every scope's binding of the surface itself
+  // enabled: the global switch, then AND over the bindings of the surface and of what it follows,
+  // walking `follows` as the model chain does, as far as the first surface with a server or plan
+  // binding of its own: a part with no binding of its own takes the Off (and its message) of the part
+  // it follows, and a part's own binding wins over its parent's. Team and person bindings met on the
+  // way only ever turn a part off.
   let enabled = true
   let disabledMessage = null
+  let disabledBy = null
   // the global switch holds even with the DB layer switched off at runtime (it is break-glass state)
   const global = snapshot?.state ?? snap.state
   if (global?.aiEnabled === false) {
@@ -221,12 +227,16 @@ export function resolveBinding(snapshot, args = {}) {
     disabledMessage = global.aiDisabledMessage || 'AI is turned off on this server by its administrator.'
     provenance.enabled = 'db:global'
   }
-  for (const { doc, layer } of docsBySurface[0].docs) {
-    if (doc.enabled === false && enabled) {
-      enabled = false
-      disabledMessage = doc.disabledMessage || `${at.title} is turned off by your administrator.`
-      provenance.enabled = layer
+  for (const { sid, docs } of docsBySurface) {
+    for (const { doc, layer } of docs) {
+      if (doc.enabled === false && enabled) {
+        enabled = false
+        disabledMessage = doc.disabledMessage || `${surfaceById(sid)?.title || at.title} is turned off by your administrator.`
+        provenance.enabled = layer
+        disabledBy = sid === id ? null : sid
+      }
     }
+    if (!enabled || docs.some(({ layer }) => !isInner(layer))) break
   }
   if (!provenance.enabled) provenance.enabled = 'code'
 
@@ -341,6 +351,8 @@ export function resolveBinding(snapshot, args = {}) {
   return {
     surface: id, builtinOnly: false, enabled, disabledMessage, chain, params, prompts, tools, limits,
     provenance, followed, bindingVersion, builtinFrom: builtinFeatureFor(id),
+    // off because the part it follows is off (it has no binding of its own): that part's id
+    disabledBy,
     // the model chain came from a published binding (not an AI settings choice, the file or code)
     chainFromBinding: Boolean(bindingVersion),
     // a one-entry chain is served as a choice (no chain walk, the call site's fallback kept)

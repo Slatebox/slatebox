@@ -28,7 +28,7 @@ import { createAIControl } from '../web/app/server/ai-control/facade.mjs'
 import { resolveBinding } from '../web/app/server/ai-control/resolve.mjs'
 import { changedFields, createAdminOps, createStatusHub, surfacesStatus } from '../web/app/server/ai-control/admin.mjs'
 import { execFileSync } from 'node:child_process'
-import { connectionFormDefaults, providerFormDefaults } from '../web/app/imports/ui/pages/admin/ai/catalog-view.mjs'
+import { connectionFormDefaults, modelFormDefaults, providerFormDefaults } from '../web/app/imports/ui/pages/admin/ai/catalog-view.mjs'
 import { createAISettings, keyFingerprint } from '../web/app/server/methods/ai/ai-settings-core.mjs'
 import { loadMasterKey } from '../web/app/server/metering/vault.mjs'
 import { createGate } from '../web/app/server/exec/gate.mjs'
@@ -488,12 +488,57 @@ test('the Changes tab: what changed field by field, a key only as which key, and
   ])
   assert.deepEqual(diffRows({ apiKey: { redacted: true, fingerprint: '…a91f' } }, { apiKey: { redacted: true, fingerprint: '…07c2' } }),
     [{ path: 'apiKey', before: 'a key (…a91f)', after: 'a key (…07c2)' }])
-  const csv = auditCsv([{ _id: 'r1', at: new Date('2026-11-24T10:00:00Z'), actor: { userId: 'root', principal: 'person', via: 'ddp' }, action: 'ai.update', target: { kind: 'aiSettings', id: 'server' }, reason: '=HYPERLINK("x"), "quoted"', before, after }])
+  const csv = auditCsv([{ _id: 'r1', at: new Date('2026-11-24T10:00:00Z'), actor: { userId: 'root', name: 'Rhea Root', principal: 'person', via: 'ddp' }, action: 'ai.update', target: { kind: 'aiSettings', id: 'server' }, reason: '=HYPERLINK("x"), "quoted"', before, after }])
   const [head, line] = csv.trim().split('\n')
-  assert.equal(head, 'when,account,principal,via,token,action,kind,id,reason,outcome,changes')
-  assert.match(line, /^2026-11-24T10:00:00.000Z,root,person,ddp,,ai.update,aiSettings,server,"'=HYPERLINK\(""x""\), ""quoted""",ok,/)
+  assert.equal(head, 'when,account,name,principal,via,token,action,kind,id,reason,outcome,changes')
+  assert.match(line, /^2026-11-24T10:00:00.000Z,root,Rhea Root,person,ddp,,ai.update,aiSettings,server,"'=HYPERLINK\(""x""\), ""quoted""",ok,/)
   assert.match(line, /connections\[gem\] key: …a91f -> sha256:1a2b3c4d…07c2/)
-  assert.equal(actorText({ userId: 'root', principal: 'agent', via: 'exec' }), 'root (agent) from a script')
+  // who: the person's name, never the account id
+  assert.equal(actorText({ userId: 'root', name: 'Rhea Root', principal: 'agent', via: 'exec' }), 'Rhea Root (agent) from a script')
+  assert.equal(actorText({ userId: 'ChYCWHWKbPsTNDQo9', principal: 'person', via: 'ddp' }), 'a deleted account in the app')
+  assert.equal(actorText({ principal: 'person', via: 'system' }), 'Slatebox by the server')
+})
+
+test('the Changes tab names people (looked up on the server, administrators only) and parts of Slatebox, and keeps the action id in the details', async () => {
+  const { actorText, targetText } = await import('../web/app/imports/ui/pages/admin/ai/audit-diff.mjs')
+  const { collections, store, ai, registry } = world()
+  const aiAudit = { aggregate: () => ({ toArray: async () => [] }) }
+  const asked = []
+  const ops = createAdminOps({ store, audit: collections.audit, aiAudit, aiSettings: ai, namesOf: async (ids) => { asked.push(ids); return { root: 'Rhea Root' } } })
+  await store.record({ action: 'ai.bindings.publish', actor: { userId: 'root', principal: 'person', via: 'ddp' }, target: { kind: 'binding', id: 'chat|server' }, before: null, after: { surface: 'chat', version: 2 }, reason: 'check' })
+  await store.record({ action: 'ai.bindings.publish', actor: { userId: 'gone1', principal: 'person', via: 'ddp' }, target: { kind: 'binding', id: 'canvas|server' }, before: null, after: { surface: 'canvas', version: 1 }, reason: 'check' })
+  await store.record({ action: 'ai.update', actor: { userId: 'root', principal: 'agent', via: 'http', tokenId: 't-root' }, target: { kind: 'aiSettings', id: 'server' }, before: {}, after: {}, reason: 'check' })
+  const { rows } = await ops.listAudit({})
+  // one lookup for the page, each account once
+  assert.deepEqual(asked.map((ids) => [...ids].sort()), [['gone1', 'root']])
+  assert.deepEqual(rows.map((r) => actorText(r.actor)).sort(), ['Rhea Root (agent) with a token', 'Rhea Root in the app', 'a deleted account in the app'])
+  for (const row of rows) assert.ok(!actorText(row.actor).includes(row.actor.userId), 'no account id in Who')
+  // the account id stays on the row (the API, the CSV); the name is added beside it
+  assert.deepEqual(rows.map((r) => r.actor.userId).sort(), ['gone1', 'root', 'root'])
+  // a lookup that fails still never shows an id
+  const broken = createAdminOps({ store, audit: collections.audit, aiAudit, aiSettings: ai, namesOf: async () => { throw new Error('db down') } })
+  assert.ok((await broken.listAudit({})).rows.every((r) => r.actor.name === 'a deleted account'))
+  // only administrators read the list
+  await assert.rejects(registry.run(person('ana'), 'ai.audit.list', {}), { status: 403 })
+  // Changed: the plain title, never "binding: chat|server"
+  const titles = { chat: 'Conversation and edits', canvas: 'Canvas conversation (drawing chat)' }
+  assert.equal(targetText({ kind: 'binding', id: 'chat|server' }, titles), 'Conversation and edits')
+  assert.equal(targetText({ kind: 'bindingVersions', id: 'canvas|server@3' }, titles), 'Canvas conversation (drawing chat)')
+  assert.equal(targetText({ kind: 'state', id: 'global' }, titles), 'AI for everyone')
+  assert.equal(targetText({ kind: 'aiSettings', id: 'me:ana' }, titles), 'A person\'s own AI settings')
+  assert.equal(targetText({ kind: 'reset', id: 'use' }, titles), 'Reset: the server\'s AI choices')
+  assert.equal(targetText({ kind: 'connection', id: 'a,b' }, titles), 'Server connections a, b')
+  // the page: Who and Changed in words; the action id only in the row's tooltip and its details
+  const page = readFileSync(new URL('../web/app/imports/ui/pages/admin/ai/Audit.jsx', import.meta.url), 'utf8')
+  assert.match(page, /\{actorText\(row\.actor\)\}/)
+  assert.match(page, /\{targetText\(row\.target, titles\)\}/)
+  assert.doesNotMatch(page, /\{row\.target\?\.kind\}: \{row\.target\?\.id\}/)
+  assert.doesNotMatch(page, /color="text\.secondary">\{row\.action\}<\/Typography>/)
+  assert.match(page, /title=\{row\.action\}/)
+  assert.match(page, /function Details\(\{ row \}\)[\s\S]*?\{row\.action\}/)
+  // the server wires the lookup to the people's names
+  const index = readFileSync(new URL('../web/app/server/ai-control/index.mjs', import.meta.url), 'utf8')
+  assert.match(index, /namesOf: async \(userIds\) =>/)
 })
 
 // ---------- review fixes (2026-11-24) ----------
@@ -585,9 +630,37 @@ test('the Add a connection and Add provider dialogs open filled: every field the
   }
 })
 
+test('the Add a model dialog is controlled from its first render: every field and Select it reads is set before it opens (no uncontrolled-to-controlled warning)', () => {
+  const source = readFileSync(new URL('../web/app/imports/ui/pages/admin/ai/Models.jsx', import.meta.url), 'utf8')
+  assert.ok(!/useState\(\{\}\)/.test(source), 'no form starts empty')
+  const start = source.indexOf('function EditModel(')
+  const body = source.slice(start, source.indexOf('\nfunction ', start + 1))
+  const fields = [...new Set([...body.matchAll(/form\.([a-zA-Z]+)/g)].map((m) => m[1]))]
+  const selects = [...body.matchAll(/<TextField select[^>]*value=\{form\.([a-zA-Z]+)\}/g)].map((m) => m[1])
+  assert.deepEqual(selects.sort(), ['connection', 'status'])
+  const builtin = ['builtin:deepinfra']
+  for (const open of [null, {}, { connection: 'server:a', modelName: 'm' }, { model: { connection: 'server:a', model: 'm', status: 'disabled', prices: { inputPerM: 1 } } }]) {
+    const form = modelFormDefaults(open, [], builtin)
+    for (const field of fields) assert.ok(form[field] !== undefined, `EditModel reads form.${field} (${JSON.stringify(open)})`)
+    for (const field of selects) assert.equal(typeof form[field], 'string', field)
+    for (const field of ['model', 'label']) assert.equal(typeof form[field], 'string', field)
+  }
+  assert.deepEqual([modelFormDefaults(null, [], builtin).connection, modelFormDefaults({}, ['server:a'], builtin).connection], ['builtin:deepinfra', 'server:a'])
+  assert.deepEqual([modelFormDefaults({ model: { connection: 'server:b', model: 'x', status: 'disabled' } }).status, modelFormDefaults({ model: { model: 'x' } }).existing], ['disabled', true])
+})
+
 test('a part an administrator turned off: board chat, board drafting, the canvas conversation and the Slatebox agent give the administrator\'s message', () => {
   const out = JSON.parse(execFileSync(process.execPath, ['--no-deprecation', new URL('./ai-request-golden.mjs', import.meta.url).pathname, '--disabled'], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }))
   for (const site of ['laneChat', 'draft', 'canvas', 'agent']) assert.equal(out[site], out.expected, site)
+})
+
+test('the administrator\'s Off is checked before the one-draft-a-minute lock: board drafting and the canvas conversation say it with no lock taken and no request sent', () => {
+  const out = JSON.parse(execFileSync(process.execPath, ['--no-deprecation', new URL('./ai-request-golden.mjs', import.meta.url).pathname, '--off-first'], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }))
+  for (const site of ['draft', 'canvas']) {
+    assert.deepEqual(out[site], { error: 'draft-unavailable', said: out.expected, locks: [], requests: 0 }, site)
+  }
+  // each asked about its own surface's request feature, for the person asking
+  assert.deepEqual(out.asked, [{ feature: 'workshop', userId: 'ana' }, { feature: 'canvas', userId: 'ana' }])
 })
 
 test('the Changes tab: a publish\'s two rows read differently, bindings actions have words, bookkeeping fields stay out of the diff', async () => {
@@ -600,4 +673,12 @@ test('the Changes tab: a publish\'s two rows read differently, bindings actions 
   assert.equal(actionText({ action: 'ai.bindings.sync', before: { surface: 'shape', version: 3 }, after: null }), 'Published a binding from AI settings: removed')
   assert.equal(actionText({ action: 'ai.bindings.publish', outcome: 'refused' }), 'Published a binding')
   assert.deepEqual(diffRows({ _id: 'a', updatedAt: 1, updatedBy: 'x', enabled: true }, { _id: 'a', updatedAt: 2, updatedBy: 'y', enabled: false }).map((r) => r.path), ['enabled'])
+})
+
+test('no button holds a button: the + menu\'s note buttons and boards rows sit in a plain group, not inside the SpeedDial action\'s own button', () => {
+  const dock = readFileSync(new URL('../web/app/imports/ui/components/node/QuickNodeActions.jsx', import.meta.url), 'utf8')
+  const actions = dock.split('<SpeedDialAction').slice(1).map((chunk) => chunk.slice(0, chunk.search(/\n\s*\/>/) + 1 || undefined))
+  const holding = actions.filter((chunk) => /<ButtonGroup|<Button\b|BoardsDock/.test(chunk))
+  assert.equal(holding.length, 2, 'the note buttons and the boards rows')
+  for (const chunk of holding) assert.match(chunk, /fab: \{ component: 'div', role: 'group'/)
 })

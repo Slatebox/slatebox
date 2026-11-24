@@ -35,13 +35,20 @@ cards: [{ id: 'walker', label: 'Walker', laneId: 'station-1' }] }
 // turned off answers (--disabled), to see which words reach the person.
 const OFF = { abort: true, abortMessage: 'Board chat is off for maintenance until noon.', fallbackBlocked: true, disabled: true, failure: 'stop' }
 let answer = { abort: true }
+// What the up-front check (ai-settings surfaceOffFor) says: null (on) for the goldens, or a part an
+// administrator turned off (--off-first), to see that it is said before any lock or request.
+const OFF_FIRST = 'Drawing chat is paused by the admin for a test.'
+let offState = null
 
-export async function recordCallSites(appRoot, { disabled = false } = {}) {
+export async function recordCallSites(appRoot, { disabled = false, offFirst = false } = {}) {
   if (disabled) answer = OFF
+  if (offFirst) offState = { surface: 'canvas', message: OFF_FIRST }
   const root = appRoot.replace(/\/+$/, '') + '/'
   register(new URL('./ai-request-golden-hooks.mjs', import.meta.url), { data: { appRoot: root, targets: TARGETS } })
 
   const calls = []
+  const locks = []
+  const offAsked = []
   let board = LANES
   class MeteorError extends Error {
     constructor(error, reason) { super(reason || error); this.error = error; this.reason = reason }
@@ -51,7 +58,7 @@ export async function recordCallSites(appRoot, { disabled = false } = {}) {
     methods: (defs) => Object.assign(methods, defs),
     userAsync: async () => ({ _id: 'ana', emails: [] }),
     userId: () => 'ana',
-    users: { updateAsync: async () => 1, findOneAsync: async () => ({ _id: 'ana' }) },
+    users: { updateAsync: async (selector, modifier) => { locks.push(Object.keys(modifier?.$set || modifier?.$unset || {})); return 1 }, findOneAsync: async () => ({ _id: 'ana' }) },
     settings: { public: {} },
     Error: MeteorError,
     isServer: true,
@@ -64,9 +71,11 @@ export async function recordCallSites(appRoot, { disabled = false } = {}) {
     'server/metering/context.mjs': { runAIAction: (_opts, fn) => fn() },
     'server/metering/context': { runAIAction: (_opts, fn) => fn() },
     'server/metering/meteor': { canStartAI: async () => true, aiRefusal: async () => null },
+    'server/methods/ai/ai-settings': { surfaceOffFor: async (query) => { offAsked.push(query); return offState } },
     'server/methods/creative-slates': {
       resolveCreativeSlate: async () => ({ canEdit: true, slateBase: { _id: 'slate1', options: {}, nodes: [], creative: { revision: 3, model: { kind: 'workshop', workshop: board } } } }),
-      resolvePresentationSlate: async () => null,
+      // a plain drawing the person can edit (canvasConversation.preview, --off-first)
+      resolvePresentationSlate: async () => (offFirst ? { canEdit: true, slateBase: { _id: 'slate1', options: {}, nodes: [] } } : null),
     },
   }
   globalThis.__aiGoldenStub = (key) => stubs[key] || anything()
@@ -84,6 +93,22 @@ export async function recordCallSites(appRoot, { disabled = false } = {}) {
   const wrongTool = [{ toolCall: { name: 'not_this_tool', arguments: {} } }, { toolCall: null, message: { content: '' } }]
   const last = () => calls.at(-1)
   const quiet = async (fn) => { try { await fn() } catch {} }
+  if (offFirst) {
+    // the error each method gives, and what it did before saying it: locks taken, requests sent
+    const said = async (fn) => {
+      const before = { locks: locks.length, calls: calls.length }
+      try { await fn(); return { said: null } } catch (error) {
+        return { error: error.error ?? null, said: error.reason || error.message, locks: locks.slice(before.locks), requests: calls.length - before.calls }
+      }
+    }
+    const self = { userId: 'ana', connection: { id: 'conn1' } }
+    return {
+      draft: await said(() => methods['workshops.draft']('Choose a venue for the spring party with the team', 'lanes')),
+      canvas: await said(() => methods['canvasConversation.preview'].call(self, 'share1', 'Suggest three names for a team retrospective board.', [], null)),
+      asked: offAsked,
+      expected: OFF_FIRST,
+    }
+  }
   if (disabled) {
     // the words each call site gives the person when req() says the part is off
     const said = async (fn) => { try { const out = await fn(); return out?.message ?? null } catch (error) { return error.reason || error.message } }
@@ -126,6 +151,7 @@ export async function recordCallSites(appRoot, { disabled = false } = {}) {
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2)
   const disabled = args.includes('--disabled')
+  const offFirst = args.includes('--off-first')
   const appRoot = args.find((a) => !a.startsWith('--')) || new URL('../web/app/', import.meta.url).pathname
-  process.stdout.write(JSON.stringify(await recordCallSites(appRoot, { disabled }), null, 2) + '\n')
+  process.stdout.write(JSON.stringify(await recordCallSites(appRoot, { disabled, offFirst }), null, 2) + '\n')
 }

@@ -162,6 +162,16 @@ export function moveLine(chain, index, by) {
   return next.map((row, i) => ({ ...row, on: i === 0 ? [] : row.on.length ? row.on : ['infra'] }))
 }
 
+/**
+ * An effective binding's on/off in words: null while on, 'Off', or 'Off (follows Conversation and
+ * edits)' for a part with no binding of its own that is off because the part it follows is.
+ * titles: { [surfaceId]: title }
+ */
+export function offText(binding, titles = {}) {
+  if (!binding || binding.enabled !== false) return null
+  return binding.disabledBy ? `Off (follows ${titles[binding.disabledBy] || binding.disabledBy})` : 'Off'
+}
+
 /** Where a field of an effective binding came from, in words (resolve.mjs provenance). */
 export function layerText(layer) {
   const value = String(layer || 'code')
@@ -179,11 +189,11 @@ export function layerText(layer) {
 }
 
 /** The rows of the Effective tab for one surface: each field, its value in words and where it came from. */
-export function effectiveRows(binding, models = []) {
+export function effectiveRows(binding, models = [], titles = {}) {
   if (!binding) return []
   const p = binding.provenance || {}
   const rows = [
-    { field: 'On or off', value: binding.enabled ? 'On' : `Off: ${binding.disabledMessage}`, from: layerText(p.enabled) },
+    { field: 'On or off', value: binding.enabled ? 'On' : `${offText(binding, titles)}: ${binding.disabledMessage}`, from: layerText(p.enabled) },
     { field: 'Model chain', value: binding.chain?.length ? binding.chain.map((c, i) => `${i ? 'then ' : ''}${c.model || entryText(c, models)}${c.connection && c.connection !== 'builtin' ? ` (${c.connection.replace(/^server:/, '')})` : c.connection === 'builtin' ? ` (built in · ${c.provider || ''})` : ''}${i ? ` when ${(c.on || []).map((o) => ON_LABELS[o] || o).join(' or ')}` : ''}`).join(', ') : 'None', from: `${layerText(p.chain)}${binding.followed ? ` · follows ${binding.followed}` : ''}` },
   ]
   for (const field of PARAM_FIELDS) {

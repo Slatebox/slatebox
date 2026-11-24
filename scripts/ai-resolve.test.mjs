@@ -222,6 +222,36 @@ test('the global switch turns every surface off with its message', async () => {
   assert.equal(b.provenance.enabled, 'db:global')
 })
 
+test('Off follows the follows chain: a part with no binding of its own takes its parent\'s Off and message; its own binding wins', async () => {
+  const chatOff = binding('chat', { level: 'server' }, { enabled: false, disabledMessage: 'Ask Slatebox is paused for an upgrade.' })
+  const control = await controlFor(snap({ bindings: [chatOff] }))
+  // canvas follows chat, the agent follows canvas, a board's conversation follows chat
+  for (const surface of ['canvas', 'agent.slatebox', 'workshop', 'workshop.draft', 'chat.route', 'library']) {
+    const b = await control.bind({ surface, userId: 'ana' })
+    assert.deepEqual([b.enabled, b.disabledMessage, b.disabledBy, b.provenance.enabled], [false, 'Ask Slatebox is paused for an upgrade.', 'chat', 'db:server@v3'], surface)
+  }
+  const chat = await control.bind({ surface: 'chat' })
+  assert.deepEqual([chat.enabled, chat.disabledBy], [false, null])
+  // parts that do not follow chat stay on
+  for (const surface of ['generation', 'shape', 'vision', 'presentation']) assert.equal((await control.bind({ surface })).enabled, true, surface)
+  // the request path refuses a following part with the parent's message
+  assert.equal(requestOptionsFromBinding({ binding: await control.bind({ surface: 'canvas' }) }).refusal.abortMessage, 'Ask Slatebox is paused for an upgrade.')
+  // a parent turned off with no message of its own: its title names it
+  const quiet = await controlFor(snap({ bindings: [binding('chat', { level: 'server' }, { enabled: false })] }))
+  assert.equal((await quiet.bind({ surface: 'canvas' })).disabledMessage, 'Conversation and edits is turned off by your administrator.')
+  // a part's own binding wins: canvas bound (on) answers while chat is off; the agent follows canvas, so it is on too
+  const own = await controlFor(snap({ bindings: [chatOff, binding('canvas', { level: 'server' }, { enabled: true, chain: [{ model: 'muse:muse-ember-1.0' }] })] }))
+  assert.deepEqual([(await own.bind({ surface: 'canvas' })).enabled, (await own.bind({ surface: 'agent.slatebox' })).enabled, (await own.bind({ surface: 'workshop' })).enabled], [true, true, false])
+  // and its own Off is its own (not "follows")
+  const both = await controlFor(snap({ bindings: [chatOff, binding('canvas', { level: 'server' }, { enabled: false, disabledMessage: 'Drawing chat is paused.' })] }))
+  const canvas = await both.bind({ surface: 'canvas' })
+  assert.deepEqual([canvas.enabled, canvas.disabledMessage, canvas.disabledBy], [false, 'Drawing chat is paused.', null])
+  // the global switch still comes first
+  const global = await controlFor(snap({ state: { generation: 9, aiEnabled: false, aiDisabledMessage: 'All AI is paused.' }, bindings: [chatOff] }))
+  const g = await global.bind({ surface: 'canvas' })
+  assert.deepEqual([g.enabled, g.disabledMessage, g.disabledBy, g.provenance.enabled], [false, 'All AI is paused.', null, 'db:global'])
+})
+
 test('limits and allowed tools only tighten', async () => {
   const s = snap({
     bindings: [

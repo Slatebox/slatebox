@@ -18,6 +18,7 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { ReasonDialog } from './BindingEditor'
+import { offText } from './bindings-view.mjs'
 
 const usd = (micros) => `$${(micros / 1_000_000).toFixed(2)}`
 const mono = { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.75rem' }
@@ -256,7 +257,7 @@ export default function Overview() {
                   {s.binding ? (
                     <>
                       <TableCell>
-                        <Typography variant="body2">{off ? `Turned off: ${s.binding.disabledMessage}` : model}</Typography>
+                        <Typography variant="body2">{off ? `${offText(s.binding, titles)}: ${s.binding.disabledMessage}` : model}</Typography>
                         {!off && via && <Typography component="span" sx={mono} color="text.secondary">{via}</Typography>}
                       </TableCell>
                       <TableCell><Typography variant="body2">{source(s.binding, titles)}</Typography></TableCell>

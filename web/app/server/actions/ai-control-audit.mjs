@@ -13,7 +13,7 @@ export default defineAction({
   id: 'ai.audit.list',
   title: 'AI control changes',
   description:
-    'Lists changes to the AI configuration, newest first: AI control changes, ai.update (connections and feature choices at any level) and persona saves (chatIntentions.save). Each row has who (account, person or agent, token, and via ddp, http or exec), the action, what it changed, the reason, before and after (keys only as fingerprints), and whether it was refused. Filter by action (exact, or a prefix ending in a dot such as ai.control.), kind, id, userId, outcome and time; pass next as before for the next page. Administrators only.',
+    'Lists changes to the AI configuration, newest first: AI control changes, ai.update (connections and feature choices at any level) and persona saves (chatIntentions.save). Each row has who (account and the name of the person, or "a deleted account"; person or agent, token, and via ddp, http or exec), the action, what it changed, the reason, before and after (keys only as fingerprints), and whether it was refused. Filter by action (exact, or a prefix ending in a dot such as ai.control.), kind, id, userId, outcome and time; pass next as before for the next page. Administrators only.',
   toolset: 'admin',
   kind: 'read',
   scope: 'ai:admin:read',

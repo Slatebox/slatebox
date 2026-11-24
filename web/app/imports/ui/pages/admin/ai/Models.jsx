@@ -20,7 +20,7 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { numberOrNull, priceText, unpricedIds } from './catalog-view.mjs'
+import { modelFormDefaults, numberOrNull, priceText, unpricedIds } from './catalog-view.mjs'
 
 // Admin › AI control › Models: the models each connection serves, what they can do and what they
 // cost. The meter charges these prices from the next call; a model with no price is charged at
@@ -32,17 +32,12 @@ const BUILTIN = ['deepinfra', 'openai', 'anthropic', 'stabilityai'].map((p) => `
 const UNPRICED = 'Until you add a price, Slatebox charges this model at its highest rate.'
 
 function EditModel({ open, onClose, onDone, connections }) {
-  const [form, setForm] = useState({})
+  const [form, setForm] = useState(() => modelFormDefaults(open, connections, BUILTIN))
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     if (!open) return
-    const m = open.model || {}
-    setForm({
-      connection: m.connection || open.connection || connections[0] || BUILTIN[0], model: m.model || open.modelName || '', label: m.label || '',
-      caps: m.capabilities || { tools: true }, maxContext: m.maxContext ?? '', maxOutput: m.maxOutput ?? '',
-      inputPerM: m.prices?.inputPerM ?? '', outputPerM: m.prices?.outputPerM ?? '', status: m.status || 'enabled', existing: Boolean(open.model),
-    })
+    setForm(modelFormDefaults(open, connections, BUILTIN))
     setError('')
   }, [open])
   if (!open) return null

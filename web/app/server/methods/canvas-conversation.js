@@ -26,6 +26,7 @@ import { slateSaveCore } from '../slate-save'
 import { rememberInvitedEdit } from './joined-slates'
 import { resolveAIFeatureConfig } from './ai/feature-config.mjs'
 import req from './ai/req'
+import { surfaceOffFor } from './ai/ai-settings'
 import { runAIAction } from '../metering/context.mjs'
 import { aiRefusal } from '../metering/meteor'
 import { refusalErrorArgs } from '../metering/refusal-pay.mjs'
@@ -140,6 +141,10 @@ Meteor.methods({
       throw new Meteor.Error(...refusalErrorArgs(refusal))
     }
     const useAI = !noteRequest(message) && !lines && aiQualifies({ canGenerate, message })
+    // A part an administrator turned off says so in their words before the meter or the
+    // one-draft-a-minute lock is taken (a second request inside the minute still gets their message).
+    const off = useAI ? await surfaceOffFor({ feature: 'canvas', userId: this.userId }) : null
+    if (off) throw new Meteor.Error('draft-unavailable', off.message)
     try {
       const turn = async () => {
         if (useAI) {

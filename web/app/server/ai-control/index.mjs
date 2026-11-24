@@ -25,6 +25,7 @@ import { createAIControl } from './facade.mjs'
 import { createBindingOps, limitsFor } from './bindings.mjs'
 import { applyBreaker, requestBreaker } from './breaker.mjs'
 import { runAIControl001 } from '../migrations/ai-control-001.mjs'
+import { displayName } from '../instance/account-summary.mjs'
 
 // A wrong ai.control section in the settings stops the start with a plain message.
 const dbLayer = fileDbLayer(Meteor.settings)
@@ -154,6 +155,11 @@ export const aiControlOps = createAdminOps({
   aiSettings,
   costOf: aiCostMicros,
   bindings: aiBindings,
+  // the Changes tab names people, never their account ids (ai.audit.list is administrators only)
+  namesOf: async (userIds) => {
+    const users = await Meteor.users.rawCollection().find({ _id: { $in: userIds } }, { projection: { profile: 1, emails: 1, username: 1 } }).toArray()
+    return Object.fromEntries(users.map((user) => [user._id, displayName(user) || user.profile?.name || user.username || 'an account with no name']))
+  },
 })
 
 // ai.surfaces.status: for every signed-in page, whether each AI surface is on and the message to

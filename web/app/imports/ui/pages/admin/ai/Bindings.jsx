@@ -12,7 +12,7 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
 import BindingEditor, { ReasonDialog } from './BindingEditor'
-import { GROUPS, chainText, limitsText, paramsText, toolsText } from './bindings-view.mjs'
+import { GROUPS, chainText, limitsText, offText, paramsText, toolsText } from './bindings-view.mjs'
 
 // Admin › AI control › Bindings: for each part of Slatebox, which model chain answers it, its
 // parameters, tools and limits, and whether it is on. A part with no binding follows what it
@@ -49,6 +49,7 @@ export default function Bindings() {
   const entries = Object.fromEntries(data.list.surfaces.map((s) => [s.surface, s]))
   const effective = Object.fromEntries(data.eff.surfaces.map((s) => [s.id, s.binding]))
   const models = data.snap.models || []
+  const titles = Object.fromEntries(data.snap.surfaces.map((s) => [s.id, s.title]))
   const notInBuild = data.snap.surfaces.filter((s) => !s.inBuild)
   // in this build, but no request of its own yet (a note's rewrite): it follows until it has one
   const notYet = data.snap.surfaces.filter((s) => s.inBuild && s.bindable && s.id !== 'default' && !s.builtinOnly && !entries[s.id])
@@ -85,6 +86,8 @@ export default function Bindings() {
                   const head = entry.head
                   const eff = effective[id]
                   const off = head?.enabled === false
+                  // no Off of its own, but the part it follows is off: it is off too, and says why
+                  const offFollowing = !off && eff?.enabled === false && eff.disabledBy ? offText(eff, titles) : null
                   const draft = entry.versions.find((v) => v.status === 'draft' && (!head || v.version > head.version))
                   return (
                     <TableRow key={id} hover data-testid={`binding-${id}`} sx={{ cursor: 'pointer' }} onClick={() => setEditing(id)}>
@@ -106,7 +109,9 @@ export default function Bindings() {
                       <TableCell><Typography variant="body2">{toolsText(head?.tools) || '—'}</Typography></TableCell>
                       <TableCell><Typography variant="body2">{limitsText(head?.limits) || '—'}</Typography></TableCell>
                       <TableCell>
-                        {off ? <Chip size="small" color="warning" label="Off" title={head.disabledMessage || ''} /> : <Typography variant="body2">On</Typography>}
+                        {off ? <Chip size="small" color="warning" label="Off" title={head.disabledMessage || ''} />
+                          : offFollowing ? <Chip size="small" color="warning" variant="outlined" label={offFollowing} title={eff.disabledMessage || ''} />
+                            : <Typography variant="body2">On</Typography>}
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         {head && <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>Version {head.version}</Typography>}

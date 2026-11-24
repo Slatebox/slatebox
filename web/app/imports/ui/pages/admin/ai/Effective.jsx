@@ -76,7 +76,7 @@ export default function Effective() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {effectiveRows(row.binding, models).map((r) => (
+              {effectiveRows(row.binding, models, Object.fromEntries((result?.surfaces || []).map((s) => [s.id, s.title]))).map((r) => (
                 <TableRow key={r.field}>
                   <TableCell>{r.field}</TableCell>
                   <TableCell>{r.value}</TableCell>

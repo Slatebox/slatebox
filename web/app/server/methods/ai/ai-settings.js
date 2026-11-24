@@ -79,6 +79,21 @@ export function resolveRequestConnection({ feature, request = {}, userId = calle
 }
 
 /**
+ * Whether an administrator turned off the surface of this request feature (ai-settings-core.mjs
+ * surfaceOff): checked before a rate limit or lock is taken, so a part that is off always answers
+ * with the administrator's message. → null or { surface, message }. Never throws: a broken read
+ * leaves the request to req(), which checks again.
+ */
+export async function surfaceOffFor({ feature, userId = callerId() }) {
+  try {
+    return await aiSettings.surfaceOff({ userId, feature })
+  } catch (error) {
+    console.warn(`ai-settings: whether ${feature} is turned off could not be read: ${error.message}`)
+    return null
+  }
+}
+
+/**
  * The key of a service beside the models for one request (ai-settings-core.mjs auxCredential): the
  * server's connection in the app when there is one, so a key rotated there is used at once, else
  * null and the caller reads the settings file as before. Never throws: a broken row falls back.
