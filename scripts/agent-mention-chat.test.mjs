@@ -116,6 +116,27 @@ test('after "@GitHub", follow-ups stay with GitHub until cleared or someone else
   assert.deepEqual(routeMessage('add three ideas', { agents: [{ ...github, canAsk: false }], replyingTo: 'gh' }), { kind: 'slatebox', replyingTo: null })
 })
 
+test('a turn that made an action card says Approve or decline that card, never Keep all on its frame', async () => {
+  const { agentChatReply } = await import('../web/app/imports/api/common/agent-mention.mjs')
+  const card = { label: 'Create Linear issue', system: 'Linear', state: 'waiting' }
+  assert.equal(agentChatReply('Linear', { items: 1, actions: ['a'], saved: 0, say: 'One change waits for your approval.', added: { notes: 1, lines: 0 }, cards: [card] }),
+    'One change waits for your approval. Approve or decline the Linear issue card on the slate.')
+  // other notes in the same answer: Keep all suggestions keeps those; the card is approved on its own
+  assert.equal(agentChatReply('Linear', { items: 1, actions: ['a'], say: 'Found 2 open issues', added: { notes: 3, lines: 0 }, cards: [card] }),
+    'Found 2 open issues. Added 2 notes as one suggestion: Keep all suggestions or Discard all on its frame, or point at a note to keep it alone. Approve or decline the Linear issue card on the slate.')
+  assert.equal(agentChatReply('Linear', { items: 1, actions: ['a'], added: { notes: 2, lines: 0 }, cards: [card, { label: 'Linear: save view', system: 'Linear', state: 'failed' }] }),
+    'Approve or decline each of the 2 Linear cards on the slate.')
+  // a label without a verb before the agent's name: its "change"
+  assert.equal(agentChatReply('GitHub', { items: 1, actions: ['a'], added: { notes: 1, lines: 0 }, cards: [{ label: 'GitHub: issue write', system: 'GitHub', state: 'unclear' }] }),
+    'Approve or decline the GitHub change card on the slate.')
+  // saved directly (no suggestion to keep): decided on the agent's chip
+  assert.equal(agentChatReply('Linear', { items: 1, actions: [], saved: 1, added: { notes: 1, lines: 0 }, cards: [card] }),
+    "Approve or decline the Linear issue card on Linear's chip under the canvas.")
+  // a card already done (the agent acts without asking) is a note like any other
+  assert.equal(agentChatReply('Linear', { items: 1, actions: ['a'], added: { notes: 1, lines: 0 }, cards: [{ ...card, state: 'done' }] }),
+    'Added 1 note as one suggestion: Keep all or Discard all on its frame, or point at a note to keep it alone.')
+})
+
 test('the same ask while its answer waits is said once (no second "one suggestion is on the slate")', async () => {
   const { agentChatReply } = await import('../web/app/imports/api/common/agent-mention.mjs')
   const said = 'That answer is still on the slate, waiting: Keep all or Discard all on its frame, then ask again for a new one.'

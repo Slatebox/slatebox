@@ -55,22 +55,39 @@ export const sameAgentName = (a, b) => fold(a) === fold(b)
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
 
+// What an action card is called in a sentence: "Linear issue" for "Create Linear issue", else "Linear change".
+function cardName(card, name) {
+  const label = typeof card?.label === 'string' ? card.label.trim() : ''
+  const system = typeof card?.system === 'string' && card.system.trim() ? card.system.trim() : name
+  const at = label.indexOf(system)
+  return at > 0 && /^\S+ $/.test(label.slice(0, at)) ? label.slice(at) : `${system} change`
+}
+
 /** What an invited agent's turn in Ask Slatebox says about what it did (connectors.call's answer). */
 export function agentChatReply(name, result = {}) {
   const said = typeof result.say === 'string' ? result.say.trim() : ''
   const waiting = Array.isArray(result.actions) ? result.actions.length : 0
   const saved = Number(result.saved) || 0
-  const notes = Number(result.added?.notes) || 0
+  // Action cards (changes outside Slatebox) still to decide: each is approved or declined on its own card.
+  const cards = (Array.isArray(result.cards) ? result.cards : []).filter((card) => ['waiting', 'failed', 'unclear'].includes(card?.state))
+  const notes = Math.max(0, (Number(result.added?.notes) || 0) - (waiting || saved ? cards.length : 0))
   const lines = Number(result.added?.lines) || 0
   const what = [notes && plural(notes, 'note', 'notes'), lines && plural(lines, 'line', 'lines')].filter(Boolean).join(' and ')
   const parts = []
   if (said) parts.push(/[.!?]$/.test(said) ? said : said + '.')
   // The same ask while its answer waits: that answer is the answer, said once.
   if (result.repeated) return parts.join(' ') || 'That answer is still on the slate, waiting.'
-  if (waiting) parts.push(what
+  const decide = cards.length === 1 ? `Approve or decline the ${cardName(cards[0], name)} card` : `Approve or decline each of the ${cards.length} ${name} cards`
+  if (waiting && cards.length) {
+    // Keep all never approves a card: its other notes are kept as usual, each card is approved alone.
+    if (what) parts.push(`Added ${what} as one suggestion: Keep all suggestions or Discard all on its frame, or point at a note to keep it alone.`)
+    parts.push(`${decide} on the slate.`)
+  } else if (waiting) parts.push(what
     ? `Added ${what} as one suggestion: Keep all or Discard all on its frame, or point at a note to keep it alone.`
     : `${waiting === 1 ? 'One suggestion is' : `${waiting} suggestions are`} on the slate: Keep all or Discard all on its frame.`)
-  if (saved) parts.push(what ? `Added ${what} to the slate.` : `Added ${saved === 1 ? 'one change' : `${saved} changes`} to the slate.`)
+  if (saved && (what || !cards.length)) parts.push(what ? `Added ${what} to the slate.` : `Added ${saved === 1 ? 'one change' : `${saved} changes`} to the slate.`)
+  // Saved directly (no suggestion to keep): its cards are decided on the agent's chip.
+  if (saved && !waiting && cards.length) parts.push(`${decide} on ${name}'s chip under the canvas.`)
   if (!waiting && !saved && !said) parts.push(`${name} had nothing to suggest for that.`)
   for (const line of Array.isArray(result.left) ? result.left : []) if (typeof line === 'string' && line.trim()) parts.push(line.trim())
   return parts.join(' ')

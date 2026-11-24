@@ -153,6 +153,12 @@ export default function AgentPresenceListener({ slate, canEdit = false }) {
           // Keep all / Discard all on an answer's frame: its waiting items at once (one save, one Undo).
           onKeepAll: (actionId) => decide(shareId, { decision: 'keep', actionId }).catch(said),
           onDiscardAll: (actionId) => decide(shareId, { decision: 'discard', actionId }).catch(said),
+          // An action card (a change outside Slatebox) shows Approve and Decline, which are Keep and Discard of its note
+          // alone. Try again anyway, on a card whose change may have been made already, sends it once more on purpose.
+          onTryAgain: ({ actionId, itemId }) => {
+            const cardId = latest.current.actions.find((a) => a.actionId === actionId)?.items?.find((i) => i.id === itemId)?.card?.id
+            if (cardId) Meteor.callAsync('connectors.approve', { cardId, again: true }).then((out) => { if (out?.say) setTold(out.say) }).catch(said)
+          },
           toNode: compat.v1NodeToV2,
         })
         ghosts.current.set(latest.current.actions)

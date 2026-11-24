@@ -9,7 +9,7 @@
 // and Edit directly are the roster's own, and each answer's ghosts (one framed group, Keep all /
 // Discard all on it) are the app's live suggestions (AgentPresenceListener).
 // Its changes outside Slatebox (agents read and write, owner 2026-11-24): each lands in its answer as
-// an action card (a ghost note: Keep approves, Discard declines); the chip lists them too, with
+// an action card (a ghost note with Approve and Decline); the chip lists them too, with
 // Approve and Decline, their links once done, and, for its inviter (or the slate's owner, to narrow
 // it), whether it acts without asking here and who may approve.
 // The canvas.agents slot holds "+ Invite agent" and the walkthrough.

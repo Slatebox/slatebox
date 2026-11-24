@@ -21,6 +21,8 @@ import { actsWithoutAsking, CARD_LIMITS, cardLabel, cardText, fitsOnCard, isApiT
 import { packContext } from '../enterprise/server/context.mjs'
 import { promptText } from '../web/app/server/ai-control/prompts/index.mjs'
 import { sanitizeClientName } from '../web/app/imports/api/common/agent-label.mjs'
+import { agentChatReply } from '../web/app/imports/api/common/agent-mention.mjs'
+import { publicAction } from '../web/app/server/agents/suggestions.mjs'
 import { connectorSuggestions } from './connector-suggestions-world.mjs'
 
 let servers
@@ -234,8 +236,17 @@ test('an ask for a change: nothing is changed during the ask; one card lands in 
   assert.deepEqual(asked.actions, [action._id])
   const item = await world.cardItem(world.outside.rows[0])
   assert.equal(item.state, 'pending')
-  assert.match(item.node.options.text, /^Create Tracker issue: Retry fails on 502\nTeam: ENG\nRetries stop after one 502\.\nWaiting for Ada to approve/)
+  assert.match(item.node.options.text, /^Create Tracker issue: Retry fails on 502\nTeam: ENG\nRetries stop after one 502\.\nWaiting for Ada to approve: Approve or Decline it here\.$/)
   assert.equal(world.slate.revision, 1, 'nothing saved')
+  // its ghost is marked as this card (every screen draws Approve and Decline on it), and published so
+  assert.deepEqual(item.card, { id: world.outside.rows[0]._id, state: 'waiting' })
+  assert.deepEqual(publicAction(action).items.find((i) => i.id === item.id).card, { id: world.outside.rows[0]._id, state: 'waiting' })
+  // the chat says what to press: Approve or Decline on the card, never Keep all
+  assert.equal(agentChatReply('Tracker', asked), 'One change waits for your approval. Approve or decline the Tracker issue card on the slate.')
+  // the same ask again while it waits: approve or decline its card (never Keep all)
+  const again = await world.service.call(world.ada, { connectionId: conn.connectionId, request: 'file the retry bug', selection: ['n0'] })
+  assert.equal(again.repeated, true)
+  assert.equal(again.say, 'That answer is still on the slate, waiting: approve or decline its card, then ask again for a new one.')
 })
 
 test('Keep all never approves a card; only the inviter approves it by keeping it alone; the card then says done, with its link', async () => {
@@ -287,7 +298,7 @@ test('the inviter or the slate owner may let editors approve (and narrow it back
   await world.service.call(world.ada, { connectionId: conn.connectionId, request: 'file the retry bug' })
   const card = world.outside.rows.find((r) => r.kind === 'card')
   const item = await world.cardItem(card)
-  assert.match(item.node.options.text, /Keep approves, Discard declines\.$/)
+  assert.match(item.node.options.text, /Approve or Decline it here\.$/)
   // Sam (an editor) approves now
   const kept = await world.decide(world.sam, 'keep', card.actionId, [item.id])
   assert.equal(kept.kept.length, 1)
@@ -368,7 +379,8 @@ test('a refused change says why plainly and can be tried again; undo leaves what
   assert.equal(card.error, 'The server said: Team <b>ENG</b> is archived.')
   const ghost = await world.cardItem(card)
   assert.equal(ghost.state, 'pending', 'it stays waiting, to try again or discard')
-  assert.match(ghost.node.options.text, /^Couldn't do · Create Tracker issue: FAIL\nThe server said: Team <b>ENG<\/b> is archived\.\nKeep to try again, Discard to drop it\.$/, 'plain text (a note never renders markup)')
+  assert.match(ghost.node.options.text, /^Couldn't do · Create Tracker issue: FAIL\nThe server said: Team <b>ENG<\/b> is archived\.\nApprove to try again, Decline to drop it\.$/, 'plain text (a note never renders markup)')
+  assert.deepEqual(ghost.card, { id: card._id, state: 'failed' }, 'its mark follows the card: the canvas still draws Approve and Decline')
   // it worked the second time (the server stopped refusing)
   card.args = { title: 'Retry fails', team: 'ENG' }
   await world.decide(world.ada, 'keep', card.actionId, [item.id])

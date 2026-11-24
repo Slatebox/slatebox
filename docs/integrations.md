@@ -58,15 +58,16 @@ Linear issue, a GitHub comment), as much as its server allows. Nothing changes w
   happen, where, and with what ("Create Linear issue: Retry fails on 502 · Team: ENG", then its
   description and **every other value it sends**, such as labels or an assignee, in full). What you
   approve is exactly what is sent; a change too long to show on a card in full is not proposed.
-  **Keep** the card to approve it, **Discard** to decline. Keep all never
-  approves a card: each one is approved on its own. The agent's chip lists its cards too, with
+  **Approve** on the card approves it, **Decline** declines it. Keep all never
+  approves a card: on a frame with cards it says **Keep all suggestions** and keeps only the other
+  notes, and a frame of cards only has none. The agent's chip lists its cards too, with
   **Approve** and **Decline**.
 - **When you approve**, the change is made then, as you, after Slatebox checks the tool is still the
   one you allowed. The card then says *Done*, with a link to what was made. If the server refuses,
-  the card says why in plain words and stays, to try again or discard. If the request went out but
+  the card says why in plain words and stays, to approve again or decline. If the request went out but
   no answer came back (a timeout, a lost connection), the card says *Not sure it was made*: look in
-  the other system first. Keep never sends it twice; *Try again anyway* on the agent's chip does,
-  on purpose. A change being made right now cannot be stopped: Discard and Decline leave its card,
+  the other system first. Approve never sends it twice; *Try again anyway* (on the card, or on the
+  agent's chip) does, on purpose. A change being made right now cannot be stopped: Discard and Decline leave its card,
   which then says how it went.
 - **Undo** takes back the agent's notes on the slate, never what was done outside it: the card stays,
   and the undo says so. Change it where it was made (the card links there).

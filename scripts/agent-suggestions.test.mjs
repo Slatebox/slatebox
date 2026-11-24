@@ -676,6 +676,11 @@ test("a host's gate (deps.suggestionGate) decides first: Keep keeps only what it
     return null;
   };
   // a waiting note's words change for every screen (the host's card says it was done)
+  // card marks the note as the host's action card: published, so every canvas draws Approve and Decline on it
+  assert.equal(await w.deps.suggestions.retext(w.slate("demo"), { actionId, nodeId: card.nodeId, text: "Create issue", card: { id: "oCard1234", state: "waiting" } }), true);
+  const marked = (await w.deps.suggestions.list(w.slate("demo")._id)).find((a) => a._id === actionId);
+  assert.deepEqual(publicAction(marked).items.find((i) => i.id === card.id).card, { id: "oCard1234", state: "waiting" });
+  assert.equal(publicAction(marked).items.find((i) => i.id === note.id).card, undefined, "a plain note carries no card");
   assert.equal(await w.deps.suggestions.retext(w.slate("demo"), { actionId, nodeId: card.nodeId, text: "Done · Create issue", link: "https://example.org/i/1" }), true);
   const all = await decide(w, person(), { decision: "keep", actionId });
   assert.deepEqual(all.body.kept.map((k) => k.itemId), [note.id]);

@@ -775,7 +775,13 @@ export function createConnectorService({
     const said = cleanHistory(history)
     const message = `${plainText(doc.name, 40)}: ${plainText(text, 120)}`
     const same = await waitingAnswer(doc, slate, message)
-    if (same) return { items: 0, actions: [same.actionId], saved: 0, repeated: true, say: `That answer is still on the slate, waiting: Keep all or Discard all on its frame, then ask again for a new one.`, left: [], added: { notes: 0, lines: 0 } }
+    if (same) {
+      // Its action cards are approved or declined on their own (Keep all never approves one).
+      const open = (await outside.find({ slateId: slate._id, actionId: same.actionId })).filter((c) => c.kind === 'card' && ['waiting', 'failed', 'unclear'].includes(c.state))
+      const others = (same.boxes || []).length - open.length
+      const what = open.length ? `approve or decline its ${open.length === 1 ? 'card' : 'cards'}${others > 0 ? ' and keep or discard its other notes' : ''}` : 'Keep all or Discard all on its frame'
+      return { items: 0, actions: [same.actionId], saved: 0, repeated: true, say: `That answer is still on the slate, waiting: ${what}, then ask again for a new one.`, left: [], added: { notes: 0, lines: 0 } }
+    }
     const card = cardFor(doc.address, await gallery())
     const recipe = checkRecipe(card?.recipe)
     const budget = requestBudget(text)
@@ -1020,6 +1026,8 @@ export function createConnectorService({
           const set = placed ? { nodeId, actionId, updatedAt: new Date(now()) } : { state: card.state === 'waiting' ? 'declined' : card.state, error: card.state === 'waiting' ? 'It could not be placed on the slate.' : card.error || null, updatedAt: new Date(now()) }
           await outside.update(card._id, set)
           Object.assign(card, set)
+          // Its ghost is marked as this card: every screen draws Approve and Decline on it, never Keep.
+          if (actionId) await retextCard(card, doc, slate)
         }
       }
       if (dropped) left.push('The suggestion could not be placed: the slate changed while it was being made. Ask again to try it.')
@@ -1028,7 +1036,8 @@ export function createConnectorService({
       outcome = 'done'
       if (doc.integrationId) await integrations.update(doc.integrationId, { lastUsedAt: new Date(now()) })
       const waiting = cards.filter((card) => card.state === 'waiting').length
-      const sayWords = plainText(result.say, 240) || (waiting ? `${waiting === 1 ? 'One change waits' : `${waiting} changes wait`} for your approval: Keep a card to approve it, Discard to decline.` : '')
+      // What to press is said by the chat (agentChatReply: "Approve or decline the Linear issue card on the slate").
+      const sayWords = plainText(result.say, 240) || (waiting ? `${waiting === 1 ? 'One change waits' : `${waiting} changes wait`} for your approval.` : '')
       return { items: actions.length + saved, actions, saved, say: sayWords, left, added: dropped ? { notes: 0, lines: 0 } : { notes, lines }, ...(cards.length && { cards: cards.map((card) => publicCard(card, principal.userId)) }) }
     } catch (error) {
       throw fromProblem(error)
@@ -1091,7 +1100,7 @@ export function createConnectorService({
   // The card's note says what became of it (only while its note still waits as a ghost).
   async function retextCard(card, doc, slate) {
     if (!card.actionId || !card.nodeId || !suggestions.retext) return
-    await suggestions.retext(slate, { actionId: card.actionId, nodeId: card.nodeId, text: cardText(card, { inviter: doc.inviterName, approvers: doc.approvers }), link: card.result?.link || null }).catch(() => {})
+    await suggestions.retext(slate, { actionId: card.actionId, nodeId: card.nodeId, text: cardText(card, { inviter: doc.inviterName, approvers: doc.approvers }), link: card.result?.link || null, card: { id: card._id, state: card.state } }).catch(() => {})
   }
 
   // Moves a card from one of these states to another, once (two approvals make a change once).

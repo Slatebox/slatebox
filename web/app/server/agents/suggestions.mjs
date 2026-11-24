@@ -207,7 +207,8 @@ export function withOwnGhosts(slate, actions) {
 
 // ---- the store -------------------------------------------------------------------------------
 
-const PUBLIC_ITEM_FIELDS = ['id', 'kind', 'state', 'nodeId', 'node', 'changes', 'previous', 'parentId', 'association', 'reason', 'decidedBy']
+// card: an outside action's card ({ id, state }): the canvas draws Approve and Decline on it, never Keep all.
+const PUBLIC_ITEM_FIELDS = ['id', 'kind', 'state', 'nodeId', 'node', 'changes', 'previous', 'parentId', 'association', 'reason', 'decidedBy', 'card']
 
 /** An action as a screen and an agent receive it: no account, token or run ids. */
 export function publicAction(doc) {
@@ -688,10 +689,12 @@ export function createSuggestionStore({
 
   /**
    * New words (and a link) for a waiting new note, written by the host that made it: an outside
-   * action's card says it was approved, done (with its link) or failed. Only a note still waiting
-   * changes; every screen redraws its ghost. → true when it changed.
+   * action's card says it was approved, done (with its link) or failed. card ({ id, state }) marks
+   * the note as that card, so every screen draws Approve and Decline on it (Try again anyway when
+   * its change may have been made). Only a note still waiting changes; every screen redraws its
+   * ghost. → true when it changed.
    */
-  async function retext(slate, { actionId, nodeId, text, link = null }) {
+  async function retext(slate, { actionId, nodeId, text, link = null, card = null }) {
     const action = await collection.findOne({ _id: actionId, slateId: slate._id })
     if (!action) return false
     let changed = false
@@ -700,7 +703,8 @@ export function createSuggestionStore({
       changed = true
       const options = { ...item.node.options, text: String(text ?? '').slice(0, 2000) }
       if (link) options.link = { show: true, type: 'url', data: link }
-      return { ...item, node: { ...item.node, options } }
+      const mark = card && typeof card.id === 'string' && typeof card.state === 'string' ? { card: { id: card.id.slice(0, 64), state: card.state.slice(0, 16) } } : {}
+      return { ...item, node: { ...item.node, options }, ...mark }
     })
     return changed
   }

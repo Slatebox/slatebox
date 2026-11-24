@@ -5,11 +5,12 @@
 // read and write ... every mcp that we connect to should be this way").
 //   - A change the person asked for ("file the retry bug") is planned like a lookup (translate.mjs
 //     writePlanPrompt) but never made during the ask. It lands on the slate as one more note in the
-//     agent's answer (the same frame, the same Keep all / Discard all), a card that says what would
+//     agent's answer (the same frame), a card that says what would
 //     happen, where, and with what: "Create Linear issue: Retry fails on 502 · Team: ENG".
-//   - Keeping that card on its own approves it: the change is made then, as its inviter, after its
-//     tool is checked again against the hash they consented to; the card then says it was done,
-//     with the link the server gave. Discarding declines it. Keep all never approves a card.
+//   - Approve on that card (the canvas draws Approve and Decline on it; the app hears Keep of that
+//     note alone) approves it: the change is made then, as its inviter, after its tool is checked
+//     again against the hash they consented to; the card then says it was done, with the link the
+//     server gave. Decline declines it. Keep all never approves a card.
 //   - Only the inviter approves (the same rule as asking), unless they let the slate's editors
 //     approve too. A token approves only for an agent its inviter lets act without asking.
 //   - "Act without asking" (per agent on an integration, and per slate; off by default; only the
@@ -144,14 +145,14 @@ export function cardText(card, options) {
   if (card.state === 'done') {
     parts.push(`Done · ${what}`, p.target, card.result?.link, card.actedWithoutAsking ? `${card.system} did this without asking.` : `Approved by ${card.decidedBy || 'someone'}.`)
   } else if (card.state === 'running') parts.push(`Sending · ${what}`, p.target)
-  else if (card.state === 'failed') parts.push(`Couldn't do · ${what}`, card.error || 'The server refused it.', 'Keep to try again, Discard to drop it.')
+  else if (card.state === 'failed') parts.push(`Couldn't do · ${what}`, card.error || 'The server refused it.', 'Approve to try again, Decline to drop it.')
   else if (card.state === 'unclear')
-    parts.push(`Not sure it was made · ${what}`, p.target, card.error || `${card.system} did not answer.`, `It may already be in ${card.system}: look there before asking again. Discard to drop this card.`)
+    parts.push(`Not sure it was made · ${what}`, p.target, card.error || `${card.system} did not answer.`, `It may already be in ${card.system}: look there first. Try again anyway only if it is not there; Decline to drop this card.`)
   else {
     // Everything the change sends, in full: what is approved is what is sent.
     parts.push(what, p.target, p.body, ...(p.more || []))
     if (card.destructive) parts.push('This deletes, closes or merges something; Slatebox cannot undo it.')
-    parts.push(options?.approvers === 'editors' ? 'Keep approves, Discard declines.' : `Waiting for ${options?.inviter || 'its inviter'} to approve: Keep approves, Discard declines.`)
+    parts.push(options?.approvers === 'editors' ? 'Approve or Decline it here.' : `Waiting for ${options?.inviter || 'its inviter'} to approve: Approve or Decline it here.`)
   }
   return parts.filter(Boolean).map((part) => plainText(part, CARD_LIMITS.body + 20)).join('\n').slice(0, CARD_LIMITS.text)
 }
