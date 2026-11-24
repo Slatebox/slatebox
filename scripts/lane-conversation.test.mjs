@@ -4,6 +4,20 @@ import { createLaneWorkshop, createInterviewWorkshop, createBudgetWorkshop, rele
 import { proposeLaneEdit as edit, proposeLaneReply, laneObjectSelection } from '../web/app/imports/api/common/lane-conversation.mjs'
 import { prepareLaneReply } from '../web/app/server/methods/lane-chat.mjs'
 
+// A move the rules refuse is not made: it is offered as "Move anyway" (move-anyway.mjs), the reply the rule's own
+// sentence and the question; the card it would move is marked with that rule; the board asked about is unchanged.
+function offeredAnyway(board, message, selection, card, lane, sentence) {
+  const before = JSON.stringify(board)
+  const made = proposeLaneReply(board, message, selection)
+  assert.equal(made.reply, '“' + card + '” can’t move to “' + lane + '” by this board’s rules. ' + sentence + ' Move it anyway?')
+  assert.deepEqual({ card: made.override.card, lane: made.override.lane, sentence: made.override.sentence }, { card, lane, sentence })
+  const moved = made.workshop.cards.find(item => item.label === card)
+  assert.equal(made.workshop.lanes.find(item => item.id === moved.laneId).label, lane)
+  assert.equal(moved.override.sentence, sentence)
+  assert.equal(JSON.stringify(board), before)
+  return made
+}
+
 test('lane commands preserve IDs, enforce capacities and allowed destinations, and preview without changing the source', () => {
   const base = createLaneWorkshop()
   let w = edit(base,'Add lane Review')
@@ -13,10 +27,10 @@ test('lane commands preserve IDs, enforce capacities and allowed destinations, a
   w = edit(w,'Set capacity of Review to 1')
   w = edit(w,'Allow Invoice in Ideas, Review')
   const selected = laneObjectSelection(w,{kind:'card',id:w.cards[0].id})
-  // A move the rules refuse is refused, and the reply is the rule's own sentence.
-  assert.throws(()=>edit(w,'Move this to Lane 2',selected),/“Invoice” can’t move to “Lane 2”\. This card can't go in Lane 2\./)
+  // A move the rules refuse is offered as "Move anyway", and the reply is the rule's own sentence.
+  offeredAnyway(w,'Move this to Lane 2',selected,'Invoice','Lane 2',"This card can't go in Lane 2.")
   w = edit(w,'Move this to Review',selected)
-  assert.throws(()=>edit(w,'Move Contract to Review'),/“Contract” can’t move to “Review”\. It already holds 1 of 1 card\./)
+  offeredAnyway(w,'Move Contract to Review',undefined,'Contract','Review','It already holds 1 of 1 card.')
   w = edit(w,'Present Review first')
   assert.deepEqual(w.presentationOrder,['lane-3','lane-1','lane-2'])
   assert.throws(()=>edit(w,'Present Review after Review'),/different/)
@@ -163,7 +177,7 @@ test('limits, layouts and rules are refused in plain words', () => {
   assert.throws(()=>edit(week,'Call Sam can only go in Later'),/“Call Sam” is in “Now” now\. Include “Now”, or move the card first\./)
   const full = edit(week,'Next holds 1')
   assert.throws(()=>edit(full,'Add a card called Email Jo to Next'),/“Next” is full: it holds 1 card\./)
-  assert.throws(()=>edit(full,'Move Call Sam to Next'),/“Call Sam” can’t move to “Next”\. It already holds 1 of 1 card\./)
+  offeredAnyway(full,'Move Call Sam to Next',undefined,'Call Sam','Next','It already holds 1 of 1 card.')
   assert.throws(()=>edit(createBudgetWorkshop(),'Add a lane called Later'),/This workshop keeps the lanes it came with\./)
   assert.throws(()=>edit(createInterviewWorkshop(),'Add a card called Kim to Customer interviews'),/This workshop keeps the cards it came with\./)
   assert.throws(()=>edit(week,'Call Sam is 3 points'),/This workshop counts cards, not points\./)

@@ -24,6 +24,18 @@ const team = (() => {
   return validateWorkshop({ ...board, cards: cards.map(([id, label, laneId]) => ({ id, label, laneId })) })
 })()
 const say = (board, message, selection = null) => proposeLaneReply(board, message, selection, tim)
+// A move a rule refuses is not made: offered as "Move anyway" with the rule's sentence (move-anyway.mjs), the card
+// marked with that rule, the board asked about unchanged.
+function refusedButOffered(board, message, sentence) {
+  const before = JSON.stringify(board)
+  const made = say(board, message)
+  assert.ok(made.override, message + ': offered as Move anyway')
+  assert.equal(made.override.sentence, sentence)
+  assert.ok(made.reply.includes(' by this board’s rules. ' + sentence + ' Move it anyway?'), made.reply)
+  assert.equal(made.workshop.cards.find(card => card.id === made.override.cardId).override.sentence, sentence)
+  assert.equal(JSON.stringify(board), before)
+  return made
+}
 // The same board before anyone set a rule.
 const bare = validateWorkshop({ ...team, behaviour: { version: 1, rev: 0, rules: [] } })
 
@@ -34,7 +46,7 @@ test('“make that a rule” adds a rule that moves nothing: Review shows 3 of 2
   assert.equal(kept.workshop.cards.filter(card => card.laneId === 'review').length, 3)
   assert.deepEqual(kept.diff, { from: 0, to: 1, lines: ['+ Review holds 2.'], over: ['Review shows 3 of 2.'] })
   assert.match(kept.reply, /^New rule: Review holds 2\./)
-  assert.throws(() => say(kept.workshop, 'Move Search to Review'), /Review holds 2\. It has 3\./)
+  refusedButOffered(kept.workshop, 'Move Search to Review', 'Review holds 2. It has 3.')
   // On a board with a rulebook, "Let Review hold 3" changes the rule, not the lane.
   const raised = say(kept.workshop, 'Let Review hold 3')
   assert.equal(raised.workshop.behaviour.rules.at(-1).max, 3)
@@ -43,10 +55,10 @@ test('“make that a rule” adds a rule that moves nothing: Review shows 3 of 2
 
 test('the D1 phrases: one lane at a time, a path, a bin, warn instead, off, removed', () => {
   const step = say(bare, 'Cards move one column at a time').workshop
-  assert.throws(() => say(step, 'Move Billing to Review'), /Cards move one column at a time\. Billing is in To do, so Doing comes first\./)
+  refusedButOffered(step, 'Move Billing to Review', 'Cards move one column at a time. Billing is in To do, so Doing comes first.')
   const path = say(bare, 'From Doing, cards go only to Review').workshop
   assert.equal(path.behaviour.rules.at(-1).kind, 'path')
-  assert.throws(() => say(path, 'Move Search to Done'), /From Doing, cards go only to Review\./)
+  refusedButOffered(path, 'Move Search to Done', 'From Doing, cards go only to Review.')
   const binned = say(team, 'Make Done a bin').workshop
   assert.deepEqual(binned.behaviour.rules.at(-1).lane, 'done')
   const capped = say(team, 'Review holds 2').workshop

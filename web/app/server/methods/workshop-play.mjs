@@ -1,6 +1,6 @@
 import {
   applyWorkshopEdits, businessKind, rulebook, validateWorkshop, workshopCandidate, workshopCardAsNote, workshopCardAsNoteRefusal, workshopCardLines, workshopCardNoteText,
-  workshopLineRefusal, workshopNoteCandidate, workshopNoteRefusal, workshopRefusal, workshopWithLine, workshopWithoutLine,
+  workshopHardLimit, workshopLineRefusal, workshopNoteCandidate, workshopNoteRefusal, workshopOverrideCandidate, workshopRefusal, workshopWithLine, workshopWithoutLine,
 } from 'slateboxjs/workshops/model'
 import { unsafeKeyPath } from '../common/document-keys.mjs'
 // A launch plan's, pipeline's or budget's rules: the same modules the canvas plays them by.
@@ -77,7 +77,10 @@ export function readWorkshopChanges(input) {
       if (key(change.cardId) && noteKey(noteId) && (note === undefined || savedNote(note, noteId))) {
         return { cardId: change.cardId, cardToNote: { noteId, ...(note === undefined ? {} : { note }) } }
       }
-    } else if (key(change?.cardId) && key(change?.laneId)) return { cardId: change.cardId, laneId: change.laneId }
+    } else if (key(change?.cardId) && key(change?.laneId) && (change.override === undefined || change.override === true)) {
+      // `override`: a move the rules refuse, made anyway once the person confirmed it ("Move anyway").
+      return { cardId: change.cardId, laneId: change.laneId, ...(change.override && { override: true }) }
+    }
     throw new Error('Expected a move or a rename.')
   })
 }
@@ -99,7 +102,7 @@ const gone = what => `That ${what} is no longer on the workshop.`
  * (staging-2, 2026-11-20: told it was saved, it told the room of its own note, so every screen
  * drew the note where the second person dropped it while the server kept the first one's).
  */
-export function playWorkshopChanges(workshop, changes, noteIds, trades) {
+export function playWorkshopChanges(workshop, changes, noteIds, trades, actor = null) {
   let board = validateWorkshop(workshop)
   const drawing = new Set(noteIds ?? [])
   const remove = new Set(), add = new Map()
@@ -216,8 +219,14 @@ export function playWorkshopChanges(workshop, changes, noteIds, trades) {
     const lane = board.lanes.find(item => item.id === change.laneId)
     if (!card) return refuse(at, { reason: gone('card'), laneId: lane?.id ?? null })
     if (!lane) return refuse(at, { reason: gone('lane'), laneId: card.laneId })
-    const next = workshopCandidate(board, card.id, lane.id)
-    if (!next) return refuse(at, { reason: workshopRefusal(board, card.id, lane.id) ?? 'That move is not available.', laneId: lane.id })
+    let next = workshopCandidate(board, card.id, lane.id)
+    // A move the rules refuse, made anyway once the person confirmed it: marked here with who (the server's name for
+    // them, never the page's) and when. A hard limit is refused all the same.
+    if (!next && change.override) {
+      next = workshopOverrideCandidate(board, card.id, lane.id, { by: actor?.by || 'Someone', at: actor?.at ?? new Date().toISOString() })
+      if (!next) return refuse(at, { reason: workshopHardLimit(board, card.id, lane.id) ?? 'That move is not available.', laneId: lane.id })
+    }
+    if (!next) return refuse(at, { reason: workshopRefusal(board, card.id, lane.id) ?? 'That move is not available.', laneId: lane.id, ...(workshopHardLimit(board, card.id, lane.id) === null && { overridable: true }) })
     heard(board, next)
     board = next
   }

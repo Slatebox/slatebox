@@ -40,7 +40,11 @@ test('a token moves by name along the routes that are there, and a refusal says 
   for (const message of ['Move Progress to Preview ten rows', 'Move the token to Preview ten rows', 'Please move the token to Preview.', 'Progress goes to Preview ten rows', 'Can you move Progress to Preview ten rows?']) {
     assert.equal(said(built, message).cards[0].laneId, station(built, 'Preview ten rows').id, message)
   }
-  assert.throws(() => said(built, 'Move Progress to Start a pilot'), /“Progress” can’t move to “Start a pilot”\. Start a pilot can't be reached from Client CSV\./)
+  // A step with no route from here is not moved to: it is offered as "Move anyway", with the missing route (move-anyway.mjs).
+  const anyway = proposeDirectMapEdit(built, 'Move Progress to Start a pilot')
+  assert.equal(anyway.reply, '“Progress” can’t move to “Start a pilot” by this board’s rules. Start a pilot can\'t be reached from Client CSV. Move it anyway?')
+  assert.deepEqual(anyway.override, { cardId: 'token', laneId: station(built, 'Start a pilot').id, card: 'Progress', lane: 'Start a pilot', sentence: "Start a pilot can't be reached from Client CSV." })
+  assert.equal(anyway.workshop.cards[0].override.from, built.cards[0].laneId)
   assert.throws(() => said(built, 'Move Progress to Client CSV'), /already at “Client CSV”/)
   // A sentence that only looks like a move is still a path.
   assert.deepEqual(said(createWorkshopMap(), 'Send the file to review → Done').lanes.map(lane => lane.label), ['Send the file to review', 'Done'])
@@ -231,7 +235,11 @@ test('selected tokens retain ordinary movement constraints and never rename thei
   const moved=proposeDirectMapEdit(named,'Move to Next step',selection).workshop
   assert.equal(moved.cards[0].label,'Patient')
   assert.equal(moved.cards[0].laneId,'next')
-  assert.throws(()=>proposeDirectMapEdit(moved,'Move to Start',selection),/unavailable/)
+  // A step with no route from here: offered as "Move anyway" with the rule, never made unasked.
+  const back=proposeDirectMapEdit(moved,'Move to Start',selection)
+  assert.equal(back.override.sentence,"Start can't be reached from Next step.")
+  assert.equal(back.workshop.cards[0].label,'Patient')
+  assert.equal(moved.cards[0].laneId,'next')
   assert.throws(()=>proposeDirectMapEdit(moved,'On arrival, Wait.',selection),/Select a station/)
   assert.deepEqual(moved.lanes,original.lanes)
 })

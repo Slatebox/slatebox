@@ -657,7 +657,7 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.slates {
-  /** Check move. Whether a card may move to a lane on one of the slate's boards (boardId; required on a slate of several boards, 400 board_required lists them), without moving it: the same verdict a drag gets. On a nested board (piles, a tree) the move names the card it goes under instead (under), or the area it goes to (lane). Answers {ok: true, warnings} or {refused: {sentence, ruleId, nearest, set}}: the one rule that refuses it (ruleId null for the board's own kind rule), who set it, and the nearest lane (or card) it may go to. rev is the rulebook's revision. Cards and lanes are named by id or by name. @scope slates:read */
+  /** Check move. Whether a card may move to a lane on one of the slate's boards (boardId; required on a slate of several boards, 400 board_required lists them), without moving it: the same verdict a drag gets. On a nested board (piles, a tree) the move names the card it goes under instead (under), or the area it goes to (lane). Answers {ok: true, warnings} or {refused: {sentence, ruleId, nearest, set, overridable}}: the one rule that refuses it (ruleId null for the board's own kind rule), who set it, the nearest lane (or card) it may go to, and whether the person may agree to move it anyway (overridable: move_workshop_card with override true, held for them to confirm; false only for a hard limit). rev is the rulebook's revision. Cards and lanes are named by id or by name. @scope slates:read */
   function checkMove(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
@@ -1847,6 +1847,8 @@ interface WorkshopEditsPlan {
         /** (1–64 characters) */
         id: string;
       };
+      /** True to move it anyway when a rule refuses it (lane boards and maps), once the person agreed to break that rule. The card shows who moved it anyway and when. */
+      override?: boolean;
     } | {
       kind: "advance_card";
       /** The token. */
@@ -2437,6 +2439,8 @@ interface WorkshopMovePlan {
     laneId: string;
     /** (at least 0) */
     expectedRevision: number;
+    /** True to move it anyway when the board's rules refuse it (a 409 move_refused with overridable true), once the person agreed to break that rule. Held for the person to confirm (confirmation_required, rule breaks_board_rule); the card shows who moved it anyway and when. */
+    override?: boolean;
     /** The board (slates.get boards[].id; main is the first). Required when the slate holds several boards. */
     boardId?: string;
   }>;

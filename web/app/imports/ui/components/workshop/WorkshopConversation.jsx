@@ -289,7 +289,9 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
       // A card proposed as an ordinary note (`toCanvas`) is taken off the lanes by the canvas itself on Keep.
       // The preview is the target board's: focus stays on it until Keep or Discard.
       if (proposal.workshop) target.setPreview({ workshop: proposal.workshop, revision: proposal.revision ?? target.revision, summary: proposal.reply,
-        ...(proposal.toCanvas ? { toCanvas: proposal.toCanvas } : {}), ...(proposal.diff ? { diff: proposal.diff } : {}) })
+        ...(proposal.toCanvas ? { toCanvas: proposal.toCanvas } : {}), ...(proposal.diff ? { diff: proposal.diff } : {}),
+        // A move the rules refuse, made only if the person says so: "Move anyway" or "Cancel", with the rule (move-anyway.mjs).
+        ...(proposal.override ? { override: proposal.override } : {}) })
     } catch (err) {
       if (!mounted.current || turn !== asked.current) return
       // Drafting this is not available to this person now (signed out, no Pro or own AI, the included amount used up, or
@@ -327,7 +329,8 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
       const saved = await save(preview.workshop, preview.revision)
       if (!mounted.current) return
       if (!saved) { setError(map ? 'Could not save. Check the latest map and try again.' : 'Could not save. Check the latest workshop and try again.'); return }
-      append({ role: 'assistant', content: map ? 'Saved to the map.' : 'Saved to the workshop.' })
+      append({ role: 'assistant', content: preview.override ? 'Moved ' + preview.override.card + ' to ' + preview.override.lane + ' anyway. The card shows who moved it and when; Undo puts it back.'
+        : map ? 'Saved to the map.' : 'Saved to the workshop.' })
       setPreview(null)
     } finally { running.current = false; if (mounted.current) setBusy(false) }
   }
@@ -367,9 +370,10 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
   }
 
   function discard() {
+    const moving = preview?.override
     setPreview(null)
     setError('')
-    append({ role: 'assistant', content: 'Discarded the preview.' })
+    append({ role: 'assistant', content: moving ? moving.card + ' stays where it was.' : 'Discarded the preview.' })
   }
 
   const scenes = workshopPresentationLanes(model)
@@ -392,8 +396,11 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
     }
     : preview ? {
       reason: stale ? (map ? 'A teammate changed this map. Discard this preview and ask again.' : 'A teammate changed the workshop. Discard this preview and ask again.')
-        : busy || locked ? 'Saving the preview…' : 'Keep or discard the preview to write again.',
-      actions: <>
+        : busy || locked ? 'Saving the preview…' : preview.override ? 'Move it anyway, or cancel, to write again.' : 'Keep or discard the preview to write again.',
+      actions: preview.override ? <>
+        <Button variant="contained" size="small" data-move-anyway="" disabled={locked || busy || stale} onClick={keepChanges}>Move anyway</Button>
+        <Button size="small" disabled={busy} onClick={discard}>Cancel</Button>
+      </> : <>
         <Button variant="contained" size="small" disabled={locked || busy || stale} onClick={keepChanges}>Keep changes</Button>
         <Button size="small" disabled={busy} onClick={discard}>Discard preview</Button>
       </>,
@@ -496,7 +503,9 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
       {!drawingStale && (drawing.component || drawing.mode === 'play') && previewKeepSentence(drawing) && <Typography variant="body2">{previewKeepSentence(drawing)}</Typography>}
       </Box></ChatTurn>
     </Box> : preview && <Box aria-label={map ? 'Review proposed map' : 'Review proposed workshop'} aria-live="polite" sx={{ my: 2 }}>
-      <Typography sx={{ fontWeight: 600 }}>{stale ? map ? 'A teammate changed this map.' : 'A teammate changed the workshop.' : orderChanged ? 'Proposed presentation order' : 'Preview · shown on the canvas'}</Typography>
+      <Typography sx={{ fontWeight: 600 }}>{stale ? map ? 'A teammate changed this map.' : 'A teammate changed the workshop.' : preview.override ? 'Move anyway?' : orderChanged ? 'Proposed presentation order' : 'Preview · shown on the canvas'}</Typography>
+      {/* The rule the move breaks, in the board's words: what "Move anyway" overrides. */}
+      {!stale && preview.override && <Typography variant="body2" data-move-anyway-rule="" sx={{ overflowWrap: 'anywhere' }}>{preview.override.sentence}</Typography>}
       {stale ? <Typography variant="body2">Discard this preview and ask again on the latest {map ? 'map' : 'workshop'}.</Typography> : <>
         {!map && preview.summary !== history.at(-1)?.content && <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>{preview.summary}</Typography>}
         {preview.diff && <Box component="section" aria-label="Rules" sx={{ my: 1, fontFamily: 'monospace', fontSize: 13 }}>

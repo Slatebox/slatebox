@@ -2,6 +2,9 @@ import { addMapToken, applyMapObjectEdit, proposeMapObjectEdit } from './map-obj
 import { addWorkshopBranch, createWorkshopMap, validateWorkshop, workshopCandidate, workshopPresentationLanes, workshopRefusal } from 'slateboxjs/workshops/model'
 import { N, atMost, count, cuts, finder, named, plainRequest, pointing, said, things, unquoted, whole } from './plain-words.mjs'
 import { cardColours } from './card-colours.mjs'
+import { moveAnywayProposal } from './move-anyway.mjs'
+
+const fail = message => { throw new Error(message) }
 
 export function isStarterMap(model) {
   // Compare canonical data. A moved token, added rule, photo or edited outcome
@@ -103,7 +106,7 @@ function sentence(model, message, selection) {
       if (!onward.length) throw new Error(said(moving.label) + ' is at ' + said(here.label) + ', and no path leads on from there.')
       if (onward.length > 1) throw new Error('From ' + said(here.label) + ' the path goes to ' + onward.map(lane => said(lane.label)).join(' or ') + '. Say which, such as “Move ' + moving.label + ' to ' + onward[0].label + '”.')
       const next = workshopCandidate(model, moving.id, onward[0].id)
-      if (!next) throw new Error(said(moving.label) + ' can’t move to ' + said(onward[0].label) + '. ' + workshopRefusal(model, moving.id, onward[0].id))
+      if (!next) return moveAnywayProposal(model, moving.id, onward[0].id) ?? fail(said(moving.label) + ' can’t move to ' + said(onward[0].label) + '. ' + workshopRefusal(model, moving.id, onward[0].id))
       return { workshop: validateWorkshop(next), reply: 'Moved ' + said(moving.label) + ' to ' + said(onward[0].label) + '.' }
     }
   }
@@ -126,7 +129,8 @@ function sentence(model, message, selection) {
       const moving = subject ?? token.find(m[1]), target = step.find(m[2])
       if (moving.laneId === target.id) throw new Error(said(moving.label) + ' is already at ' + said(target.label) + '.')
       const next = workshopCandidate(model, moving.id, target.id)
-      if (!next) throw new Error(said(moving.label) + ' can’t move to ' + said(target.label) + '. ' + workshopRefusal(model, moving.id, target.id))
+      // A step the rules close (no path to it): offered as "Move anyway", with the rule (move-anyway.mjs).
+      if (!next) return moveAnywayProposal(model, moving.id, target.id) ?? fail(said(moving.label) + ' can’t move to ' + said(target.label) + '. ' + workshopRefusal(model, moving.id, target.id))
       return { workshop: validateWorkshop(next), reply: 'Moved ' + said(moving.label) + ' to ' + said(target.label) + '.' }
     }
   }

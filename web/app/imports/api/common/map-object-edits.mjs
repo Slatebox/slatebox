@@ -1,4 +1,5 @@
-import { addWorkshopBranch, moveWorkshopCard, validateWorkshop } from 'slateboxjs/workshops/model'
+import { addWorkshopBranch, moveWorkshopCard, validateWorkshop, workshopCandidate } from 'slateboxjs/workshops/model'
+import { moveAnywayProposal } from './move-anyway.mjs'
 
 /** Only an object identity travels with a turn. Labels and rules come from the current board. */
 export function mapObjectSelection(map, selection) {
@@ -88,7 +89,15 @@ export function proposeMapObjectEdit(map, message, selection) {
   match = /^move to column (\d+),? row (\d+)$/i.exec(message)
   if (match) return proposal({type:'position', column:Number(match[1])-1, row:Number(match[2])-1}, 'Moved “' + item.label + '” to column ' + match[1] + ', row ' + match[2] + '.')
   match = /^move to (.+)$/i.exec(message)
-  if (match && selected.kind === 'card') return proposal({type:'moveToken', to:stationId(map, match[1])}, 'Moved “' + item.label + '” to “' + match[1] + '”.')
+  if (match && selected.kind === 'card') {
+    const to = stationId(map, match[1])
+    // A step the rules close: offered as "Move anyway", with the rule (move-anyway.mjs).
+    if (!workshopCandidate(map, selected.id, to)) {
+      const anyway = moveAnywayProposal(map, selected.id, to)
+      if (anyway) return anyway
+    }
+    return proposal({type:'moveToken', to}, 'Moved “' + item.label + '” to “' + match[1] + '”.')
+  }
   match = /^set capacity to (\d+)$/i.exec(message)
   if (match) return proposal({type:'capacity', capacity:Number(match[1])}, 'Set capacity at “' + item.label + '” to ' + match[1] + '.')
   if (/^remove capacity$/i.test(message)) return proposal({type:'clearCapacity'}, 'Removed the capacity limit at “' + item.label + '”.')

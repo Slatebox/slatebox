@@ -143,8 +143,10 @@ function parseOperation(plan, supported) {
     (fields.includes('label') && op.label.length > 80) ||
     (fields.includes('outcome') && op.outcome.length > 160) ||
     (op.boardId !== undefined && (typeof op.boardId !== 'string' || !boardIdPattern.test(op.boardId))) ||
+    // `override` (a move the rules refuse, made anyway once the person agreed): a card move's only.
+    (op.override !== undefined && (op.kind !== 'move_workshop_card' || typeof op.override !== 'boolean')) ||
     Object.keys(op).some(
-      (key) => !['kind', ...fields, 'expectedRevision', 'boardId'].includes(key)
+      (key) => !['kind', ...fields, 'expectedRevision', 'boardId', 'override'].includes(key)
     )
   )
     throw invalid(
@@ -161,6 +163,7 @@ function parseOperation(plan, supported) {
     ...(op.boardId !== undefined && { boardId: op.boardId }),
     ...Object.fromEntries(fields.map((field) => [field, op[field]])),
     expectedRevision: op.expectedRevision,
+    ...(op.override === true && { override: true }),
   }
 }
 
@@ -181,12 +184,12 @@ export function operationBoard(slate, boardId) {
 const scopedTargets = (report, boardId) =>
   boardId === MAIN_BOARD || !Array.isArray(report?.targets) ? report : { ...report, targets: report.targets.map((id) => workshopScopedId(id, boardId)) }
 
-function applyWorkshopEdit(board, operation, slate) {
+function applyWorkshopEdit(board, operation, slate, actor) {
   switch (operation.kind) {
     case 'workshop_edits':
-      return applyEdits(board, operation, slate)
+      return applyEdits(board, operation, slate, actor)
     case 'move_workshop_card':
-      return applyCardMove(board, operation, slate)
+      return applyCardMove(board, operation, slate, actor)
     case 'connect_workshop_card':
     case 'disconnect_workshop_card':
       return applyCardLine(board, operation, slate)
@@ -275,15 +278,24 @@ function applyCardLine(board, operation, slate) {
   return { next: workshopWithLine(board, line), report: { lines: [{ id: line.id, fromId: card.id, toId }] } }
 }
 
-// The short form of one move_card: the same reducer, the same rule a person's drag meets.
-function applyCardMove(board, operation, slate) {
+// The cards an edit moved past a rule (a move made anyway): what the exec gate holds for the person to confirm.
+export function overridesBetween(before, after) {
+  const was = new Map(before.cards.map((card) => [card.id, card]))
+  return after.cards
+    .filter((card) => card.override && JSON.stringify(was.get(card.id)?.override) !== JSON.stringify(card.override))
+    .map((card) => ({ cardId: card.id, laneId: card.laneId, fromLaneId: card.override.from, sentence: card.override.sentence }))
+}
+
+// The short form of one move_card: the same reducer, the same rule a person's drag meets. With `override`, a move
+// the rules refuse is made anyway (the exec gate holds it for the person first: breaks_board_rule).
+function applyCardMove(board, operation, slate, actor) {
   const revision = operation.expectedRevision
   const card = board.cards.find((item) => item.id === operation.cardId)
   if (!card) throw invalid('That card is not on the workshop. Use a card ID from the board.')
   const lane = board.lanes.find((item) => item.id === operation.laneId)
   if (!lane) throw invalid('That lane is not on the workshop. Use a lane ID from the board.')
   if (card.laneId === lane.id) throw invalid(`${card.label} is already in ${lane.label}.`)
-  const result = applyWorkshopEdits(board, [{ kind: 'move_card', card: { id: card.id }, lane: { id: lane.id } }])
+  const result = applyWorkshopEdits(board, [{ kind: 'move_card', card: { id: card.id }, lane: { id: lane.id }, ...(operation.override && { override: true }) }], { actor })
   if (result.refused) {
     const current = workshopAt(board, slate, revision)
     throw new WorkshopOperationError(
@@ -294,12 +306,15 @@ function applyCardMove(board, operation, slate) {
         cardId: card.id,
         laneId: lane.id,
         legalLaneIds: current.cards.find((item) => item.id === card.id).legalLaneIds,
+        // A rule the person may agree to break: the same call again with override true (held for them to confirm).
+        overridable: Boolean(result.refused.overridable),
         revision,
         workshop: current,
       }
     )
   }
-  return { next: result.workshop, report: { movedCards: result.report.movedCards, targets: targetsOf(result.report) } }
+  const overrides = overridesBetween(board, result.workshop)
+  return { next: result.workshop, report: { movedCards: result.report.movedCards, targets: targetsOf(result.report), ...(overrides.length && { overrides }) } }
 }
 
 // The card lines taken away on their own. A line that went with a removed card is part of that
@@ -397,13 +412,15 @@ function refusedEdit(board, slate, revision, refused, edit) {
     ...(refused.candidates && { candidates: refused.candidates }),
     // A number out of range: the range a person may use, and the sentence at each end.
     ...(refused.limits && { limits: refused.limits }),
+    // A move the rules refuse that the person may agree to: the same move_card with override true (held for them).
+    ...(refused.overridable && { overridable: true }),
     revision,
     workshop: current,
   })
 }
 
-function applyEdits(board, operation, slate) {
-  const result = applyWorkshopEdits(board, operation.edits)
+function applyEdits(board, operation, slate, actor) {
+  const result = applyWorkshopEdits(board, operation.edits, { actor })
   if (result.refused)
     throw refusedEdit(board, slate, operation.expectedRevision, result.refused, operation.edits[result.refused.index])
   const added = new Set(board.cards.map((card) => card.id))
@@ -415,6 +432,8 @@ function applyEdits(board, operation, slate) {
       addedCards: result.workshop.cards.filter((card) => !added.has(card.id)).map((card) => card.id),
       ...removedBetween(board, result.workshop),
       targets: targetsOf(result.report),
+      // Moves made anyway (move_card with override): held by the exec gate for the person (breaks_board_rule).
+      ...(overridesBetween(board, result.workshop).length && { overrides: overridesBetween(board, result.workshop) }),
     },
   }
 }
@@ -493,7 +512,8 @@ export function createWorkshopOperations({
         // Undoing an edit that added cards takes them away again: reported (and held) as any removal is.
         report = { undone: receipt._id, restoredRevision: receipt.beforeRevision, ...removedBetween(board, next), targets: receipt.report?.targets ?? [] }
       } else {
-        ;({ next, report } = applyWorkshopEdit(board, operation, slate))
+        // Who moves a card anyway, as the card says it: the agent's token, by its name.
+        ;({ next, report } = applyWorkshopEdit(board, operation, slate, { by: String(token.name || 'an agent').slice(0, 80), via: 'exec' }))
       }
       report = scopedTargets(report, boardId)
       const body = {

@@ -1,5 +1,5 @@
 import { catalogEntry } from 'slateboxjs/catalog'
-import { laneEditFormats, proposeLaneEdit } from '../../imports/api/common/lane-conversation.mjs'
+import { laneEditFormats, proposeLaneReply } from '../../imports/api/common/lane-conversation.mjs'
 
 export const laneChangeTool = {
   name:'propose_workshop_edits',
@@ -39,6 +39,16 @@ export function prepareLaneReply(input, workshop, selection) {
     return { reply: input.reply.trim(), workshop: null, ...(recommend && { recommend }) }
   }
   let next = workshop
-  for (const command of commands) next = proposeLaneEdit(next, command, selection)
+  let override = null
+  for (const command of commands) {
+    const made = proposeLaneReply(next, command, selection)
+    next = made.workshop
+    if (made.override) override = made
+  }
+  // A move the rules refuse, offered as "Move anyway": said in the board's words, alone (move-anyway.mjs).
+  if (override) {
+    if (commands.length > 1) throw Error(override.reply)
+    return { reply: override.reply, workshop: next, override: override.override, ...(recommend && { recommend }) }
+  }
   return { reply: input.reply.trim(), workshop: next, ...(recommend && { recommend }) }
 }

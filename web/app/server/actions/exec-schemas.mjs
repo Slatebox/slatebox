@@ -84,10 +84,12 @@ const reason = {
     n: { type: 'integer' },
     rule: {
       type: 'string',
-      enum: ['removes', 'rewrites_text', 'others_notes', 'widens_audience', 'widens_access'],
+      enum: ['removes', 'rewrites_text', 'others_notes', 'widens_audience', 'widens_access', 'breaks_board_rule'],
     },
     shareId: { type: 'string' },
     count: { type: 'integer' },
+    // breaks_board_rule: the board's rules each card moved anyway breaks, in the board's words (show them to the person).
+    rules: { type: 'array', items: { type: 'string' } },
   },
   required: ['rule'],
 }

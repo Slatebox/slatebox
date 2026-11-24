@@ -70,7 +70,9 @@ export const slateComponents = {
   // tool SLATE_OPERATION_TOOL lists names only).
   CanvasPlan: slateOperationPlanSchema(),
   WorkshopMovePlan: onePlan({
-    ...onBoard(record({ kind: { const: 'move_workshop_card' }, cardId: text, laneId: text, expectedRevision: revision })),
+    ...onBoard(record({ kind: { const: 'move_workshop_card' }, cardId: text, laneId: text, expectedRevision: revision,
+      override: { type: 'boolean', description: 'True to move it anyway when the board\'s rules refuse it (a 409 move_refused with overridable true), once the person agreed to break that rule. Held for the person to confirm (confirmation_required, rule breaks_board_rule); the card shows who moved it anyway and when.' } },
+    ['kind', 'cardId', 'laneId', 'expectedRevision'])),
     additionalProperties: false,
   }),
   WorkshopEditsPlan: {

@@ -216,9 +216,13 @@ Meteor.methods({
         ? await Slates.findOneAsync({ _id: slate._id }, { fields: { nodes: 1, lastSaved: 1 } }) : null
       const noteIds = drawn ? (drawn.nodes ?? []).map(node => node?.options?.id).filter(id => typeof id === 'string') : undefined
       let played
-      try { played = playWorkshopChanges(before.workshop, changes, noteIds, slate.creative.trades) } catch { throw invalid() }
+      // Who moves a card anyway, as the card says it (the server stamps it, never the page).
+      const account = changes.some(change => change.override) ? await Meteor.users.findOneAsync(this.userId, { fields: { 'profile.name': 1, username: 1 } }) : null
+      const actor = account ? { by: String(account.profile?.name || account.username || 'Someone').split(' ')[0].slice(0, 80) } : null
+      try { played = playWorkshopChanges(before.workshop, changes, noteIds, slate.creative.trades, actor) } catch { throw invalid() }
       if (played.refused) {
         throw new Meteor.Error('refused', played.refused.reason, { laneId: played.refused.laneId, revision, model: before, at: played.at, ...(played.taken ? { taken: true } : {}),
+          ...(played.refused.overridable && { overridable: true }),
           ...(played.refused.limits && { limits: played.refused.limits }) })
       }
       let model

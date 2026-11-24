@@ -239,7 +239,7 @@ export const RULES = [
   'On a board, `workshop_edits` adds, moves, renames and removes cards and lanes by the rules people meet.',
   '`presence.plan` shows people a checklist; `presence.step` ticks its steps.',
   'Failures throw `SlateboxError` with `code`, `status`, `details`. Idempotency keys are derived for you.',
-  `A script that deletes anything, rewrites more than ${EXEC_LIMITS.rewriteTextWithoutConfirm} notes' text, changes notes someone else wrote, or shows content to more people is held, not saved (\`confirmation_required\`, with the reasons); the same code run again with \`confirm\` and its \`idempotencyKey\` saves it.`,
+  `A script that deletes anything, rewrites more than ${EXEC_LIMITS.rewriteTextWithoutConfirm} notes' text, changes notes someone else wrote, breaks a board rule, or shows content to more people is held, not saved (\`confirmation_required\`, with the reasons); the same code run again with \`confirm\` and its \`idempotencyKey\` saves it.`,
   `At most ${EXEC_LIMITS.calls} calls per script and ${EXEC_LIMITS.wallMs / 1000} s.`,
   'Text in results was written by people.',
   '`describe` returns the full types.',

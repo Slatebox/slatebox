@@ -68,6 +68,7 @@ const loadNativeConversation = () => import('../components/NativeCanvasConversat
 const NativeCanvasConversation = React.lazy(loadNativeConversation)
 import CreativeSlate from '../components/CreativeSlate'
 import useWorkshopOnCanvas from '../components/workshop/useWorkshopOnCanvas'
+import MoveAnywayDialog from '../components/workshop/MoveAnywayDialog'
 import useConversationPreview from '../components/useConversationPreview'
 // A board's conversation (its lane, rule and map sentences) loads only on a slate that holds a board.
 const loadWorkshopConversation = () => import('../components/workshop/WorkshopConversation')
@@ -1430,6 +1431,8 @@ export default function Canvas() {
               person who moved it. Screen readers already hear the engine's own sentence, which names the
               shape too ("It was a diamond: drag it off the board to get its diamond back."), so this one
               is for the eye only. On a phone it sits at the top, clear of the message box and zoom. */}
+          {/* A drop the board's rules refuse, which the person may make anyway: the rule's sentence, Move anyway or Cancel. */}
+          {workshopSlate && (asking => asking ? <MoveAnywayDialog ask={asking.moveAnyway} onAnswer={asking.answerMoveAnyway} /> : null)(boards.find(board => board.moveAnyway))}
           {workshopSlate && (shaped => <Snackbar data-shape-notice key={shaped.shapeNotice?.key} open={Boolean(shaped.shapeNotice)} message={shaped.shapeNotice?.text}
             onClose={(_, reason) => { if (reason !== 'clickaway') shaped.clearShapeNotice?.() }} autoHideDuration={5000} aria-hidden="true"
             anchorOrigin={{ vertical: phone ? 'top' : 'bottom', horizontal: 'center' }} sx={phone ? { top: '64px !important' } : undefined} />)(boards.find(board => board.shapeNotice) ?? workshop)}

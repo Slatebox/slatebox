@@ -164,6 +164,34 @@ test("move_workshop_card is the short form of move_card: the same reducer, the s
   assert.deepEqual(ok.value.report.targets, ["card-c"]);
 });
 
+test("moving a card anyway waits for a yes, with the rule it breaks; confirmed, the card is marked with the agent", async (t) => {
+  const { world, principal, gate, context, board, revision } = await setup(t);
+  const move = (extra = {}) => ({ shareId: "board", plan: { message: "Move Gamma to Now anyway", operations: [{ kind: "move_workshop_card", cardId: "c", laneId: "now", expectedRevision: revision(), ...extra }] } });
+  // Refused, and said to be one the person may agree to.
+  const refused = await gate.call(context(), { seq: 1, method: "slates.applyOperations", input: move() });
+  assert.equal(refused.error.code, "move_refused");
+  assert.equal(refused.error.details.overridable, true);
+  // With override: held for the person, shown the rule it breaks.
+  const input = move({ override: true });
+  const ctx = context({ execKey: "anyway" });
+  const held = await gate.call(ctx, { seq: 1, method: "slates.applyOperations", input });
+  assert.equal(held.error?.code, "confirmation_required");
+  assert.deepEqual(held.error.details.reasons, [{ rule: "breaks_board_rule", shareId: "board", count: 1, rules: ["It already holds 2 of 2 cards."] }]);
+  assert.equal(board().cards[2].laneId, "next", "nothing moved yet");
+  const claimed = await world.exec.store.claimConfirmation({ id: ctx.held.id, subject: principal.tokenId, codeSha256: sha("code"), execId: "x" });
+  const again = context({ execKey: "anyway", confirmation: { id: ctx.held.id, fingerprints: claimed.fingerprints, used: new Set() } });
+  const saved = await gate.call(again, { seq: 1, method: "slates.applyOperations", input });
+  assert.equal(saved.ok, true, JSON.stringify(saved.error));
+  const gamma = board().cards.find((card) => card.id === "c");
+  assert.equal(gamma.laneId, "now");
+  assert.deepEqual({ ...gamma.override, at: undefined }, { by: principal.tokenName ?? gamma.override.by, at: undefined, sentence: "It already holds 2 of 2 cards.", from: "next" });
+  assert.ok(gamma.override.by && gamma.override.by !== "Someone");
+  // The same through workshop_edits: move_card with override is held too.
+  const ctx2 = context({ execKey: "anyway2" });
+  const viaEdits = await gate.call(ctx2, { seq: 1, method: "slates.applyOperations", input: { shareId: "board", plan: { message: "Move", operations: [{ kind: "workshop_edits", edits: [{ kind: "move_card", card: "Alpha", lane: "Next", override: false }, { kind: "move_card", card: "Beta", lane: "Later" }], expectedRevision: revision() }] } } });
+  assert.equal(viaEdits.ok, true, "a legal move with override false needs no yes: " + JSON.stringify(viaEdits.error));
+});
+
 // Someone else's map, which the token's account may edit (an EDIT grant).
 const theirMap = () => ({
   version: 1, title: "Their map",

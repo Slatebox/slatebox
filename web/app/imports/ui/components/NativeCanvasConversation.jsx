@@ -29,6 +29,7 @@ const WARNINGS={
   others_notes:()=>'This changes notes someone else wrote.',
   widens_audience:()=>'This puts content where more people can see it.',
   widens_access:()=>'This gives more people access.',
+  breaks_board_rule:(count,reason)=>`This moves ${count===1?'a card':(count||'some')+' cards'} past the board's rules: ${(reason?.rules||[]).join(' ')}`.trim(),
 }
 
 /**
@@ -257,7 +258,7 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
       {draft.said && <Typography variant="body2">{draft.said.replace(/^Added /,'Keep this to add ')}.</Typography>}
       {/* What Keep does, in the board's own words: "play the route" is a map's only. */}
       {!draft.said && (draft.component || draft.mode==='play') && previewKeepSentence(draft) && <Typography variant="body2">{previewKeepSentence(draft)}</Typography>}
-      {draft.warnings?.map(w=><Typography variant="body2" key={w.rule} role="note" color="warning.main">{WARNINGS[w.rule]?.(w.count)}</Typography>)}
+      {draft.warnings?.map(w=><Typography variant="body2" key={w.rule} role="note" color="warning.main">{WARNINGS[w.rule]?.(w.count,w)}</Typography>)}
       </Box></ChatTurn>
     </Box>}
   </ConversationPanel>

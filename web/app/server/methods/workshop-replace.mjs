@@ -1,4 +1,4 @@
-import { applyWorkshopEdits, businessKind, checkWorkshopReplacement, rulebook, validateWorkshop } from 'slateboxjs/workshops/model'
+import { applyWorkshopEdits, businessKind, checkWorkshopReplacement, rulebook, validateWorkshop, workshopStampOverrides } from 'slateboxjs/workshops/model'
 // A launch plan's, pipeline's or budget's rules, and a rulebook's whole-save helpers (a rule change
 // said as its rule edits, an earlier board put back); the edits between two business boards.
 import { behaviourEditsBetween, restoreWorkshop } from 'slateboxjs/workshops/rules'
@@ -88,6 +88,9 @@ export function replaceWorkshop(stored, next, { undo = null, revision, current =
   // No rule changed: the rules are the stored ones (a lane removed takes its own).
   if (rules) board = { ...board, behaviour: rules }
   else delete board.behaviour
+  // A card moved anyway (a kept "Move anyway"): marked by the one who saves it, now, and with the rule the stored
+  // board refuses it by; a mark the page wrote on anything else is not kept (the engine's workshopStampOverrides).
+  board = workshopStampOverrides(saved, board, { by: actor?.by || 'Someone', at: new Date().toISOString() })
   return changeBoard(saved, board)
 }
 

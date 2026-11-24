@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Meteor } from 'meteor/meteor'
 import { Tracker } from 'meteor/tracker'
 import { useTracker } from 'meteor/react-meteor-data'
-import { attachWorkshop, rulebookLoaded, validateWorkshop, workshopLanePlaces, workshopCandidate, workshopNodeIds, workshopRefusal, workshopReserve, workshopWithoutCardLines } from 'slateboxjs/workshops/model'
+import { attachWorkshop, rulebookLoaded, validateWorkshop, workshopLanePlaces, workshopCandidate, workshopNodeIds, workshopOverrideCandidate, workshopRefusal, workshopReserve, workshopWithoutCardLines } from 'slateboxjs/workshops/model'
 import { CreativeStates } from '../../../api/client/creativeSlateStates'
 import createAnonymousUser from '../../../api/client/createAnonymousUser'
 import { workshopStyle, lanesPerRow } from '../../../api/common/workshop-look.mjs'
@@ -83,6 +83,12 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
   // A shaped note that became a card, or a card that is its shape again: said once, to the person
   // who moved it, in a snackbar over the canvas (never in the chat). { key, text }.
   const [shapeNotice, setShapeNotice] = useState(null)
+  // A drop (or a "Move to") the rules refuse that the person may make anyway: { ask, answer } while the page asks
+  // "Move anyway?" with the rule's sentence (the engine's confirmOverride). One at a time: a new ask cancels the last.
+  const [moveAnyway, setMoveAnyway] = useState(null)
+  const askMoveAnyway = useCallback(ask => new Promise(resolve => {
+    setMoveAnyway(previous => { previous?.answer(false); return { ask, answer: resolve } })
+  }), [])
   // Whether the board draws its cards with rounded corners (the slate's own notes do).
   const roundCards = useRef(false)
   // What a change of this person's own would say of a shape, said once the server has saved it.
@@ -313,6 +319,9 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
         ...(kit && { kit }),
         style,
         onFocusDone: () => leaveRef.current?.(),
+        // A drop the rules refuse: "Move anyway?" with the rule's sentence; confirmed, the server marks who and when.
+        confirmOverride: askMoveAnyway,
+        overrideBy: () => String(Meteor.user()?.profile?.name || Meteor.user()?.username || 'You').split(' ')[0],
         onChange(_next, change) {
           // A card that became a note goes to the server with the note, so the board and the
           // drawing are saved in one write.
@@ -661,6 +670,9 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     notice,
     shapeNotice,
     clearShapeNotice: () => setShapeNotice(null),
+    // "Move anyway?" while it is asked: { card, lane, reason }, and the answer (true: move it, false: cancel).
+    moveAnyway: moveAnyway?.ask ?? null,
+    answerMoveAnyway: yes => { if (!moveAnyway) return; moveAnyway.answer(Boolean(yes)); setMoveAnyway(null) },
     selection,
     // The board in focus for the chat ('main') or null; focusBoard puts it in focus and fits the view to
     // it once the chat has settled. While a proposal waits for Keep or Discard, focus stays on its
@@ -707,6 +719,19 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
       if (!next) {
         const reason = workshopRefusal(current, cardId, laneId) || 'That move is not available.'
         board.refuse(laneId, reason)
+        // A rule the person may break once they say so: asked, as a drop is; confirmed, played as an override.
+        const card = current.cards.find(item => item.id === cardId), lane = current.lanes.find(item => item.id === laneId)
+        if (card && lane && workshopOverrideCandidate(current, cardId, laneId, { by: 'You', at: new Date().toISOString() })) {
+          askMoveAnyway({ cardId, laneId, card: card.label, lane: lane.label, reason }).then(yes => {
+            if (!yes || live.current !== board) return
+            const forced = workshopOverrideCandidate(board.value, cardId, laneId, { by: String(Meteor.user()?.profile?.name || 'You').split(' ')[0], at: new Date().toISOString() })
+            if (!forced) return
+            board.update(forced)
+            queue.current.push({ cardId, laneId, override: true })
+            playRef.current()
+          })
+          return false
+        }
         setError(reason)
         return false
       }

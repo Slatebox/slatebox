@@ -6,6 +6,7 @@ import {
 import { N, atMost, count, cuts, finder, listed, named, plainRequest as plain, pointing, said, several, things, unquoted, whole } from './plain-words.mjs'
 import { noteRequest, noteRequestProblem } from './note-requests.mjs'
 import { cardColours } from './card-colours.mjs'
+import { moveAnywayProposal } from './move-anyway.mjs'
 // The sentences about a board's rules and its business fields (board-chat.mjs): loaded on demand with
 // the board's rulebook, and plugged in here when they load, so a plain slate never downloads them.
 let boardChat = null
@@ -492,7 +493,12 @@ function change(board, message, selection) {
   function move(subject, target) {
     if (subject.laneId === target.id) throw Error(said(subject.label) + ' is already in ' + said(target.label) + '.')
     const next = workshopCandidate(board, subject.id, target.id)
-    if (!next) throw Error(said(subject.label) + ' can’t move to ' + said(target.label) + '. ' + workshopRefusal(board, subject.id, target.id))
+    if (!next) {
+      // A move the rules refuse: offered as "Move anyway", with the rule's sentence (move-anyway.mjs).
+      const anyway = moveAnywayProposal(board, subject.id, target.id)
+      if (anyway) return { board: anyway.workshop, reply: anyway.reply, override: anyway.override }
+      throw Error(said(subject.label) + ' can’t move to ' + said(target.label) + '. ' + workshopRefusal(board, subject.id, target.id))
+    }
     return done(next, 'Moved ' + said(subject.label) + ' to ' + said(target.label) + '.')
   }
 
@@ -668,7 +674,8 @@ function propose(input, asked, selection, actor) {
   }
   // A change that took rules with it (a lane removed) is previewed with its rules diff.
   const rulesChanged = original.behaviour && JSON.stringify(original.behaviour) !== JSON.stringify(next.behaviour)
-  return { workshop: next, reply: result.reply, ...(result.toCanvas ? { toCanvas: result.toCanvas } : {}), ...(rulesChanged && { diff: rulebook().diff(original, next) }) }
+  return { workshop: next, reply: result.reply, ...(result.toCanvas ? { toCanvas: result.toCanvas } : {}), ...(result.override && { override: result.override }),
+    ...(rulesChanged && { diff: rulebook().diff(original, next) }) }
 }
 
 // The model's own checks, for the few a sentence can still run into.

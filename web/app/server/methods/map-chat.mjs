@@ -1,5 +1,6 @@
 import { addMapToken, applyMapObjectEdit } from '../../imports/api/common/map-object-edits.mjs'
-import { addWorkshopBranch, validateWorkshop } from 'slateboxjs/workshops/model'
+import { addWorkshopBranch, validateWorkshop, workshopCandidate } from 'slateboxjs/workshops/model'
+import { moveAnywayProposal } from '../../imports/api/common/move-anyway.mjs'
 
 const short = (maxLength = 80) => ({ type: 'string', minLength: 1, maxLength })
 const action = (type, fields) => ({
@@ -41,7 +42,15 @@ export function prepareMapReply(input, original) {
     switch (edit.type) {
       case 'position': case 'capacity': case 'clearCapacity': case 'image': case 'clearImage': case 'imageDescription':
         map = applyMapObjectEdit(map, {kind:'lane', id:edit.id}, edit); break
-      case 'moveToken': map = applyMapObjectEdit(map, {kind:'card', id:edit.id}, edit); break
+      case 'moveToken': {
+        // A step the rules close (no path to it from where the token is): one move alone is offered as "Move
+        // anyway", with the rule's sentence (move-anyway.mjs); the server marks who and when as it is kept.
+        const anyway = input.edits.length === 1 && map.cards.some(card => card.id === edit.id) && map.lanes.some(lane => lane.id === edit.to) &&
+          !workshopCandidate(map, edit.id, edit.to) ? moveAnywayProposal(map, edit.id, edit.to) : null
+        if (anyway) return anyway
+        map = applyMapObjectEdit(map, {kind:'card', id:edit.id}, edit)
+        break
+      }
       case 'addToken': map = addMapToken(map,edit.at,edit.label); break
       case 'title': map.title = edit.text; break
       case 'renameStation': station(edit.id).label = edit.text; break

@@ -153,7 +153,8 @@ test('the library: every nest entry’s phrases parse on its sample, and each ru
 test('exec’s check_move on a nest board: the verdict a drag gets, by under', () => {
   const slate = { creative: { revision: 4, model: { kind: 'workshop', workshop: tree() } } }
   assert.deepEqual(checkMove(slate, { card: 'CSV import', under: 'Activation to 40%' }), { revision: 4, rev: 0,
-    refused: { sentence: 'Solutions sit under an opportunity.', ruleId: 'rule-2', nearest: 'Data trust', set: { by: 'Slatebox', at: '2026-11-21T00:00:00.000Z', via: 'preset' } } })
+    // A nested board's refusal is a hard limit: never offered as "Move anyway".
+    refused: { sentence: 'Solutions sit under an opportunity.', ruleId: 'rule-2', nearest: 'Data trust', overridable: false, set: { by: 'Slatebox', at: '2026-11-21T00:00:00.000Z', via: 'preset' } } })
   assert.deepEqual(checkMove(slate, { card: 'CSV import', under: 'Data trust' }), { revision: 4, rev: 0, ok: true, warnings: [] })
   assert.deepEqual(checkMove(slate, { card: 'Templates gallery', lane: 'Parked ideas' }), { revision: 4, rev: 0, ok: true, warnings: [] })
   // The same as the drag's candidates, card by card.

@@ -133,10 +133,21 @@ async function chatTurn(input, map) {
             prepare(toolCall.arguments, workshop, selection)
           }
           return null
-        } catch { return { code: 'invalid-map-turn', retryPrompt: 'Use valid IDs from the current board. Reply in no more than 1200 characters or propose a valid edit.' } }
+        } catch (error) {
+          // The board's own sentence for a change it turns down (a step that is not on the map, a hard limit): said to
+          // the model on the retry, and to the person if the retry fails too.
+          const reason = typeof error?.message === 'string' && error.message.length <= 300 ? error.message : ''
+          return { code: 'invalid-map-turn', ...(reason && { reason }),
+            retryPrompt: (reason ? 'That change was refused: ' + reason + ' ' : '') + 'Use valid IDs from the current board. Reply in no more than 1200 characters or propose a valid edit.' }
+        }
       },
     })
-    if (turn.abort) throw new Meteor.Error('reply-unavailable', turn.capability || turn.unusable ? turn.abortMessage : 'The model could not prepare a reply. Your board is still saved.')
+    if (turn.abort) {
+      if (turn.capability || turn.unusable) throw new Meteor.Error('reply-unavailable', turn.abortMessage)
+      // The model called the tool; the change it proposed is one the board does not make. Said in the board's words.
+      if (turn.rejected?.reason) throw new Meteor.Error('reply-unavailable', 'That change could not be made: ' + turn.rejected.reason + ' Your board is still saved.')
+      throw new Meteor.Error('reply-unavailable', 'The model could not prepare a reply. Your board is still saved.')
+    }
     await currentBoard()
     if (turn.toolCall) return { ...prepare(turn.toolCall.arguments, workshop, selection), revision }
     const reply = typeof turn.message.content === 'string' ? turn.message.content : turn.message.content.find(part => part.type === 'text').text

@@ -202,6 +202,10 @@ export function createGate({
     )
     if (deleted.length || disconnected.length || removedFromWorkshop)
       reasons.push({ rule: 'removes', shareId, count: deleted.length + disconnected.length + removedFromWorkshop })
+    // A card moved past a board's rule (a move made anyway): the person agrees first, shown the rule it breaks.
+    const overrides = Array.isArray(report.overrides) ? report.overrides : []
+    if (overrides.length)
+      reasons.push({ rule: 'breaks_board_rule', shareId, count: overrides.length, rules: overrides.map((item) => String(item.sentence).slice(0, 300)) })
     const texts = new Map((slate.nodes || []).map((node) => [node.options?.id, sameText(node.options?.text)]))
     let rewrites = 0
     for (const op of preview.body?.operations || []) {

@@ -36,7 +36,7 @@ export default defineAction({
   id: 'slates.checkMove',
   title: 'Check move',
   description:
-    'Whether a card may move to a lane on one of the slate\'s boards (boardId; required on a slate of several boards, 400 board_required lists them), without moving it: the same verdict a drag gets. On a nested board (piles, a tree) the move names the card it goes under instead (under), or the area it goes to (lane). Answers {ok: true, warnings} or {refused: {sentence, ruleId, nearest, set}}: the one rule that refuses it (ruleId null for the board\'s own kind rule), who set it, and the nearest lane (or card) it may go to. rev is the rulebook\'s revision. Cards and lanes are named by id or by name.',
+    'Whether a card may move to a lane on one of the slate\'s boards (boardId; required on a slate of several boards, 400 board_required lists them), without moving it: the same verdict a drag gets. On a nested board (piles, a tree) the move names the card it goes under instead (under), or the area it goes to (lane). Answers {ok: true, warnings} or {refused: {sentence, ruleId, nearest, set, overridable}}: the one rule that refuses it (ruleId null for the board\'s own kind rule), who set it, the nearest lane (or card) it may go to, and whether the person may agree to move it anyway (overridable: move_workshop_card with override true, held for them to confirm; false only for a hard limit). rev is the rulebook\'s revision. Cards and lanes are named by id or by name.',
   toolset: 'slates',
   kind: 'read',
   scope: 'slates:read',

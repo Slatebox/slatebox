@@ -9,6 +9,7 @@ import { resolveRequestConnection } from './ai-settings'
 import { connectionFetch } from './endpoint-policy.mjs'
 import { connectionRequest } from './connection-request.mjs'
 import { carriesImages, featureTitle } from './connections.mjs'
+import { chosenShapeAbort } from './shape-abort.mjs'
 import utils from '../../../imports/api/common/utils'
 import {
   AI_PROVIDERS,
@@ -128,6 +129,11 @@ function requestUserId(aiOpts) {
 async function requestFromProvider({ prompts, system, maxSize, userId: askedFor, ...aiOpts }, operatorWorkshop) {
   let errs = aiOpts?.errorCount || 0
   let responseValidationErrors = 0
+  // Whether the model answered with a tool call at all, and the last answer a feature's own check turned down: a
+  // model that called the tool but proposed something the board refuses can call tools (2026-11-23: a decision
+  // path's refused move was reported as "did not answer with a tool call ... may not support tool calls").
+  let calledTool = false
+  let lastRejection = null
   const callerId = requestUserId({ userId: askedFor })
   const user = callerId ? await Meteor.users.findOneAsync(callerId) : null
   // Fail closed: with the meter on, nothing is sent unless a counted action is running.
@@ -411,6 +417,7 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
 
     const normalized = normalizeProviderResponse({ provider, response: response || {} })
     const { message, toolCall, usage } = normalized
+    if (toolCall) calledTool = true
     const validationError = aiOpts.validateResponse?.({
       message,
       toolCall,
@@ -433,11 +440,15 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
       })
 
       if (charged.stop) return { abort: true, abortMessage: charged.abortMessage, fallbackBlocked: true, provider, model }
+      lastRejection = validationError
       if (responseValidationErrors >= maxResponseValidationRetries) {
         return {
           abort: true,
           abortMessage: 'The AI response did not meet Slatebox validation.',
           shape: true,
+          // What the feature's check said of the last answer (its code, and a sentence for the person when it has one).
+          rejected: { code: validationError.code || 'responseValidationFailed', ...(typeof validationError.reason === 'string' && { reason: validationError.reason }) },
+          calledTool,
           // Shape-exhausted aborts must not re-burn the whole ladder on the
           // fallback model for welcome-layer features (telemetry: 3-call FB
           // chains ending in plain chat text; Nov 1 welcome-route burst: 6 FB
@@ -610,10 +621,11 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
   // A chosen connection's answer is its own: it never falls back to another model, and when its
   // answers never took the shape a feature needs, the person is told which model and what to do.
   const named = { ...result, chosen: chosen.ref, chosenLabel }
-  if (result?.abort && result.shape && aiOpts.functions?.length) {
-    named.abortMessage = `${chosenLabel} did not answer with a tool call, which ${featureTitle(chosen.feature).toLowerCase()} needs. It may not support tool calls: choose another model for ${featureTitle(chosen.feature).toLowerCase()} in your AI settings.`
-    named.capability = 'tools'
-  }
+  // Only a model that never called a tool is said to be unable to: one that called it with a change the feature
+  // turned down is named with that reason, and keeps its capability (shape-abort.mjs).
+  const said = chosenShapeAbort({ result, label: chosenLabel, feature: featureTitle(chosen.feature).toLowerCase(),
+    tools: Boolean(aiOpts.functions?.length), calledTool, rejection: lastRejection })
+  if (said) Object.assign(named, said)
   return named
 }
 

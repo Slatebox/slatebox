@@ -166,7 +166,9 @@ const { releasePlan, validateWorkshop, workshopRefusal } = requireModel(
   'slateboxjs/workshops/model'
 )
 
-async function refusal(workshop, cardId, laneId) {
+// `overridable`: whether the person may agree to move it anyway (the same call with override true), false only
+// for a hard limit (the engine's workshopHardLimit).
+async function refusal(workshop, cardId, laneId, overridable) {
   const { board, request } = fixture(workshop)
   Object.assign(request.plan.operations[0], { cardId, laneId })
   const run = createWorkshopOperations({
@@ -190,6 +192,7 @@ async function refusal(workshop, cardId, laneId) {
       laneId,
       legalLaneIds: summarizeWorkshop(board).cards.find((c) => c.id === cardId)
         .legalLaneIds,
+      overridable,
       revision: 3,
       workshop: summarizeWorkshop(board),
     })
@@ -212,27 +215,66 @@ const recordOne = () => ({
 })
 
 test('a full lane is refused with the canvas sentence, the legal lanes and the current board', async () => {
-  const error = await refusal(recordOne(), 'horn', 'slot')
+  const error = await refusal(recordOne(), 'horn', 'slot', true)
   assert.equal(error.message, 'It already holds 1 of 1 card.')
 })
 
 test('a lane the card may not enter is refused with the canvas sentence', async () => {
-  const error = await refusal(recordOne(), 'horn', 'done')
+  const error = await refusal(recordOne(), 'horn', 'done', true)
   assert.equal(error.message, "This card can't go in Archive.")
 })
 
 test('a station with no route from the current one is refused with the canvas sentence', async () => {
   const map = createWorkshopMap()
   map.lanes.push({ id: 'other', label: 'Other', station: { column: 1, row: 1, next: [], outcome: 'Other.' } })
-  const error = await refusal(validateWorkshop(map), 'token', 'other')
+  const error = await refusal(validateWorkshop(map), 'token', 'other', true)
   assert.equal(error.message, "Other can't be reached from Start.")
 })
 
 test('a release without room is refused with the points it needs and holds', async () => {
   const plan = structuredClone(releasePlan)
   plan.lanes.find((lane) => lane.id === 'friday').capacity = 5
-  const error = await refusal(validateWorkshop(plan), 'export', 'friday')
+  // A release plan's points are what it plans: a hard limit, never offered as "Move anyway".
+  const error = await refusal(validateWorkshop(plan), 'export', 'friday', false)
   assert.equal(error.message, 'Needs 4 points. It already holds 3 of 5 points.')
+})
+
+test('with override, a refused move is made anyway: marked with the agent and the rule, reported for the exec gate to hold', async () => {
+  // The owner's decision path: the token already at Decide, asked back to The question (no path leads back).
+  const { board, request } = fixture(validateWorkshop({ ...createWorkshopMap(), lanes: [
+    { id: 'question', label: 'The question', station: { column: 0, row: 0, next: ['decide'], outcome: 'Say what you are deciding.' } },
+    { id: 'decide', label: 'Decide', station: { column: 1, row: 0, next: [], outcome: 'Write down what you chose.' } },
+  ], cards: [{ id: 'token', label: 'asdf', laneId: 'decide' }] }))
+  request.token = { _id: 'credential', userId: 'owner', name: 'Claude' }
+  Object.assign(request.plan.operations[0], { cardId: 'token', laneId: 'question', override: true })
+  const { body } = await createWorkshopOperations({})({ ...request, dryRun: true })
+  const sentence = "The question can't be reached from Decide."
+  assert.deepEqual(body.report.overrides, [{ cardId: 'token', laneId: 'question', fromLaneId: 'decide', sentence }])
+  assert.deepEqual(body.operations[0], { kind: 'move_workshop_card', cardId: 'token', laneId: 'question', expectedRevision: 3, override: true })
+  assert.equal(body.workshop.cards[0].laneId, 'question')
+  // Without override the same call is a 409 that says it may be made anyway.
+  delete request.plan.operations[0].override
+  await assert.rejects(createWorkshopOperations({})({ ...request, dryRun: true }), (error) => {
+    assert.equal(error.code, 'move_refused')
+    assert.equal(error.message, sentence)
+    assert.equal(error.details.overridable, true)
+    return true
+  })
+  // override is a card move's only, and a boolean.
+  for (const op of [{ override: 'yes' }, { kind: 'set_presentation_order', laneIds: ['question', 'decide'], override: true }]) {
+    await assert.rejects(createWorkshopOperations({})({ ...request, dryRun: true, plan: { ...request.plan, operations: [{ ...request.plan.operations[0], ...op }] } }),
+      { code: 'invalid_operation_plan' })
+  }
+  // A hard limit stays refused with override.
+  const plan = structuredClone(releasePlan)
+  plan.lanes.find((lane) => lane.id === 'friday').capacity = 5
+  const hard = fixture(validateWorkshop(plan))
+  Object.assign(hard.request.plan.operations[0], { cardId: 'export', laneId: 'friday', override: true })
+  await assert.rejects(createWorkshopOperations({})({ ...hard.request, dryRun: true }), (error) => {
+    assert.equal(error.code, 'move_refused')
+    assert.equal(error.details.overridable, false)
+    return true
+  })
 })
 
 test('on the interview board the API decides moves by the canvas rule: the prototype interview can swap back out', async () => {

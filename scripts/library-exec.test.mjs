@@ -75,7 +75,8 @@ test("check_move gives the drag's verdict, read-only: the one rule, who set it, 
   const { world, gate, context } = await setup(t);
   const out = await gate.call(context(), { seq: 1, method: "slates.checkMove", input: { shareId: "team", card: "Search", lane: "Review" } });
   assert.equal(out.ok, true, JSON.stringify(out.error));
-  assert.deepEqual(out.value, { revision: 1, rev: 1, refused: { sentence: "Review holds 2. It has 2.", ruleId: "rule-1", nearest: "Done",
+  // overridable: the person may agree to move it anyway (move_workshop_card with override, held for them).
+  assert.deepEqual(out.value, { revision: 1, rev: 1, refused: { sentence: "Review holds 2. It has 2.", ruleId: "rule-1", nearest: "Done", overridable: true,
     set: { by: "Tim", at: "2026-11-21T10:00:00.000Z", via: "chat" } } });
   const fine = await gate.call(context(), { seq: 2, method: "slates.checkMove", input: { shareId: "team", card: "billing", lane: "Doing" } });
   assert.deepEqual(fine.value, { revision: 1, rev: 1, ok: true, warnings: [] });
