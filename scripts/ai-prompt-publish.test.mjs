@@ -418,6 +418,8 @@ test('every test run is audited: one that failed at the provider, one over the h
   assert.equal(failed.outcome, 'ok')
   assert.match(failed.after.failed, /Provider answered 502/)
   assert.equal(failed.after.surface, 'shape')
+  const { actionText } = await import('../web/app/imports/ui/pages/admin/ai/audit-diff.mjs')
+  assert.equal(actionText(failed), 'Test-ran a prompt: unsaved text, no answer (Provider answered 502)')
   await broken.test({ actor: person, id: 'shape.system', version: 0 })
   await assert.rejects(broken.test({ actor: person, id: 'shape.system', version: 0 }), (e) => e.status === 429)
   assert.equal(refusedRows(w, 'ai.prompts.test').length, 1, 'the run over the limit is recorded as refused')
@@ -431,6 +433,10 @@ test('every test run is audited: one that failed at the provider, one over the h
   const caps = await w.ops.saveDraft({ actor: person, id: 'shape.system', body: `${withSentence} Draw YOUR_TOPIC.` })
   await assert.rejects(w.ops.publish({ actor: person, id: 'shape.system', version: caps.version, reason: 'go' }), /cannot be published: All-caps/)
   assert.match(refusedRows(w, 'ai.prompts.publish').at(-1).error, /^lint: All-caps/)
+  // the prompt's own record, written with its first draft, reads as that in Changes
+  const head = [...w.collections.audit.docs.values()].find((r) => r.action === 'ai.prompts.saveDraft' && r.after?.labels)
+  assert.ok(head)
+  assert.equal(actionText(head), 'Saved a prompt draft: first draft of this prompt')
 })
 
 test('the Prompts tab says the built-in text is sent when the published version does not render', async () => {

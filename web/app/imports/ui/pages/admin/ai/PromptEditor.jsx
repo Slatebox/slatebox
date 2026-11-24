@@ -268,7 +268,9 @@ export default function PromptEditor({ id, titles, onClose, onChanged }) {
             <Lint lint={lint} error={renderError} />
             <Box>
               <Typography variant="subtitle2" mb={0.5}>Values this prompt is given</Typography>
-              <Variables code={prompt.code.variables} body={body} wrap={wrap} onWrap={(name, value) => setWrap((w) => ({ ...w, [name]: value }))} />
+              <Box sx={{ overflowX: 'auto' }}>
+                <Variables code={prompt.code.variables} body={body} wrap={wrap} onWrap={(name, value) => setWrap((w) => ({ ...w, [name]: value }))} />
+              </Box>
             </Box>
             <Stack direction="row" spacing={1} alignItems="center">
               <TextField size="small" label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} inputProps={{ maxLength: 200 }} sx={{ flex: 1 }} />

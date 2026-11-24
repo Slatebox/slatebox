@@ -121,8 +121,11 @@ export function actionText(row = {}) {
 function promptText(base, row) {
   const doc = row.after
   if (!doc) return base
+  if (row.action === 'ai.prompts.test' && doc.failed) return `${base}: ${doc.version ? `version ${doc.version}` : doc.version === 0 ? 'the built-in text' : 'unsaved text'}, no answer (${doc.failed})`
   if (row.action === 'ai.prompts.test') return `${base}: ${doc.version ? `version ${doc.version}` : doc.version === 0 ? 'the built-in text' : 'unsaved text'}, ${doc.parses ? 'answer usable' : 'answer not usable'}`
   if (doc.promptId) return `${base}: version ${doc.version} saved${doc.status === 'draft' ? ' as a draft' : ''}${doc.origin === 'ai-proposal' ? ' (suggested by an agent)' : ''}`
+  // the prompt's own record, written with its first draft: nothing went live
+  if (doc.labels && row.action === 'ai.prompts.saveDraft') return `${base}: first draft of this prompt`
   if (doc.labels) return `${base}: ${doc.labels.published ? `version ${doc.labels.published} live` : 'the built-in text live'}`
   return base
 }
