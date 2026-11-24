@@ -7,16 +7,20 @@ import { useSetAtom } from 'jotai'
 import { useTracker } from 'meteor/react-meteor-data'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import CircularProgress from '@mui/material/CircularProgress'
 import Typography from '@mui/material/Typography'
 import CreateOrganization from '../components/teams/CreateOrganization'
 import ManageOrganization from '../components/teams/ManageOrganization'
 import { Organizations } from '../../api/common/models'
+import CONSTANTS from '../../api/common/constants'
 import { registrationDetails } from '../jotai/atoms'
 
 export default function Team() {
   const setRegistrationDetails = useSetAtom(registrationDetails)
   const org = useTracker(() => Organizations.findOne())
   const user = useTracker(() => Meteor.user())
+  // the account's team field comes with users.me (the same subscription InitSubscriptions holds)
+  const meReady = useTracker(() => Boolean(Meteor.userId()) && Meteor.subscribe(CONSTANTS.publications.users.me).ready())
   const orgNameType = user?.isEducationCertified ? 'Classroom' : 'Team'
   const lower = orgNameType.toLowerCase()
 
@@ -25,6 +29,10 @@ export default function Team() {
   )
 
   if (org) return page(<ManageOrganization />)
+  // in a team whose details have not arrived yet: wait, never flash "Create your team"
+  if (!meReady || user?.orgId) {
+    return page(<Box role="status" aria-label="Loading your team" sx={{ display: 'grid', placeItems: 'center', py: 8 }}><CircularProgress size={28} /></Box>)
+  }
 
   const blocked = user && (user.isAnonymous || !user.emails?.[0]?.verified)
   const registerOrVerify = () => setRegistrationDetails({
