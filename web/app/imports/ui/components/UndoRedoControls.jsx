@@ -26,6 +26,24 @@ export default function UndoRedoControls({ slate, narrow = false }) {
       if (outcome?.message) setSaid({ key: Date.now(), text: outcome.message })
     })
   }, [slate])
+  // From a tablet up the pill sits in the bottom-left corner, where other bottom-left controls (Agent
+  // tasks) would cover it: they start right of where it ends (--sb-undo-redo-end, in the viewport).
+  const pill = React.useRef(null)
+  React.useLayoutEffect(() => {
+    const node = pill.current
+    if (!node || narrow || typeof document === 'undefined') return undefined
+    const root = document.documentElement
+    const place = () => root.style.setProperty('--sb-undo-redo-end', `${Math.round(node.getBoundingClientRect().right)}px`)
+    place()
+    const watch = typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null
+    watch?.observe(node)
+    window.addEventListener('resize', place)
+    return () => {
+      watch?.disconnect()
+      window.removeEventListener('resize', place)
+      root.style.removeProperty('--sb-undo-redo-end')
+    }
+  }, [narrow, element, slate])
   if (!element || !slate?.onUndoRedo) return null
   const keys = undoRedoKeys(typeof navigator === 'undefined' ? '' : navigator.platform || navigator.userAgent)
   // A phone has no keyboard to name.
@@ -36,7 +54,7 @@ export default function UndoRedoControls({ slate, narrow = false }) {
   const button = { width: size, height: size, color: 'inherit', '&.Mui-disabled': { color: 'inherit', opacity: 0.35 } }
   return <>
     {createPortal(
-      <div className="sb-undo-redo" role="group" aria-label="Undo and redo" data-compact={narrow ? '' : undefined}
+      <div ref={pill} className="sb-undo-redo" role="group" aria-label="Undo and redo" data-compact={narrow ? '' : undefined}
         // Presses here are not presses on the canvas: no marquee, no new note on a double-click.
         onPointerDown={stop} onMouseDown={stop} onTouchStart={stop} onDoubleClick={stop} onClick={stop}
         style={{

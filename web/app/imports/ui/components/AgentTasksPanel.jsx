@@ -54,7 +54,8 @@ export default function AgentTasksPanel({ shareId, canEdit }) {
   }
 
   return (
-    <Box data-agent-tasks sx={{ position: 'fixed', left: 16, bottom: 16, zIndex: 1200, maxWidth: 'calc(100vw - 32px)' }}>
+    // Right of the canvas's Undo and Redo when they sit in the same corner (UndoRedoControls sets the variable).
+    <Box data-agent-tasks sx={{ position: 'fixed', left: 'calc(var(--sb-undo-redo-end, 8px) + 8px)', bottom: 16, zIndex: 1200, maxWidth: 'calc(100vw - var(--sb-undo-redo-end, 8px) - 24px)' }}>
       {!open ? (
         <Button variant="contained" size="small" data-agent-tasks-open onClick={() => setOpen(true)}>
           Agent tasks{active ? ` · ${active}` : ''}{waiting ? ' · needs you' : ''}
