@@ -17,7 +17,7 @@ import { createRefineAI } from './refine-ai.mjs'
 import { createLibraryNotifier } from './notify.mjs'
 import req from '../methods/ai/req'
 import { runAIAction } from '../metering/context.mjs'
-import { canStartAI } from '../metering/meteor'
+import { aiRefusal, canStartAI } from '../metering/meteor'
 import { resolveAIFeatureConfig } from '../methods/ai/feature-config.mjs'
 
 const raw = (collection) => collection.rawCollection()
@@ -40,6 +40,8 @@ const refineWithAI = createRefineAI({
   request: (opts) => req(opts),
   meter: (opts, fn) => runAIAction(opts, fn),
   canUseAI: async (userId) => canStartAI(userId && (await Meteor.users.findOneAsync(userId)), 'library'),
+  // The meter's own reason (Pro, balance, today's amount used), said instead of "not set up".
+  refusal: async (userId) => aiRefusal(userId && (await Meteor.users.findOneAsync(userId)), 'library'),
   config: () => resolveAIFeatureConfig('library', Meteor.settings),
 })
 

@@ -5,6 +5,7 @@
 // an author hears about every decision in the app and, with an address, by email.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import { createRefineAI, personalDataChecks, refinePrompt, refineRequest, refineTool, readRefinement, REFINE_TOOL_NAME } from "../web/app/server/library/refine-ai.mjs";
 import { createLibraryNotifier, libraryNotice, MY_LIBRARY_PATH } from "../web/app/server/library/notify.mjs";
 import { localRefinement, checkProposal } from "../web/app/server/library/refine.mjs";
@@ -63,6 +64,27 @@ test("the refine AI uses the library feature, meters it, and says so when there 
   assert.equal((await refine(ask)).reply, "Answer 3");
   const none = createRefineAI({ request: async () => assert.fail("never asked"), canUseAI: async () => false });
   await assert.rejects(none(ask), { status: 403, code: "ai_unavailable" });
+  assert.match((await none(ask).catch((error) => error)).message, /^AI is not set up on this server\./);
+  // The meter's refusal is the reason given (Pro, balance), never "not set up": asked before, or thrown as it starts.
+  const pro = { code: "pro", message: "AI on Slatebox needs Slatebox Pro, or your own AI key.", pay: { action: "pro" } };
+  const gated = createRefineAI({ request: async () => assert.fail("never asked"), canUseAI: async () => false, refusal: async (userId) => (userId === "admin" ? pro : null) });
+  const said = await gated(ask).catch((error) => error);
+  assert.deepEqual([said.status, said.code, said.details], [403, "ai_unavailable", { reason: "pro", pay: { action: "pro" } }]);
+  assert.ok(said.message.startsWith(pro.message), said.message);
+  assert.doesNotMatch(said.message, /not set up/);
+  const broke = createRefineAI({ request: async () => assert.fail("never asked"), canUseAI: async () => false, refusal: async () => { throw new Error("no meter"); } });
+  assert.match((await broke(ask).catch((error) => error)).message, /^AI is not set up on this server\./);
+  const balance = Object.assign(new Error("Your balance is used up. Top up to keep using AI."), { error: "balance", reason: "Your balance is used up. Top up to keep using AI.", details: { pay: { action: "topup" } } });
+  const meterSays = createRefineAI({ request: async () => assert.fail("never asked"), meter: async () => { throw balance; } });
+  const late = await meterSays(ask).catch((error) => error);
+  assert.deepEqual([late.status, late.code, late.details], [403, "ai_unavailable", { reason: "balance", pay: { action: "topup" } }]);
+  assert.ok(late.message.startsWith(balance.reason));
+  // Any other failure is not dressed up as a refusal.
+  const crashed = createRefineAI({ request: async () => { throw new Error("socket hang up"); } });
+  await assert.rejects(crashed(ask), { message: "socket hang up" });
+  // The app wires the meter's reason in.
+  const wiring = readFileSync(new URL("../web/app/server/library/meteor.js", import.meta.url), "utf8");
+  assert.match(wiring, /refusal: async \(userId\) => aiRefusal\(userId && \(await Meteor\.users\.findOneAsync\(userId\)\), 'library'\)/);
   const aborted = createRefineAI({ request: async () => ({ abort: true, abortMessage: "Your AI budget for today is spent." }) });
   await assert.rejects(aborted(ask), { status: 502, message: "Your AI budget for today is spent." });
   // The use key: library-refine is the library choice, which falls back to chat.

@@ -2,7 +2,7 @@
 // clearer one-line summary") and gets a proposal back, never a change. The core (core.mjs refine)
 // checks the proposal, shows it as a diff, and applies it only when the reviewer keeps it.
 //
-//   createRefineAI({ request, meter, canUseAI, config }) → refineWithAI
+//   createRefineAI({ request, meter, canUseAI, refusal, config }) → refineWithAI
 //   refineWithAI({ item, board, message, history, principal }) → { reply, meta?, edits?, check?, ai? }
 //
 // `request` is req (server/methods/ai/req.js) in the app: it picks the connection
@@ -168,10 +168,26 @@ const historyTurns = (history = []) =>
     .slice(-LIBRARY_LIMITS.history)
     .map((turn) => ({ role: turn.role === 'assistant' ? 'assistant' : 'user', content: turn.text.slice(0, 2000) }))
 
-export function createRefineAI({ request, meter = (_opts, fn) => fn(), canUseAI = async () => true, config = () => ({}) }) {
+// Said when there is no reason more exact: the server has no AI for the library.
+export const NO_AI_SENTENCE = 'AI is not set up on this server.'
+const BY_HAND = ' Rename, recategorise or rewrite the summary by saying it ("rename it to …", "put it in Decide", "summary: …").'
+
+/** A refusal ({ code, message, pay? } from the meter, or a Meteor.Error it threw) as the library's 403. */
+function unavailable(refused) {
+  const message = typeof refused?.message === 'string' && refused.message.trim() ? refused.message.trim() : NO_AI_SENTENCE
+  const details = { ...(refused?.code && { reason: refused.code }), ...(refused?.pay && { pay: refused.pay }) }
+  return libraryError(403, 'ai_unavailable', message + BY_HAND, Object.keys(details).length ? details : undefined)
+}
+// The meter's refusal thrown as it starts (a Meteor.Error: error is its code, reason its words, details.pay).
+const meterRefusal = (error) => (error && typeof error.error === 'string' && typeof error.reason === 'string' && !error.status
+  ? { code: error.error, message: error.reason, ...(error.details?.pay && { pay: error.details.pay }) } : null)
+
+// `refusal(userId)` → { code, message, pay? } | null: why this person can't use AI now, in the meter's own
+// words (Pro, balance, today's amount used, AI off). Without one, or with no reason, the server has no AI.
+export function createRefineAI({ request, meter = (_opts, fn) => fn(), canUseAI = async () => true, refusal = async () => null, config = () => ({}) }) {
   return async function refineWithAI({ item, board, message, history = [], principal }) {
     const userId = principal?.userId ?? null
-    if (!(await canUseAI(userId))) throw libraryError(403, 'ai_unavailable', 'AI is not set up on this server. Rename, recategorise or rewrite the summary by saying it ("rename it to …", "put it in Decide", "summary: …").')
+    if (!(await canUseAI(userId))) throw unavailable(await refusal(userId).catch(() => null))
     const tool = refineTool(item, board)
     const system = refinePrompt(item, board)
     const turn = await meter({ feature: 'library-refine', userId }, () => request({
@@ -181,7 +197,10 @@ export function createRefineAI({ request, meter = (_opts, fn) => fn(), canUseAI 
       functions: [tool], function_call: { name: REFINE_TOOL_NAME }, maxResponseValidationRetries: 1,
       validateResponse: ({ toolCall }) => (toolCall?.name === REFINE_TOOL_NAME && readRefinement(toolCall.arguments)?.reply
         ? null : { code: 'invalid-refinement', retryPrompt: 'Answer with the propose_library_refinement tool, and always give a reply.' }),
-    }))
+    })).catch((error) => {
+      const refused = meterRefusal(error)
+      throw refused ? unavailable(refused) : error
+    })
     if (!turn || turn.abort) throw libraryError(502, 'refine_failed', turn?.abortMessage || 'The AI could not answer just now. Ask again.')
     const proposal = readRefinement(turn.toolCall?.arguments)
     if (!proposal?.reply) throw libraryError(502, 'refine_failed', 'The AI answer could not be read. Ask again.')
