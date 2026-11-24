@@ -255,13 +255,41 @@ export function entryOfBoard(board) {
  * parses as it stands. Three at most unless `all`; a rule phrase carries `changes(before, after)`, true
  * when it changes the next drag (the listing gate's second test).
  */
+// New names a rename example may give, when the catalogue's own is already on the board: a column is
+// never renamed to a name another column has, a card to another card's, nor the board to its own.
+const SPARE_NAMES = Object.freeze({
+  rename_lane: ['Blocked', 'On hold', 'Waiting', 'Parked', 'Next up', 'Later', 'Ready', 'In review'],
+  rename_card: ['Review notes', 'Follow-up', 'Final check', 'Next step', 'Open question'],
+  rename_workshop: ['Team review', 'Our board', 'Weekly board', 'Team plan'],
+})
+const nameKey = text => String(text ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+
+/**
+ * A rename example as it makes sense on this board: "Rename To do to Blocked" on a board that already has a
+ * Blocked column becomes "Rename To do to On hold". The names on the board are its real lanes (a column),
+ * cards (a card) or its title (the board). Any other phrase is returned as it is; null when no name is free.
+ */
+export function freshRename(text, board, edit) {
+  const spare = SPARE_NAMES[edit]
+  const match = spare && /^(Rename .+ to )(.+)$/.exec(text)
+  if (!match || !board) return text
+  const names = edit === 'rename_lane' ? (board.lanes ?? []).map(lane => lane.label)
+    : edit === 'rename_card' ? (board.cards ?? []).map(card => card.label) : [board.title]
+  const taken = new Set(names.map(nameKey))
+  if (!taken.has(nameKey(match[2]))) return text
+  const free = spare.find(name => !taken.has(nameKey(name)))
+  return free ? match[1] + free : null
+}
+
 export function startersFor(entry, board, selection = null, { all = false, chain = all, actor = null } = {}) {
   const offered = []
   // With `all`, a phrase that needs a rule (warn, remove) is said on the board after the limit phrase made one,
   // as a person would say them in turn; `on` is the board it was checked on.
   let current = board
   for (const item of entry.moves) {
-    for (const text of fillings(item.say, current, selection)) {
+    for (const filled of fillings(item.say, current, selection)) {
+      const text = freshRename(filled, current, item.edit)
+      if (!text) continue
       let proposal
       try { proposal = tryPhrase(current, text, selection, actor) } catch { continue }
       if (item.rule && proposal.workshop && !dragsDiffer(current, proposal.workshop)) continue

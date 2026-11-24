@@ -12,7 +12,7 @@ import { catalog, catalogPreset } from 'slateboxjs/catalog'
 import { proposeLaneReply } from '../web/app/imports/api/common/lane-conversation.mjs'
 import '../web/app/imports/api/common/board-chat.mjs'
 import { proposeDirectMapEdit } from '../web/app/imports/api/common/map-direct-edits.mjs'
-import { boardMoves, catalogSample, libraryTurn, listedEntries, startersFor } from '../web/app/imports/api/common/library.mjs'
+import { boardMoves, catalogSample, freshRename, libraryTurn, listedEntries, startersFor } from '../web/app/imports/api/common/library.mjs'
 import { nativeCanvasDraft, nativeRequestKind } from '../web/app/imports/api/common/native-canvas-conversation.mjs'
 import { workshopStarters } from '../web/app/imports/api/common/workshop-starters.mjs'
 
@@ -154,6 +154,31 @@ test('chips are real: at most three, each parses as it stands, for a board, a la
   assert.ok(moves.length >= 3)
   assert.ok(moves.every(move => typeof move.words === 'string' && typeof move.text === 'string'))
   for (const move of moves) say(team, move.text)
+})
+
+// aicontrol fixes (2026-11-24): the item page's "Say it like this" never suggests a rename to a name the
+// board already has; the example is made from the board's real lanes, cards and title.
+test('a rename example never gives a column, a card or the board a name it already has', () => {
+  const blocked = validateWorkshop({ ...catalogPreset('team-board'), title: 'Team review',
+    lanes: [{ id: 'todo', label: 'To do' }, { id: 'blocked', label: 'Blocked' }, { id: 'onhold', label: 'On hold' }, { id: 'done', label: 'Done' }],
+    cards: [{ id: 'a', label: 'Review notes', laneId: 'todo' }, { id: 'b', label: 'Billing', laneId: 'blocked' }], behaviour: undefined })
+  const moves = boardMoves(blocked)
+  const lanes = blocked.lanes.map(lane => lane.label.toLowerCase())
+  const cards = blocked.cards.map(card => card.label.toLowerCase())
+  const renames = moves.map(move => /^Rename (.+) to (.+)$/.exec(move.text)).filter(Boolean)
+  assert.ok(renames.length >= 2, 'the board still has rename examples')
+  for (const [text, from, to] of renames) {
+    assert.notEqual(to.toLowerCase(), from.toLowerCase(), text)
+    if (from === 'the board') assert.notEqual(to.toLowerCase(), blocked.title.toLowerCase(), text)
+    else if (lanes.includes(from.toLowerCase())) assert.ok(!lanes.includes(to.toLowerCase()), text + ': a column already has that name')
+    else assert.ok(!cards.includes(to.toLowerCase()), text + ': a card already has that name')
+  }
+  assert.ok(moves.some(move => move.text === 'Rename To do to Waiting'), moves.map(move => move.text).join(' | '))
+  for (const move of moves) say(blocked, move.text)
+  // Where the catalogue's own name is free, the example stays as it was.
+  assert.equal(freshRename('Rename To do to Blocked', team, 'rename_lane'), 'Rename To do to Blocked')
+  assert.equal(freshRename('Rename the board to Team review', team, 'rename_workshop'), 'Rename the board to Team review')
+  assert.equal(freshRename('Move Billing to Done', blocked, 'move_card'), 'Move Billing to Done')
 })
 
 test('the rules travel through the one door: a whole-board save that breaks them is refused', () => {
