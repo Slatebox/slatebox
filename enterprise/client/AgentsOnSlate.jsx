@@ -18,6 +18,11 @@ import Typography from '@mui/material/Typography'
 import { AgentSuggestions, McpConnections } from './collections'
 import { colorOf, useAgentGhosts } from './ghosts'
 import InviteWalkthrough from './InviteWalkthrough'
+import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx'
+
+// What a chip says about an agent that can't be asked right now (everyone sees it; the cursor's
+// ghosts stay keepable either way).
+const STATE_WORDS = { paused: 'paused: its tools changed', needs_sign_in: 'needs sign-in', pro_ended: 'Pro ended' }
 
 function Hexagon({ color }) {
   return (
@@ -43,6 +48,8 @@ export default function AgentsOnSlate({ slate, canEdit, readSelection }) {
     }
   }, [shareId, userId])
   const [inviting, setInviting] = useState(false)
+  const [reconnect, setReconnect] = useState(null)
+  const { open: openPay } = usePaySheet()
   const [asking, setAsking] = useState(null) // connectionId
   const [request, setRequest] = useState('')
   const [busy, setBusy] = useState(false)
@@ -86,6 +93,20 @@ export default function AgentsOnSlate({ slate, canEdit, readSelection }) {
       await decide(s._id, null, keep)
   }
   const askingConnection = connections.find((c) => c._id === asking)
+  // Sign in again: only the inviter sees the agent's address (connectors.list), so ask for it.
+  const signInAgain = async (c) => {
+    setNote('')
+    try {
+      const { connections: mine } = await Meteor.callAsync('connectors.list', { shareId })
+      const own = mine.find((m) => m.connectionId === c._id)
+      if (!own?.address) return setNote('That agent is not on this slate any more.')
+      setReconnect({ connectionId: c._id, address: own.address, name: c.name })
+      setInviting(true)
+    } catch (e) {
+      setNote(errorText(e))
+    }
+  }
+  const renewPro = () => openPay({ action: 'pro', from: 'agents', reason: 'Invite outside agents onto your slates.', retry: () => Meteor.callAsync('connectors.list', { shareId }).catch(() => {}) })
 
   return (
     <Box data-agents-on-slate="" sx={{ position: 'fixed', left: 16, bottom: 128, zIndex: 1200, display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-start', maxWidth: 'calc(100vw - 32px)' }}>
@@ -111,9 +132,9 @@ export default function AgentsOnSlate({ slate, canEdit, readSelection }) {
           const mine = c.ownerId === userId
           const run = working(c._id)
           return (
-            <Paper key={c._id} variant="outlined" data-agent-chip-invited={c.name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, p: 0.5, borderColor: color, borderStyle: 'dashed' }}>
-              <Chip size="small" variant="outlined" icon={<Hexagon color={color} />} sx={{ border: 0 }}
-                label={`${c.name} · added by ${mine ? 'you' : c.inviterName}${run ? ' · working…' : ''}${c.status === 'paused' ? ' · paused: its tools changed' : ''}${pending.length ? ` · ${pending.length} waiting` : ''}`}
+            <Paper key={c._id} variant="outlined" data-agent-chip-invited={c.name} data-agent-state={c.status} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, p: 0.5, borderColor: color, borderStyle: 'dashed', ...(STATE_WORDS[c.status] && { opacity: 0.85 }) }}>
+              <Chip size="small" variant="outlined" icon={<Hexagon color={STATE_WORDS[c.status] ? '#9aa1ad' : color} />} sx={{ border: 0 }}
+                label={`${c.name} · added by ${mine ? 'you' : c.inviterName}${run ? ' · working…' : ''}${STATE_WORDS[c.status] ? ` · ${STATE_WORDS[c.status]}` : ''}${pending.length ? ` · ${pending.length} waiting` : ''}`}
                 onClick={mine && c.status === 'active' ? () => setAsking(c._id) : undefined}
                 aria-label={`${c.name}, an agent added by ${mine ? 'you' : c.inviterName}`} />
               {canEdit && !guest && pending.length > 0 && (
@@ -122,6 +143,8 @@ export default function AgentsOnSlate({ slate, canEdit, readSelection }) {
                   <Button size="small" data-agent-discard-all="" onClick={() => decideAll(c._id, false)}>Discard all</Button>
                 </>
               )}
+              {mine && c.status === 'needs_sign_in' && <Button size="small" variant="outlined" data-agent-sign-in-again="" onClick={() => signInAgain(c)}>Sign in again</Button>}
+              {mine && c.status === 'pro_ended' && <Button size="small" variant="outlined" data-agent-renew-pro="" onClick={renewPro}>Renew Pro</Button>}
               {mine && <Button size="small" onClick={() => Meteor.callAsync('connectors.disconnect', { connectionId: c._id }).catch((e) => setNote(errorText(e)))}>Remove</Button>}
             </Paper>
           )
@@ -130,7 +153,7 @@ export default function AgentsOnSlate({ slate, canEdit, readSelection }) {
           <Button size="small" variant="outlined" data-invite-agent-open="" onClick={() => setInviting(true)}>+ Invite agent</Button>
         )}
       </Box>
-      <InviteWalkthrough open={inviting} onClose={() => setInviting(false)} shareId={shareId} slateName={slate?.options?.name}
+      <InviteWalkthrough open={inviting} onClose={() => { setInviting(false); setReconnect(null) }} shareId={shareId} slateName={slate?.options?.name} reconnect={reconnect}
         onInvited={(connection) => setAsking(connection.connectionId)} />
     </Box>
   )

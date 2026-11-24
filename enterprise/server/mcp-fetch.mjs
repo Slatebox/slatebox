@@ -13,8 +13,10 @@
 //   - the answer is capped in bytes and the whole request in time;
 //   - a real User-Agent is sent (bot walls refuse the default one);
 //   - no GET listening stream: Slatebox never keeps a connection open for server pushes.
-// The SDK is handed this function as its fetch, so every request it makes (discovery, calls,
-// OAuth metadata in S2b) goes through these checks.
+// The SDK is handed this function as its fetch, so every request it makes goes through these
+// checks. Sign-in (oauth.mjs) uses a second instance of the same guard, which may also GET (the
+// metadata documents) and follows no redirects at all, so a code, verifier or client secret is
+// only ever sent to the endpoint the checked metadata named.
 //
 // devOrigins: exact origins (scheme://host:port) a local development run may reach over plain
 // http on this machine, such as a fake MCP server in a test. Ignored on production settings
@@ -147,7 +149,8 @@ function cappedStream(res, { maxBytes, deadline, host }) {
 
 /**
  * Builds the guarded fetch. Options: devOrigins, timeoutMs, maxBytes, maxRedirects, userAgent,
- * resolve (dns.lookup; tests pass their own), onRequest(url) (an audit hook; tests count hops).
+ * resolve (dns.lookup; tests pass their own), onRequest(url) (an audit hook; tests count hops),
+ * methods (the HTTP methods allowed; default POST and DELETE, the calls the protocol makes).
  */
 export function createMcpFetch({
   devOrigins = [],
@@ -157,13 +160,14 @@ export function createMcpFetch({
   userAgent = MCP_USER_AGENT,
   resolve = dns.lookup,
   onRequest = () => {},
+  methods = ['POST', 'DELETE'],
 } = {}) {
   const lookup = publicOnlyLookup(resolve)
   return async function mcpFetch(input, init = {}) {
     const raw = typeof input === 'string' || input instanceof URL ? String(input) : input?.url
     let method = String(init.method || input?.method || 'GET').toUpperCase()
     // No listening stream (GET) and nothing but the calls the protocol makes.
-    if (!['POST', 'DELETE'].includes(method)) return new Response(null, { status: 405, statusText: 'Method Not Allowed' })
+    if (!methods.includes(method)) return new Response(null, { status: 405, statusText: 'Method Not Allowed' })
     let { url, dev } = checkMcpUrl(raw, { devOrigins })
     const origin = url.origin
     let headers = headersOf(init)
@@ -184,7 +188,7 @@ export function createMcpFetch({
         }
         ;({ url, dev } = checkMcpUrl(next.href, { devOrigins }))
         if (url.origin !== origin) delete headers.authorization
-        if ([301, 302, 303].includes(answer.status)) {
+        if (method !== 'GET' && [301, 302, 303].includes(answer.status)) {
           // A redirect that turns the call into a GET has nothing left to call.
           return new Response(null, { status: 405, statusText: 'Method Not Allowed' })
         }
@@ -201,5 +205,24 @@ export function createMcpFetch({
       return new Response(empty ? null : cappedStream(res, { maxBytes, deadline, host: url.host }), { status, headers: responseHeaders })
     }
     refuse('redirects', `${url.host} redirected too many times.`)
+  }
+}
+
+/**
+ * No token passthrough: a person's token for one server is attached only to requests to that
+ * server's own origin. Any other request made with this fetch loses its Authorization header
+ * (and mcpFetch already drops it on a redirect to another origin).
+ */
+export function bindToken(fetch, origin) {
+  return function boundFetch(input, init = {}) {
+    const raw = typeof input === 'string' || input instanceof URL ? String(input) : input?.url
+    let target = null
+    try {
+      target = new URL(raw).origin
+    } catch {}
+    if (target === origin) return fetch(input, init)
+    const headers = headersOf(init)
+    delete headers.authorization
+    return fetch(input, { ...init, headers })
   }
 }

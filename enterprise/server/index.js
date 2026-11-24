@@ -8,24 +8,37 @@
 //   api.addMethods({...})   plain Meteor methods (prefer actions)
 //   api.addRoute({ method, path, handler })   e.g. GET /connectors/oauth/callback
 //   api.onStartup(fn)
+/* eslint-disable no-console */
 // context: { edition: 'cloud', settings, agentInvite } where agentInvite is
 // settings.public.agents.invite === true (the invite feature switch, off by default).
 import { connectorActions } from './actions.mjs'
+import { signInRoutes } from './routes.mjs'
 
 export const manifest = Object.freeze({ name: 'slatebox-enterprise', features: ['agents.invite'] })
 
 export function register(api, context) {
   // Nothing a person can reach is added while the invite switch is off.
   if (!context?.agentInvite) return
-  let service = null
+  let started = null
+  const starting = () => Object.assign(new Error('Outside agents are starting. Try again in a moment.'), { status: 409, code: 'starting' })
   const running = () => {
-    if (!service) throw Object.assign(new Error('Outside agents are starting. Try again in a moment.'), { status: 409, code: 'starting' })
-    return service
+    if (!started) throw starting()
+    return started.service
   }
-  // S2a: outside agents on open MCP servers (connectors.list/discover/connect/disconnect/call/keep/discard).
+  // Outside agents: open servers (S2a) and servers that need sign-in (S2b):
+  // connectors.list/discover/signIn/signInStatus/useKey/connect/disconnect/call/keep/discard.
   api.addActions(connectorActions(running))
+  // Sign-in's own addresses: the client document, the popup's start and the fixed callback.
+  for (const route of signInRoutes({
+    signIn: () => {
+      if (!started) throw starting()
+      return started.signIn
+    },
+    origin: () => (started ? started.origin() : ''),
+    log: (entry) => console.log('[connectors]', JSON.stringify(entry)),
+  })) api.addRoute(route)
   api.onStartup(async () => {
     const { startConnectors } = await import('./meteor.js')
-    service = startConnectors()
+    started = startConnectors()
   })
 }

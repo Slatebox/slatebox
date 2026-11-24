@@ -1,9 +1,12 @@
 // Copyright (c) 2026 Slatebox LLC. Licensed under the Slatebox Enterprise License (enterprise/LICENSE).
 // Not MIT: see enterprise/README.md.
 //
-// The curated gallery of outside agents (first-party servers only, no gateways). S2a invites the
-// open ones (no sign-in). The cards say what lands on the slate, never how many tools a server has.
-// `featured` cards come first. Sign-in servers arrive with S2b.
+// The curated gallery of outside agents (first-party servers only, no gateways). The cards say
+// what lands on the slate, never how many tools a server has. `featured` cards come first.
+// signIn: 'oauth' cards need the person to sign in to the vendor (a popup on the vendor's own
+// page); keyHint says what they may paste instead. Linear is listed by its read-only address
+// while invited agents only suggest (S2b); GitHub signs in with Slatebox's registered GitHub app
+// (settings.connectors.oauthApps.github) or a pasted personal access token.
 
 export const GALLERY = Object.freeze([
   {
@@ -25,6 +28,29 @@ export const GALLERY = Object.freeze([
     try: 'Find open models that remove image backgrounds',
     featured: true,
     cost: 'Free',
+  },
+  {
+    id: 'linear',
+    name: 'Linear',
+    url: 'https://mcp.linear.app/mcp/readonly',
+    job: 'Issues',
+    lands: 'Brings your team\'s issues and cycles onto the slate as linked notes. Reads only.',
+    try: 'What is in the current cycle?',
+    featured: true,
+    signIn: 'oauth',
+    cost: 'Uses your Linear account',
+  },
+  {
+    id: 'github',
+    name: 'GitHub',
+    url: 'https://api.githubcopilot.com/mcp/',
+    job: 'Code and issues',
+    lands: 'Adds issues and pull requests as linked notes beside the parts of your diagram they touch.',
+    try: 'Which open pull requests touch checkout?',
+    featured: true,
+    signIn: 'oauth',
+    keyHint: 'Or paste a GitHub personal access token.',
+    cost: 'Uses your GitHub account',
   },
   { id: 'apexcharts', name: 'ApexCharts', url: 'https://mcp.apexcharts.com/mcp', job: 'Charts', lands: 'Turns the numbers in your notes into a chart outline as notes.', try: 'Chart these sales by month', cost: 'Free' },
   { id: 'wolfram', name: 'Wolfram', url: 'https://agenttools.wolfram.com/mcp', job: 'Math and facts', lands: 'Adds computed facts and unit math as notes.', try: 'How far is the Moon in km?', cost: 'Free' },

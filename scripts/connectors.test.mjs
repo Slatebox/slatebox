@@ -12,7 +12,7 @@ import { quarantine, safeLink } from '../enterprise/server/results.mjs'
 import { packContext, scrub } from '../enterprise/server/context.mjs'
 import { checkLayout, checkPlan, excalidrawElements, excalidrawGroup, itemsFromLayout, planPrompt } from '../enterprise/server/translate.mjs'
 import { connectorPrincipal, createConnectorService } from '../enterprise/server/service.mjs'
-import { connectorSettings } from '../enterprise/server/settings.mjs'
+import { connectorSettings } from '../enterprise/server/connector-settings.mjs'
 import { canonicalAddress, cardFor, GALLERY } from '../enterprise/common/gallery.mjs'
 import { sanitizeClientName } from '../web/app/imports/api/common/agent-label.mjs'
 import { canvasOfWrites } from '../web/app/server/exec/conversation.mjs'
@@ -82,7 +82,7 @@ test('settings: test origins are dropped on a deployed Slatebox', () => {
 
 // ---------- hostile server: every case refused ----------
 
-test('hostile: resource_metadata pointing at 169.254.169.254 is never fetched; sign-in servers are refused in S2a', async () => {
+test('hostile: resource_metadata pointing at 169.254.169.254 is never fetched by the session (sign-in reads it only through its own checks)', async () => {
   requested.length = 0
   await refusedWith(discover(servers.url('/hostile/metadata/mcp'), fetch), 'needs_sign_in')
   assert.ok(requested.length > 0)
@@ -248,8 +248,10 @@ test('Excalidraw elements become native notes and lines with no model', async ()
   assert.equal(group.lines.length, 2)
 })
 
-test('gallery: open servers first, addresses compared in canonical form', () => {
-  assert.ok(GALLERY.filter((c) => c.featured).map((c) => c.id).join() === 'excalidraw,huggingface')
+test('gallery: featured open servers first, then featured sign-in servers; addresses compared in canonical form', () => {
+  assert.equal(GALLERY.filter((c) => c.featured).map((c) => c.id).join(), 'excalidraw,huggingface,linear,github')
+  assert.equal(cardFor('https://mcp.linear.app/mcp/readonly').signIn, 'oauth')
+  assert.equal(cardFor('https://api.githubcopilot.com/mcp').id, 'github')
   assert.equal(cardFor('https://MCP.excalidraw.com/mcp/?x=1').id, 'excalidraw')
   assert.equal(canonicalAddress('https://a.example/mcp/'), 'https://a.example/mcp')
 })
@@ -262,7 +264,7 @@ function memoryStore() {
     rows,
     insert: async (doc) => rows.push(structuredClone(doc)),
     findOne: async (q) => rows.find((r) => Object.entries(q).every(([k, v]) => r[k] === v)) || null,
-    find: async (q) => rows.filter((r) => r.slateId === q.slateId && r.status !== 'removed'),
+    find: async (q) => rows.filter((r) => Object.entries(q).every(([k, v]) => (v && typeof v === 'object' && '$ne' in v ? r[k] !== v.$ne : r[k] === v))),
     update: async (id, set) => Object.assign(rows.find((r) => r._id === id) || {}, set),
     pushItem: async (id, item) => rows.find((r) => r._id === id).items.push(item),
     async setItem(id, n, set, onlyIf) {
@@ -461,12 +463,14 @@ test('the connector actions join the one registry: Meteor method, /api/v1 route,
   const { connectorActions } = await import('../enterprise/server/actions.mjs')
   const registry = createAppRegistry({ extraActions: connectorActions(() => ({})) })
   const ids = registry.list().map((a) => a.id).filter((id) => id.startsWith('connectors.'))
-  assert.deepEqual(ids.sort(), ['connectors.call', 'connectors.connect', 'connectors.discard', 'connectors.disconnect', 'connectors.discover', 'connectors.keep', 'connectors.list'])
+  assert.deepEqual(ids.sort(), ['connectors.call', 'connectors.connect', 'connectors.discard', 'connectors.disconnect', 'connectors.discover', 'connectors.keep', 'connectors.list', 'connectors.signIn', 'connectors.signInStatus', 'connectors.useKey'])
   for (const action of registry.list().filter((a) => a.id.startsWith('connectors.'))) {
     assert.ok(action.mounts.ddp && action.mounts.http && action.tool, action.id)
     assert.ok(action.principals.includes('agent') && action.principals.includes('person'))
   }
   assert.equal(registry.get('connectors.call').openWorld, true)
+  // a pasted key is a secret: writeOnly, so a run's record keeps it redacted
+  assert.equal(registry.get('connectors.useKey').input.properties.key.writeOnly, true)
   // the exec client's contract: keyed writes, object outputs
   const { buildClientManifest, renderExecTool } = await import('../web/app/server/actions/client-render.mjs')
   const manifest = buildClientManifest(registry)

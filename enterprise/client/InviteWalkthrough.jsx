@@ -2,8 +2,10 @@
 // Not MIT: see enterprise/README.md.
 //
 // "Invite an agent": pick from the gallery or paste an address → (free account: the in-app Pro
-// sheet, then straight on) → discovery → what it can do, in plain words → which lookups it may
-// use → what it may see, and what leaves Slatebox → it arrives as a named cursor.
+// sheet, then straight on) → discovery → (a server that needs sign-in: a popup on its own page,
+// a pasted client id, or a pasted key or token) → what it can do, in plain words → which lookups
+// it may use → what it may see, and what leaves Slatebox → it arrives as a named cursor.
+// With `reconnect` (an agent that needs sign-in again) it stops after the sign-in.
 import React, { useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
@@ -22,6 +24,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx'
 import { GALLERY, cardFor } from '../common/gallery.mjs'
+import { followSignIn, openSignInWindow } from './signin'
 
 const SEES = [
   { value: 'request', label: 'Only what I ask' },
@@ -31,8 +34,12 @@ const SEES = [
 
 const errorText = (error) => error?.reason || error?.message || 'That did not work. Try again.'
 
-export default function InviteWalkthrough({ open, onClose, shareId, slateName, onInvited }) {
-  const [step, setStep] = useState('choose') // choose | discovering | consent | inviting
+export default function InviteWalkthrough({ open, onClose, shareId, slateName, onInvited, reconnect }) {
+  const [step, setStep] = useState('choose') // choose | discovering | signin | waiting | consent | inviting | reconnected
+  const [clientId, setClientId] = useState('')
+  const [key, setKey] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const pending = useRef(null)
   const [address, setAddress] = useState('')
   const [found, setFound] = useState(null)
   const [name, setName] = useState('')
@@ -45,8 +52,13 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
   useEffect(() => () => { live.current = false }, [])
   useEffect(() => {
     if (!open) {
-      setStep('choose'); setFound(null); setError(''); setAddress(''); setShowAll(false)
+      pending.current?.cancel()
+      setStep('choose'); setFound(null); setError(''); setAddress(''); setShowAll(false); setKey(''); setClientId(''); setShowKey(false)
+    } else if (reconnect?.address) {
+      setAddress(reconnect.address)
+      discover(reconnect.address)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   // The server checks Pro on every call; a refusal opens the in-app sheet, and paying carries on from here.
@@ -61,6 +73,15 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
       const result = await Meteor.callAsync('connectors.discover', { shareId, address: target })
       if (!live.current) return
       setFound(result)
+      if (result.signIn) {
+        setShowKey(result.signIn.method === 'key')
+        setStep('signin')
+        return
+      }
+      if (reconnect) {
+        setStep('reconnected')
+        return
+      }
       setName(result.suggestedName)
       setAllowed(Object.fromEntries(result.tools.map((tool) => [tool.name, tool.policy === 'allow'])))
       setStep('consent')
@@ -68,6 +89,49 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
       if (!live.current) return
       setStep('choose')
       if (e?.error === 'pro_required') return payThen(() => discover(target))
+      setError(errorText(e))
+    }
+  }
+
+  // The popup is opened inside the click, before the server is asked, so the browser allows it.
+  async function signIn() {
+    setError('')
+    const win = openSignInWindow()
+    setStep('waiting')
+    try {
+      const started = await Meteor.callAsync('connectors.signIn', { shareId, address: found.address, ...(clientId.trim() && { clientId: clientId.trim() }) })
+      if (!live.current) return win?.close()
+      const follow = followSignIn(win, started)
+      pending.current = follow
+      const outcome = await follow.promise
+      pending.current = null
+      if (!live.current) return
+      try { if (!win?.closed) win.close() } catch {}
+      if (outcome.ok) return discover(found.address)
+      setStep('signin')
+      setError(outcome.message || 'Sign-in didn\'t finish. Try again.')
+    } catch (e) {
+      try { win?.close() } catch {}
+      if (!live.current) return
+      setStep('signin')
+      if (e?.error === 'pro_required') return payThen(() => signIn())
+      setError(errorText(e))
+    }
+  }
+
+  async function useKey(event) {
+    event?.preventDefault()
+    if (!key.trim()) return
+    setError('')
+    setStep('waiting')
+    try {
+      await Meteor.callAsync('connectors.useKey', { shareId, address: found.address, key: key.trim() })
+      setKey('')
+      if (live.current) discover(found.address)
+    } catch (e) {
+      if (!live.current) return
+      setStep('signin')
+      if (e?.error === 'pro_required') return payThen(() => useKey())
       setError(errorText(e))
     }
   }
@@ -97,6 +161,8 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
   const changes = found?.tools.filter((tool) => tool.group === 'change') || []
   const chosen = lookups.filter((tool) => allowed[tool.name])
   const card = found?.card ? cardFor(found.address) : null
+  const plan = found?.signIn
+  const signInWith = plan?.provider || plan?.authHost || found?.host
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth aria-labelledby="invite-agent-title" data-invite-agent="">
@@ -116,12 +182,12 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
                 <Box key={item.id} component="button" type="button" data-gallery-card={item.id} onClick={() => { setAddress(item.url); discover(item.url) }} onPointerEnter={prefetch}
                   sx={{ textAlign: 'left', p: 1.5, border: '1px solid', borderColor: item.featured ? 'primary.main' : 'divider', borderRadius: 2, bgcolor: 'background.paper', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
                   <Typography variant="subtitle2">⬡ {item.name}</Typography>
-                  <Typography variant="caption" color="text.secondary" component="div">{item.job} · {item.cost} · Pro</Typography>
+                  <Typography variant="caption" color="text.secondary" component="div">{item.job} · {item.signIn ? 'Sign in · ' : ''}{item.cost} · Pro</Typography>
                   <Typography variant="body2" sx={{ mt: 0.5 }}>{item.lands}</Typography>
                 </Box>
               ))}
             </Box>
-            <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 2 }}>Any MCP server that needs no sign-in works now. Slatebox AI turns what it answers into notes on your slate. Inviting agents is part of Slatebox Pro.</Typography>
+            <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 2 }}>Any MCP server works: open ones straight away, others after you sign in on their own page or paste a key. Slatebox AI turns what it answers into notes on your slate. Inviting agents is part of Slatebox Pro.</Typography>
           </>
         )}
         {step === 'discovering' && (
@@ -130,11 +196,57 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
             <LinearProgress sx={{ mt: 2 }} />
           </Box>
         )}
+        {(step === 'signin' || step === 'waiting') && found && plan && (
+          <Box data-invite-signin={plan.method}>
+            <Typography variant="body2">✓ Reached <b>{found.host}</b></Typography>
+            {found.lookalike && <Typography color="warning.main" variant="body2">This address looks like it stands for another site. Check it before you go on.</Typography>}
+            <Typography variant="body2" sx={{ mb: 2 }}>
+              {plan.again ? `✓ ${reconnect?.name || 'This agent'} needs you to sign in to ${found.host} again.` : '✓ Sign-in needed'}
+              {plan.method === 'oauth' && plan.authHost ? ` · opens ${plan.authHost}` : ''}
+            </Typography>
+            {step === 'waiting' && (
+              <Box aria-live="polite" sx={{ mb: 2 }}>
+                <Typography variant="body2">Finish signing in in the window that opened. Slatebox carries on here by itself.</Typography>
+                <LinearProgress sx={{ mt: 1 }} />
+              </Box>
+            )}
+            {step === 'signin' && plan.method === 'oauth' && (
+              <Box sx={{ mb: 2 }}>
+                {plan.needsClientId && (
+                  <TextField size="small" fullWidth label={`Client id from ${found.host}`} value={clientId} onChange={(e) => setClientId(e.target.value)} sx={{ mb: 1 }}
+                    helperText="This server needs a registered app. Paste the client id it gave you." inputProps={{ maxLength: 500, 'data-invite-client-id': '' }} />
+                )}
+                <Button variant="contained" data-invite-sign-in="" disabled={plan.needsClientId && !clientId.trim()} onClick={signIn}>Sign in to {signInWith} →</Button>
+                <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1 }}>
+                  A window opens on {plan.authHost || found.host}'s own page. Slatebox never sees your password. What it gives Slatebox is kept encrypted for you alone, never shown to anyone on the slate, and removed when you remove the agent.
+                </Typography>
+              </Box>
+            )}
+            {step === 'signin' && plan.keyAllowed && (
+              <Box>
+                {plan.method === 'oauth' && !showKey && (
+                  <Button size="small" onClick={() => setShowKey(true)}>{card?.keyHint || 'Or paste a key or token'}</Button>
+                )}
+                {showKey && (
+                  <Box component="form" onSubmit={useKey} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                    <TextField size="small" fullWidth type="password" autoComplete="off" label={`Key or token for ${found.host}`} value={key} onChange={(e) => setKey(e.target.value)}
+                      helperText="Stored encrypted, never shown to anyone on the slate." inputProps={{ maxLength: 4096, 'data-invite-key': '' }} />
+                    <Button type="submit" variant={plan.method === 'key' ? 'contained' : 'outlined'} disabled={!key.trim()} data-invite-use-key="">Use key</Button>
+                  </Box>
+                )}
+              </Box>
+            )}
+            {error && <Typography role="alert" color="error" variant="body2" sx={{ mt: 2 }}>{error}</Typography>}
+          </Box>
+        )}
+        {step === 'reconnected' && found && (
+          <Typography variant="body2" data-invite-reconnected="">✓ Signed in to {found.host}. {reconnect?.name || 'Your agent'} is ready: ask it again.</Typography>
+        )}
         {(step === 'consent' || step === 'inviting') && found && (
           <Box data-invite-consent="">
             <Typography variant="body2">✓ Reached <b>{found.host}</b>{found.serverName ? ` · it calls itself “${found.serverName}” (self-reported)` : ''}</Typography>
             {found.lookalike && <Typography color="warning.main" variant="body2">This address looks like it stands for another site. Check it before you go on.</Typography>}
-            <Typography variant="body2">✓ No sign-in: anyone with this address can use this server</Typography>
+            <Typography variant="body2">{found.signedIn ? `✓ Signed in${found.signedIn.kind === 'key' ? ' with your key' : ''}: it acts as you on ${found.host}, and only you can ask it` : '✓ No sign-in: anyone with this address can use this server'}</Typography>
             <Typography variant="body2" sx={{ mb: 2 }}>✓ Found {lookups.length} {lookups.length === 1 ? 'way' : 'ways'} to look things up{changes.length ? ` and ${changes.length} that change things elsewhere` : ''}</Typography>
             <TextField size="small" label="Name on your slate" value={name} onChange={(e) => setName(e.target.value)} inputProps={{ maxLength: 32, 'data-invite-name': '' }}
               helperText={`Shown as “${name || '…'} · added by you”. Names can't say Slatebox, admin, support or a person's name.`} sx={{ mb: 2 }} />
@@ -179,8 +291,13 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
               {step === 'inviting' ? 'Inviting…' : `Invite ${name || 'agent'} ⬡`}
             </Button>
           </>
+        ) : step === 'signin' || step === 'waiting' ? (
+          <>
+            {!reconnect && <Button onClick={() => { pending.current?.cancel(); setStep('choose'); setError('') }}>Back</Button>}
+            <Button onClick={() => { pending.current?.cancel(); onClose() }}>{step === 'waiting' ? 'Cancel' : 'Close'}</Button>
+          </>
         ) : (
-          <Button onClick={onClose}>Close</Button>
+          <Button onClick={onClose}>{step === 'reconnected' ? 'Done' : 'Close'}</Button>
         )}
       </DialogActions>
     </Dialog>
@@ -193,4 +310,5 @@ InviteWalkthrough.propTypes = {
   shareId: PropTypes.string.isRequired,
   slateName: PropTypes.string,
   onInvited: PropTypes.func,
+  reconnect: PropTypes.shape({ connectionId: PropTypes.string, address: PropTypes.string, name: PropTypes.string }),
 }

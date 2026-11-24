@@ -6,8 +6,10 @@
 // pass fakes).
 //
 //   discover   reach the address (mcpFetch), list its tools, say in plain words what it can do
+//   signIn     a server that needs sign-in: a popup sign-in flow (signin.mjs), or a pasted key or
+//              token (useKey). What it issues goes into the person's vault (credentials.mjs).
 //   connect    invite it onto one slate: the name it wears, the tools it may use (consent is to
-//              each tool's hash), what it may see. Only open servers in S2a.
+//              each tool's hash), what it may see.
 //   call       the inviter asks it something. Slatebox's model plans the lookups, the calls run,
 //              the results are quarantined, a quarantined model lays them out, and each group
 //              appears on the slate as a live ghost (broadcast to everyone on the slate) while
@@ -15,7 +17,8 @@
 //   keep       anyone who can edit the slate keeps a ghost (or all): it is saved as the agent
 //              ("<name> · added by <inviter>"), one save per ghost, so each is one undo step.
 //   discard    anyone who can edit the slate discards a ghost (or all).
-//   disconnect the inviter removes the agent; its waiting ghosts go with it.
+//   disconnect the inviter removes the agent; its waiting ghosts go with it, and when no other
+//              slate of theirs uses that server, its sign-in is revoked and forgotten.
 //
 // Rules every entry point enforces (owner decisions 2026-11-23): Cloud only and the invite switch
 // on (the loader registers nothing otherwise); the inviter needs Slatebox Pro (checked on every
@@ -25,6 +28,9 @@
 import { randomBytes } from 'node:crypto'
 import { canonicalAddress, cardFor, DEAD_HOSTS, lookalikeHost } from '../common/gallery.mjs'
 import { checkMcpUrl, McpFetchRefused } from './mcp-fetch.mjs'
+import { SignInNeeded } from './credentials.mjs'
+import { SignInProblem } from './oauth.mjs'
+import { KEY_PATTERN } from './signin.mjs'
 import { capabilitySummary, defaultPolicy, normalizeTools, plainText, POLICIES, reconcile } from './tools.mjs'
 import { quarantine } from './results.mjs'
 import { CONTEXT_LEVELS, packContext } from './context.mjs'
@@ -32,7 +38,7 @@ import {
   checkLayout, checkPlan, excalidrawElements, excalidrawGroup, itemsFromLayout, LAYOUT_TOOL, linksIn, PLAN_LIMITS, PLAN_TOOL, planPrompt, translatePrompt,
 } from './translate.mjs'
 
-export const AGENT_LIMITS = Object.freeze({ perSlate: 8, perOwnerPerSlate: 3, ghostHours: 24, beatMs: 450, requestChars: 1000, nameChars: 32 })
+export const AGENT_LIMITS = Object.freeze({ perSlate: 8, perOwnerPerSlate: 3, ghostHours: 24, beatMs: 450, requestChars: 1000, nameChars: 32, proEndedDays: 30, orphanHours: 24 })
 
 export class ConnectorRefused extends Error {
   constructor(status, code, message, details) {
@@ -78,6 +84,7 @@ export function publicConnection(doc, viewerId) {
     invitedBy: doc.inviterName || '',
     host: doc.host,
     status: doc.status,
+    signedIn: Boolean(doc.auth),
     mine,
     ...(mine && {
       address: doc.address,
@@ -102,6 +109,9 @@ export function createConnectorService({
   firstName, // async (userId) -> string
   sanitizeName, // agent-label.mjs sanitizeClientName
   presence, // { plan(principal, slate, steps), step(principal, slate, index, status), saved(principal, slate, { targets, message }), end(runId, outcome) }
+  vault = null, // credentials.mjs: { available(), save(...), describe(userId, address), tokenFor(userId, address, { force }), remove(userId, address) }
+  signIn = null, // signin.mjs: { plan({ address, challenge }), start({ userId, address, challenge, clientId }), status({ userId, flowId }) }
+  probe = null, // (address, fetch) -> { open } | { challenge }: the server's sign-in challenge
   devOrigins = [],
   now = Date.now,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -144,25 +154,86 @@ export function createConnectorService({
     return error
   }
 
+  const fromSignIn = (error) => {
+    if (error instanceof SignInNeeded) return new ConnectorRefused(401, error.code === 'busy' ? 'busy' : 'needs_sign_in', error.message)
+    if (error instanceof SignInProblem) return new ConnectorRefused(422, error.code, error.message)
+    return fromProblem(error)
+  }
+
+  // The person's token for this address: null when they never signed in to it.
+  async function tokenOf(userId, address, options) {
+    if (!vault) return null
+    return vault.tokenFor(userId, address, options)
+  }
+
+  // Discovery with the person's own sign-in when they have one. A refused token is renewed once
+  // (refresh under the lease); still refused means "sign in again".
+  async function discoverAs(userId, address) {
+    let token = null
+    try {
+      token = await tokenOf(userId, address)
+    } catch (error) {
+      if (error instanceof SignInNeeded && error.code === 'needs_sign_in') return { needsSignIn: true, again: true }
+      throw fromSignIn(error)
+    }
+    try {
+      return { found: await session.discover(address, fetch, { token }), token }
+    } catch (error) {
+      const problem = fromProblem(error)
+      if (problem?.code !== 'needs_sign_in') throw problem
+      if (!token) return { needsSignIn: true, again: false }
+    }
+    try {
+      token = await tokenOf(userId, address, { force: true })
+      return { found: await session.discover(address, fetch, { token }), token }
+    } catch (error) {
+      const problem = fromSignIn(error)
+      if (problem?.code === 'needs_sign_in') return { needsSignIn: true, again: true }
+      throw problem
+    }
+  }
+
+  // What signing in to this server takes, read from its own metadata (every check in oauth.mjs).
+  async function signInPlan(address) {
+    if (!vault?.available?.() || !signIn || !probe) refuse(422, 'vault_off', 'Agents that need sign-in are not available on this server.')
+    let challenge = null
+    try {
+      const answer = await probe(address, fetch)
+      challenge = answer.challenge || null
+    } catch (error) {
+      throw fromProblem(error)
+    }
+    try {
+      return { ...(await signIn.plan({ address, challenge })), keyAllowed: true }
+    } catch (error) {
+      // No sign-in details at all: a pasted key or token is the only way in.
+      if (error instanceof SignInProblem && error.code === 'no_sign_in_details') return { method: 'key', keyAllowed: true, note: error.message }
+      throw fromSignIn(error)
+    }
+  }
+
   async function discover(principal, { shareId, address: raw }) {
     await requireEditor(principal, shareId)
     await requirePro(principal.userId)
     const { address, host } = checkAddress(raw)
-    let found
-    try {
-      found = await session.discover(address, fetch)
-    } catch (error) {
-      throw fromProblem(error)
+    const card = cardFor(address)
+    const head = { address, host, lookalike: lookalikeHost(address), card: card ? { id: card.id, name: card.name } : null }
+    const reached = await discoverAs(principal.userId, address)
+    if (reached.needsSignIn) {
+      const plan = await signInPlan(address)
+      audit({ kind: 'discover', userId: principal.userId, host, signIn: plan.method })
+      return { ...head, suggestedName: slateName(card?.name || host.split('.').slice(-2, -1)[0] || 'Agent', sanitizeName) || 'Agent', signIn: { ...plan, again: reached.again }, tools: [], summary: null }
     }
+    const { found } = reached
     const tools = normalizeTools(found.tools)
     if (!tools.length) refuse(422, 'no_tools', `${host} answered, but offers no tools Slatebox can use.`)
-    const card = cardFor(address)
+    const signedIn = reached.token ? await vault.describe(principal.userId, address) : null
+    // Signed in again: this person's agents on this server that were waiting for it can be asked.
+    if (reached.token) for (const doc of await connections.find({ ownerId: principal.userId, address, status: 'needs_sign_in' })) await setStatus(doc, 'active')
     audit({ kind: 'discover', userId: principal.userId, host, tools: tools.length })
     return {
-      address,
-      host,
-      lookalike: lookalikeHost(address),
-      card: card ? { id: card.id, name: card.name } : null,
+      ...head,
+      ...(signedIn && { signedIn: { kind: signedIn.kind } }),
       // Self-reported: shown as the server's claim, never used as the name on the slate.
       serverName: plainText(found.serverInfo?.title || found.serverInfo?.name || '', 60),
       suggestedName: slateName(card?.name || found.serverInfo?.title || found.serverInfo?.name || host.split('.').slice(-2, -1)[0] || 'Agent', sanitizeName) || 'Agent',
@@ -183,12 +254,10 @@ export function createConnectorService({
     if (live.filter((doc) => doc.ownerId === principal.userId).length >= AGENT_LIMITS.perOwnerPerSlate)
       refuse(429, 'agent_limit', `You can invite ${AGENT_LIMITS.perOwnerPerSlate} agents onto one slate. Remove one first.`)
     // Consent is to what the server says now: the hashes the person saw must still be the server's.
-    let found
-    try {
-      found = await session.discover(address, fetch)
-    } catch (error) {
-      throw fromProblem(error)
-    }
+    const reached = await discoverAs(principal.userId, address)
+    if (reached.needsSignIn) refuse(401, 'needs_sign_in', `Sign in to ${host} first.`)
+    const { found } = reached
+    const auth = reached.token ? await vault.describe(principal.userId, address) : null
     const tools = normalizeTools(found.tools)
     const seen = new Map((Array.isArray(chosen) ? chosen : []).map((entry) => [entry?.name, entry]))
     const stored = tools.map((tool) => {
@@ -211,6 +280,8 @@ export function createConnectorService({
       tools: stored,
       contextLevel,
       mode: 'suggest',
+      // The inviter's own sign-in to this server (the vault holds it; the connection never does).
+      auth: auth ? { kind: auth.kind, issuer: auth.issuer } : null,
       // One agent colour on its cursor, chip and ghosts (0 is the Slatebox agent's).
       colorIndex: 1 + (randomBytes(1)[0] % 5),
       status: 'active',
@@ -228,7 +299,20 @@ export function createConnectorService({
   async function list(principal, { shareId }) {
     const { slate } = await requireReader(principal, shareId)
     const docs = await connections.find({ slateId: slate._id, status: { $ne: 'removed' } })
-    return { connections: docs.map((doc) => publicConnection(doc, principal.userId)), pro: principal.userId ? await pro(principal.userId) : false }
+    const isPro = principal.userId ? await pro(principal.userId) : false
+    // The viewer's own agents follow their Pro: "Pro ended" while it is off, back when it returns.
+    for (const doc of docs) {
+      if (doc.ownerId !== principal.userId) continue
+      if (!isPro && doc.status === 'active') await setStatus(doc, 'pro_ended')
+      else if (isPro && doc.status === 'pro_ended') await setStatus(doc, 'active')
+    }
+    return { connections: docs.map((doc) => publicConnection(doc, principal.userId)), pro: isPro }
+  }
+
+  async function setStatus(doc, status) {
+    if (doc.status === status) return
+    doc.status = status
+    await connections.update(doc._id, { status, updatedAt: new Date(now()) })
   }
 
   async function ownConnection(principal, connectionId) {
@@ -243,7 +327,14 @@ export function createConnectorService({
     const doc = await ownConnection(principal, connectionId)
     await connections.update(doc._id, { status: 'removed', updatedAt: new Date(now()) })
     await suggestions.removeForConnection(doc._id)
-    audit({ kind: 'disconnect', userId: principal.userId, host: doc.host, connectionId: doc._id })
+    // Its sign-in goes too (revoked at the server when it offers that), unless another of this
+    // person's slates still has an agent on the same server.
+    let signedOut = false
+    if (vault) {
+      const others = await connections.find({ ownerId: doc.ownerId, address: doc.address, status: { $ne: 'removed' } })
+      if (!others.some((other) => other._id !== doc._id)) signedOut = (await vault.remove(doc.ownerId, doc.address).catch(() => ({ removed: false }))).removed
+    }
+    audit({ kind: 'disconnect', userId: principal.userId, host: doc.host, connectionId: doc._id, signedOut })
     return { ok: true, connectionId: doc._id }
   }
 
@@ -264,7 +355,10 @@ export function createConnectorService({
   async function call(principal, { connectionId, request, selection = [] }) {
     const doc = await ownConnection(principal, connectionId)
     const slate = await requireEditor(principal, doc.shareId)
-    await requirePro(principal.userId)
+    if (!(await pro(principal.userId))) {
+      await setStatus(doc, 'pro_ended')
+      refuse(402, 'pro_required', PRO_REQUIRED)
+    }
     if (doc.status === 'paused') refuse(409, 'tools_changed', `${doc.name}'s tools changed since you invited it. Look at the changes before asking again.`, { changed: (doc.changed || []).map((c) => c.name) })
     const text = plainText(request, AGENT_LIMITS.requestChars)
     if (!text) refuse(400, 'invalid_request', `Ask ${doc.name} something.`)
@@ -296,16 +390,23 @@ export function createConnectorService({
           }
         }
         let found
+        let token = null
         try {
-          found = await session.discover(doc.address, fetch)
+          const reached = await discoverAs(principal.userId, doc.address)
+          if (reached.needsSignIn) {
+            await setStatus(doc, 'needs_sign_in')
+            refuse(401, 'needs_sign_in', `${doc.name} needs you to sign in to ${doc.host} again.`)
+          }
+          ;({ found, token } = reached)
           check(found.tools)
         } catch (error) {
           if (error?.code === 'tools_changed') {
             await connections.update(doc._id, { status: 'paused', changed: error.changes, updatedAt: new Date(now()) })
             throw error
           }
-          throw fromProblem(error)
+          throw fromSignIn(error)
         }
+        if (doc.status !== 'active') await setStatus(doc, 'active')
         const { allowed } = reconcile(doc.tools, listedTools)
         if (!allowed.length) refuse(409, 'no_tools', `${doc.name} has nothing it may look up. Invite it again to choose.`)
         const toolOf = new Map(allowed.map((tool) => [tool.name, tool]))
@@ -319,13 +420,18 @@ export function createConnectorService({
           for (const { tool, args } of planned.calls) {
             let raw
             try {
-              raw = await session.callTool(doc.address, fetch, { name: tool, args, check })
+              raw = await session.callTool(doc.address, fetch, { name: tool, args, check }, { token })
             } catch (error) {
               if (error?.code === 'tools_changed') {
                 await connections.update(doc._id, { status: 'paused', changed: error.changes, updatedAt: new Date(now()) })
                 throw error
               }
-              throw fromProblem(error)
+              const problem = fromProblem(error)
+              if (problem?.code === 'needs_sign_in') {
+                await setStatus(doc, 'needs_sign_in')
+                refuse(401, 'needs_sign_in', `${doc.name} needs you to sign in to ${doc.host} again.`)
+              }
+              throw problem
             }
             const clean = quarantine(raw, { outputSchema: toolOf.get(tool)?.outputSchema })
             audit({ kind: 'call', userId: principal.userId, host: doc.host, tool, ok: !clean.isError, chars: clean.text.length })
@@ -435,7 +541,80 @@ export function createConnectorService({
     return { ok: true, kept, discarded: 0 }
   }
 
+  // ---------- signing in ----------
+
+  /** A popup sign-in for this person and server. → { flowId, startUrl, authHost } */
+  async function startSignIn(principal, { shareId, address: raw, clientId = null }) {
+    await requireEditor(principal, shareId)
+    await requirePro(principal.userId)
+    const { address, host } = checkAddress(raw)
+    if (!vault?.available?.() || !signIn || !probe) refuse(422, 'vault_off', 'Agents that need sign-in are not available on this server.')
+    let challenge = null
+    try {
+      challenge = (await probe(address, fetch)).challenge || null
+    } catch (error) {
+      throw fromProblem(error)
+    }
+    let started
+    try {
+      started = await signIn.start({ userId: principal.userId, address, challenge, clientId })
+    } catch (error) {
+      throw fromSignIn(error)
+    }
+    audit({ kind: 'sign_in_start', userId: principal.userId, host })
+    return started
+  }
+
+  /** Whether a popup sign-in finished (only the person who started it may ask). */
+  async function signInStatus(principal, { flowId }) {
+    if (!principal?.userId) refuse(401, 'sign_in', 'Save your account to invite agents.')
+    return signIn ? signIn.status({ userId: principal.userId, flowId }) : { status: 'unknown', message: 'Start the sign-in again.' }
+  }
+
+  /** A pasted key or token, for servers that take one: checked against the server, then sealed. */
+  async function useKey(principal, { shareId, address: raw, key }) {
+    await requireEditor(principal, shareId)
+    await requirePro(principal.userId)
+    const { address, host } = checkAddress(raw)
+    if (!vault?.available?.()) refuse(422, 'vault_off', 'Agents that need sign-in are not available on this server.')
+    const value = typeof key === 'string' ? key.trim().replace(/^Bearer\s+/i, '') : ''
+    if (!KEY_PATTERN.test(value)) refuse(400, 'bad_key', 'That doesn\'t look like a key or token. Paste it again.')
+    try {
+      await session.discover(address, fetch, { token: value })
+    } catch (error) {
+      const problem = fromProblem(error)
+      if (['needs_sign_in', 'needs_more_access'].includes(problem?.code)) refuse(422, 'key_refused', `That key didn't work for ${host}.`)
+      throw problem
+    }
+    await vault.save({ userId: principal.userId, address, resource: address, issuer: 'key', kind: 'key', tokens: { accessToken: value } })
+    audit({ kind: 'sign_in_key', userId: principal.userId, host })
+    return { ok: true, host }
+  }
+
+  /**
+   * Housekeeping (hourly): sign-ins nobody uses are forgotten (and revoked): those with no agent on
+   * any slate after a day, and those of agents whose inviter's Pro ended 30 days ago.
+   * credentialRows() -> [{ ownerId, address, createdAt }]
+   */
+  async function sweep(credentialRows) {
+    let removed = 0
+    for (const row of await credentialRows()) {
+      const live = await connections.find({ ownerId: row.ownerId, address: row.address, status: { $ne: 'removed' } })
+      const orphan = !live.length && now() - new Date(row.createdAt).getTime() > AGENT_LIMITS.orphanHours * 3600000
+      const lapsed = live.length > 0 && live.every((doc) => doc.status === 'pro_ended' && now() - new Date(doc.updatedAt).getTime() > AGENT_LIMITS.proEndedDays * 86400000)
+      if (orphan || lapsed) {
+        await vault.remove(row.ownerId, row.address).catch(() => {})
+        removed++
+      }
+    }
+    return { removed }
+  }
+
   return {
+    startSignIn,
+    signInStatus,
+    useKey,
+    sweep,
     discover,
     connect,
     list,

@@ -3,11 +3,13 @@
 //
 // One short MCP session per job: connect (server/discover on 2026-07-28 servers, initialize on
 // older ones), do the job, close. Nothing is kept open between calls, so any app process can make
-// any call. Every request goes through mcpFetch. S2a talks to open servers only: a server that
-// asks for sign-in is reported as such and nothing more is fetched (no protected-resource or
-// authorization-server metadata, so an address planted there is never requested).
+// any call. Every request goes through mcpFetch. A server that needs sign-in gets the token of the
+// person asking (from the vault, credentials.mjs) through a minimal auth provider, and that token
+// is attached only to requests to the server's own origin (bindToken). The SDK's own OAuth is
+// never used: sign-in is Slatebox's (oauth.mjs, signin.mjs), and a 401 here is reported as
+// "needs sign-in" for the service to handle.
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
-import { McpFetchRefused } from './mcp-fetch.mjs'
+import { bindToken, McpFetchRefused } from './mcp-fetch.mjs'
 
 export const CLIENT_INFO = Object.freeze({ name: 'Slatebox', version: '1.0.0' })
 const PASS_THROUGH = Object.freeze({ getValidator: () => (input) => ({ valid: true, data: input, errorMessage: undefined }) })
@@ -22,24 +24,24 @@ export class McpProblem extends Error {
 }
 
 // What a person is told, by what went wrong. Never the server's own error text.
-export function problemOf(error, host) {
+export function problemOf(error, host, { signedIn = false } = {}) {
   if (error instanceof McpProblem) return error
   if (error instanceof McpFetchRefused) return new McpProblem(error.code, error.message)
   const cause = error?.cause instanceof McpFetchRefused ? error.cause : null
   if (cause) return new McpProblem(cause.code, cause.message)
   const text = String(error?.message || '')
   const status = Number(error?.status ?? error?.code ?? error?.data?.status)
-  if (status === 401 || status === 403 || /\b401\b|Unauthorized|invalid_token/i.test(text))
-    return new McpProblem('needs_sign_in', `${host} needs you to sign in. Agents that need sign-in are coming soon; this one can't be invited yet.`)
+  if (/insufficient_scope/i.test(text) || (status === 403 && signedIn)) return new McpProblem('needs_more_access', `${host} needs more access to do that. Sign in again to allow it.`)
+  if (status === 401 || /\b401\b|Unauthorized|invalid_token/i.test(text)) return new McpProblem('needs_sign_in', `${host} needs you to sign in.`)
   if (/\b404\b|\b405\b|\b406\b|\b415\b|not\s+found|unexpected content type|Unexpected token|JSON/i.test(text))
     return new McpProblem('not_mcp', `That address didn't answer like an MCP server. Is there a /mcp path?`)
-  if (/\b1010\b|\b429\b|blocked|forbidden/i.test(text)) return new McpProblem('blocked', `${host} blocked the connection.`)
+  if (status === 403 || status === 429 || /\b1010\b|\b429\b|blocked|forbidden/i.test(text)) return new McpProblem('blocked', `${host} blocked the connection.`)
   if (/timed? ?out|timeout/i.test(text)) return new McpProblem('timeout', `${host} took too long to answer.`)
   return new McpProblem('unreachable', `Couldn't reach ${host}. Check the address.`)
 }
 
 /** Runs fn(client) inside one session. */
-export async function withSession(address, fetch, fn, { requestMs = SESSION_LIMITS.requestMs } = {}) {
+export async function withSession(address, fetch, fn, { requestMs = SESSION_LIMITS.requestMs, token = null } = {}) {
   const url = new URL(address)
   const client = new Client(CLIENT_INFO, {
     versionNegotiation: { mode: 'auto', probe: { timeoutMs: requestMs } },
@@ -49,17 +51,21 @@ export async function withSession(address, fetch, fn, { requestMs = SESSION_LIMI
     // keeps the text, rather than failing the whole call here.
     jsonSchemaValidator: PASS_THROUGH,
   })
-  const transport = new StreamableHTTPClientTransport(url, { fetch, redirectPolicy: 'same-origin' })
+  const transport = new StreamableHTTPClientTransport(url, {
+    fetch: token ? bindToken(fetch, url.origin) : fetch,
+    redirectPolicy: 'same-origin',
+    ...(token && { authProvider: { token: async () => token } }),
+  })
   try {
     await client.connect(transport, { timeout: requestMs })
   } catch (error) {
     await client.close().catch(() => {})
-    throw problemOf(error, url.host)
+    throw problemOf(error, url.host, { signedIn: Boolean(token) })
   }
   try {
     return await fn(client)
   } catch (error) {
-    throw problemOf(error, url.host)
+    throw problemOf(error, url.host, { signedIn: Boolean(token) })
   } finally {
     await client.close().catch(() => {})
   }
