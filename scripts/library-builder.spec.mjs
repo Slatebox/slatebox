@@ -92,8 +92,16 @@ for (const size of [{ name: 'desktop', width: 1440, height: 900 }, { name: 'phon
     }
     await expect.poll(async () => (await line.getAttribute('aria-label'))?.match(/Doing holds (\d+)/)?.[1], { timeout: 30000 }).toBeTruthy()
     const held = (await line.getAttribute('aria-label')).match(/Doing holds (\d+)/)[1]
-    // The change was saved with Undo, and the board says it.
-    await expect(page.getByRole('button', { name: 'Undo last change' }).first()).toBeVisible({ timeout: 30000 })
+    // The change was saved as one step of the canvas's Undo (the board's one-step pill is gone on prod): Undo takes the
+    // limit back, Redo makes it again.
+    const undo = page.getByRole('group', { name: 'Undo and redo' }).getByRole('button', { name: 'Undo', exact: true })
+    const redo = page.getByRole('group', { name: 'Undo and redo' }).getByRole('button', { name: 'Redo', exact: true })
+    await expect(undo).toBeEnabled({ timeout: 30000 })
+    await undo.click()
+    await expect.poll(async () => (await line.getAttribute('aria-label'))?.match(/Doing holds (\d+)/)?.[1] ?? 'none', { timeout: 30000 }).not.toBe(held)
+    await expect(redo).toBeEnabled({ timeout: 30000 })
+    await redo.click()
+    await expect(line).toHaveAttribute('aria-label', new RegExp(`Doing holds ${held}\\b`), { timeout: 30000 })
     await shot(page, `${size.name}-04-limit-dragged`)
     // Reloaded, the rule is still there.
     await page.reload()
