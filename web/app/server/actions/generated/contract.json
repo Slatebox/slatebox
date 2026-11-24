@@ -11220,6 +11220,21 @@
                 },
                 "mine": {
                   "type": "boolean"
+                },
+                "credit": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "description": "For an icon from The Noun Project: the credit to show with it."
                 }
               }
             }
@@ -11345,6 +11360,21 @@
                 },
                 "mine": {
                   "type": "boolean"
+                },
+                "credit": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "description": "For an icon from The Noun Project: the credit to show with it."
                 }
               }
             }
@@ -11363,6 +11393,140 @@
           "destructiveHint": false,
           "idempotentHint": true,
           "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "shapes.searchIcons",
+      "title": "Find icons",
+      "description": "Search The Noun Project's icons by words. Each result is one checked outline in a 0..100 box (icons that cannot be one outline are left out) with credit: the text and link The Noun Project asks to show with the icon. An applyOperations update_nodes or add_nodes plan takes {name, d, fillRule} as the shape. Not counted as AI use. Answers 503 icons_not_set_up on a server without a Noun Project key.",
+      "action": "shapes.searchIcons",
+      "toolset": "slates",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": false,
+      "principals": [
+        "agent"
+      ],
+      "scope": "slates:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/shapes/icons",
+        "pathParams": [],
+        "queryParams": [
+          "q",
+          "limit"
+        ],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Words for the icon, such as songbird."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 24,
+            "default": 12
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "icons": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "iconId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "d": {
+                  "type": "string",
+                  "description": "The outline: one SVG path in a 0..100 box."
+                },
+                "fillRule": {
+                  "type": "string",
+                  "enum": [
+                    "nonzero",
+                    "evenodd"
+                  ]
+                },
+                "aspect": {
+                  "type": "number",
+                  "description": "Width / height."
+                },
+                "textBox": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "description": "Where a label sits, in 0..1 of the box."
+                },
+                "credit": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "license": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "credit": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "icons"
+        ]
+      },
+      "tool": {
+        "name": "search_icons",
+        "title": "Search icons",
+        "description": "Search The Noun Project for icons to use as note shapes, each with the credit to show.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": true
         }
       }
     },

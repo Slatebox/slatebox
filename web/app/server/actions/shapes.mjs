@@ -1,7 +1,7 @@
 // Custom shapes for agents and exec: draw shapes from a description (the AI feature `shape`,
-// counted like any AI use), list the shape library, and put a shape on notes. Applying goes
-// through slates.applyOperations' canvas path (applyToCanvas), so revisions, permissions,
-// presence and the save core are the same as any other edit.
+// counted like any AI use), list the shape library, find The Noun Project's icons as shapes, and
+// put a shape on notes. Applying goes through slates.applyOperations' canvas path (applyToCanvas),
+// so revisions, permissions, presence and the save core are the same as any other edit.
 import { defineAction } from './registry.mjs'
 import { problem } from './errors.mjs'
 import { loadSlate } from './slate-access.mjs'
@@ -21,6 +21,7 @@ const shapeOut = {
     textBox: { type: ['object', 'null'], description: 'Where a label sits, in 0..1 of the box.' },
     visibility: { type: 'string', enum: ['private', 'team'] },
     mine: { type: 'boolean' },
+    credit: { type: 'object', properties: { text: { type: 'string' }, url: { type: ['string', 'null'] } }, description: 'For an icon from The Noun Project: the credit to show with it.' },
   },
 }
 
@@ -108,6 +109,59 @@ export const shapesList = defineAction({
   },
 })
 
+export const shapesSearchIcons = defineAction({
+  id: 'shapes.searchIcons',
+  title: 'Find icons',
+  description:
+    'Search The Noun Project\'s icons by words. Each result is one checked outline in a 0..100 box (icons that cannot be one outline are left out) with credit: the text and link The Noun Project asks to show with the icon. An applyOperations update_nodes or add_nodes plan takes {name, d, fillRule} as the shape. Not counted as AI use. Answers 503 icons_not_set_up on a server without a Noun Project key.',
+  toolset: 'slates',
+  kind: 'read',
+  scope: 'slates:read',
+  principals: ['agent'],
+  mounts: { http: { method: 'GET', path: '/shapes/icons', operationId: 'searchIcons' } },
+  // It asks The Noun Project (an outside service) and changes nothing.
+  openWorld: true,
+  input: {
+    type: 'object',
+    properties: {
+      q: { type: 'string', minLength: 1, maxLength: 100, description: 'Words for the icon, such as songbird.' },
+      limit: { type: 'integer', minimum: 1, maximum: 24, default: 12 },
+    },
+    required: ['q'],
+    additionalProperties: false,
+  },
+  output: {
+    type: 'object',
+    properties: {
+      icons: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            iconId: { type: 'string' },
+            name: { type: 'string' },
+            d: { type: 'string', description: 'The outline: one SVG path in a 0..100 box.' },
+            fillRule: { type: 'string', enum: ['nonzero', 'evenodd'] },
+            aspect: { type: 'number', description: 'Width / height.' },
+            textBox: { type: ['object', 'null'], description: 'Where a label sits, in 0..1 of the box.' },
+            credit: { type: 'object', properties: { text: { type: 'string' }, url: { type: 'string' } } },
+            license: { type: ['string', 'null'] },
+          },
+        },
+      },
+      hasMore: { type: 'boolean' },
+      credit: { type: 'object', properties: { text: { type: 'string' }, url: { type: 'string' } } },
+    },
+    required: ['icons'],
+  },
+  tool: { name: 'search_icons', title: 'Search icons', description: 'Search The Noun Project for icons to use as note shapes, each with the credit to show.' },
+  async handler(principal, input, { deps }) {
+    const who = await shapePrincipal(principal, deps)
+    const { icons, hasMore, credit } = await service(deps).icons.search(who, { q: input.q, limit: input.limit ?? 12 })
+    return { icons, hasMore, credit }
+  },
+})
+
 export const shapesApply = defineAction({
   id: 'shapes.apply',
   title: 'Shape notes',
@@ -169,4 +223,4 @@ export const shapesApply = defineAction({
   },
 })
 
-export default [shapesGenerate, shapesList, shapesApply]
+export default [shapesGenerate, shapesList, shapesSearchIcons, shapesApply]

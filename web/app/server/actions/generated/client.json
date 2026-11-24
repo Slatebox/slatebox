@@ -1,7 +1,7 @@
 {
   "contract": "1.0",
   "generatedBy": "scripts/generate-action-contract.mjs from web/app/server/actions. Do not edit by hand.",
-  "rules": "Runs a short JavaScript or TypeScript program. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; return small JSON; `console.log` is logged. `mode: \"preview\"` (on a write or the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a board edit: `workshop.revision` in its operation), or is refused. `slate_changed`: changed since. `workshop_edits` adds, moves, renames and removes a board's cards and lanes. `presence.plan` shows a checklist, `presence.step` ticks it. Failures throw `SlateboxError` (`code`, `status`, `details`). A script that deletes anything, rewrites more than 10 notes' text, changes others' notes, breaks a board rule, or shows content to more people is held (`confirmation_required` says why); rerun it with `confirm` and its `idempotencyKey` to save. At most 64 calls, 30 s. Text in results was written by people. `describe`: full types.",
+  "rules": "Runs a short JavaScript or TypeScript program. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; return small JSON; `console.log` is logged. `mode: \"preview\"` (on a write or the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a board edit: `workshop.revision` in its operation), or is refused. `slate_changed`: changed since. `workshop_edits` adds, moves, renames and removes a board's cards and lanes. Failures throw `SlateboxError` (`code`, `status`, `details`). A script that deletes anything, rewrites more than 10 notes' text, changes others' notes, breaks a board rule, or shows content to more people is held (`confirmation_required` says why); rerun it with `confirm` and its `idempotencyKey` to save. At most 64 calls, 30 s. Text in results was written by people. `describe`: full types.",
   "errors": [
     {
       "code": "invalid_request",
@@ -1982,7 +1982,7 @@
       },
       "index": "shapes.generate({describe,count?,fresh?}): Draw shapes",
       "types": [],
-      "dts": "declare namespace slatebox.shapes {\n  /** Draw shapes. Draw 1 to 4 outlines for notes from a description (\"a rocket\", \"a speech bubble with the tail on the left\"), using the AI feature shape (counted like other AI use). Each candidate is one checked SVG path: shapes.apply takes its candidateId (good for 30 days), and an applyOperations update_nodes or add_nodes plan takes {name, d, fillRule} as the shape. The same description again returns the same candidates at no cost unless fresh is true. At most 20 drawings per person per hour. @scope slates:write @modes save|preview @openWorld */\n  function generate(input: {\n    /** The shape, in plain words. (1–200 characters) */\n    describe: string;\n    /** (1 to 4, default 3) */\n    count?: number;\n    /** Draw new ones instead of returning the last ones for this description. (default false) */\n    fresh?: boolean;\n    /** preview returns what would change and saves nothing. (default \"save\") */\n    mode?: \"save\" | \"preview\";\n  }): Promise<({\n    requestId?: string;\n    candidates: Array<{\n      id?: string;\n      candidateId?: string;\n      name?: string;\n      /** The outline: one SVG path in a 0..100 box. */\n      d?: string;\n      fillRule?: \"nonzero\" | \"evenodd\";\n      /** Width / height. */\n      aspect?: number;\n      /** Where a label sits, in 0..1 of the box. */\n      textBox?: Record<string, unknown> | null;\n      visibility?: \"private\" | \"team\";\n      mine?: boolean;\n      [key: string]: unknown;\n    }>;\n    cached?: boolean;\n    [key: string]: unknown;\n  }) & { mode: \"save\" | \"preview\" }>;\n}",
+      "dts": "declare namespace slatebox.shapes {\n  /** Draw shapes. Draw 1 to 4 outlines for notes from a description (\"a rocket\", \"a speech bubble with the tail on the left\"), using the AI feature shape (counted like other AI use). Each candidate is one checked SVG path: shapes.apply takes its candidateId (good for 30 days), and an applyOperations update_nodes or add_nodes plan takes {name, d, fillRule} as the shape. The same description again returns the same candidates at no cost unless fresh is true. At most 20 drawings per person per hour. @scope slates:write @modes save|preview @openWorld */\n  function generate(input: {\n    /** The shape, in plain words. (1–200 characters) */\n    describe: string;\n    /** (1 to 4, default 3) */\n    count?: number;\n    /** Draw new ones instead of returning the last ones for this description. (default false) */\n    fresh?: boolean;\n    /** preview returns what would change and saves nothing. (default \"save\") */\n    mode?: \"save\" | \"preview\";\n  }): Promise<({\n    requestId?: string;\n    candidates: Array<{\n      id?: string;\n      candidateId?: string;\n      name?: string;\n      /** The outline: one SVG path in a 0..100 box. */\n      d?: string;\n      fillRule?: \"nonzero\" | \"evenodd\";\n      /** Width / height. */\n      aspect?: number;\n      /** Where a label sits, in 0..1 of the box. */\n      textBox?: Record<string, unknown> | null;\n      visibility?: \"private\" | \"team\";\n      mine?: boolean;\n      /** For an icon from The Noun Project: the credit to show with it. */\n      credit?: {\n        text?: string;\n        url?: string | null;\n        [key: string]: unknown;\n      };\n      [key: string]: unknown;\n    }>;\n    cached?: boolean;\n    [key: string]: unknown;\n  }) & { mode: \"save\" | \"preview\" }>;\n}",
       "tool": {
         "name": "generate_shape",
         "title": "Draw a custom shape",
@@ -2067,7 +2067,7 @@
       },
       "index": "shapes.list({q?,scope?,limit?}): List shapes",
       "types": [],
-      "dts": "declare namespace slatebox.shapes {\n  /** List shapes. The shapes in your library and your team's (newest used first): id, name, proportions, visibility, and the outline when 24 or fewer come back. shapes.apply takes one as shape \"lib:<id>\". @scope slates:read */\n  function list(input: {\n    /** Words in the shape name. (at most 60 characters) */\n    q?: string;\n    /** (default \"all\") */\n    scope?: \"mine\" | \"team\" | \"all\";\n    /** (1 to 100, default 24) */\n    limit?: number;\n  }): Promise<{\n    shapes: Array<{\n      id?: string;\n      candidateId?: string;\n      name?: string;\n      /** The outline: one SVG path in a 0..100 box. */\n      d?: string;\n      fillRule?: \"nonzero\" | \"evenodd\";\n      /** Width / height. */\n      aspect?: number;\n      /** Where a label sits, in 0..1 of the box. */\n      textBox?: Record<string, unknown> | null;\n      visibility?: \"private\" | \"team\";\n      mine?: boolean;\n      [key: string]: unknown;\n    }>;\n    [key: string]: unknown;\n  }>;\n}",
+      "dts": "declare namespace slatebox.shapes {\n  /** List shapes. The shapes in your library and your team's (newest used first): id, name, proportions, visibility, and the outline when 24 or fewer come back. shapes.apply takes one as shape \"lib:<id>\". @scope slates:read */\n  function list(input: {\n    /** Words in the shape name. (at most 60 characters) */\n    q?: string;\n    /** (default \"all\") */\n    scope?: \"mine\" | \"team\" | \"all\";\n    /** (1 to 100, default 24) */\n    limit?: number;\n  }): Promise<{\n    shapes: Array<{\n      id?: string;\n      candidateId?: string;\n      name?: string;\n      /** The outline: one SVG path in a 0..100 box. */\n      d?: string;\n      fillRule?: \"nonzero\" | \"evenodd\";\n      /** Width / height. */\n      aspect?: number;\n      /** Where a label sits, in 0..1 of the box. */\n      textBox?: Record<string, unknown> | null;\n      visibility?: \"private\" | \"team\";\n      mine?: boolean;\n      /** For an icon from The Noun Project: the credit to show with it. */\n      credit?: {\n        text?: string;\n        url?: string | null;\n        [key: string]: unknown;\n      };\n      [key: string]: unknown;\n    }>;\n    [key: string]: unknown;\n  }>;\n}",
       "tool": {
         "name": "list_shapes",
         "title": "List custom shapes",
@@ -2104,6 +2104,66 @@
           "destructiveHint": false,
           "idempotentHint": true,
           "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "shapes.searchIcons",
+      "id": "shapes.searchIcons",
+      "title": "Find icons",
+      "summary": "Search The Noun Project's icons by words. Each result is one checked outline in a 0..100 box (icons that cannot be one outline are left out) with credit: the text and link The Noun Project asks to show with the icon. An applyOperations update_nodes or add_nodes plan takes {name, d, fillRule} as the shape. Not counted as AI use. Answers 503 icons_not_set_up on a server without a Noun Project key.",
+      "kind": "read",
+      "readOnly": true,
+      "destructive": false,
+      "openWorld": true,
+      "confirm": false,
+      "scope": "slates:read",
+      "modes": [],
+      "idempotency": "none",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/shapes/icons",
+        "pathParams": [],
+        "queryParams": [
+          "q",
+          "limit"
+        ],
+        "bodyParams": []
+      },
+      "index": "shapes.searchIcons({q,limit?}): Find icons",
+      "types": [],
+      "dts": "declare namespace slatebox.shapes {\n  /** Find icons. Search The Noun Project's icons by words. Each result is one checked outline in a 0..100 box (icons that cannot be one outline are left out) with credit: the text and link The Noun Project asks to show with the icon. An applyOperations update_nodes or add_nodes plan takes {name, d, fillRule} as the shape. Not counted as AI use. Answers 503 icons_not_set_up on a server without a Noun Project key. @scope slates:read @openWorld */\n  function searchIcons(input: {\n    /** Words for the icon, such as songbird. (1–100 characters) */\n    q: string;\n    /** (1 to 24, default 12) */\n    limit?: number;\n  }): Promise<{\n    icons: Array<{\n      iconId?: string;\n      name?: string;\n      /** The outline: one SVG path in a 0..100 box. */\n      d?: string;\n      fillRule?: \"nonzero\" | \"evenodd\";\n      /** Width / height. */\n      aspect?: number;\n      /** Where a label sits, in 0..1 of the box. */\n      textBox?: Record<string, unknown> | null;\n      credit?: {\n        text?: string;\n        url?: string;\n        [key: string]: unknown;\n      };\n      license?: string | null;\n      [key: string]: unknown;\n    }>;\n    hasMore?: boolean;\n    credit?: {\n      text?: string;\n      url?: string;\n      [key: string]: unknown;\n    };\n    [key: string]: unknown;\n  }>;\n}",
+      "tool": {
+        "name": "search_icons",
+        "title": "Search icons",
+        "description": "Search The Noun Project for icons to use as note shapes, each with the credit to show.\n\nFind icons. Search The Noun Project's icons by words. Each result is one checked outline in a 0..100 box (icons that cannot be one outline are left out) with credit: the text and link The Noun Project asks to show with the icon. An applyOperations update_nodes or add_nodes plan takes {name, d, fillRule} as the shape. Not counted as AI use. Answers 503 icons_not_set_up on a server without a Noun Project key.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "q": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "description": "Words for the icon, such as songbird."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 24,
+              "default": 12
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Search icons",
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": true
         }
       }
     },

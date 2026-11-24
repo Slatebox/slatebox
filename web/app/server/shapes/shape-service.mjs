@@ -12,7 +12,7 @@ const BUILTIN_DEFAULT = Object.freeze([
 
 /**
  * deps: { shapes (collection), generations (collection), request, run, model?, newId, now?, builtins?,
- *         drawingsPerHour? }
+ *         drawingsPerHour?, icons? (createIconSearch: The Noun Project's icons as shapes) }
  */
 export function createShapeService(deps) {
   const now = deps.now || (() => new Date())
@@ -80,9 +80,15 @@ export function createShapeService(deps) {
     return { custom: { name: doc.name, d: doc.d, fillRule: doc.fillRule, aspect: doc.aspect, ref: { id: doc._id, name: doc.name } }, libraryId: doc._id }
   }
 
+  const icons = deps.icons || {
+    configured: false,
+    search: async () => { throw new ShapeProblem('icons_not_set_up', 'Icon search is not set up on this server. Create a shape with AI instead.', 503) },
+  }
+
   return {
     library,
     resolve,
+    icons,
     generate: (principal, input) => generateShapes({ principal, ...input }, drawDeps),
     /**
      * Find a shape by words, or draw one (count 1) when the library has none. Used by the chat

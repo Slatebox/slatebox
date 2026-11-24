@@ -10,6 +10,17 @@ export const LIMITS = Object.freeze({ perPerson: 500, perTeam: 2000, list: 100, 
 const VISIBILITY = ['private', 'team']
 const SOURCES = ['generated', 'drawn', 'imported']
 const ID = /^[A-Za-z0-9_-]{1,64}$/
+const CREDIT_URL = /^https:\/\/([a-z0-9-]+\.)*thenounproject\.com(\/[^\s"<>]*)?$/i
+
+// The credit an icon from The Noun Project carries ("<icon> by <creator> from Noun Project" and a
+// link to the icon there), kept with the shape; anything else is dropped.
+export function cleanCredit(credit) {
+  if (!credit || typeof credit !== 'object') return null
+  const text = String(credit.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 200)
+  if (!text) return null
+  const url = typeof credit.url === 'string' && credit.url.length <= 300 && CREDIT_URL.test(credit.url) ? credit.url : null
+  return { text, url }
+}
 
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -28,6 +39,7 @@ export function publicShape(doc, { withPath = true } = {}) {
     fillRule: doc.fillRule,
     textBox: doc.textBox ?? null,
     visibility: doc.visibility,
+    credit: doc.credit ?? undefined,
     mine: undefined,
     ...(withPath ? { d: doc.d } : {}),
     describe: doc.describe ?? undefined,
@@ -91,6 +103,7 @@ export function createShapeLibrary({ collection, newId, now = () => new Date() }
         visibility,
         source: SOURCES.includes(input.source) ? input.source : 'generated',
         model: typeof input.model === 'string' ? input.model.slice(0, 120) : null,
+        ...(cleanCredit(input.credit) ? { credit: cleanCredit(input.credit) } : {}),
         createdAt: at,
         usedAt: at,
         uses: 0,

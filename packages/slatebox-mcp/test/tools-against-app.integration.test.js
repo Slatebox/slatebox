@@ -249,6 +249,7 @@ async function instance(t) {
     shapes: {
       generate: async (who, input) => ({ requestId: "r1", cached: false, candidates: [{ candidateId: "c1", name: "Box", d: "M0 0H100V60H0Z", fillRule: "nonzero", aspect: 1.667, textBox: { x: 0.04, y: 0.07, w: 0.92, h: 0.86 }, describe: input.describe, who: who.userId }] }),
       library: { list: async () => ({ shapes: [{ id: "s1", name: "Box", aspect: 1.667, fillRule: "nonzero", visibility: "private", mine: true, d: "M0 0H100V60H0Z" }] }), used: async () => {} },
+      icons: { search: async (who, input) => ({ icons: [{ iconId: "7", name: input.q, d: "M0 0H100V60H0Z", fillRule: "nonzero", aspect: 1.667, textBox: null, credit: { text: `${input.q} by Ann from Noun Project`, url: "https://thenounproject.com/icon/7/" }, license: null, who: who.userId }], hasMore: false, credit: { text: "Icons from Noun Project", url: "https://thenounproject.com" } }) },
       resolve: async (_who, shape) => (shape === "c1"
         ? { custom: { name: "Box", d: "M0 0H100V60H0Z", fillRule: "nonzero", aspect: 1.667, ref: { id: "s1", name: "Box" } }, libraryId: "s1" }
         : { builtin: "ellipse" }),
@@ -493,6 +494,8 @@ return slatebox.presence.step({ shareId: "canvas", index: 0, status: "done" })`)
   const drawn = await ok(`return slatebox.shapes.generate({ describe: "a box" })`);
   assert.deepEqual([drawn.candidates[0].candidateId, drawn.candidates[0].who], ["c1", "owner"]);
   assert.equal((await ok(`return slatebox.shapes.list({})`)).shapes[0].name, "Box");
+  const found = await ok(`return slatebox.shapes.searchIcons({ q: "songbird" })`);
+  assert.deepEqual([found.icons[0].name, found.icons[0].credit.text, found.credit.text], ["songbird", "songbird by Ann from Noun Project", "Icons from Noun Project"]);
   const shaped = await ok(`return slatebox.shapes.apply({ shareId: "canvas", ids: ["b"], shape: "c1" })`);
   assert.deepEqual([shaped.mode, shaped.shape.name], ["save", "Box"]);
   const boxed = (await stored("canvas")).nodes.find((n) => n.options.id === "b").options;

@@ -644,6 +644,12 @@ declare namespace slatebox.shapes {
       textBox?: Record<string, unknown> | null;
       visibility?: "private" | "team";
       mine?: boolean;
+      /** For an icon from The Noun Project: the credit to show with it. */
+      credit?: {
+        text?: string;
+        url?: string | null;
+        [key: string]: unknown;
+      };
       [key: string]: unknown;
     }>;
     cached?: boolean;
@@ -674,8 +680,50 @@ declare namespace slatebox.shapes {
       textBox?: Record<string, unknown> | null;
       visibility?: "private" | "team";
       mine?: boolean;
+      /** For an icon from The Noun Project: the credit to show with it. */
+      credit?: {
+        text?: string;
+        url?: string | null;
+        [key: string]: unknown;
+      };
       [key: string]: unknown;
     }>;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.shapes {
+  /** Find icons. Search The Noun Project's icons by words. Each result is one checked outline in a 0..100 box (icons that cannot be one outline are left out) with credit: the text and link The Noun Project asks to show with the icon. An applyOperations update_nodes or add_nodes plan takes {name, d, fillRule} as the shape. Not counted as AI use. Answers 503 icons_not_set_up on a server without a Noun Project key. @scope slates:read @openWorld */
+  function searchIcons(input: {
+    /** Words for the icon, such as songbird. (1–100 characters) */
+    q: string;
+    /** (1 to 24, default 12) */
+    limit?: number;
+  }): Promise<{
+    icons: Array<{
+      iconId?: string;
+      name?: string;
+      /** The outline: one SVG path in a 0..100 box. */
+      d?: string;
+      fillRule?: "nonzero" | "evenodd";
+      /** Width / height. */
+      aspect?: number;
+      /** Where a label sits, in 0..1 of the box. */
+      textBox?: Record<string, unknown> | null;
+      credit?: {
+        text?: string;
+        url?: string;
+        [key: string]: unknown;
+      };
+      license?: string | null;
+      [key: string]: unknown;
+    }>;
+    hasMore?: boolean;
+    credit?: {
+      text?: string;
+      url?: string;
+      [key: string]: unknown;
+    };
     [key: string]: unknown;
   }>;
 }

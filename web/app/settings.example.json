@@ -24,7 +24,7 @@
     "cloudUrl": ""
   },
   "nounProject": {
-    "//": "Icon search (The Noun Project API key and secret).",
+    "//": "Icon search for custom shapes and the style bar (The Noun Project API key and secret, OAuth 1.0a). Leave both empty to turn icon search off: the custom shape pane then offers only drawing with AI.",
     "key": "",
     "secret": ""
   },

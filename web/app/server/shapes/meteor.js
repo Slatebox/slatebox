@@ -6,6 +6,8 @@ import { Meteor } from 'meteor/meteor'
 import { Mongo } from 'meteor/mongo'
 import { Random } from 'meteor/random'
 import { check, Match } from 'meteor/check'
+import { DDPRateLimiter } from 'meteor/ddp-rate-limiter'
+import OAuth from 'oauth'
 import req from '../methods/ai/req'
 import { runAIAction } from '../metering/context.mjs'
 import { ESTIMATES } from '../metering/prices.mjs'
@@ -13,6 +15,7 @@ import { resolveAIFeatureConfig } from '../methods/ai/feature-config.mjs'
 import { resolveRequestConnection } from '../methods/ai/ai-settings'
 import { GENERATION_TTL_MS, SHAPE_FEATURE, ShapeProblem } from './shape-core.mjs'
 import { createShapeService } from './shape-service.mjs'
+import { createIconSearch } from './icon-search.mjs'
 
 export const Shapes = new Mongo.Collection('shapes')
 export const ShapeGenerations = new Mongo.Collection('shapeGenerations')
@@ -42,7 +45,38 @@ async function modelFor(principal) {
   return resolveAIFeatureConfig(SHAPE_FEATURE, Meteor.settings).engine || 'builtin'
 }
 
+// The Noun Project's icon search (settings.nounProject: key and secret; apiOrigin only to point it
+// at another address, such as a test double). Requests are signed with OAuth 1.0a, as its API asks.
+const noun = Meteor.settings.nounProject || {}
+const nounOrigin = noun.apiOrigin || 'https://api.thenounproject.com'
+const nounOAuth = noun.key && noun.secret
+  ? new OAuth.OAuth(nounOrigin, nounOrigin, noun.key, noun.secret, '1.0', null, 'HMAC-SHA1')
+  : null
+const ICON_TIMEOUT_MS = 8000
+export const iconSearch = createIconSearch({
+  configured: Boolean(nounOAuth),
+  apiOrigin: nounOrigin,
+  requestJson: (url) => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(Object.assign(new Error('timeout'), { status: 504 })), ICON_TIMEOUT_MS)
+    nounOAuth.get(url, null, null, (error, data) => {
+      clearTimeout(timer)
+      if (error) {
+        reject(Object.assign(new Error('noun project request failed'), { status: error.statusCode || 502 }))
+        return
+      }
+      try { resolve(JSON.parse(data)) } catch { reject(Object.assign(new Error('unreadable answer'), { status: 502 })) }
+    })
+  }),
+  fetchText: async (url) => {
+    const response = await fetch(url, { signal: AbortSignal.timeout(ICON_TIMEOUT_MS), redirect: 'error' })
+    if (!response.ok) throw new Error(`icon ${response.status}`)
+    const text = await response.text()
+    return text.length > 400000 ? null : text
+  },
+})
+
 export const shapeService = createShapeService({
+  icons: iconSearch,
   shapes: Shapes.rawCollection(),
   generations: ShapeGenerations.rawCollection(),
   newId: () => Random.id(),
@@ -91,9 +125,27 @@ Meteor.methods({
     check(input, { q: Match.Maybe(String), scope: Match.Maybe(Match.OneOf('mine', 'team', 'all')), limit: Match.Maybe(Match.Integer) })
     return shapeService.library.list(await principalOf(), input)
   }),
+  // An icon picked from the search is kept as "imported", with its credit.
   'shapes.save': call(async (input) => {
-    check(input, { name: String, d: String, fillRule: Match.Maybe(Match.OneOf('nonzero', 'evenodd')), describe: Match.Maybe(String), visibility: Match.Maybe(Match.OneOf('private', 'team')) })
-    return shapeService.library.save(await principalOf(), { ...input, source: 'generated' })
+    check(input, {
+      name: String,
+      d: String,
+      fillRule: Match.Maybe(Match.OneOf('nonzero', 'evenodd')),
+      describe: Match.Maybe(String),
+      visibility: Match.Maybe(Match.OneOf('private', 'team')),
+      source: Match.Maybe(Match.OneOf('generated', 'imported')),
+      credit: Match.Maybe({ text: String, url: Match.Maybe(String) }),
+    })
+    const source = input.source === 'imported' ? 'imported' : 'generated'
+    return shapeService.library.save(await principalOf(), { ...input, source, credit: source === 'imported' ? input.credit : undefined })
+  }),
+  // The Noun Project's icons for some words, each one checked outline. A guest may search too
+  // (keeping a shape needs an account).
+  'shapes.searchIcons': call(async (input) => {
+    check(input, { q: String, limit: Match.Maybe(Match.Integer), page: Match.Maybe(Match.Integer) })
+    const user = await Meteor.userAsync()
+    if (!user) throw new Meteor.Error('sign_in', 'Sign in to search icons.')
+    return shapeService.icons.search({ userId: user._id, teamId: user.orgId ?? null, isAnonymous: Boolean(user.isAnonymous) }, input)
   }),
   'shapes.update': call(async (input) => {
     check(input, { id: String, name: Match.Maybe(String), visibility: Match.Maybe(Match.OneOf('private', 'team')) })
@@ -109,3 +161,6 @@ Meteor.methods({
     return true
   }),
 })
+
+// A search is one Noun Project API call: 20 a minute for each connection.
+DDPRateLimiter.addRule({ type: 'method', name: 'shapes.searchIcons', connectionId: () => true }, 20, 60000)

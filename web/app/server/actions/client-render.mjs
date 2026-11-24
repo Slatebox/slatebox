@@ -237,7 +237,6 @@ export const RULES = [
   '`mode: "preview"` (on a write or the run) saves nothing.',
   'One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a board edit: `workshop.revision` in its operation), or is refused. `slate_changed`: changed since.',
   '`workshop_edits` adds, moves, renames and removes a board\'s cards and lanes.',
-  '`presence.plan` shows a checklist, `presence.step` ticks it.',
   'Failures throw `SlateboxError` (`code`, `status`, `details`).',
   `A script that deletes anything, rewrites more than ${EXEC_LIMITS.rewriteTextWithoutConfirm} notes' text, changes others' notes, breaks a board rule, or shows content to more people is held (\`confirmation_required\` says why); rerun it with \`confirm\` and its \`idempotencyKey\` to save.`,
   `At most ${EXEC_LIMITS.calls} calls, ${EXEC_LIMITS.wallMs / 1000} s.`,

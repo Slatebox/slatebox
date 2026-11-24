@@ -226,20 +226,12 @@ export default function QuickNodeActions({
     onNodeCreated(node, { key: 'customShape' })
   }
 
-  // The icon search, still one click away from the shape maker.
-  const searchIcons = () => {
-    setShapeMakerOpen(false)
-    setActionMenuOpen(true)
-    addNode({ key: 'searchCustom', icons: true })
-  }
-
   return (
     <div>
       <ShapeMaker
         open={shapeMakerOpen}
         onClose={() => setShapeMakerOpen(false)}
         onApply={addCustomShape}
-        onSearchIcons={searchIcons}
         target={shapeTargets.length || 'new'}
         fill={shapeTargets[0]?.options?.backgroundColor ?? baseOpts.backgroundColor}
         stroke={baseOpts.borderColor || '#333'}

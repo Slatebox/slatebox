@@ -135,7 +135,7 @@ export const deps = {
     presence,
     // team.export and teamImports.* (server/team-export)
     teamTransfer,
-    // shapes.generate, shapes.list, shapes.apply (server/shapes)
+    // shapes.generate, shapes.list, shapes.searchIcons, shapes.apply (server/shapes)
     shapes: shapeService,
     // slates.list: the Slates page's lists (imports/api/common/slateFilter.js), for a token's account.
     async listSlates({ userId, orgId, scope, q, limit }) {
