@@ -123,8 +123,11 @@ test('desktop 1440: the + menu Sticky Note is the default note in sticky yellow,
   await page.locator('.MuiSpeedDial-fab').hover()
   const tile = page.locator('.MuiSpeedDial-root [aria-label="stickyNote"]')
   await expect(tile).toBeVisible({ timeout: 15000 })
-  // The tile is drawn as the note it makes: filled sticky yellow.
+  // The tile is drawn as the note it makes: filled sticky yellow, filling its 24 box like the other tiles.
   expect(await tile.locator('path').getAttribute('fill')).toBe(LEMON)
+  const box = await tile.locator('path').evaluate((p) => { const b = p.getBBox(); return { w: b.width, h: b.height } })
+  expect(box.w).toBeGreaterThanOrEqual(20)
+  expect(box.h).toBeGreaterThanOrEqual(14)
   await page.waitForTimeout(500)
   await shot(page, 'after-plus-menu-1440')
   const before = await notes(page)
@@ -192,7 +195,8 @@ test('desktop 1440: the rotate knob is a visible rotate control; drag turns the 
     await selectNote(page, note.id)
     const k = await knobOf(page)
     expect(k.icon).toBe(true)
-    expect(Math.abs(k.size - 28)).toBeLessThan(2)
+    // A 68-tall note is 34px on screen at 50%: it gets the small knob (20px), so the knob never dwarfs it.
+    expect(Math.abs(k.size - (zoom === 0.5 ? 20 : 28))).toBeLessThan(2)
     expect(k.x).toBeGreaterThan(k.corner.x)
     expect(k.y).toBeLessThan(k.corner.y)
     if (zoom === 1) await shot(page, 'after-knob-1440')
@@ -257,6 +261,87 @@ test('phone 390: the add sheet Sticky Note is the yellow default note; a finger 
   await shot(page, 'after-rotating-390')
   await touch('touchEnd')
   await expect(page.locator('.slatebox-rotate-readout')).toHaveCount(0)
+  expect(errors).toEqual([])
+  await context.close()
+})
+
+test('desktop 1440: after a note with big words, the Sticky Note is as tall as the default note for them', async ({ browser }) => {
+  const { context, page, errors } = await freshSlate(browser, { viewport: { width: 1440, height: 900 } })
+  await page.locator('.MuiSpeedDial-fab').hover()
+  const tile = page.locator('.MuiSpeedDial-root [aria-label="stickyNote"]')
+  let before = await notes(page)
+  await tile.click()
+  const [first] = await newest(page, before)
+  expectSticky(first)
+  // The last note now has 36px words (the dock copies the last note's font).
+  await page.evaluate((key) => {
+    const slate = window.__slateboxInstances.find((s) => s.element.id === 'slateCanvas')
+    slate.nodes.one(key).options.fontSize = 36
+  }, first.id)
+  before = await notes(page)
+  await page.locator('.MuiSpeedDial-fab').hover()
+  await tile.click()
+  const [second] = await newest(page, before)
+  // The default note at 36px: max(68, 36 * 1.4 + 40) = 90.
+  expectSticky(second, 90)
+  expect(errors).toEqual([])
+  await context.close()
+})
+
+test('desktop 1440: a multi-note selection has the same rotate knob; it turns both, Escape puts them back', async ({ browser }) => {
+  const { context, page, errors } = await freshSlate(browser, { viewport: { width: 1440, height: 900 } })
+  const tile = page.locator('.MuiSpeedDial-root [aria-label="stickyNote"]')
+  const ids = []
+  for (let i = 0; i < 2; i++) {
+    const before = await notes(page)
+    await page.locator('.MuiSpeedDial-fab').hover()
+    await tile.click()
+    const [n] = await newest(page, before)
+    ids.push(n.id)
+  }
+  await page.mouse.move(40, 450)
+  // Side by side, then both selected.
+  await page.evaluate((keys) => {
+    const slate = window.__slateboxInstances.find((s) => s.element.id === 'slateCanvas')
+    const [a, b] = keys.map((k) => slate.nodes.one(k))
+    b.position((a.options.x || 0) + 240, (a.options.y || 0) + 60)
+    slate.selectNodes([])
+    slate.selectNodes([a, b])
+  }, ids)
+  const knob = page.locator('#slateCanvas g.slatebox-group-rotate')
+  await expect(knob.locator('circle')).toBeVisible({ timeout: 10000 })
+  const k = await knob.evaluate((g) => {
+    const c = g.querySelector('circle').getBoundingClientRect()
+    const f = g.parentNode.querySelector('rect').getBoundingClientRect()
+    return { x: c.x + c.width / 2, y: c.y + c.height / 2, size: c.width, icon: !!g.querySelector('path'), frame: { l: f.left, r: f.right, t: f.top, b: f.bottom } }
+  })
+  expect(k.icon).toBe(true)
+  expect(Math.abs(k.size - 28)).toBeLessThan(2)
+  expect(k.x).toBeGreaterThan(k.frame.r)
+  expect(k.y).toBeLessThan(k.frame.t)
+  await shot(page, 'after-group-knob-1440')
+  const centre = { x: (k.frame.l + k.frame.r) / 2, y: (k.frame.t + k.frame.b) / 2 }
+  await page.mouse.move(k.x, k.y)
+  await page.mouse.down()
+  let p = around(centre, k, 30)
+  await page.mouse.move(p.x, p.y, { steps: 5 })
+  await expect(page.locator('.slatebox-rotate-readout')).toBeVisible()
+  await shot(page, 'after-group-rotating-1440')
+  for (const id of ids) expect(Math.abs((await angleOf(page, id)) - 30)).toBeLessThanOrEqual(1)
+  await page.keyboard.press('Escape')
+  for (const id of ids) expect(await angleOf(page, id)).toBe(0)
+  await page.mouse.up()
+  await expect(page.locator('.slatebox-rotate-readout')).toHaveCount(0)
+  // A real turn sticks. (The release redraws the selection: wait for the knob to be drawn again.)
+  await expect(knob.locator('circle')).toBeVisible({ timeout: 10000 })
+  await page.waitForTimeout(300)
+  const k2 = await knob.evaluate((g) => { const c = g.querySelector('circle').getBoundingClientRect(); return { x: c.x + c.width / 2, y: c.y + c.height / 2 } })
+  await page.mouse.move(k2.x, k2.y)
+  await page.mouse.down()
+  p = around(centre, k2, 45)
+  await page.mouse.move(p.x, p.y, { steps: 5 })
+  await page.mouse.up()
+  for (const id of ids) expect(Math.abs((await angleOf(page, id)) - 45)).toBeLessThanOrEqual(1)
   expect(errors).toEqual([])
   await context.close()
 })
