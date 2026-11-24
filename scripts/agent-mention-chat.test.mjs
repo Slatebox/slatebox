@@ -115,3 +115,9 @@ test('after "@GitHub", follow-ups stay with GitHub until cleared or someone else
   // an agent that can no longer be asked (removed, Pro ended) does not hold the conversation
   assert.deepEqual(routeMessage('add three ideas', { agents: [{ ...github, canAsk: false }], replyingTo: 'gh' }), { kind: 'slatebox', replyingTo: null })
 })
+
+test('the same ask while its answer waits is said once (no second "one suggestion is on the slate")', async () => {
+  const { agentChatReply } = await import('../web/app/imports/api/common/agent-mention.mjs')
+  const said = 'That answer is still on the slate, waiting: Keep all or Discard all on its frame, then ask again for a new one.'
+  assert.equal(agentChatReply('Exa', { repeated: true, actions: ['a1'], say: said, added: { notes: 0, lines: 0 } }), said)
+})

@@ -65,6 +65,8 @@ export function agentChatReply(name, result = {}) {
   const what = [notes && plural(notes, 'note', 'notes'), lines && plural(lines, 'line', 'lines')].filter(Boolean).join(' and ')
   const parts = []
   if (said) parts.push(/[.!?]$/.test(said) ? said : said + '.')
+  // The same ask while its answer waits: that answer is the answer, said once.
+  if (result.repeated) return parts.join(' ') || 'That answer is still on the slate, waiting.'
   if (waiting) parts.push(what
     ? `Added ${what} as one suggestion: Keep all or Discard all on its frame, or point at a note to keep it alone.`
     : `${waiting === 1 ? 'One suggestion is' : `${waiting} suggestions are`} on the slate: Keep all or Discard all on its frame.`)
