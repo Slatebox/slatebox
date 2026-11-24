@@ -461,7 +461,7 @@ declare namespace slatebox.library {
 }
 
 declare namespace slatebox.library {
-  /** Use a library item. Use a library item: a slate or presentation becomes a new private slate of yours (a presentation with its deck), and a smart component goes onto a new slate, or beside the boards of a slate you can edit (targetShareId; a slate holds up to 8 boards, past that 409 component_opens_new_slate). The copy remembers where it came from. Preview first to see the board and where it goes (canvas); save makes it. topic names the board ("Retro: Q3 launch"). @scope slates:write @modes save|preview */
+  /** Use a library item. Use a library item: a slate or presentation becomes a new private slate of yours (a presentation with its deck), and a smart component goes onto a new slate, or beside the boards of a slate you can edit (targetShareId; a slate holds up to 8 boards, past that 409 component_opens_new_slate; an agent gets 423 agents_paused while people there paused agents). The copy remembers where it came from. Preview first to see the board and where it goes (canvas); save makes it. topic names the board ("Retro: Q3 launch"). @scope slates:write @modes save|preview */
   function fork(input: {
     /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
     itemId: string;
@@ -1364,7 +1364,7 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.slates {
-  /** Copy slate. Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. A view invitation alone does not allow a copy. The copy is an ordinary private slate. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork). @scope slates:write */
+  /** Copy slate. Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork). @scope slates:write */
   function copy(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;

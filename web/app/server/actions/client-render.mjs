@@ -426,7 +426,7 @@ export const COMPACT_MAX = 24
 export const KEEP_WHOLE = Object.freeze(['slates'])
 const namespaceOf = (name) => name.slice(0, name.lastIndexOf('.'))
 export const compactLine = (namespace, names) =>
-  `${namespace}.{${names.map((name) => name.slice(namespace.length + 1)).join(', ')}} (call describe for their inputs)`
+  `${namespace}.{${names.map((name) => name.slice(namespace.length + 1)).join(', ')}} (inputs in describe)`
 
 export function execDescription(manifest, budget = DESCRIPTION_BUDGET) {
   const head = `${EXEC_LEAD} ${manifest.rules} Methods:`

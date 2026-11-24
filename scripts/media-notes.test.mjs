@@ -242,9 +242,11 @@ test("the canvas hands a pasted video address to the server lookup; still pictur
   const add = read("imports/api/client/addMediaNote.js");
   assert.match(add, /kind: 'add_nodes'/);
   assert.match(add, /executeSlateOperations\(/);
-  for (const path of ["imports/ui/components/SnapSlate.jsx", "imports/ui/components/slate/SlateSnapshots.jsx", "imports/ui/pages/SlateTemplates.jsx", "imports/ui/components/BrandPreviewSlate.jsx"]) {
+  // Restated (shared library): the template gallery's page is gone; the library's previews draw through SnapSlate.
+  for (const path of ["imports/ui/components/SnapSlate.jsx", "imports/ui/components/slate/SlateSnapshots.jsx", "imports/ui/components/BrandPreviewSlate.jsx"]) {
     assert.match(read(path), /mediaPlayback: false/, path);
   }
+  assert.match(read("imports/ui/components/library/LibraryPreview.jsx"), /<SnapSlate slate=\{slate\} allowDrag=\{false\}/);
   // The presenter's stage plays videos inline.
   assert.doesNotMatch(read("imports/ui/components/presentations/livePresenter.mjs"), /mediaPlayback: false/);
 });

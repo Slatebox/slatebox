@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { createApiTokenService } from "../web/app/server/api-token-core.mjs";
 import { createAppRegistry } from "../web/app/server/actions/index.mjs";
 import { boundActions } from "../web/app/server/actions/exec-binding.mjs";
-import { buildClientManifest, renderExecTool, DESCRIPTION_BUDGET } from "../web/app/server/actions/client-render.mjs";
+import { buildClientManifest, compactLine, renderExecTool, DESCRIPTION_BUDGET, KEEP_WHOLE } from "../web/app/server/actions/client-render.mjs";
 import { buildOpenApi } from "../web/app/server/actions/openapi.mjs";
 import { slateListSelector, slateListEntry } from "../web/app/server/actions/slate-list.mjs";
 import { createGate } from "../web/app/server/exec/gate.mjs";
@@ -97,9 +97,18 @@ test("every action a token may call is on every surface: an HTTP route in OpenAP
     assert.ok(typed.has(action.id), `${action.id}: typed MCP tool`);
     assert.equal("cli" in action, false, `${action.id}: no CLI name (the CLI reaches it through slatebox exec)`);
   }
-  // Every method is listed in exec's own description, within its budget.
-  for (const method of manifest.methods) assert.ok(tools.exec.description.includes(method.index), method.name);
-  assert.ok(tools.exec.description.length <= DESCRIPTION_BUDGET);
+  // Every method is listed in exec's own description, within its budget. Restated (shared library): with the library's
+  // 20 methods every index line no longer fits, so the renderer names a namespace's methods in one line (compactLine),
+  // the largest namespaces first and never the slates methods; every other method keeps its whole index line.
+  const description = tools.exec.description;
+  const namespaceOf = (name) => name.slice(0, name.lastIndexOf("."));
+  const compacted = new Set(manifest.methods.map((m) => namespaceOf(m.name)).filter((namespace) =>
+    description.includes(compactLine(namespace, manifest.methods.filter((m) => namespaceOf(m.name) === namespace).map((m) => m.name)))));
+  for (const method of manifest.methods)
+    assert.ok(description.includes(method.index) || compacted.has(namespaceOf(method.name)), method.name);
+  for (const namespace of KEEP_WHOLE) assert.equal(compacted.has(namespace), false, namespace + " keeps its whole lines");
+  assert.ok(!description.includes(" more in describe"), "no method is left out");
+  assert.ok(description.length <= DESCRIPTION_BUDGET);
 });
 
 test("the parity actions are declared on the token surfaces with the app's scopes", () => {

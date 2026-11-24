@@ -13,7 +13,7 @@ const PRIVATE_FIELDS = ['comments', 'collaborators', 'chatHistory', 'aiHistory',
 // creationBrief is the prompt the person first wrote to make the slate; collabBaseline is the slate as
 // a collaboration session started; the search fields index the author's own copy.
 const PRIVATE_OPTIONS = ['isPrivate', 'isPublic', 'isUnlisted', 'isTemplate', 'templateApproved', 'templateMarkdown', 'templateTags',
-  'tags', 'basedOnTemplate', 'templateName', 'templatePrompt', 'userNameOverride', 'eligibleForThemeCompilation', 'id',
+  'tags', 'basedOnTemplate', 'templateName', 'templatePrompt', 'userNameOverride', 'id',
   'creationBrief', 'collabBaseline', 'textSearch', 'nameSearch', 'descriptionSearch']
 // Who set a rule is a person on the author's slate (a collaborator, a reviewer): the published board
 // says "The author" instead. A rule that came with the board keeps its preset mark.

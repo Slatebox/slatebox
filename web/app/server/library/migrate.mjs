@@ -18,7 +18,7 @@ const SEED_OWNERS = new Set(['system'])
 // Approved public templates (template-policy.mjs publicTemplateSelector), stated here so the
 // migration outlives the template code it replaces.
 export const templateSelector = () => ({
-  isThemeGenerator: { $ne: true }, 'options.isTemplate': true, 'options.templateApproved': true,
+  'options.isTemplate': true, 'options.templateApproved': true,
   'options.isPublic': true, 'options.isPrivate': { $ne: true }, 'options.isUnlisted': { $ne: true }, archivedDate: { $exists: false },
 })
 // Community slates (slateFilter.js 'community' without the per-person clause).

@@ -62,7 +62,7 @@ export default defineAction({
   id: 'slates.copy',
   title: 'Copy slate',
   description:
-    'Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. A view invitation alone does not allow a copy. The copy is an ordinary private slate. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork).',
+    'Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork).',
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:write',
