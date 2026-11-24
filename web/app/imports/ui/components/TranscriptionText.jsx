@@ -90,9 +90,10 @@ export default function TranscriptionText({ slateShareId }) {
                 {new Date(m.timestamp).toLocaleTimeString()}
               </TableCell>
               <TableCell key={`cell_message_${m._id}`}>
-                {m.text}
-                {/* a refusal of this person's own request: the pay sheet's action, for them only */}
-                <PayNotice refusal={refusalForViewer(m, Meteor.userId())} from="draft" />
+                {/* a refusal of this person's own request: Pro or a balance in the message itself, for them only; the text for everyone else */}
+                {refusalForViewer(m, Meteor.userId())
+                  ? <PayNotice refusal={refusalForViewer(m, Meteor.userId())} from="draft" inline />
+                  : m.text}
               </TableCell>
             </TableRow>
           ))}

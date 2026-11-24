@@ -70,7 +70,10 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
   const full = boards.length >= MAX_BOARDS
   const map = Boolean(model.lanes[0].station)
   const storageKey = (map ? 'slatebox-map-studio:' : 'slatebox-workshop-studio:') + Meteor.userId() + ':' + shareId
-  const keep = turns => turns.slice(map ? -8 : -10).map(({ role, content, catalog, opens, adds, boards: asked, again }) => ({ role, content: content.slice(0, map ? 800 : 1000),
+  const keep = turns => turns.slice(map ? -8 : -10).map(({ role, content, catalog, opens, adds, boards: asked, again, choices }) => ({ role, content: content.slice(0, map ? 800 : 1000),
+    // A look to choose from ("Stronger borders", "Bolder headers", "Both"), each a sentence the chat reads as it is.
+    ...(Array.isArray(choices) && { choices: choices.filter(item => typeof item?.label === 'string' && typeof item?.say === 'string').slice(0, 3)
+      .map(item => ({ label: item.label.slice(0, 40), say: item.say.slice(0, 200) })) }),
     ...(Array.isArray(catalog) && { catalog: catalog.filter(id => typeof id === 'string').slice(0, 10) }), ...(typeof opens === 'string' && { opens: opens.slice(0, 200) }),
     ...(typeof adds === 'string' && { adds: adds.slice(0, 200) }),
     ...(Array.isArray(asked) && typeof again === 'string' && { boards: asked.filter(item => typeof item?.id === 'string').slice(0, 8)
@@ -296,6 +299,12 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
         ...(proposal.override ? { override: proposal.override } : {}) })
     } catch (err) {
       if (!mounted.current || turn !== asked.current) return
+      // A look that could mean more than one ("make it pop"): two or three to choose from, as a turn, never a refusal.
+      if (err.code === 'appearance-choices') {
+        setRequest('')
+        append({ role: 'user', content: said }, { role: 'assistant', content: err.message, choices: err.choices })
+        return
+      }
       // Drafting this is not available to this person now (signed out, no Pro or own AI, the included amount used up, or
       // no AI on this install): said as a turn of the conversation, with the way on.
       if (['sign-in', 'guest', 'drafting-off'].includes(err.error) || isCreditRefusal(err.error)) {
@@ -443,7 +452,6 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
     helperText={access === null ? 'Checking editing access. You can type while you wait.' : undefined}
     prompt={history.length && isPhone() ? null : "What should happen on this slate?"}
     extra={(focus || !hold) && <>
-      {!hold && payRefusal && <PayNotice refusal={payRefusal} from="draft" retry={() => submit(payRefusal.message)} />}
       {/* The board in focus stays named while a preview of it waits (focus is held until Keep or Discard). */}
       {focus ? <Box aria-label="Board in focus" data-board-focus="" sx={{ display: 'flex', alignItems: 'center', gap: .5, mb: hold ? 0 : 1 }}>
         <Typography role="status" variant="body2" sx={{ overflowWrap: 'anywhere', fontWeight: 600 }}>{editingLabel(model, selection)}</Typography>
@@ -475,7 +483,12 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
         const last = index === history.length - 1
         return turn.role === 'user'
           ? <ChatTurn who="you" key={index}>{turn.content}</ChatTurn>
-          : <ChatTurn who="slatebox" key={index} after={(turn.opens || turn.catalog || (last && (turn.adds || turn.boards))) && <>
+          : <ChatTurn who="slatebox" key={index} after={(turn.opens || turn.catalog || (last && (turn.adds || turn.boards || turn.choices))) && <>
+            {/* A look to choose from: each chip says its sentence, read with no AI call. */}
+            {turn.choices && last && <Box role="group" aria-label="Choose a look" sx={{ display: 'flex', flexWrap: 'wrap', gap: .5 }}>
+              {turn.choices.map(item => <Button key={item.say} size="small" variant="outlined" data-look-choice={item.label} sx={{ textTransform: 'none' }}
+                onClick={() => submit(item.say)}>{item.label}</Button>)}
+            </Box>}
             {turn.opens && <Button size="small" variant="outlined" onClick={() => openNewSlate(turn.opens)}>Open on a new slate</Button>}
             {turn.adds && last && <Box sx={{ display: 'flex', gap: .5 }}>
               <Button size="small" variant="outlined" onClick={() => submit(turn.adds)}>Add it beside this board</Button>
@@ -487,7 +500,10 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
                 onClick={() => submit(turn.again, item.id)}>{item.title}</Button>)}
             </Box>}
             {turn.catalog && <Suspense fallback={null}><CatalogCards ids={turn.catalog} onAdd={addEntry} full={full} onOpen={entry => browse({ entry: entry.id })} /></Suspense>}
-          </>}>{turn.content}</ChatTurn>
+          </>}>{last && payRefusal && !hold
+            // The refusal's ways on inside its own message: Pro or a balance, in the same pay sheet; the request runs again once paid.
+            ? <PayNotice refusal={payRefusal} from="draft" retry={() => submit(payRefusal.message)} inline />
+            : turn.content}</ChatTurn>
       })}
       {busy && !preview && !drawing && <ChatThinking />}
     </Box>

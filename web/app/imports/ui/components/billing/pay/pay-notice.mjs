@@ -54,3 +54,33 @@ export function refusalForViewer(row, userId) {
   if (!userId || !row?.refusal || row.refusal.userId !== userId || typeof row.refusal.code !== 'string') return null
   return { code: row.refusal.code, reason: row.text || '' }
 }
+
+// In a chat message itself (owner, 2026-11-24: the offer belongs right in the chat, with the same pay sheet, so it can be
+// done right then, really easily): both ways on as buttons in the refusing message, each opening the same pay sheet on
+// its pane, and the request runs again once paid.
+export const INLINE_LABELS = Object.freeze({ pro: 'Get Slatebox Pro — $5/month', topup: 'Add a balance', again: 'Run it now' })
+
+/**
+ * The buttons a refusal carries inside a chat message: [{ action, wallet, choice, label }], Pro first. A refusal Pro or a
+ * balance answers offers both where this server sells them and Pro is not on yet; Pro switched on since is "Run it now";
+ * anything else (confirm the email, sign in, the card, a team admin) is its one button, as refusalAction says. [] when it
+ * is not about money.
+ */
+export function inlinePayActions(refusal, options = {}) {
+  const one = refusalAction(refusal, options)
+  if (!one) return []
+  if (one.action === 'again') return [{ action: 'again', wallet: null, choice: null, label: INLINE_LABELS.again }]
+  if ((one.action !== 'pro' && one.action !== 'topup') || one.wallet === 'team') return [{ ...one, choice: null }]
+  const { summary = null } = options
+  const actions = []
+  if (summary?.proAvailable !== false && !summary?.proState?.active) actions.push({ action: 'pro', wallet: null, choice: { interval: 'month' }, label: INLINE_LABELS.pro })
+  if (summary?.topUpsAvailable !== false) actions.push({ action: 'topup', wallet: 'me', choice: null, label: INLINE_LABELS.topup })
+  return actions.length ? actions : [{ ...one, choice: null }]
+}
+
+/** What the refusing message says when it carries both buttons: short, the buttons say the rest. */
+export function inlineRefusalText(refusal, actions) {
+  const both = actions.some(item => item.action === 'pro') && actions.some(item => item.action === 'topup')
+  if (both) return 'This needs Slatebox Pro or a balance. Choose one here and it runs as soon as it’s paid.'
+  return refusal?.reason ?? ''
+}

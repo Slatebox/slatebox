@@ -23,6 +23,7 @@ import { CATEGORY_CHIPS, KindTitle, REFINE_STARTERS, diffLines, eventLine } from
 import { refineHistory, proposalChanges } from './refineTurns.mjs'
 import { useAtom } from 'jotai'
 import { conversationOpen } from '../../../jotai/atoms'
+import PayNotice, { isCreditRefusal } from '../../PayNotice'
 
 const STATE_WORDS = { submitted: 'Submitted', in_review: 'In review', changes_requested: 'Changes asked for', published: 'Published', rejected: 'Not accepted', unpublished: 'Taken out' }
 
@@ -106,7 +107,10 @@ export default function ReviewPanel({ slate }) {
       const answer = await asReviewer(libraryApi.review.refine, { itemId, message: said, history, mode: 'preview' })
       setTurns((now) => [...now, { role: 'assistant', text: answer.reply || 'Here is what I would change.', ask: said, history, answer, state: proposalChanges(answer) ? 'pending' : 'reply' }])
     } catch (error) {
-      setTurns((now) => [...now, { role: 'assistant', text: error?.reason || 'That could not be done. Ask in another way.', state: 'error' }])
+      // The meter's refusal (no Pro or balance, the included amount used): its ways on inside the turn, and the ask again once paid.
+      const code = error?.error === 'ai_unavailable' ? error.details?.reason : null
+      const refusal = code && (isCreditRefusal(code) || error.details?.pay) ? { code, reason: error.reason, details: { ...(error.details?.pay && { pay: error.details.pay }) } } : null
+      setTurns((now) => [...now, { role: 'assistant', text: error?.reason || 'That could not be done. Ask in another way.', state: 'error', ...(refusal && { refusal, ask: said }) }])
     } finally {
       setAsking(false)
     }
@@ -267,7 +271,7 @@ export default function ReviewPanel({ slate }) {
               Ask for a change: you see it first and keep it only if you want it. Change the notes and boards on the canvas directly.
             </Typography>
             {turns.map((turn, index) => (
-              <RefineTurn key={index} turn={turn} onKeep={() => keep(index)}
+              <RefineTurn key={index} turn={turn} last={index === turns.length - 1} onAgain={() => ask(turn.ask)} onKeep={() => keep(index)}
                 onDiscard={() => setTurns((now) => now.map((row, i) => (i === index ? { ...row, state: 'discarded' } : row)))}
                 onChange={() => { setMessage(`Instead: `); composer.current?.focus() }} />
             ))}
@@ -349,7 +353,7 @@ export default function ReviewPanel({ slate }) {
   )
 }
 
-function RefineTurn({ turn, onKeep, onDiscard, onChange }) {
+function RefineTurn({ turn, last = false, onAgain = null, onKeep, onDiscard, onChange }) {
   if (turn.role === 'user') {
     return <Typography variant="body2" sx={{ justifySelf: 'end', bgcolor: 'action.selected', borderRadius: 2, px: 1.25, py: 0.75, maxWidth: '90%', whiteSpace: 'pre-wrap' }}>{turn.text}</Typography>
   }
@@ -357,7 +361,9 @@ function RefineTurn({ turn, onKeep, onDiscard, onChange }) {
   const check = turn.answer?.proposal?.check || []
   return (
     <Box data-testid="refine-turn" sx={{ display: 'grid', gap: 0.75 }}>
-      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', color: turn.state === 'error' ? 'error.main' : 'text.primary' }}>{turn.text}</Typography>
+      {turn.refusal && last
+        ? <PayNotice refusal={turn.refusal} from="draft" retry={onAgain} inline />
+        : <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', color: turn.state === 'error' ? 'error.main' : 'text.primary' }}>{turn.text}</Typography>}
       {(lines.length > 0 || check.length > 0) && (
         <Box data-testid="refine-diff" sx={{ border: 1, borderColor: turn.state === 'kept' ? 'success.main' : 'divider', borderRadius: 1, p: 1, display: 'grid', gap: 0.5,
           opacity: turn.state === 'discarded' ? 0.55 : 1 }}>
@@ -388,6 +394,8 @@ RefineTurn.propTypes = {
   onKeep: PropTypes.func.isRequired,
   onDiscard: PropTypes.func.isRequired,
   onChange: PropTypes.func.isRequired,
+  last: PropTypes.bool,
+  onAgain: PropTypes.func,
 }
 
 ReviewPanel.propTypes = { slate: PropTypes.object }

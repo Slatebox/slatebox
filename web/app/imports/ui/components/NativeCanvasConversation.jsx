@@ -152,7 +152,12 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
         if(turn!==asked.current) return
         setDraft({...res,message,via})
       }
-    } catch(e) {if(turn===asked.current) {setError(e.reason || e.message);setRefusal(isCreditRefusal(e.error) || e.details?.pay ? {error:e.error,reason:e.reason,details:e.details,message} : null)}}
+    } catch(e) {if(turn===asked.current) {
+      // A refusal the pay sheet answers is said in the conversation, its ways on inside the message; anything else is the error line.
+      const paying=isCreditRefusal(e.error) || Boolean(e.details?.pay)
+      setError(paying ? '' : e.reason || e.message);setRefusal(paying ? {error:e.error,reason:e.reason,details:e.details,message} : null)
+      if(paying) setText('')
+    }}
     finally {if(turn===asked.current) {inFlight.current=false;setBusy(null)}}
   }
   // Leaving a preview that is still being prepared: its answer, when it comes, is dropped.
@@ -244,7 +249,6 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
   const composer = <ConversationComposer shareId={shareId} inputRef={input} value={text} onChange={setText} onSubmit={()=>ask(text)}
     hold={hold} canSubmit={Boolean(text.trim())} placeholder={empty ? (board.library?.mode==='build' ? 'Describe the board, or pick a shape' : 'What are you working on?') : agents.some(a=>a.canAsk) ? `Ask anything, or @${agents.find(a=>a.canAsk).name}` : 'Ask anything'} maxLength={1200} error={error}
     extra={!hold && <>
-      {refusal && <PayNotice refusal={refusal} from="draft" retry={() => ask(refusal.message)} />}
       {/* One way to browse at a time: not under the library, nor under the first turn's own cards. */}
       {!view && !firstTurn && <AddStrip empty={empty} hasBoard={false} onAdd={addEntry} onBrowse={()=>browse()} compact={history.length>0 || Boolean(draft)} />}
     </>}
@@ -272,6 +276,11 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
         {turn.message!==brief && <ChatTurn who="you" as="div">{turn.message}</ChatTurn>}
         <ChatTurn who={turn.agent ? 'agent' : 'slatebox'} agent={turn.agent ?? null} as="div" after={turn.attach?.type==='catalog' && <Suspense fallback={null}><CatalogTurn ids={turn.attach.entries} onAdd={addEntry} onOpen={entry=>browse({entry:entry.id})} onBrowse={()=>browse()} /></Suspense>}>{turn.reply}</ChatTurn>
       </Box>)}
+    </Box>}
+    {/* The refused request and the refusal, with Pro or a balance as buttons in the message (the same pay sheet); it runs again once paid. */}
+    {refusal && !busy && <Box aria-label="Refused request" sx={{my:1}}>
+      <ChatTurn who="you" as="div">{refusal.message}</ChatTurn>
+      <ChatTurn who="slatebox" as="div"><PayNotice refusal={refusal} from="draft" retry={() => ask(refusal.message)} inline /></ChatTurn>
     </Box>}
     {busy==='asking' && !draft && !asking && <ChatThinking as="div" />}
     {draft && <Box aria-label="Review the preview" aria-live="polite" sx={{my:1}}>

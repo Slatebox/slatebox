@@ -4,10 +4,11 @@ import { Meteor } from 'meteor/meteor'
 import { useAtomValue } from 'jotai'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Typography from '@mui/material/Typography'
 import { CREDIT_REFUSALS } from '../../api/common/native-canvas-conversation.mjs'
 import { allowance } from '../jotai/atoms'
-import { usePaySheet } from './billing/pay/PaySheetHost'
-import { refusalAction } from './billing/pay/pay-notice.mjs'
+import { prefetchPaySheet, usePaySheet } from './billing/pay/PaySheetHost'
+import { inlinePayActions, inlineRefusalText, refusalAction } from './billing/pay/pay-notice.mjs'
 import { ownKeysAllowed } from '../../api/common/own-keys.mjs'
 
 // Whether a refusal is the meter's: no Slatebox Pro (or, self-hosted, own AI), this month's credits used up,
@@ -34,9 +35,35 @@ export function usePayAction() {
   }, [open, summary])
 }
 
+/**
+ * The ways on inside a chat's own message (inline): the short reason, then "Get Slatebox Pro — $5/month" and "Add a
+ * balance" as buttons in the bubble, each opening the same pay sheet on its pane (the person pays there, with their own
+ * click, or not at all); the surface's retry runs once the server has the payment. Pro switched on since: "Run it now".
+ */
+function InlinePay({ refusal, from, retry }) {
+  const { open } = usePaySheet()
+  const summary = useAtomValue(allowance)
+  const actions = inlinePayActions(refusal, { summary, metered: Meteor.settings.public.metered === true, ownKeys: ownKeysAllowed(Meteor.settings) })
+  const reason = refusal.reason ?? ''
+  const run = item => (item.action === 'again' ? retry?.() : open({ action: item.action, wallet: item.wallet, reason, retry, from, choice: item.choice }))
+  return <Box data-inline-pay="" sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+    <Typography variant="body2" component="span" sx={{ whiteSpace: 'pre-wrap', display: 'block', lineHeight: 1.5 }}>{inlineRefusalText(refusal, actions) || reason}</Typography>
+    {actions.length > 0 && <Box role="group" aria-label="Pay" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+      {actions.map((item, i) => <Button key={item.action} size="small" variant={i === 0 ? 'contained' : 'outlined'} data-pay-action={item.action}
+        disabled={item.action === 'again' && typeof retry !== 'function'} onPointerEnter={prefetchPaySheet} onClick={() => run(item)}
+        sx={{ textTransform: 'none' }}>{item.label}</Button>)}
+    </Box>}
+  </Box>
+}
+
 // The button itself, under a refusal's text. plain: the style bar's and the presenter's own
-// small button instead of MUI's.
-export default function PayNotice({ refusal, from, retry, plain }) {
+// small button instead of MUI's. inline: inside a chat's message, its text with both ways on (InlinePay).
+export default function PayNotice({ refusal, from, retry, plain, inline }) {
+  if (inline && refusal) return <InlinePay refusal={refusal} from={from} retry={retry} />
+  return <PayButton refusal={refusal} from={from} retry={retry} plain={plain} />
+}
+
+function PayButton({ refusal, from, retry, plain }) {
   const payAction = usePayAction()
   const pay = refusal ? payAction(refusal, { from, retry }) : null
   if (!pay) return null
@@ -55,6 +82,7 @@ PayNotice.propTypes = {
   from: PropTypes.oneOf(['draft', 'call', 'pictures', 'image', 'plan']),
   retry: PropTypes.func,
   plain: PropTypes.bool,
+  inline: PropTypes.bool,
 }
 
-PayNotice.defaultProps = { refusal: null, from: 'draft', retry: null, plain: false }
+PayNotice.defaultProps = { refusal: null, from: 'draft', retry: null, plain: false, inline: false }
