@@ -28,13 +28,14 @@ import { proActive } from '/server/pro-billing.mjs'
 import { invitesAgents } from '/imports/api/business/membership.mjs'
 import { presence } from '/server/presence/meteor'
 import { firstNameOf, sanitizeClientName } from '/imports/api/common/agent-label.mjs'
-import { Organizations, Slates } from '/imports/api/common/models'
+import { AIAgents, Organizations, Slates } from '/imports/api/common/models'
 import { loadMasterKey } from '/server/metering/vault.mjs'
 import { createMcpFetch } from './mcp-fetch.mjs'
 import { callTool, discover } from './mcp-session.mjs'
 import { ConnectorRefused, createConnectorService } from './service.mjs'
 import { connectorSettings } from './connector-settings.mjs'
 import { cardFor } from '../common/gallery.mjs'
+import { liveGallery } from './gallery-admin.mjs'
 import { createVault } from './credentials.mjs'
 import { createSignIn, probe } from './signin.mjs'
 
@@ -146,6 +147,16 @@ async function userFor(req) {
 
 export const appOrigin = () => String(Meteor.settings.public?.baseUrl || Meteor.absoluteUrl()).replace(/\/+$/, '')
 
+// The gallery as administrators set it (aiAgents, /admin/ai › Gallery), read at most every few seconds.
+const findGallery = () => AIAgents.find({ kind: 'outbound-connector' }).fetchAsync()
+let galleryCache = { at: 0, cards: null }
+async function gallery() {
+  if (galleryCache.cards && Date.now() - galleryCache.at < 5000) return galleryCache.cards
+  const cards = liveGallery(await findGallery().catch(() => []))
+  galleryCache = { at: Date.now(), cards }
+  return cards
+}
+
 export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
   const settings = connectorSettings(Meteor.settings, { development: Meteor.isDevelopment })
   const fetch = createMcpFetch({ devOrigins: settings.devOrigins, userAgent: settings.userAgent })
@@ -199,6 +210,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     probe,
     devOrigins: settings.devOrigins,
     audit: (entry) => console.log('[connectors]', JSON.stringify({ ...entry, at: new Date().toISOString() })),
+    gallery,
   })
   Meteor.startup(async () => {
     await McpConnections.rawCollection().createIndex({ slateId: 1, status: 1 })
@@ -242,5 +254,5 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     return undefined
   })
 
-  return { service, signIn, origin: appOrigin, userFor }
+  return { service, signIn, origin: appOrigin, userFor, findGallery }
 }

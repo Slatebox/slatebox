@@ -15,6 +15,7 @@
 // isUnlocked() says whether the key still holds (checked hourly; actions, methods and routes are
 // already guarded by the app).
 import { connectorActions } from './actions.mjs'
+import { galleryActions } from './gallery-admin.mjs'
 import { signInRoutes } from './routes.mjs'
 
 export const manifest = Object.freeze({ name: 'slatebox-enterprise', features: ['agents.invite'] })
@@ -32,6 +33,11 @@ export function register(api, context) {
   // connectors.list/discover/signIn/signInStatus/useKey/connect/disconnect/call. Keeping and
   // discarding what they suggest is the app's own suggestions.decide.
   api.addActions(connectorActions(running))
+  // /admin/ai › Gallery: the invite gallery's cards, order and recipes (aiAgents, audited).
+  api.addActions(galleryActions(() => {
+    if (!started) throw starting()
+    return started.findGallery
+  }))
   // Sign-in's own addresses: the client document, the popup's start and the fixed callback.
   for (const route of signInRoutes({
     signIn: () => {
