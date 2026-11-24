@@ -24,9 +24,12 @@ relay_sha=$(git -C "$relay" rev-parse --short=12 HEAD)
 # The image is labelled with the app revision, so what it contains must be
 # what that revision holds. Uncommitted changes to the image's own files are
 # refused unless the label is allowed to say so.
-if [[ -n $(git -C "$app" status --porcelain -- self-host web/app enterprise LICENSE.md) ]]; then
+# Git-ignored files count too: rootfs is copied from disk below, so an ignored file there would go
+# into the image without ever being in the revision the label names.
+if [[ -n $(git -C "$app" status --porcelain -- self-host web/app enterprise LICENSE.md) ]] \
+  || [[ -n $(git -C "$app" ls-files --others --ignored --exclude-standard -- self-host/Dockerfile self-host/build self-host/licenses self-host/rootfs) ]]; then
   if [[ ${ALLOW_DIRTY:-} != 1 ]]; then
-    echo 'Commit your changes under self-host/ and web/app/ first, or set ALLOW_DIRTY=1 for a local trial build.' >&2
+    echo 'Commit your changes under self-host/ and web/app/ first (git-ignored files under self-host/rootfs, build or licenses count), or set ALLOW_DIRTY=1 for a local trial build.' >&2
     exit 1
   fi
   app_label="$app_sha-dirty"
