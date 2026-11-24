@@ -25,7 +25,7 @@ import Snackbar from '@mui/material/Snackbar'
 import { visibleAgents, agentStepText, agentChecklist, agentName, agentOrigin, AGENT_PALETTE, compat } from 'slateboxjs'
 import { AgentPresence, AgentSuggestions } from '../../api/common/models'
 import { clockOffset, onScreenClock } from '../../api/common/agent-clock.mjs'
-import { activityLine, agentsOnRoster, pendingCount } from '../../api/common/agent-roster.mjs'
+import { activityLine, agentsOnRoster, pendingCount, withWaiting } from '../../api/common/agent-roster.mjs'
 import EnterpriseSlot from '../common/EnterpriseSlot'
 import Hexagon from './AgentMark'
 import { expectOwnRuns } from '../../api/client/ownRuns.mjs'
@@ -111,8 +111,10 @@ const decide = (shareId, input) => {
 export const mayDirect = (controls, agentId) => Boolean(controls?.owner || (Array.isArray(controls?.mine) && controls.mine.includes(agentId)))
 
 export default function AgentPresenceListener({ slate, canEdit = false }) {
-  const { all } = useAgentPresence(slate.shareId)
+  const { all: records } = useAgentPresence(slate.shareId)
   const { actions } = useAgentSuggestions(slate.shareId)
+  // Each pointer knows whether its agent's suggestion still waits: its tag says "Waiting for you" then, never "Done".
+  const all = useMemo(() => withWaiting(records, actions), [records, actions])
   const setControls = useSetAtom(agentControlsAtom)
   useEffect(() => { setControls(Boolean(canEdit)) }, [canEdit, setControls])
   const presence = useRef(null)
@@ -243,7 +245,7 @@ export function AgentChips({ records, shareId = null }) {
       <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>Agents</Typography>
       {agents.map((agent) => {
         const color = AGENT_PALETTE[agent.colorIndex % AGENT_PALETTE.length]
-        const step = agent.record ? agentStepText(agent.record) : null
+        const step = agent.record ? agentStepText({ ...agent.record, waiting: agent.waiting > 0 }) : null
         const waiting = agent.waiting ? `${agent.waiting} waiting` : ''
         const name = agentName(agent)
         const extra = [step, agent.state, waiting].filter(Boolean).join(' · ')
@@ -287,7 +289,7 @@ export function AgentChips({ records, shareId = null }) {
                 ))}
               </Box>
             ) : (
-              <Typography variant="body2" sx={{ mt: 1 }}>{agentStepText(openAgent.record) || 'Working on this slate'}</Typography>
+              <Typography variant="body2" sx={{ mt: 1 }}>{agentStepText({ ...openAgent.record, waiting: openAgent.waiting > 0 }) || 'Working on this slate'}</Typography>
             ))}
             {/* Enterprise: an invited agent's own controls (ask it, sign in again, remove it). Empty where enterprise code is locked. */}
             {openAgent.invited && (

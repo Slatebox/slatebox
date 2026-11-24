@@ -7,6 +7,15 @@ export const ROSTER_RECENT_MS = 60 * 60 * 1000
 
 export const pendingCount = (action) => (action?.items || []).filter((item) => item.state === 'pending').length
 
+/**
+ * The presence records as the pointers draw them: each says whether what its agent suggested still waits on the slate for
+ * Keep or Discard (waiting), so its tag says "Waiting for you" then, and never "Done" while its group is there.
+ */
+export function withWaiting(records = [], actions = []) {
+  const waiting = new Set(actions.filter((action) => pendingCount(action) > 0).map((action) => action.agentId).filter(Boolean))
+  return records.map((record) => ({ ...record, waiting: Boolean(record.agentId && waiting.has(record.agentId)) }))
+}
+
 const time = (value) => {
   const t = value instanceof Date ? value.getTime() : Date.parse(value)
   return Number.isFinite(t) ? t : 0

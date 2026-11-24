@@ -408,6 +408,31 @@ test("an MCP client's name is read from initialize or, on newer clients, from ev
   assert.equal(reportedClientName([{ jsonrpc: "2.0", method: "tools/list", params: {} }, null]), null);
 });
 
+test("a pointer whose agent's suggestion waits says \"Waiting for you\", never \"Done\"; on its way to its ghosts it says \"Suggesting…\"", async () => {
+  const { withWaiting } = await import("../web/app/imports/api/common/agent-roster.mjs");
+  const core = await import(createRequire(new URL("../web/app/package.json", import.meta.url)).resolve("slateboxjs"));
+  const { agentStepText } = { ...core, ...(core.default || {}) };
+  const steps = ["Ask Exa", "Read what it found", "Place suggestions"].map((text) => ({ text, status: "done" }));
+  const ended = { agentKey: "r1", agentId: "ag-exa", label: "Exa", status: "done", plan: { steps, current: 2 }, targets: ["ghost-a", "ghost-b"], updatedAt: 0, endedAt: 0, expiresAt: 1 };
+  const other = { ...ended, agentKey: "r2", agentId: "ag-other", targets: [] };
+  const actions = [
+    { actionId: "x1", agentId: "ag-exa", items: [{ id: "add:a", kind: "add", state: "pending" }, { id: "add:b", kind: "add", state: "kept" }] },
+    { actionId: "x2", agentId: "ag-other", items: [{ id: "add:c", kind: "add", state: "kept" }] },
+  ];
+  const [exa, done] = withWaiting([ended, other], actions);
+  assert.equal(exa.waiting, true);
+  assert.equal(done.waiting, false);
+  assert.equal(agentStepText(exa), "Waiting for you");
+  assert.equal(agentStepText(done), "Done", "nothing waits any more: done");
+  // Still landing (its pointer on its way to the ghosts): what it does, never Done.
+  assert.equal(agentStepText({ ...ended, waiting: false }, { landing: true }), "Suggesting…");
+  // A live run that filed a suggestion (its targets are ghosts) is suggesting; its greeting (no ghosts) says its message.
+  assert.equal(agentStepText({ ...ended, status: "live", endedAt: null, plan: null }), "Suggesting…");
+  assert.equal(agentStepText({ ...ended, status: "live", endedAt: null, plan: null, targets: [], message: "Hi, I'm Exa." }), "Hi, I'm Exa.");
+  // Only pending items count; an agent with no agentId is never waiting.
+  assert.deepEqual(withWaiting([{ agentKey: "r3" }], actions).map((r) => r.waiting), [false]);
+});
+
 test("the roster: people, then agents as their own group; an agent with suggestions waiting or a recent action stays on it; activity reads plainly", async () => {
   const { agentsOnRoster, activityLine, pendingCount, ROSTER_RECENT_MS } = await import("../web/app/imports/api/common/agent-roster.mjs");
   const now = Date.parse("2026-11-23T12:00:00Z");
