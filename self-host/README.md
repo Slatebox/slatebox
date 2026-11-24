@@ -7,10 +7,6 @@ database. Install Docker, run one command, open one address.
 docker run -d --name slatebox -p 7070:7070 -v slatebox-data:/data ghcr.io/slatebox/slatebox
 ```
 
-The image is being published at `ghcr.io/slatebox/slatebox`. Until it is, the
-command above cannot pull it: build it from this repository with
-`self-host/build-image.sh`, or use Slatebox Cloud at <https://app.slatebox.com>.
-
 Open <http://localhost:7070>. A start usually takes well under a minute; until
 then the page says that Slatebox is starting and opens by itself when it is
 ready. `docker ps` shows the container as `healthy` once a slate can be opened.

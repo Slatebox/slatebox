@@ -11,8 +11,8 @@ import { EXIT, InstallError } from './errors.mjs'
  * `npx slatebox@x.y.z install` always installs the same bytes.
  */
 export const DEFAULT_REPOSITORY = 'ghcr.io/slatebox/slatebox'
-export const PINNED_TAG = 'latest'
-export const PINNED_DIGEST = null
+export const PINNED_TAG = '0.1.0'
+export const PINNED_DIGEST = 'sha256:94f761bd8153ca9b9d9ef1ecd4af9faddf318427f7495c3af8492bb2a1d22d4f'
 export const DEFAULT_IMAGE = PINNED_DIGEST ? `${DEFAULT_REPOSITORY}@${PINNED_DIGEST}` : `${DEFAULT_REPOSITORY}:${PINNED_TAG}`
 
 /** Does this reference name a registry (so a digest reference can be pulled elsewhere)? */
