@@ -231,8 +231,8 @@ const reqSourceForPolicy = await readFile(
 assert.equal(
   reqSourceForPolicy.match(/!keepsFallbackAfterShapeExhaustion\(aiOpts\.feature\)/g)
     ?.length,
-  2,
-  'both shape-exhaustion paths (validation + invalid-JSON ladder) must run the fallback policy',
+  3,
+  'every shape-exhaustion path (a tool the binding does not allow, validation, the invalid-JSON ladder) must run the fallback policy',
 )
 assert.match(
   reqSourceForPolicy,
