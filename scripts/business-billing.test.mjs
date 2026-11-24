@@ -2,9 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
-  BUSINESS_COPY, billableMembers, businessCheckoutKey, businessCheckoutParams, businessFromSubscription, businessOnSale, businessPriceIds,
+  BUSINESS_COPY, acceptedMember, alertOnce, billableMembers, businessCheckoutKey, businessCheckoutParams, businessFromSubscription, businessOnSale, businessPriceIds,
   businessSource, businessSummary, checkBusinessPrice, handleBusinessEvent, isBusinessSubscription, matchBusinessMembers, mayManageBusiness,
-  mayWriteBusiness, pricingPageDiffers, setBusinessRenewal, startBusinessCheckout, syncBusinessSubscription,
+  mayWriteBusiness, pricingPageDiffers, prorationFor, setBusinessRenewal, startBusinessCheckout, syncBusinessSubscription,
 } from '../web/app/server/business-billing.mjs'
 import { businessActive, invitesAgents } from '../web/app/imports/api/business/membership.mjs'
 import { PRO_GRACE_MS } from '../web/app/server/pro-billing.mjs'
@@ -25,7 +25,7 @@ const ATTEMPT = '1b4e28ba-2fa1-4d3b-a3f5-ef19b5a7633b'
 
 const bizPrice = (interval = 'month', more = {}) => ({
   id: IDS[interval], object: 'price', active: true, type: 'recurring', billing_scheme: 'per_unit', currency: 'usd',
-  unit_amount: interval === 'year' ? 6000 : 600, recurring: { interval, interval_count: 1, usage_type: 'licensed' }, ...more,
+  unit_amount: interval === 'year' ? 8000 : 800, recurring: { interval, interval_count: 1, usage_type: 'licensed' }, ...more,
 })
 const bizSub = (id, { orgId = 'org1', status = 'active', quantity = 3, interval = 'month', created = NOW, end = NOW + 30 * DAY, more = {} } = {}) => ({
   id, object: 'subscription', status, customer: 'cus_team', created: sec(created), cancel_at_period_end: false,
@@ -67,16 +67,19 @@ function world({ orgs = [{ _id: 'org1' }], members = { org1: 3 } } = {}) {
         || (orgId && teams.get(orgId)) || (customerId && all.find(o => o.business?.customerId === customerId))
       return hit ? structuredClone(hit) : null
     },
-    async writeBusiness(orgId, fields, fetchedAt) {
+    async writeBusiness(orgId, fields, fetchedAt, { over = null } = {}) {
       const org = teams.get(orgId)
-      if (!org || !mayWriteBusiness(org.business, fetchedAt, clock)) return false
+      const giveWay = over && org?.business?.source === 'stripe' && org.business.subscriptionId === over
+      if (!org || (!giveWay && !mayWriteBusiness(org.business, fetchedAt, clock))) return { written: false, previous: null }
+      const previous = org.business ? structuredClone(org.business) : null
       org.business = structuredClone(fields)
-      return true
+      return { written: true, previous }
     },
     async countMembers(orgId) { return members[orgId] ?? 1 },
     async audit(entry) { audits.push(entry) },
   }
-  const deps = { stripe, store, alert: async text => { alerts.push(text) }, now: () => clock, priceIds: IDS }
+  let changes = 0
+  const deps = { stripe, store, alert: async text => { alerts.push(text) }, now: () => clock, priceIds: IDS, changeId: () => 'chg' + (++changes) }
   return { deps, subs, sessions, updates, cancels, refunds, alerts, audits, teams, members, tick: ms => { clock += ms } }
 }
 
@@ -103,11 +106,46 @@ test('a price must be recurring at its interval, per member and active; its amou
   // differing from the pricing page's figure alerts (to fix the page) but never refuses
   assert.equal(pricingPageDiffers(bizPrice('month'), 'month'), false)
   assert.equal(pricingPageDiffers(bizPrice('month', { unit_amount: 700 }), 'month'), true)
+  // Restated (owner decision 2026-11-24): the pricing page states $8 a month and $80 a year per member
+  assert.equal(pricingPageDiffers(bizPrice('month', { unit_amount: 600 }), 'month'), true, 'the old $6 now differs')
+  assert.equal(pricingPageDiffers(bizPrice('year'), 'year'), false)
 })
 
-test('members billed: accounts of their own, never guests or imports not yet invited; at least one', () => {
-  assert.equal(billableMembers([{ emails: [{ address: 'a@x.test' }] }, { emails: [{ address: 'b@x.test' }] }, { isAnonymous: true, emails: [{ address: 'g@x.test' }] }, { emails: [] }, {}]), 2)
+test('the "differs from the pricing page" alert fires once a day per price and amount, not on every read (review #13)', () => {
+  let at = NOW
+  const may = alertOnce({ now: () => at })
+  assert.equal(may('price_biz_month:700:usd'), true)
+  at += 10 * 60_000
+  assert.equal(may('price_biz_month:700:usd'), false, 'the next read 10 minutes later is quiet')
+  assert.equal(may('price_biz_month:750:usd'), true, 'a new amount alerts')
+  at += DAY
+  assert.equal(may('price_biz_month:700:usd'), true, 'and again a day later')
+})
+
+test('members billed: only those who have joined; never guests, never invitations not yet accepted; at least one', () => {
+  // Restated (review #7): an invitation creates the account at once with an unconfirmed address, no
+  // password and no sign-in, so the earlier "has an email" rule billed people who never accepted
+  const joined = [
+    { emails: [{ address: 'a@x.test', verified: true }] }, // confirmed through the enrollment link
+    { emails: [{ address: 'b@x.test', verified: false }], services: { password: { bcrypt: 'h' } } }, // signed up with a password
+    { emails: [{ address: 'c@x.test' }], services: { resume: { loginTokens: [{ when: new Date() }] } } }, // has signed in
+  ]
+  const notBilled = [
+    { emails: [{ address: 'invited@x.test', verified: false }] }, // invited, not accepted
+    { emails: [{ address: 'invited2@x.test', verified: false }], services: { resume: { loginTokens: [] } } },
+    { isAnonymous: true, emails: [{ address: 'g@x.test', verified: true }] }, // a guest
+    { emails: [] }, {},
+  ]
+  for (const u of joined) assert.equal(acceptedMember(u), true, JSON.stringify(u))
+  for (const u of notBilled) assert.equal(acceptedMember(u), false, JSON.stringify(u))
+  assert.equal(billableMembers([...joined, ...notBilled]), 3)
   assert.equal(billableMembers([]), 1)
+  // the team page says so
+  const panel = readFileSync(new URL('../web/app/imports/ui/components/teams/BusinessPanel.jsx', import.meta.url), 'utf8')
+  assert.match(panel, /invitations not yet accepted are not counted/)
+  // and the Mongo count reads the fields acceptedMember needs
+  const methods = readFileSync(new URL('../web/app/server/methods/business.js', import.meta.url), 'utf8')
+  assert.match(methods, /projection: MEMBER_FIELDS/)
 })
 
 test('only the team owner or an admin buys or changes Business', () => {
@@ -187,7 +225,7 @@ test('renewal, past due and the end all follow Stripe; an older read never repla
   await syncBusinessSubscription(w.deps, 'sub_b1', { orgId: 'org1' })
   // a late read taken before the stored one is dropped
   const stale = businessFromSubscription(bizSub('sub_b1', { status: 'past_due' }), NOW - 1000)
-  assert.equal(await w.deps.store.writeBusiness('org1', stale, NOW - 1000), false)
+  assert.equal((await w.deps.store.writeBusiness('org1', stale, NOW - 1000)).written, false)
   assert.equal(w.teams.get('org1').business.status, 'active')
   w.tick(1000)
   w.subs.get('sub_b1').status = 'past_due'
@@ -232,6 +270,72 @@ test('two admins paying at once: the later subscription is cancelled and refunde
   assert.equal(w.teams.get('org1').business.subscriptionId, 'sub_first')
 })
 
+test('two first webhooks racing (both read an empty team): the second write settles it at once (review #12)', async () => {
+  const w = world()
+  w.subs.set('sub_first', bizSub('sub_first', { created: NOW }))
+  w.subs.set('sub_second', bizSub('sub_second', { created: NOW + 5000 }))
+  // both start before either writes: each reads the team with no Business
+  const [a, b] = await Promise.all([
+    syncBusinessSubscription(w.deps, 'sub_first', { orgId: 'org1' }),
+    syncBusinessSubscription(w.deps, 'sub_second', { orgId: 'org1' }),
+  ])
+  assert.deepEqual([a.duplicate, b.duplicate].filter(Boolean), ['sub_second'], 'exactly one is settled, in the same run')
+  assert.deepEqual(w.cancels.map(c => c.id), ['sub_second'])
+  assert.deepEqual(w.refunds.map(r => r.params.payment_intent), ['pi_in_sub_second'])
+  assert.equal(w.teams.get('org1').business.subscriptionId, 'sub_first')
+  assert.equal(w.teams.get('org1').business.status, 'active')
+})
+
+test('a racing write that lands over the other subscription: the older stays, the newer is cancelled (review #12)', async () => {
+  const w = world()
+  w.subs.set('sub_first', bizSub('sub_first', { created: NOW }))
+  w.subs.set('sub_second', bizSub('sub_second', { created: NOW + 5000 }))
+  // the second's webhook read the team while it was empty, but writes after the first (a newer read)
+  const findOrg = w.deps.store.findOrg
+  await syncBusinessSubscription(w.deps, 'sub_first', { orgId: 'org1' })
+  w.tick(1000)
+  w.deps.store.findOrg = async q => { w.deps.store.findOrg = findOrg; return { _id: 'org1' } }
+  const out = await syncBusinessSubscription(w.deps, 'sub_second', { orgId: 'org1' })
+  assert.equal(out.duplicate, 'sub_second')
+  assert.deepEqual(w.cancels.map(c => c.id), ['sub_second'])
+  assert.equal(w.teams.get('org1').business.subscriptionId, 'sub_first', 'the older subscription is written back')
+})
+
+test('a paid subscription the store refuses to record alerts the owner (review #4)', async () => {
+  // an expired contract whose `until` is a Date: the old Mongo filter compared it with a number
+  const w = world({ orgs: [{ _id: 'org1', business: { status: 'active', until: new Date(NOW - DAY) } }] })
+  w.subs.set('sub_b1', bizSub('sub_b1'))
+  w.deps.store.writeBusiness = async () => ({ written: false, previous: null })
+  const out = await syncBusinessSubscription(w.deps, 'sub_b1', { orgId: 'org1' })
+  assert.equal(out.written, false)
+  assert.match(w.alerts.join('\n'), /could not be recorded on its team: sub_b1 \(team org1/)
+  // a refusal because a newer read of the same subscription is stored is normal and quiet
+  const q = world()
+  q.subs.set('sub_b1', bizSub('sub_b1'))
+  await syncBusinessSubscription(q.deps, 'sub_b1', { orgId: 'org1' })
+  const stale = await syncBusinessSubscription(q.deps, 'sub_b1', { orgId: 'org1', sub: bizSub('sub_b1'), fetchedAt: NOW - 5000 })
+  assert.equal(stale.written, false)
+  assert.deepEqual(q.alerts, [])
+  // the Mongo store matches a Date `until` as well as a number (membership.mjs allows both)
+  const methods = readFileSync(new URL('../web/app/server/methods/business.js', import.meta.url), 'utf8')
+  assert.match(methods, /'business\.until': \{ \$lte: now \}/)
+  assert.match(methods, /'business\.until': \{ \$lte: new Date\(now\) \}/)
+  assert.equal(mayWriteBusiness({ status: 'active', until: new Date(NOW - 1) }, NOW, NOW), true)
+})
+
+test('a Business lookup that fails never holds up Pro (review #11)', async () => {
+  const w = world()
+  w.deps.stripe.subscriptions.retrieve = async () => { throw Object.assign(new Error('Stripe is down'), { statusCode: 500 }) }
+  // a Pro invoice: Business steps aside and Pro's handler runs
+  assert.deepEqual(await handleBusinessEvent({ type: 'invoice.paid', data: { object: { parent: { subscription_details: { subscription: 'sub_pro', metadata: { product: 'pro' } } } } } }, w.deps), { handled: false })
+  assert.deepEqual(await handleBusinessEvent({ type: 'invoice.upcoming', data: { object: { subscription: 'sub_pro', lines: { data: [{ price: { id: 'price_pro' } }] } } } }, w.deps), { handled: false })
+  // an invoice that says it is Business is retried by Stripe (the error goes up)
+  await assert.rejects(handleBusinessEvent({ type: 'invoice.paid', data: { object: { parent: { subscription_details: { subscription: 'sub_b1', metadata: { product: 'business' } } } } } }, w.deps), /Stripe is down/)
+  await assert.rejects(handleBusinessEvent({ type: 'invoice.paid', data: { object: { subscription: 'sub_b1', lines: { data: [{ price: { id: IDS.year } }] } } } }, w.deps), /Stripe is down/)
+  // and a Business subscription event too
+  await assert.rejects(handleBusinessEvent({ type: 'customer.subscription.updated', data: { object: bizSub('sub_b1') } }, w.deps), /Stripe is down/)
+})
+
 // ---------- members change the quantity, prorated ----------
 
 test('adding or removing a member changes the subscription\'s quantity, prorated, and the webhook records it', async () => {
@@ -243,6 +347,7 @@ test('adding or removing a member changes the subscription\'s quantity, prorated
   assert.deepEqual(await matchBusinessMembers(w.deps, 'org1'), { changed: true, from: 3, to: 5 })
   assert.deepEqual(w.updates[0].params, { items: [{ id: 'si_sub_b1', quantity: 5 }], proration_behavior: 'create_prorations' })
   assert.match(w.updates[0].key, /^business-members:sub_b1:3:5:/)
+  assert.equal(w.updates[0].key, 'business-members:sub_b1:3:5:chg1', 'each change has its own id')
   // Stripe's update event: the new quantity is written, and nothing more is changed
   w.tick(1000)
   await handleBusinessEvent({ type: 'customer.subscription.updated', data: { object: w.subs.get('sub_b1') } }, w.deps)
@@ -258,6 +363,47 @@ test('adding or removing a member changes the subscription\'s quantity, prorated
   await syncBusinessSubscription(w.deps, 'sub_b1')
   w.members.org1 = 9
   assert.deepEqual(await matchBusinessMembers(w.deps, 'org1'), { changed: false })
+})
+
+test('the member count compares with Stripe\'s quantity, and a change back and forth is never a replay (review #13)', async () => {
+  const w = world({ members: { org1: 3 } })
+  w.subs.set('sub_b1', bizSub('sub_b1', { quantity: 3 }))
+  await syncBusinessSubscription(w.deps, 'sub_b1', { orgId: 'org1' })
+  // 3 → 4, then back to 3 and to 4 again within the same minute, before any webhook records it
+  for (const n of [4, 3, 4]) {
+    w.members.org1 = n
+    assert.equal((await matchBusinessMembers(w.deps, 'org1')).changed, true)
+  }
+  assert.deepEqual(w.updates.map(u => u.params.items[0].quantity), [4, 3, 4], 'every change reaches Stripe')
+  assert.equal(new Set(w.updates.map(u => u.key)).size, 3, 'three different idempotency keys')
+  assert.equal(w.subs.get('sub_b1').items.data[0].quantity, 4)
+  // the recorded count still says 3; Stripe says 4 and the team has 4: nothing to do
+  assert.deepEqual(await matchBusinessMembers(w.deps, 'org1'), { changed: false })
+  // a sign-in compares with the recorded count first and reads Stripe only when it differs
+  let reads = 0
+  const retrieve = w.deps.stripe.subscriptions.retrieve
+  w.deps.stripe.subscriptions.retrieve = async id => { reads++; return retrieve(id) }
+  w.members.org1 = 3
+  assert.deepEqual(await matchBusinessMembers(w.deps, 'org1', { recordedFirst: true }), { changed: false })
+  assert.equal(reads, 0)
+})
+
+test('yearly: members added are invoiced at once; removals and monthly changes are prorated on the next invoice (review #13)', async () => {
+  assert.equal(prorationFor('year', 3, 4), 'always_invoice')
+  assert.equal(prorationFor('year', 4, 3), 'create_prorations')
+  assert.equal(prorationFor('month', 3, 4), 'create_prorations')
+  assert.equal(prorationFor('month', 4, 3), 'create_prorations')
+  const w = world({ members: { org1: 3 } })
+  w.subs.set('sub_y', bizSub('sub_y', { quantity: 3, interval: 'year', end: NOW + 365 * DAY }))
+  await syncBusinessSubscription(w.deps, 'sub_y', { orgId: 'org1' })
+  w.members.org1 = 4
+  await matchBusinessMembers(w.deps, 'org1')
+  assert.equal(w.updates[0].params.proration_behavior, 'always_invoice')
+  w.members.org1 = 2
+  await matchBusinessMembers(w.deps, 'org1')
+  assert.equal(w.updates[1].params.proration_behavior, 'create_prorations')
+  // written down where the owner reads how Business is billed
+  assert.match(readFileSync(new URL('../web/app/server/metering/README.md', import.meta.url), 'utf8'), /yearly plan are invoiced at once/)
 })
 
 test('a team without Stripe billing (none, or a contract) is never touched by the member count', async () => {
@@ -324,7 +470,8 @@ test('the sheet\'s words show the amount the server read, never one written in t
   const app = new URL('../web/app/', import.meta.url).pathname
   for (const file of ['imports/ui/components/billing/pay/BusinessPane.jsx', 'imports/ui/components/teams/BusinessPanel.jsx', 'imports/ui/components/billing/ProPanel.jsx', 'imports/ui/components/billing/pay/pay-copy.mjs', 'server/methods/business.js', 'server/business-billing.mjs']) {
     const text = readFileSync(app + file, 'utf8')
-    assert.doesNotMatch(text, /\$6\b|\$60\b|\$6 per|\$60 per/, file)
+    // Restated (owner decision 2026-11-24): the pricing page's $8 / $80 as well as the old $6 / $60
+    assert.doesNotMatch(text, /\$6\b|\$60\b|\$6 per|\$60 per|\$8\b|\$80\b|\$8 per|\$80 per/, file)
   }
   // the pricing page's figures are read only to alert when Stripe differs (pricingPageDiffers), never shown
   for (const file of ['imports/ui/components/billing/pay/BusinessPane.jsx', 'imports/ui/components/teams/BusinessPanel.jsx', 'imports/ui/components/billing/pay/pay-copy.mjs', 'server/methods/business.js']) {
@@ -337,4 +484,25 @@ test('the sheet\'s words show the amount the server read, never one written in t
 test('the refusals say what to do', () => {
   for (const text of Object.values(BUSINESS_COPY)) assert.match(text, /\.$/)
   assert.match(BUSINESS_COPY.notOnSale, /Talk to us/)
+})
+
+test('no Pro or Business amount is typed into app copy or the READMEs: said from pro/prices.mjs, or "See pricing" (review #10)', async () => {
+  const { proPriceWords, proPricesInWords, PRO_PRICES } = await import('../web/app/imports/api/pro/prices.mjs')
+  const { PRO_PRICES: catalogPrices } = await import('../web/app/imports/api/pro/catalog.mjs')
+  assert.equal(catalogPrices, PRO_PRICES, 'the catalogue re-exports the one list')
+  assert.equal(proPriceWords('month').label, '$5 a month')
+  assert.equal(proPricesInWords(), '$5 a month or $50 a year')
+  const root = new URL('../', import.meta.url).pathname
+  const files = [
+    'web/app/imports/ui/components/billing/ProPanel.jsx', 'web/app/imports/ui/components/billing/pay/manage-view.mjs',
+    'web/app/imports/ui/components/billing/pay/pay-copy.mjs', 'web/app/imports/ui/components/teams/BusinessPanel.jsx',
+    'web/app/imports/ui/components/billing/pay/BusinessPane.jsx', 'README.md', 'web/README.md',
+  ]
+  for (const file of files) assert.doesNotMatch(readFileSync(root + file, 'utf8'), /\$\d/, file)
+  // the meter's refusals say Pro's price from the same place
+  const policy = readFileSync(root + 'web/app/server/metering/policy.mjs', 'utf8')
+  assert.doesNotMatch(policy, /Slatebox Pro,? \$\d/)
+  assert.equal(policy.match(/Slatebox Pro, \$\{PRO_MONTH\}/g).length, 4)
+  // the README does not say Business is bought in the app before its prices exist
+  assert.doesNotMatch(readFileSync(root + 'README.md', 'utf8'), /gets Slatebox Business[^.]*on the team page/)
 })

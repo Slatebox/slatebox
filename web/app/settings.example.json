@@ -79,13 +79,13 @@
   },
   "payments": {
     "business": {
-      "//": "Slatebox Business bought in the app for a team (server/business-billing.mjs). The ids of two recurring, per-unit, licensed Stripe prices the owner makes in Stripe: monthly and yearly, quantity = the team's members. The sheet shows the amount Stripe has for them. With either id empty, Business is not sold in the app and the team page says Talk to us.",
+      "//": "Slatebox Business bought in the app for a team (server/business-billing.mjs). The ids of two recurring, per-unit, licensed Stripe prices the owner makes in Stripe: monthly and yearly, quantity = the team's members who have joined (invitations not yet accepted are not billed). The sheet shows the amount Stripe has for them. Slatebox Cloud only (its Cloud key, server/cloud-lock.mjs). With either id empty, Business is not sold in the app and the team page says Talk to us.",
       "monthly": "",
       "yearly": ""
     }
   },
   "metering": {
-    "//": "Slatebox Cloud only: its AI and call meter. A self-hosted Slatebox has no meter; leave it off for local development and self-hosting. See server/metering/README.md.",
+    "//": "Slatebox Cloud only: its AI and call meter. It runs only where public.edition is cloud and enterprise.license holds Slatebox Cloud's own key (server/cloud-lock.mjs): anywhere else there is no meter, whatever this says. Leave it off for local development and self-hosting. See server/metering/README.md.",
     "enabled": false,
     "alertEmail": ""
   },

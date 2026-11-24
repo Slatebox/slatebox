@@ -10,6 +10,10 @@ export function payUi() {
   return { inApp: stripe.inApp === true && Boolean(publishableKey), publishableKey }
 }
 
+// Whether this server takes payments at all: only Slatebox Cloud, proved by its signed Cloud key
+// (server/cloud-lock.mjs writes public.payments.cloud at startup). Elsewhere no billing UI shows.
+export const paymentsHere = () => Meteor.settings.public.payments?.cloud === true
+
 // A payment attempt (design §7.3): a UUID v4, new when the sheet opens and after a change of amount
 // or interval or an expired session. Session creation is idempotent per attempt on the server.
 export const newAttempt = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : null)

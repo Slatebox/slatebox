@@ -31,9 +31,12 @@ import { TOP_UP_AMOUNTS, cardFeeMode } from '../../imports/api/billing/top-up.mj
 import { payAlso, refusalPay } from './refusal-pay.mjs'
 import { OWN_KEYS_CLOUD, ownKeysAllowed } from '../../imports/api/common/own-keys.mjs'
 import { isInstanceAdmin } from '../permissions'
+import { cloudOn, paymentsOn } from '../cloud-lock-meteor'
 
-// Decided once at startup: a Cloud server without metering.enabled stops here (policy.mjs).
-const METERED = meteringEnabled(Meteor.settings)
+// Decided once at startup: a Cloud server without metering.enabled stops here (policy.mjs), and
+// the meter runs only on Slatebox Cloud by its signed Cloud key (cloud-lock.mjs): a self-hosted
+// server has none, whatever metering.enabled says.
+const METERED = meteringEnabled(Meteor.settings, { cloud: cloudOn() })
 // Own AI and call keys are a self-hosted feature (own-keys.mjs): on Slatebox Cloud none is saved,
 // shown or used, and a key saved before stays stored but unused.
 const OWN_KEYS = ownKeysAllowed(Meteor.settings)
@@ -135,7 +138,8 @@ async function isTeamAdmin(user) {
 // What pay-route reads about this person, from the same facts meter.summary uses. teamAdmin is read
 // only when a team balance was the payer.
 async function refusalFlags(user, details = {}) {
-  const sold = Boolean(Meteor.settings.stripePrivateKey)
+  // payments run only on Slatebox Cloud by its Cloud key, with a Stripe key (cloud-lock.mjs)
+  const sold = paymentsOn()
   const settings = await meterSettings()
   return {
     proState: user && !user.isAnonymous ? proSummary(user.pro, Date.now()) : null,
@@ -519,13 +523,13 @@ Meteor.methods({
       frozen: Boolean(personal.frozen),
       // own keys are a self-hosted feature: never offered on Slatebox Cloud (own-keys.mjs)
       ownKeysAvailable: OWN_KEYS && Boolean(master),
-      topUpsAvailable: Boolean(Meteor.settings.stripePrivateKey),
+      topUpsAvailable: paymentsOn(),
       marginPercent: settings.marginPercent,
       emailVerified: Boolean(user.emails?.[0]?.verified),
       // Slatebox Pro: what the person holds, and whether it can be bought here
       proState: proSummary(user.pro, now),
       // on sale where Pro is needed (pro-billing.mjs proOnSale: 'now' on Cloud), where payments are configured
-      proAvailable: Boolean(Meteor.settings.stripePrivateKey) && proOnSale(settings),
+      proAvailable: paymentsOn() && proOnSale(settings),
       // the subscription looks out of date (a missed webhook): the profile asks pro.refresh
       proStale: Boolean(user.pro?.subscriptionId && ['active', 'trialing'].includes(user.pro.status) && now > (user.pro.currentPeriodEnd || 0)),
       // the pay sheet (design §3.2): whether it takes payments here (public.stripe.inApp, computed at

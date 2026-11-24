@@ -3,6 +3,7 @@
 // webhook writes through. Rules in ../business-billing.mjs. Prices are Stripe's, named in
 // settings.payments.business.monthly / .yearly; nothing here holds an amount.
 import { Meteor } from 'meteor/meteor'
+import { Accounts } from 'meteor/accounts-base'
 import { check, Match } from 'meteor/check'
 import CONSTANTS from '../../imports/api/common/constants'
 import AuthManager from '../../imports/api/common/AuthManager'
@@ -10,11 +11,12 @@ import { Audit, Organizations } from '../../imports/api/common/models'
 import { BUSINESS_CONTACT_URL } from '../../imports/api/business/catalog.mjs'
 import { PRICING_URL } from '../../imports/api/common/contact.mjs'
 import {
-  BUSINESS_COPY, BUSINESS_INTERVALS, billableMembers, businessOnSale, businessPriceIds, businessSource, businessSummary, checkBusinessPrice,
+  BUSINESS_COPY, BUSINESS_INTERVALS, MEMBER_FIELDS, alertOnce, billableMembers, businessOnSale, businessPriceIds, businessSource, businessSummary, checkBusinessPrice,
   handleBusinessEvent, matchBusinessMembers, mayManageBusiness, offerOfPrice, pricingPageDiffers, setBusinessRenewal, startBusinessCheckout, syncBusinessSubscription,
 } from '../business-billing.mjs'
 import { asMethodError, inAppOn, stripeClient } from './wallet'
 import { alert, meterOn } from '../metering/meteor'
+import { paymentsOn, requireCloudLicense } from '../cloud-lock-meteor'
 
 const orgs = () => Organizations.rawCollection()
 
@@ -27,22 +29,29 @@ export const businessStore = {
       || (customerId && await orgs().findOne({ 'business.customerId': customerId }, fields))
       || null
   },
-  // mayWriteBusiness as an update filter: never over a running contract, never over a newer read
-  async writeBusiness(orgId, fields, fetchedAt) {
+  // mayWriteBusiness as one atomic update filter: never over a running contract, never over a
+  // newer read. A contract's `until` may be a Date or a time in ms (membership.mjs): Mongo never
+  // compares a Date with a number, so both are matched. → { written, previous } (previous: the
+  // business the team held just before this write, for the race in syncBusinessSubscription)
+  async writeBusiness(orgId, fields, fetchedAt, { over = null } = {}) {
     const now = Date.now()
-    const result = await orgs().updateOne({
+    const result = await orgs().findOneAndUpdate({
       _id: orgId,
       $or: [
         { business: null },
+        // a subscription just cancelled as a duplicate (syncBusinessSubscription) gives way to the one kept
+        ...(over ? [{ 'business.source': 'stripe', 'business.subscriptionId': over }] : []),
         { 'business.source': 'stripe', $or: [{ 'business.fetchedAt': { $lt: fetchedAt } }, { 'business.fetchedAt': null }] },
-        { 'business.source': { $ne: 'stripe' }, $or: [{ 'business.status': { $ne: 'active' } }, { 'business.until': { $lte: now } }] },
+        { 'business.source': { $ne: 'stripe' }, $or: [{ 'business.status': { $ne: 'active' } }, { 'business.until': { $lte: now } }, { 'business.until': { $lte: new Date(now) } }] },
       ],
-    }, { $set: { business: fields } })
-    return result.modifiedCount === 1
+    }, { $set: { business: fields } }, { projection: { business: 1 }, returnDocument: 'before', includeResultMetadata: false })
+    // older drivers wrap the document in { value }
+    const before = result && Object.hasOwn(result, 'ok') && Object.hasOwn(result, 'value') ? result.value : result
+    return { written: Boolean(before), previous: before?.business ?? null }
   },
+  // members who have joined: invitations not yet accepted are not billed (acceptedMember)
   async countMembers(orgId) {
-    const members = await Meteor.users.rawCollection()
-      .find({ orgId }, { projection: { isAnonymous: 1, 'emails.address': 1 } }).toArray()
+    const members = await Meteor.users.rawCollection().find({ orgId }, { projection: MEMBER_FIELDS }).toArray()
     return billableMembers(members)
   },
   audit: entry => Audit.insertAsync({ ...entry, created: Date.now() }),
@@ -52,7 +61,8 @@ export const businessDeps = () => ({
   stripe: stripeClient(), store: businessStore, alert, now: () => Date.now(), priceIds: businessPriceIds(Meteor.settings),
 })
 
-const cloudReady = () => meterOn() && Boolean(Meteor.settings.stripePrivateKey)
+// Payments run only on Slatebox Cloud by its Cloud key, with a Stripe key (cloud-lock.mjs), and the meter on.
+const cloudReady = () => paymentsOn() && meterOn()
 
 // The webhook's first stop (stripeHooks.js, via methods/pro.js handleBilling): Business, else Pro.
 export async function handleBusiness(event) {
@@ -60,11 +70,11 @@ export async function handleBusiness(event) {
   return handleBusinessEvent(event, businessDeps())
 }
 
-/** After the team's members change (an invite, a removal): the subscription follows. Never throws. */
-export function membersChanged(orgId, { delayMs = 0 } = {}) {
+/** After the team's members change (an invitation accepted, a removal): the subscription follows. Never throws. */
+export function membersChanged(orgId, { delayMs = 0, recordedFirst = false } = {}) {
   if (!orgId || !cloudReady() || !businessOnSale(Meteor.settings)) return
   Meteor.setTimeout(() => {
-    matchBusinessMembers(businessDeps(), orgId)
+    matchBusinessMembers(businessDeps(), orgId, { recordedFirst })
       .catch(error => console.error('Business member count update failed', orgId, error.message)) // eslint-disable-line no-console
   }, delayMs)
 }
@@ -75,6 +85,7 @@ Meteor.startup(() => {
   if (!cloudReady() || !businessOnSale(Meteor.settings)) return
   Meteor.setInterval(async () => {
     const billed = await orgs().find({ 'business.source': 'stripe', 'business.stripeStatus': { $in: ['active', 'trialing', 'past_due'] } }, { projection: { _id: 1 } }).toArray()
+    if (!cloudReady()) return
     for (const org of billed) {
       await matchBusinessMembers(businessDeps(), org._id)
         .catch(error => console.error('Business member count check failed', org._id, error.message)) // eslint-disable-line no-console
@@ -82,8 +93,16 @@ Meteor.startup(() => {
   }, 60 * 60_000)
 })
 
+// A member who accepts an invitation joins the bill (invitations are not billed until then): their
+// first sign-ins check the team's quantity. matchBusinessMembers changes nothing when it matches.
+Accounts.onLogin(({ user }) => {
+  if (user?.orgId && !user.isAnonymous) membersChanged(user.orgId, { recordedFirst: true })
+})
+
 // Both prices read from Stripe by id (10 minutes in memory) and checked for shape; the amount is Stripe's.
 const priceCache = new Map()
+// the "differs from the pricing page" alert: once a day per price and amount, not on every read
+const mismatchAlert = alertOnce()
 async function businessPrice(stripe, interval) {
   const id = businessPriceIds(Meteor.settings)[interval]
   if (!id) throw new Meteor.Error('business-not-on-sale', BUSINESS_COPY.notOnSale)
@@ -95,7 +114,7 @@ async function businessPrice(stripe, interval) {
     await alert(`Slatebox Business checkout refused: the Stripe price ${id} (settings.payments.business) is not usable (${problem}).`)
     throw new Meteor.Error('business-unavailable', BUSINESS_COPY.priceProblem)
   }
-  if (pricingPageDiffers(price, interval)) {
+  if (pricingPageDiffers(price, interval) && mismatchAlert(`${id}:${price.unit_amount}:${price.currency}`)) {
     await alert(`The Stripe price ${id} for Slatebox Business (${interval}) is ${price.unit_amount} ${price.currency}, not what the pricing page states. The sheet shows and charges Stripe's amount; bring the pricing page in line (the figures in business/catalog.mjs, then pro-figures).`)
   }
   priceCache.set(id, { price, until: Date.now() + 10 * 60_000 })
@@ -140,6 +159,7 @@ Meteor.methods({
   // The team page and the sheet: whether Business is sold here, the amounts Stripe has for it, the
   // team's members and where the team stands. → { onSale, manager, members, prices, summary, contactUrl, pricingUrl }
   async [CONSTANTS.methods.business.offer]() {
+    requireCloudLicense()
     const { org, manager } = await teamMember()
     const base = { onSale: false, manager, members: await businessStore.countMembers(org._id), prices: [], summary: businessSummary(org), contactUrl: BUSINESS_CONTACT_URL, pricingUrl: PRICING_URL }
     if (!cloudReady() || !businessOnSale(Meteor.settings)) return base
@@ -159,6 +179,7 @@ Meteor.methods({
     check(interval, Match.OneOf('month', 'year'))
     check(ui, Match.OneOf('elements', 'hosted'))
     check(attemptId, Match.Maybe(String))
+    requireCloudLicense()
     if (!cloudReady()) throw new Meteor.Error('business-unavailable', BUSINESS_COPY.unavailable)
     if (!businessOnSale(Meteor.settings)) throw new Meteor.Error('business-not-on-sale', BUSINESS_COPY.notOnSale)
     const { user, org } = await teamManager()
@@ -177,6 +198,7 @@ Meteor.methods({
   // The return page asks until the subscription is on the team (the webhook usually arrives first). → { status }
   async [CONSTANTS.methods.business.confirm]({ sessionId } = {}) {
     check(sessionId, String)
+    requireCloudLicense()
     if (!cloudReady()) throw new Meteor.Error('business-unavailable', BUSINESS_COPY.unavailable)
     const { org } = await teamMember()
     const deps = businessDeps()
@@ -193,6 +215,7 @@ Meteor.methods({
   async [CONSTANTS.methods.business.renewal]({ renew, attemptId } = {}) {
     check(renew, Boolean)
     check(attemptId, Match.Maybe(String))
+    requireCloudLicense()
     if (!cloudReady()) throw new Meteor.Error('business-unavailable', BUSINESS_COPY.unavailable)
     const { org } = await teamManager()
     return managed(() => setBusinessRenewal(businessDeps(), { org, renew, attemptId }))
@@ -200,6 +223,7 @@ Meteor.methods({
 
   // Stripe's customer portal for the team's card and receipts (settings.stripe.businessPortalConfiguration, if set).
   async [CONSTANTS.methods.business.portal]() {
+    requireCloudLicense()
     if (!cloudReady()) throw new Meteor.Error('business-unavailable', BUSINESS_COPY.unavailable)
     const { org } = await teamManager()
     if (org.business?.source !== 'stripe' || !org.business.customerId) throw new Meteor.Error('business-none', BUSINESS_COPY.none)

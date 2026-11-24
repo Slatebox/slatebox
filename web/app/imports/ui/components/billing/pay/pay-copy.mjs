@@ -1,11 +1,14 @@
 // The pay sheet's words (design §5, §8). Pure, so the copy rules are tested (scripts/pay-sheet.test.mjs).
 // Never the processor's name, and none of the words the no-plans and no-conversion guards ban.
 import { billingDate } from '../billing-date.mjs'
+import { proPriceWords } from '../../../../api/pro/prices.mjs'
 
-// The Pro choices; scripts/pay-sheet.test.mjs checks the amounts against imports/api/pro/catalog.mjs.
+// The Pro choices, said from the one place Pro's prices are written (pro/prices.mjs; the server
+// sells only a Stripe price equal to it). scripts/pay-sheet.test.mjs checks them against the catalogue.
+const proChoice = (interval, more) => Object.freeze({ cents: proPriceWords(interval).cents, label: proPriceWords(interval).label, ...more })
 export const PRO_FIGURES = Object.freeze({
-  month: Object.freeze({ cents: 500, label: '$5 a month', sub: 'Cancel any time', line: 'Slatebox Pro, monthly', tag: null }),
-  year: Object.freeze({ cents: 5000, label: '$50 a year', sub: 'One payment a year', line: 'Slatebox Pro, yearly', tag: '2 months free' }),
+  month: proChoice('month', { sub: 'Cancel any time', line: 'Slatebox Pro, monthly', tag: null }),
+  year: proChoice('year', { sub: 'One payment a year', line: 'Slatebox Pro, yearly', tag: '2 months free' }),
 })
 
 export const money = cents => `$${((cents || 0) / 100).toFixed(2)}`

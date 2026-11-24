@@ -25,17 +25,19 @@ export const BUSINESS = Object.freeze({
   ]),
   // what every member adds to the team's pool: Slatebox Pro's credits (pro/catalog.mjs)
   creditsPerMember: 'pro',
-  // the in-app checkout is built; it is on sale where settings.payments.business names both prices
-  billingBuilt: true,
+  // Whether it is sold in the app is not a code flag: it is on sale on Slatebox Cloud (its Cloud
+  // key, server/cloud-lock.mjs) where settings.payments.business names both Stripe prices
+  // (GET /api/v1/instance capabilities.businessCheckout; pro-figures businessCheckout).
   contactLabel: 'Talk to us about Business',
   contactUrl: BUSINESS_CONTACT_URL,
 })
 
-// Per person, before tax: the figures the pricing page states (scripts/pro-figures.mjs), never
-// shown by the app itself. The prices sold are the Stripe prices settings name; when Stripe's amount
+// Per member, before tax: $8 a month, or $80 a year (two months free, as with Pro). The figures the
+// central pricing page (https://slatebox.com/plans/) states (scripts/pro-figures.mjs), never shown
+// by the app itself. The prices sold are the Stripe prices settings name; when Stripe's amount
 // differs from these, the server alerts (business-billing.mjs pricingPageDiffers) so the pricing
 // page is brought in line, and the sheet still shows and charges Stripe's amount.
 export const BUSINESS_PRICES = Object.freeze([
-  Object.freeze({ interval: 'month', unitAmountPerSeat: 600 }),
-  Object.freeze({ interval: 'year', unitAmountPerSeat: 6000 }),
+  Object.freeze({ interval: 'month', unitAmountPerSeat: 800 }),
+  Object.freeze({ interval: 'year', unitAmountPerSeat: 8000 }),
 ])

@@ -8,7 +8,7 @@ import CONSTANTS from '../../../../api/common/constants'
 import { allowance, globalMessage } from '../../../jotai/atoms'
 import { POLL_DELAYS_MS, initialSheet, sheetReducer } from './sheet-machine.mjs'
 import { PAY_PARAMS, payRequestFromQuery } from './pay-url.mjs'
-import { newAttempt, payUi } from './pay-env'
+import { newAttempt, payUi, paymentsHere } from './pay-env'
 import { BILLING_CONTACT_URL } from '../../../../api/common/contact.mjs'
 
 // The one pay sheet (design §2): mounted once at the app root (App.jsx), it renders nothing until a
@@ -62,6 +62,7 @@ export function usePaySheet() {
     if (pending.owner === owner.current) { pending.retry = null; pending.owner = null }
   }, [])
   const open = useCallback(({ action, wallet = null, reason = '', retry = null, from = 'profile', choice = null } = {}) => {
+    if (!paymentsHere()) return
     pending.retry = typeof retry === 'function' ? retry : null
     pending.owner = pending.retry ? owner.current : null
     prefetchPaySheet()
@@ -119,6 +120,13 @@ export default function PaySheetHost({ children }) {
     if (!userId || !account) return
     const asked = payRequestFromQuery(query)
     if (!asked) return
+    // a server without payments (not Slatebox Cloud) never opens the sheet: the link is dropped
+    if (!paymentsHere()) {
+      const next = new URLSearchParams(query)
+      PAY_PARAMS.forEach(p => next.delete(p))
+      setQuery(next, { replace: true })
+      return
+    }
     // A guest (an exec or MCP &pay= link opened signed out) saves their account or signs in first:
     // the link stays in the address, and the pane opens once they are a member (design §4.1).
     // Pro is the exception: a guest pays it at once and gives their email in the sheet (/pro, pro-claim.mjs).

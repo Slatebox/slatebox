@@ -610,8 +610,10 @@ async function inviteTeam(opts = {}, resend) {
         markSent: (teamId, id) => Meteor.users.updateAsync({ _id: id, orgId: teamId }, { $set: { teamEnrollmentSentAt: new Date() } }),
       },
     })
-    // a team billed for Slatebox Business pays for its new members from now (prorated)
-    if (!resend) membersChanged(orgId)
+    // a team billed for Slatebox Business pays for a member once they accept (business-billing.mjs
+    // acceptedMember; their sign-in updates the count): an invitation alone changes nothing, so
+    // this only catches a count that had drifted
+    if (!resend) membersChanged(orgId, { recordedFirst: true })
     return delivered
   } finally {
     await Organizations.updateAsync({ _id: orgId, 'invitationLease.id': lock }, { $unset: { invitationLease: 1 } })

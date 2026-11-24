@@ -18,6 +18,7 @@ import { RATE_LIMITS } from '../actions/rate-limit.mjs'
 import { createAccounts } from './account-summary.mjs'
 import { canStartAI, includedThisMonth, proSummaryFor } from '../metering/meteor'
 import { createInstanceDescriber } from './describe.mjs'
+import { cloudOn } from '../cloud-lock-meteor'
 import { resolveInstanceIdentity } from './identity.mjs'
 import { packageVersion } from './package-version.mjs'
 
@@ -89,6 +90,7 @@ export const describer = createInstanceDescriber({
   mailAvailable: verificationMailAvailable,
   accounts,
   env: process.env,
+  cloud: cloudOn,
   execLimits: execLimits(),
 })
 

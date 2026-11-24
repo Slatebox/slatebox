@@ -5,6 +5,11 @@
 // (sheet-machine.mjs). Tested in scripts/manage-pane.test.mjs. Never the processor's name.
 import { PRO_FIGURES, money } from './pay-copy.mjs'
 import { billingDate } from '../billing-date.mjs'
+import { proPriceWords, proPricesInWords } from '../../../../api/pro/prices.mjs'
+
+// Pro's prices in words, from the one place they are written (pro/prices.mjs)
+const MONTH = proPriceWords('month')
+const YEAR = proPriceWords('year')
 
 /** "December 22, 2026": the person's own calendar date, the same as the profile's (billing-date.mjs). */
 export const longDate = at => billingDate(at)
@@ -28,14 +33,14 @@ function switchRow(summary, preview) {
   const pro = summary.proState
   if (summary.proPending) {
     return {
-      key: 'pending', title: `Monthly from ${longDate(summary.proPending.from)}`, sub: 'Your year runs to the end, then $5 a month plus tax.',
+      key: 'pending', title: `Monthly from ${longDate(summary.proPending.from)}`, sub: `Your year runs to the end, then ${MONTH.label} plus tax.`,
       button: 'Keep yearly', job: 'keep-year', confirm: null, disabled: false,
     }
   }
   if (pro.interval === 'year') {
     const from = longDate(pro.renewsOn)
     return {
-      key: 'switch', title: 'Pay monthly instead', sub: `$5 a month plus tax from ${from}, when this year ends. Nothing changes until then.`,
+      key: 'switch', title: 'Pay monthly instead', sub: `${MONTH.label} plus tax from ${from}, when this year ends. Nothing changes until then.`,
       button: 'Switch', job: 'to-month', disabled: false,
       confirm: { text: `Switch to monthly from ${from}? Your year runs to the end, and nothing is refunded.`, yes: 'Switch at renewal', no: 'Not now' },
     }
@@ -80,10 +85,10 @@ export function manageView(summary, { preview, invoices } = {}) {
   const view = { status: { title: '', when: '', warn: false }, notices: [], pinned: null, rows: [], portal: { show: Boolean(pro), note: null } }
   if (!pro) {
     view.status.title = 'You do not have Slatebox Pro.'
-    if (summary?.proAvailable) view.rows.push({ key: 'get', title: 'Slatebox Pro', sub: '$5 a month or $50 a year, plus tax.', button: 'Get Pro', job: null, confirm: null, disabled: false })
+    if (summary?.proAvailable) view.rows.push({ key: 'get', title: 'Slatebox Pro', sub: `${proPricesInWords()}, plus tax.`, button: 'Get Pro', job: null, confirm: null, disabled: false })
     return view
   }
-  const amount = pro.interval === 'year' ? 'yearly, $50' : 'monthly, $5'
+  const amount = pro.interval === 'year' ? `yearly, ${YEAR.amount}` : `monthly, ${MONTH.amount}`
   const ending = Boolean(pro.active && pro.endsOn)
   if (pro.pastDue) {
     Object.assign(view.status, { title: "Pro's last payment didn't go through", when: '', warn: true })
@@ -93,7 +98,7 @@ export function manageView(summary, { preview, invoices } = {}) {
     Object.assign(view.status, { title: `Pro is on · ${amount} plus tax`, when: pro.renewsOn ? `Renews on ${longDate(pro.renewsOn)}` : '' })
   } else {
     view.status.title = 'Your Pro has ended'
-    if (summary.proAvailable) view.rows.push({ key: 'get', title: 'Slatebox Pro', sub: '$5 a month or $50 a year, plus tax.', button: 'Get Pro again', job: null, confirm: null, disabled: false })
+    if (summary.proAvailable) view.rows.push({ key: 'get', title: 'Slatebox Pro', sub: `${proPricesInWords()}, plus tax.`, button: 'Get Pro again', job: null, confirm: null, disabled: false })
     view.rows.push(receiptsRow(invoices))
     return view
   }
@@ -122,7 +127,7 @@ export function manageView(summary, { preview, invoices } = {}) {
   view.rows.push(receiptsRow(invoices))
 
   if (ending) {
-    view.rows.push({ key: 'renewal', title: 'Keep Pro', sub: `Pro renews on ${longDate(pro.endsOn)} again, ${pro.interval === 'year' ? '$50 a year' : '$5 a month'} plus tax.`, button: 'Keep Pro', job: 'keep', confirm: null, disabled: false })
+    view.rows.push({ key: 'renewal', title: 'Keep Pro', sub: `Pro renews on ${longDate(pro.endsOn)} again, ${pro.interval === 'year' ? YEAR.label : MONTH.label} plus tax.`, button: 'Keep Pro', job: 'keep', confirm: null, disabled: false })
   } else {
     const until = longDate(pro.renewsOn || pro.endsOn)
     const dropped = summary.proPending ? ' Your switch to monthly is dropped.' : ''

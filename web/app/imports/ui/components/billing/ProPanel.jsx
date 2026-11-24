@@ -10,6 +10,7 @@ import { PRICING_URL } from '../../../api/common/contact.mjs'
 import { AccountActions, AccountNote, AccountSection, FinePrint, SPACE } from '../../common/AccountLayout'
 import { prefetchPaySheet, usePaySheet } from './pay/PaySheetHost'
 import { proStatusText } from './billing-date.mjs'
+import { proPriceWords, proPricesInWords } from '../../../api/pro/prices.mjs'
 
 // Profile → Credits → Slatebox Pro: one optional personal subscription on Slatebox Cloud, monthly
 // or yearly, that includes AI and calls each month (summary.credits: the meter's own numbers in
@@ -44,7 +45,8 @@ export default function ProPanel({ summary, onChange }) {
       {status && <Typography>{status}</Typography>}
       {!holding && (
         <Typography>
-          Slatebox is free. Pro is $5 a month or $50 a year (two months free), plus tax where applicable, for you alone, and includes AI on Slatebox, image search and calls you start. Cancel any time.
+          Slatebox is free. Pro is {proPricesInWords()} (two months free), plus tax where applicable, for you alone, and includes AI on Slatebox, image search and calls you start. Cancel any time.{' '}
+          <Link href={PRICING_URL} target="_blank" rel="noopener noreferrer">See pricing</Link>
         </Typography>
       )}
       {summary.credits?.sentence && (
@@ -57,8 +59,8 @@ export default function ProPanel({ summary, onChange }) {
       {summary.proAvailable && (
         <AccountActions>
           {!holding && summary.emailVerified && <>
-            <Button variant="contained" onPointerEnter={prefetchPaySheet} onClick={() => getPro('month')}>Get Pro, $5 a month</Button>
-            <Button variant="outlined" onPointerEnter={prefetchPaySheet} onClick={() => getPro('year')}>Get Pro, $50 a year</Button>
+            <Button variant="contained" onPointerEnter={prefetchPaySheet} onClick={() => getPro('month')}>Get Pro, {proPriceWords('month').label}</Button>
+            <Button variant="outlined" onPointerEnter={prefetchPaySheet} onClick={() => getPro('year')}>Get Pro, {proPriceWords('year').label}</Button>
           </>}
           {!holding && !summary.emailVerified && <Typography variant="body2">Confirm your email address to get Slatebox Pro.</Typography>}
           {pro && <Button variant={holding ? 'contained' : 'outlined'} onPointerEnter={prefetchPaySheet} onClick={manage}>{manageLabel}</Button>}

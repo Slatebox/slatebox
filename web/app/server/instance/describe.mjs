@@ -11,14 +11,21 @@
 import { CONTRACT_VERSION } from '../actions/registry.mjs'
 import { EXEC_LIMITS, publicLimits } from '../exec/limits.mjs'
 import { AI_PROVIDERS, getProviderApiKey } from '../methods/ai/provider.mjs'
+import { cloudLicensed } from '../cloud-lock.mjs'
+import { businessOnSale } from '../business-billing.mjs'
 
 export const AGENT_GUIDE = 'https://docs.slatebox.com/developers/slateboxapi/terminal-and-agents/'
 const UNITS = { b: 1, kb: 1024, mb: 1024 * 1024 }
 
 const selfHosted = (settings) => settings.public?.env === 'selfhost'
-export const billingAvailable = (settings) => !selfHosted(settings) && Boolean(settings.stripePrivateKey)
+// Payments run only on Slatebox Cloud by its signed Cloud key (cloud-lock.mjs): `cloud` says so.
+// Settings alone (a Stripe key, metering.enabled) never make billing available.
+export const billingAvailable = (settings, { cloud = false } = {}) => cloud === true && !selfHosted(settings) && Boolean(settings.stripePrivateKey)
+// Slatebox Business sold in the app: billing, and both Business prices named in settings
+// (payments.business.monthly / .yearly). Docs and site guards key on this, never on a code flag.
+export const businessCheckout = (settings, { cloud = false } = {}) => billingAvailable(settings, { cloud }) && businessOnSale(settings)
 
-export function instanceCapabilities(settings, { mailAvailable, env = {} }) {
+export function instanceCapabilities(settings, { mailAvailable, env = {}, cloud = false }) {
   const self = selfHosted(settings)
   // self-hosted: the operator turned AI on, or connected a model in settings.ai (connections.mjs)
   const drafting = self
@@ -31,7 +38,8 @@ export function instanceCapabilities(settings, { mailAvailable, env = {} }) {
     transcription: Boolean(settings.deepgram?.secret) && settings.metering?.enabled !== true,
     // instance: the operator's own model or key; slatebox: Slatebox runs it (Cloud).
     aiDrafting: drafting ? { available: true, provider: self ? 'instance' : 'slatebox' } : { available: false, provider: 'none' },
-    billing: billingAvailable(settings),
+    billing: billingAvailable(settings, { cloud }),
+    businessCheckout: businessCheckout(settings, { cloud }),
     fileStore: Boolean(settings.aws?.imageBucket && settings.aws?.cloudUrl),
     render: false,
     icons: Boolean(settings.nounProject?.key),
@@ -56,6 +64,8 @@ export function createInstanceDescriber({
   mailAvailable,
   accounts,
   env = {},
+  // whether this server is Slatebox Cloud by its signed Cloud key (cloud-lock.mjs); read per answer
+  cloud = () => cloudLicensed({ settings, env }),
   // exec's limits as this instance applies them (a self-hosted operator may change them).
   execLimits = EXEC_LIMITS,
 }) {
@@ -113,7 +123,7 @@ export function createInstanceDescriber({
         engine: engine.version,
         relay: settings.build?.relay ?? null,
       },
-      capabilities: instanceCapabilities(settings, { mailAvailable, env }),
+      capabilities: instanceCapabilities(settings, { mailAvailable, env, cloud: cloud() === true }),
       limits: fixed.limits,
       canvas: fixed.canvas,
       workshops: fixed.workshops,

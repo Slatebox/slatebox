@@ -11,6 +11,10 @@
 // users.pro is (pro-billing.mjs): a webhook only records state, so a retried or late event never
 // grants twice, and a write from an older read never replaces a newer one. A membership written by
 // staff for a contract (no source, or source 'contract') is never overwritten while it runs.
+//
+// Payments run only on Slatebox Cloud by its signed Cloud key (server/cloud-lock.mjs): the Meteor
+// glue never builds a Stripe client elsewhere, so nothing here runs on a self-hosted server.
+import { randomUUID } from 'node:crypto'
 import { HELD_STATUSES, PRO_GRACE_MS, chargePaidAnInvoice, refundTargetOfInvoice } from './pro-billing.mjs'
 import { SHEET_INTEGRATION, attemptPart, checkUi, checkoutMinute, sessionAnswer, sessionUi } from './pay-attempt.mjs'
 import { businessActive } from '../imports/api/business/membership.mjs'
@@ -84,11 +88,30 @@ export function pricingPageDiffers(price, interval) {
 /** What the sheet shows for a price: the amount per member, read from Stripe. */
 export const offerOfPrice = (price, interval) => ({ interval, unitAmount: price.unit_amount, currency: price.currency })
 
-/** The people a team pays for: members with an account of their own (not guests, not imports not yet invited); at least 1. */
-export function billableMembers(users) {
-  const count = (users || []).filter(u => u && u.isAnonymous !== true && Boolean(u.emails?.[0]?.address)).length
-  return Math.max(1, count)
+/**
+ * Whether a team member has joined: an invitation creates the account at once (team-invitations.mjs),
+ * with no password, an unconfirmed address and no sign-in. A member who confirmed the address (the
+ * enrollment link does), set a password or has signed in has accepted.
+ */
+export function acceptedMember(user) {
+  if (!user || user.isAnonymous === true || !user.emails?.[0]?.address) return false
+  if (user.emails[0].verified === true) return true
+  if (user.services?.password?.bcrypt || user.services?.password?.argon2) return true
+  return Array.isArray(user.services?.resume?.loginTokens) && user.services.resume.loginTokens.length > 0
 }
+
+/**
+ * The people a team pays for: members who have joined, with an account of their own. Guests are
+ * never counted, nor invitations not yet accepted (the team page says so); at least 1.
+ */
+export function billableMembers(users) {
+  return Math.max(1, (users || []).filter(acceptedMember).length)
+}
+
+// The Mongo fields acceptedMember reads (methods/business.js countMembers).
+export const MEMBER_FIELDS = Object.freeze({
+  isAnonymous: 1, emails: 1, 'services.password.bcrypt': 1, 'services.password.argon2': 1, 'services.resume.loginTokens.when': 1,
+})
 
 /** Whether this person may buy or change Business for their team: its owner, or an admin of it. */
 export const mayManageBusiness = ({ user, admin }) => Boolean(user?.orgId && (user.isOrgOwner === true || admin === true))
@@ -189,6 +212,22 @@ export function mayWriteBusiness(stored, fetchedAt, now = Date.now()) {
   return !Number.isFinite(stored.fetchedAt) || stored.fetchedAt < fetchedAt
 }
 
+/**
+ * The price-mismatch alert, at most once per price, amount and window (a day by default), so a
+ * difference left for a while does not alert on every price read.
+ * → (key: string) => boolean  true when this one may alert now
+ */
+export function alertOnce({ now = () => Date.now(), windowMs = 86_400_000 } = {}) {
+  const sent = new Map()
+  return key => {
+    const at = now()
+    const last = sent.get(key)
+    if (last !== undefined && at - last < windowMs) return false
+    sent.set(key, at)
+    return true
+  }
+}
+
 /** What the team page and its agents see about the team's Business, or null. */
 export function businessSummary(org, now = Date.now()) {
   const business = org?.business
@@ -211,9 +250,11 @@ export function businessSummary(org, now = Date.now()) {
 }
 
 /**
- * deps: { stripe, store, alert(text), now(), priceIds: { month, year } }
+ * deps: { stripe, store, alert(text), now(), priceIds: { month, year }, changeId?() }
  * store: { findOrg({ orgId, subscriptionId, customerId }) → { _id, business } | null,
- *          writeBusiness(orgId, fields, fetchedAt) → boolean (mayWriteBusiness),
+ *          writeBusiness(orgId, fields, fetchedAt, { over? }) → { written: boolean, previous: business | null }
+ *            (mayWriteBusiness as one atomic update, or over the subscription named `over`, one just
+ *            cancelled as a duplicate; previous: what the team held just before),
  *          countMembers(orgId) → number (billableMembers), audit(entry) }
  */
 // fetchedAt is when the read of Stripe STARTED (as in pro-billing.mjs syncSubscription).
@@ -234,21 +275,49 @@ export async function syncBusinessSubscription(deps, subscriptionId, { orgId = n
     // an older subscription that has ended never replaces the one the team holds
     if (!HELD_STATUSES.has(sub.status)) return { kind: 'business', handled: true, ignored: 'ended' }
     // two held at once (two admins paid in a race): the later one is cancelled at once and refunded
-    const other = await stripe.subscriptions.retrieve(stored.subscriptionId, { expand: ['items.data.price'] }).catch(() => null)
-    if (other && HELD_STATUSES.has(other.status)) {
-      const [keep, drop] = (other.created ?? 0) <= (sub.created ?? 0) ? [other, sub] : [sub, other]
-      await cancelDuplicate(deps, drop, org._id)
-      if (keep.id !== stored.subscriptionId) await store.writeBusiness(org._id, businessFromSubscription(keep, fetchedAt), fetchedAt)
-      return { kind: 'business', handled: true, duplicate: drop.id }
-    }
+    const duplicate = await settleDuplicate(deps, org._id, sub, stored.subscriptionId)
+    if (duplicate) return { kind: 'business', handled: true, duplicate }
   }
   if (stored && stored.source !== 'stripe' && businessActive(org, now()) && HELD_STATUSES.has(sub.status)) {
     // staff wrote a contract for this team: it stays; the paid subscription is looked at by hand
     await alert(`A Slatebox Business subscription was paid for a team with a contract: ${sub.id} (team ${org._id}). The contract stays; refund or cancel the subscription by hand.`)
     return { kind: 'business', handled: true, ignored: 'contract' }
   }
-  const written = await store.writeBusiness(org._id, businessFromSubscription(sub, fetchedAt), fetchedAt)
+  const { written, previous } = await store.writeBusiness(org._id, businessFromSubscription(sub, fetchedAt), fetchedAt)
+  // The race the read above cannot see: two first webhooks for two subscriptions both found the
+  // team empty. Whichever write comes second sees the other one (previous, or the team as it now
+  // stands when its own write was refused) and settles it at once: the older stays, the newer is
+  // cancelled and refunded.
+  const other = written ? previous : (await store.findOrg({ orgId: org._id }))?.business
+  if (other?.source === 'stripe' && other.subscriptionId && other.subscriptionId !== sub.id && HELD_STATUSES.has(sub.status) && HELD_STATUSES.has(other.stripeStatus)) {
+    const duplicate = await settleDuplicate(deps, org._id, sub, other.subscriptionId)
+    if (duplicate) return { kind: 'business', handled: true, duplicate }
+  }
+  if (!written) {
+    // refused for a reason other than a newer read of this same subscription (a contract that is
+    // still running, or a store that could not match the team): a paid team without Business must
+    // never go unnoticed
+    const newer = other?.source === 'stripe' && other.subscriptionId === sub.id && Number.isFinite(other.fetchedAt) && other.fetchedAt >= fetchedAt
+    if (!newer && HELD_STATUSES.has(sub.status)) {
+      await alert(`A paid Slatebox Business subscription could not be recorded on its team: ${sub.id} (team ${org._id}, team holds ${other?.source || 'nothing'}${other?.status ? ' ' + other.status : ''}). Look at it by hand: the team is charged without Business.`)
+    }
+  }
   return { kind: 'business', handled: true, org: org._id, written, sub }
+}
+
+// Two held subscriptions for one team: the older stays and is (re)written, the newer is cancelled
+// and refunded. → the cancelled subscription's id, or null when the other one is not held.
+async function settleDuplicate(deps, orgId, sub, otherId) {
+  const { stripe, store, now } = deps
+  const other = await stripe.subscriptions.retrieve(otherId, { expand: ['items.data.price'] }).catch(() => null)
+  if (!other || !HELD_STATUSES.has(other.status)) return null
+  const [keep, drop] = (other.created ?? 0) <= (sub.created ?? 0) ? [other, sub] : [sub, other]
+  await cancelDuplicate(deps, drop, orgId)
+  const at = now()
+  const kept = await stripe.subscriptions.retrieve(keep.id, { expand: ['items.data.price'] })
+  // over: the cancelled one may be replaced whatever its read time (two reads in the same ms tie)
+  await store.writeBusiness(orgId, businessFromSubscription(kept, at), at, { over: drop.id })
+  return drop.id
 }
 
 async function cancelDuplicate({ stripe, store, alert }, sub, orgId) {
@@ -265,26 +334,46 @@ async function cancelDuplicate({ stripe, store, alert }, sub, orgId) {
 }
 
 /**
- * Keeps the subscription's quantity equal to the team's members: a member added or removed changes
- * the quantity, and Stripe prorates the change on the next invoice. Runs from the webhook (every
- * Business event, and invoice.upcoming before a renewal), after an invite, after a removal, and on
- * the server's periodic check. The webhook that follows the update records the new quantity.
+ * How a quantity change is charged. Monthly: prorated on the next invoice (create_prorations).
+ * Yearly: members added are invoiced at once for the rest of the year (always_invoice), so a team
+ * does not add people in month two and pay for them only at the yearly renewal; members removed
+ * become a prorated credit on the next invoice (create_prorations), never a refund.
+ */
+export const prorationFor = (interval, from, to) => (interval === 'year' && to > from ? 'always_invoice' : 'create_prorations')
+
+/**
+ * Keeps the subscription's quantity equal to the team's members: a member who joins or leaves
+ * changes the quantity (prorationFor). Runs from the webhook (every Business event, and
+ * invoice.upcoming before a renewal), after an invite is accepted, after a removal, and on the
+ * server's periodic check. The quantity compared is the one Stripe has now (read here, or the
+ * subscription the webhook just read), not the one last recorded, so a change made while a webhook
+ * is on its way is never missed or doubled. Each change has its own id in the idempotency key: a
+ * change back and forth (3 → 4 → 3 → 4) is never taken for a replay.
  * → { changed: boolean, from?, to? }
  */
-export async function matchBusinessMembers(deps, orgId) {
-  const { stripe, store, now } = deps
+// recordedFirst: compare with the recorded count first and read Stripe only when it differs (a
+// sign-in, which happens often; the periodic check and the webhook always compare with Stripe).
+export async function matchBusinessMembers(deps, orgId, { sub: given = null, recordedFirst = false } = {}) {
+  const { stripe, store } = deps
   const org = await store.findOrg({ orgId })
   const business = org?.business
   if (!business || business.source !== 'stripe' || !business.subscriptionId || !business.itemId) return { changed: false }
   // an ended subscription is not changed; a cancelled one keeps its quantity to the end
   if (!LIVE_STATUSES.has(business.stripeStatus) && business.stripeStatus !== 'past_due') return { changed: false }
   const to = await store.countMembers(orgId)
-  const from = business.members
-  if (!Number.isInteger(to) || to < 1 || to === from) return { changed: false }
+  if (!Number.isInteger(to) || to < 1) return { changed: false }
+  if (recordedFirst && to === business.members) return { changed: false }
+  const sub = given?.id === business.subscriptionId ? given : await stripe.subscriptions.retrieve(business.subscriptionId, { expand: ['items.data.price'] })
+  if (!LIVE_STATUSES.has(sub.status) && sub.status !== 'past_due') return { changed: false }
+  const item = (sub.items?.data || []).find(i => i.id === business.itemId) || sub.items?.data?.[0]
+  const from = Number.isInteger(item?.quantity) ? item.quantity : business.members
+  if (!item?.id || to === from) return { changed: false }
+  const interval = item.price?.recurring?.interval ?? business.interval
+  const changeId = deps.changeId ? deps.changeId() : randomUUID()
   await stripe.subscriptions.update(business.subscriptionId, {
-    items: [{ id: business.itemId, quantity: to }],
-    proration_behavior: 'create_prorations',
-  }, { idempotencyKey: `business-members:${business.subscriptionId}:${from}:${to}:${checkoutMinute(now())}` })
+    items: [{ id: item.id, quantity: to }],
+    proration_behavior: prorationFor(interval, from, to),
+  }, { idempotencyKey: `business-members:${business.subscriptionId}:${from}:${to}:${changeId}` })
   await store.audit({ type: 'business-members-changed', orgId, subscriptionId: business.subscriptionId, from, to })
   return { changed: true, from, to }
 }
@@ -306,6 +395,15 @@ export async function setBusinessRenewal(deps, { org, renew, attemptId = null })
 
 const subscriptionOfInvoice = invoice => idOf(invoice?.subscription) ?? idOf(invoice?.parent?.subscription_details?.subscription)
 
+// Whether an invoice says by itself that it is Business: the subscription's metadata Stripe copies
+// onto it, or a line at a configured Business price.
+function invoiceSaysBusiness(invoice, priceIds = {}) {
+  const meta = invoice?.parent?.subscription_details?.metadata || invoice?.subscription_details?.metadata
+  if (meta?.product === 'business') return true
+  const ids = new Set(Object.values(priceIds).filter(Boolean))
+  return (invoice?.lines?.data || []).some(line => ids.has(idOf(line?.price)) || ids.has(idOf(line?.pricing?.price_details?.price)))
+}
+
 /**
  * One Stripe event, before Pro's handler: → { handled: true } for Business, { handled: false }
  * otherwise (Pro, top-ups and cards go on as before).
@@ -317,7 +415,7 @@ export async function handleBusinessEvent(event, deps) {
   if (type === 'checkout.session.completed' || type === 'checkout.session.async_payment_succeeded') {
     if (object.mode !== 'subscription' || !object.subscription || object.metadata?.product !== 'business') return { handled: false }
     const out = await syncBusinessSubscription(deps, idOf(object.subscription), { orgId: object.metadata?.orgId || object.client_reference_id })
-    if (out.org) await matchBusinessMembers(deps, out.org)
+    if (out.org) await matchBusinessMembers(deps, out.org, { sub: out.sub })
     return { handled: true }
   }
   if (type === 'charge.refunded' || type === 'charge.dispute.created' || type === 'charge.dispute.closed') {
@@ -338,9 +436,17 @@ export async function handleBusinessEvent(event, deps) {
   // the metadata on the event's own object saves a read for anything that is clearly not Business
   if (/^customer\.subscription\./.test(type) && !isBusinessSubscription(object, deps.priceIds)) return { handled: false }
   const fetchedAt = deps.now()
-  const sub = await stripe.subscriptions.retrieve(subscriptionId, { expand: ['items.data.price'] })
+  let sub
+  try {
+    sub = await stripe.subscriptions.retrieve(subscriptionId, { expand: ['items.data.price'] })
+  } catch (error) {
+    // Business's lookup never holds up Pro: an invoice that does not say it is Business goes on
+    // to Pro's handler, which reads the subscription itself. A Business event is retried by Stripe.
+    if (/^invoice\./.test(type) && !invoiceSaysBusiness(object, deps.priceIds)) return { handled: false }
+    throw error
+  }
   if (!isBusinessSubscription(sub, deps.priceIds)) return { handled: false, sub, fetchedAt }
   const out = await syncBusinessSubscription(deps, subscriptionId, { sub, fetchedAt })
-  if (out.org) await matchBusinessMembers(deps, out.org)
+  if (out.org) await matchBusinessMembers(deps, out.org, { sub })
   return { handled: true }
 }

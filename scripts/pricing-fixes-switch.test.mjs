@@ -198,7 +198,9 @@ test('#4: a missing or misspelled public.env does not run unmetered', () => {
   assert.throws(() => meteringEnabled({ public: { env: 'production' } }), /metering\.enabled/)
   assert.throws(() => meteringEnabled({ public: { env: 'Prod' } }), /metering\.enabled/)
   // a deliberate setting is honoured
-  assert.equal(meteringEnabled({ public: { env: 'production' }, metering: { enabled: true } }), true)
+  // Restated (owner decision 2026-11-24): honoured on Slatebox Cloud by its Cloud key only
+  assert.equal(meteringEnabled({ public: { env: 'production' }, metering: { enabled: true } }, { cloud: true }), true)
+  assert.equal(meteringEnabled({ public: { env: 'production' }, metering: { enabled: true } }), false)
   assert.equal(meteringEnabled({ public: { env: 'staging' }, metering: { enabled: false } }), false)
   assert.equal(meteringEnabled({ public: { env: 'dev' } }), false)
   assert.equal(meteringEnabled({ public: { env: 'selfhost' } }), false)

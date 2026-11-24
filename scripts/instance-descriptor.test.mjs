@@ -52,7 +52,9 @@ const selfHostSettings = () => ({
 
 let world;
 
-function makeWorld(settings = cloudSettings()) {
+// cloudKey: whether the server is Slatebox Cloud by its signed Cloud key (server/cloud-lock.mjs).
+// Restated (owner decision 2026-11-24): payments are on only with it, so Cloud's world says so.
+function makeWorld(settings = cloudSettings(), { cloudKey = settings.public?.env === "prod" } = {}) {
   const users = memoryMeteorCollection("user");
   users.docs.push(
     { _id: "owner", emails: [{ address: "ada@example.com", verified: true }], profile: { firstName: "Ada", lastName: "Lovelace" }, requestingEducationCertification: true },
@@ -99,6 +101,7 @@ function makeWorld(settings = cloudSettings()) {
     rateLimits: RATE_LIMITS,
     mailAvailable: () => true,
     accounts,
+    cloud: () => cloudKey,
   });
   const deps = { apiTokens: service, instance: describer, accounts };
   const build = () => createAppRegistry({ deps });
@@ -164,7 +167,9 @@ test("with a token, GET /instance adds build, capabilities, limits, kinds, actio
   assert.deepEqual(body.capabilities, {
     // transcription is off on a metered server until it is priced (pricing-fixes-switch #2)
     mail: true, calls: true, transcription: false, aiDrafting: { available: true, provider: "slatebox" },
-    billing: true, fileStore: true, render: false, icons: true, customWorkshopKinds: false,
+    // Restated (owner decision 2026-11-24): businessCheckout says whether Business is sold in the
+    // app (Cloud's key, and both Business prices named in settings: none here)
+    billing: true, businessCheckout: false, fileStore: true, render: false, icons: true, customWorkshopKinds: false,
   });
   assert.deepEqual(body.limits, {
     rate: { perToken: 120, perAccount: 240, windowSeconds: 60 },
@@ -257,7 +262,7 @@ test("Cloud and a self-hosted instance answer the same shape with different fact
   assert.deepEqual(selfFull.build, { app: null, engine: engineVersion, relay: null });
   assert.deepEqual(selfFull.capabilities, {
     mail: true, calls: false, transcription: false, aiDrafting: { available: true, provider: "instance" },
-    billing: false, fileStore: false, render: false, icons: false, customWorkshopKinds: false,
+    billing: false, businessCheckout: false, fileStore: false, render: false, icons: false, customWorkshopKinds: false,
   });
   assert.equal("plans" in selfFull, false);
   // No plan prompts on self-host: no plan, no education, no meter, no Pro, no Credits link.

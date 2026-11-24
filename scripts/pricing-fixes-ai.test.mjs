@@ -70,13 +70,19 @@ test('C2: Slatebox Cloud refuses to start without the meter; dev and self-host d
   assert.throws(() => meteringEnabled({ public: { env: 'prod' }, metering: { enabled: false } }), /metering\.enabled/)
   assert.throws(() => meteringEnabled({ public: { env: 'test' } }), /metering\.enabled/)
   assert.throws(() => meteringEnabled({ public: { env: 'stage' }, metering: {} }), /metering\.enabled/)
-  assert.equal(meteringEnabled({ public: { env: 'prod' }, metering: { enabled: true } }), true)
+  // Restated (owner decision 2026-11-24): the meter runs only on Slatebox Cloud by its Cloud key
+  // (cloud-lock.mjs); production without the key does not start either
+  assert.equal(meteringEnabled({ public: { env: 'prod' }, metering: { enabled: true } }, { cloud: true }), true)
+  assert.throws(() => meteringEnabled({ public: { env: 'prod' }, metering: { enabled: true } }), /Slatebox Cloud key/)
   assert.equal(meteringEnabled({ public: { env: 'test' }, metering: { enabled: false } }), false)
   assert.equal(meteringEnabled({ public: { env: 'dev' } }), false)
   assert.equal(meteringEnabled({ public: { env: 'selfhost' } }), false)
-  assert.equal(meteringEnabled({ public: { env: 'selfhost' }, metering: { enabled: true } }), true)
+  // Restated: a self-hosted server has no meter, whatever its settings say
+  assert.equal(meteringEnabled({ public: { env: 'selfhost' }, metering: { enabled: true } }), false)
+  assert.equal(meteringEnabled({ public: { env: 'selfhost' }, metering: { enabled: true } }, { cloud: false }), false)
   // decided once at startup, so a bad setting stops the server instead of the first request
-  assert.match(source('server/metering/meteor.js'), /const METERED = meteringEnabled\(Meteor\.settings\)/)
+  // Restated (owner decision 2026-11-24): with the Cloud lock's answer beside the settings
+  assert.match(source('server/metering/meteor.js'), /const METERED = meteringEnabled\(Meteor\.settings, \{ cloud: cloudOn\(\) \}\)/)
 })
 
 test('H1: 200 parallel requests from one account stay within 30 drafts, $0.50 a day and $1.00 a month', async () => {

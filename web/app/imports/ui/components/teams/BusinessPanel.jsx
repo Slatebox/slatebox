@@ -12,7 +12,7 @@ import { Organizations } from '../../../api/common/models'
 import { PRICING_URL } from '../../../api/common/contact.mjs'
 import { BUSINESS } from '../../../api/business/catalog.mjs'
 import { usePaySheet, prefetchPaySheet } from '../billing/pay/PaySheetHost'
-import { newAttempt } from '../billing/pay/pay-env'
+import { newAttempt, paymentsHere } from '../billing/pay/pay-env'
 import { billingDate } from '../billing/billing-date.mjs'
 
 // Slatebox Business on the team page: get it for the team (owner or admin, where the server sells
@@ -29,6 +29,8 @@ export default function BusinessPanel() {
     return business ? `${business.status}:${business.stripeStatus}:${business.cancelAtPeriodEnd}:${business.members}` : 'none'
   }, [])
   const load = useCallback(() => {
+    // Slatebox Business is Slatebox Cloud's: a server without payments shows no panel at all
+    if (!paymentsHere()) return
     Meteor.callAsync(CONSTANTS.methods.business.offer).then(setOffer).catch(() => setOffer(null))
   }, [])
   useEffect(load, [stamp])
@@ -69,7 +71,7 @@ export default function BusinessPanel() {
     else line += '.'
     body = (
       <>
-        <Typography variant="body2">{line} Adding or removing a member changes the next payment, prorated. {pricing}</Typography>
+        <Typography variant="body2">{line} You pay for members who have joined: invitations not yet accepted are not counted. {summary.interval === 'year' ? 'A member who joins is charged at once for the rest of the year; one who leaves becomes a credit on the next payment.' : 'A member who joins or leaves changes the next payment, prorated.'} {pricing}</Typography>
         {manager && (
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.5 }}>
             <Button variant="outlined" disabled={busy} onClick={portal}>Card and receipts</Button>
@@ -84,7 +86,7 @@ export default function BusinessPanel() {
   } else if (onSale && manager) {
     body = (
       <>
-        <Typography variant="body2">{BUSINESS.summary} A shared AI and call pool for the team, and every member can invite outside agents onto slates. {pricing}</Typography>
+        <Typography variant="body2">{BUSINESS.summary} A shared AI and call pool for the team, and every member can invite outside agents onto slates. You pay for the {offer.members} {offer.members === 1 ? 'member who has' : 'members who have'} joined; invitations not yet accepted are not counted until they are. {pricing}</Typography>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.5 }}>
           <Button variant="contained" disableElevation onPointerEnter={prefetchPaySheet} onClick={() => open({ action: 'business', choice: { interval: 'month' } })}>Get Business monthly</Button>
           <Button variant="outlined" onPointerEnter={prefetchPaySheet} onClick={() => open({ action: 'business', choice: { interval: 'year' } })}>Get Business yearly</Button>

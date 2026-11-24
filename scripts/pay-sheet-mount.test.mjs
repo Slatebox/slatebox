@@ -56,7 +56,9 @@ const session = {
   tax: { status: 'requires_address' }, status: { type: 'open' }, canConfirm: false,
 }
 globalThis.__paySheetTest = {
-  settings: { public: { stripe: { inApp: true, publishableKey: 'pk_test_sheet' }, baseUrl: 'http://localhost' } },
+  // Slatebox Cloud's public settings as its server writes them at start: payments.cloud is true only
+  // with the signed Cloud key (server/cloud-lock.mjs; the last case here turns it off)
+  settings: { public: { stripe: { inApp: true, publishableKey: 'pk_test_sheet' }, payments: { cloud: true }, baseUrl: 'http://localhost' } },
   userId: () => 'u1',
   user: () => ({ _id: 'u1', isAnonymous: false }),
   subscribe: () => ({ ready: () => world.accountReady }),
@@ -257,4 +259,23 @@ test('Business opens one session for the team and shows the amount the server re
   assert.match(text, /\$290 a year for 4 people/)
   assert.ok([...document.querySelectorAll('a')].some(a => a.textContent === 'See pricing' && a.href === 'https://slatebox.com/plans/'))
   app.unmount()
+})
+
+test('a server without payments (no Slatebox Cloud key) never opens the sheet, from a button or a ?pay= link', async () => {
+  world.reset(); world.summaryMs = 0; phone = false
+  const pub = globalThis.__paySheetTest.settings.public
+  const saved = pub.payments
+  pub.payments = { cloud: false }
+  try {
+    const app = await mountApp({ path: '/team?pay=business&plan=yearly' })
+    await wait(80)
+    openSheet({ action: 'pro', choice: { interval: 'month' } })
+    await wait(120)
+    assert.equal(world.counts.checkoutCalls.length, 0, 'no payment session')
+    assert.equal(world.counts.loadStripe, 0, 'the payment SDK is never loaded')
+    assert.equal(stage() ?? 'closed', 'closed')
+    app.unmount()
+  } finally {
+    pub.payments = saved
+  }
 })

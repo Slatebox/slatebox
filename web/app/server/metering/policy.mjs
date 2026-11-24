@@ -1,7 +1,11 @@
 // Who pays for an AI request or a call, and what each person has left.
 // Pure: every input is passed in, nothing is read or written here.
+import { proPriceWords } from '../../imports/api/pro/prices.mjs'
 import { CALL_PRICES, ESTIMATES } from './prices.mjs'
 import { BILLING_CONTACT_URL } from '../../imports/api/common/contact.mjs'
+
+// Pro's monthly price in words, from the one place it is written (pro/prices.mjs)
+const PRO_MONTH = proPriceWords('month').label
 
 // Slatebox Cloud's switch to Slatebox Pro (settings.free.proRequiredFrom): 'now' (Cloud, from
 // 2026-11-22), 'never' (the default, and every self-hosted meter: self-host has no Pro) or a
@@ -119,8 +123,8 @@ export const COPY = Object.freeze({
   presentationsToday: "You have used today's free presentation plans. Sign in with a confirmed email for more, or try again tomorrow.",
   stagePaused: 'Free AI and free calls are paused until the 1st. Your balance still works.',
   // Slatebox Pro (Cloud, once settings.free.proRequiredFrom has passed)
-  getPro: 'AI on Slatebox comes with Slatebox Pro, $5 a month, or a balance. Get Pro or top up in your profile.',
-  getProCalls: "Starting a call comes with Slatebox Pro, $5 a month, or a balance. Anyone can join a call that's already running.",
+  getPro: `AI on Slatebox comes with Slatebox Pro, ${PRO_MONTH}, or a balance. Get Pro or top up in your profile.`,
+  getProCalls: `Starting a call comes with Slatebox Pro, ${PRO_MONTH}, or a balance. Anyone can join a call that's already running.`,
   getProImages: 'Image search and image generation come with Slatebox Pro or a balance. Get Pro or top up in your profile.',
   proPastDue: "Your Pro payment didn't go through, so your credits are paused. Update your card in your profile. Your balance still works.",
   proAiToday: "You have used today's Pro credits for AI. Top up in your profile.",
@@ -145,8 +149,8 @@ export const OWN_KEY_COPY = Object.freeze({
   videoToVoice: 'Your free video for this month is used up, so this call is voice. Add a Daily key or top up for video.',
   freeStopped: `Free use is off for this account. Your own key and your balance still work. Write to us at ${BILLING_CONTACT_URL}.`,
   stagePaused: 'Free AI and free calls are paused until the 1st. Your own keys and your balance still work.',
-  getPro: 'AI on Slatebox\'s own models comes with Slatebox Pro, $5 a month. Get Pro in your profile, or connect your own AI, which is free.',
-  getProCalls: "Starting a call comes with Slatebox Pro, $5 a month, or add your own Daily key for free. Anyone can join a call that's already running.",
+  getPro: `AI on Slatebox's own models comes with Slatebox Pro, ${PRO_MONTH}. Get Pro in your profile, or connect your own AI, which is free.`,
+  getProCalls: `Starting a call comes with Slatebox Pro, ${PRO_MONTH}, or add your own Daily key for free. Anyone can join a call that's already running.`,
   proPastDue: "Your Pro payment didn't go through, so your credits are paused. Update your card in your profile. Your own keys and your balance still work.",
   proAiToday: "You have used today's Pro credits for AI. Add your own AI or top up in your profile.",
   proAiMonth: "You have used this month's Pro credits for AI. Add your own AI or top up in your profile.",
@@ -211,12 +215,16 @@ export function resolveMetering({ stored = {}, deploy = {}, ownKeys = false } = 
   }
 }
 
-// Cloud settings turn the meter on. A self-hosted server has no meter unless its operator sets one.
+// Cloud settings turn the meter on, and only on Slatebox Cloud: `cloud` is whether this server is
+// Cloud by its signed Cloud key (server/cloud-lock.mjs), false unless the caller says so. Anywhere
+// else there is no meter, whatever metering.enabled says (owner decision, 2026-11-24): a
+// self-hosted server cannot switch on a paid meter of its own.
 // It fails closed: only public.env 'selfhost' or 'dev' may leave metering.enabled out (and run
-// with no meter). Production refuses to start without the meter, and any other env, including a
-// missing or misspelled one, must say true or false, so a settings mistake never means "no limits".
+// with no meter). Production refuses to start without the meter, or without its Cloud key, and any
+// other env, including a missing or misspelled one, must say true or false, so a settings mistake
+// never means "no limits" on Cloud.
 const UNMETERED_ENVS = new Set(['selfhost', 'dev'])
-export function meteringEnabled(settings = {}) {
+export function meteringEnabled(settings = {}, { cloud = false } = {}) {
   const env = settings.public?.env
   const enabled = settings.metering?.enabled
   if (env === 'prod' && enabled !== true) {
@@ -225,7 +233,13 @@ export function meteringEnabled(settings = {}) {
   if (!UNMETERED_ENVS.has(env) && typeof enabled !== 'boolean') {
     throw new Error(`Set metering.enabled to true or false in the server settings (public.env is ${env === undefined ? 'missing' : JSON.stringify(env)}; only "selfhost" and "dev" may leave it out).`)
   }
-  return enabled === true
+  if (enabled !== true) return false
+  if (cloud !== true) {
+    // production is Slatebox Cloud: unmetered there would mean unlimited AI on Slatebox's providers
+    if (env === 'prod') throw new Error('Slatebox Cloud does not start without its Slatebox Cloud key (settings.enterprise.license, kind cloud): the meter runs only on Cloud.')
+    return false
+  }
+  return true
 }
 
 // What an own key pays for. Image search and image generation always use Slatebox's own
