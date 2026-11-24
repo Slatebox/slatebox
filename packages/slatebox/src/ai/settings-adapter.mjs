@@ -176,17 +176,18 @@ try {
   report.models = listed.ok ? ((await listed.json()).data || []).map(m => m.id).filter(Boolean) : 'HTTP ' + listed.status
   if (model) {
     const started = Date.now()
-    const tool = { type: 'function', function: { name: 'note', description: 'Add a note', parameters: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] } } }
+    // The same probe as the image's own \`slatebox ai check\`: one forced call of a ping tool.
+    const tool = { type: 'function', function: { name: 'ping', description: 'Call this tool to answer.', parameters: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] } } }
     const answer = await fetch(root + '/chat/completions', {
       method: 'POST', headers, signal: AbortSignal.timeout(60000),
-      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Add a note that says hello.' }], tools: [tool], tool_choice: { type: 'function', function: { name: 'note' } }, max_tokens: 64 }),
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Call the ping tool with ok set to true.' }], tools: [tool], tool_choice: { type: 'function', function: { name: 'ping' } }, max_tokens: 64 }),
     })
     report.latencyMs = Date.now() - started
     if (!answer.ok) report.error = 'chat completions answered HTTP ' + answer.status
     else {
       const calls = (await answer.json()).choices?.[0]?.message?.tool_calls || []
       report.toolCalls = calls.length > 0
-      report.toolChoiceHonoured = calls.some(call => call.function?.name === 'note')
+      report.toolChoiceHonoured = calls.some(call => call.function?.name === 'ping')
     }
   }
 } catch (error) {
