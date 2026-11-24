@@ -20,6 +20,7 @@ import {
   Slates,
   ArchivedSlates,
   Messages,
+  Wallets,
 } from '../../imports/api/common/models'
 import AuthManager from '../../imports/api/common/AuthManager'
 
@@ -51,15 +52,36 @@ method[CONSTANTS.methods.organizations.create] = async function createOrganizati
   return orgId
 }
 
+// A subscription still billing: the statuses endProForRemoval and endBusinessForRemoval skip.
+const ENDED = ['canceled', 'incomplete_expired']
+const hasBalance = async (walletId) => ((await Wallets.findOneAsync({ _id: walletId }, { fields: { balanceMicros: 1 } }))?.balanceMicros || 0) > 0
+
 async function cancellationImplications(user) {
   const otherUsers = await Meteor.users.find({ orgId: user.orgId, _id: { $ne: user._id } }, { fields: { _id: 1 } }).fetchAsync()
   const otherSlates = await Slates.find({ userId: { $in: otherUsers.map((u) => u._id) } }).countAsync()
-  const mySlates = await Slates.find({ userId: user._id }).countAsync()
+  // organizations.delete removes the owner's slates in the team (userId + orgId); any others are
+  // counted apart, so Team settings can say they are not kept
+  const mySlates = await Slates.find({ userId: user._id, orgId: user.orgId }).countAsync()
+  const myOtherSlates = await Slates.find({ userId: user._id, orgId: { $ne: user.orgId } }).countAsync()
   const orgOwner = await Meteor.users.findOneAsync({ orgId: user.orgId, isOrgOwner: true }, { fields: { profile: 1, emails: 1 } })
+  // What deleting the team would end first, for its owner only: the same checks the delete runs
+  // (refundBalance, endBusinessForRemoval, endProForRemoval), so the dialog names only what applies.
+  let ends = null
+  if (user.isOrgOwner) {
+    const org = await Organizations.findOneAsync({ _id: user.orgId }, { fields: { business: 1 } })
+    const business = org?.business
+    ends = {
+      balance: (await hasBalance(`org:${user.orgId}`)) || (await hasBalance(`user:${user._id}`)),
+      business: business?.source === 'stripe' && Boolean(business.subscriptionId) && !ENDED.includes(business.stripeStatus),
+      pro: Boolean(user.pro?.subscriptionId) && !ENDED.includes(user.pro.status),
+    }
+  }
   return {
     otherUsers: otherUsers.length,
     otherSlates,
     mySlates,
+    myOtherSlates,
+    ends,
     orgOwner: orgOwner ? {
       name: `${orgOwner.profile?.firstName ?? ''} ${orgOwner.profile?.lastName ?? ''}`.trim(),
       email: orgOwner.emails?.[0]?.address,
@@ -69,7 +91,7 @@ async function cancellationImplications(user) {
 }
 
 method[CONSTANTS.methods.organizations.getCancellationImplications] = async function getCancellationImplications() {
-  const user = this.userId && await Meteor.users.findOneAsync(this.userId, { fields: { orgId: 1 } })
+  const user = this.userId && await Meteor.users.findOneAsync(this.userId, { fields: { orgId: 1, isOrgOwner: 1, pro: 1 } })
   if (!user?.orgId) return null
   return cancellationImplications(user)
 }

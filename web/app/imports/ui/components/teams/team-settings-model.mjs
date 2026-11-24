@@ -65,10 +65,12 @@ const count = (n, one, many) => `${n} ${n === 1 ? one : many}`
  * is asking. organizations.delete removes the team only when no other member is left, and with it
  * the owner's slates in the team and the owner's account; balances are refunded and Business and
  * Pro end first, and if any of that fails nothing is removed (server/methods/organizations.js).
- *   → { state: 'loading' | 'not-owner' | 'members-left' | 'ready', lines, ... }
+ * implications.ends says which of those apply to this owner (the server runs the delete's own
+ * checks), so the dialog never claims a balance, Business or Pro the person does not have.
+ *   → { state: 'loading' | 'failed' | 'not-owner' | 'members-left' | 'ready', lines, ... }
  */
-export function deleteTeamState({ implications, owner, teamName, noun = 'team', people = 'members', metered = false, payments = false }) {
-  if (!implications) return { state: 'loading', lines: [] }
+export function deleteTeamState({ implications, failed = false, owner, teamName, noun = 'team', people = 'members' }) {
+  if (!implications) return failed ? { state: 'failed', lines: [] } : { state: 'loading', lines: [] }
   if (!owner) {
     const who = implications.orgOwner
     const named = who ? `${who.name || 'the owner'}${who.email ? ` (${who.email})` : ''}` : 'the person who made it'
@@ -89,12 +91,15 @@ export function deleteTeamState({ implications, owner, teamName, noun = 'team', 
     `Your ${count(implications.mySlates ?? 0, 'slate', 'slates')} in it.`,
     'Your Slatebox account. You are signed out and cannot sign in with it again.',
   ]
-  const first = []
-  if (metered) first.push(`The ${noun} balance and your own balance go back to the card they were paid with.`)
-  if (payments) {
-    first.push(`Slatebox Business for the ${noun} ends at once, with no refund for the current period.`)
-    first.push('Your Slatebox Pro ends at once, with no refund for the current period.')
+  const outside = implications.myOtherSlates ?? 0
+  if (outside > 0) {
+    removed.push(`Your ${count(outside, 'slate', 'slates')} outside the ${noun}: no one can open ${outside === 1 ? 'it' : 'them'} once your account is gone.`)
   }
+  const ends = implications.ends ?? {}
+  const first = []
+  if (ends.balance) first.push(`Money left in the ${noun} balance or your own goes back to the card it was paid with.`)
+  if (ends.business) first.push(`Slatebox Business for the ${noun} ends at once, with no refund for the current period.`)
+  if (ends.pro) first.push('Your Slatebox Pro ends at once, with no refund for the current period.')
   return {
     state: 'ready',
     removed,
@@ -102,6 +107,15 @@ export function deleteTeamState({ implications, owner, teamName, noun = 'team', 
     lines: [`No other ${people} or their slates are left, so you can delete the ${noun}. This cannot be undone.`],
     safety: first.length ? 'If any of this fails, nothing is removed.' : null,
   }
+}
+
+/** The intro under the page title, naming only the sections this person sees. */
+export function settingsIntro(sections, teamName) {
+  const words = { general: 'its name', members: 'people', billing: 'plan', ai: 'AI', branding: 'brand kit', data: 'data' }
+  const parts = sections.map((s) => words[s.id]).filter(Boolean)
+  if (!teamName || parts.length === 0) return null
+  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
+  return `Everything about ${teamName} in one place: ${list}.`
 }
 
 /** The typed confirmation: the exact team name, ignoring spaces around it. */

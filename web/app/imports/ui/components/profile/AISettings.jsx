@@ -155,7 +155,8 @@ function choicesFor(settings, level) {
 // belongs to. Parts not in this build are left out.
 const partsOf = (settings) => (settings.surfaces || []).filter((s) => s.inBuild && s.follows && s.follows !== 'default')
 
-// Exported for Team settings › Agents & AI, which shows the team level on its own.
+// Exported for Team settings › Agents & AI, which shows the team level on its own inside a card
+// that has its own heading, so there the title is left out.
 export function Level({ settings, level, title, holder, editable, onChange, children }) {
   const parts = partsOf(settings)
   const [showParts, setShowParts] = useState(() => parts.some((s) => holder?.use?.[s.id]))
@@ -242,14 +243,14 @@ export function Level({ settings, level, title, holder, editable, onChange, chil
 Level.propTypes = {
   settings: PropTypes.object.isRequired,
   level: PropTypes.oneOf(Object.keys(LEVEL_SCOPE)).isRequired,
-  title: PropTypes.string.isRequired,
+  title: PropTypes.string,
   holder: PropTypes.object,
   editable: PropTypes.bool,
   onChange: PropTypes.func.isRequired,
   children: PropTypes.node,
 }
 
-Level.defaultProps = { children: null }
+Level.defaultProps = { title: null, children: null }
 
 export default function AISettings() {
   const [settings, setSettings] = useState(null)

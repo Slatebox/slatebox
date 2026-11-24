@@ -46,8 +46,9 @@ import BusinessPanel from '../components/teams/BusinessPanel'
 import ExportEverything from '../components/teams/ExportEverything'
 import { Level } from '../components/profile/AISettings'
 import { paymentsHere } from '../components/billing/pay/pay-env'
+import { PRICING_URL } from '../../api/common/contact.mjs'
 import {
-  confirmsName, deleteTeamState, pickSection, teamNameProblem, teamSettingsSections, TEAM_NAME_MAX,
+  confirmsName, deleteTeamState, pickSection, settingsIntro, teamNameProblem, teamSettingsSections, TEAM_NAME_MAX,
 } from '../components/teams/team-settings-model.mjs'
 
 const ICONS = {
@@ -93,7 +94,8 @@ Card.defaultProps = { title: null, icon: null, children: null, danger: false }
 function SectionHeader({ id, title, intro }) {
   return (
     <Box sx={{ mb: 0.5 }}>
-      <Typography variant="h6" component="h2" id={`team-settings-${id}`} sx={{ fontWeight: 750 }}>{title}</Typography>
+      {/* tabIndex -1: choosing a section moves focus here, so keyboard and screen-reader users land on it */}
+      <Typography variant="h6" component="h2" id={`team-settings-${id}`} tabIndex={-1} sx={{ fontWeight: 750, '&:focus': { outline: 'none' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}>{title}</Typography>
       {intro && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>{intro}</Typography>}
     </Box>
   )
@@ -171,18 +173,18 @@ function TeamName({ org, admin, noun }) {
 TeamName.propTypes = { org: PropTypes.shape({ _id: PropTypes.string, name: PropTypes.string }), admin: PropTypes.bool.isRequired, noun: PropTypes.string.isRequired }
 TeamName.defaultProps = { org: null }
 
-function DeleteTeam({ org, owner, implications, noun, people }) {
+function DeleteTeam({ org, owner, implications, failed, onRetry, noun, people }) {
   const [open, setOpen] = React.useState(false)
   const [typed, setTyped] = React.useState('')
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState('')
   const teamName = org?.name ?? ''
-  const plan = deleteTeamState({
-    implications, owner, teamName, noun, people,
-    metered: Meteor.settings.public.metered === true, payments: paymentsHere(),
-  })
+  const plan = deleteTeamState({ implications, failed, owner, teamName, noun, people })
+  const ready = confirmsName(typed, teamName)
   const close = () => { if (!busy) { setOpen(false); setTyped(''); setError('') } }
-  const remove = async () => {
+  const remove = async (event) => {
+    event?.preventDefault()
+    if (busy || !ready) return
     setBusy(true)
     setError('')
     try {
@@ -200,6 +202,11 @@ function DeleteTeam({ org, owner, implications, noun, people }) {
   return (
     <Card danger title={`Delete this ${noun}`} icon={WarningAmberOutlined} data-testid="danger-zone" data-delete-state={plan.state}>
       {plan.state === 'loading' && <Typography variant="body2" color="text.secondary">Checking who and what is still in the {noun}…</Typography>}
+      {plan.state === 'failed' && (
+        <Alert severity="warning" action={<Button color="inherit" size="small" onClick={onRetry}>Try again</Button>}>
+          We could not check who and what is still in the {noun}, so it cannot be deleted right now.
+        </Alert>
+      )}
       {plan.lines.map((line) => <Typography key={line} variant="body2">{line}</Typography>)}
       {plan.state === 'members-left' && (
         <Box><Button component={RouterLink} to="/team" variant="outlined">Go to the {noun} page</Button></Box>
@@ -211,7 +218,9 @@ function DeleteTeam({ org, owner, implications, noun, people }) {
           </Button>
         </Box>
       )}
-      <Dialog open={open} onClose={close} maxWidth="sm" fullWidth aria-labelledby="delete-team-title" aria-describedby="delete-team-body">
+      {/* a form, so Enter deletes too, but only once the name is typed (remove checks it) */}
+      <Dialog open={open} onClose={close} maxWidth="sm" fullWidth aria-labelledby="delete-team-title" aria-describedby="delete-team-body"
+        PaperProps={{ component: 'form', onSubmit: remove, noValidate: true }}>
         <DialogTitle id="delete-team-title">Delete {teamName} and your account?</DialogTitle>
         <DialogContent id="delete-team-body">
           {plan.state === 'ready' && (
@@ -235,7 +244,7 @@ function DeleteTeam({ org, owner, implications, noun, people }) {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={close} disabled={busy}>Cancel</Button>
-          <Button color="error" variant="contained" disableElevation sx={dangerButton} disabled={busy || !confirmsName(typed, teamName)} onClick={remove} data-team-delete-confirm="">
+          <Button color="error" variant="contained" disableElevation sx={dangerButton} type="submit" disabled={busy || !ready} data-team-delete-confirm="">
             {busy ? 'Deleting…' : `Delete ${noun} and account`}
           </Button>
         </DialogActions>
@@ -245,9 +254,9 @@ function DeleteTeam({ org, owner, implications, noun, people }) {
 }
 DeleteTeam.propTypes = {
   org: PropTypes.shape({ name: PropTypes.string }), owner: PropTypes.bool.isRequired, implications: PropTypes.shape({}),
-  noun: PropTypes.string.isRequired, people: PropTypes.string.isRequired,
+  failed: PropTypes.bool, onRetry: PropTypes.func.isRequired, noun: PropTypes.string.isRequired, people: PropTypes.string.isRequired,
 }
-DeleteTeam.defaultProps = { org: null, implications: null }
+DeleteTeam.defaultProps = { org: null, implications: null, failed: false }
 
 function TeamAI({ noun }) {
   const [settings, setSettings] = React.useState(null)
@@ -274,7 +283,7 @@ function TeamAI({ noun }) {
         <Typography variant="body2" color="text.secondary">
           Connections the {noun} adds here are used by every member who has not chosen AI of their own. A member&apos;s own choice wins, then the {noun}&apos;s, then this server&apos;s.
         </Typography>
-        <Level settings={settings} level="team" title="Connections and choices" holder={settings.team} editable={settings.team.editable} onChange={setSettings} />
+        <Level settings={settings} level="team" holder={settings.team} editable={settings.team.editable} onChange={setSettings} />
       </>
     )
   }
@@ -293,7 +302,12 @@ export default function TeamSettings() {
   const wide = useMediaQuery(theme.breakpoints.up('md'))
   const [searchParams, setSearchParams] = useSearchParams()
   const [isTeamAdmin, setIsTeamAdmin] = React.useState(false)
+  // the orgId whose admin check has answered: until then an admin-only section asked for by
+  // ?section= is held, instead of flashing General and the members' list
+  const [adminCheckedFor, setAdminCheckedFor] = React.useState(null)
   const [implications, setImplications] = React.useState(null)
+  const [implicationsFailed, setImplicationsFailed] = React.useState(false)
+  const [implicationsTry, setImplicationsTry] = React.useState(0)
   const user = useTracker(() => Meteor.user())
   const userId = user?._id
   const orgId = user?.orgId
@@ -305,23 +319,45 @@ export default function TeamSettings() {
 
   React.useEffect(() => {
     let live = true
-    if (userId && orgId)
-      AuthManager.userHasClaim(userId, [CONSTANTS.claims.admin._id]).then((yes) => live && setIsTeamAdmin(Boolean(yes)))
+    if (userId && orgId) {
+      AuthManager.userHasClaim(userId, [CONSTANTS.claims.admin._id])
+        .then((yes) => live && setIsTeamAdmin(Boolean(yes)))
+        .catch(() => live && setIsTeamAdmin(false))
+        .finally(() => live && setAdminCheckedFor(orgId))
+    }
     return () => { live = false }
   }, [userId, orgId])
 
   // who and what is in the team: the people count, and whether it can be deleted
   React.useEffect(() => {
     let live = true
-    if (orgId) Meteor.callAsync(CONSTANTS.methods.organizations.getCancellationImplications).then((x) => live && setImplications(x)).catch(() => {})
+    if (orgId) {
+      setImplicationsFailed(false)
+      Meteor.callAsync(CONSTANTS.methods.organizations.getCancellationImplications)
+        .then((x) => live && setImplications(x))
+        .catch(() => live && setImplicationsFailed(true))
+    }
     return () => { live = false }
-  }, [orgId])
+  }, [orgId, implicationsTry])
 
   const metered = Meteor.settings.public.metered === true
   const payments = paymentsHere()
   const sections = teamSettingsSections({ inTeam: Boolean(orgId), admin: isTeamAdmin, owner, billing: metered || payments })
-  const active = pickSection(sections, searchParams.get('section'))
-  const open = (id) => setSearchParams(id === sections[0]?.id ? {} : { section: id }, { replace: true })
+  const asked = searchParams.get('section')
+  const adminChecked = adminCheckedFor === orgId
+  // an asked section this person may not see yet: wait for the admin check before falling back
+  const holding = !adminChecked && Boolean(asked) && !sections.some((s) => s.id === asked)
+  const active = holding ? null : pickSection(sections, asked)
+  const focusHeading = React.useRef(false)
+  const open = (id) => {
+    focusHeading.current = true
+    setSearchParams(id === sections[0]?.id ? {} : { section: id }, { replace: true })
+  }
+  React.useEffect(() => {
+    if (!focusHeading.current || !active) return
+    focusHeading.current = false
+    document.getElementById(`team-settings-${active}`)?.focus({ preventScroll: !wide })
+  }, [active, wide])
   const integrationsHere = enterpriseState(Meteor.settings).unlocked
   const memberCount = implications ? implications.otherUsers + 1 : null
   let role = 'Member'
@@ -341,10 +377,8 @@ export default function TeamSettings() {
       <Typography variant="h4" component="h1" sx={{ fontWeight: 750, fontSize: { xs: 26, sm: 32 } }}>
         {education ? t('teamSettings.educationHeader') : t('teamSettings.header')}
       </Typography>
-      {org?.name && (
-        <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-          Everything about <b>{org.name}</b> in one place: its name, people, plan, AI and data.
-        </Typography>
+      {!holding && settingsIntro(sections, org?.name) && (
+        <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>{settingsIntro(sections, org?.name)}</Typography>
       )}
     </Box>
   )
@@ -422,7 +456,8 @@ export default function TeamSettings() {
   } else if (active === 'billing') {
     panel = (
       <>
-        <SectionHeader id="billing" title="Plan & billing" intro={payments ? 'Amounts come from Stripe at checkout: see the pricing page for today\'s prices.' : null} />
+        <SectionHeader id="billing" title="Plan & billing"
+          intro={payments ? <>Amounts come from Stripe at checkout. <Link href={PRICING_URL} target="_blank" rel="noopener noreferrer">See today&apos;s prices</Link>.</> : null} />
         {payments && (
           // BusinessPanel is shared with the team page: here it takes the same card as the sections around it
           <Box sx={(th) => ({ '& [data-business-panel]': card(th) })}><BusinessPanel /></Box>
@@ -473,7 +508,8 @@ export default function TeamSettings() {
     panel = (
       <>
         <SectionHeader id="danger" title="Danger zone" intro="Changes here cannot be undone." />
-        <DeleteTeam org={org} owner={owner} implications={implications} noun={noun} people={people} />
+        <DeleteTeam org={org} owner={owner} implications={implications} failed={implicationsFailed}
+          onRetry={() => setImplicationsTry((n) => n + 1)} noun={noun} people={people} />
       </>
     )
   }
@@ -482,10 +518,10 @@ export default function TeamSettings() {
     <Box sx={{ maxWidth: 1040, mx: { xs: -1, sm: 0 }, pt: { xs: 1, md: 3 }, pb: 6, minWidth: 0 }} data-team-settings="">
       {header}
       <Box sx={wide ? { display: 'grid', gridTemplateColumns: '220px minmax(0, 760px)', gap: 4 } : { minWidth: 0 }}>
-        {nav}
+        {holding ? <Box /> : nav}
         <Box sx={{ display: 'grid', gap: 2, alignContent: 'start', minWidth: 0 }} data-team-settings-panel={active || ''}
           role="region" aria-labelledby={active ? `team-settings-${active}` : undefined}>
-          {panel}
+          {holding ? <Typography variant="body2" color="text.secondary" data-team-settings-holding="">Opening…</Typography> : panel}
         </Box>
       </Box>
     </Box>
