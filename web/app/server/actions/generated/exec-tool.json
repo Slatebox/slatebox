@@ -4003,6 +4003,25 @@
       "given": {
         "style": " Once they have pressed Present, play it in the {value} style with style_presentation (or slatebox.presentations.setStyle)."
       }
+    },
+    {
+      "name": "install_slatebox",
+      "title": "Install Slatebox on a machine",
+      "description": "Walk a person through installing their own Slatebox on a computer, a server or Kubernetes with the npx slatebox installer.",
+      "arguments": [
+        {
+          "name": "where",
+          "description": "Where it should run, such as \"this laptop\", \"my Ubuntu server\" or \"our Kubernetes cluster\" (optional).",
+          "required": false
+        }
+      ],
+      "template": "Help me install my own Slatebox{where}. Slatebox runs as one container (the app, live collaboration, its database and Keycloak for single sign-on), and the installer is the npm package slatebox, run with npx on the machine it installs from. Ask me, one question at a time and without guessing: where it runs (this computer with Docker, a Linux server over SSH as user@host, Kubernetes with a kube context, or only the files); a domain name for HTTPS or a port; the admin email; AI providers (none for now is fine; Slatebox has no default provider); and whether to turn on single sign-on. Never ask me to paste a key, password or token into this conversation: keys stay in environment variables on my machine and the installer reads them from there. You do not run commands on my machine or server yourself. Then give me the exact command to run in a terminal on the machine I install from: npx slatebox for this computer, or for example npx slatebox install ssh root@203.0.113.5 --domain boards.example.com --admin-email ops@example.com --ai none, or npx slatebox install k8s --k8s-context NAME --namespace slatebox. Suggest adding --dry-run first: it prints the plan and changes nothing. It needs Node.js 22.13 or newer and Docker (or Podman with Docker compatibility) where Slatebox runs; on a server, --install-docker lets it install Docker Engine, only if I agree. When it finishes it prints the address and the command that gives the admin a sign-in link. Ask me for the address, then check that ADDRESS/readyz answers 200 (fetch it if you can, or ask me to open it). If the installer stops with an exit code, read me its message: 3 means an answer is missing, 4 a precondition such as no Docker or a port in use, 5 it did not become healthy and was rolled back. Troubleshooting: https://docs.slatebox.com/installation/troubleshooting/",
+      "defaults": {
+        "where": ""
+      },
+      "given": {
+        "where": " on {value}"
+      }
     }
   ],
   "resources": [

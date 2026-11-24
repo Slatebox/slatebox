@@ -1,0 +1,236 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: slatebox
+  labels:
+    app.kubernetes.io/name: slatebox
+    app.kubernetes.io/instance: slatebox
+    app.kubernetes.io/managed-by: slatebox-installer
+    slatebox.com/install: slatebox
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: slatebox-env
+  namespace: slatebox
+  labels:
+    app.kubernetes.io/name: slatebox
+    app.kubernetes.io/instance: slatebox
+    app.kubernetes.io/managed-by: slatebox-installer
+    slatebox.com/install: slatebox
+type: Opaque
+stringData:
+  SLATEBOX_KEY_ENCRYPTION_KEY: placeholder
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: slatebox-config
+  namespace: slatebox
+  labels:
+    app.kubernetes.io/name: slatebox
+    app.kubernetes.io/instance: slatebox
+    app.kubernetes.io/managed-by: slatebox-installer
+    slatebox.com/install: slatebox
+data:
+  SLATEBOX_URL: http://localhost:7070
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: slatebox-backup-script
+  namespace: slatebox
+  labels:
+    app.kubernetes.io/name: slatebox
+    app.kubernetes.io/instance: slatebox
+    app.kubernetes.io/managed-by: slatebox-installer
+    slatebox.com/install: slatebox
+data:
+  backup-loop.sh: "#!/bin/bash\n# Daily backups of the Slatebox in this pod, kept on the backups volume.\n#   backup-loop.sh          wait for BACKUP_AT (HH:MM, UTC) every day\n#   backup-loop.sh --once   one backup now, then exit\nset -u\ndir=/backups\nkeep=${BACKUP_KEEP:-14}\nonce() {\n  local file=\"$dir/slatebox-$(date -u +%Y%m%d-%H%M%S).gz\"\n  if /opt/slatebox/bin/slatebox backup > \"$file.part\"; then\n    mv \"$file.part\" \"$file\"\n    echo \"[backups] $(date -u +%FT%TZ) wrote $file\"\n  else\n    rm -f \"$file.part\"\n    echo \"[backups] $(date -u +%FT%TZ) the backup failed; the previous ones are kept\" >&2\n  fi\n  ls -1t \"$dir\"/slatebox-*.gz 2>/dev/null | tail -n +$((keep + 1)) | xargs -r rm -f\n}\nif [[ ${1:-} == --once ]]; then once; exit; fi\nwhile :; do\n  now=$(date -u +%s)\n  next=$(date -u -d \"today ${BACKUP_AT:-03:00}\" +%s)\n  ((next > now)) || next=$(date -u -d \"tomorrow ${BACKUP_AT:-03:00}\" +%s)\n  sleep $((next - now))\n  once\ndone\n"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: slatebox-backups
+  namespace: slatebox
+  labels:
+    app.kubernetes.io/name: slatebox
+    app.kubernetes.io/instance: slatebox
+    app.kubernetes.io/managed-by: slatebox-installer
+    slatebox.com/install: slatebox
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: slatebox
+  namespace: slatebox
+  labels:
+    app.kubernetes.io/name: slatebox
+    app.kubernetes.io/instance: slatebox
+    app.kubernetes.io/managed-by: slatebox-installer
+    slatebox.com/install: slatebox
+spec:
+  serviceName: slatebox
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: slatebox
+      app.kubernetes.io/instance: slatebox
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: slatebox
+        app.kubernetes.io/instance: slatebox
+        app.kubernetes.io/managed-by: slatebox-installer
+        slatebox.com/install: slatebox
+      annotations:
+        slatebox.com/config-hash: e304792e70fa976e
+    spec:
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: slatebox
+        image: ghcr.io/slatebox/slatebox@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 7070
+        envFrom:
+        - configMapRef:
+            name: slatebox-config
+        - secretRef:
+            name: slatebox-env
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: run
+          mountPath: /run/slatebox
+        startupProbe:
+          exec:
+            command:
+            - /opt/slatebox/bin/slatebox
+            - health
+          timeoutSeconds: 10
+          periodSeconds: 5
+          failureThreshold: 120
+        readinessProbe:
+          exec:
+            command:
+            - /opt/slatebox/bin/slatebox
+            - health
+          timeoutSeconds: 10
+          periodSeconds: 10
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: 1Gi
+            cpu: "1"
+          limits:
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+      - name: backups
+        image: ghcr.io/slatebox/slatebox@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - /opt/slatebox-backup/backup-loop.sh
+        env:
+        - name: BACKUP_AT
+          value: "03:00"
+        - name: BACKUP_KEEP
+          value: "14"
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: run
+          mountPath: /run/slatebox
+        - name: backups
+          mountPath: /backups
+        - name: backup-script
+          mountPath: /opt/slatebox-backup
+          readOnly: true
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 10m
+          limits:
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: run
+        emptyDir: {}
+      - name: backups
+        persistentVolumeClaim:
+          claimName: slatebox-backups
+      - name: backup-script
+        configMap:
+          name: slatebox-backup-script
+          defaultMode: 365
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        app.kubernetes.io/name: slatebox
+        app.kubernetes.io/instance: slatebox
+        app.kubernetes.io/managed-by: slatebox-installer
+        slatebox.com/install: slatebox
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: slatebox
+  namespace: slatebox
+  labels:
+    app.kubernetes.io/name: slatebox
+    app.kubernetes.io/instance: slatebox
+    app.kubernetes.io/managed-by: slatebox-installer
+    slatebox.com/install: slatebox
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: slatebox
+    app.kubernetes.io/instance: slatebox
+  ports:
+  - name: http
+    port: 7070
+    targetPort: http
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: slatebox-install
+  namespace: slatebox
+  labels:
+    app.kubernetes.io/name: slatebox
+    app.kubernetes.io/instance: slatebox
+    app.kubernetes.io/managed-by: slatebox-installer
+    slatebox.com/install: slatebox
+data:
+  install.yaml: "name: slatebox\n"

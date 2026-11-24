@@ -1,0 +1,42 @@
+{
+  "name": "slatebox",
+  "version": "0.1.0",
+  "description": "Install your own Slatebox with one command: npx slatebox. Runs on the machine of your choice (Docker on this computer, a server over SSH, Kubernetes, or files only), asks a few questions, shows a plan, and starts the one-container Slatebox.",
+  "keywords": [
+    "slatebox",
+    "self-host",
+    "installer",
+    "docker",
+    "kubernetes",
+    "helm",
+    "whiteboard",
+    "open-source"
+  ],
+  "homepage": "https://docs.slatebox.com/installation/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Slatebox/slatebox.git",
+    "directory": "packages/slatebox"
+  },
+  "bugs": {
+    "url": "https://github.com/Slatebox/slatebox/issues"
+  },
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "slatebox": "bin/slatebox.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE.md"
+  ],
+  "scripts": {
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "test:integration": "node --test --test-concurrency=1 test/integration/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}

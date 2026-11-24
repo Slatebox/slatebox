@@ -22,3 +22,10 @@ condition = "AND"
 paths = ['''(^|/)scripts/exec-api\.integration\.test\.mjs$''']
 regexTarget = "secret"
 regexes = ['''^plain-remove-\d+$''']
+
+[[allowlists]]
+description = "Installer test fixtures: made-up keys built from the digits 0123456789 (e.g. 'sk-test-0123456789', 'ghp_0123456789abcdef…', 'sk_live_51HxAbCdEf0123456789', 'tok_0123456789AbCd…') that check a key is refused or never printed, and the SSH public key file name 'id_ed25519.pub'. None is a credential."
+condition = "AND"
+paths = ['''(^|/)packages/slatebox/test/.+\.test\.mjs$''']
+regexTarget = "secret"
+regexes = ['''0123456789''', '''^id_ed25519\.pub$''']

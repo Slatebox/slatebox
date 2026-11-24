@@ -1,0 +1,20 @@
+{
+  "name": "create-slatebox",
+  "version": "0.1.0",
+  "description": "npm create slatebox: the same as npx slatebox install.",
+  "type": "module",
+  "bin": {
+    "create-slatebox": "bin/create-slatebox.mjs"
+  },
+  "files": [
+    "bin",
+    "LICENSE.md"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "slatebox": "^0.1.0"
+  },
+  "license": "MIT"
+}

@@ -181,7 +181,7 @@ test("the one option: typed tools are listed unless SLATEBOX_MCP_TYPED_TOOLS is 
 });
 
 test("prompts: mind map, flowchart, project plan and presentation, filled from their arguments", () => {
-  assert.deepEqual(PROMPTS.map((p) => p.name), ["mind_map", "flowchart", "project_plan", "presentation"]);
+  assert.deepEqual(PROMPTS.map((p) => p.name), ["mind_map", "flowchart", "project_plan", "presentation", "install_slatebox"]);
   const mind = promptMessages(PROMPTS[0], { topic: "Q1 launch ideas" });
   assert.equal(mind.messages.length, 1);
   assert.equal(mind.messages[0].role, "user");
@@ -192,6 +192,22 @@ test("prompts: mind map, flowchart, project plan and presentation, filled from t
   assert.match(promptMessages(PROMPTS[3], { topic: "our roadmap" }).messages[0].content.text, /choose Present/);
   assert.throws(() => promptMessages(PROMPTS[1], {}), /needs process/);
   for (const p of PROMPTS) assert.doesNotMatch(JSON.stringify(promptMessages(p, { topic: "t", process: "a", project: "p" })), /\{\w+\}/);
+});
+
+test("install_slatebox: ends with the npx slatebox command on the person's machine, never asks for a secret, checks the address", () => {
+  const install = PROMPTS.find((p) => p.name === "install_slatebox");
+  assert.deepEqual(install.arguments.map((a) => [a.name, a.required]), [["where", false]]);
+  const plain = promptMessages(install, {}).messages[0].content.text;
+  assert.match(plain, /^Help me install my own Slatebox\. /);
+  assert.match(promptMessages(install, { where: "my Ubuntu server" }).messages[0].content.text, /^Help me install my own Slatebox on my Ubuntu server\. /);
+  assert.match(plain, /npx slatebox install ssh root@203\.0\.113\.5 --domain boards\.example\.com/);
+  assert.match(plain, /--dry-run/);
+  assert.match(plain, /Never ask me to paste a key, password or token/);
+  assert.match(plain, /You do not run commands on my machine or server yourself/);
+  assert.match(plain, /ADDRESS\/readyz answers 200/);
+  assert.match(plain, /single sign-on/);
+  // Self-hosting is for running Slatebox yourself: nothing about payments.
+  assert.doesNotMatch(plain, /stripe|meter|top.?up|balance|billing|payment|price|subscription|\$\d/i);
 });
 
 test("resources: the client types and guide, and a slate as JSON or Mermaid read through exec", () => {
