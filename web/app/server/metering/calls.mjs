@@ -163,7 +163,11 @@ export function tick({ call, presence, now, minutesLeft, level }) {
   const paused = freeRoute && level >= 100
   const extendTo = now + CALL_LIMITS.windowMinutes * MIN
   const capAt = call.startedAt + CALL_LIMITS.maxHours * 60 * MIN
-  if (!paused && minutesLeft[call.mode] >= needed) {
+  // A call started on a Slatebox Business team's pool is never cut off because the pool ran out
+  // (terms Schedule A3): it runs on to its usual limits (alone, 3 hours), and its minutes still count
+  // on the team's month. The pool decides only whether a call may start (pool.mjs).
+  const poolCall = Boolean(call.pool)
+  if (!paused && (poolCall || minutesLeft[call.mode] >= needed)) {
     const warning = aloneWarning ? 'alone' : null
     return { charge, decision: 'extend', warning, set: { ...set, roomExpAt: Math.min(extendTo, capAt), warning } }
   }
