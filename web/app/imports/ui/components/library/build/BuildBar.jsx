@@ -51,9 +51,9 @@ export default function BuildBar({ slate }) {
         {words.state && <Typography variant="body2" role="status" data-build-status={builder.status} noWrap
           sx={{ color: builder.status === 'submitted' ? 'success.main' : 'text.secondary', fontWeight: 600 }}>{phone ? '' : '· '}{words.state}</Typography>}
         <Box sx={{ flex: '1 1 auto' }} />
-        <Button size="small" onClick={() => open('save')} disabled={Boolean(blocked) || builder.waiting || Boolean(builder.busy)} sx={{ minHeight: phone ? 44 : 32 }}>Save</Button>
+        <Button size="small" onClick={() => open('save')} disabled={Boolean(blocked) || builder.waiting || Boolean(builder.busy)} sx={{ minHeight: phone ? 44 : 32, flex: 'none' }}>Save</Button>
         <Button size="small" variant="contained" onClick={() => open('submit')} disabled={Boolean(blocked) || builder.waiting || Boolean(builder.busy)}
-          sx={{ minHeight: phone ? 44 : 32, whiteSpace: 'nowrap' }}>{phone ? 'Submit' : 'Submit to the library'}</Button>
+          sx={{ minHeight: phone ? 44 : 32, whiteSpace: 'nowrap', flex: 'none' }}>{phone ? 'Submit' : 'Submit to the library'}</Button>
       </Box>
       {/* A branch's first words, until the person closes them: whose copy this is and how to change it. */}
       {greeting && first.kind === 'branch' && !sheet && <Box sx={{ display: 'flex', alignItems: 'center', gap: .5 }} data-build-greeting="">
