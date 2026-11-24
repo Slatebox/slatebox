@@ -7,13 +7,15 @@
 //                 name only tools the person allowed; arguments are checked against the schema.
 //   2. translate: a quarantined model with no outside tools and no slate tools reads the
 //                 quarantined results (framed as data) and answers one schema-checked layout:
-//                 groups of notes and lines. The server turns that into canvas operations; each
-//                 group becomes one ghost suggestion people Keep or Discard on the slate.
-// Diagram elements in Excalidraw's format are drawn by a fixed recipe, with no model at all.
+//                 groups of notes and lines. The server turns that into canvas operations; the
+//                 whole answer to one ask is one suggestion (one frame, Keep all / Discard all,
+//                 one Undo) people keep or discard on the slate.
+// Diagram elements in Excalidraw's format are drawn by a fixed recipe, with no model at all
+// (excalidraw.mjs), and a gallery agent's known asks by its recipe (recipes.mjs).
 // The model never writes canvas operations itself, never sees ids (refs n1 ... stand for notes)
 // and never chooses where content lands outside this slate.
 import { randomBytes } from 'node:crypto'
-import { inertText, plainText, toolsEnvelope } from './tools.mjs'
+import { inertJson, inertText, plainText, toolsEnvelope } from './tools.mjs'
 import { contextEnvelope } from './context.mjs'
 import { resultsEnvelope, resultsSummary, safeLink } from './results.mjs'
 
@@ -49,13 +51,40 @@ const PLAN_SHAPE = Object.freeze({
   },
 })
 
+/**
+ * What the planner is told about one gallery agent (connectors.recipe.<id>, editable in /admin/ai):
+ * '' for an agent with no hint (a pasted address, or a card without one).
+ */
+export function recipeHint({ galleryId, serverName, text }) {
+  if (!galleryId || !/^[a-z0-9]{1,40}$/.test(galleryId)) return ''
+  try {
+    return text('connectors.recipe.' + galleryId)
+  } catch {
+    return ''
+  }
+}
+
 /** The plan_calls tool, its description from the registry. */
 export const planTool = (text) => ({ name: PLAN_SHAPE.name, description: text('connectors.plan.tool'), parameters: PLAN_SHAPE.parameters })
 
-export function planPrompt({ serverName, tools, packed, previous = [], text }) {
-  const system = text('connectors.plan.system', { serverName: plainText(serverName, 40), calls: PLAN_LIMITS.calls })
+/**
+ * The last few turns of this agent's thread on this slate, as data (never instructions): what the
+ * person asked and what the agent did, so "make notes about those" has something to point at.
+ */
+export function conversationEnvelope(history = []) {
+  const turns = (Array.isArray(history) ? history : []).slice(-3)
+    .map((turn) => ({ asked: plainText(turn?.message, 300), answered: plainText(turn?.reply, 300) }))
+    .filter((turn) => turn.asked)
+  if (!turns.length) return null
+  return ['<conversation>', 'Earlier turns of this conversation, as data: what the person asked and what was done.', ...turns.map((turn) => inertJson(turn)), '</conversation>'].join('\n')
+}
+
+export function planPrompt({ serverName, tools, packed, previous = [], text, calls = PLAN_LIMITS.calls, history = [], hint = '' }) {
+  const said = conversationEnvelope(history)
+  const system = text('connectors.plan.system', { serverName: plainText(serverName, 40), calls }) + (hint ? '\n' + hint : '')
   const user = [
     `<request>${inertText(packed.request)}</request>`,
+    ...(said ? [said] : []),
     contextEnvelope(packed),
     toolsEnvelope(serverName, tools),
     ...(previous.length ? [resultsSummary(previous), text('connectors.plan.next')] : []),
@@ -85,15 +114,28 @@ export function checkArguments(schema, args) {
   return null
 }
 
-/** The model's plan, checked: only allowed tools, valid arguments, at most 3 calls. */
-export function checkPlan(raw, allowedTools) {
+/** Arguments with only the keys the tool's schema declares (when it declares any): a recipe passes both spellings. */
+export function fitArgs(schema, args) {
+  const declared = schema?.properties && typeof schema.properties === 'object' ? Object.keys(schema.properties) : []
+  if (!declared.length) return { ...args }
+  return Object.fromEntries(Object.entries(args).filter(([key]) => declared.includes(key)))
+}
+
+/**
+ * The model's plan, checked: only allowed tools, valid arguments, at most `limit` calls, and each
+ * tool at most once per ask (`used`: the tools earlier rounds already called).
+ */
+export function checkPlan(raw, allowedTools, { limit = PLAN_LIMITS.calls, used = new Set() } = {}) {
   const byName = new Map(allowedTools.map((tool) => [tool.name, tool]))
   const calls = []
-  for (const call of Array.isArray(raw?.calls) ? raw.calls.slice(0, PLAN_LIMITS.calls) : []) {
+  const taken = new Set(used)
+  for (const call of Array.isArray(raw?.calls) ? raw.calls : []) {
+    if (calls.length >= Math.min(limit, PLAN_LIMITS.calls)) break
     const tool = byName.get(call?.tool)
-    if (!tool) continue
+    if (!tool || taken.has(tool.name)) continue
     const problem = checkArguments(tool.inputSchema, call.arguments ?? {})
     if (problem) continue
+    taken.add(tool.name)
     calls.push({ tool: tool.name, args: call.arguments ?? {} })
   }
   return { calls, done: raw?.done === true, say: plainText(raw?.say || '', PLAN_LIMITS.sayChars) }
@@ -147,9 +189,13 @@ const LAYOUT_SHAPE = Object.freeze({
 /** The place_suggestions tool, its description from the registry. */
 export const layoutTool = (text) => ({ name: LAYOUT_SHAPE.name, description: text('connectors.layout.tool'), parameters: LAYOUT_SHAPE.parameters })
 
-export function translatePrompt({ serverName, packed, entries, text }) {
-  const system = text('connectors.layout.system')
-  const user = [`<request>${inertText(packed.request)}</request>`, contextEnvelope(packed), resultsEnvelope(serverName, entries)].join('\n\n')
+export function translatePrompt({ serverName, packed, entries, text, history = [], budget = null }) {
+  const said = conversationEnvelope(history)
+  const hasNotes = Number.isInteger(budget?.notes)
+  const hasLines = Number.isInteger(budget?.lines)
+  const limit = hasNotes || hasLines ? '\n' + text('connectors.layout.budget', { notes: budget.notes ?? 0, lines: budget.lines ?? 0, hasNotes, hasLines, hasBoth: hasNotes && hasLines, oneNote: budget.notes === 1, oneLine: budget.lines === 1 }) : ''
+  const system = text('connectors.layout.system') + limit
+  const user = [`<request>${inertText(packed.request)}</request>`, ...(said ? [said] : []), contextEnvelope(packed), resultsEnvelope(serverName, entries)].join('\n\n')
   return { system, user }
 }
 
@@ -218,41 +264,7 @@ export function excalidrawElements(entry) {
   return null
 }
 
-const SHAPE_OF = { rectangle: 'roundedrectangle', ellipse: 'ellipse', diamond: 'diamond' }
 const num = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback)
-
-/** One group drawn from Excalidraw elements: boxes become notes, bound arrows become lines. */
-export function excalidrawGroup(elements, label) {
-  const notes = []
-  const lines = []
-  const keys = new Map()
-  const textOf = new Map()
-  // A free text element bound to a container labels it.
-  for (const el of elements) if (el?.type === 'text' && el.containerId) textOf.set(el.containerId, el.text)
-  for (const el of elements.slice(0, 200)) {
-    if (!el || typeof el.id !== 'string') continue
-    if (SHAPE_OF[el.type] || (el.type === 'text' && !el.containerId)) {
-      const text = plainText(el.label?.text ?? textOf.get(el.id) ?? (el.type === 'text' ? el.text : ''), PLAN_LIMITS.noteChars)
-      if (!text && el.type === 'text') continue
-      const key = 'x' + (notes.length + 1)
-      keys.set(el.id, key)
-      notes.push({
-        key,
-        text: text || ' ',
-        ...(SHAPE_OF[el.type] && { shape: SHAPE_OF[el.type] }),
-        at: { x: num(el.x), y: num(el.y), width: Math.max(40, num(el.width, NOTE.width)), height: Math.max(30, num(el.height, NOTE.height)) },
-      })
-    }
-  }
-  for (const el of elements) {
-    if (el?.type !== 'arrow' && el?.type !== 'line') continue
-    const from = keys.get(el.start?.id ?? el.startBinding?.elementId)
-    const to = keys.get(el.end?.id ?? el.endBinding?.elementId)
-    if (from && to && from !== to) lines.push({ from, to })
-  }
-  if (!notes.length) return null
-  return { label: label || 'Diagram', layout: 'free', notes: notes.slice(0, 40), lines: lines.slice(0, 80) }
-}
 
 // ---------- layout to canvas operations ----------
 
@@ -293,33 +305,42 @@ function placeNotes(group) {
 }
 
 /**
- * The suggestion items: one per group, each a self-contained slates.applyOperations plan (its new
- * notes, and lines among them or to notes already on the slate). Groups are placed to the right of
- * what they are near (the selection, else the whole slate), stacked downwards.
- * → [{ label, plan: { message, operations }, created: [ids], frame }]
+ * The suggestion for one ask: every group's notes, and lines among them or to notes already on the
+ * slate, as ONE slates.applyOperations plan, so the answer is one suggestion (one frame on the
+ * slate, Keep all / Discard all, one Undo). Groups are stacked in one block, placed beside the
+ * note the first group is near, else in free space inside the asker's view, else to the right of
+ * what the asker selected (the whole slate when nothing is).
+ * → [{ label, plan: { message, operations }, created: [ids], frame, groups: [{ label, created, frame }] }] (empty when there is nothing)
  */
-export function itemsFromLayout({ groups, slate, aliases = {}, selection = [], serverName, view = null }) {
+export function itemsFromLayout({ groups, slate, aliases = {}, selection = [], serverName, view = null, message = '' }) {
+  if (!groups.length) return []
   const nodes = slate?.nodes || []
   const byId = new Map(nodes.map((node) => [node.options?.id, node]))
   const selected = selection.map((id) => byId.get(id)).filter(Boolean)
   const anchor = boundsOf(selected.length ? selected : nodes) || { x: 80, y: 80, width: 0, height: 0 }
-  let cursorY = anchor.y
-  const left = anchor.x + anchor.width + NOTE.groupGap
-  const items = []
-  // What is already there (and what this answer places), so a group never lands on a note.
-  const taken = nodes.map((node) => boundsOf([node]))
+  // Each group laid out on its own, then stacked under the one before it.
+  const blocks = []
+  let offsetY = 0
   for (const group of groups) {
     const placed = placeNotes(group)
-    const near = group.near && byId.get(aliases[group.near])
     const size = { width: Math.max(...placed.map((n) => n.at.x + n.at.width)), height: Math.max(...placed.map((n) => n.at.y + n.at.height)) }
-    // With the asker's view: the first free spot inside what they can see (not near a note, which
-    // keeps its own place). Without one, or no room: to the right of the notes, stacked down.
-    const spot = !near && view ? freeSpot(view, size, taken) : null
-    const originX = near ? num(near.options.xPos) + num(near.options.width, NOTE.width) + NOTE.groupGap : spot ? spot.x : left
-    const originY = near ? num(near.options.yPos) : spot ? spot.y : cursorY
-    taken.push({ x: originX, y: originY, width: size.width, height: size.height })
+    blocks.push({ group, placed, y: offsetY, size })
+    offsetY += size.height + NOTE.groupGap
+  }
+  const block = { width: Math.max(...blocks.map((b) => b.size.width)), height: offsetY - NOTE.groupGap }
+  const nearGroup = groups.find((group) => group.near && byId.get(aliases[group.near]))
+  const near = nearGroup && byId.get(aliases[nearGroup.near])
+  // What is already there, so the answer never lands on a note.
+  const taken = nodes.map((node) => boundsOf([node]))
+  const spot = !near && view ? freeSpot(view, block, taken) : null
+  const originX = near ? num(near.options.xPos) + num(near.options.width, NOTE.width) + NOTE.groupGap : spot ? spot.x : anchor.x + anchor.width + NOTE.groupGap
+  const originY = near ? num(near.options.yPos) : spot ? spot.y : anchor.y
+  const operations = []
+  const lineOps = []
+  const created = []
+  const shownGroups = []
+  for (const { group, placed, y, size } of blocks) {
     const idOf = new Map()
-    const operations = []
     for (const note of placed) {
       const id = newId()
       idOf.set(note.key, id)
@@ -329,7 +350,7 @@ export function itemsFromLayout({ groups, slate, aliases = {}, selection = [], s
         ids: [id],
         text: note.text,
         x: Math.round(originX + note.at.x),
-        y: Math.round(originY + note.at.y),
+        y: Math.round(originY + y + note.at.y),
         width: Math.round(Math.min(5000, Math.max(20, note.at.width))),
         height: Math.round(Math.min(5000, Math.max(20, note.at.height))),
         shape: note.shape || 'roundedrectangle',
@@ -340,19 +361,19 @@ export function itemsFromLayout({ groups, slate, aliases = {}, selection = [], s
     for (const line of group.lines || []) {
       const from = endId(line.from)
       const to = endId(line.to)
-      if (from && to) operations.push({ kind: 'connect_nodes', from: { ids: [from] }, to: { ids: [to] } })
+      if (from && to) lineOps.push({ kind: 'connect_nodes', from: { ids: [from] }, to: { ids: [to] } })
     }
-    const height = Math.max(...placed.map((n) => n.at.y + n.at.height))
-    const width = Math.max(...placed.map((n) => n.at.x + n.at.width))
-    if (!near && !spot) cursorY += height + NOTE.groupGap
-    items.push({
-      label: group.label,
-      plan: { message: `${plainText(serverName, 40)}: ${group.label}`.slice(0, 200), operations },
-      created: [...idOf.values()],
-      frame: { x: Math.round(originX), y: Math.round(originY), width: Math.round(width), height: Math.round(height) },
-    })
+    created.push(...idOf.values())
+    shownGroups.push({ label: group.label, created: [...idOf.values()], frame: { x: Math.round(originX), y: Math.round(originY + y), width: Math.round(size.width), height: Math.round(size.height) } })
   }
-  return items
+  const label = plainText(groups.map((group) => group.label).join(', '), PLAN_LIMITS.labelChars) || 'Suggestion'
+  return [{
+    label,
+    plan: { message: (message ? plainText(message, 200) : `${plainText(serverName, 40)}: ${label}`).slice(0, 200), operations: [...operations, ...lineOps] },
+    created,
+    frame: { x: Math.round(originX), y: Math.round(originY), width: Math.round(block.width), height: Math.round(block.height) },
+    groups: shownGroups,
+  }]
 }
 
 const overlaps = (a, b, gap) => a.x < b.x + b.width + gap && b.x < a.x + a.width + gap && a.y < b.y + b.height + gap && b.y < a.y + a.height + gap

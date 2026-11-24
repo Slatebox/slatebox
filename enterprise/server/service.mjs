@@ -10,13 +10,18 @@
 //              token (useKey). What it issues goes into the person's vault (credentials.mjs).
 //   connect    invite it onto one slate: the name it wears, the tools it may use (consent is to
 //              each tool's hash), what it may see.
-//   call       the inviter asks it something. Slatebox's model plans the lookups, the calls run,
-//              the results are quarantined, a quarantined model lays them out, and each group is
-//              saved as the agent through slates.applyOperations, where an agent's canvas edit
+//   call       the inviter asks it something (in Ask Slatebox, "@name"). A gallery agent's known ask
+//              runs its recipe (fixed steps, no planner); anything else is planned by Slatebox's
+//              model (one round of two calls unless its recipe says more; read-me tools never
+//              offered), the results are quarantined, a quarantined model lays them out (or a
+//              recipe's output rule, or the Excalidraw recipe: only one of those per ask), trimmed
+//              to what the request asked for ("a 3 node diagram" is 3 notes), and the whole answer
+//              is saved ONCE as the agent through slates.applyOperations, where an agent's canvas edit
 //              becomes a live suggestion (server/agents/suggestions.mjs): ghosts everyone on the
 //              slate sees as they appear, the agent's named cursor moving to each.
-//              Keeping, discarding and undoing are the app's own suggestions.decide (Keep and
-//              Discard on each ghost, Keep all / Discard all on the agent's chip, Undo per action),
+//              Keeping, discarding and undoing are the app's own suggestions.decide (Keep all /
+//              Discard all on the answer's frame and the agent's chip, Keep and Discard on a ghost
+//              under the pointer, Undo per action),
 //              by anyone who can edit the slate; an agent a person lets edit directly saves at once.
 //   disconnect the inviter removes the agent; its waiting suggestions are discarded, and when no
 //              other slate of theirs uses that server, its sign-in is revoked and forgotten.
@@ -29,7 +34,7 @@
 // to edit the slate.
 import { randomBytes } from 'node:crypto'
 import { sameAgentName } from '/imports/api/common/agent-mention.mjs'
-import { canonicalAddress, cardFor, DEAD_HOSTS, lookalikeHost } from '../common/gallery.mjs'
+import { canonicalAddress, cardFor, DEAD_HOSTS, GALLERY, lookalikeHost } from '../common/gallery.mjs'
 import { checkMcpUrl, McpFetchRefused } from './mcp-fetch.mjs'
 import { SignInNeeded } from './credentials.mjs'
 import { SignInProblem } from './oauth.mjs'
@@ -40,8 +45,13 @@ import { CONTEXT_LEVELS, packContext } from './context.mjs'
 // The plan and layout words: the registry's (a version an administrator published, else the code's).
 import { promptText } from '/server/ai-control/prompts/index.mjs'
 import {
-  checkLayout, checkPlan, excalidrawElements, excalidrawGroup, itemsFromLayout, layoutTool, linksIn, PLAN_LIMITS, planPrompt, planTool, translatePrompt,
+  checkArguments, checkLayout, checkPlan, excalidrawElements, fitArgs, itemsFromLayout, layoutTool, linksIn, PLAN_LIMITS, planPrompt, planTool, recipeHint, translatePrompt,
 } from './translate.mjs'
+import { excalidrawGroup } from './excalidraw.mjs'
+import {
+  checkRecipe, cutWords, dedupeGroups, extract, isReferenceTool, matchIntent, outputNotes, planLimits, rawData, rawText, RECIPE_LIMITS, requestBudget, requestValues,
+  stepCalls, stepTool, trimToBudget,
+} from './recipes.mjs'
 
 export const AGENT_LIMITS = Object.freeze({ perSlate: 8, perOwnerPerSlate: 3, beatMs: 450, requestChars: 1000, nameChars: 32, proEndedDays: 30, orphanHours: 24, concurrentPerUser: 3, helloMs: 8000 })
 
@@ -79,11 +89,15 @@ export function slateName(raw, sanitize) {
   return name || null
 }
 
-/** What anyone who can read the slate sees of an agent; the inviter also sees its tools. */
-export function publicConnection(doc, viewerId) {
+/**
+ * What anyone who can read the slate sees of an agent; the inviter also sees its tools. galleryId:
+ * the gallery card it was invited from (so the gallery can say "On this slate" without the address).
+ */
+export function publicConnection(doc, viewerId, cards = GALLERY) {
   const mine = doc.ownerId === viewerId
   return {
     connectionId: doc._id,
+    galleryId: doc.galleryId || cardFor(doc.address, cards)?.id || null,
     // The agent's id on this slate: its suggestions and activity are filed under it (suggestions.list).
     agentId: doc.agentId || null,
     name: doc.name,
@@ -124,6 +138,7 @@ export function createConnectorService({
   later = (fn, ms) => setTimeout(fn, ms),
   audit = () => {},
   promptOf = promptText, // (id, values) -> the prompt's text (the registry)
+  gallery = async () => GALLERY, // the live gallery (aiAgents, edited in /admin/ai), else the built-in cards
 }) {
   // How many outside reaches each person has running now: a few at once, never a flood.
   const running = new Map()
@@ -246,11 +261,16 @@ export function createConnectorService({
   }
 
   async function discoverNow(principal, { shareId, address: raw }) {
-    await requireEditor(principal, shareId)
+    const slate = await requireEditor(principal, shareId)
     await requirePro(principal.userId)
     const { address, host } = checkAddress(raw)
-    const card = cardFor(address)
-    const head = { address, host, lookalike: lookalikeHost(address), card: card ? { id: card.id, name: card.name } : null }
+    const cards = await gallery()
+    const card = cardFor(address, cards)
+    // Already on this slate as this person's agent: the page says so and offers Manage (connect
+    // refuses a second copy). Signing in again for it is still a discovery, so this is not a refusal.
+    const here = (await connections.find({ slateId: slate._id, ownerId: principal.userId, status: { $ne: 'removed' } })).find((doc) => canonicalAddress(doc.address) === address)
+    const alreadyHere = here ? { connectionId: here._id, agentId: here.agentId || null, name: here.name, text: `${here.name} is already on this slate.` } : null
+    const head = { address, host, lookalike: lookalikeHost(address), card: card ? { id: card.id, name: card.name } : null, ...(alreadyHere && { alreadyHere }) }
     const reached = await discoverAs(principal.userId, address)
     if (reached.needsSignIn) {
       const plan = await signInPlan(address)
@@ -287,6 +307,9 @@ export function createConnectorService({
     const name = slateName(rawName, sanitizeName)
     if (!name) refuse(400, 'bad_name', 'Choose another name. Names can\'t say Slatebox, admin, support or a person\'s name.')
     const live = await connections.find({ slateId: slate._id, status: { $ne: 'removed' } })
+    // One copy of a server per person on a slate: theirs is already here (another person may bring their own).
+    const already = live.find((doc) => doc.ownerId === principal.userId && canonicalAddress(doc.address) === address)
+    if (already) refuse(409, 'already_here', `${already.name} is already on this slate.`, { connectionId: already._id, agentId: already.agentId || null, name: already.name })
     if (live.length >= AGENT_LIMITS.perSlate) refuse(429, 'agent_limit', `A slate can have ${AGENT_LIMITS.perSlate} invited agents. Remove one first.`)
     if (live.filter((doc) => doc.ownerId === principal.userId).length >= AGENT_LIMITS.perOwnerPerSlate)
       refuse(429, 'agent_limit', `You can invite ${AGENT_LIMITS.perOwnerPerSlate} agents onto one slate. Remove one first.`)
@@ -316,6 +339,7 @@ export function createConnectorService({
       name,
       address,
       host,
+      galleryId: cardFor(address, await gallery())?.id || null,
       serverName: plainText(found.serverInfo?.name || '', 60),
       tools: stored,
       contextLevel,
@@ -353,7 +377,19 @@ export function createConnectorService({
       if (!isPro && doc.status === 'active') await setStatus(doc, 'pro_ended')
       else if (isPro && doc.status === 'pro_ended') await setStatus(doc, 'active')
     }
-    return { connections: docs.map((doc) => publicConnection(doc, principal.userId)), pro: isPro }
+    const cards = await gallery()
+    // canInvite: this person may invite agents here (Pro, or a Business seat; always on a licensed install).
+    return { connections: docs.map((doc) => publicConnection(doc, principal.userId, cards)), pro: isPro, canInvite: isPro }
+  }
+
+  /** The gallery the invite dialog shows: the enabled cards in order, and whether this person may invite. */
+  async function galleryList(principal) {
+    const cards = await gallery()
+    const canInvite = principal?.userId && principal.kind !== 'guest' && principal.kind !== 'visitor' ? await pro(principal.userId) : false
+    return {
+      cards: cards.map(({ id, name, url, job, lands, try: tryThis, featured, signIn, keyHint, cost }) => ({ id, name, url, job, lands, try: tryThis, featured: Boolean(featured), signIn: signIn || null, keyHint: keyHint || null, cost: cost || '' })),
+      canInvite,
+    }
   }
 
   async function setStatus(doc, status) {
@@ -427,7 +463,36 @@ export function createConnectorService({
     return oneAtATime(principal, () => callNow(principal, input))
   }
 
-  async function callNow(principal, { connectionId, request, selection = [], view = null }) {
+  // One call to the outside server, as the inviter, with the tool's arguments fitted to its schema.
+  async function reach(doc, { tool, args, check, token, toolOf, principal, entries, extra = {} }) {
+    let raw
+    try {
+      raw = await session.callTool(doc.address, fetch, { name: tool, args, check }, { token })
+    } catch (error) {
+      if (error?.code === 'tools_changed') {
+        await connections.update(doc._id, { status: 'paused', changed: error.changes, updatedAt: new Date(now()) })
+        throw error
+      }
+      const problem = fromProblem(error)
+      if (problem?.code === 'needs_sign_in') {
+        await setStatus(doc, 'needs_sign_in')
+        refuse(401, 'needs_sign_in', `${doc.name} needs you to sign in to ${doc.host} again.`)
+      }
+      throw problem
+    }
+    const clean = quarantine(raw, { outputSchema: toolOf.get(tool)?.outputSchema })
+    audit({ kind: 'call', userId: principal.userId, host: doc.host, tool, ok: !clean.isError, chars: clean.text.length })
+    const entry = { tool, args, result: clean, ...extra }
+    entries.push(entry)
+    return { raw, entry }
+  }
+
+  // The person's last few turns with this agent, as the page kept them (inert data in the prompts).
+  const cleanHistory = (history) => (Array.isArray(history) ? history : []).slice(-3)
+    .filter((turn) => turn && typeof turn.message === 'string')
+    .map((turn) => ({ message: plainText(turn.message, 300), reply: plainText(typeof turn.reply === 'string' ? turn.reply : '', 300) }))
+
+  async function callNow(principal, { connectionId, request, selection = [], view = null, history = [] }) {
     const doc = await ownConnection(principal, connectionId)
     const slate = await requireEditor(principal, doc.shareId)
     if (!(await pro(principal.userId))) {
@@ -441,6 +506,10 @@ export function createConnectorService({
     const text = plainText(request, AGENT_LIMITS.requestChars)
     if (!text) refuse(400, 'invalid_request', `Ask ${doc.name} something.`)
     const ids = Array.isArray(selection) ? selection.filter((id) => typeof id === 'string').slice(0, 60) : []
+    const said = cleanHistory(history)
+    const card = cardFor(doc.address, await gallery())
+    const recipe = checkRecipe(card?.recipe)
+    const budget = requestBudget(text)
     const runId = newId('r')
     const agent = connectorPrincipal(doc, runId)
     let outcome = 'stopped'
@@ -483,72 +552,139 @@ export function createConnectorService({
         const { allowed } = reconcile(doc.tools, listedTools)
         if (!allowed.length) refuse(409, 'no_tools', `${doc.name} has nothing it may look up. Invite it again to choose.`)
         const toolOf = new Map(allowed.map((tool) => [tool.name, tool]))
+        // Read-me tools only explain the others: never offered, never laid out.
+        const offered = allowed.filter((tool) => !isReferenceTool(tool, recipe))
+        if (!offered.length) refuse(409, 'no_tools', `${doc.name} has nothing it may look up. Invite it again to choose.`)
+        const offeredNames = new Set(offered.map((tool) => tool.name))
         const entries = []
         let say = ''
-        for (let round = 0; round < PLAN_LIMITS.rounds; round++) {
-          const { system, user } = planPrompt({ serverName: doc.name, tools: allowed, packed, previous: entries, text: promptOf })
-          const planned = checkPlan(await model({ feature: 'connectors', tool: planTool(promptOf), system, user, userId: principal.userId, shareId: slate.shareId }), allowed)
-          say = say || planned.say
-          if (!planned.calls.length) break
-          for (const { tool, args } of planned.calls) {
-            let raw
-            try {
-              raw = await session.callTool(doc.address, fetch, { name: tool, args, check }, { token })
-            } catch (error) {
-              if (error?.code === 'tools_changed') {
-                await connections.update(doc._id, { status: 'paused', changed: error.changes, updatedAt: new Date(now()) })
-                throw error
-              }
-              const problem = fromProblem(error)
-              if (problem?.code === 'needs_sign_in') {
-                await setStatus(doc, 'needs_sign_in')
-                refuse(401, 'needs_sign_in', `${doc.name} needs you to sign in to ${doc.host} again.`)
-              }
-              throw problem
+        let recipeGroups = null
+        let answered = false // a recipe's output rule already gave the answer (notes, or "nothing found")
+        let finalStep = null // the entries of the step whose answer becomes notes
+        const limits = planLimits(recipe, PLAN_LIMITS.calls)
+        const hint = recipeHint({ galleryId: card?.id, serverName: doc.name, text: promptOf })
+        // The planner for one turn: these tools, at most `limit` calls, each tool once per ask.
+        const plan = async (tools, limit, used) => {
+          const { system, user } = planPrompt({ serverName: doc.name, tools, packed, previous: entries, text: promptOf, calls: limit, history: said, hint })
+          return checkPlan(await model({ feature: 'connectors', tool: planTool(promptOf), system, user, userId: principal.userId, shareId: slate.shareId }), tools, { limit, used })
+        }
+        const intent = recipe && matchIntent(recipe, text)
+        const runnable = intent && intent.steps.every((step) => stepTool(step, offeredNames))
+        if (runnable) {
+          // A known ask: this code runs the steps; values pass from one step to the next by typed
+          // extraction only (logins, owner/repo names), never the server's words.
+          const values = { ...requestValues(text), request: text }
+          let calls = 0
+          let stopped = false
+          for (const step of intent.steps) {
+            const tool = stepTool(step, offeredNames)
+            const schema = toolOf.get(tool)?.inputSchema
+            let planned = []
+            if (step.args === 'plan') {
+              const picked = await plan([toolOf.get(tool)], 1, new Set())
+              say = say || picked.say
+              planned = picked.calls.map((call) => ({ tool, args: call.args, run: values }))
+            } else planned = stepCalls({ ...step, tool }, values).map((call) => ({ ...call, args: fitArgs(schema, call.args) }))
+            planned = planned.filter((call) => !checkArguments(schema, call.args))
+            if (!planned.length) {
+              stopped = true
+              break
             }
-            const clean = quarantine(raw, { outputSchema: toolOf.get(tool)?.outputSchema })
-            audit({ kind: 'call', userId: principal.userId, host: doc.host, tool, ok: !clean.isError, chars: clean.text.length })
-            entries.push({ tool, args, result: clean })
+            const stepEntries = []
+            for (const call of planned) {
+              if (calls >= RECIPE_LIMITS.calls) break
+              calls++
+              const { raw, entry } = await reach(doc, { tool, args: call.args, check, token, toolOf, principal, entries, extra: { run: call.run } })
+              entry.data = rawData(raw)
+              stepEntries.push(entry)
+              if (step.extract && !entry.result.isError) {
+                for (const [name, list] of Object.entries(extract(entry.data, step.extract, rawText(raw)))) {
+                  if (!list.length) continue
+                  values[name] = step.each ? [...new Set([...(values[name] || []), ...list])] : (values[name] === undefined ? list : values[name])
+                }
+              }
+            }
+            finalStep = stepEntries
+            if (stepEntries.every((entry) => entry.result.isError)) {
+              stopped = true
+              break
+            }
           }
-          if (planned.done) break
+          if (!stopped && intent.output && finalStep) {
+            answered = true
+            const notes = outputNotes(finalStep.filter((entry) => !entry.result.isError), { ...intent.output, maxNotes: Math.min(intent.output.maxNotes || 5, budget.notes || Infinity) })
+            if (notes.length) recipeGroups = [{ label: intent.output.label || intent.label || doc.name, layout: 'column', notes, lines: [] }]
+            else say = `${doc.name} found nothing for that.`
+          }
+          if (stopped && !entries.some((entry) => !entry.result.isError)) say = say || `${doc.name} couldn't find what that needs. Try naming the repository (owner/name).`
+        } else {
+          // Anything else: the planner, within the limits (one round of two calls unless its recipe says more).
+          const used = new Set()
+          for (let round = 0; round < limits.rounds; round++) {
+            const planned = await plan(offered, limits.calls, used)
+            say = say || planned.say
+            if (!planned.calls.length) break
+            const roundEntries = []
+            for (const { tool, args } of planned.calls) {
+              used.add(tool)
+              const { entry } = await reach(doc, { tool, args, check, token, toolOf, principal, entries })
+              roundEntries.push(entry)
+            }
+            finalStep = roundEntries
+            if (planned.done) break
+          }
         }
         if (!entries.length) return { groups: [], say: say || `${doc.name} had nothing to look up for that.`, entries }
         await presence.step(agent, slate, 1, 'doing').catch(() => {})
-        // Diagrams by the fixed recipe; everything else through the quarantined translator.
-        const groups = []
-        const rest = []
-        for (const entry of entries) {
-          const elements = excalidrawElements(entry)
-          const group = elements && excalidrawGroup(elements, 'Diagram')
-          if (group) groups.push(group)
-          else if (!entry.result.isError) rest.push(entry)
-        }
-        if (rest.length && (rest.some((e) => e.result.text) || rest.some((e) => e.result.links.length))) {
-          const { system, user } = translatePrompt({ serverName: doc.name, packed, entries: rest, text: promptOf })
-          let layout = { groups: [], say: '' }
-          try {
-            layout = checkLayout(await model({ feature: 'connectors', tool: layoutTool(promptOf), system, user, userId: principal.userId, shareId: slate.shareId }), { aliases: packed.aliases, allowedLinks: linksIn(rest) })
-          } catch (error) {
-            if (error instanceof ConnectorRefused) throw error
+        // One output per ask: the recipe's notes, else a drawing by the Excalidraw recipe, else the
+        // translator over the last step's answers (never a read-me tool's text).
+        let groups = recipeGroups || []
+        const left = []
+        if (!groups.length && !answered) {
+          for (const entry of finalStep || entries) {
+            const elements = excalidrawElements(entry)
+            const group = elements && excalidrawGroup(elements, 'Diagram')
+            if (group) {
+              groups = [group]
+              if (group.left) left.push(group.left)
+              break
+            }
           }
-          groups.push(...(layout.groups.length ? layout.groups : plainLayout(rest)))
-          say = layout.say || say
         }
+        if (!groups.length && !answered) {
+          const rest = (finalStep || entries).filter((entry) => !entry.result.isError)
+          if (rest.length && (rest.some((e) => e.result.text) || rest.some((e) => e.result.links.length))) {
+            const { system, user } = translatePrompt({ serverName: doc.name, packed, entries: rest, text: promptOf, history: said, budget })
+            let layout = { groups: [], say: '' }
+            try {
+              layout = checkLayout(await model({ feature: 'connectors', tool: layoutTool(promptOf), system, user, userId: principal.userId, shareId: slate.shareId }), { aliases: packed.aliases, allowedLinks: linksIn(rest) })
+            } catch (error) {
+              if (error instanceof ConnectorRefused) throw error
+            }
+            groups = layout.groups.length ? layout.groups : plainLayout(rest)
+            say = layout.say || say
+          }
+        }
+        // Exactly what was asked: the same words once, then no more notes or lines than the request named.
+        const trimmed = trimToBudget(dedupeGroups(groups), budget)
+        const cut = cutWords(trimmed.cut, budget)
+        if (cut) left.push(cut)
         const errors = entries.filter((entry) => entry.result.isError)
-        if (!groups.length && errors.length) say = `${doc.name} couldn't find results for that.`
-        return { groups, say, entries }
+        if (!trimmed.groups.length && errors.length) say = say || `${doc.name} couldn't find results for that.`
+        return { groups: trimmed.groups, say, entries, left }
       }, { userId: principal.userId, shareId: slate.shareId })
-      const left = [...new Set(result.entries.flatMap((entry) => entry.result.left))]
+      const left = [...new Set([...result.entries.flatMap((entry) => entry.result.left), ...(result.left || [])])]
       await presence.step(agent, slate, 2, 'doing').catch(() => {})
-      // Each group is saved as the agent as soon as it is ready: the app files it as a live
-      // suggestion (ghosts on every screen, the cursor moving to them), or saves it at once when a
-      // person lets this agent edit directly. One action per group, so each is one Undo.
-      const items = itemsFromLayout({ groups: result.groups, slate, aliases: packed.aliases, selection: ids, serverName: doc.name, view: viewOf(view) })
+      // The whole answer is saved ONCE as the agent: the app files it as one live suggestion (one
+      // frame of ghosts on every screen, the cursor moving to them, Keep all / Discard all, one
+      // Undo), or saves it at once when a person lets this agent edit directly.
+      const message = `${plainText(doc.name, 40)}: ${plainText(text, 120)}`
+      const items = itemsFromLayout({ groups: result.groups, slate, aliases: packed.aliases, selection: ids, serverName: doc.name, view: viewOf(view), message })
       const actions = []
       let saved = 0
       let dropped = 0
-      // One save of a group; a person editing meanwhile moves the revision, so a refused save is
-      // tried once more against the fresh slate before it is counted as not placed.
+      // A person editing meanwhile moves the revision, so a refused save is tried once more against
+      // the fresh slate before it is counted as not placed.
       const place = async (item) => {
         const current = await access.reload(slate.shareId)
         return applyOperations(agent, { shareId: slate.shareId, plan: item.plan, expectedRevision: current?.revision ?? slate.revision ?? 0 }, 'save')
@@ -566,15 +702,13 @@ export function createConnectorService({
         }
         if (answer?.body?.suggestion?.actionId) actions.push(answer.body.suggestion.actionId)
         else if (answer?.body?.outcome === 'saved') saved++
-        else {
-          dropped++
-          continue
-        }
-        await sleep(AGENT_LIMITS.beatMs)
+        else dropped++
       }
-      if (dropped) left.push(`${dropped} ${dropped === 1 ? 'group' : 'groups'} could not be placed. Ask again to try ${dropped === 1 ? 'it' : 'them'}.`)
+      if (dropped) left.push('The suggestion could not be placed: the slate changed while it was being made. Ask again to try it.')
+      const notes = result.groups.reduce((sum, group) => sum + group.notes.length, 0)
+      const lines = result.groups.reduce((sum, group) => sum + (group.lines || []).length, 0)
       outcome = 'done'
-      return { items: actions.length + saved, actions, saved, say: plainText(result.say, 240), left }
+      return { items: actions.length + saved, actions, saved, say: plainText(result.say, 240), left, added: dropped ? { notes: 0, lines: 0 } : { notes, lines } }
     } catch (error) {
       throw fromProblem(error)
     } finally {
@@ -669,5 +803,6 @@ export function createConnectorService({
     list,
     disconnect,
     call,
+    gallery: galleryList,
   }
 }

@@ -298,6 +298,14 @@ function recordConnectors({ translate, context, promptText }) {
   out['connectors:plan'] = { ...clone(translate.planPrompt({ serverName: 'GitHub', tools, packed, text: promptText })), tool: tool(planTool) }
   out['connectors:planNext'] = clone(translate.planPrompt({ serverName: 'GitHub', tools, packed, previous: entries, text: promptText }))
   out['connectors:layout'] = { ...clone(translate.translatePrompt({ serverName: 'GitHub', packed, entries, text: promptText })), tool: tool(layoutTool) }
+  // pass 2: the number of notes asked for, a follow-up's earlier turns, and each gallery agent's hint
+  if (translate.recipeHint) {
+    const history = [{ message: 'hey', reply: 'Hi, I am GitHub.' }]
+    out['connectors:layoutBudget'] = clone(translate.translatePrompt({ serverName: 'GitHub', packed, entries, text: promptText, budget: { notes: 3, lines: 2 }, history }))
+    out['connectors:layoutOneNote'] = clone(translate.translatePrompt({ serverName: 'GitHub', packed, entries, text: promptText, budget: { notes: 1 } }))
+    for (const id of ['github', 'linear', 'huggingface', 'deepwiki', 'context7', 'wolfram', 'firecrawl', 'exa'])
+      out['connectors:plan:' + id] = clone(translate.planPrompt({ serverName: 'Agent', tools, packed, text: promptText, calls: 2, history, hint: translate.recipeHint({ galleryId: id, serverName: 'Agent', text: promptText }) }))
+  }
   return out
 }
 

@@ -481,6 +481,8 @@ function memoryStore() {
 function makeWorld({ pro = ['ada'] } = {}) {
   const made = makeSignIn()
   const slate = { _id: 'slate1', shareId: 'share1', userId: 'ada', revision: 1, nodes: [{ options: { id: 'n0', text: 'Checkout', xPos: 0, yPos: 0, width: 200, height: 80 }, relationships: { associations: [] } }] }
+  // Another of Ada's slates (an agent on the same server there keeps the sign-in).
+  const other = { _id: 'slate2', shareId: 'share2', userId: 'ada', revision: 1, nodes: [] }
   const roles = { ada: 'edit', sam: 'edit', vic: 'read' }
   const connections = memoryStore()
   // The app's real suggestion path: the agent's saves become live suggestions.
@@ -498,7 +500,10 @@ function makeWorld({ pro = ['ada'] } = {}) {
       return { groups: [{ label: 'Issues', notes: [{ key: 'a', text: 'ENG-12 Retry declined cards' }] }] }
     },
     applyOperations: live.applyOperations,
-    access: { forUser: async (shareId, userId) => (shareId === 'share1' && roles[userId] ? { slate, canRead: true, canEdit: roles[userId] === 'edit' } : null), reload: async () => slate },
+    access: {
+      forUser: async (shareId, userId) => (shareId === 'share1' && roles[userId] ? { slate, canRead: true, canEdit: roles[userId] === 'edit' } : shareId === 'share2' && userId === 'ada' ? { slate: other, canRead: true, canEdit: true } : null),
+      reload: async () => slate,
+    },
     pro: async (userId) => proList.includes(userId),
     firstName: async (userId) => userId[0].toUpperCase() + userId.slice(1),
     sanitizeName: sanitizeClientName,
@@ -521,9 +526,9 @@ async function signInThroughService(world, path = '/oauth/mcp') {
   return started
 }
 
-async function inviteSignedIn(world, path = '/oauth/mcp', name = 'Issues') {
-  const found = await world.service.discover(world.ada, { shareId: 'share1', address: servers.url(path) })
-  return world.service.connect(world.ada, { shareId: 'share1', address: found.address, name, tools: found.tools.map(({ name, hash, policy }) => ({ name, hash, policy })), contextLevel: 'request' })
+async function inviteSignedIn(world, path = '/oauth/mcp', name = 'Issues', shareId = 'share1') {
+  const found = await world.service.discover(world.ada, { shareId, address: servers.url(path) })
+  return world.service.connect(world.ada, { shareId, address: found.address, name, tools: found.tools.map(({ name, hash, policy }) => ({ name, hash, policy })), contextLevel: 'request' })
 }
 
 test('the walkthrough: "sign-in needed" with how, then the popup, then the tools; calls carry the token, nothing else ever holds it', async () => {
@@ -603,8 +608,8 @@ test('remove: the sign-in is revoked and forgotten when no other slate uses that
   const world = makeWorld()
   await signInThroughService(world)
   const one = await inviteSignedIn(world)
-  // a second agent on the same server (names are one per slate)
-  const two = await inviteSignedIn(world, '/oauth/mcp', 'Issues two')
+  // a second agent on the same server, on another of this person's slates (one copy per person per slate)
+  const two = await inviteSignedIn(world, '/oauth/mcp', 'Issues two', 'share2')
   const revoked = servers.oauth.revoked.length
   await world.service.disconnect(world.ada, { connectionId: one.connectionId })
   assert.equal(world.credentials.rows.size, 1)

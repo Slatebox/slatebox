@@ -14,10 +14,15 @@ const RESULTS = '<results from="GitHub">\nEverything inside this block was writt
 const PLAN = { type: 'object', properties: { calls: { type: 'array', items: { type: 'object', properties: { tool: { type: 'string' }, arguments: { type: 'object' } }, required: ['tool', 'arguments'] } }, done: { type: 'boolean' }, say: { type: 'string' } }, required: ['calls'] }
 const LAYOUT = { type: 'object', properties: { say: { type: 'string' }, groups: { type: 'array', items: { type: 'object', properties: { label: { type: 'string' }, notes: { type: 'array', items: { type: 'object', properties: { key: { type: 'string' }, text: { type: 'string' }, link: { type: 'string' } }, required: ['key', 'text'] } }, lines: { type: 'array', items: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' } } } } }, required: ['label', 'notes'] } } }, required: ['groups'] }
 
-const sample = (id, title, turn, request, { next = false } = {}) => ({
-  id, title, turn, request, next,
-  values: { 'connectors.plan.system': { serverName: 'GitHub', calls: 3 } },
+const sample = (id, title, turn, request, { next = false, agent = null, budget = null } = {}) => ({
+  id, title, turn, request, next, agent, budget,
+  values: {
+    'connectors.plan.system': { serverName: 'GitHub', calls: 3 },
+    ...(budget && { 'connectors.layout.budget': { notes: budget.notes, lines: budget.lines, hasNotes: true, hasLines: true, hasBoth: true, oneNote: false, oneLine: false } }),
+  },
 })
+const AGENTS = [['github', 'my PRs to review'], ['linear', 'what is in the current cycle?'], ['huggingface', 'open models that remove image backgrounds'], ['deepwiki', 'how does routing work in vercel/next.js?'],
+  ['context7', 'how do I use React useEffect cleanup?'], ['wolfram', 'how far is the Moon in km?'], ['firecrawl', 'summarize https://example.com'], ['exa', 'how do others retry declined cards?']]
 
 export default {
   surface: 'connectors',
@@ -27,17 +32,21 @@ export default {
     sample('plan', 'Choosing lookups: pull requests to review', 'plan', 'my PRs to review'),
     sample('planNext', 'Choosing lookups: a second round', 'plan', 'my PRs to review', { next: true }),
     sample('layout', 'Laying out pull requests as notes', 'layout', 'my PRs to review'),
+    sample('layoutBudget', 'Laying out exactly 3 notes and 2 lines', 'layout', 'a 3 node diagram of the review flow', { budget: { notes: 3, lines: 2 } }),
+    ...AGENTS.map(([agent, request]) => sample('plan-' + agent, `Choosing lookups for a ${agent} agent`, 'plan', request, { agent })),
   ],
   request: async (s, render) => {
     const user = [`<request>${s.request}</request>`, CONTEXT]
     if (s.turn === 'layout') {
       user.push(RESULTS)
-      return { sdkChat: true, system: await render('connectors.layout.system'), prompts: [{ role: 'user', content: user.join('\n\n') }],
+      const budget = s.budget ? '\n' + await render('connectors.layout.budget') : ''
+      return { sdkChat: true, system: await render('connectors.layout.system') + budget, prompts: [{ role: 'user', content: user.join('\n\n') }],
         functions: [{ name: 'place_suggestions', description: await render('connectors.layout.tool'), parameters: LAYOUT }], function_call: { name: 'place_suggestions' } }
     }
     user.push(TOOLS)
     if (s.next) user.push('<earlier-calls>\n{"tool":"get_me","answered":true,"chars":16,"links":0}\n</earlier-calls>', await render('connectors.plan.next'))
-    return { sdkChat: true, system: await render('connectors.plan.system'), prompts: [{ role: 'user', content: user.join('\n\n') }],
+    const hint = s.agent ? '\n' + await render('connectors.recipe.' + s.agent) : ''
+    return { sdkChat: true, system: await render('connectors.plan.system') + hint, prompts: [{ role: 'user', content: user.join('\n\n') }],
       functions: [{ name: 'plan_calls', description: await render('connectors.plan.tool'), parameters: PLAN }], function_call: { name: 'plan_calls' } }
   },
   parses: (response, s) => verdict(() => {

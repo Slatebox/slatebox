@@ -56,11 +56,95 @@ export default definePrompts([
     ].join('\n'),
   },
   {
+    id: 'connectors.layout.budget',
+    surface: 'connectors',
+    kind: 'system',
+    slot: 'layoutBudget',
+    title: 'Invited agents: the number of notes the person asked for',
+    body: 'The person asked for {{#hasNotes}}{{notes}} {{#oneNote}}note{{/oneNote}}{{^oneNote}}notes{{/oneNote}}{{/hasNotes}}{{#hasBoth}} and {{/hasBoth}}{{#hasLines}}{{lines}} {{#oneLine}}line{{/oneLine}}{{^oneLine}}lines{{/oneLine}}{{/hasLines}}: make exactly that many, no more.',
+    variables: {
+      notes: server('integer'), lines: server('integer'), hasNotes: server('boolean'), hasLines: server('boolean'), hasBoth: server('boolean'),
+      oneNote: server('boolean'), oneLine: server('boolean'),
+    },
+  },
+  {
     id: 'connectors.layout.tool',
     surface: 'connectors',
     kind: 'tool-description',
     slot: 'layoutTool',
     title: 'Invited agents: the place_suggestions tool',
     body: 'Turn the outside agent\'s results into suggestions on the slate: groups of notes and the lines between them.',
+  },
+  {
+    id: 'connectors.recipe.github',
+    surface: 'connectors',
+    kind: 'system',
+    slot: 'recipeGithub',
+    title: 'Invited agents: what to know about GitHub',
+    // Appended to connectors.plan.system for an agent invited from the GitHub gallery card.
+    body: 'For GitHub: "my" and "me" mean the signed-in person, whose login get_me returns. Commits: list_commits with owner and repo (and author when they are the person\'s). Pull requests and issues: search_pull_requests or search_issues with GitHub search words such as is:open, author:@me, review-requested:@me or assignee:@me. Ask for at most 5 results.',
+  },
+  {
+    id: 'connectors.recipe.linear',
+    surface: 'connectors',
+    kind: 'system',
+    slot: 'recipeLinear',
+    title: 'Invited agents: what to know about Linear',
+    // Appended to connectors.plan.system for an agent invited from the Linear gallery card.
+    body: 'For Linear: "my issues" are the issues assigned to the signed-in person; "the current cycle" is the active cycle of their team. Ask for at most 10 issues.',
+  },
+  {
+    id: 'connectors.recipe.huggingface',
+    surface: 'connectors',
+    kind: 'system',
+    slot: 'recipeHuggingface',
+    title: 'Invited agents: what to know about Hugging Face',
+    // Appended to connectors.plan.system for an agent invited from the Hugging Face gallery card.
+    body: 'For Hugging Face: search models, datasets, Spaces or papers with a few plain words from the request. Ask for at most 5 results.',
+  },
+  {
+    id: 'connectors.recipe.deepwiki',
+    surface: 'connectors',
+    kind: 'system',
+    slot: 'recipeDeepwiki',
+    title: 'Invited agents: what to know about DeepWiki',
+    // Appended to connectors.plan.system for an agent invited from the DeepWiki gallery card.
+    body: 'For DeepWiki: a question names a public GitHub repository as owner/name. Ask its question tool with that name and the person\'s question.',
+  },
+  {
+    id: 'connectors.recipe.context7',
+    surface: 'connectors',
+    kind: 'system',
+    slot: 'recipeContext7',
+    title: 'Invited agents: what to know about Context7',
+    // Appended to connectors.plan.system for an agent invited from the Context7 gallery card.
+    body: 'For Context7: find the library\'s id with resolve-library-id, using the library\'s name from the request.',
+  },
+  {
+    id: 'connectors.recipe.wolfram',
+    surface: 'connectors',
+    kind: 'system',
+    slot: 'recipeWolfram',
+    title: 'Invited agents: what to know about Wolfram',
+    // Appended to connectors.plan.system for an agent invited from the Wolfram gallery card.
+    body: 'For Wolfram: send the question as one short query, in plain words or math.',
+  },
+  {
+    id: 'connectors.recipe.firecrawl',
+    surface: 'connectors',
+    kind: 'system',
+    slot: 'recipeFirecrawl',
+    title: 'Invited agents: what to know about Firecrawl',
+    // Appended to connectors.plan.system for an agent invited from the Firecrawl gallery card.
+    body: 'For Firecrawl: read the one web address the request names; search only when it names none.',
+  },
+  {
+    id: 'connectors.recipe.exa',
+    surface: 'connectors',
+    kind: 'system',
+    slot: 'recipeExa',
+    title: 'Invited agents: what to know about Exa',
+    // Appended to connectors.plan.system for an agent invited from the Exa gallery card.
+    body: 'For Exa: search with the person\'s question in a few plain words. Ask for at most 5 results.',
   },
 ])
