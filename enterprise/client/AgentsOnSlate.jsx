@@ -22,12 +22,17 @@ import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx
 import { agentColor, openAgentAtom, rosterExtrasAtom } from '/imports/ui/components/AgentPresenceListener.jsx'
 import { askableAgentsAtom } from '/imports/ui/jotai/atoms'
 import { agentChatReply } from '/imports/api/common/agent-mention.mjs'
+import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
 
 // What a chip says about an agent that can't be asked right now (everyone sees it; its ghosts stay
 // keepable either way).
 export const STATE_WORDS = { paused: 'paused: its tools changed', needs_sign_in: 'needs sign-in', pro_ended: 'Pro ended' }
 
-const errorText = (error) => error?.reason || error?.message || 'That did not work. Try again.'
+// A refusal because the server's key ended (enterprise_locked) also empties the app's enterprise slots.
+const errorText = (error) => {
+  enterpriseSlots.lockIfRefused(error)
+  return error?.reason || error?.message || 'That did not work. Try again.'
+}
 
 // The canvas's readers (selection, visible area) and a reconnect request, shared between the
 // canvas.agents slot and each chip's popover.
@@ -65,6 +70,10 @@ export function askableEntries(connections, { readSelection, readView } = {}) {
       ask: (request) => {
         const view = readView?.() || null
         return Meteor.callAsync('connectors.call', { connectionId: c._id, request, selection: readSelection?.() || [], ...(view && { view }) })
+          .catch((error) => {
+            enterpriseSlots.lockIfRefused(error)
+            throw error
+          })
       },
     }))
 }

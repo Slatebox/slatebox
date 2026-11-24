@@ -21,6 +21,16 @@ export function createSlots() {
       },
     }),
     get: (name) => components.get(name) || null,
+    // The server answered enterprise_locked (its key ended while it ran): every slot empties for the
+    // rest of this page's life, so nothing offers what the server now refuses. True when it did.
+    lockIfRefused(error) {
+      if (error?.error !== 'enterprise_locked' && error?.code !== 'enterprise_locked') return false
+      if (components.size) {
+        components.clear()
+        notify()
+      }
+      return true
+    },
     names: () => [...components.keys()],
     subscribe(listener) {
       listeners.add(listener)

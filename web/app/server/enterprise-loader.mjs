@@ -13,8 +13,10 @@
 //   api.addMethods({ name: fn })       plain Meteor methods (prefer actions)
 //   api.addRoute({ method, path, handler })  an Express route on the app (OAuth callbacks)
 //   api.onStartup(fn)                  run inside Meteor.startup
-// On a licensed install every action, method and route is checked again when it is called, so a
-// license that ends while the server runs locks them then, not at the next restart.
+// Every action, method and route is checked again when it is called (Cloud's key as much as an
+// on-prem license), so a key that ends while the server runs locks them then, not at the next
+// restart. context.isUnlocked() lets enterprise code check the same for what the api does not
+// carry (its publication and its background sweep).
 import { agentInviteKilled, editionOf } from '../imports/api/common/edition.mjs'
 import { enterpriseAccess, LICENSE_WORDS } from './enterprise-license.mjs'
 
@@ -140,13 +142,14 @@ export function loadEnterprise({ settings, load, host = enterpriseHost, log = ()
   }
   // Invited agents are on wherever enterprise code runs; settings.connectors.off is the kill switch.
   const features = agentInviteKilled(settings) ? [] : ['agents.invite']
-  // A license is read again at most once an hour while the server runs (Cloud never ends).
+  // The key is read again at most once an hour while the server runs.
   let checked = { at: Date.now(), state: first }
   const current = () => {
     if (Date.now() - checked.at > 3_600_000) checked = { at: Date.now(), state: access() }
     return checked.state
   }
-  const api = first.via === 'license' ? guardedApi(host.api, current) : host.api
-  mod.register(api, { edition, settings, unlocked: true, via: first.via, features, agentInvite: features.includes('agents.invite') })
+  const api = guardedApi(host.api, current)
+  const isUnlocked = () => current().unlocked === true
+  mod.register(api, { edition, settings, unlocked: true, via: first.via, features, agentInvite: features.includes('agents.invite'), isUnlocked })
   return { edition, loaded: true, name: mod.manifest?.name || 'enterprise', access: first, features }
 }

@@ -83,7 +83,7 @@
     "alertEmail": ""
   },
   "public": {
-    "//": "Everything under public reaches every browser. Only keys that are meant to be public belong here. edition: \"self-host\" (the default when missing) or \"cloud\" (Slatebox Cloud only, imports/api/common/edition.mjs). The server adds public.enterprise itself at start (whether enterprise code is unlocked here); do not set it.",
+    "//": "Everything under public reaches every browser. Only keys that are meant to be public belong here. edition: \"self-host\" (the default when missing) or \"cloud\" (Slatebox Cloud only, imports/api/common/edition.mjs; it unlocks nothing without Slatebox Cloud's own key in enterprise.license). The server adds public.enterprise itself at start (whether enterprise code is unlocked here); do not set it.",
     "env": "dev",
     "edition": "self-host",
     "agents": {
@@ -111,7 +111,7 @@
     }
   },
   "enterprise": {
-    "//": "Enterprise features (enterprise/: outside agent connections, invited agents and their integrations) run on Slatebox Cloud, and on a self-hosted install once a license key from Slatebox LLC unlocks them (Upgrade on prem). license: the key itself; or licenseFile: a file holding it; or the SLATEBOX_LICENSE or SLATEBOX_LICENSE_FILE environment variables. Checked offline at start (server/enterprise-license.mjs). Single sign-on with the bundled Keycloak needs no license.",
+    "//": "Enterprise features (enterprise/: outside agent connections, invited agents and their integrations) run on Slatebox Cloud (with Cloud's own signed key, kind cloud) and on a self-hosted install once a license key from Slatebox LLC unlocks them (Upgrade on prem). Each key names the host names it covers (public.baseUrl), one install per on-prem license. license: the key itself; or licenseFile: a file holding it; or the SLATEBOX_LICENSE or SLATEBOX_LICENSE_FILE environment variables. Checked offline at start (server/enterprise-license.mjs). Single sign-on with the bundled Keycloak needs no license.",
     "license": "",
     "licenseFile": ""
   },

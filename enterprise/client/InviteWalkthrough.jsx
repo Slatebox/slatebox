@@ -23,7 +23,8 @@ import RadioGroup from '@mui/material/RadioGroup'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx'
-import { isCloudEdition } from '/imports/api/common/edition.mjs'
+import { enterpriseState } from '/imports/api/common/edition.mjs'
+import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
 import { GALLERY, cardFor } from '../common/gallery.mjs'
 import { followSignIn, openSignInWindow } from './signin'
 
@@ -37,7 +38,11 @@ const SEES = [
 // "Free" alone next to "Pro" read as a contradiction; the service's own price is not Slatebox's.
 export const cardCost = (item) => (item.signIn ? item.cost : item.cost === 'Free' ? 'No sign-in needed' : `No sign-in needed · ${item.cost}`)
 
-const errorText = (error) => error?.reason || error?.message || 'That did not work. Try again.'
+// A refusal because the server's key ended (enterprise_locked) also empties the app's enterprise slots.
+const errorText = (error) => {
+  enterpriseSlots.lockIfRefused(error)
+  return error?.reason || error?.message || 'That did not work. Try again.'
+}
 
 export default function InviteWalkthrough({ open, onClose, shareId, slateName, onInvited, reconnect }) {
   const [step, setStep] = useState('choose') // choose | discovering | signin | waiting | consent | inviting | reconnected
@@ -53,8 +58,9 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
   const [showAll, setShowAll] = useState(false)
   const [error, setError] = useState('')
   const { open: openPay, prefetch } = usePaySheet()
-  // Slatebox Pro is Slatebox Cloud's; a licensed self-hosted install has no Pro to mention.
-  const cloud = isCloudEdition(Meteor.settings)
+  // Slatebox Pro is Slatebox Cloud's; a licensed self-hosted install has no Pro to mention. The
+  // server says which it is (unlocked as Cloud by Cloud's key, or by an on-prem license).
+  const cloud = enterpriseState(Meteor.settings).via === 'cloud'
   const live = useRef(true)
   useEffect(() => () => { live.current = false }, [])
   useEffect(() => {

@@ -25,7 +25,6 @@ import req from '/server/methods/ai/req'
 import { resolveAIFeatureConfig } from '/server/methods/ai/feature-config.mjs'
 import { runAIAction } from '/server/metering/context.mjs'
 import { proActive } from '/server/pro-billing.mjs'
-import { isCloudEdition } from '/imports/api/common/edition.mjs'
 import { presence } from '/server/presence/meteor'
 import { firstNameOf, sanitizeClientName } from '/imports/api/common/agent-label.mjs'
 import { Slates } from '/imports/api/common/models'
@@ -145,7 +144,7 @@ async function userFor(req) {
 
 export const appOrigin = () => String(Meteor.settings.public?.baseUrl || Meteor.absoluteUrl()).replace(/\/+$/, '')
 
-export function startConnectors() {
+export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
   const settings = connectorSettings(Meteor.settings, { development: Meteor.isDevelopment })
   const fetch = createMcpFetch({ devOrigins: settings.devOrigins, userAgent: settings.userAgent })
   // Sign-in's own fetch: the same checks, may GET metadata, follows no redirect, small answers.
@@ -183,7 +182,7 @@ export function startConnectors() {
     // Slatebox Pro is needed to invite agents on Slatebox Cloud. A licensed self-hosted install has
     // no Pro: its license is what unlocks invited agents for everyone who may edit there.
     pro: async (userId) => {
-      if (!isCloudEdition(Meteor.settings)) return true
+      if (via !== 'cloud') return true
       const user = await Meteor.users.findOneAsync(userId, { fields: { pro: 1 } })
       return proActive(user?.pro)
     },
@@ -204,7 +203,7 @@ export function startConnectors() {
     await McpSignins.rawCollection().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
   })
   // Hourly: forget (and revoke) sign-ins no agent uses any more.
-  const sweep = () => service.sweep(() => McpCredentials.find({}, { fields: { ownerId: 1, address: 1, createdAt: 1 } }).fetchAsync())
+  const sweep = () => !isUnlocked() ? Promise.resolve() : service.sweep(() => McpCredentials.find({}, { fields: { ownerId: 1, address: 1, createdAt: 1 } }).fetchAsync())
     .then(({ removed }) => removed && console.log('[connectors]', JSON.stringify({ kind: 'sweep', removed })))
     .catch((error) => console.warn('[connectors] sweep failed', error?.message))
   Meteor.setTimeout(sweep, 60000)
@@ -213,7 +212,8 @@ export function startConnectors() {
   // Everyone who can read a slate sees its invited agents, live (their ghosts come with the app's
   // agentSuggestions.forSlate, like every agent's).
   Meteor.publish('connectors.forSlate', async function forSlate(shareId) {
-    if (typeof shareId !== 'string') return this.ready()
+    // A key that ended while the server ran: the publication goes quiet like every action.
+    if (typeof shareId !== 'string' || !isUnlocked()) return this.ready()
     const found = await forUser(shareId, this.userId)
     if (!found?.canRead) return this.ready()
     const slateId = found.slate._id

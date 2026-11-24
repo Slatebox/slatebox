@@ -1,7 +1,9 @@
 // Whether this server may run the code in the repository's enterprise/ directory (enterprise/LICENSE).
 // MIT, and runs without Meteor (scripts/enterprise-license.test.mjs).
 //
-// - Slatebox Cloud (settings.public.edition 'cloud') runs it: Slatebox LLC's own service.
+// - Slatebox Cloud runs it: Slatebox LLC's own service. Saying so in settings is not enough:
+//   settings.public.edition 'cloud' unlocks only with a Cloud key (kind 'cloud', bound to Cloud's
+//   host names) signed like any license, so no settings change alone unlocks a self-hosted install.
 // - A self-hosted install carries the same code, locked. A license key from Slatebox LLC unlocks it
 //   (an on-prem license: a flat yearly fee per install). The key is checked offline: it is signed
 //   with Slatebox LLC's private Ed25519 key, and this file holds only the public half, so no one
@@ -10,8 +12,9 @@
 //
 // A license key is one line:
 //   sblic1.<key id>.<payload, base64url JSON>.<Ed25519 signature of "sblic1.<key id>.<payload>", base64url>
-// payload: { v: 1, product: 'slatebox-enterprise', id, licensee, kind: 'on-prem', issuedAt, expiresAt,
-//            hosts?: ['slatebox.example.com'] }   (dates as YYYY-MM-DD, UTC; hosts binds it to installs)
+// payload: { v: 1, product: 'slatebox-enterprise', id, licensee, kind: 'on-prem'|'cloud', issuedAt, expiresAt,
+//            hosts?: ['slatebox.example.com'] }   (dates as YYYY-MM-DD, UTC; hosts binds it to installs,
+//            and a Cloud key must name them)
 //
 // Where an install puts it (the first one found wins):
 //   settings.enterprise.license        the key itself (private settings, never sent to browsers)
@@ -37,6 +40,8 @@ export const LICENSE_KEYS = Object.freeze({
 // What an administrator reads for each state (the admin page and the server log).
 export const LICENSE_WORDS = Object.freeze({
   cloud: 'Slatebox Cloud: enterprise features are on.',
+  cloud_no_key: 'These settings say Slatebox Cloud, but there is no Slatebox Cloud key: enterprise features are off.',
+  wrong_kind: 'The license key is for another kind of install (Slatebox Cloud or on-prem).',
   license: 'Enterprise features are on with this install\'s license.',
   grace: 'This install\'s license has ended. Enterprise features stay on for a few more days: renew to keep them.',
   no_license: 'Enterprise features are off on this install. An on-prem license from Slatebox turns them on.',
@@ -115,6 +120,9 @@ export function verifyLicense(text, { keys = LICENSE_KEYS, now = Date.now(), hos
   const to = day(payload.expiresAt)
   if (!Number.isFinite(from) || !Number.isFinite(to)) return { valid: false, reason: 'malformed' }
   if (now < from) return { valid: false, reason: 'not_yet', license }
+  if (license.kind !== 'on-prem' && license.kind !== 'cloud') return { valid: false, reason: 'wrong_kind', license }
+  // A Cloud key works only on Cloud's own host names.
+  if (license.kind === 'cloud' && !license.hosts.length) return { valid: false, reason: 'wrong_kind', license }
   if (license.hosts.length && !license.hosts.some((name) => name.toLowerCase() === String(host).toLowerCase()))
     return { valid: false, reason: 'wrong_host', license }
   // The key covers its last day in full, then the grace.
@@ -146,12 +154,16 @@ export function readLicenseText({ settings, env = {}, readFile = (path) => readF
  */
 export function enterpriseAccess({ settings, env = {}, readFile, keys = LICENSE_KEYS, now = Date.now() }) {
   const out = (unlocked, via, reason, license = null, endsAt = null) => ({ unlocked, via, reason, words: LICENSE_WORDS[reason] || '', license, endsAt })
-  if (settings?.public?.edition === 'cloud') return out(true, 'cloud', 'cloud')
+  // Cloud proves itself with a Cloud key; a self-hosted install with an on-prem key. Each kind
+  // unlocks only its own edition, so neither a settings change nor the other kind's key unlocks.
+  const cloud = settings?.public?.edition === 'cloud'
   const { text, problem } = readLicenseText({ settings, env, readFile })
   if (problem) return out(false, null, problem)
-  if (!text) return out(false, null, 'no_license')
+  if (!text) return out(false, null, cloud ? 'cloud_no_key' : 'no_license')
   const checked = verifyLicense(text, { keys, now, host: hostOf(settings?.public?.baseUrl) })
   if (!checked.valid) return out(false, null, checked.reason, checked.license || null)
+  if (checked.license.kind !== (cloud ? 'cloud' : 'on-prem')) return out(false, null, 'wrong_kind', checked.license)
+  if (cloud) return out(true, 'cloud', checked.reason === 'grace' ? 'grace' : 'cloud', checked.license, checked.endsAt)
   return out(true, 'license', checked.reason, checked.license, checked.endsAt)
 }
 

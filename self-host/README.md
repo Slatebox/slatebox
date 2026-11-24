@@ -111,7 +111,7 @@ The app image includes Slatebox's enterprise features (inviting outside agents s
 1. Add the license key you receive to the server-only part of `.state/settings.json`: `"enterprise": { "license": "sblic1.…" }`. A file works too: `"enterprise": { "licenseFile": "/path/inside/the/container" }`.
 2. Run `./run up -d --no-deps --force-recreate --wait app`. The app log says `[enterprise] licensed to …` and **Admin tools** shows the license and its end date.
 
-The key is checked inside the app, offline: nothing is sent to Slatebox. A key may name the host names it is for; it then works only at those addresses (`public.baseUrl`). After its end date a key keeps working for 14 more days, so a renewal never interrupts anyone. Without a valid key the features stay locked and the rest of Slatebox works as before.
+The key is checked inside the app, offline: nothing is sent to Slatebox. A license covers one install: its key names that install's host name and works only at that address (`public.baseUrl`). Setting `public.edition` to `"cloud"` does not unlock anything; it locks an on-prem key instead. After its end date a key keeps working for 14 more days, so a renewal never interrupts anyone. Without a valid key the features stay locked and the rest of Slatebox works as before.
 
 ### Tell the app how many proxies are in front of it
 

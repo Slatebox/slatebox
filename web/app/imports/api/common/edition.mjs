@@ -2,7 +2,8 @@
 // settings.public.edition, read the same way by the server and the browser.
 //
 // - 'cloud': Slatebox Cloud. The code in the repository's enterprise/ directory (outside agent
-//   connections: the MCP client, invited agents and the integrations built on them) runs.
+//   connections: the MCP client, invited agents and the integrations built on them) runs, once
+//   Cloud's own signed key proves it (server/enterprise-license.mjs): the setting alone unlocks nothing.
 // - 'self-host': every other install. Its image carries the same enterprise code, locked: it runs
 //   only once a license key from Slatebox LLC unlocks it (an on-prem license,
 //   server/enterprise-license.mjs). Single sign-on (the bundled Keycloak) is free and never locked.

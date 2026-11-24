@@ -10,8 +10,10 @@
 //   api.addRoute({ method, path, handler })   e.g. GET /connectors/oauth/callback
 //   api.onStartup(fn)
 /* eslint-disable no-console */
-// context: { edition, settings, unlocked, via: 'cloud'|'license', features, agentInvite } where
-// agentInvite is true unless the server-side kill switch settings.connectors.off is set.
+// context: { edition, settings, unlocked, via: 'cloud'|'license', features, agentInvite, isUnlocked }
+// where agentInvite is true unless the server-side kill switch settings.connectors.off is set, and
+// isUnlocked() says whether the key still holds (checked hourly; actions, methods and routes are
+// already guarded by the app).
 import { connectorActions } from './actions.mjs'
 import { signInRoutes } from './routes.mjs'
 
@@ -42,6 +44,6 @@ export function register(api, context) {
   })) api.addRoute(route)
   api.onStartup(async () => {
     const { startConnectors } = await import('./meteor.js')
-    started = startConnectors()
+    started = startConnectors({ via: context.via, isUnlocked: context.isUnlocked || (() => true) })
   })
 }
