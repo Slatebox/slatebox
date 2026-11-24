@@ -9,9 +9,10 @@ import { readFileSync, readdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  DEFAULT_LOGO_URL, PRIVACY_URL, SAMPLES, enrollAccount, firstNameOf, greeting, libraryDecision, loginLink, logoUrlFor,
-  meterAlert, proMergeLink, resetPassword, verifyEmail,
+  DEFAULT_LOGO_URL, PRIVACY_URL, VML_MAX_WIDTH, enrollAccount, firstNameOf, greeting, libraryDecision, loginLink, logoUrlFor,
+  meterAlert, proMergeLink, resetPassword, verifyEmail, vmlButton,
 } from '../web/app/server/email/templates.mjs'
+import { SAMPLES } from './email-samples.mjs'
 import { libraryNotice } from '../web/app/server/library/notify.mjs'
 import { FIXTURES, renderAll, writePreviews } from './email-preview.mjs'
 
@@ -101,7 +102,8 @@ test('a library decision: the in-app line is unchanged; the email is branded, wi
   const item = { _id: 'i1', kind: 'slate', title: 'Kickoff notes', slug: 'kickoff-notes-i1', authorId: 'ada' }
   const notice = libraryNotice({ item, type: 'approved', message: 'Thanks', origin: 'https://app.slatebox.test', firstName: 'Ada' })
   assert.equal(notice.text, 'Your slate "Kickoff notes" was published.')
-  assert.equal(notice.subject, 'Your slate "Kickoff notes" is published')
+  // the subject keeps its old "Slatebox: " start (mail filters people made still match)
+  assert.equal(notice.subject, 'Slatebox: your slate "Kickoff notes" is published')
   assert.match(notice.body, /^Hi Ada,\n/)
   assert.match(notice.body, /The reviewer wrote:\nThanks/)
   assert.ok(notice.html.includes('href="https://app.slatebox.test/library/kickoff-notes-i1" class="sb-button-link"'))
@@ -110,6 +112,30 @@ test('a library decision: the in-app line is unchanged; the email is branded, wi
   const changes = libraryNotice({ item, type: 'changes_requested', origin: 'https://app.slatebox.test' })
   assert.match(changes.body, /^Hi there,\n/)
   assert.match(changes.body, /My library: https:\/\/app\.slatebox\.test\/library\/mine/)
+})
+
+test('Outlook\'s button fits its label; a label too long for it shows the short label', () => {
+  assert.deepEqual(vmlButton({ label: 'Confirm my email' }), { label: 'Confirm my email', width: 208 })
+  const long = 'Join The Northwest Regional Product Design and Research Collaborative'
+  assert.deepEqual(vmlButton({ label: long, shortLabel: 'Join the team' }), { label: 'Join the team', width: 200 })
+  const mail = enrollAccount({ teamName: long.slice(5), url })
+  assert.match(mail.html, /width:200px;" arcsize="50%" stroke="f" fillcolor="#254b3b"><w:anchorlock\/><center [^>]*>Join the team<\/center>/)
+  assert.ok(mail.html.includes(`>${long}</a>`), 'every other client shows the full label')
+  for (const { html } of renderAll()) {
+    for (const [, width] of html.matchAll(/v-text-anchor:middle;width:(\d+)px;/g)) assert.ok(Number(width) <= VML_MAX_WIDTH)
+  }
+})
+
+test('a team name with line breaks or control characters makes a tidy one-line subject', () => {
+  const mail = enrollAccount({ teamName: 'Acme\r\nBcc: x@y.test\t\u0007Design', url })
+  assert.equal(mail.subject, "You're invited to join Acme Bcc: x@y.test Design on Slatebox")
+  assert.doesNotMatch(mail.subject, /[\r\n\t\u0000-\u001f]/)
+})
+
+test('dark mode covers Outlook.com text too, and the text twin uses the standard signature separator', () => {
+  const { html, text } = verifyEmail({ url })
+  assert.match(html, /\[data-ogsc\] \.sb-card p, \[data-ogsc\] \.sb-card td, \[data-ogsc\] \.sb-headline \{ color: #f5f3e9 !important; \}/)
+  assert.match(text, /\n-- \nYou got this email because/)
 })
 
 test('the logo comes from the instance itself over https, else from Slatebox Cloud', () => {

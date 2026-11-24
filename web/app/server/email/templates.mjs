@@ -62,13 +62,25 @@ const paragraphText = (paragraph) => segments(paragraph).map((part) => (typeof p
 const P = `margin:0 0 16px;font-family:${FONT_STACK};font-size:16px;line-height:26px;color:${BRAND.ink};`
 const SMALL = `margin:0 0 8px;font-family:${FONT_STACK};font-size:13px;line-height:20px;color:${BRAND.secondaryInk};`
 
-function buttonHtml({ label, url }) {
+// Outlook's VML button has a fixed width: wide enough for its label (about 9.5px a character at
+// 16px bold, plus the padding), within the 600px column. A label too long for it (a long team
+// name) shows the short label there instead, so Outlook never cuts the words off.
+export const VML_MAX_WIDTH = 520
+const vmlWidthFor = (label) => Math.max(200, Math.ceil(String(label || '').length * 9.5) + 56)
+export function vmlButton({ label, shortLabel }) {
+  const vmlLabel = vmlWidthFor(label) > VML_MAX_WIDTH && shortLabel ? shortLabel : label
+  return { label: vmlLabel, width: Math.min(VML_MAX_WIDTH, vmlWidthFor(vmlLabel)) }
+}
+
+function buttonHtml({ label, url, shortLabel }) {
   const href = escapeHtml(url)
   const text = escapeHtml(label)
+  const vml = vmlButton({ label, shortLabel })
+  const width = vml.width
   // Outlook on Windows draws the VML shape; every other client the table cell and its link.
   return `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:8px 0 24px;">
 <tr><td>
-<!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${href}" style="height:48px;v-text-anchor:middle;width:260px;" arcsize="50%" stroke="f" fillcolor="${BRAND.button}"><w:anchorlock/><center style="color:${BRAND.buttonInk};font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">${text}</center></v:roundrect><![endif]-->
+<!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${href}" style="height:48px;v-text-anchor:middle;width:${width}px;" arcsize="50%" stroke="f" fillcolor="${BRAND.button}"><w:anchorlock/><center style="color:${BRAND.buttonInk};font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">${escapeHtml(vml.label)}</center></v:roundrect><![endif]-->
 <!--[if !mso]><!-- --><table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
 <td class="sb-button" align="center" bgcolor="${BRAND.button}" style="border-radius:24px;background:${BRAND.button};">
 <a href="${href}" class="sb-button-link" target="_blank" style="display:inline-block;padding:14px 28px;font-family:${FONT_STACK};font-size:16px;line-height:20px;font-weight:700;color:${BRAND.buttonInk};text-decoration:none;border-radius:24px;">${text}</a>
@@ -131,6 +143,8 @@ export function renderEmail(content) {
     .sb-button-link { color: ${BRAND.darkPage} !important; }
   }
   [data-ogsc] .sb-card { background: ${BRAND.darkPaper} !important; }
+  [data-ogsc] .sb-card p, [data-ogsc] .sb-card td, [data-ogsc] .sb-headline { color: ${BRAND.darkInk} !important; }
+  [data-ogsc] .sb-card .sb-muted, [data-ogsc] .sb-card .sb-footer p, [data-ogsc] .sb-card .sb-footer a { color: ${BRAND.darkSecondaryInk} !important; }
   [data-ogsc] .sb-link { color: ${BRAND.peach} !important; }
 </style>
 </head>
@@ -177,7 +191,7 @@ ${after.map((paragraph) => `<p class="sb-muted" style="${P}color:${BRAND.seconda
     ...paragraphs.flatMap((paragraph) => [paragraphText(paragraph), '']),
     ...(cta ? [`${cta.textLabel || cta.label}: ${cta.url}`, ''] : []),
     ...after.flatMap((paragraph) => [paragraphText(paragraph), '']),
-    '--',
+    '-- ', // the signature separator (dash dash space), so mail clients can fold the footer
     reason,
     `${COMPANY} · Privacy: ${PRIVACY_URL}`,
     '',
@@ -220,17 +234,20 @@ export function resetPassword({ firstName, url, logoUrl }) {
 
 /** Accounts enrollAccount: a team invitation (the team page, or a team import's placeholder). */
 export function enrollAccount({ firstName, teamName, url, logoUrl }) {
-  const team = typeof teamName === 'string' && teamName.trim() ? teamName.trim().slice(0, 80) : null
+  // A team names itself: line breaks and other control characters are flattened to spaces.
+  // eslint-disable-next-line no-control-regex
+  const cleaned = typeof teamName === 'string' ? teamName.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim() : ''
+  const team = cleaned ? cleaned.slice(0, 80) : null
   return renderEmail({
     subject: team ? `You're invited to join ${team} on Slatebox` : "You're invited to join a team on Slatebox",
     preheader: team ? `Set your password to join ${team} and start building together.` : 'Set your password to join your team and start building together.',
     headline: team ? `Join ${team} on Slatebox` : 'Join your team on Slatebox',
     firstName,
     paragraphs: [
-      `${team ? `You've been invited to the ${team} team.` : "You've been invited to a team."} Slatebox is a shared canvas where people and agents build ideas together in real time, then share what they make.`,
+      `${team ? `You've been invited to join ${team}.` : "You've been invited to a team."} Slatebox is a shared canvas where people and agents build ideas together in real time, then share what they make.`,
       'Set your password to accept the invitation.',
     ],
-    cta: { label: team ? `Join ${team}` : 'Join the team', url, textLabel: 'Accept the invitation' },
+    cta: { label: team ? `Join ${team}` : 'Join the team', shortLabel: 'Join the team', url, textLabel: 'Accept the invitation' },
     after: ["Not expecting this? You can ignore this email and nothing will change."],
     reason: 'You got this email because a team admin invited this address to Slatebox.',
     logoUrl,
@@ -301,25 +318,3 @@ export function meterAlert({ text, adminUrl, logoUrl }) {
     logoUrl,
   })
 }
-
-/** Sample data for every email, for the preview script and the snapshot tests. */
-export const SAMPLES = Object.freeze({
-  'verify-email': () => verifyEmail({ firstName: null, url: 'https://app.slatebox.com/verify-email/sample-token' }),
-  'verify-email-named': () => verifyEmail({ firstName: 'Ada', url: 'https://app.slatebox.com/verify-email/sample-token' }),
-  'reset-password': () => resetPassword({ firstName: 'Ada', url: 'https://app.slatebox.com/reset-password/sample-token' }),
-  'enroll-account': () => enrollAccount({ firstName: 'Grace', teamName: 'Acme Design', url: 'https://app.slatebox.com/enroll-account/sample-token' }),
-  'enroll-account-no-team': () => enrollAccount({ firstName: null, teamName: '', url: 'https://app.slatebox.com/enroll-account/sample-token' }),
-  'login-link': () => loginLink({ firstName: 'Ada', url: 'https://app.slatebox.com/login-link/sample-link' }),
-  'pro-merge-link': () => proMergeLink({ firstName: 'Ada', url: 'https://app.slatebox.com/login-link/sample-link', days: 7 }),
-  'library-approved': () => libraryDecision({
-    firstName: 'Ada', subject: 'Your slate "Kickoff notes" is published', headline: 'Your slate "Kickoff notes" was published',
-    message: 'Thanks, this is a great starter.', publicUrl: 'https://app.slatebox.com/library/kickoff-notes-i1',
-    libraryUrl: 'https://app.slatebox.com/library/mine',
-  }),
-  'library-changes-requested': () => libraryDecision({
-    firstName: 'Ada', subject: 'Your smart component "Retro board" needs changes', headline: 'Your smart component "Retro board" needs changes',
-    message: 'Add a "Try" column.\nThen submit it again.', nextLine: 'Change it, then submit it again from My library.',
-    libraryUrl: 'https://app.slatebox.com/library/mine',
-  }),
-  'meter-alert': () => meterAlert({ text: "Today's free spend reached the daily ceiling. Free calls pause until midnight UTC.", adminUrl: 'https://app.slatebox.com/admin' }),
-})

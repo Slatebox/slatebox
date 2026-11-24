@@ -3,8 +3,15 @@ import { Accounts } from 'meteor/accounts-base'
 import { Organizations } from '../../imports/api/common/models'
 import { enrollAccount, firstNameOf, logoUrlFor, resetPassword, verifyEmail } from './templates.mjs'
 
-/** The logo's address for this instance's emails (templates.mjs logoUrlFor). */
-export const emailLogoUrl = () => logoUrlFor(Meteor.settings.public?.baseUrl || Meteor.absoluteUrl())
+/**
+ * The logo's address for this instance's emails: settings.email.logoUrl when set (a self-hosted
+ * instance whose own address its recipients can't reach), else templates.mjs logoUrlFor.
+ */
+export const emailLogoUrl = () => {
+  const configured = Meteor.settings.email?.logoUrl
+  if (typeof configured === 'string' && /^https:\/\/\S+$/i.test(configured.trim())) return configured.trim()
+  return logoUrlFor(Meteor.settings.public?.baseUrl || Meteor.absoluteUrl())
+}
 
 export default async function setup() {
   // eslint-disable-next-line no-undef
@@ -30,10 +37,25 @@ export default async function setup() {
       firstName: firstNameOf(user), teamName: await teamNameOf(user), url, logoUrl: emailLogoUrl(),
     }),
   }
+  // Accounts asks for the subject, then the text, then the HTML of one email: render it once
+  // (one team lookup) and hand out its parts. The render is keyed by user and URL (the URL holds
+  // the one-time token) and dropped after a minute.
+  const renders = new Map()
+  const renderOnce = (type, render, user, url) => {
+    const key = `${type}\n${user?._id}\n${url}`
+    const now = Date.now()
+    for (const [k, entry] of renders) if (entry.at < now - 60_000) renders.delete(k)
+    if (!renders.has(key)) {
+      const pending = render(user, url)
+      pending.catch(() => renders.delete(key))
+      renders.set(key, { at: now, pending })
+    }
+    return renders.get(key).pending
+  }
   for (const [type, render] of Object.entries(accountEmail)) {
-    Accounts.emailTemplates[type].subject = async (user, url) => (await render(user, url)).subject
-    Accounts.emailTemplates[type].html = async (user, url) => (await render(user, url)).html
-    Accounts.emailTemplates[type].text = async (user, url) => (await render(user, url)).text
+    for (const part of ['subject', 'html', 'text']) {
+      Accounts.emailTemplates[type][part] = async (user, url) => (await renderOnce(type, render, user, url))[part]
+    }
   }
 
   // strips the # from the genned urls

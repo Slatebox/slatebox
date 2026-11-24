@@ -1,4 +1,4 @@
-Subject: Your slate "Kickoff notes" is published
+Subject: Slatebox: your slate "Kickoff notes" is published
 Preheader: Your slate "Kickoff notes" was published. The reviewer left a note.
 
 Hi Ada,
@@ -12,6 +12,6 @@ Anyone can find it in the library now. You can also see it in My library (https:
 
 In the library: https://app.slatebox.com/library/kickoff-notes-i1
 
---
+-- 
 You got this email because you submitted this item to the Slatebox library.
 Slatebox LLC · Privacy: https://slatebox.com/privacy/

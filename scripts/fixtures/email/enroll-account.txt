@@ -5,7 +5,7 @@ Hi Grace,
 
 Join Acme Design on Slatebox
 
-You've been invited to the Acme Design team. Slatebox is a shared canvas where people and agents build ideas together in real time, then share what they make.
+You've been invited to join Acme Design. Slatebox is a shared canvas where people and agents build ideas together in real time, then share what they make.
 
 Set your password to accept the invitation.
 
@@ -13,6 +13,6 @@ Accept the invitation: https://app.slatebox.com/enroll-account/sample-token
 
 Not expecting this? You can ignore this email and nothing will change.
 
---
+-- 
 You got this email because a team admin invited this address to Slatebox.
 Slatebox LLC · Privacy: https://slatebox.com/privacy/

@@ -1,4 +1,4 @@
-// Renders every email Slatebox sends (web/app/server/email/templates.mjs SAMPLES) with sample data,
+// Renders every email Slatebox sends (web/app/server/email/templates.mjs, samples in scripts/email-samples.mjs) with sample data,
 // to <name>.html, <name>.txt and index.html in a folder, for a look in a browser. A dev tool: it runs
 // from a checkout, sends nothing and is not part of the app or its routes.
 //
@@ -8,7 +8,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { SAMPLES } from '../web/app/server/email/templates.mjs'
+import { SAMPLES } from './email-samples.mjs'
 
 export const FIXTURES = fileURLToPath(new URL('./fixtures/email/', import.meta.url))
 

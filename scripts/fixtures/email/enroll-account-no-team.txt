@@ -13,6 +13,6 @@ Accept the invitation: https://app.slatebox.com/enroll-account/sample-token
 
 Not expecting this? You can ignore this email and nothing will change.
 
---
+-- 
 You got this email because a team admin invited this address to Slatebox.
 Slatebox LLC · Privacy: https://slatebox.com/privacy/
