@@ -155,7 +155,8 @@ function choicesFor(settings, level) {
 // belongs to. Parts not in this build are left out.
 const partsOf = (settings) => (settings.surfaces || []).filter((s) => s.inBuild && s.follows && s.follows !== 'default')
 
-function Level({ settings, level, title, holder, editable, onChange, children }) {
+// Exported for Team settings › Agents & AI, which shows the team level on its own.
+export function Level({ settings, level, title, holder, editable, onChange, children }) {
   const parts = partsOf(settings)
   const [showParts, setShowParts] = useState(() => parts.some((s) => holder?.use?.[s.id]))
   const [dialog, setDialog] = useState(null) // { initial } | null

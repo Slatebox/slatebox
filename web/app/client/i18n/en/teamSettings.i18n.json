@@ -1,6 +1,6 @@
 {
   "_namespace": "teamSettings",
-  "header": "Manage your team settings below.",
-  "educationHeader": "Manage your classroom settings below.",
+  "header": "Team settings",
+  "educationHeader": "Classroom settings",
   "reVerificationNote": "Note: You will need to re-verify your email once changed."
 }

@@ -4,6 +4,7 @@
 // methods.js
 import { Random } from 'meteor/random'
 import { Meteor } from 'meteor/meteor'
+import { Accounts } from 'meteor/accounts-base'
 import { check, Match } from 'meteor/check'
 import { getUserName } from './users'
 import { recordGuestAdmission } from './guest-admission.mjs'
@@ -81,7 +82,7 @@ method[CONSTANTS.methods.organizations.get] = async () => {
   return null
 }
 
-method[CONSTANTS.methods.organizations.delete] = async () => {
+method[CONSTANTS.methods.organizations.delete] = async function deleteOrganization() {
   const user = await Meteor.userAsync()
   if (user?.orgId && user.isOrgOwner) {
     const implications = await cancellationImplications(user)
@@ -107,7 +108,19 @@ method[CONSTANTS.methods.organizations.delete] = async () => {
 
       await Messages.removeAsync({ userId: user._id })
 
-      await Meteor.users.removeAsync({ _id: user._id })
+      // As users.delete does: Meteor Accounts closes every connection watching a removed login
+      // token, so the result never reached Team settings. Release only this connection's
+      // observer so it receives the result, then sign it out.
+      const { connection } = this
+      const token = connection && Accounts._getLoginToken(connection.id)
+      if (token) Accounts._setLoginToken(user._id, connection, null)
+      try {
+        await Meteor.users.removeAsync({ _id: user._id })
+      } catch (error) {
+        if (token) Accounts._setLoginToken(user._id, connection, token)
+        throw error
+      }
+      if (connection) await this.setUserId(null)
 
       return {
         success: true,
