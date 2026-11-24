@@ -78,8 +78,9 @@ export default function ReviewPanel({ slate }) {
   const shown = item ? { ...item, ...(item.pendingMeta || {}) } : null
   const state = item ? reviewStateOf(item) : null
   const reviewing = state === 'in_review'
-  // The version people are told about: the how-manyth publication (the first is 1), never the internal number.
-  const nextVersion = (item?.publishedCount ?? (item?.publishedVersion ? 1 : 0)) + 1
+  // The version approving publishes: the one its author sent (approve keeps the review copy's changes in it),
+  // so the number said here is the stored publishedVersion afterwards, the item page's and the thread's.
+  const nextVersion = item?.pendingVersion ?? null
   // A decision is asked about the version as it stands when the button is pressed.
   const choose = (kind) => { setAskedVersion(nextVersion); setDecision(kind) }
 
@@ -149,7 +150,7 @@ export default function ReviewPanel({ slate }) {
       const text = decisionText.trim()
       if (decision === 'approve') {
         const result = await asReviewer(libraryApi.review.approve, { itemId, ...(text && { message: text }) })
-        setDone({ kind: 'approve', url: `/library/${item.slug}`, version: result.publishedCount ?? nextVersion })
+        setDone({ kind: 'approve', url: `/library/${item.slug}`, version: result.publishedVersion ?? nextVersion })
       } else if (decision === 'changes') {
         await libraryApi.review.requestChanges({ itemId, message: text })
         setDone({ kind: 'changes' })
@@ -214,7 +215,7 @@ export default function ReviewPanel({ slate }) {
 
           {done && (
             <Alert severity="success" data-testid="review-done">
-              {done.kind === 'approve' && <>Published as version {done.version}. <RouterLink to={done.url}>See it in the library</RouterLink>.</>}
+              {done.kind === 'approve' && <>Published{done.version ? ` as version ${done.version}` : ''}. <RouterLink to={done.url}>See it in the library</RouterLink>.</>}
               {done.kind === 'changes' && 'Sent back to the author with your message.'}
               {done.kind === 'reject' && 'Not accepted. The author has your reason.'}
               {done.kind === 'unpublish' && 'Taken out of the library.'}
@@ -308,7 +309,7 @@ export default function ReviewPanel({ slate }) {
       )}
       <Dialog open={Boolean(decision)} onClose={() => !deciding && setDecision(null)} fullWidth maxWidth="xs">
         <DialogTitle>
-          {askedNow === 'approve' && `Publish version ${askedVersion ?? nextVersion} for everyone?`}
+          {askedNow === 'approve' && ((askedVersion ?? nextVersion) ? `Publish version ${askedVersion ?? nextVersion} for everyone?` : 'Publish it for everyone?')}
           {askedNow === 'changes' && 'Ask the author for changes'}
           {askedNow === 'reject' && 'Turn this down?'}
           {askedNow === 'unpublish' && 'Take it out of the library?'}

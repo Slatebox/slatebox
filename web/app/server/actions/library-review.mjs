@@ -91,7 +91,7 @@ export const reviewApprove = defineAction({
   id: 'library.review.approve',
   title: 'Approve and publish',
   description:
-    'For administrators: publish an item in review as its review copy stands now (your refinements included), as a new version. Anyone can then find, use and change it. The author is told. The person agrees first.',
+    'For administrators: publish an item in review as its review copy stands now (your refinements included), as the version its author sent. Anyone can then find, use and change it. The author is told. The person agrees first.',
   confirm: true,
   mounts: { ddp: true, http: { method: 'POST', path: '/library/review/{itemId}/approve', operationId: 'approveLibraryItem' } },
   input: object({ itemId: itemRef, message: messageInput, selfReview }, ['itemId']),

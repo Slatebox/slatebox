@@ -948,7 +948,7 @@ declare namespace slatebox.library {
 }
 
 declare namespace slatebox.library.review {
-  /** Approve and publish. For administrators: publish an item in review as its review copy stands now (your refinements included), as a new version. Anyone can then find, use and change it. The author is told. The person agrees first. @scope library:review @confirm */
+  /** Approve and publish. For administrators: publish an item in review as its review copy stands now (your refinements included), as the version its author sent. Anyone can then find, use and change it. The author is told. The person agrees first. @scope library:review @confirm */
   function approve(input: {
     /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
     itemId: string;

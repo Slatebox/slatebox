@@ -4534,7 +4534,7 @@
       "post": {
         "operationId": "approveLibraryItem",
         "summary": "Approve and publish",
-        "description": "For administrators: publish an item in review as its review copy stands now (your refinements included), as a new version. Anyone can then find, use and change it. The author is told. The person agrees first.",
+        "description": "For administrators: publish an item in review as its review copy stands now (your refinements included), as the version its author sent. Anyone can then find, use and change it. The author is told. The person agrees first.",
         "x-required-scope": "library:review",
         "x-slatebox": {
           "action": "library.review.approve",

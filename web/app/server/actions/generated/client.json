@@ -3308,7 +3308,7 @@
       "name": "library.review.approve",
       "id": "library.review.approve",
       "title": "Approve and publish",
-      "summary": "For administrators: publish an item in review as its review copy stands now (your refinements included), as a new version. Anyone can then find, use and change it. The author is told. The person agrees first.",
+      "summary": "For administrators: publish an item in review as its review copy stands now (your refinements included), as the version its author sent. Anyone can then find, use and change it. The author is told. The person agrees first.",
       "kind": "write",
       "readOnly": false,
       "destructive": false,
@@ -3333,11 +3333,11 @@
       },
       "index": "library.review.approve({itemId,message?,selfReview?}): Approve and publish",
       "types": [],
-      "dts": "declare namespace slatebox.library.review {\n  /** Approve and publish. For administrators: publish an item in review as its review copy stands now (your refinements included), as a new version. Anyone can then find, use and change it. The author is told. The person agrees first. @scope library:review @confirm */\n  function approve(input: {\n    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */\n    itemId: string;\n    /** (1–2000 characters) */\n    message?: string;\n    /** Review your own submission. Allowed only on a server with one administrator; the thread records it. */\n    selfReview?: boolean;\n  }): Promise<({\n    itemId: string;\n    status: string;\n    publishedVersion: number;\n    /** How many times it has been published, this time included (1 the first time). */\n    publishedCount?: number;\n    url?: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.library.review {\n  /** Approve and publish. For administrators: publish an item in review as its review copy stands now (your refinements included), as the version its author sent. Anyone can then find, use and change it. The author is told. The person agrees first. @scope library:review @confirm */\n  function approve(input: {\n    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */\n    itemId: string;\n    /** (1–2000 characters) */\n    message?: string;\n    /** Review your own submission. Allowed only on a server with one administrator; the thread records it. */\n    selfReview?: boolean;\n  }): Promise<({\n    itemId: string;\n    status: string;\n    publishedVersion: number;\n    /** How many times it has been published, this time included (1 the first time). */\n    publishedCount?: number;\n    url?: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "approve_library_item",
         "title": "Approve a library submission",
-        "description": "For administrators: publish a library submission in review, as its review copy stands. The person agrees first.\n\nApprove and publish. For administrators: publish an item in review as its review copy stands now (your refinements included), as a new version. Anyone can then find, use and change it. The author is told. The person agrees first.",
+        "description": "For administrators: publish a library submission in review, as its review copy stands. The person agrees first.\n\nApprove and publish. For administrators: publish an item in review as its review copy stands now (your refinements included), as the version its author sent. Anyone can then find, use and change it. The author is told. The person agrees first.",
         "inputSchema": {
           "type": "object",
           "properties": {

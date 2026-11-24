@@ -1640,7 +1640,7 @@
     {
       "name": "approve_library_item",
       "title": "Approve a library submission",
-      "description": "For administrators: publish a library submission in review, as its review copy stands. The person agrees first.\n\nApprove and publish. For administrators: publish an item in review as its review copy stands now (your refinements included), as a new version. Anyone can then find, use and change it. The author is told. The person agrees first.",
+      "description": "For administrators: publish a library submission in review, as its review copy stands. The person agrees first.\n\nApprove and publish. For administrators: publish an item in review as its review copy stands now (your refinements included), as the version its author sent. Anyone can then find, use and change it. The author is told. The person agrees first.",
       "inputSchema": {
         "type": "object",
         "properties": {

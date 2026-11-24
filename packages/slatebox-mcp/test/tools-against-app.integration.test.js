@@ -587,7 +587,7 @@ return slatebox.agentTasks.update({ shareId: "canvas", taskId: ${JSON.stringify(
   assert.equal((await ok(lib(`return slatebox.library.review.refine({ itemId: ITEM, message: "put it in Meetings", selfReview: true })`))).kept, false, "already in Meetings: nothing to keep");
   assert.equal((await ok(lib(`return slatebox.library.review.update({ itemId: ITEM, summary: "Three columns, one rule", selfReview: true })`))).item.summary, "Three columns, one rule");
   const approved = await confirmed(lib(`return slatebox.library.review.approve({ itemId: ITEM, message: "Published", selfReview: true })`), ["widens_access"]);
-  assert.deepEqual([approved.status, approved.publishedVersion], ["published", 2]);
+  assert.deepEqual([approved.status, approved.publishedVersion], ["published", 1]);
   const use = await ok(lib(`return slatebox.library.fork({ itemId: ITEM, mode: "preview" })`));
   assert.equal(use.canvas.workshop.title, "Probe retro");
   const used = await ok(lib(`return slatebox.library.fork({ itemId: ITEM })`));

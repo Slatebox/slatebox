@@ -51,9 +51,12 @@ export function licenseLine(item) {
   return `Free to use, change and share under CC BY 4.0, crediting ${who}.`
 }
 
-/** "Version 2 · published 23 Nov 2026": the how-manyth publication (publishedCount), never the internal number. */
+/**
+ * "Version 2 · published 23 Nov 2026": the stored publishedVersion, the same number the review panel said
+ * when it was approved, the thread's "approved and published it (version 2)" and a branch's provenance.
+ */
 export function versionLine(item, _version) {
-  const n = item?.publishedCount ?? (item?.publishedVersion ? 1 : null)
+  const n = item?.publishedVersion ?? null
   const date = item?.publishedAt ? new Date(item.publishedAt) : null
   const when = date && !Number.isNaN(date.valueOf()) ? date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : null
   return [n ? `Version ${n}` : null, when ? `published ${when}` : null].filter(Boolean).join(' · ')

@@ -157,7 +157,7 @@ test('a slate is published from Share, refined and moved on the review canvas, a
 
   // Approve and publish.
   await review(page).getByTestId('review-approve').click()
-  // Approve writes the review canvas as a new version, and tells people the how-manyth publication it is: the first is 1.
+  // Approve publishes the version the author sent, as the review canvas stands: the number said is the stored publishedVersion.
   const confirmDialog = page.getByRole('dialog', { name: /Publish version \d+ for everyone\?/ })
   await expect(confirmDialog).toBeVisible()
   const n = (await confirmDialog.getByRole('heading').innerText()).match(/version (\d+)/)[1]
@@ -176,8 +176,8 @@ test('a slate is published from Share, refined and moved on the review canvas, a
   const one = await api(visitor, `/library/${found.id}`)
   expect(one.status).toBe(200)
   expect(Number(n)).toBe(1)
-  expect(one.body.item.publishedCount ?? 1).toBe(Number(n))
-  // The internal number counts the submission too: what is served is the version approve wrote.
+  expect(one.body.item.publishedVersion).toBe(Number(n))
+  // What is served is that version, as approve left it.
   expect(one.body.version.n).toBe(one.body.item.publishedVersion)
   expect(one.body.thread).toBeUndefined()
   // The bar moved on the review canvas is published as the reviewer left it, not as the author sent it.

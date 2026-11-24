@@ -6,6 +6,7 @@
 // keeps its parent's category.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { makeExecWorld } from "./exec-test-world.mjs";
 import { mountDdp } from "../web/app/server/actions/ddp.mjs";
@@ -192,14 +193,20 @@ test("the lifecycle, one event per action: submit, open, refine, request changes
   assert.notEqual(world.library.items.docs.find((doc) => doc._id === itemId).reviewShareId, opened.reviewShareId, "a new version gets a fresh review copy");
   assert.ok(world.slate(opened.reviewShareId).archivedDate, "the old copy is archived, never deleted");
   const approved = await run(root, "library.review.approve", { itemId, message: "Thanks" });
-  assert.deepEqual([approved.status, approved.publishedVersion], ["published", 3]);
+  // Approve publishes the version the author sent (2), the reviewer's changes kept in it: no number of its own.
+  assert.deepEqual([approved.status, approved.publishedVersion, approved.publishedCount], ["published", 2, 1]);
+  const stored = world.library.versions.docs.filter((doc) => doc.itemId === itemId);
+  assert.deepEqual(stored.map((doc) => doc.n), [1, 2]);
+  assert.deepEqual([stored[1].meta.title, stored[1].reviewedBy, stored[1].submitted], ["Team retro", "admin", undefined], "sent as it was published: nothing kept beside it");
+  const thread = world.library.events.docs.filter((event) => event.itemId === itemId && event.type === "approved");
+  assert.deepEqual(thread.map((event) => event.version), [2], "the thread names the version published");
   // An update to a published item: the published version stays public until the update is approved.
   const visitor = { kind: "visitor", userId: null, scopes: [] };
   await run(ada, "library.submit", { kind: "component", itemId, title: "Team retro, again" });
   const live = await run(visitor, "library.get", { itemId });
-  assert.deepEqual([live.version.n, live.item.title, live.item.pendingMeta], [3, "Team retro", undefined], "the public sees what was published");
+  assert.deepEqual([live.version.n, live.item.publishedVersion, live.item.title, live.item.pendingMeta], [2, 2, "Team retro", undefined], "the public sees what was published");
   assert.equal((await run(ada, "library.get", { itemId })).item.pendingMeta.title, "Team retro, again", "its author sees the update waiting");
-  assert.equal((await run(ada, "library.get", { itemId })).version.n, 4);
+  assert.equal((await run(ada, "library.get", { itemId })).version.n, 3);
   const queued = await run(root, "library.review.queue", {});
   assert.equal(queued.items.find((row) => row.id === itemId).isUpdate, true);
   await run(root, "library.review.open", { itemId });
@@ -207,8 +214,8 @@ test("the lifecycle, one event per action: submit, open, refine, request changes
   assert.equal((await run(visitor, "library.get", { itemId })).item.summary, "Went well, change, try", "a reviewer's edit to an update waits with it");
   await run(root, "library.review.reject", { itemId, message: "Keep the first name" });
   const after = world.library.items.docs.find((doc) => doc._id === itemId);
-  assert.deepEqual([after.status, after.reviewStatus, after.publishedVersion, after.title, after.pendingMeta], ["published", "rejected", 3, "Team retro", undefined]);
-  assert.equal((await run(visitor, "library.get", { itemId })).version.n, 3);
+  assert.deepEqual([after.status, after.reviewStatus, after.publishedVersion, after.title, after.pendingMeta], ["published", "rejected", 2, "Team retro", undefined]);
+  assert.equal((await run(visitor, "library.get", { itemId })).version.n, 2);
   await run(root, "library.review.unpublish", { itemId, message: "Duplicate" });
   await assert.rejects(run(visitor, "library.get", { itemId }), { status: 404 });
   assert.deepEqual(events(), ["created", "submitted", "review_opened", "refine_proposed", "refine_proposed", "refine_kept", "changes_requested", "comment",
@@ -253,6 +260,32 @@ test("guests use what is published and never publish: fork and branch yes, submi
   await assert.rejects(run(person("other"), "library.saveDraft", { shareId: branch.shareId, title: "Mine now", summary: "x" }), { status: 403, code: "owner_required" });
 });
 
+test("approving publishes the version its author sent, as the reviewer left it: the number shown, stored and branched from is one", async (t) => {
+  const env = await setup(t);
+  const { run, person, world } = env;
+  const root = person("admin"), visitor = { kind: "visitor", userId: null, scopes: [] };
+  const { itemId } = await submitted(env);
+  await run(root, "library.review.open", { itemId });
+  await run(root, "library.review.update", { itemId, title: "Reviewed retro" });
+  const approved = await run(root, "library.review.approve", { itemId });
+  assert.deepEqual([approved.publishedVersion, approved.publishedCount], [1, 1]);
+  const rows = world.library.versions.docs.filter((doc) => doc.itemId === itemId);
+  assert.equal(rows.length, 1, "the review adds no version of its own");
+  assert.deepEqual([rows[0].n, rows[0].meta.title, rows[0].submitted.meta.title, rows[0].reviewedBy], [1, "Reviewed retro", "Weekly retro", "admin"]);
+  const page = await run(visitor, "library.get", { itemId });
+  assert.deepEqual([page.item.publishedVersion, page.version.n, page.item.title], [1, 1, "Reviewed retro"]);
+  const { versionLine } = await import("../web/app/imports/ui/components/library/gallery/galleryCopy.mjs");
+  assert.match(versionLine(page.item, page.version), /^Version 1\b/);
+  // A branch names the same version the page shows.
+  const branch = await run(person("other"), "library.branch", { itemId });
+  assert.equal(world.slate(branch.shareId).library.parent.version, page.item.publishedVersion);
+  // The review panel says the version it is about to publish, and the one it published, from the same numbers.
+  const panel = readFileSync(new URL("../web/app/imports/ui/components/library/review/ReviewPanel.jsx", import.meta.url), "utf8");
+  assert.match(panel, /const nextVersion = item\?\.pendingVersion \?\? null/);
+  assert.match(panel, /version: result\.publishedVersion \?\? nextVersion/);
+  assert.doesNotMatch(panel, /result\.publishedCount/);
+});
+
 test("a fork remembers its item through later copies and is credited when published; a branch keeps its parent's category, locked", async (t) => {
   const env = await setup(t);
   const { run, person, world } = env;
@@ -264,7 +297,7 @@ test("a fork remembers its item through later copies and is credited when publis
   // Ben forks it: a private slate of his, remembering the item.
   const forked = await run(ben, "library.fork", { itemId: slateItem.itemId, name: "Ben's demo" });
   const copy = world.slate(forked.shareId);
-  assert.deepEqual([copy.userId, copy.options.name, copy.libraryOrigin], ["other", "Ben's demo", { itemId: slateItem.itemId, version: 2, kind: "slate", title: "Demo", authorName: "Ada" }]);
+  assert.deepEqual([copy.userId, copy.options.name, copy.libraryOrigin], ["other", "Ben's demo", { itemId: slateItem.itemId, version: 1, kind: "slate", title: "Demo", authorName: "Ada" }]);
   assert.equal(copy.nodes.length, world.slate("demo").nodes.length);
   assert.equal(world.library.items.docs.find((doc) => doc._id === slateItem.itemId).counts.copies, 1);
   // A later copy of the fork still remembers it; a builder's mode never travels.
@@ -272,7 +305,7 @@ test("a fork remembers its item through later copies and is credited when publis
   assert.deepEqual([again.libraryOrigin, again.library], [copy.libraryOrigin, undefined]);
   // Ben publishes his fork: credited to Ada's item.
   const benItem = await run(ben, "library.submit", { kind: "slate", shareId: forked.shareId, summary: "My take" });
-  assert.deepEqual(world.library.items.docs.find((doc) => doc._id === benItem.itemId).provenance, { forkedFrom: { itemId: slateItem.itemId, version: 2, title: "Demo" } });
+  assert.deepEqual(world.library.items.docs.find((doc) => doc._id === benItem.itemId).provenance, { forkedFrom: { itemId: slateItem.itemId, version: 1, title: "Demo" } });
   // A branch of a Decide component stays in Decide: on save, on review edits and on refinement.
   const branch = await run(ada, "library.branch", { itemId: "pros-cons" });
   assert.deepEqual(world.slate(branch.shareId).library.parent, { itemId: "builtin-pros-cons", version: 1, title: "Pros and cons", category: "decide" });

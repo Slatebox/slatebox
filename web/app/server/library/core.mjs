@@ -181,6 +181,22 @@ export function createLibraryCore(deps) {
     return row
   }
 
+  // Approving publishes the version its author sent, as the reviewer left it on the review copy: the
+  // reviewed content and details go into that same version, so a review never adds a number of its own
+  // (the version people see is the stored publishedVersion, and a branch's provenance names the same).
+  // What the author sent first is kept beside it (submitted), once.
+  async function publishReviewed(row, { content, meta, reviewedBy }) {
+    const sizeBytes = checkSize(content)
+    const hash = contentHash(content)
+    const changed = row.contentHash !== hash || JSON.stringify(row.meta ?? null) !== JSON.stringify(meta)
+    const submitted = !row.submitted && changed
+      ? { submitted: { content: row.content, meta: row.meta, contentHash: row.contentHash, sizeBytes: row.sizeBytes, createdBy: row.createdBy ?? null } }
+      : {}
+    const set = { content, meta, contentHash: hash, sizeBytes, reviewedAt: at(), reviewedBy, ...submitted }
+    await versions.updateOne({ _id: row._id }, { $set: set })
+    return { ...row, ...set }
+  }
+
   // ---------- shapes ----------
   const url = (item) => `${appOrigin().replace(/\/$/, '')}/library/${item.slug}`
   function summary(item) {
@@ -780,9 +796,11 @@ export function createLibraryCore(deps) {
       }
     }
     const meta = metaOf(withPending(item))
-    const version = await writeVersion(item, { source: 'review', content, createdBy: principal.userId, meta })
-    // What people are told: the how-manyth publication this is (1 for the first), not the internal version
-    // number, which also counts every submission.
+    const version = pending
+      ? await publishReviewed(pending, { content, meta, reviewedBy: principal.userId })
+      : await writeVersion(item, { source: 'review', content, createdBy: principal.userId, meta })
+    // How many times it has been published (the review header's "published 2 times"); the version
+    // number people see is publishedVersion, the version the author sent.
     const publishedCount = publishedCountOf(item) + 1
     const diff = { ...(pending && Object.keys(metaDiff(pending.meta, meta)).length && { meta: metaDiff(pending.meta, meta) }), ...contentDiff(pending?.content, content) }
     await items.updateOne({ _id: item._id }, {
