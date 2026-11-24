@@ -27,7 +27,8 @@ const CONNECTION_REF = /^server:([a-z0-9][a-z0-9-]{0,39})$/
 const MESSAGE_MAX = 300
 const NOTE_MAX = 200
 // what a version keeps of a binding (the head adds status, version and who published it)
-const FIELDS = ['surface', 'scope', 'enabled', 'disabledMessage', 'chain', 'params', 'prompts', 'tools', 'limits']
+const FIELDS = ['surface', 'scope', 'enabled', 'disabledMessage', 'chain', 'onTrip', 'params', 'prompts', 'tools', 'limits']
+export const TRIP_RULES = Object.freeze(['fallback', 'report'])
 
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const fail = (message, status = 400, details) => {
@@ -48,7 +49,7 @@ export function bindingIdOf(surfaceId, scope = { level: 'server' }) {
 
 /**
  * Checks a binding an administrator sends and returns the document fields to store.
- * input: { surface, scope?, enabled?, disabledMessage?, chain?, params?, prompts?, tools?, limits? }
+ * input: { surface, scope?, enabled?, disabledMessage?, chain?, onTrip?, params?, prompts?, tools?, limits? }
  * ctx: { snapshot, connections: [{ name, status?, capabilities?, disabled? }] the server's
  *        connections (the settings file's and the app's), codePromptIds?: [ids], checkRefs: true }
  * With checkRefs false (a draft) only the shape is checked; models and connections are checked
@@ -103,6 +104,12 @@ export function normalizeBinding(input, { snapshot, connections = [], codePrompt
       return out
     })
     if (!doc.chain.length) delete doc.chain
+  }
+
+  // what this pod's circuit breaker does when the chain keeps failing (resolve.mjs tripRule)
+  if (input.onTrip !== undefined && input.onTrip !== null) {
+    if (!TRIP_RULES.includes(input.onTrip)) fail('onTrip is fallback (use the settings file and built-in AI while the chain keeps failing) or report (keep the chain, say so).')
+    doc.onTrip = input.onTrip
   }
 
   if (input.params !== undefined && input.params !== null) {
@@ -211,10 +218,20 @@ export function createBindingOps({ store, bindings, versions, snapshot, connecti
     return Math.max(rows[0]?.version ?? 0, head?.version ?? 0) + 1
   }
 
-  async function writeVersion({ bindingId, version, doc, status, note, actor, action, reason, extra = {} }) {
-    const row = { bindingId, version, doc, status, note: note ?? null, createdBy: actor.userId ?? null, createdByPrincipal: actor.principal, createdAt: now(), ...extra }
-    await store.write({ kind: 'bindingVersions', id: `${bindingId}@${version}`, doc: row, action, actor, reason, target: { kind: 'binding', id: bindingId } })
-    return row
+  // Writes a new version under the next free number. A version is only ever inserted: two writers
+  // that read the same next number (a person and an agent saving drafts at once) never replace each
+  // other's content; the second picks the number after. → the row (with its version)
+  async function writeVersion({ bindingId, doc, status, note, actor, action, reason, extra = {} }) {
+    for (let tries = 0; ; tries += 1) {
+      const version = await nextVersion(bindingId)
+      const row = { bindingId, version, doc, status, note: note ?? null, createdBy: actor.userId ?? null, createdByPrincipal: actor.principal, createdAt: now(), ...extra }
+      try {
+        await store.write({ kind: 'bindingVersions', id: `${bindingId}@${version}`, doc: row, action, actor, reason, target: { kind: 'binding', id: bindingId }, create: true })
+        return row
+      } catch (error) {
+        if (error?.code !== 'conflict' || tries >= 4) throw error
+      }
+    }
   }
 
   // makes one version the published head; the version it replaces becomes superseded
@@ -232,8 +249,7 @@ export function createBindingOps({ store, bindings, versions, snapshot, connecti
   async function saveDraft({ actor, input, note = null }) {
     const doc = normalizeBinding(input, await ctx(false))
     const bindingId = bindingIdOf(doc.surface, doc.scope)
-    const version = await nextVersion(bindingId)
-    await writeVersion({ bindingId, version, doc, status: 'draft', note: checkNote(note), actor, action: 'ai.bindings.saveDraft', extra: actor.principal === 'agent' ? { origin: 'ai-proposal' } : {} })
+    const { version } = await writeVersion({ bindingId, doc, status: 'draft', note: checkNote(note), actor, action: 'ai.bindings.saveDraft', extra: actor.principal === 'agent' ? { origin: 'ai-proposal' } : {} })
     return { bindingId, version, status: 'draft', binding: doc }
   }
 
@@ -246,8 +262,7 @@ export function createBindingOps({ store, bindings, versions, snapshot, connecti
     if (input) {
       const doc = normalizeBinding({ ...input, surface: input.surface ?? surface, scope: input.scope ?? scope }, await ctx(true))
       const bindingId = bindingIdOf(doc.surface, doc.scope)
-      const next = await nextVersion(bindingId)
-      await writeVersion({ bindingId, version: next, doc, status: 'published', note: checkNote(note), actor, action, reason, extra })
+      const { version: next } = await writeVersion({ bindingId, doc, status: 'published', note: checkNote(note), actor, action, reason, extra })
       return publishVersion({ bindingId, version: next, doc, actor, reason, action })
     }
     const bindingId = bindingIdOf(surface, scope)
@@ -273,8 +288,7 @@ export function createBindingOps({ store, bindings, versions, snapshot, connecti
       if (error instanceof ModelError) fail(`Version ${toVersion} cannot be published again: ${error.message.replace(/^This binding cannot be published: /, '')} Return ${surfaceById(surface)?.title || surface} to the built-in AI instead (ai.control.reset target binding).`, 409, { builtinInstead: true })
       throw error
     }
-    const version = await nextVersion(bindingId)
-    await writeVersion({ bindingId, version, doc, status: 'published', note: `Rollback to version ${toVersion}`, actor, action: 'ai.bindings.rollback', reason, extra: { rollbackOf: toVersion } })
+    const { version } = await writeVersion({ bindingId, doc, status: 'published', note: `Rollback to version ${toVersion}`, actor, action: 'ai.bindings.rollback', reason, extra: { rollbackOf: toVersion } })
     return publishVersion({ bindingId, version, doc, actor, reason, action: 'ai.bindings.rollback' })
   }
 
@@ -337,8 +351,7 @@ export function createBindingOps({ store, bindings, versions, snapshot, connecti
         continue
       }
       const checked = normalizeBinding(doc, await ctx(true))
-      const version = await nextVersion(bindingId)
-      await writeVersion({ bindingId, version, doc: checked, status: 'published', note: 'From AI settings', actor, action: 'ai.bindings.sync', reason, extra: { origin: 'ai.update' } })
+      const { version } = await writeVersion({ bindingId, doc: checked, status: 'published', note: 'From AI settings', actor, action: 'ai.bindings.sync', reason, extra: { origin: 'ai.update' } })
       await publishVersion({ bindingId, version, doc: checked, actor, reason, action: 'ai.bindings.sync' })
       done.push({ surface, version })
     }

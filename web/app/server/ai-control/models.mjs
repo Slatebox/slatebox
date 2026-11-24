@@ -5,7 +5,7 @@
 //
 // Pure apart from the injected store, AI settings and address checks.
 import { MAX_PRICE_PER_MILLION } from '../metering/prices.mjs'
-import { BUILTIN_PROVIDERS, PROVIDER_CAPS, ProviderError, mergeProviders, normalizeProvider, publicProvider } from './providers.mjs'
+import { BUILTIN_PROVIDERS, PROVIDER_CAPS, ProviderError, mergeProviderInput, mergeProviders, normalizeProvider, publicProvider } from './providers.mjs'
 
 // The built-in AI's own connections a model row may name (the snapshot accepts the same).
 export const BUILTIN_CONNECTIONS = Object.freeze(['deepinfra', 'openai', 'anthropic', 'stabilityai'])
@@ -83,17 +83,27 @@ export function normalizeModel(input, { serverConnections = [] } = {}) {
 }
 
 /**
- * The price an administrator set for a model name (metering/prices.mjs setDbPriceSource): among the
- * enabled rows that serve it with a price, the dearest, so two connections serving one model never
- * count it as the cheaper. → { inPerMillion, outPerMillion, id } or null.
+ * The price an administrator set for a model (metering/prices.mjs setDbPriceSource). where: the
+ * connection that served the call ({ connection: 'server:<name>' | 'builtin', provider }): only the
+ * row of that connection and model applies, so a price set on one connection never changes what a
+ * call through another (or through the built-in AI) costs. Without where (whether a model is
+ * priced at all), the dearest enabled row that serves the name. → { inPerMillion, outPerMillion,
+ * id, builtin } or null.
  */
-export function dbPriceFor(snapshot, model) {
+export function dbPriceFor(snapshot, model, where = null) {
+  const served = where?.connection
+    ? (where.connection === 'builtin' ? (where.provider ? `builtin:${where.provider}` : null) : String(where.connection))
+    : undefined
+  if (served === null) return null
   let best = null
   for (const row of Object.values(snapshot?.models || {})) {
     if (row.model !== model || row.status === 'disabled') continue
+    if (served !== undefined && row.connection !== served) continue
     const p = row.prices
     if (!p || !Number.isFinite(p.inputPerM) || !Number.isFinite(p.outputPerM)) continue
-    if (!best || p.inputPerM + p.outputPerM > best.inPerMillion + best.outPerMillion) best = { inPerMillion: p.inputPerM, outPerMillion: p.outputPerM, id: row._id }
+    if (!best || p.inputPerM + p.outputPerM > best.inPerMillion + best.outPerMillion) {
+      best = { inPerMillion: p.inputPerM, outPerMillion: p.outputPerM, id: row._id, builtin: String(row.connection).startsWith('builtin:') }
+    }
   }
   return best
 }
@@ -124,14 +134,15 @@ export function providersView(snapshot, archived = []) {
 export function createCatalogOps({ store, snapshot, aiSettings, checkUrl, assertHost = async () => {}, readProvider = async (id) => snapshot()?.providers?.[id] ?? null }) {
   async function saveProvider({ userId, actor, input, dropKeys = false, reason = null }) {
     let doc
+    // what the change leaves out keeps its stored value (providers.mjs mergeProviderInput)
+    const previous = BUILTIN_PROVIDERS[input?.id ?? input?._id] ? null : await readProvider(input?.id ?? input?._id)
     try {
-      doc = normalizeProvider(input, { checkUrl })
+      doc = normalizeProvider(mergeProviderInput(input, previous), { checkUrl })
       if (doc.baseUrl) await assertHost(doc.baseUrl)
     } catch (error) {
       if (error instanceof ProviderError || error?.name === 'EndpointRefused') throw new ModelError(error.message)
       throw error
     }
-    const previous = await readProvider(doc._id)
     // a provider whose address changes never sends its connections' keys to the new one (spec 6.2)
     const moved = previous && (previous.baseUrl ?? null) !== (doc.baseUrl ?? null)
     let dropped = []

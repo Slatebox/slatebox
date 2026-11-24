@@ -16,14 +16,14 @@ import { assertEndpointHost, checkEndpointUrl, endpointRules } from '../methods/
 import { createConnectionStore } from '../methods/ai/connection-store.mjs'
 import { createCatalogOps, createWriteLimit, dbPriceFor, providersView } from './models.mjs'
 import { SURFACES } from './catalogue.mjs'
-import { createAdminOps, surfacesStatus } from './admin.mjs'
+import { createAdminOps, createStatusHub, surfacesStatus } from './admin.mjs'
 import { resolveBinding } from './resolve.mjs'
 import { operatorConfig } from '../methods/ai/connections.mjs'
 import { createSnapshotHolder, fileDbLayer, parsePromptRef } from './snapshot.mjs'
 import { STATE_ID, createControlStore, ensureAIControlIndexes } from './store.mjs'
 import { createAIControl } from './facade.mjs'
 import { createBindingOps, limitsFor } from './bindings.mjs'
-import { requestBreaker } from './breaker.mjs'
+import { applyBreaker, requestBreaker } from './breaker.mjs'
 import { runAIControl001 } from '../migrations/ai-control-001.mjs'
 
 // A wrong ai.control section in the settings stops the start with a plain message.
@@ -106,12 +106,12 @@ export const aiBindings = createBindingOps({
 // failing on this pod is served from the settings file and built-in AI until the breaker closes.
 aiSettings.setBindingSource(async ({ surface, userId, orgId, holders }) => {
   const snapshot = await snapshotHolder.ready()
-  const binding = resolveBinding(snapshot, { surface, userId, orgId, holders, settings: Meteor.settings })
-  const open = requestBreaker.isOpen(binding.surface)
-  // a new version (published on any pod) starts with the breaker closed
-  if (open && open.bindingVersion !== binding.bindingVersion) requestBreaker.reset(binding.surface)
-  return { ...binding, tripped: Boolean(binding.chainFromBinding && requestBreaker.isOpen(binding.surface)) }
+  return applyBreaker(resolveBinding(snapshot, { surface, userId, orgId, holders, settings: Meteor.settings }), requestBreaker)
 })
+// The keys of the services beside the models saved in the app (picture search, icons, Stability,
+// transcription) apply only while the DB layer is on; switched off, the settings file's keys apply,
+// exactly as before AI control.
+aiSettings.setAuxKeysOn(() => dbLayer !== 'off' && snapshotHolder.current().dbLayer !== 'off')
 // ai.update at the server level writes the server's bindings too (spec 4), so they never disagree.
 aiSettings.setServerUseSync(({ changes, actor, reason }) => aiBindings.syncServerUse({ actor, changes, reason }))
 // A binding's limits tighten the meter's estimate and ceiling for its surface, from the next call.
@@ -121,7 +121,7 @@ setLimitSource((feature) => limitsFor(snapshotHolder.current(), feature))
 // on models win in the meter (metering/prices.mjs): both read the snapshot, so a change reaches
 // every pod within one poll, with no restart.
 setProviderSource(() => snapshotHolder.current().providers)
-setDbPriceSource((model) => dbPriceFor(snapshotHolder.current(), model))
+setDbPriceSource((model, where) => dbPriceFor(snapshotHolder.current(), model, where))
 
 // The endpoint rules for the server's own configuration (an administrator's provider address).
 const serverRules = () => endpointRules({ hosted, level: 'server', privateEndpoints: operatorConfig(Meteor.settings).privateEndpoints })
@@ -158,36 +158,26 @@ export const aiControlOps = createAdminOps({
 
 // ai.surfaces.status: for every signed-in page, whether each AI surface is on and the message to
 // show when an administrator turned it off. No models, prompts or connections. It follows the
-// snapshot: a change reaches open pages within one poll.
-const STATUS_POLL_MS = 5000
-Meteor.publish('ai.surfaces.status', async function publishSurfacesStatus() {
-  const userId = this.userId
-  const compute = async () => surfacesStatus({
+// snapshot: a change reaches open pages within one poll. Signed-in only; one shared computation
+// and one timer for every subscriber (admin.mjs createStatusHub).
+const statusHub = createStatusHub({
+  // On and off come from the snapshot alone (the global switch and the server bindings), the same
+  // for everyone, so this reads no database; which model answers is never part of it.
+  compute: async () => surfacesStatus({
     surfaces: SURFACES,
     snapshot: aiControl.snapshot(),
-    // On and off come from the snapshot alone (the global switch and the server and plan
-    // bindings), so this reads no database; which model answers is never part of it.
-    bind: (surface) => resolveBinding(aiControl.snapshot(), { surface, userId, holders: { ownProviders: false }, settings: Meteor.settings }),
-  })
-  let last = await compute()
-  this.added('aiSurfacesStatus', 'status', last)
+    bind: (surface) => resolveBinding(aiControl.snapshot(), { surface, holders: { ownProviders: false }, settings: Meteor.settings }),
+  }),
+  generation: () => aiControl.snapshot().generation,
+  every: (fn, ms) => Meteor.setInterval(fn, ms),
+  cancel: (handle) => Meteor.clearInterval(handle),
+})
+Meteor.publish('ai.surfaces.status', async function publishSurfacesStatus() {
+  if (!this.userId) return this.ready()
+  const sub = await statusHub.subscribe((next) => this.changed('aiSurfacesStatus', 'status', next))
+  this.added('aiSurfacesStatus', 'status', sub.current)
   this.ready()
-  let lastGeneration = aiControl.snapshot().generation
-  const timer = Meteor.setInterval(async () => {
-    const generation = aiControl.snapshot().generation
-    if (generation === lastGeneration) return
-    lastGeneration = generation
-    try {
-      const next = await compute()
-      if (JSON.stringify(next) !== JSON.stringify(last)) {
-        last = next
-        this.changed('aiSurfacesStatus', 'status', next)
-      }
-    } catch (error) {
-      console.warn('ai-control: surfaces status not refreshed:', error.message)
-    }
-  }, STATUS_POLL_MS)
-  this.onStop(() => Meteor.clearInterval(timer))
+  this.onStop(() => sub.stop())
 })
 
 if (dbLayer === 'off') console.warn('ai-control: the DB layer is switched off in the settings file (ai.control.dbLayer); the settings file and built-in defaults apply')

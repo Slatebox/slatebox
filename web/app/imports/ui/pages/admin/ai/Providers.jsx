@@ -16,7 +16,7 @@ import Stack from '@mui/material/Stack'
 import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { checkResultText, keyText, lastCheckText, parseHeaders } from './catalog-view.mjs'
+import { checkResultText, connectionFormDefaults, keyText, lastCheckText, parseHeaders, providerFormDefaults } from './catalog-view.mjs'
 
 // Admin › AI control › Providers and keys: the providers Slatebox can talk to (the built-in ones and
 // those an administrator added), and under each the server's connections with which key they use.
@@ -44,12 +44,13 @@ function Reason({ value, onChange, label = 'Why (kept in the change history)' })
 }
 
 function AddConnection({ open, onClose, onDone, providers, hosted }) {
-  const [form, setForm] = useState({})
+  // the form starts filled (its first render reads every field), and again each time it opens
+  const [form, setForm] = useState(() => connectionFormDefaults(open))
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     if (open) {
-      setForm({ provider: open.provider || 'openai-compatible', name: '', baseUrl: '', model: '', apiKey: '', fromEnv: false, envName: 'SLATEBOX_AI_KEY_', tools: true, vision: false, images: false })
+      setForm(connectionFormDefaults(open))
       setError('')
     }
   }, [open])
@@ -190,12 +191,12 @@ function RemoveConnection({ connection, onClose, onDone }) {
 }
 
 function AddProvider({ open, onClose, onDone }) {
-  const [form, setForm] = useState({})
+  const [form, setForm] = useState(providerFormDefaults)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     if (open) {
-      setForm({ id: '', label: '', protocol: 'openai-chat', baseUrl: '', baseUrlLocked: true, authStyle: 'bearer', authName: '', headers: '', caps: { tools: true } })
+      setForm(providerFormDefaults())
       setError('')
     }
   }, [open])

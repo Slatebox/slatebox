@@ -43,10 +43,12 @@ function frozen(value) {
 }
 
 /** The snapshot with no DB layer: resolution uses the settings file and code only. */
-export function emptySnapshot({ dbLayer = 'on', source = 'empty', health = [], generation = 0 } = {}) {
+export function emptySnapshot({ dbLayer = 'on', source = 'empty', health = [], generation = 0, global = null } = {}) {
   return frozen({
     generation, dbLayer, source, loadedAt: null,
-    state: { ...DEFAULT_STATE, generation, dbLayer },
+    // the global switch (AI off for everyone, and its message) is break-glass state, not an AI
+    // control document: it holds while the DB layer is switched off at runtime
+    state: { ...DEFAULT_STATE, ...(global && { aiEnabled: global.aiEnabled !== false, aiDisabledMessage: global.aiDisabledMessage ?? null }), generation, dbLayer },
     providers: {}, connections: {}, models: {}, bindings: {}, prompts: {}, promptVersions: {}, agents: {},
     health,
   })
@@ -186,6 +188,7 @@ function bindingProblem(doc, { models, prompts, promptVersions, codePromptIds, c
       if (gap) return `chain ${index + 1}: ${entry.model} cannot do ${gap}, which ${at.id} needs`
     }
   }
+  if (doc.onTrip !== undefined && doc.onTrip !== null && !['fallback', 'report'].includes(doc.onTrip)) return 'onTrip is fallback or report'
   if (doc.params !== undefined && doc.params !== null) {
     if (!isObject(doc.params)) return 'params is an object'
     for (const key of ['maxTokens', 'timeoutMs']) if (!optionalPositive(doc.params[key])) return `params.${key} is a number above 0`
@@ -241,7 +244,7 @@ export function buildSnapshot(raw = {}, { fileConnections = [], codePromptIds = 
   }
 
   // A dbLayer switched off at runtime ignores every document but keeps counting generations.
-  if (state.dbLayer === 'off') return emptySnapshot({ dbLayer: 'off', source, generation: state.generation })
+  if (state.dbLayer === 'off') return emptySnapshot({ dbLayer: 'off', source, generation: state.generation, global: state })
 
   const providers = pick(raw.providers, 'provider', providerProblem)
   // server connections: never a key, a cipher or anything sealed

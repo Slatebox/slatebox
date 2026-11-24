@@ -140,17 +140,18 @@ export function actionEstimateMicros(feature) {
 
 // Prices an administrator set on a model in AI control (aiModels, spec 1.3), read from the
 // snapshot: they win over the settings file and the table from the next call, with no restart.
-// source(model) → { inPerMillion, outPerMillion, id } or null; ai-control/index.mjs sets it.
+// source(model, where?) → { inPerMillion, outPerMillion, id, builtin } or null; where names the
+// connection that served the call ({ connection, provider }); ai-control/index.mjs sets it.
 let dbPrices = () => null
 export function setDbPriceSource(source) {
   dbPrices = typeof source === 'function' ? source : () => null
 }
 
-const dbPriceOf = (model) => {
+const dbPriceOf = (model, where = null) => {
   try {
-    const row = model ? dbPrices(model) : null
+    const row = model ? dbPrices(model, where) : null
     if (!row || !Number.isFinite(row.inPerMillion) || !Number.isFinite(row.outPerMillion)) return null
-    return Object.freeze({ model, inPerMillion: row.inPerMillion, outPerMillion: row.outPerMillion, source: 'db', read: null, ...(row.id && { id: row.id }) })
+    return Object.freeze({ model, inPerMillion: row.inPerMillion, outPerMillion: row.outPerMillion, source: 'db', read: null, ...(row.id && { id: row.id }), ...(row.builtin && { builtin: true }) })
   } catch {
     return null
   }
@@ -161,19 +162,30 @@ export function isPriced(model) {
   return Boolean(dbPriceOf(model) || prices.some(row => row.model === model))
 }
 
-export function aiPrice(model) {
-  return dbPriceOf(model) || prices.find(row => row.model === model) || dearest
+/**
+ * The price of one call. where: the connection that served it ({ connection, provider }), so an
+ * administrator's price applies only to that connection's model. A price set on the built-in AI's
+ * own model can raise what the table says but never lower it: Slatebox's provider bills the table
+ * rate, and budgets and credits are counted from it.
+ */
+export function aiPrice(model, where = null) {
+  const table = prices.find(row => row.model === model)
+  const db = dbPriceOf(model, where)
+  if (db && db.builtin && table) {
+    return Object.freeze({ ...db, inPerMillion: Math.max(db.inPerMillion, table.inPerMillion), outPerMillion: Math.max(db.outPerMillion, table.outPerMillion) })
+  }
+  return db || table || dearest
 }
 
 // DeepInfra returns usage.estimated_cost. Its unit is not yet confirmed from a recorded
 // response, so it can raise the table price but never lower it.
-export function aiCostMicros({ model, usage = {} }) {
-  const price = aiPrice(model)
+export function aiCostMicros({ model, usage = {}, connection = null, provider = null }) {
+  const price = aiPrice(model, connection ? { connection, provider } : null)
   // Whole micro-dollars per million tokens keep the arithmetic exact; round up.
   const perToken = (usage.inputTokens || 0) * Math.round(price.inPerMillion * 1e6) + (usage.outputTokens || 0) * Math.round(price.outPerMillion * 1e6)
   const table = Math.ceil(perToken / 1e6)
-  const provider = typeof usage.providerCostUsd === 'number' && usage.providerCostUsd > 0 ? Math.ceil(usage.providerCostUsd * 1_000_000) : 0
-  if (provider > table) return { costMicros: provider, source: 'provider', priceModel: model }
+  const provider$ = typeof usage.providerCostUsd === 'number' && usage.providerCostUsd > 0 ? Math.ceil(usage.providerCostUsd * 1_000_000) : 0
+  if (provider$ > table) return { costMicros: provider$, source: 'provider', priceModel: model }
   return { costMicros: table, source: price.source === 'db' ? 'db' : 'table', priceModel: price.model }
 }
 

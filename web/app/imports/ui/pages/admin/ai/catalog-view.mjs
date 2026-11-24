@@ -70,3 +70,13 @@ export const numberOrNull = (text) => (String(text ?? '').trim() === '' ? null :
 
 /** The model ids that are unpriced, from ai.control.get's warnings. */
 export const unpricedIds = (warnings = []) => new Set(warnings.filter((w) => w.kind === 'unpriced').map((w) => w.id))
+
+// The Add a connection and Add provider forms as they open. Every field the dialogs read on their
+// first render is here (a form that started empty and was filled after the first render blanked
+// the page: form.name.trim() of undefined).
+export function connectionFormDefaults(open = null) {
+  return { provider: (open && open.provider) || 'openai-compatible', name: '', baseUrl: '', model: '', apiKey: '', fromEnv: false, envName: 'SLATEBOX_AI_KEY_', tools: true, vision: false, images: false }
+}
+export function providerFormDefaults() {
+  return { id: '', label: '', protocol: 'openai-chat', baseUrl: '', baseUrlLocked: true, authStyle: 'bearer', authName: '', headers: '', caps: { tools: true } }
+}

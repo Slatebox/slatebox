@@ -110,13 +110,21 @@ export async function run(appRoot) {
   await scenario('toolsAllow', chainRoute([entry('good', 'ok')], { tools: { mode: null, allow: ['propose_shapes'] } }), { functions, allowPlainText: true })
   await scenario('toolsNone', chainRoute([entry('good', 'ok')], { tools: { mode: null, allow: ['nothing_here'] } }), { functions, allowPlainText: true })
 
-  // a primary that always fails: after enough calls the breaker opens for the surface on this pod
+  // a primary that always fails for one person never opens the breaker for everyone (review fix:
+  // failures must come from at least 3 people)
+  requestBreaker.reset()
+  for (let i = 0; i < 12; i += 1) {
+    route = chainRoute([entry('bad', 'fail500'), entry('good', 'ok', ['infra'])])
+    await req({ feature: 'shape', userId: 'mallory', prompts: [{ role: 'user', content: 'draw' }] })
+  }
+  out.breakerOnePerson = { open: Boolean(requestBreaker.isOpen('shape')) }
+  // a primary that always fails for several people: after enough calls it opens for the surface on this pod
   requestBreaker.reset()
   for (let i = 0; i < 10; i += 1) {
-    route = chainRoute([entry('bad', 'fail500'), entry('good', 'ok', ['infra'])])
-    await req({ feature: 'shape', prompts: [{ role: 'user', content: 'draw' }] })
+    route = { ...chainRoute([entry('bad', 'fail500'), entry('good', 'ok', ['infra'])]), onTrip: 'report' }
+    await req({ feature: 'shape', userId: `person-${i % 3}`, prompts: [{ role: 'user', content: 'draw' }] })
   }
-  out.breaker = { open: Boolean(requestBreaker.isOpen('shape')), health: requestBreaker.health().map((h) => ({ kind: h.kind, id: h.id, bindingVersion: h.bindingVersion })) }
+  out.breaker = { open: Boolean(requestBreaker.isOpen('shape')), health: requestBreaker.health().map((h) => ({ kind: h.kind, id: h.id, bindingVersion: h.bindingVersion })), onTrip: requestBreaker.isOpen('shape')?.onTrip ?? null }
   stub.server.close()
   console.log = log
   return out

@@ -81,6 +81,23 @@ export const looksLikeSecret = (text) => typeof text === 'string' && KEY_LIKE.te
  * → { _id, label, protocol, baseUrl, baseUrlLocked, auth, extraHeaders, keyRequired, modelOptional,
  *     defaultCapabilities, status }
  */
+/**
+ * A provider change as it will be stored: the fields the input leaves out keep their stored values
+ * (a save never clears an address, key style or headers by omission). The key style follows a
+ * change of protocol, since Anthropic's is fixed. Send null to clear a field.
+ */
+export const PROVIDER_KEPT_FIELDS = Object.freeze(['baseUrl', 'baseUrlLocked', 'auth', 'extraHeaders', 'defaultCapabilities', 'keyRequired', 'modelOptional'])
+export function mergeProviderInput(input, previous) {
+  if (!isObject(input) || !isObject(previous)) return input
+  const out = { ...input }
+  for (const key of PROVIDER_KEPT_FIELDS) {
+    if (out[key] !== undefined) continue
+    if (key === 'auth' && input.protocol !== undefined && input.protocol !== previous.protocol) continue
+    if (previous[key] !== undefined) out[key] = previous[key]
+  }
+  return out
+}
+
 export function normalizeProvider(input, { checkUrl = (url) => url } = {}) {
   if (!isObject(input)) throw new ProviderError('A provider is an object with an id, a label and a wire protocol.')
   const id = input._id ?? input.id

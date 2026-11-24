@@ -60,6 +60,9 @@ export function createAISettings({
   // AI control's resolver for one surface (ai-control/index.mjs sets it): a published binding's
   // on/off, model chain, parameters and tools apply to the request path through resolveFor.
   let bindingSource = null
+  // whether the keys of the services beside the models saved in the app apply: not while AI control's
+  // DB layer is switched off (then everything is exactly as before it: the settings file's keys)
+  let auxKeysOn = () => true
   // ai.update at the server level also writes the server's bindings (ai-control bindings.mjs
   // syncServerUse), so a choice and a published binding never disagree. Set by ai-control/index.mjs.
   let useSync = null
@@ -592,7 +595,7 @@ export function createAISettings({
    * previousApiKey? } or null (then the settings file applies).
    */
   async function auxCredential(provider) {
-    if (!isAux(provider)) return null
+    if (!isAux(provider) || !auxKeysOn()) return null
     const docs = (await store.listConnections(SERVER))
       .filter((doc) => doc.provider === provider && doc.name && doc.status !== 'disabled')
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -607,6 +610,7 @@ export function createAISettings({
 
   /** Whether the server has a usable key for a service beside the models, in the app (not the settings file). */
   async function hasAuxKey(provider) {
+    if (!auxKeysOn()) return false
     const docs = (await store.listConnections(SERVER)).filter((doc) => doc.provider === provider && doc.name && doc.status !== 'disabled')
     return docs.some((doc) => fromDoc(doc, SERVER, false).hasKey)
   }
@@ -707,10 +711,13 @@ export function createAISettings({
     if (binding?.chainFromBinding && !binding.tripped) {
       // the surface whose binding applied names it in messages (a part that follows names its parent)
       const named = binding.followed || surface
+      // one entry is served as the choice it is: no chain walk, so req.js keeps the call site's
+      // own fallback model as it did for the same choice in AI settings (resolve.mjs choiceLike)
+      if (binding.choiceLike) return { ...(await routeForEntry(binding.chain[0], { user, feature: named, request })), control: controlOf(binding) }
       const chain = []
       for (const entry of binding.chain) chain.push(await routeForEntry(entry, { user, feature: named, request }))
       // always with the surface and version: each attempt's audit row and this pod's breaker need them
-      return { ...chain[0], chain, control: controlOf(binding) }
+      return { ...chain[0], chain, control: controlOf(binding), onTrip: binding.onTrip ?? 'report' }
     }
     // a surface whose binding kept failing on this pod (ai-control/breaker.mjs): the settings file
     // and the built-in AI only, until the breaker closes
@@ -805,6 +812,7 @@ export function createAISettings({
   return {
     view, update, resetServerUse, check: checkOne, resolveFor, serverState, choiceHolders,
     setBindingSource: (source) => { bindingSource = typeof source === 'function' ? source : null },
+    setAuxKeysOn: (fn) => { auxKeysOn = typeof fn === 'function' ? fn : () => true },
     setServerUseSync: (sync) => { useSync = typeof sync === 'function' ? sync : null },
     serverConnections, saveServerConnections, removeServerConnections, dropProviderKeys, connectionsOfProvider, discoverModels,
     auxCredential, hasAuxKey,

@@ -63,7 +63,7 @@ export function createMeter({ enabled, io, settings: loadSettings, decide, crede
       const settings = await loadSettings()
       const at = now()
       const kind = entry.kind || 'ai'
-      const costMicros = entry.costMicros ?? aiCostMicros({ model: entry.model, usage: entry.usage }).costMicros
+      const costMicros = entry.costMicros ?? aiCostMicros({ model: entry.model, usage: entry.usage, connection: entry.connection ?? null, provider: entry.provider ?? null }).costMicros
       const out = await recordUsage(io, {
         ref: entry.ref, payer: action.payer, actorId: action.userId, kind, route: action.route, feature: action.feature,
         model: entry.model, units: entry.usage?.totalTokens ?? 1, costMicros, now: at, settings, hold: action.hold,

@@ -12,7 +12,7 @@ export default defineAction({
   id: 'ai.control.reset',
   title: 'Reset AI control',
   description:
-    'Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part\'s published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); dbLayer switches AI control\'s own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. Needs a reason, which the audit trail keeps. Administrators only.',
+    'Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part\'s published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); dbLayer switches AI control\'s own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only.',
   toolset: 'admin',
   kind: 'write',
   scope: 'ai:admin',
@@ -45,9 +45,27 @@ export default defineAction({
       await deps.aiControlStore?.refused({ action: 'ai.control.reset', actor, target: { kind: 'reset', id: input.target }, reason: input.reason, error: error.message }).catch(() => {})
       throw error
     }
+    // A reset moves toward the defaults, and for a part an administrator turned off the default is
+    // on. From a token, a reset that would switch such a part back on is refused: a person does it
+    // on the page. (The global switch holds through every reset: snapshot.mjs, resolve.mjs.)
+    const reopened = principal.kind === 'agent' ? turnedOffParts(deps.aiControl?.snapshot?.(), input) : []
+    if (reopened.length) {
+      const why = `Only a person can switch back on what an administrator turned off (${reopened.join(', ')}). Use the AI control page, or reset target use.`
+      await deps.aiControlStore?.refused({ action: 'ai.control.reset', actor, target: { kind: 'reset', id: input.target }, reason: input.reason, error: why, trusted: true }).catch(() => {})
+      throw problem(403, 'forbidden', why, { details: { personOnly: true } })
+    }
     if (!input.reason.trim()) throw problem(400, 'invalid_request', 'Say why: a reset needs a reason.', { details: { field: 'reason' } })
     if (input.keys && !['use', 'all'].includes(input.target)) throw problem(400, 'invalid_request', 'keys go with target use or all.', { details: { field: 'keys' } })
     if ((input.target === 'binding') !== Boolean(input.surface)) throw problem(400, 'invalid_request', 'surface goes with target binding, and target binding needs it.', { details: { field: 'surface' } })
     return deps.aiControlOps.reset({ userId: principal.userId, actor, target: input.target, keys: input.keys ?? null, surface: input.surface ?? null, reason: input.reason })
   },
 })
+
+// The surfaces whose published binding turns them off and that this reset would stop applying.
+export function turnedOffParts(snapshot, { target, surface = null }) {
+  if (!['binding', 'bindings', 'dbLayer', 'all'].includes(target) || !snapshot || snapshot.dbLayer === 'off') return []
+  return Object.values(snapshot.bindings || {})
+    .filter((doc) => doc.enabled === false && (target !== 'binding' || doc.surface === surface))
+    .map((doc) => doc.surface)
+    .sort()
+}

@@ -145,7 +145,8 @@ async function chatTurn(input, map) {
       },
     })
     if (turn.abort) {
-      if (turn.capability || turn.unusable) throw new Meteor.Error('reply-unavailable', turn.abortMessage)
+      // a model that cannot do this, cannot be used, or a part an administrator turned off says so in its own words
+      if (turn.capability || turn.unusable || turn.disabled) throw new Meteor.Error('reply-unavailable', turn.abortMessage)
       // The model called the tool; the change it proposed is one the board does not make. Said in the board's words.
       if (turn.rejected?.reason) throw new Meteor.Error('reply-unavailable', 'That change could not be made: ' + turn.rejected.reason + ' Your board is still saved.')
       throw new Meteor.Error('reply-unavailable', 'The model could not prepare a reply. Your board is still saved.')
@@ -216,7 +217,7 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
     },
   })
   // a chosen model that cannot do this says so; a chosen model that failed is named, never replaced
-  if (plan.abort) throw new Meteor.Error('draft-unavailable', plan.capability || plan.unusable ? plan.abortMessage : plan.chosen
+  if (plan.abort) throw new Meteor.Error('draft-unavailable', plan.capability || plan.unusable || plan.disabled ? plan.abortMessage : plan.chosen
     ? `${plan.chosenLabel} could not return a usable draft. Check the model service and its tool-calling support, or choose another model in your AI settings.`
     : 'The agent could not produce a valid draft. Revise the brief and try again.')
   return parse(plan.toolCall.arguments)

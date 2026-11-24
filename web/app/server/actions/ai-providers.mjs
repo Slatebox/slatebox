@@ -16,14 +16,15 @@ import { agentRefusal } from '../ai-control/key-policy.mjs'
  */
 export async function guardControlWrite(principal, deps, { action, target, doing, reason = null, refusal = null }) {
   const actor = actorOf(principal)
-  const refuse = async (error) => {
-    await deps.aiControlStore?.refused({ action, actor, target, reason, error: error.message }).catch(() => {})
+  // trusted: past the administrator check, so the attempt's own text (its reason) is kept
+  const refuse = async (error, trusted = true) => {
+    await deps.aiControlStore?.refused({ action, actor, target, reason, error: error.message, trusted }).catch(() => {})
     throw error
   }
   try {
     await requireAIControlAdmin(principal, deps, doing)
   } catch (error) {
-    await refuse(error)
+    await refuse(error, false)
   }
   if (principal.kind === 'agent' && refusal) {
     const why = await refusal()

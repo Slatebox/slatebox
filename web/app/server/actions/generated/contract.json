@@ -9958,7 +9958,7 @@
     {
       "id": "ai.control.reset",
       "title": "Reset AI control",
-      "description": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. Needs a reason, which the audit trail keeps. Administrators only.",
+      "description": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only.",
       "action": "ai.control.reset",
       "toolset": "admin",
       "readOnly": false,
@@ -10960,6 +10960,18 @@
                   },
                   "additionalProperties": false
                 }
+              },
+              "onTrip": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "fallback",
+                  "report",
+                  null
+                ],
+                "description": "When the chain keeps failing on a server: fallback uses the settings file and built-in AI for 10 minutes; report keeps the chain and says so. Unset: fallback only for a chain of two or more that lists the built-in AI."
               },
               "params": {
                 "type": "object",

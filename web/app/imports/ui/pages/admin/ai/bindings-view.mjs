@@ -96,6 +96,7 @@ export function formFromBinding(head, surface) {
     enabled: head ? head.enabled !== false : true,
     disabledMessage: blank(head?.disabledMessage),
     chain: (head?.chain || []).map((entry, index) => ({ value: entryValue(entry), on: index === 0 ? [] : [...(entry.on || ['infra'])] })),
+    onTrip: blank(head?.onTrip),
     params,
     allow: (head?.tools?.allow || []).join(', '),
     mode: blank(head?.tools?.mode),
@@ -126,6 +127,8 @@ export function bindingFromForm(form) {
       }
       binding.chain.push(entry)
     }
+    // only a chain of two or more ever trips (one entry is a choice)
+    if (form.chain.length > 1 && ['fallback', 'report'].includes(form.onTrip)) binding.onTrip = form.onTrip
   }
   const params = {}
   for (const field of PARAM_FIELDS) {

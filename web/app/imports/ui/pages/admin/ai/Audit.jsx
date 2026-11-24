@@ -12,7 +12,7 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { actorText, auditCsv, diffRows } from './audit-diff.mjs'
+import { actionText, actorText, auditCsv, diffRows } from './audit-diff.mjs'
 
 // Every change to the AI configuration (ai.audit.list), newest first: AI control's own changes,
 // AI settings at every level and persona saves. A row opens to what changed; keys show only as
@@ -28,17 +28,6 @@ const AREAS = [
   { value: 'ai.bindings.', label: 'Bindings (models, fallbacks, on and off per part)' },
   { value: 'chatIntentions.', label: 'Personas' },
 ]
-const ACTIONS = {
-  'ai.update': 'Changed AI settings',
-  'ai.control.reset': 'Reset AI control',
-  'ai.providers.save': 'Saved a provider',
-  'ai.providers.archive': 'Archived a provider',
-  'ai.connections.save': 'Saved server connections',
-  'ai.connections.remove': 'Removed server connections',
-  'ai.models.save': 'Saved models',
-  'chatIntentions.save': 'Saved a persona',
-  'chatIntentions.delete': 'Deleted a persona',
-}
 const failure = (err, fallback) => err?.reason || err?.message || fallback
 
 function Changes({ row }) {
@@ -144,7 +133,7 @@ export default function Audit() {
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{new Date(row.at).toLocaleString()}</TableCell>
                     <TableCell>{actorText(row.actor)}</TableCell>
                     <TableCell>
-                      {ACTIONS[row.action] || row.action}
+                      {actionText(row)}
                       {row.outcome === 'refused' && <Typography component="span" color="error" variant="body2"> (refused)</Typography>}
                       <br />
                       <Typography component="span" sx={mono} color="text.secondary">{row.action}</Typography>

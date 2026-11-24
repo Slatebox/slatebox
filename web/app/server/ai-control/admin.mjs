@@ -158,7 +158,7 @@ export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null
  * → { aiEnabled, message, surfaces: { [id]: { enabled, message } } }
  */
 export async function surfacesStatus({ surfaces, snapshot, bind }) {
-  const aiEnabled = snapshot?.dbLayer === 'off' || snapshot?.state?.aiEnabled !== false
+  const aiEnabled = snapshot?.state?.aiEnabled !== false
   const out = {}
   for (const s of surfaces) {
     // not a place people use (default is the fallback row; admin.test is an administrator's)
@@ -188,4 +188,55 @@ export function changedFields(before, after) {
     if (key in after) out.after[key] = after[key]
   }
   return out
+}
+
+/**
+ * One shared ai.surfaces.status for every subscriber (the status is the same for everyone: it reads
+ * only the global switch and the server bindings). One timer runs while anyone subscribes; the
+ * status is computed once per generation, not once per subscriber.
+ * deps: { compute() → status, generation() → number, every(fn, ms) → handle, cancel(handle), pollMs }
+ * → { subscribe(onChange) → Promise<{ current, stop() }>, size() }
+ */
+export function createStatusHub({ compute, generation, every, cancel, pollMs = 5000, log = console }) {
+  const listeners = new Set()
+  let current = null
+  let seen = null
+  let timer = null
+  let pending = null
+  const refresh = async () => {
+    const at = generation()
+    if (current && at === seen) return current
+    pending ||= (async () => {
+      try {
+        const next = await compute()
+        seen = at
+        if (!current || JSON.stringify(next) !== JSON.stringify(current)) {
+          current = next
+          for (const listener of [...listeners]) listener(current)
+        }
+        return current
+      } finally {
+        pending = null
+      }
+    })()
+    return pending
+  }
+  return {
+    async subscribe(onChange) {
+      const first = await refresh()
+      listeners.add(onChange)
+      if (!timer) timer = every(() => { refresh().catch((error) => log.warn?.(`ai-control: surfaces status not refreshed: ${error.message}`)) }, pollMs)
+      return {
+        current: first,
+        stop() {
+          listeners.delete(onChange)
+          if (!listeners.size && timer) {
+            cancel(timer)
+            timer = null
+          }
+        },
+      }
+    },
+    size: () => listeners.size,
+  }
 }

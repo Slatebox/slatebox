@@ -214,9 +214,11 @@ export function resolveBinding(snapshot, args = {}) {
   // enabled: the global switch, then AND over every scope's binding of the surface itself
   let enabled = true
   let disabledMessage = null
-  if (snap.state?.aiEnabled === false) {
+  // the global switch holds even with the DB layer switched off at runtime (it is break-glass state)
+  const global = snapshot?.state ?? snap.state
+  if (global?.aiEnabled === false) {
     enabled = false
-    disabledMessage = snap.state.aiDisabledMessage || 'AI is turned off on this server by its administrator.'
+    disabledMessage = global.aiDisabledMessage || 'AI is turned off on this server by its administrator.'
     provenance.enabled = 'db:global'
   }
   for (const { doc, layer } of docsBySurface[0].docs) {
@@ -250,11 +252,20 @@ export function resolveBinding(snapshot, args = {}) {
   // server's and a plan's bindings, as it outranks the server's choices today.
   const legacy = legacyChain(id, holders, settings)
   const ownChoice = ['me', 'team'].includes(legacy.choice.scope)
+  let choiceLike = false
+  let onTrip = 'report'
   if (fromDb && resolvedDb.length && (isInner(fromDb.layer) || !ownChoice)) {
-    chain = resolvedDb
+    // One entry is a choice, as AI settings made it (and as ai.update and ai-control-001 write
+    // it): the request keeps the call site's own fallback model, exactly as the choice did, and the
+    // circuit breaker never moves it. The built-in AI's entry shows that fallback here too. A
+    // longer chain is the whole list: the call site's fallback does not apply.
+    choiceLike = fromDb.value.length === 1
+    const onlyBuiltin = choiceLike && fromDb.value[0]?.connection === 'builtin' && !fromDb.value[0]?.model
+    chain = onlyBuiltin ? builtinChain(id, settings).chain.map((entry, index) => (index === 0 ? { ...entry, builtinDefault: true } : { ...entry, builtinFallback: true })) : resolvedDb
     provenance.chain = fromDb.layer
     followed = fromDb.sid === id ? null : fromDb.sid
     bindingVersion = `${fromDb.doc._id}@v${fromDb.doc.version ?? 1}`
+    onTrip = tripRule(fromDb.doc)
   } else {
     chain = legacy.chain
     provenance.chain = legacy.layer
@@ -332,7 +343,24 @@ export function resolveBinding(snapshot, args = {}) {
     provenance, followed, bindingVersion, builtinFrom: builtinFeatureFor(id),
     // the model chain came from a published binding (not an AI settings choice, the file or code)
     chainFromBinding: Boolean(bindingVersion),
+    // a one-entry chain is served as a choice (no chain walk, the call site's fallback kept)
+    choiceLike,
+    // what this pod's circuit breaker does when the chain keeps failing (breaker.mjs)
+    onTrip,
   }
+}
+
+/**
+ * What the circuit breaker does for a published binding that keeps failing: 'fallback' serves the
+ * surface from the settings file and the built-in AI for a while; 'report' keeps the chain and
+ * only says so (health, rollback). The binding's own onTrip wins. Otherwise only a chain of two or
+ * more that already lists the built-in AI falls back: an administrator who bound a surface to their
+ * own connections alone (to keep data on site, say) never has it sent elsewhere by the breaker.
+ */
+export function tripRule(doc) {
+  if (doc?.onTrip === 'fallback' || doc?.onTrip === 'report') return doc.onTrip
+  const chain = Array.isArray(doc?.chain) ? doc.chain : []
+  return chain.length > 1 && chain.some((entry) => entry?.connection === 'builtin' || String(entry?.model || '').startsWith('builtin:')) ? 'fallback' : 'report'
 }
 
 /** A short form for comparing with what the AI settings resolve: the primary connection and model. */

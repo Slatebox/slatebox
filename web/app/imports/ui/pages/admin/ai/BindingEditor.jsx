@@ -215,6 +215,14 @@ export default function BindingEditor({ surface, entry, effective, models, conne
                   />
                 ))}
                 {form.chain.length < 5 && <Button size="small" sx={{ alignSelf: 'flex-start' }} onClick={() => set({ chain: [...form.chain, { value: 'connection:builtin', on: ['infra'] }] })}>Add a fallback</Button>}
+                {form.chain.length > 1 && (
+                  <TextField select size="small" label="If it keeps failing for several people" value={form.onTrip || ''} onChange={(e) => set({ onTrip: e.target.value })} sx={{ maxWidth: 520 }} data-testid="binding-on-trip"
+                    helperText="More than half of the last 50 calls on a server, for at least 3 people.">
+                    <MenuItem value="">{form.chain.some((r) => r.value === 'connection:builtin' || String(r.value).startsWith('model:builtin:')) ? 'Use the settings file and built-in AI for 10 minutes' : 'Keep this chain and show a warning'} (the default)</MenuItem>
+                    <MenuItem value="fallback">Use the settings file and built-in AI for 10 minutes</MenuItem>
+                    <MenuItem value="report">Keep this chain and show a warning</MenuItem>
+                  </TextField>
+                )}
               </Stack>
             )}
           </Box>

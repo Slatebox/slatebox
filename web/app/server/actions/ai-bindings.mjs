@@ -35,6 +35,7 @@ export const bindingInput = {
         additionalProperties: false,
       },
     },
+    onTrip: { type: ['string', 'null'], enum: ['fallback', 'report', null], description: 'When the chain keeps failing on a server: fallback uses the settings file and built-in AI for 10 minutes; report keeps the chain and says so. Unset: fallback only for a chain of two or more that lists the built-in AI.' },
     params: {
       type: 'object',
       properties: Object.fromEntries(Object.entries(PARAM_LIMITS).map(([key, l]) => [key, { type: [l.whole ? 'integer' : 'number', 'null'], minimum: l.min, maximum: l.max }])),

@@ -5,14 +5,15 @@
 // in step from here on (bindings.mjs syncServerUse).
 //
 // It changes nothing anyone sees. Before writing, it resolves every surface with and without the
-// proposed bindings and moves a choice only when no surface would answer differently: a choice the
+// proposed bindings and moves a choice only when no surface's whole route (every model in its
+// chain and when each is tried) would differ: a choice the
 // settings file overrides for a more specific part (file use.workshop under an app use.chat, say)
 // stays a choice. A surface that already has a server binding is never touched. Choices of people
 // and teams stay in their AI settings (they outrank server bindings, resolve.mjs).
 //
 // Pure apart from the injected collections and services; ai-control/index.mjs runs it.
 import { BINDABLE_SURFACES, bindingIdOf } from '../ai-control/bindings.mjs'
-import { primaryOf, resolveBinding } from '../ai-control/resolve.mjs'
+import { resolveBinding } from '../ai-control/resolve.mjs'
 
 export const AI_CONTROL_001 = 'migration:ai-control-001'
 export const REASON_001 = 'Moved from the AI settings to AI control (ai-control-001)'
@@ -51,7 +52,10 @@ export async function runAIControl001({ state, aiSettings, ops, snapshot, settin
     // every surface for the server's choices alone (people's and teams' choices outrank bindings)
     const holders = { person: null, team: null, server: { connections: server.connections, use: server.use }, ownProviders: false, serverUseSource: server.useSource }
     const base = snapshot()
-    const answers = (bindings) => JSON.stringify(BINDABLE_SURFACES.map((surface) => primaryOf(resolveBinding({ ...base, bindings }, { surface, holders, settings }))))
+    // the whole route of every surface: each model in its chain, in order, and when it is tried (a
+    // built-in choice keeps its fallback model: resolve.mjs serves a one-entry chain as a choice)
+    const route = (binding) => binding.chain.map((entry) => [entry.connection ?? null, entry.provider ?? null, entry.model ?? null, [...(entry.on || [])].sort().join(',')])
+    const answers = (bindings) => JSON.stringify(BINDABLE_SURFACES.map((surface) => route(resolveBinding({ ...base, bindings }, { surface, holders, settings }))))
     const before = answers(base.bindings)
     const accepted = {}
     const docFor = (key) => ({ _id: bindingIdOf(key), surface: key, scope: { level: 'server' }, enabled: true, chain: [{ connection: server.use[key] === 'builtin' ? 'builtin' : server.use[key] }], status: 'published', version: 1 })

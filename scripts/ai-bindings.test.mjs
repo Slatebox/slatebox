@@ -23,7 +23,7 @@ import { COLLECTIONS, STATE_ID, createControlStore } from '../web/app/server/ai-
 import { createAIControl } from '../web/app/server/ai-control/facade.mjs'
 import { createAdminOps, surfacesStatus } from '../web/app/server/ai-control/admin.mjs'
 import { BINDABLE_SURFACES, createBindingOps, limitsFor, normalizeBinding } from '../web/app/server/ai-control/bindings.mjs'
-import { createBreaker } from '../web/app/server/ai-control/breaker.mjs'
+import { applyBreaker, createBreaker } from '../web/app/server/ai-control/breaker.mjs'
 import { createWriteLimit } from '../web/app/server/ai-control/models.mjs'
 import { AI_CONTROL_001, runAIControl001 } from '../web/app/server/migrations/ai-control-001.mjs'
 import { createAISettings } from '../web/app/server/methods/ai/ai-settings-core.mjs'
@@ -134,10 +134,7 @@ function world({ settings = SELFHOST, hosted = false } = {}) {
   // the same wiring as ai-control/index.mjs
   ai.setBindingSource(async ({ surface, userId, orgId, holders }) => {
     const snapshot = await holder.ready()
-    const binding = resolveBinding(snapshot, { surface, userId, orgId, holders, settings })
-    const open = breaker.isOpen(binding.surface)
-    if (open && open.bindingVersion !== binding.bindingVersion) breaker.reset(binding.surface)
-    return { ...binding, tripped: Boolean(binding.chainFromBinding && breaker.isOpen(binding.surface)) }
+    return applyBreaker(resolveBinding(snapshot, { surface, userId, orgId, holders, settings }), breaker)
   })
   ai.setServerUseSync(({ changes, actor, reason }) => ops.syncServerUse({ actor, changes, reason }))
   const adminOps = createAdminOps({ store, audit: { find: () => ({ sort: () => ({ limit: () => ({ toArray: async () => [] }) }) }) }, aiSettings: ai, bindings: ops })
@@ -332,38 +329,59 @@ test('the request path follows the chain by failure class; an unreachable primar
   assert.deepEqual(out.toolsAllow.seen[0].tools, ['propose_shapes'])
   assert.deepEqual([out.toolsNone.seen, out.toolsNone.result.failure], [[], 'stop'])
   assert.match(out.toolsNone.result.message, /an administrator limited its tools/)
-  // a primary that fails every call trips the breaker for the surface on this pod
-  assert.deepEqual(out.breaker, { open: true, health: [{ kind: 'breaker', id: 'shape', bindingVersion: 'shape|server@v3' }] })
+  // a primary that fails every call, for several people, trips the breaker for the surface on this
+  // pod (restated, review fix: it needs failures from at least 3 people, and records what the
+  // binding does on a trip); one person's failures alone never trip it
+  assert.deepEqual(out.breaker, { open: true, health: [{ kind: 'breaker', id: 'shape', bindingVersion: 'shape|server@v3' }], onTrip: 'report' })
+  assert.deepEqual(out.breakerOnePerson, { open: false })
 })
 
 test('the breaker: more than half of the last calls failing (at least 10) opens it for 10 minutes; the surface uses the settings file and built-in AI; a new version closes it', async () => {
   let now = 0
   const breaker = createBreaker({ now: () => now, log: { warn() {} } })
-  for (let i = 0; i < 9; i += 1) breaker.record('shape', { failure: 'infra', bindingVersion: 'shape|server@v1' })
+  // Restated (review fix): failures count only when they come from at least 3 people, and the
+  // binding says what an open breaker does (onTrip)
+  const who = (i) => `person-${i % 3}`
+  for (let i = 0; i < 9; i += 1) breaker.record('shape', { failure: 'infra', bindingVersion: 'shape|server@v1', userId: who(i), onTrip: 'fallback' })
   assert.equal(breaker.isOpen('shape'), null, 'fewer than 10 calls never trip it')
-  breaker.record('shape', { failure: null, bindingVersion: 'shape|server@v1' })
+  breaker.record('shape', { failure: null, bindingVersion: 'shape|server@v1', userId: 'x', onTrip: 'fallback' })
   assert.ok(breaker.isOpen('shape'), '9 of 10 failed')
   assert.match(breaker.health()[0].problem, /failed 9 of the last 10 calls: using the settings file and built-in AI on this server until 00:10 UTC/)
   now += 10 * 60 * 1000
   assert.equal(breaker.isOpen('shape'), null, 'closes after 10 minutes')
   // half failing is not more than half; context and other failures never count
-  for (let i = 0; i < 10; i += 1) breaker.record('vision', { failure: i % 2 ? 'shape' : null, bindingVersion: 'v' })
-  for (let i = 0; i < 10; i += 1) breaker.record('chat', { failure: 'context', bindingVersion: 'c' })
-  assert.deepEqual([breaker.isOpen('vision'), breaker.isOpen('chat')], [null, null])
+  for (let i = 0; i < 10; i += 1) breaker.record('vision', { failure: i % 2 ? 'shape' : null, bindingVersion: 'v', userId: who(i) })
+  for (let i = 0; i < 10; i += 1) breaker.record('chat', { failure: 'context', bindingVersion: 'c', userId: who(i) })
+  // one or two people failing every call never trip it for everyone
+  for (let i = 0; i < 50; i += 1) breaker.record('workshop', { failure: 'shape', bindingVersion: 'w', userId: i % 2 ? 'mallory' : 'eve' })
+  assert.deepEqual([breaker.isOpen('vision'), breaker.isOpen('chat'), breaker.isOpen('workshop')], [null, null, null])
+  // a binding that only reports keeps its chain; the health entry says so
+  for (let i = 0; i < 10; i += 1) breaker.record('presentation', { failure: 'infra', bindingVersion: 'p', userId: who(i), onTrip: 'report' })
+  assert.equal(breaker.isOpen('presentation').onTrip, 'report')
+  assert.match(breaker.health().find((h) => h.id === 'presentation').problem, /keeps using its own models/)
 
   // the request path while it is open: the binding's chain is set aside for the settings file
   const w = world({ settings: { ...SELFHOST, ai: { connections: { filebox: { type: 'openai-compatible', baseUrl: 'https://file.example.com/v1', model: 'file-1' } }, use: { default: 'filebox' } } } })
   await withConnections(w)
-  await w.ops.publish({ actor: ACTOR, input: { surface: 'shape', chain: [{ connection: 'server:chatbox' }] }, reason: 'chat model draws' })
+  // Restated (review fix): a chain that already lists the built-in AI falls back on a trip (its
+  // default onTrip); a one-entry binding is a choice and is never moved; a chain of the
+  // administrator's own connections only reports
+  await w.ops.publish({ actor: ACTOR, input: { surface: 'shape', chain: [{ connection: 'server:chatbox' }, { connection: 'builtin', on: ['infra'] }] }, reason: 'chat model draws' })
   assert.equal((await route(w, 'shape')).ref, 'server:chatbox')
-  for (let i = 0; i < 10; i += 1) w.breaker.record('shape', { failure: 'infra', bindingVersion: 'shape|server@v1' })
+  for (let i = 0; i < 10; i += 1) w.breaker.record('shape', { failure: 'infra', bindingVersion: 'shape|server@v1', userId: who(i), onTrip: 'fallback' })
   const tripped = await route(w, 'shape')
   assert.deepEqual([tripped.ref, tripped.chain], ['server:filebox', undefined])
   assert.equal(w.aiControl.get().health.find((h) => h.kind === 'breaker').id, 'shape')
+  for (const [chain, version] of [[[{ connection: 'server:chatbox' }], 'shape|server@v2'], [[{ connection: 'server:chatbox' }, { connection: 'server:agentbox', on: ['infra'] }], 'shape|server@v3']]) {
+    await w.ops.publish({ actor: ACTOR, input: { surface: 'shape', chain }, reason: 'own models only' })
+    for (let i = 0; i < 10; i += 1) w.breaker.record('shape', { failure: 'infra', bindingVersion: version, userId: who(i), onTrip: 'report' })
+    assert.equal((await route(w, 'shape')).ref, 'server:chatbox', `${chain.length} entries: the breaker never moves it`)
+  }
   // a surface turned off is never served by the breaker's fallback
   await w.ops.publish({ actor: ACTOR, input: { surface: 'shape', enabled: false, chain: [{ connection: 'server:chatbox' }] }, reason: 'off' })
   assert.equal((await route(w, 'shape')).disabled, true)
   // publishing (any pod: a new version) closes it
+  w.breaker.record('shape', { failure: null, bindingVersion: 'shape|server@v4' })
   await w.ops.publish({ actor: ACTOR, input: { surface: 'shape', chain: [{ connection: 'server:chatbox' }] }, reason: 'fixed' })
   assert.equal((await route(w, 'shape')).ref, 'server:chatbox')
   assert.equal(w.breaker.isOpen('shape'), null)
@@ -539,4 +557,75 @@ test('the Bindings tab: a binding in words, the editor form round-trips to the a
   // the options never offer a connection that is off or a service beside the models
   assert.deepEqual(view.chainOptions({ connections: [{ name: 'a' }, { name: 'off', status: 'disabled' }, { name: 'pics', aux: true }], models: [{ _id: 'a:m', model: 'm' }, { _id: 'a:x', model: 'x', status: 'disabled' }] }).map((o) => o.value),
     ['connection:builtin', 'connection:server:a', 'model:a:m'])
+})
+
+// ---------- review fixes (2026-11-24) ----------
+// What a request takes from a route, for comparing a binding with the choice it replaced: the
+// connection and model, the chain it walks (if any), and the fallback model the call site keeps.
+const routeShape = (r) => ({ ref: r.ref, model: r.connection?.model ?? r.builtin?.engine ?? null, chain: r.chain ? r.chain.map((c) => c.ref) : null })
+
+test('a one-entry binding is the choice it replaced: no chain walk (the call site keeps its fallback model), the built-in fallback shown, and the breaker never moves it', async () => {
+  const w = world()
+  await withConnections(w)
+  // the same choices through AI settings before AI control: a built-in choice and a server connection
+  await w.keyStore.setUse({ type: 'server', id: 'server' }, { use: { generation: 'builtin', vision: 'server:agentbox' } })
+  const legacy = { generation: routeShape(await route(w, 'generation')), vision: routeShape(await route(w, 'vision')) }
+  const legacyChain = resolveBinding(w.holder.current(), { surface: 'generation', holders: await w.ai.choiceHolders(null), settings: w.settings }).chain
+  assert.ok(legacyChain.length === 2, 'the built-in AI has a fallback model for drafting')
+  // published as one-entry bindings (what ai.update and ai-control-001 write)
+  await w.ops.publish({ actor: ACTOR, input: { surface: 'generation', chain: [{ connection: 'builtin' }] }, reason: 'from settings' })
+  await w.ops.publish({ actor: ACTOR, input: { surface: 'vision', chain: [{ connection: 'server:agentbox' }] }, reason: 'from settings' })
+  for (const surface of ['generation', 'vision']) {
+    const r = await route(w, surface)
+    // no chain: req.js takes the path a choice takes, with the call site's own fallback model
+    assert.deepEqual(routeShape(r), legacy[surface], surface)
+    assert.equal(r.chain, undefined, `${surface}: no chain walk`)
+    assert.equal(r.control.bindingVersion, `${surface}|server@v1`, `${surface}: the audit rows still name the binding`)
+  }
+  // the resolver shows the built-in fallback, as the choice had it
+  const bound = resolveBinding(w.holder.current(), { surface: 'generation', holders: await w.ai.choiceHolders(null), settings: w.settings })
+  assert.deepEqual(bound.chain.map((e) => [e.connection, e.provider, e.model, e.on]), legacyChain.map((e) => [e.connection, e.provider, e.model, e.on]))
+  assert.deepEqual([bound.choiceLike, bound.onTrip], [true, 'report'])
+  // a binding that keeps failing for everyone still never moves a one-entry binding
+  for (let i = 0; i < 20; i += 1) w.breaker.record('vision', { failure: 'infra', bindingVersion: 'vision|server@v1', userId: `p${i % 4}`, onTrip: 'fallback' })
+  assert.equal((await route(w, 'vision')).ref, 'server:agentbox')
+  // two entries: the whole list, walked by failure class (the call site's fallback does not apply)
+  await w.ops.publish({ actor: ACTOR, input: { surface: 'vision', chain: [{ connection: 'server:agentbox' }, { connection: 'builtin', on: ['infra'] }] }, reason: 'with a fallback' })
+  const two = await route(w, 'vision')
+  assert.deepEqual([two.chain.map((c) => c.ref), two.onTrip], [['server:agentbox', 'builtin'], 'fallback'])
+  // onTrip is the binding's to set, and checked
+  assert.equal(normalizeBinding({ surface: 'vision', onTrip: 'report' }, { checkRefs: false }).onTrip, 'report')
+  assert.throws(() => normalizeBinding({ surface: 'vision', onTrip: 'never' }, { checkRefs: false }), /onTrip is fallback/)
+})
+
+test('ai-control-001 compares whole routes: a moved built-in choice keeps its fallback model', async () => {
+  const w = world()
+  await withConnections(w)
+  await w.keyStore.setUse({ type: 'server', id: 'server' }, { use: { generation: 'builtin', vision: 'builtin' } })
+  const chains = async () => {
+    const holders = await w.ai.choiceHolders(null)
+    return Object.fromEntries(BINDABLE_SURFACES.map((s) => [s, resolveBinding(w.holder.current(), { surface: s, holders, settings: w.settings }).chain.map((e) => [e.connection, e.model, e.on])]))
+  }
+  const routes = async () => Object.fromEntries(await Promise.all(BINDABLE_SURFACES.map(async (s) => [s, routeShape(await route(w, s))])))
+  const [beforeChains, beforeRoutes] = [await chains(), await routes()]
+  const out = await runAIControl001({ state: w.collections.state, aiSettings: w.ai, ops: w.ops, snapshot: () => w.holder.current(), settings: w.settings, log: { info() {} } })
+  assert.deepEqual(out.moved.sort(), ['generation', 'vision'])
+  assert.deepEqual(await chains(), beforeChains)
+  assert.deepEqual(await routes(), beforeRoutes)
+  assert.ok(beforeChains.generation.length === 2 && beforeChains.vision.length === 2)
+})
+
+test('two drafts saved at once get their own version numbers; neither replaces the other', async () => {
+  const w = world()
+  await withConnections(w)
+  const [a, b] = await Promise.all([
+    w.ops.saveDraft({ actor: ACTOR, input: { surface: 'shape', enabled: false, disabledMessage: 'Person draft.' } }),
+    w.ops.saveDraft({ actor: { userId: 'root', principal: 'agent', via: 'http' }, input: { surface: 'shape', chain: [{ connection: 'server:chatbox' }] } }),
+  ])
+  assert.deepEqual([a.version, b.version].sort(), [1, 2])
+  const versions = await w.ops.versionsOf('shape|server')
+  assert.equal(versions.length, 2)
+  const byVersion = Object.fromEntries(versions.map((v) => [v.version, v.doc]))
+  assert.equal(byVersion[a.version].disabledMessage, 'Person draft.')
+  assert.deepEqual(byVersion[b.version].chain, [{ connection: 'server:chatbox' }])
 })

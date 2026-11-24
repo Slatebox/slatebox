@@ -8,6 +8,7 @@
 // some prefixes never are.
 //
 // Pure.
+import { mergeProviderInput } from './providers.mjs'
 
 export const ENV_KEY_NAME = /^SLATEBOX_AI_KEY_[A-Z0-9_]{1,40}$/
 // Never, whatever the settings file allows.
@@ -41,13 +42,21 @@ export function envKeyRefusal(name, settings = {}) {
  * → null when an agent may make this write, else the reason.
  */
 export function agentRefusal(kind, input, previous, { provider = null } = {}) {
-  const changed = (field, normalize = (v) => v ?? null) => JSON.stringify(normalize(input[field])) !== JSON.stringify(normalize(previous?.[field]))
   if (kind === 'provider') {
-    if (input.baseUrl !== undefined && changed('baseUrl', (v) => (v ? String(v).replace(/\/+$/, '') : null))) return 'Only a person can set where a provider sends requests (baseUrl).'
-    if (input.auth !== undefined && changed('auth')) return 'Only a person can change how a provider sends its key (auth).'
-    if (input.extraHeaders !== undefined && changed('extraHeaders', (v) => (v && Object.keys(v).length ? v : null))) return 'Only a person can change a provider\'s extra headers.'
-    if (input.protocol !== undefined && previous && changed('protocol')) return 'Only a person can change a provider\'s protocol.'
-    if (!previous && (input.baseUrl || input.auth || (input.extraHeaders && Object.keys(input.extraHeaders).length))) return 'Only a person can add a provider with an address, a key style or extra headers.'
+    if (!previous) {
+      if (input.baseUrl || input.auth || (input.extraHeaders && Object.keys(input.extraHeaders).length)) return 'Only a person can add a provider with an address, a key style or extra headers.'
+      return null
+    }
+    // compared as it will be stored: a field left out keeps its value (models.mjs saveProvider)
+    const next = mergeProviderInput(input, previous)
+    const changed = (field, normalize = (v) => v ?? null) => JSON.stringify(normalize(next[field])) !== JSON.stringify(normalize(previous[field]))
+    const url = (v) => (v ? String(v).replace(/\/+$/, '') : null)
+    const style = (v) => (v && typeof v === 'object' ? { style: v.style ?? 'bearer', ...(v.name && { name: String(v.name).toLowerCase() }) } : { style: 'bearer' })
+    if (changed('baseUrl', url)) return 'Only a person can set where a provider sends requests (baseUrl).'
+    if (url(next.baseUrl) && changed('baseUrlLocked', (v) => v !== false)) return 'Only a person can lock or unlock a provider\'s address (baseUrlLocked).'
+    if (changed('protocol')) return 'Only a person can change a provider\'s protocol.'
+    if (changed('auth', style)) return 'Only a person can change how a provider sends its key (auth).'
+    if (changed('extraHeaders', (v) => (v && Object.keys(v).length ? v : null))) return 'Only a person can change a provider\'s extra headers.'
     return null
   }
   if (typeof input.apiKey === 'string') return 'Only a person can send a key. An agent may save a connection without one.'
@@ -56,6 +65,8 @@ export function agentRefusal(kind, input, previous, { provider = null } = {}) {
   const providerOf = input.type ?? input.provider
   if (previous && providerOf !== undefined && providerOf !== previous.provider) return 'Only a person can change a connection\'s provider.'
   if (!previous && !provider?.baseUrlLocked) return 'Only a person can add a connection whose address can be chosen. An agent may add a keyless connection to a provider with a fixed address.'
+  // a connection a person turned off (after a leak, say) is turned back on by a person
+  if (previous?.status === 'disabled' && input.status !== undefined && input.status !== 'disabled') return 'Only a person can turn a connection back on.'
   const sameUrl = (a, b) => String(a ?? '').replace(/\/+$/, '') === String(b ?? '').replace(/\/+$/, '')
   if (input.baseUrl !== undefined && input.baseUrl !== null && !sameUrl(input.baseUrl, previous?.baseUrl ?? provider?.baseUrl)) return 'Only a person can change where a connection sends requests (baseUrl).'
   return null

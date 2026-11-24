@@ -31,7 +31,13 @@ const MAP = { version: 1, title: 'Trip', lanes: [
   { id: 'station-2', label: 'Summit', station: { column: 1, row: 0, next: [], outcome: 'At the top.' } }],
 cards: [{ id: 'walker', label: 'Walker', laneId: 'station-1' }] }
 
-export async function recordCallSites(appRoot) {
+// What req() answers every call: { abort: true } for the goldens, or what a part an administrator
+// turned off answers (--disabled), to see which words reach the person.
+const OFF = { abort: true, abortMessage: 'Board chat is off for maintenance until noon.', fallbackBlocked: true, disabled: true, failure: 'stop' }
+let answer = { abort: true }
+
+export async function recordCallSites(appRoot, { disabled = false } = {}) {
+  if (disabled) answer = OFF
   const root = appRoot.replace(/\/+$/, '') + '/'
   register(new URL('./ai-request-golden-hooks.mjs', import.meta.url), { data: { appRoot: root, targets: TARGETS } })
 
@@ -54,7 +60,7 @@ export async function recordCallSites(appRoot) {
   }
   const stubs = {
     'meteor/meteor': { Meteor },
-    'server/methods/ai/req': { default: async (opts) => { calls.push(opts); return { abort: true } } },
+    'server/methods/ai/req': { default: async (opts) => { calls.push(opts); return { ...answer } } },
     'server/metering/context.mjs': { runAIAction: (_opts, fn) => fn() },
     'server/metering/context': { runAIAction: (_opts, fn) => fn() },
     'server/metering/meteor': { canStartAI: async () => true, aiRefusal: async () => null },
@@ -78,6 +84,20 @@ export async function recordCallSites(appRoot) {
   const wrongTool = [{ toolCall: { name: 'not_this_tool', arguments: {} } }, { toolCall: null, message: { content: '' } }]
   const last = () => calls.at(-1)
   const quiet = async (fn) => { try { await fn() } catch {} }
+  if (disabled) {
+    // the words each call site gives the person when req() says the part is off
+    const said = async (fn) => { try { const out = await fn(); return out?.message ?? null } catch (error) { return error.reason || error.message } }
+    const tool = { name: 'exec', description: 'Run code', parameters: { type: 'object', properties: { code: { type: 'string' } } } }
+    const prompts = [{ role: 'user', content: 'draw three notes' }]
+    board = LANES
+    return {
+      laneChat: await said(() => methods['workshops.laneChat']({ shareId: 'share1', revision: 3, message: 'move the barn', history: [] })),
+      draft: await said(() => methods['workshops.draft']('Choose a venue for the spring party with the team', 'lanes')),
+      canvas: await said(() => modelFor('share1')({ system: 'canvas system', prompts, tool })),
+      agent: await said(() => modelFor(null, 'agent')({ system: 'agent system', prompts, tool })),
+      expected: OFF.abortMessage,
+    }
+  }
 
   const out = {}
   board = LANES
@@ -104,6 +124,8 @@ export async function recordCallSites(appRoot) {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const appRoot = process.argv[2] || new URL('../web/app/', import.meta.url).pathname
-  process.stdout.write(JSON.stringify(await recordCallSites(appRoot), null, 2) + '\n')
+  const args = process.argv.slice(2)
+  const disabled = args.includes('--disabled')
+  const appRoot = args.find((a) => !a.startsWith('--')) || new URL('../web/app/', import.meta.url).pathname
+  process.stdout.write(JSON.stringify(await recordCallSites(appRoot, { disabled }), null, 2) + '\n')
 }

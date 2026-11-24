@@ -111,7 +111,8 @@ async function recordProviderTelemetry({
   if (aiOpts?.unpaid && currentAIAction()?.route !== 'byok') return { stop: false }
   // Every call that returned tokens cost money, whether or not its answer was usable.
   if (!usage || !(usage.totalTokens || usage.inputTokens || usage.outputTokens || usage.providerCostUsd)) return { stop: false }
-  return chargeProviderCall({ ref: auditId, provider, model, usage })
+  // the connection that served it: an administrator's price applies to that connection's model only
+  return chargeProviderCall({ ref: auditId, provider, model, usage, connection: aiOpts?.connectionRef ?? null })
 }
 
 // An attempt that was sent but got no usage back (timeout, dropped connection, 5xx) is
@@ -729,7 +730,7 @@ export function failureClass(result) {
 // A published binding's model chain (AI control): the primary, then each fallback whose `on`
 // names the class of the last failure (or any). Each attempt writes its own aiAudit row with its
 // place in the chain. The primary's outcome feeds this pod's circuit breaker for the surface.
-async function walkChain(options, route) {
+async function walkChain(options, route, userId = null) {
   const original = JSON.parse(JSON.stringify(options.prompts || []))
   const surface = route.control?.surface ?? null
   const bindingVersion = route.control?.bindingVersion ?? null
@@ -755,7 +756,7 @@ async function walkChain(options, route) {
       if (index === route.chain.length - 1) throw error
       result = { abort: true, abortMessage: error.message, provider: options.provider, model: options.engine, failure: 'infra' }
     }
-    if (index === 0) requestBreaker.record(surface, { failure: failureClass(result), bindingVersion })
+    if (index === 0) requestBreaker.record(surface, { failure: failureClass(result), bindingVersion, userId, onTrip: route.onTrip })
     if (!result?.abort) {
       return last ? { ...result, fallbackFrom: { provider: last.provider, model: last.model, reason: last.abortMessage } } : result
     }
@@ -774,15 +775,17 @@ export default async function req(requested, localWorkshop) {
   // Which connection serves this request, once: an administrator's binding may turn the surface
   // off, or give it a model chain. A lookup that fails leaves it to requestFromProvider, as before.
   let route
+  let forUser = null
   try {
-    route = await resolveRequestConnection({ feature: given.feature, request: { images: carriesImages(given.prompts), tools: Boolean(given.functions?.length) }, userId: requestUserId({ userId: given.userId }) })
+    forUser = requestUserId({ userId: given.userId })
+    route = await resolveRequestConnection({ feature: given.feature, request: { images: carriesImages(given.prompts), tools: Boolean(given.functions?.length) }, userId: forUser })
   } catch {
     route = undefined
   }
   if (route?.disabled) {
     return { abort: true, abortMessage: route.message || 'This feature is turned off by your administrator.', fallbackBlocked: true, disabled: true, failure: 'stop', surface: route.control?.surface ?? null }
   }
-  if (route?.chain?.length) return walkChain(given, route)
+  if (route?.chain?.length) return walkChain(given, route, forUser)
   const options = route === undefined ? given : { ...given, route }
   const { fallback } = options
   const originalPrompts = fallback

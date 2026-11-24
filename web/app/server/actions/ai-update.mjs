@@ -1,5 +1,7 @@
 import { defineAction } from './registry.mjs'
+import { problem } from './errors.mjs'
 import { actorOf, connectionInput, level, requireLevelScope, settingsOutput, useInput } from './ai-schemas.mjs'
+import { agentConnectionRefusal } from './ai-connections.mjs'
 
 // Changing where AI requests go sends people's briefs and slates somewhere new, so exec holds it
 // for confirmation (confirm).
@@ -39,8 +41,25 @@ export default defineAction({
   },
   output: settingsOutput,
   precheck: (principal, input) => requireLevelScope(principal, input.level),
-  handler: (principal, input, { deps }) => {
+  handler: async (principal, input, { deps }) => {
     requireLevelScope(principal, input.level)
+    if (principal.kind === 'agent' && input.level === 'server') await refuseAgentServerChange(principal, input, deps)
     return deps.ai.update(principal.userId, input, { actor: actorOf(principal) })
   },
 })
+
+// The server level from a token (spec 6.2, 4): the same person-only rule as ai.connections.save for
+// keys, addresses and providers, and no choices or removals, because those publish the server's
+// bindings (bindings.mjs syncServerUse) and only a person publishes. An agent proposes a binding
+// with ai.bindings.saveDraft instead. Checked for administrators only (anyone else is refused by
+// ai.update itself), and each refusal is kept in the audit trail.
+async function refuseAgentServerChange(principal, input, deps) {
+  if (!(await deps.aiControlAdmin?.(principal.userId))) return
+  let why = null
+  if (input.use && Object.keys(input.use).length) why = 'Only a person can choose which AI answers for the whole server: it publishes the server\'s bindings. Save a draft with ai.bindings.saveDraft for a person to publish.'
+  else if (input.remove?.length) why = 'Only a person can remove the server\'s connections.'
+  else if (input.connections?.length) why = await agentConnectionRefusal(deps, principal.userId, input.connections)
+  if (!why) return
+  await deps.aiControlStore?.refused({ action: 'ai.update', actor: actorOf(principal), target: { kind: 'aiSettings', id: 'server' }, error: why, trusted: true }).catch(() => {})
+  throw problem(403, 'forbidden', why, { details: { personOnly: true } })
+}

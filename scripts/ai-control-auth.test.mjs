@@ -26,7 +26,9 @@ import { COLLECTIONS, STATE_ID, createControlStore } from '../web/app/server/ai-
 import { buildSnapshot, createSnapshotHolder } from '../web/app/server/ai-control/snapshot.mjs'
 import { createAIControl } from '../web/app/server/ai-control/facade.mjs'
 import { resolveBinding } from '../web/app/server/ai-control/resolve.mjs'
-import { changedFields, createAdminOps, surfacesStatus } from '../web/app/server/ai-control/admin.mjs'
+import { changedFields, createAdminOps, createStatusHub, surfacesStatus } from '../web/app/server/ai-control/admin.mjs'
+import { execFileSync } from 'node:child_process'
+import { connectionFormDefaults, providerFormDefaults } from '../web/app/imports/ui/pages/admin/ai/catalog-view.mjs'
 import { createAISettings, keyFingerprint } from '../web/app/server/methods/ai/ai-settings-core.mjs'
 import { loadMasterKey } from '../web/app/server/metering/vault.mjs'
 import { createGate } from '../web/app/server/exec/gate.mjs'
@@ -335,9 +337,12 @@ test('ai.update writes an audit row at every level, with keys only as fingerprin
   const { registry, auditRows } = world()
   const key = `sk-test-${randomBytes(12).toString('hex')}`
   await registry.run(person('root'), 'ai.update', { level: 'server', connections: [{ name: 'gem', type: 'openai', apiKey: key, model: 'gpt-x' }], use: { shape: 'server:gem' } })
-  await registry.run(token('root', ['ai:settings', 'ai:admin']), 'ai.update', { level: 'server', use: { generation: 'server:gem' } })
+  // Restated (review fix, spec 4 "only a person publishes"): a token's server choice publishes
+  // bindings, so it is refused and recorded; the token's audited change is one an agent may make.
+  await assert.rejects(registry.run(token('root', ['ai:settings', 'ai:admin']), 'ai.update', { level: 'server', use: { generation: 'server:gem' } }), { status: 403, details: { personOnly: true } })
+  await registry.run(token('root', ['ai:settings', 'ai:admin']), 'ai.update', { level: 'server', ownProviders: 'on' })
   await registry.run(person('ana'), 'ai.update', { level: 'me', connections: [{ name: 'desk', type: 'openai-compatible', baseUrl: 'https://desk.example/v1', model: 'd' }] })
-  const rows = auditRows().filter((r) => r.action === 'ai.update')
+  const rows = auditRows().filter((r) => r.action === 'ai.update' && r.outcome === 'ok')
   assert.equal(rows.length, 3)
   const [first, second, third] = rows
   assert.deepEqual([first.target, first.actor.via, first.actor.principal], [{ kind: 'aiSettings', id: 'server' }, 'ddp', 'person'])
@@ -349,23 +354,25 @@ test('ai.update writes an audit row at every level, with keys only as fingerprin
   // the key that stays shows as the fingerprint it was saved with (S3 keeps keyFingerprint on the
   // connection, spec 1.2); the change is the choice
   assert.equal(second.before.connections[0].keyFingerprint, keyFingerprint(key))
-  assert.deepEqual([second.actor.principal, second.actor.via, second.actor.tokenId, second.after.use.generation], ['agent', 'http', 't-root', 'server:gem'])
+  assert.deepEqual([second.actor.principal, second.actor.via, second.actor.tokenId, second.after.ownProviders, second.after.use.generation], ['agent', 'http', 't-root', true, undefined])
+  const refusedRow = auditRows().find((r) => r.action === 'ai.update' && r.outcome === 'refused')
+  assert.deepEqual([refusedRow.actor.principal, refusedRow.target], ['agent', { kind: 'aiSettings', id: 'server' }])
   assert.deepEqual(third.target, { kind: 'aiSettings', id: 'me:ana' })
   // the key appears nowhere in the trail
   assert.ok(!JSON.stringify(auditRows()).includes(key))
   assert.ok(!JSON.stringify(auditRows()).includes(key.slice(0, 20)))
   // the audit list reads it, newest first, filtered, a page at a time
-  const listed = body(await registry.run(person('root'), 'ai.audit.list', { action: 'ai.update', limit: 2 }))
+  const listed = body(await registry.run(person('root'), 'ai.audit.list', { action: 'ai.update', outcome: 'ok', limit: 2 }))
   assert.equal(listed.rows.length, 2)
   assert.equal(listed.rows[0].target.id, 'me:ana')
   assert.ok(listed.next)
   // the three rows share one millisecond: the next page goes on by row id, skipping none
   assert.match(listed.next, /^2026-11-24T10:00:00\.000Z\|row\d+$/)
-  const page2 = body(await registry.run(person('root'), 'ai.audit.list', { action: 'ai.update', limit: 2, before: listed.next }))
+  const page2 = body(await registry.run(person('root'), 'ai.audit.list', { action: 'ai.update', outcome: 'ok', limit: 2, before: listed.next }))
   assert.deepEqual([page2.rows.map((r) => r.target.id), page2.next], [['server'], null])
   assert.equal(new Set([...listed.rows, ...page2.rows].map((r) => r._id)).size, 3)
   assert.equal(body(await registry.run(person('root'), 'ai.audit.list', { userId: 'ana' })).rows.length, 1)
-  assert.equal(body(await registry.run(person('root'), 'ai.audit.list', { action: 'ai.' })).rows.length, 3)
+  assert.equal(body(await registry.run(person('root'), 'ai.audit.list', { action: 'ai.', outcome: 'ok' })).rows.length, 3)
   await assert.rejects(registry.run(person('root'), 'ai.audit.list', { before: 'yesterday' }), { status: 400 })
 })
 
@@ -487,4 +494,110 @@ test('the Changes tab: what changed field by field, a key only as which key, and
   assert.match(line, /^2026-11-24T10:00:00.000Z,root,person,ddp,,ai.update,aiSettings,server,"'=HYPERLINK\(""x""\), ""quoted""",ok,/)
   assert.match(line, /connections\[gem\] key: …a91f -> sha256:1a2b3c4d…07c2/)
   assert.equal(actorText({ userId: 'root', principal: 'agent', via: 'exec' }), 'root (agent) from a script')
+})
+
+// ---------- review fixes (2026-11-24) ----------
+test('a signed-in non-admin calling an admin write in a loop cannot fill the audit trail; their text is not kept', async () => {
+  const { registry, auditRows } = world()
+  const long = 'x'.repeat(500)
+  for (let i = 0; i < 40; i += 1) {
+    await assert.rejects(registry.run(person('ana'), 'ai.providers.save', { provider: { id: `p${i}`, label: 'x', protocol: 'openai-chat' }, reason: long }), { status: 403 })
+  }
+  const rows = auditRows().filter((r) => r.outcome === 'refused')
+  assert.equal(rows.length, 20, 'at most 20 refusals per caller per 10 minutes on a server')
+  assert.ok(rows.every((r) => r.reason === null && r.untrusted === true && r.target.id.length <= 60))
+  // an administrator's own refusals keep their reason
+  await assert.rejects(registry.run(token('root', ['ai:admin', 'ai:settings']), 'ai.update', { level: 'server', use: { default: 'builtin' } }), { status: 403 })
+  assert.equal(auditRows().filter((r) => r.outcome === 'refused' && r.actor.userId === 'root').length, 1)
+})
+
+test('AI off for everyone holds when the DB layer is switched off; a token cannot switch back on a part an administrator turned off', async () => {
+  const { registry, store, holder, auditRows } = world()
+  await registry.run(person('root'), 'ai.control.setGlobal', { aiEnabled: false, message: 'AI is paused for an incident.', reason: 'incident' })
+  await registry.run(person('root'), 'ai.control.reset', { target: 'dbLayer', reason: 'break glass' })
+  await holder.refresh({ force: true })
+  const snap = holder.current()
+  assert.equal(snap.dbLayer, 'off')
+  const chat = resolveBinding(snap, { surface: 'chat', holders: { ownProviders: false }, settings: {} })
+  assert.deepEqual([chat.enabled, chat.disabledMessage], [false, 'AI is paused for an incident.'])
+  const status = await surfacesStatus({ surfaces: SURFACES, snapshot: snap, bind: (surface) => resolveBinding(snap, { surface, holders: { ownProviders: false }, settings: {} }) })
+  assert.deepEqual([status.aiEnabled, status.message], [false, 'AI is paused for an incident.'])
+  // switched back on by a person; the global switch still works with the DB layer off
+  await registry.run(person('root'), 'ai.control.setGlobal', { aiEnabled: true, reason: 'resolved' })
+  await holder.refresh({ force: true })
+  assert.equal(resolveBinding(holder.current(), { surface: 'chat', holders: { ownProviders: false }, settings: {} }).enabled, true)
+  await registry.run(person('root'), 'ai.control.setGlobal', { dbLayer: 'on', reason: 'fixed' })
+
+  // a published binding turns shapes off
+  await store.write({ kind: 'bindings', id: 'shape|server', doc: { surface: 'shape', scope: { level: 'server' }, enabled: false, disabledMessage: 'Shapes are paused.', status: 'published', version: 1 }, action: 'ai.bindings.publish', actor: { userId: 'root', principal: 'person', via: 'ddp' }, reason: 'pause' })
+  await holder.refresh({ force: true })
+  const bot = token('root', ['ai:admin'])
+  for (const input of [{ target: 'dbLayer' }, { target: 'bindings' }, { target: 'all' }, { target: 'binding', surface: 'shape' }]) {
+    await assert.rejects(registry.run(bot, 'ai.control.reset', { ...input, reason: 'x' }), (error) => error.status === 403 && /switch back on what an administrator turned off \(shape\)/.test(error.message), input.target)
+  }
+  assert.equal(holder.current().dbLayer, 'on')
+  assert.equal(auditRows().filter((r) => r.action === 'ai.control.reset' && r.outcome === 'refused').length, 4)
+  // a reset that leaves it off is allowed; a person may do any of them
+  assert.ok(body(await registry.run(bot, 'ai.control.reset', { target: 'use', reason: 'back to the file' })))
+  assert.equal(body(await registry.run(person('root'), 'ai.control.reset', { target: 'dbLayer', reason: 'break glass' })).dbLayer, 'off')
+})
+
+test('ai.surfaces.status: signed-in only, one computation per generation and one timer for every subscriber', async () => {
+  let generation = 1
+  let computed = 0
+  const timers = []
+  const hub = createStatusHub({
+    compute: async () => { computed += 1; return { aiEnabled: generation % 2 === 1 } },
+    generation: () => generation,
+    every: (fn) => { timers.push(fn); return timers.length },
+    cancel: (handle) => { timers[handle - 1] = null },
+  })
+  const seen = [[], [], []]
+  const subs = await Promise.all(seen.map((list) => hub.subscribe((next) => list.push(next))))
+  assert.deepEqual([computed, timers.length, subs.map((s) => s.current.aiEnabled)], [1, 1, [true, true, true]])
+  await timers[0]()
+  assert.equal(computed, 1, 'nothing recomputed while the generation stands')
+  generation = 2
+  await timers[0]()
+  assert.deepEqual([computed, seen.map((list) => list.length)], [2, [1, 1, 1]])
+  for (const sub of subs) sub.stop()
+  assert.equal(timers[0], null, 'the timer stops with the last subscriber')
+  const source = readFileSync(new URL('../web/app/server/ai-control/index.mjs', import.meta.url), 'utf8')
+  assert.match(source, /Meteor\.publish\('ai\.surfaces\.status', async function publishSurfacesStatus\(\) \{\n  if \(!this\.userId\) return this\.ready\(\)/)
+})
+
+test('the Add a connection and Add provider dialogs open filled: every field their first render reads is set', () => {
+  const source = readFileSync(new URL('../web/app/imports/ui/pages/admin/ai/Providers.jsx', import.meta.url), 'utf8')
+  assert.ok(!/const \[form, setForm\] = useState\(\{\}\)/.test(source), 'no dialog form starts empty')
+  const fieldsOf = (fn) => {
+    const start = source.indexOf(`function ${fn}(`)
+    const end = source.indexOf('\nfunction ', start + 1)
+    return [...new Set([...source.slice(start, end).matchAll(/form\.([a-zA-Z]+)/g)].map((m) => m[1]))]
+  }
+  const connection = connectionFormDefaults({ provider: 'gemini' })
+  for (const field of fieldsOf('AddConnection')) assert.ok(field in connection, `AddConnection reads form.${field}`)
+  assert.equal(connection.provider, 'gemini')
+  const provider = providerFormDefaults()
+  for (const field of fieldsOf('AddProvider')) assert.ok(field in provider, `AddProvider reads form.${field}`)
+  // the fields the first render trims are text
+  for (const [form, fields] of [[connection, ['name', 'baseUrl', 'model', 'envName']], [provider, ['id', 'label', 'baseUrl', 'authName']]]) {
+    for (const field of fields) assert.equal(typeof form[field], 'string', field)
+  }
+})
+
+test('a part an administrator turned off: board chat, board drafting, the canvas conversation and the Slatebox agent give the administrator\'s message', () => {
+  const out = JSON.parse(execFileSync(process.execPath, ['--no-deprecation', new URL('./ai-request-golden.mjs', import.meta.url).pathname, '--disabled'], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }))
+  for (const site of ['laneChat', 'draft', 'canvas', 'agent']) assert.equal(out[site], out.expected, site)
+})
+
+test('the Changes tab: a publish\'s two rows read differently, bindings actions have words, bookkeeping fields stay out of the diff', async () => {
+  const { actionText, diffRows } = await import('../web/app/imports/ui/pages/admin/ai/audit-diff.mjs')
+  const version = { action: 'ai.bindings.publish', outcome: 'ok', after: { bindingId: 'shape|server', version: 3, status: 'published' } }
+  const head = { action: 'ai.bindings.publish', outcome: 'ok', after: { surface: 'shape', version: 3, status: 'published' } }
+  assert.equal(actionText(version), 'Published a binding: version 3 saved')
+  assert.equal(actionText(head), 'Published a binding: version 3 live')
+  assert.equal(actionText({ action: 'ai.bindings.saveDraft', after: { bindingId: 'shape|server', version: 4, status: 'draft' } }), 'Saved a binding draft: version 4 saved as a draft')
+  assert.equal(actionText({ action: 'ai.bindings.sync', before: { surface: 'shape', version: 3 }, after: null }), 'Published a binding from AI settings: removed')
+  assert.equal(actionText({ action: 'ai.bindings.publish', outcome: 'refused' }), 'Published a binding')
+  assert.deepEqual(diffRows({ _id: 'a', updatedAt: 1, updatedBy: 'x', enabled: true }, { _id: 'a', updatedAt: 2, updatedBy: 'y', enabled: false }).map((r) => r.path), ['enabled'])
 })

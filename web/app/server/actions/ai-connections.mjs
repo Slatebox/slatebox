@@ -23,6 +23,22 @@ async function moveGeneration(deps, actor) {
   }
 }
 
+/**
+ * Why an agent may not make these server connection writes (spec 6.2), or null: the same rule for
+ * ai.connections.save, ai.update at the server level and ai.check of an unsaved connection. A
+ * connection is compared with the one saved under its name (its provider, address and on/off).
+ */
+export async function agentConnectionRefusal(deps, userId, inputs) {
+  const { connections } = await deps.ai.serverConnections(userId)
+  for (const connection of inputs) {
+    const previous = connections.find((c) => c.name === connection.name && c.editable)
+    const provider = connectionType(connection.type ?? previous?.provider) || BUILTIN_PROVIDERS[connection.type] || null
+    const why = agentRefusal('connection', connection, previous ? { provider: previous.provider, baseUrl: previous.baseUrl, status: previous.status } : null, { provider })
+    if (why) return `${connection.name}: ${why}`
+  }
+  return null
+}
+
 export const aiConnectionsList = defineAction({
   id: 'ai.connections.list',
   title: 'AI connections',
@@ -71,16 +87,7 @@ export const aiConnectionsSave = defineAction({
     const names = input.connections.map((c) => c.name).join(',')
     const actor = await guardControlWrite(principal, deps, {
       action: 'ai.connections.save', target: { kind: 'connection', id: names }, doing: 'change the server\'s AI connections', reason: input.reason ?? null,
-      refusal: async () => {
-        const { connections } = await deps.ai.serverConnections(principal.userId)
-        for (const connection of input.connections) {
-          const previous = connections.find((c) => c.name === connection.name && c.editable)
-          const provider = connectionType(connection.type ?? previous?.provider) || BUILTIN_PROVIDERS[connection.type] || null
-          const why = agentRefusal('connection', connection, previous ? { provider: previous.provider, baseUrl: previous.baseUrl } : null, { provider })
-          if (why) return `${connection.name}: ${why}`
-        }
-        return null
-      },
+      refusal: () => agentConnectionRefusal(deps, principal.userId, input.connections),
     })
     try {
       const out = await deps.ai.saveServerConnections(principal.userId, input.connections, { actor, reason: input.reason ?? null })

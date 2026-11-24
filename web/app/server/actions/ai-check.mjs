@@ -1,5 +1,7 @@
 import { defineAction } from './registry.mjs'
-import { connectionInput, level, requireLevelScope } from './ai-schemas.mjs'
+import { problem } from './errors.mjs'
+import { actorOf, connectionInput, level, requireLevelScope } from './ai-schemas.mjs'
+import { agentConnectionRefusal } from './ai-connections.mjs'
 
 // Test connection. It changes nothing (readOnly), but it reaches an outside address (openWorld)
 // and may carry a key, so it is a POST.
@@ -45,8 +47,18 @@ export default defineAction({
     required: ['ok', 'reachable', 'tools', 'message'],
   },
   precheck: (principal, input) => requireLevelScope(principal, input.level),
-  handler: (principal, input, { deps }) => {
+  handler: async (principal, input, { deps }) => {
     requireLevelScope(principal, input.level)
+    // From a token, an unsaved server connection is tested only where an agent could save it (a
+    // provider's fixed address, no key): otherwise a test would reach any address the server can,
+    // private ones included, and send it a key (spec 6.2). A saved one is tested by name.
+    if (principal.kind === 'agent' && input.level === 'server' && input.connection && await deps.aiControlAdmin?.(principal.userId)) {
+      const why = await agentConnectionRefusal(deps, principal.userId, [{ name: input.connection.name ?? 'test', ...input.connection }])
+      if (why) {
+        await deps.aiControlStore?.refused({ action: 'ai.check', actor: actorOf(principal), target: { kind: 'connection', id: String(input.connection.name ?? 'unsaved') }, error: why, trusted: true }).catch(() => {})
+        throw problem(403, 'forbidden', `${why} Test a saved connection by its name instead.`, { details: { personOnly: true } })
+      }
+    }
     return deps.ai.check(principal.userId, input)
   },
 })

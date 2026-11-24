@@ -223,7 +223,7 @@ export default function Overview() {
         <Typography variant="h6" component="h2">Who answers what</Typography>
         <FormControlLabel
           data-testid="ai-control-global"
-          control={<Switch checked={snapshot.global.aiEnabled} disabled={snapshot.dbLayer === 'off'} onChange={(e) => setSwitching({ kind: 'ai', to: e.target.checked, message: snapshot.global.aiDisabledMessage })} />}
+          control={<Switch checked={snapshot.global.aiEnabled} disabled={snapshot.source === 'file-switch'} onChange={(e) => setSwitching({ kind: 'ai', to: e.target.checked, message: snapshot.global.aiDisabledMessage })} />}
           label={snapshot.global.aiEnabled ? 'AI for everyone: on' : `AI for everyone: off (“${snapshot.global.aiDisabledMessage || 'AI is turned off on this server.'}”)`}
         />
       </Box>

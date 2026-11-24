@@ -34,10 +34,14 @@ export function shown(value, path = '') {
   return JSON.stringify(value)
 }
 
+// Bookkeeping every stored document carries: who and when are the row's own columns.
+const BOOKKEEPING = new Set(['_id', 'updatedAt', 'updatedBy'])
+const withoutBookkeeping = (value) => (isPlain(value) ? Object.fromEntries(Object.entries(value).filter(([key]) => !BOOKKEEPING.has(key))) : value)
+
 /** The fields that differ: [{ path, before, after }] in words, sorted by path. */
 export function diffRows(before, after) {
-  const a = flatten(before ?? {})
-  const b = flatten(after ?? {})
+  const a = flatten(withoutBookkeeping(before ?? {}))
+  const b = flatten(withoutBookkeeping(after ?? {}))
   const rows = []
   for (const path of [...new Set([...Object.keys(a), ...Object.keys(b)])].sort()) {
     if (JSON.stringify(a[path]) === JSON.stringify(b[path])) continue
@@ -71,4 +75,36 @@ export function auditCsv(rows) {
     diffRows(row.before, row.after).map((d) => `${d.path}: ${d.before} -> ${d.after}`).join('; '),
   ].map(cell).join(','))
   return [head.join(','), ...lines].join('\n') + '\n'
+}
+
+const ACTIONS = {
+  'ai.update': 'Changed AI settings',
+  'ai.check': 'Tested a connection',
+  'ai.control.reset': 'Reset AI control',
+  'ai.control.setGlobal': 'Switched AI for everyone',
+  'ai.providers.save': 'Saved a provider',
+  'ai.providers.archive': 'Archived a provider',
+  'ai.connections.save': 'Saved server connections',
+  'ai.connections.remove': 'Removed server connections',
+  'ai.models.save': 'Saved models',
+  'ai.bindings.saveDraft': 'Saved a binding draft',
+  'ai.bindings.publish': 'Published a binding',
+  'ai.bindings.rollback': 'Rolled back a binding',
+  'ai.bindings.sync': 'Published a binding from AI settings',
+  'ai.bindings.migrate': 'Moved an AI settings choice to a binding',
+  'chatIntentions.save': 'Saved a persona',
+  'chatIntentions.delete': 'Deleted a persona',
+}
+
+/**
+ * What one audit row did, in words. A publish writes two rows (the version, then the live binding):
+ * the version row reads "version N saved", the other "version N live", so they no longer look alike.
+ */
+export function actionText(row = {}) {
+  const base = ACTIONS[row.action] || row.action || 'A change'
+  if (!String(row.action || '').startsWith('ai.bindings.') || row.outcome === 'refused') return base
+  if (!row.after) return `${base}: removed`
+  const doc = row.after
+  if (doc.bindingId) return `${base}: version ${doc.version} saved${doc.status === 'draft' ? ' as a draft' : ''}`
+  return `${base}: version ${doc.version} live`
 }

@@ -94,7 +94,8 @@ export function modelFor(shareId, feature = 'canvas') {
         return text?.trim() && text.length <= 1200 ? null : { code: 'invalid-exec-call', retryPrompt: 'Call exec with intent and code.' }
       },
     })
-    if (turn.abort) return { abort: true, ...((turn.capability || turn.unusable) && { message: turn.abortMessage }) }
+    // the administrator's own message when the part is turned off (turn.disabled), as for a model that cannot do this
+    if (turn.abort) return { abort: true, ...((turn.capability || turn.unusable || turn.disabled) && { message: turn.abortMessage }) }
     const text = typeof turn.message?.content === 'string' ? turn.message.content : turn.message?.content?.find?.(part => part.type === 'text')?.text
     return { toolCall: turn.toolCall || null, text }
   }

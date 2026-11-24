@@ -590,3 +590,104 @@ test('the Providers and Models tabs say which key, never the key, and flag unpri
   assert.deepEqual([numberOrNull(''), numberOrNull('12'), Number.isNaN(numberOrNull('x'))], [null, 12, true])
   assert.deepEqual([...unpricedIds([{ kind: 'unpriced', id: 'a' }, { kind: 'connection', id: 'b' }])], ['a'])
 })
+
+// ---------- review fixes (2026-11-24) ----------
+test('an agent cannot change a provider\'s key style, headers, address or lock by leaving them out; a save keeps what it omits', async () => {
+  const { registry, collections, auditRows } = world()
+  await registry.run(person('root'), 'ai.providers.save', { provider: GEMINI })
+  const bot = agent('root')
+  // leaving out auth, extraHeaders and baseUrl keeps them (a relabel, which an agent may make)
+  await registry.run(bot, 'ai.providers.save', { provider: { id: 'gemini', label: 'Gemini', protocol: 'openai-chat' } })
+  const stored = await collections.providers.findOne({ _id: 'gemini' })
+  assert.deepEqual([stored.label, stored.auth, stored.extraHeaders, stored.baseUrl, stored.baseUrlLocked], ['Gemini', GEMINI.auth, GEMINI.extraHeaders, GEMINI.baseUrl, true])
+  // naming them differently is still refused, and so is unlocking the address
+  await assert.rejects(registry.run(bot, 'ai.providers.save', { provider: { id: 'gemini', label: 'G', protocol: 'openai-chat', auth: { style: 'bearer' } } }), /auth/)
+  await assert.rejects(registry.run(bot, 'ai.providers.save', { provider: { id: 'gemini', label: 'G', protocol: 'openai-chat', extraHeaders: {} } }), /headers/)
+  await assert.rejects(registry.run(bot, 'ai.providers.save', { provider: { id: 'gemini', label: 'G', protocol: 'openai-chat', baseUrl: null } }), /baseUrl/)
+  await assert.rejects(registry.run(bot, 'ai.providers.save', { provider: { id: 'gemini', label: 'G', protocol: 'openai-chat', baseUrlLocked: false } }), /baseUrlLocked/)
+  assert.equal(auditRows().filter((r) => r.action === 'ai.providers.save' && r.outcome === 'refused').length, 4)
+  // a person clears a field by sending it empty
+  await registry.run(person('root'), 'ai.providers.save', { provider: { id: 'gemini', label: 'Gemini', protocol: 'openai-chat', extraHeaders: {} } })
+  assert.deepEqual((await collections.providers.findOne({ _id: 'gemini' })).extraHeaders, {})
+})
+
+test('a connection a person turned off is turned back on by a person, not an agent', async () => {
+  const { registry, keys } = world()
+  await registry.run(person('root'), 'ai.providers.save', { provider: GEMINI })
+  await registry.run(person('root'), 'ai.connections.save', { connections: [{ name: 'gem', type: 'gemini', model: 'm1', apiKey: 'AIza-person-key-0123456789-1234', status: 'disabled' }] })
+  await assert.rejects(registry.run(agent('root'), 'ai.connections.save', { connections: [{ name: 'gem', type: 'gemini', model: 'm1', status: 'active' }] }), /turn a connection back on/)
+  const gem = () => keys.rows.find((d) => d.name === 'gem')
+  assert.equal(gem().status, 'disabled')
+  // an agent's other changes leave it off
+  await registry.run(agent('root'), 'ai.connections.save', { connections: [{ name: 'gem', type: 'gemini', model: 'm2' }] })
+  assert.deepEqual([gem().model, gem().status], ['m2', 'disabled'])
+  await registry.run(person('root'), 'ai.connections.save', { connections: [{ name: 'gem', type: 'gemini', model: 'm2', status: 'active' }] })
+  assert.equal(gem().status, 'active')
+})
+
+test('ai.update and ai.check at the server level keep the person-only rule for a token: keys, addresses, choices and removals', async () => {
+  const { registry, keys, auditRows } = world()
+  const bot = agent('root')
+  const refused = [
+    [{ level: 'server', connections: [{ name: 'x', type: 'openai-compatible', baseUrl: 'https://attacker.example/v1', model: 'm', apiKey: 'k-0123456789' }] }, /send a key/],
+    [{ level: 'server', connections: [{ name: 'x', type: 'openai-compatible', baseUrl: 'https://attacker.example/v1', model: 'm' }] }, /address can be chosen/],
+    [{ level: 'server', use: { default: 'builtin' } }, /Only a person can choose/],
+    [{ level: 'server', remove: ['x'] }, /remove the server's connections/],
+  ]
+  for (const [input, why] of refused) {
+    await assert.rejects(registry.run(bot, 'ai.update', input), (error) => error.status === 403 && error.details?.personOnly && why.test(error.message), JSON.stringify(input))
+  }
+  assert.equal(keys.rows.length, 0)
+  assert.equal(auditRows().filter((r) => r.action === 'ai.update' && r.outcome === 'refused').length, refused.length)
+  assert.ok(!JSON.stringify(auditRows()).includes('k-0123456789'))
+  // what a token may still do at the server level: change the model of a connection a person keyed
+  await registry.run(person('root'), 'ai.update', { level: 'server', connections: [{ name: 'oa', type: 'openai', model: 'gpt-x', apiKey: 'sk-abcdefghijklmnopqrst' }] })
+  await registry.run(bot, 'ai.update', { level: 'server', connections: [{ name: 'oa', type: 'openai', model: 'gpt-y' }] })
+  assert.deepEqual([keys.rows.find((d) => d.name === 'oa').model, keys.rows.find((d) => d.name === 'oa').last4], ['gpt-y', 'qrst'])
+  // a person may do all of it
+  await registry.run(person('root'), 'ai.update', { level: 'server', connections: [{ name: 'x', type: 'openai-compatible', baseUrl: 'https://own.example/v1', model: 'm', apiKey: 'k-0123456789' }], use: { default: 'server:x' } })
+  // ai.check: a token cannot test an address of its choosing (a private one, say), only a saved connection by name
+  await assert.rejects(registry.run(bot, 'ai.check', { level: 'server', connection: { name: 'probe', type: 'openai-compatible', baseUrl: 'http://10.0.0.5:8080/v1', model: 'm' } }), (error) => error.status === 403 && /Test a saved connection by its name/.test(error.message))
+  assert.equal(body(await registry.run(bot, 'ai.check', { level: 'server', name: 'x' })).ok, true)
+  assert.equal(body(await registry.run(person('root'), 'ai.check', { level: 'server', connection: { name: 'probe', type: 'openai-compatible', baseUrl: 'http://10.0.0.5:8080/v1', model: 'm' } })).ok, true)
+})
+
+test('an administrator\'s price applies to the connection that served the call; the built-in AI\'s price is never lowered', async () => {
+  const { registry, holder } = world()
+  // production wiring (ai-control/index.mjs): the price source is told which connection served the call
+  setDbPriceSource((model, where) => dbPriceFor(holder.current(), model, where))
+  try {
+    await registry.run(person('root'), 'ai.connections.save', { connections: [{ name: 'oa', type: 'openai', model: 'gpt-x', apiKey: 'sk-abcdefghijklmnopqrst' }] })
+    const QWEN = 'Qwen/Qwen3-235B-A22B-Instruct-2507'
+    const table = AI_PRICES.find((row) => row.model === QWEN)
+    assert.ok(table, 'the table prices the built-in model')
+    await registry.run(person('root'), 'ai.models.save', { models: [
+      { connection: 'server:oa', model: QWEN, prices: { inputPerM: 0, outputPerM: 0 } },
+      { connection: 'builtin:deepinfra', model: QWEN, prices: { inputPerM: 0, outputPerM: 0 } },
+    ] })
+    const usage = { inputTokens: 1_000_000, outputTokens: 0 }
+    // through the administrator's own connection: their price (free)
+    assert.equal(aiCostMicros({ model: QWEN, usage, connection: 'server:oa', provider: 'openai' }).costMicros, 0)
+    // through the built-in AI: the table's, whatever was saved for it
+    assert.equal(aiCostMicros({ model: QWEN, usage, connection: 'builtin', provider: 'deepinfra' }).costMicros, Math.ceil(table.inPerMillion * 1e6))
+    // through another connection with no row of its own: the table's
+    assert.equal(aiCostMicros({ model: QWEN, usage, connection: 'server:other', provider: 'openai' }).costMicros, Math.ceil(table.inPerMillion * 1e6))
+    // a built-in price above the table's does apply
+    await registry.run(person('root'), 'ai.models.save', { models: [{ connection: 'builtin:deepinfra', model: QWEN, prices: { inputPerM: table.inPerMillion * 2, outputPerM: table.outPerMillion * 2 } }] })
+    assert.equal(aiCostMicros({ model: QWEN, usage, connection: 'builtin', provider: 'deepinfra' }).costMicros, Math.ceil(table.inPerMillion * 2 * 1e6))
+  } finally {
+    setDbPriceSource((model) => dbPriceFor(holder.current(), model))
+  }
+})
+
+test('with the DB layer switched off, the services\' keys saved in the app are not used (the settings file\'s are)', async () => {
+  const { registry, ai } = world()
+  await registry.run(person('root'), 'ai.connections.save', { connections: [{ name: 'voice', type: 'deepgram', apiKey: 'dg-0000000000000000' }] })
+  assert.equal(await ai.hasAuxKey('deepgram'), true)
+  let on = false
+  ai.setAuxKeysOn(() => on)
+  assert.equal(await ai.auxCredential('deepgram'), null)
+  assert.equal(await ai.hasAuxKey('deepgram'), false)
+  on = true
+  assert.equal((await ai.auxCredential('deepgram')).name, 'voice')
+})
