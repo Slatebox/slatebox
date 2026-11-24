@@ -169,7 +169,21 @@ function whereChosen(surfaceId, holders) {
 // The lowest value set, with the layer that set it.
 const tightestOf = (entries) => entries.reduce((best, entry) => (Number.isFinite(entry.value) && (!best || entry.value < best.value) ? entry : best), null)
 
-function resolvePromptRef(snapshot, ref, codePrompts) {
+/**
+ * The text a prompt is served with (spec 2.1: published DB version, then code): a version a published
+ * server binding of the prompt's surface pins for its slot, else the prompt's published version, else
+ * null (the caller uses the code text). prompt: the registry row { id, surface, slot }. With the DB
+ * layer off there are no documents, so it is always null.
+ * → { id, version, body, variables, source: 'pinned' | 'published' } | null
+ */
+export function promptFor(snapshot, prompt, codePrompts = {}) {
+  if (!snapshot || snapshot.dbLayer === 'off' || !prompt) return null
+  const pinned = snapshot.bindings?.[`${prompt.surface}|server`]?.prompts?.[prompt.slot]
+  const found = resolvePromptRef(snapshot, pinned || prompt.id, codePrompts)
+  return found && found.version > 0 ? found : null
+}
+
+export function resolvePromptRef(snapshot, ref, codePrompts) {
   const pin = parsePromptRef(ref)
   if (!pin) return null
   const head = snapshot.prompts[pin.id]

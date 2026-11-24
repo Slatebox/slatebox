@@ -31,6 +31,7 @@ import { runAIAction } from '../metering/context.mjs'
 import { aiRefusal } from '../metering/meteor'
 import { refusalErrorArgs } from '../metering/refusal-pay.mjs'
 import { validSelection } from '../../imports/api/common/chat-selection.mjs'
+import { promptText } from '../ai-control/prompts/index.mjs'
 
 // In the app, a person opens a slate by its address, which may be an invitation key; the
 // session's own rule decides access (the same rule the conversation has always used).
@@ -90,9 +91,9 @@ export function modelFor(shareId, feature = 'canvas') {
       maxResponseValidationRetries: 1,
       validateResponse: ({ message, toolCall }) => {
         if (toolCall) return toolCall.name === tool.name && typeof toolCall.arguments?.code === 'string' && toolCall.arguments.code.trim()
-          ? null : { code: 'invalid-exec-call', retryPrompt: 'Call exec with intent and code.' }
+          ? null : { code: 'invalid-exec-call', retryPrompt: promptText('exec.chat.retry') }
         const text = typeof message?.content === 'string' ? message.content : message?.content?.find?.(part => part.type === 'text')?.text
-        return text?.trim() && text.length <= 1200 ? null : { code: 'invalid-exec-call', retryPrompt: 'Call exec with intent and code.' }
+        return text?.trim() && text.length <= 1200 ? null : { code: 'invalid-exec-call', retryPrompt: promptText('exec.chat.retry') }
       },
     })
     // the administrator's own message when the part is turned off (turn.disabled), as for a model that cannot do this

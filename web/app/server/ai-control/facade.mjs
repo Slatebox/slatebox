@@ -77,7 +77,10 @@ export function createAIControl({ holder, choiceHolders, settings = {}, codeProm
         out.push({ ...publicSurface(s), binding: null, note: 'Not in this build' })
         continue
       }
-      out.push({ ...publicSurface(s), binding: await bind({ surface: s.id, userId, orgId, plan }) })
+      const binding = await bind({ surface: s.id, userId, orgId, plan })
+      // which version of each prompt it is served, and from where (the texts are in ai.prompts.get)
+      const prompts = Object.fromEntries(Object.entries(binding.prompts || {}).map(([slot, p]) => [slot, { id: p.id, version: p.version, source: p.source }]))
+      out.push({ ...publicSurface(s), binding: { ...binding, prompts } })
     }
     return { generation: snapshot.generation, dbLayer: snapshot.dbLayer, source: snapshot.source, userId, plan, surfaces: out }
   }
@@ -127,6 +130,7 @@ export function createAIControl({ holder, choiceHolders, settings = {}, codeProm
   return {
     bind,
     renderSlot,
+    noteHealth,
     effective,
     get,
     health: () => [...holder.current().health, ...runtimeHealth, ...extraHealth()],

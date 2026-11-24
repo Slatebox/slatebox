@@ -1,9 +1,10 @@
 import { validateWorkshop, availableLanes } from 'slateboxjs/workshops/model'
+import { codePromptText, promptText } from '../ai-control/prompts/index.mjs'
 
 const name = { type: 'string', minLength: 1, maxLength: 80 }
 export const mapTool = {
   name: 'draft_concept_map',
-  description: 'Create an editable simulation of a decision. Name each station, the consequence of arriving there, and the stations it leads to.',
+  description: codePromptText('tool.draft_concept_map'),
   parameters: {
     type: 'object', additionalProperties: false, required: ['title', 'stations', 'token', 'start'],
     properties: {
@@ -24,7 +25,9 @@ export const mapTool = {
     },
   },
 }
-export const mapInstructions = 'Build a playable concept map tailored to the supplied situation. Use the draft_concept_map tool. Use two to five stations total. Use four when the brief leaves the size open. Give each station a distinctive short name and a concrete consequence. Use those station names exactly in next and start. Model different choices when the brief asks for them. Start the token at a station with an onward path. Every station must be reachable from that starting station. If the brief names a change that depends on the token being at one station, include a signal with both the present and absent messages. Preserve any outcome name and quoted messages supplied in the brief. Return only the requested tool arguments.'
+// The tool as sent (its description is tool.draft_concept_map) and the instructions (workshop.draft.map).
+export const mapDraftTool = () => ({ ...mapTool, description: promptText('tool.draft_concept_map') })
+export const mapInstructions = () => promptText('workshop.draft.map')
 
 export function conceptMapFromDraft(input) {
   if (!Array.isArray(input?.stations) || input.stations.length < 2 || input.stations.length > 5) {

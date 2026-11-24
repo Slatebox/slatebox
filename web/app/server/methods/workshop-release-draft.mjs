@@ -1,10 +1,11 @@
 import { availableLanes, validateWorkshop } from 'slateboxjs/workshops/model'
+import { codePromptText, promptText } from '../ai-control/prompts/index.mjs'
 
 const label = { type: 'string', minLength: 1, maxLength: 80 }
 const points = { type: 'integer', minimum: 1, maximum: 24 }
 export const releaseTool = {
   name: 'draft_release_plan',
-  description: 'Draft release windows, effort estimates and feature prerequisites for an editable planning session.',
+  description: codePromptText('tool.draft_release_plan'),
   parameters: { type: 'object', additionalProperties: false, required: ['title', 'windows', 'features'], properties: {
     title: { type: 'string', minLength: 1, maxLength: 120 },
     windows: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'object', additionalProperties: false,
@@ -14,7 +15,9 @@ export const releaseTool = {
         prerequisites: { type: 'array', items: label, description: 'Exact names of prerequisite features. Use an empty list for independent features.' } } } },
   } },
 }
-export const releaseInstructions = 'Use draft_release_plan to prepare an editable release plan from the brief. Use one to four chronological release windows. Features take 1–24 effort points. Window budgets may range from 1 to 576 points. Honor stated estimates, and keep suggested estimates modest when the user leaves them open. Use unique feature names. Write each prerequisite using its exact feature name; use no circular dependencies. The application starts all features in an Unscheduled backlog for the team to try. At least one feature must fit a release window.'
+// The tool as sent (its description is tool.draft_release_plan) and the instructions (workshop.draft.release).
+export const releaseDraftTool = () => ({ ...releaseTool, description: promptText('tool.draft_release_plan') })
+export const releaseInstructions = () => promptText('workshop.draft.release')
 
 export function releasePlanFromDraft(input) {
   if (!Array.isArray(input?.windows) || input.windows.length < 1 || input.windows.length > 4) throw new Error('Provide one to four release windows.')

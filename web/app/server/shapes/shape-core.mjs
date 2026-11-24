@@ -5,6 +5,7 @@
 // model's answer is only ever data, never markup. Nothing here names a model or provider.
 import { createHash } from 'node:crypto'
 import { prepareShape } from 'slateboxjs/shapes'
+import { codePromptText, promptText } from '../ai-control/prompts/index.mjs'
 
 export const SHAPE_FEATURE = 'shape'
 export const MAX_DESCRIBE = 200
@@ -19,10 +20,11 @@ export const DRAWINGS_PER_HOUR = 20
 export const RATE_LIMITED_MESSAGE = 'That is a lot of shapes for one hour. Try again a little later.'
 export const UNAVAILABLE_MESSAGE = 'Could not draw that shape. Try describing it more simply.'
 
-// The one tool the model answers with.
+// The one tool the model answers with. Its description is a prompt (tool.propose_shapes,
+// server/ai-control/prompts/shape.mjs): shapeTool() sends the published one, SHAPE_TOOL holds the built-in.
 export const SHAPE_TOOL = Object.freeze({
   name: 'propose_shapes',
-  description: 'Propose outlines for a note on a canvas, each one SVG path.',
+  description: codePromptText('tool.propose_shapes'),
   parameters: {
     type: 'object',
     properties: {
@@ -45,24 +47,19 @@ export const SHAPE_TOOL = Object.freeze({
   },
 })
 
-// Lowercase prose only (no placeholder tokens): the description is never spliced in here.
+/** The tool as sent: its description is the published one (tool.propose_shapes). */
+export function shapeTool() {
+  return { ...SHAPE_TOOL, description: promptText('tool.propose_shapes') }
+}
+
+// The text is a prompt an administrator can edit (shape.system, server/ai-control/prompts/shape.mjs).
+// The description is never spliced in here.
 export function shapeSystemPrompt(count = DEFAULT_COUNT) {
-  return [
-    'You draw outlines for notes on a whiteboard canvas.',
-    `Answer with the propose_shapes tool and exactly ${count} clearly different takes on the shape the person describes.`,
-    'Each shape is one flat silhouette, drawn as a single svg path in a 0 0 100 100 box.',
-    'Use absolute commands only (M, L, H, V, C, Q, A, Z) and plain decimal numbers.',
-    'Close every part with Z. Separate parts must not overlap.',
-    'Draw a hole as a part inside another part and set fillRule to evenodd; otherwise use nonzero.',
-    'Use at most 200 commands and at most 12 parts. No text, letters or outlines of letters.',
-    'Keep a calm, roughly rectangular area in the middle of the shape where a short label can sit.',
-    'Give each shape a short name of two or three words.',
-    'If you cannot call the tool, answer with only the json object it takes: {"shapes": [{"name": "...", "d": "...", "fillRule": "nonzero"}]}.',
-  ].join(' ')
+  return promptText('shape.system', { count })
 }
 
 export function shapeUserPrompt(describe) {
-  return { role: 'user', content: [{ type: 'text', text: `The shape to draw: ${describe}` }] }
+  return { role: 'user', content: [{ type: 'text', text: promptText('shape.user', { describe }) }] }
 }
 
 export function cleanDescribe(describe) {
@@ -243,13 +240,13 @@ export async function generateShapes({ principal, describe, count = DEFAULT_COUN
       if (problems) {
         prompts.push({
           role: 'user',
-          content: [{ type: 'text', text: `Some shapes could not be used (${[...new Set(problems)].join(', ')}). Send ${missing} more, following every rule.` }],
+          content: [{ type: 'text', text: promptText('shape.retry', { problems: [...new Set(problems)].join(', '), missing }) }],
         })
       }
       const response = await deps.request({
         system: shapeSystemPrompt(missing),
         prompts,
-        functions: [SHAPE_TOOL],
+        functions: [shapeTool()],
         function_call: { name: SHAPE_TOOL.name },
       }, principal)
       if (response?.abort) throw new ShapeProblem('shape_unavailable', response.abortMessage || UNAVAILABLE_MESSAGE, 422)

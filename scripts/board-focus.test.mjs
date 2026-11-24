@@ -134,8 +134,8 @@ test('the request ladder: a rule this board knows first, then a checked catalogu
 test('the AI turn may name a component; the server keeps only real catalogue ids', () => {
   assert.ok(laneChangeTool.parameters.properties.recommend)
   assert.deepEqual(laneChangeTool.parameters.required, ['reply'])
-  assert.match(laneInstructions, /recommend/)
-  assert.match(laneInstructions, /kind board/)
+  assert.match(laneInstructions(), /recommend/)
+  assert.match(laneInstructions(), /kind board/)
   const kept = prepareLaneReply({ reply: 'A Sales pipeline tracks deal amounts.', recommend: { component: 'sales-pipeline', why: 'It tracks deal amounts.' } }, retro, null)
   assert.deepEqual(kept, { reply: 'A Sales pipeline tracks deal amounts.', workshop: null, recommend: { component: 'sales-pipeline', why: 'It tracks deal amounts.' } })
   const unknown = prepareLaneReply({ reply: 'Try a CRM.', recommend: { component: 'salesforce', why: 'x' } }, retro, null)

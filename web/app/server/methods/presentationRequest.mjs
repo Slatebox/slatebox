@@ -11,6 +11,7 @@ import { refusalOf } from '../metering/refusal-pay.mjs'
 import { STEP_LAYOUTS, normalizeDirection, CAPTION_WORDS } from '../../imports/ui/components/presentations/presentationCompose.mjs'
 import { STYLES, STYLE_IDS } from '../../imports/ui/components/presentations/presentationStyles.mjs'
 import { MASK_NAMES } from '../../imports/ui/components/presentations/presentationPaths.mjs'
+import { codePromptText, promptRef, promptText } from '../ai-control/prompts/index.mjs'
 
 /** The most notes a slate may have for the AI to plan it. A larger slate gets the automatic plan. */
 export const MAX_PLAN_NOTES = 300
@@ -93,54 +94,67 @@ export function sanitizeLayout(raw) {
 
 const NARRATIVE_WORDS = 15
 
-const SEGMENT_PROMPT = `You plan presentations of a slate, a canvas of notes. The presenter's camera moves from segment to segment: each segment frames a set of notes together and shows a short narrative line. The presenter opens and closes with the whole slate itself: you write only the opening and closing narratives, never their notes. You receive the notes as [id, text, x, y, width, height] (a seventh number is a rotation), the connections between them as [from, to], and suggested groups: notes that are connected or close to each other. Rules: 1) Plan meaningful segments, never one note at a time: a cluster of related notes, a branch, a lane or column, or a note with its connected neighbours. Start from the suggested groups, and merge or split them when the meaning calls for it. A segment usually has two to six notes; a single note only when it stands on its own. Use at most 24 segments. 2) Order the segments so the story flows: from the main idea to its parts, following the connections, otherwise in reading order (top to bottom, left to right). 3) Every note is in at least one segment. 4) The opening narrative says what the slate is about; the closing narrative sums it up. 5) Each narrative is plain and specific, at most ${NARRATIVE_WORDS} words, and says what the segment means rather than listing its notes. 6) Durations in milliseconds: a segment 2500 to 4500 (longer for more notes). Use only ids from the input. When asked to refine, give exactly the number of segments asked for, and keep each segment a meaningful group.`
-
+// The planning instructions are prompts an administrator can edit (server/ai-control/prompts/
+// presentation.mjs): how to plan segments, how to art-direct the deck, and one system prompt per kind
+// of slate. The style list, layouts, masks and word limits are the code's own, passed as values.
 const STYLE_GUIDE = STYLE_IDS.map((id) => `${id} (${STYLES[id].blurb})`).join('; ')
 // Art direction: the deck is played on the live canvas in a style, with Prezi-style camera moves.
 // The AI chooses the style, the layout of each step, the words and the pictures; the composer
 // places everything in free canvas space (the AI never does geometry).
-const ART_DIRECTION = ` You also art-direct the deck, which plays on the live canvas with Prezi-style camera flights: zoom out, travel, zoom in, roll, deep zooms into small details. Make it bold, varied and delightful, never a slideshow. 1) Pick the style that fits the slate's content: ${STYLE_GUIDE}. A mind map or tree suits voyage, a process blueprint, a timeline journey, a brainstorm sketch, numbers stage, a comparison or narrative editorial, a short launch neon. 2) Write a title (at most 8 words, specific to the slate, not its name repeated), a kicker (at most 5 words), a call to action (at most 4 words) and a closing caption. 3) Give every segment a layout from: ${STEP_LAYOUTS.join(', ')}. overview frames the whole slate; dive flies into a group with a picture and a headline; hero holds on one idea with a speech bubble; treeBuild builds a branch with a brace; trace follows a ribbon from a branch back to the centre; sweep shows two groups side by side, each with a picture; compare sets two groups against each other with headings; bigNumber shows one number in huge type; quote pulls a note's own words; split pairs a picture with a headline; group frames notes plainly. Rules: start with overview; never the same layout three times in a row; alternate wide and close shots; include at least one surprising beat (bigNumber, quote, compare, trace, or a detail). A bigNumber's number must be written on the slate (or 0 for something free, or a count of the slate's notes); never invent numbers. 4) Give one dive a detail: a tiny sticker label (at most 4 characters, like $0 or MIT) and its fine print (at most 12 words from the slate), revealed only when the camera zooms deep into it. 5) Captions (the narrative) are at most ${CAPTION_WORDS} words, say what the step means, never repeat a note's text, and never use all-caps placeholder words. Headlines are at most 6 words. 6) Pictures: for dive, split, hero and sweep, ask for an image with a search query, a generation prompt and a one-line why that ties the picture to the notes' meaning (a bridge for connecting tools, a workshop for building); choose a mask from ${MASK_NAMES.join(', ')}. A picture without a why is dropped.`
-const withArt = (prompt) => `${prompt}${ART_DIRECTION}`
+const systemParts = () => ({
+  segments: promptText('presentation.segments', { narrativeWords: NARRATIVE_WORDS }),
+  art: promptText('presentation.art', { styleGuide: STYLE_GUIDE, stepLayouts: STEP_LAYOUTS.join(', '), captionWords: CAPTION_WORDS, masks: MASK_NAMES.join(', ') }),
+})
+// The prompts a plan's system text is made of, as `id@v<n>`: kept with the conversation so a
+// refinement can say which versions its plan was made with.
+const systemRefOf = (id) => ({ system: promptRef(id), segments: promptRef('presentation.segments'), art: promptRef('presentation.art') })
 
 // The intentions a slate can be made for. Each plans segments; they differ in how the published
 // deck plays and in the tone asked for.
 const INTENTIONS = {
   dynamic: {
-    prompt: withArt(`${SEGMENT_PROMPT} This slate is a dynamic, visual piece: keep the pace quick (segments 2000 to 3000), and let the narratives build on each other like one sentence told across the segments.`),
+    // the id of its system prompt
+    prompt: 'presentation.system.dynamic',
     showNarrative: false,
     hideMenuOnPublish: true,
     autoplayOnPublish: true,
   },
   slideDeck: {
-    prompt: withArt(`${SEGMENT_PROMPT} This slate is laid out like slides: a segment is usually one slide's notes together, in the slides' order.`),
+    prompt: 'presentation.system.slides',
     showNarrative: false,
     hideMenuOnPublish: true,
     autoplayOnPublish: true,
   },
 }
-const TEMPLATE_PROMPT = withArt(`${SEGMENT_PROMPT} The notes were added to a template by a group of collaborators: find the themes in what they wrote and build the segments around those themes.`)
-const ART_PROMPT = withArt(SEGMENT_PROMPT)
+const TEMPLATE_PROMPT = 'presentation.system.template'
+const ART_PROMPT = 'presentation.system'
+const systemText = (id) => promptText(id, systemParts())
 
-const imageSchema = {
+// The descriptions that steer picture search and generation, and the tool's own, are prompts
+// (tool.create-presentation*): planFunctions(text) builds the tool with the published ones.
+const imageSchemaWith = (text) => ({
   type: 'object',
   description: 'A picture for this step: searched for, else generated, else drawn from the style',
   properties: {
-    query: { type: 'string', description: 'An image search query, 2 to 6 words' },
-    prompt: { type: 'string', description: 'A prompt to generate the picture, one sentence' },
-    why: { type: 'string', description: 'One line: how the picture shows what these notes mean' },
+    query: { type: 'string', description: text('tool.create-presentation.image-query') },
+    prompt: { type: 'string', description: text('tool.create-presentation.image-prompt') },
+    why: { type: 'string', description: text('tool.create-presentation.image-why') },
     mask: { type: 'string', enum: MASK_NAMES },
   },
   required: ['query', 'why'],
-}
+})
 
 /**
  * The function the AI answers with: the plan's segments and the words for its opening and closing
- * overviews (the server adds their notes: the AI never lists every note twice).
+ * overviews (the server adds their notes: the AI never lists every note twice). text(id) gives a
+ * prompt's text: the published one for a request (planFunctions()), the built-in for PLAN_FUNCTIONS.
  */
-export const PLAN_FUNCTIONS = [
+export function planFunctions(text = promptText) {
+  const imageSchema = imageSchemaWith(text)
+  return [
   {
     name: 'createPresentation',
-    description: 'Plan the presentation as segments of related notes',
+    description: text('tool.create-presentation'),
     parameters: {
       type: 'object',
       properties: {
@@ -185,7 +199,10 @@ export const PLAN_FUNCTIONS = [
       required: ['name', 'description', 'opening', 'segments', 'closing', 'style', 'title'],
     },
   },
-]
+  ]
+}
+/** The tool with its built-in descriptions (version 0). */
+export const PLAN_FUNCTIONS = planFunctions(codePromptText)
 
 /**
  * The slate as the AI reads it, compact: each note as [id, text, x, y, width, height] (and its
@@ -218,27 +235,31 @@ export function compactSlate(layout) {
 /** The slate in words for the AI: the compact notes, connections and suggested groups. */
 export function slateForPrompt(layout) {
   const { notes, links } = compactSlate(layout)
-  return `Notes [id, text, x, y, width, height]: ${JSON.stringify(notes)}. Connections [from, to]: ${JSON.stringify(links)}. Suggested groups: ${JSON.stringify(layout ? planHints(layout) : [])}`
+  return promptText('presentation.slate', { notes: JSON.stringify(notes), links: JSON.stringify(links), groups: JSON.stringify(layout ? planHints(layout) : []) })
 }
 
 /**
  * The prompts for planning this slate. `layout` is the kept layout (sanitizeLayout); the AI is
  * sent that, never the caller's payload. → { system, systemFor({ intentionId, isTemplate }),
- * settingsFor(intentionId), user }
+ * systemRefFor(same), settingsFor(intentionId), user, withBrief(brief), refinement(message, slateChanged) }
  */
 export function presentationPrompts({ layout, scenes = [], isTemplate = false }) {
-  const systemFor = ({ intentionId, isTemplate: template = false } = {}) => (template ? TEMPLATE_PROMPT : INTENTIONS[intentionId]?.prompt ?? ART_PROMPT)
-  let user = `Please plan the presentation of this slate. ${slateForPrompt(layout)}`
-  if (isTemplate) user += '. This slate is based on a template, so the notes\' texts give the themes, fewer than the notes under them.'
-  if (scenes.length) {
-    user += `. The slate holds a workshop whose lanes the team presents in this order, each lane with the notes on it: ${scenes
-      .map((scene) => scene.nodeIds.join(' + ')).join(', then ')}. Present one segment per lane in that order, then the segments of the other notes.`
-  }
+  const systemId = ({ intentionId, isTemplate: template = false } = {}) => (template ? TEMPLATE_PROMPT : INTENTIONS[intentionId]?.prompt ?? ART_PROMPT)
+  const user = promptText('presentation.user', {
+    slate: slateForPrompt(layout),
+    isTemplate: Boolean(isTemplate),
+    hasScenes: scenes.length > 0,
+    scenes: scenes.map((scene) => scene.nodeIds.join(' + ')).join(', then '),
+  })
   return {
-    system: ART_PROMPT,
-    systemFor,
+    system: systemText(ART_PROMPT),
+    systemFor: (args) => systemText(systemId(args)),
+    systemRefFor: (args) => systemRefOf(systemId(args)),
     settingsFor: (intentionId) => INTENTIONS[intentionId] ?? {},
     user,
+    // the presenter's own words, as a JSON string inside the request
+    withBrief: (brief) => promptText('presentation.brief', { request: user, brief: JSON.stringify(brief) }),
+    refinement: (message, slateChanged = false) => promptText('presentation.refine', { message: String(message), slateChanged: Boolean(slateChanged), ...(slateChanged && { slate: slateForPrompt(layout) }) }),
   }
 }
 

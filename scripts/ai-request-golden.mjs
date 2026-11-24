@@ -13,6 +13,8 @@
 //     conversation's kept system text) and the library refine turn. Compared byte for byte with
 //     scripts/fixtures/ai-request/prompt-sites.golden.json (captured from 4ffde9cf, before the
 //     prompts moved to server/ai-control/prompts).
+//   node scripts/ai-request-golden.mjs --used [webAppRoot]   the prompt ids those sites asked the
+//     registry for (every prompt in it should be one of them)
 // One app root per process: the module hooks are registered once.
 import { register } from 'node:module'
 import { pathToFileURL } from 'node:url'
@@ -47,12 +49,18 @@ let answer = { abort: true }
 const OFF_FIRST = 'Drawing chat is paused by the admin for a test.'
 let offState = null
 
-export async function recordCallSites(appRoot, { disabled = false, offFirst = false, prompts: promptSites = false } = {}) {
+export async function recordCallSites(appRoot, { disabled = false, offFirst = false, prompts: promptSites = false, used = false } = {}) {
   if (disabled) answer = OFF
   if (offFirst) offState = { surface: 'canvas', message: OFF_FIRST }
   const root = appRoot.replace(/\/+$/, '') + '/'
   // The pure modules the prompt sites run, loaded before the hooks: real code, real engine.
   const pure = promptSites ? await loadPure(root) : null
+  // --used: which prompts of the registry (server/ai-control/prompts) the sites asked for
+  const asked = new Set()
+  if (used) {
+    const { prompts: registry } = await import(pathToFileURL(root + 'server/ai-control/prompts/index.mjs').href)
+    registry.setSource((id) => { asked.add(id); return null })
+  }
   register(new URL('./ai-request-golden-hooks.mjs', import.meta.url), { data: { appRoot: root, targets: TARGETS } })
 
   const calls = []
@@ -158,7 +166,7 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
     out.canvas = shape(last(), [{ toolCall: { name: 'exec', arguments: { code: '' } } }, { toolCall: null, message: { content: '' } }])
     Object.assign(out, await recordPure(pure))
     Object.assign(out, await recordPresentations(methods, calls))
-    return out
+    return used ? [...asked].sort() : out
   }
   board = LANES
   await quiet(() => methods['workshops.laneChat']({ shareId: 'share1', revision: 3, message: 'move the barn to the shortlist', history: [] }))
@@ -338,8 +346,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2)
   const disabled = args.includes('--disabled')
   const offFirst = args.includes('--off-first')
-  const prompts = args.includes('--prompts')
+  const prompts = args.includes('--prompts') || args.includes('--used')
+  const used = args.includes('--used')
   const appRoot = args.find((a) => !a.startsWith('--')) || new URL('../web/app/', import.meta.url).pathname
   TARGET_ROOT = appRoot.replace(/\/+$/, '') + '/'
-  process.stdout.write(JSON.stringify(await recordCallSites(appRoot, { disabled, offFirst, prompts }), null, 2) + '\n')
+  process.stdout.write(JSON.stringify(await recordCallSites(appRoot, { disabled, offFirst, prompts, used }), null, 2) + '\n')
 }

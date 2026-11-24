@@ -17,7 +17,8 @@ import { createConnectionStore } from '../methods/ai/connection-store.mjs'
 import { createCatalogOps, createWriteLimit, dbPriceFor, providersView } from './models.mjs'
 import { SURFACES } from './catalogue.mjs'
 import { createAdminOps, createStatusHub, surfacesStatus } from './admin.mjs'
-import { resolveBinding } from './resolve.mjs'
+import { promptFor, resolveBinding } from './resolve.mjs'
+import { CODE_PROMPTS, CODE_SLOTS, PROMPT_IDS, prompts as promptRegistry } from './prompts/index.mjs'
 import { operatorConfig } from '../methods/ai/connections.mjs'
 import { createSnapshotHolder, fileDbLayer, parsePromptRef } from './snapshot.mjs'
 import { STATE_ID, createControlStore, ensureAIControlIndexes } from './store.mjs'
@@ -72,6 +73,8 @@ const read = {
 export const snapshotHolder = createSnapshotHolder({
   read,
   settings: Meteor.settings,
+  // a binding may name a built-in prompt (prompts/*.mjs) as well as a stored one
+  codePromptIds: () => PROMPT_IDS,
   fileConnections: () => operatorConfig(Meteor.settings).connections.map((c) => c.name),
 })
 
@@ -85,6 +88,9 @@ export const aiControl = createAIControl({
   holder: snapshotHolder,
   choiceHolders: (userId) => aiSettings.choiceHolders(userId),
   settings: Meteor.settings,
+  // the effective binding shows which version of each prompt a surface is served, and from where
+  codePrompts: CODE_PROMPTS,
+  codeSlots: CODE_SLOTS,
   isPriced,
   providerView: (snap) => providersView(snap),
   // a binding that kept failing on this pod (breaker.mjs) shows with the snapshot's health
@@ -100,6 +106,19 @@ export const aiBindings = createBindingOps({
   // the server's connections a chain may name: the settings file's and the app's
   connections: async () => (await aiSettings.serverState()).connections.map((c) => ({ name: c.name, status: c.disabled ? 'disabled' : 'active', capabilities: c.capabilities || {} })),
   breaker: requestBreaker,
+  codePromptIds: () => PROMPT_IDS,
+})
+
+// Every prompt a call site sends (prompts/index.mjs promptText) comes from here: a version a
+// published server binding pins, else the published version, else the built-in text (spec 2.1).
+// The snapshot holds them, so no request waits on the database; with the DB layer off the snapshot
+// has no documents and every prompt is the built-in text. A published version that does not render
+// falls back to the built-in text and is named in health.
+promptRegistry.setSource((id) => promptFor(snapshotHolder.current(), promptRegistry.byId[id], CODE_PROMPTS), {
+  onFallback: ({ id, version, error }) => aiControl.noteHealth({
+    kind: 'prompt', id,
+    problem: version ? `Version ${version} could not be rendered (${error.message}); the built-in text was used.` : `The prompt could not be read (${error.message}); the built-in text was used.`,
+  }),
 })
 
 // Every AI request asks this for its surface (ai-settings-core.mjs resolveFor): a published binding
