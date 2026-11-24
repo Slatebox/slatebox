@@ -7,7 +7,7 @@ import { surfaceForRequest } from './catalogue.mjs'
 import { STATE_ID } from './store.mjs'
 import { ModelError } from './models.mjs'
 
-export const RESET_TARGETS = Object.freeze(['use', 'binding', 'bindings', 'dbLayer', 'all'])
+export const RESET_TARGETS = Object.freeze(['use', 'binding', 'bindings', 'prompt', 'prompts', 'dbLayer', 'all'])
 export const GLOBAL_MESSAGE_MAX = 300
 export const AUDIT_PAGE = 50
 export const AUDIT_PAGE_MAX = 200
@@ -31,7 +31,7 @@ const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  *   now?()        → ms
  * }
  */
-export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null, costOf = () => ({ costMicros: 0 }), bindings = null, namesOf = null, now = Date.now }) {
+export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null, costOf = () => ({ costMicros: 0 }), bindings = null, prompts = null, namesOf = null, now = Date.now }) {
   // Each row's actor with the person's name (actor.name): an account that is gone reads "a deleted
   // account", and a row with no account (the server's own) keeps no name. Only administrators read
   // the list, so the names never reach anyone else.
@@ -121,7 +121,7 @@ export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null
    *   all      every one of the above.
    * A reason is required. → { target, cleared: [keys], removed: [binding ids], dbLayer: 'on' | 'off' }
    */
-  async function reset({ userId, actor, target, keys = null, surface = null, reason }) {
+  async function reset({ userId, actor, target, keys = null, surface = null, promptId = null, reason }) {
     if (!RESET_TARGETS.includes(target)) throw new Error(`target is ${RESET_TARGETS.join(', ')}`)
     let cleared = []
     const removed = []
@@ -137,6 +137,12 @@ export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null
         if (out.removed) removed.push(out.bindingId)
       }
     }
+    // prompts back to their built-in text (version 0); their versions stay
+    let promptsReset = []
+    if (target === 'prompt' || target === 'prompts' || target === 'all') {
+      if (!prompts) throw new Error('ai-control admin: needs the prompt store to reset prompts')
+      ;({ reset: promptsReset } = await prompts.reset({ actor, id: target === 'prompt' ? promptId : null, reason }))
+    }
     let { dbLayer } = await store.state()
     if (target === 'dbLayer' || target === 'all') {
       const state = await store.state()
@@ -144,7 +150,7 @@ export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null
       await store.write({ kind: 'state', id: STATE_ID, doc: { aiEnabled: true, ...rest, dbLayer: 'off' }, action: 'ai.control.reset', actor, reason, target: { kind: 'state', id: 'dbLayer' } })
       dbLayer = 'off'
     }
-    return { target, cleared, removed, dbLayer: dbLayer === 'off' ? 'off' : 'on' }
+    return { target, cleared, removed, prompts: promptsReset, dbLayer: dbLayer === 'off' ? 'off' : 'on' }
   }
 
   /**

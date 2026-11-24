@@ -620,7 +620,10 @@ return slatebox.library.saveDraft({ shareId, title: "Probe triage", summary: "So
   // AI control S3: providers, connections and models, the same way (their rules: scripts/ai-providers.test.mjs)
   // AI control S4: bindings, the same way (publish, rollback and the global switch are a person's,
   // in the app only, so they are no client methods; their rules: scripts/ai-bindings.test.mjs)
-  for (const call of ["ai.connections.list({})", "ai.models.discover({ connection: \"gem\" })", "ai.bindings.list({})"]) {
+  // AI control S6: prompts, the same way (publish and rollback are a person's, in the app only;
+  // their rules: scripts/ai-prompt-publish.test.mjs)
+  for (const call of ["ai.connections.list({})", "ai.models.discover({ connection: \"gem\" })", "ai.bindings.list({})",
+    "ai.prompts.list({})", "ai.prompts.get({ id: \"shape.system\" })", "ai.prompts.render({ id: \"shape.system\" })"]) {
     const refusedRead = await exec(`return slatebox.${call}`);
     assert.deepEqual([refusedRead.error.status, refusedRead.error.code, refusedRead.error.details?.requiredScope], [403, "insufficient_scope", "ai:admin:read"], call);
   }
@@ -629,6 +632,8 @@ return slatebox.library.saveDraft({ shareId, title: "Probe triage", summary: "So
     "ai.connections.save({ connections: [{ name: \"gem\", type: \"deepinfra\" }] })",
     "ai.models.save({ models: [{ connection: \"builtin:deepinfra\", model: \"m\" }] })",
     "ai.bindings.saveDraft({ binding: { surface: \"shape\", enabled: false } })",
+    "ai.prompts.saveDraft({ id: \"shape.system\", body: \"Draw {{count}} outlines.\" })",
+    "ai.prompts.test({ id: \"shape.system\" })",
   ]) {
     const refusedWrite = await exec(`return slatebox.${call}`);
     assert.deepEqual([refusedWrite.status, refusedWrite.error.status, refusedWrite.error.code, refusedWrite.error.details?.requiredScope], ["failed", 403, "insufficient_scope", "ai:admin"], call);

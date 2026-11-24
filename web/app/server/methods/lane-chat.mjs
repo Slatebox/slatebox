@@ -23,7 +23,8 @@ export const laneChangeTool = {
 export const laneTool = () => ({ ...laneChangeTool, description: promptText('tool.propose_workshop_edits') })
 
 // The lane chat's instructions (workshop.lane.system): the command formats are the reader's own.
-export const laneInstructions = () => promptText('workshop.lane.system', { editFormats: laneEditFormats.join('; ') })
+export const laneSystemValues = () => ({ editFormats: laneEditFormats.join('; ') })
+export const laneInstructions = () => promptText('workshop.lane.system', laneSystemValues())
 
 // A component the AI named: kept only when it is a catalogue entry (an unknown id is dropped).
 function recommendOf(input) {

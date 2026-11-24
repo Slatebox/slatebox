@@ -11,17 +11,18 @@ const CHAT_METHODS = ['slates.get', 'slates.applyOperations']
 
 // The instructions are a prompt an administrator can edit (exec.chat.system,
 // server/ai-control/prompts/exec.mjs); the rules and declarations come from the registry.
-export function chatSystemPrompt(manifest, shareId) {
+export function chatSystemValues(manifest, shareId) {
   const methods = manifest.methods.filter((method) => CHAT_METHODS.includes(method.name))
   const types = ['CanvasPlan'].filter((name) => manifest.types[name]).map((name) => manifest.types[name])
   const declarations = [...methods.map((method) => method.dts), manifest.errorDeclaration, ...types]
-  return promptText('exec.chat.system', {
+  return {
     rules: manifest.rules ?? '',
     shareId: String(shareId),
     hasDeclarations: declarations.length > 0,
     declarations: declarations.join('\n\n'),
-  })
+  }
 }
+export const chatSystemPrompt = (manifest, shareId) => promptText('exec.chat.system', chatSystemValues(manifest, shareId))
 
 export function chatPrompts({ board, shareId, message, history = [], selection = null }) {
   const turns = history.slice(-2).flatMap((turn) => [

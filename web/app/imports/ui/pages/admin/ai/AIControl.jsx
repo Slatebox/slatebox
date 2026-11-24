@@ -10,11 +10,12 @@ import Overview from './Overview'
 import Providers from './Providers'
 import Models from './Models'
 import Bindings from './Bindings'
+import Prompts from './Prompts'
 import Effective from './Effective'
 import Audit from './Audit'
 
 // Admin › AI control (/admin/ai): which AI answers each part of Slatebox and where that choice
-// comes from, the providers, keys and models it can use, what each part is bound to, and every change to the AI configuration. The page calls only the ai.control.*, ai.bindings.* and
+// comes from, the providers, keys and models it can use, what each part is bound to, the prompts each part sends, and every change to the AI configuration. The page calls only the ai.control.*, ai.bindings.*, ai.prompts.* and
 // ai.audit.* actions, the same ones an administrator's token, exec, MCP and the CLI call; the
 // server checks the administrator on every call.
 const TABS = [
@@ -22,6 +23,7 @@ const TABS = [
   { id: 'providers', label: 'Providers and keys', Panel: Providers },
   { id: 'models', label: 'Models', Panel: Models },
   { id: 'bindings', label: 'Bindings', Panel: Bindings },
+  { id: 'prompts', label: 'Prompts', Panel: Prompts },
   { id: 'effective', label: 'What a person gets', Panel: Effective },
   { id: 'audit', label: 'Changes', Panel: Audit },
 ]

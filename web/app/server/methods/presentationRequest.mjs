@@ -101,9 +101,14 @@ const STYLE_GUIDE = STYLE_IDS.map((id) => `${id} (${STYLES[id].blurb})`).join(';
 // Art direction: the deck is played on the live canvas in a style, with Prezi-style camera moves.
 // The AI chooses the style, the layout of each step, the words and the pictures; the composer
 // places everything in free canvas space (the AI never does geometry).
+/** The code's values for the two parts of the planning instructions (for test runs, AI control). */
+export const PLAN_PART_VALUES = Object.freeze({
+  segments: Object.freeze({ narrativeWords: NARRATIVE_WORDS }),
+  art: Object.freeze({ styleGuide: STYLE_GUIDE, stepLayouts: STEP_LAYOUTS.join(', '), captionWords: CAPTION_WORDS, masks: MASK_NAMES.join(', ') }),
+})
 const systemParts = () => ({
-  segments: promptText('presentation.segments', { narrativeWords: NARRATIVE_WORDS }),
-  art: promptText('presentation.art', { styleGuide: STYLE_GUIDE, stepLayouts: STEP_LAYOUTS.join(', '), captionWords: CAPTION_WORDS, masks: MASK_NAMES.join(', ') }),
+  segments: promptText('presentation.segments', PLAN_PART_VALUES.segments),
+  art: promptText('presentation.art', PLAN_PART_VALUES.art),
 })
 // The prompts a plan's system text is made of, as `id@v<n>`: kept with the conversation so a
 // refinement can say which versions its plan was made with.
@@ -233,10 +238,11 @@ export function compactSlate(layout) {
 }
 
 /** The slate in words for the AI: the compact notes, connections and suggested groups. */
-export function slateForPrompt(layout) {
+export function slateValues(layout) {
   const { notes, links } = compactSlate(layout)
-  return promptText('presentation.slate', { notes: JSON.stringify(notes), links: JSON.stringify(links), groups: JSON.stringify(layout ? planHints(layout) : []) })
+  return { notes: JSON.stringify(notes), links: JSON.stringify(links), groups: JSON.stringify(layout ? planHints(layout) : []) }
 }
+export const slateForPrompt = (layout) => promptText('presentation.slate', slateValues(layout))
 
 /**
  * The prompts for planning this slate. `layout` is the kept layout (sanitizeLayout); the AI is

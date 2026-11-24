@@ -1963,6 +1963,711 @@
         }
       }
     },
+    "/ai/control/prompts": {
+      "get": {
+        "operationId": "listAIPrompts",
+        "summary": "AI prompts",
+        "description": "Lists every prompt Slatebox sends its models, by part of Slatebox: the version served now and where it comes from (built in, published or pinned by a binding), the published and previous versions, and any draft or suggestion. Administrators only.",
+        "x-required-scope": "ai:admin:read",
+        "x-slatebox": {
+          "action": "ai.prompts.list",
+          "toolset": "admin",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ]
+        },
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "surfaces": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/control/prompts/draft": {
+      "put": {
+        "operationId": "saveAIPromptDraft",
+        "summary": "Save AI prompt draft",
+        "description": "Saves a new draft version of a prompt. Changes nothing live: a person publishes it after its checks pass. An agent's draft is marked as a suggestion. Returns the version and its lint findings. Administrators only.",
+        "x-required-scope": "ai:admin",
+        "x-slatebox": {
+          "action": "ai.prompts.saveDraft",
+          "toolset": "admin",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "enum": [
+                      "shape.system",
+                      "shape.user",
+                      "shape.retry",
+                      "tool.propose_shapes",
+                      "workshop.map.system",
+                      "workshop.lane.system",
+                      "workshop.chat.retry",
+                      "tool.propose_map_edits",
+                      "tool.propose_workshop_edits",
+                      "workshop.draft.system",
+                      "workshop.draft.map",
+                      "workshop.draft.release",
+                      "workshop.draft.rules",
+                      "workshop.draft.retry",
+                      "workshop.draft.repair",
+                      "tool.draft_workshop",
+                      "tool.draft_concept_map",
+                      "tool.draft_release_plan",
+                      "tool.revise_workshop_rules",
+                      "exec.chat.system",
+                      "exec.chat.fix",
+                      "exec.chat.retry",
+                      "agent.request.notes",
+                      "presentation.segments",
+                      "presentation.art",
+                      "presentation.system",
+                      "presentation.system.dynamic",
+                      "presentation.system.slides",
+                      "presentation.system.template",
+                      "presentation.slate",
+                      "presentation.user",
+                      "presentation.brief",
+                      "presentation.refine",
+                      "tool.create-presentation",
+                      "tool.create-presentation.image-query",
+                      "tool.create-presentation.image-prompt",
+                      "tool.create-presentation.image-why",
+                      "library.refine.system",
+                      "library.refine.request",
+                      "library.refine.retry",
+                      "tool.propose_library_refinement"
+                    ],
+                    "description": "The prompt, for example shape.system."
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32768,
+                    "description": "The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not."
+                  },
+                  "wrap": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "data"
+                      ]
+                    },
+                    "description": "Per value: data encloses it in a <data> block so it reads as data, not instructions."
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "A short note kept with the version."
+                  }
+                },
+                "required": [
+                  "id",
+                  "body"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "origin": {
+                      "type": "string"
+                    },
+                    "lint": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/control/prompts/test": {
+      "post": {
+        "operationId": "testAIPrompt",
+        "summary": "Test AI prompt",
+        "description": "Sends a prompt version (or text sent with the call) with a built-in sample through a part of Slatebox's binding (default: the prompt's own). Returns the request sent, the raw answer, whether that part could use it, the model, latency and cost. The answer is shown, never applied. Metered to the caller; 30 an hour per administrator. Administrators only.",
+        "x-required-scope": "ai:admin",
+        "x-slatebox": {
+          "action": "ai.prompts.test",
+          "toolset": "admin",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "enum": [
+                      "shape.system",
+                      "shape.user",
+                      "shape.retry",
+                      "tool.propose_shapes",
+                      "workshop.map.system",
+                      "workshop.lane.system",
+                      "workshop.chat.retry",
+                      "tool.propose_map_edits",
+                      "tool.propose_workshop_edits",
+                      "workshop.draft.system",
+                      "workshop.draft.map",
+                      "workshop.draft.release",
+                      "workshop.draft.rules",
+                      "workshop.draft.retry",
+                      "workshop.draft.repair",
+                      "tool.draft_workshop",
+                      "tool.draft_concept_map",
+                      "tool.draft_release_plan",
+                      "tool.revise_workshop_rules",
+                      "exec.chat.system",
+                      "exec.chat.fix",
+                      "exec.chat.retry",
+                      "agent.request.notes",
+                      "presentation.segments",
+                      "presentation.art",
+                      "presentation.system",
+                      "presentation.system.dynamic",
+                      "presentation.system.slides",
+                      "presentation.system.template",
+                      "presentation.slate",
+                      "presentation.user",
+                      "presentation.brief",
+                      "presentation.refine",
+                      "tool.create-presentation",
+                      "tool.create-presentation.image-query",
+                      "tool.create-presentation.image-prompt",
+                      "tool.create-presentation.image-why",
+                      "library.refine.system",
+                      "library.refine.request",
+                      "library.refine.retry",
+                      "tool.propose_library_refinement"
+                    ],
+                    "description": "The prompt, for example shape.system."
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "A saved version; 0 is the built-in text."
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32768,
+                    "description": "The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not."
+                  },
+                  "wrap": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "data"
+                      ]
+                    },
+                    "description": "Per value: data encloses it in a <data> block so it reads as data, not instructions."
+                  },
+                  "sample": {
+                    "type": "string",
+                    "maxLength": 40,
+                    "description": "A built-in sample (ai.prompts.get lists them). Default: the first."
+                  },
+                  "surface": {
+                    "type": "string",
+                    "enum": [
+                      "default",
+                      "chat",
+                      "chat.route",
+                      "generation",
+                      "presentation",
+                      "vision",
+                      "images",
+                      "shape",
+                      "workshop",
+                      "workshop.draft",
+                      "canvas",
+                      "agent.slatebox",
+                      "library",
+                      "connectors"
+                    ],
+                    "description": "Whose binding (model chain) to test against."
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rendered": {
+                      "type": "object"
+                    },
+                    "answer": {
+                      "type": "object"
+                    },
+                    "parses": {
+                      "type": "object"
+                    },
+                    "latencyMs": {
+                      "type": "integer"
+                    },
+                    "model": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "costMicros": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/control/prompts/{id}": {
+      "get": {
+        "operationId": "getAIPrompt",
+        "summary": "AI prompt",
+        "description": "Returns one prompt: the built-in text (version 0), the text served now and where it comes from, every saved version newest first with its author, note and eval results, the values it may use, and the samples a test run can send. Administrators only.",
+        "x-required-scope": "ai:admin:read",
+        "x-slatebox": {
+          "action": "ai.prompts.get",
+          "toolset": "admin",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ]
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "shape.system",
+                "shape.user",
+                "shape.retry",
+                "tool.propose_shapes",
+                "workshop.map.system",
+                "workshop.lane.system",
+                "workshop.chat.retry",
+                "tool.propose_map_edits",
+                "tool.propose_workshop_edits",
+                "workshop.draft.system",
+                "workshop.draft.map",
+                "workshop.draft.release",
+                "workshop.draft.rules",
+                "workshop.draft.retry",
+                "workshop.draft.repair",
+                "tool.draft_workshop",
+                "tool.draft_concept_map",
+                "tool.draft_release_plan",
+                "tool.revise_workshop_rules",
+                "exec.chat.system",
+                "exec.chat.fix",
+                "exec.chat.retry",
+                "agent.request.notes",
+                "presentation.segments",
+                "presentation.art",
+                "presentation.system",
+                "presentation.system.dynamic",
+                "presentation.system.slides",
+                "presentation.system.template",
+                "presentation.slate",
+                "presentation.user",
+                "presentation.brief",
+                "presentation.refine",
+                "tool.create-presentation",
+                "tool.create-presentation.image-query",
+                "tool.create-presentation.image-prompt",
+                "tool.create-presentation.image-why",
+                "library.refine.system",
+                "library.refine.request",
+                "library.refine.retry",
+                "tool.propose_library_refinement"
+              ],
+              "description": "The prompt, for example shape.system."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "object"
+                    },
+                    "live": {
+                      "type": "object"
+                    },
+                    "versions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/control/prompts/{id}/render": {
+      "get": {
+        "operationId": "renderAIPrompt",
+        "summary": "Render AI prompt",
+        "description": "Renders a prompt version (or text sent with the call) into the request a built-in sample sends, and reports its lint findings. No model is called. Administrators only.",
+        "x-required-scope": "ai:admin:read",
+        "x-slatebox": {
+          "action": "ai.prompts.render",
+          "toolset": "admin",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ]
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "shape.system",
+                "shape.user",
+                "shape.retry",
+                "tool.propose_shapes",
+                "workshop.map.system",
+                "workshop.lane.system",
+                "workshop.chat.retry",
+                "tool.propose_map_edits",
+                "tool.propose_workshop_edits",
+                "workshop.draft.system",
+                "workshop.draft.map",
+                "workshop.draft.release",
+                "workshop.draft.rules",
+                "workshop.draft.retry",
+                "workshop.draft.repair",
+                "tool.draft_workshop",
+                "tool.draft_concept_map",
+                "tool.draft_release_plan",
+                "tool.revise_workshop_rules",
+                "exec.chat.system",
+                "exec.chat.fix",
+                "exec.chat.retry",
+                "agent.request.notes",
+                "presentation.segments",
+                "presentation.art",
+                "presentation.system",
+                "presentation.system.dynamic",
+                "presentation.system.slides",
+                "presentation.system.template",
+                "presentation.slate",
+                "presentation.user",
+                "presentation.brief",
+                "presentation.refine",
+                "tool.create-presentation",
+                "tool.create-presentation.image-query",
+                "tool.create-presentation.image-prompt",
+                "tool.create-presentation.image-why",
+                "library.refine.system",
+                "library.refine.request",
+                "library.refine.retry",
+                "tool.propose_library_refinement"
+              ],
+              "description": "The prompt, for example shape.system."
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "A saved version; 0 is the built-in text."
+            }
+          },
+          {
+            "in": "query",
+            "name": "body",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32768,
+              "description": "The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not."
+            }
+          },
+          {
+            "in": "query",
+            "name": "wrap",
+            "required": false,
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "data"
+                ]
+              },
+              "description": "Per value: data encloses it in a <data> block so it reads as data, not instructions."
+            }
+          },
+          {
+            "in": "query",
+            "name": "sample",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 40,
+              "description": "A built-in sample (ai.prompts.get lists them). Default: the first."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sample": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "rendered": {
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "lint": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/ai/control/providers": {
       "put": {
         "operationId": "saveAIProvider",
@@ -2183,7 +2888,7 @@
       "post": {
         "operationId": "resetAIControl",
         "summary": "Reset AI control",
-        "description": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only.",
+        "description": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); prompt returns one prompt (promptId) to its built-in text, prompts every prompt (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only.",
         "x-required-scope": "ai:admin",
         "x-slatebox": {
           "action": "ai.control.reset",
@@ -2239,6 +2944,8 @@
                       "use",
                       "binding",
                       "bindings",
+                      "prompt",
+                      "prompts",
                       "dbLayer",
                       "all"
                     ]
@@ -2262,6 +2969,53 @@
                       "connectors"
                     ],
                     "description": "For target binding: the part of Slatebox."
+                  },
+                  "promptId": {
+                    "type": "string",
+                    "enum": [
+                      "shape.system",
+                      "shape.user",
+                      "shape.retry",
+                      "tool.propose_shapes",
+                      "workshop.map.system",
+                      "workshop.lane.system",
+                      "workshop.chat.retry",
+                      "tool.propose_map_edits",
+                      "tool.propose_workshop_edits",
+                      "workshop.draft.system",
+                      "workshop.draft.map",
+                      "workshop.draft.release",
+                      "workshop.draft.rules",
+                      "workshop.draft.retry",
+                      "workshop.draft.repair",
+                      "tool.draft_workshop",
+                      "tool.draft_concept_map",
+                      "tool.draft_release_plan",
+                      "tool.revise_workshop_rules",
+                      "exec.chat.system",
+                      "exec.chat.fix",
+                      "exec.chat.retry",
+                      "agent.request.notes",
+                      "presentation.segments",
+                      "presentation.art",
+                      "presentation.system",
+                      "presentation.system.dynamic",
+                      "presentation.system.slides",
+                      "presentation.system.template",
+                      "presentation.slate",
+                      "presentation.user",
+                      "presentation.brief",
+                      "presentation.refine",
+                      "tool.create-presentation",
+                      "tool.create-presentation.image-query",
+                      "tool.create-presentation.image-prompt",
+                      "tool.create-presentation.image-why",
+                      "library.refine.system",
+                      "library.refine.request",
+                      "library.refine.retry",
+                      "tool.propose_library_refinement"
+                    ],
+                    "description": "For target prompt: the prompt."
                   },
                   "keys": {
                     "type": "array",
@@ -2322,6 +3076,12 @@
                       }
                     },
                     "removed": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "prompts": {
                       "type": "array",
                       "items": {
                         "type": "string"

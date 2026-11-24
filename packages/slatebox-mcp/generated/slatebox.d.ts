@@ -376,11 +376,13 @@ declare namespace slatebox.ai.control {
 }
 
 declare namespace slatebox.ai.control {
-  /** Reset AI control. Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only. @scope ai:admin @destructive @confirm @idempotent */
+  /** Reset AI control. Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); prompt returns one prompt (promptId) to its built-in text, prompts every prompt (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only. @scope ai:admin @destructive @confirm @idempotent */
   function reset(input: {
-    target: "use" | "binding" | "bindings" | "dbLayer" | "all";
+    target: "use" | "binding" | "bindings" | "prompt" | "prompts" | "dbLayer" | "all";
     /** For target binding: the part of Slatebox. */
     surface?: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors";
+    /** For target prompt: the prompt. */
+    promptId?: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement";
     /** For target use: only these feature choices. (1–15 items) */
     keys?: Array<"default" | "chat" | "chat.route" | "generation" | "generation.notes" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors">;
     /** (1–500 characters) */
@@ -389,6 +391,7 @@ declare namespace slatebox.ai.control {
     target?: string;
     cleared?: string[];
     removed?: string[];
+    prompts?: string[];
     dbLayer?: string;
     [key: string]: unknown;
   }) & { mode: "save" }>;
@@ -464,6 +467,96 @@ declare namespace slatebox.ai.models {
   }): Promise<({
     models?: Array<Record<string, unknown>>;
     generation?: number | null;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.ai.prompts {
+  /** AI prompt. Returns one prompt: the built-in text (version 0), the text served now and where it comes from, every saved version newest first with its author, note and eval results, the values it may use, and the samples a test run can send. Administrators only. @scope ai:admin:read */
+  function get(input: {
+    /** The prompt, for example shape.system. */
+    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement";
+  }): Promise<{
+    id?: string;
+    code?: Record<string, unknown>;
+    live?: Record<string, unknown>;
+    versions?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.ai.prompts {
+  /** AI prompts. Lists every prompt Slatebox sends its models, by part of Slatebox: the version served now and where it comes from (built in, published or pinned by a binding), the published and previous versions, and any draft or suggestion. Administrators only. @scope ai:admin:read */
+  function list(input: Record<string, unknown>): Promise<{
+    surfaces?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.ai.prompts {
+  /** Render AI prompt. Renders a prompt version (or text sent with the call) into the request a built-in sample sends, and reports its lint findings. No model is called. Administrators only. @scope ai:admin:read */
+  function render(input: {
+    /** The prompt, for example shape.system. */
+    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement";
+    /** A saved version; 0 is the built-in text. (at least 0) */
+    version?: number;
+    /** The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not. (1–32768 characters) */
+    body?: string;
+    /** Per value: data encloses it in a <data> block so it reads as data, not instructions. */
+    wrap?: Record<string, "none" | "data">;
+    /** A built-in sample (ai.prompts.get lists them). Default: the first. (at most 40 characters) */
+    sample?: string;
+  }): Promise<{
+    sample?: string | null;
+    rendered?: Record<string, unknown> | null;
+    lint?: Record<string, unknown>;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.ai.prompts {
+  /** Save AI prompt draft. Saves a new draft version of a prompt. Changes nothing live: a person publishes it after its checks pass. An agent's draft is marked as a suggestion. Returns the version and its lint findings. Administrators only. @scope ai:admin */
+  function saveDraft(input: {
+    /** The prompt, for example shape.system. */
+    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement";
+    /** The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not. (1–32768 characters) */
+    body: string;
+    /** Per value: data encloses it in a <data> block so it reads as data, not instructions. */
+    wrap?: Record<string, "none" | "data">;
+    /** A short note kept with the version. (at most 200 characters) */
+    note?: string;
+  }): Promise<({
+    id?: string;
+    version?: number;
+    status?: string;
+    origin?: string;
+    lint?: Record<string, unknown>;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.ai.prompts {
+  /** Test AI prompt. Sends a prompt version (or text sent with the call) with a built-in sample through a part of Slatebox's binding (default: the prompt's own). Returns the request sent, the raw answer, whether that part could use it, the model, latency and cost. The answer is shown, never applied. Metered to the caller; 30 an hour per administrator. Administrators only. @scope ai:admin */
+  function test(input: {
+    /** The prompt, for example shape.system. */
+    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement";
+    /** A saved version; 0 is the built-in text. (at least 0) */
+    version?: number;
+    /** The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not. (1–32768 characters) */
+    body?: string;
+    /** Per value: data encloses it in a <data> block so it reads as data, not instructions. */
+    wrap?: Record<string, "none" | "data">;
+    /** A built-in sample (ai.prompts.get lists them). Default: the first. (at most 40 characters) */
+    sample?: string;
+    /** Whose binding (model chain) to test against. */
+    surface?: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors";
+  }): Promise<({
+    rendered?: Record<string, unknown>;
+    answer?: Record<string, unknown>;
+    parses?: Record<string, unknown>;
+    latencyMs?: number;
+    model?: string | null;
+    costMicros?: number;
     [key: string]: unknown;
   }) & { mode: "save" }>;
 }

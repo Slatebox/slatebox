@@ -28,6 +28,7 @@ import aiProviderActions from './ai-providers.mjs'
 import aiConnectionActions from './ai-connections.mjs'
 import aiModelActions from './ai-models.mjs'
 import aiBindingActions from './ai-bindings.mjs'
+import aiPromptActions from './ai-prompts.mjs'
 import aiControlSetGlobal from './ai-control-set-global.mjs'
 import presencePlan from './presence-plan.mjs'
 import presenceStep from './presence-step.mjs'
@@ -74,6 +75,7 @@ export const actions = [
   ...aiConnectionActions,
   ...aiModelActions,
   ...aiBindingActions,
+  ...aiPromptActions,
   aiControlSetGlobal,
   presencePlan,
   presenceStep,

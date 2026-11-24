@@ -37,11 +37,14 @@ import { memoryCollection as driverCollection } from './exec-test-world.mjs'
 
 // S3 added providers, connections and models (ai-providers/connections/models.mjs); their own
 // rules are tested in ai-providers.test.mjs. S4 added bindings and the global switch
-// (ai-bindings.mjs, ai-control-set-global.mjs), tested in ai-bindings.test.mjs. Restated here:
+// (ai-bindings.mjs, ai-control-set-global.mjs), tested in ai-bindings.test.mjs. S6 added prompts
+// (ai-prompts.mjs), tested in ai-prompt-publish.test.mjs. Restated here:
 // every admin action is listed.
 const ADMIN_ACTIONS = ['ai.audit.list', 'ai.bindings.list', 'ai.bindings.publish', 'ai.bindings.rollback', 'ai.bindings.saveDraft',
   'ai.connections.list', 'ai.connections.remove', 'ai.connections.save', 'ai.control.effective', 'ai.control.get',
-  'ai.control.health', 'ai.control.reset', 'ai.control.setGlobal', 'ai.models.discover', 'ai.models.save', 'ai.providers.archive', 'ai.providers.save']
+  'ai.control.health', 'ai.control.reset', 'ai.control.setGlobal', 'ai.models.discover', 'ai.models.save',
+  'ai.prompts.get', 'ai.prompts.list', 'ai.prompts.publish', 'ai.prompts.render', 'ai.prompts.rollback', 'ai.prompts.saveDraft', 'ai.prompts.test',
+  'ai.providers.archive', 'ai.providers.save']
 const READS = { 'ai.audit.list': {}, 'ai.control.effective': { surface: 'chat' }, 'ai.control.get': {}, 'ai.control.health': {} }
 const RESET = { target: 'use', reason: 'back to the settings file' }
 // inputs for the S3 actions in the "who may call" test
@@ -59,9 +62,17 @@ const S3_INPUTS = {
   'ai.bindings.publish': { binding: { surface: 'shape', enabled: false }, reason: 'paused' },
   'ai.bindings.rollback': { surface: 'shape', toVersion: 1, reason: 'back' },
   'ai.control.setGlobal': { aiEnabled: false, message: 'Paused.', reason: 'incident' },
+  // S6
+  'ai.prompts.list': {},
+  'ai.prompts.get': { id: 'shape.system' },
+  'ai.prompts.render': { id: 'shape.system' },
+  'ai.prompts.saveDraft': { id: 'shape.system', body: 'Draw {{count}} outlines.' },
+  'ai.prompts.test': { id: 'shape.system' },
+  'ai.prompts.publish': { id: 'shape.system', version: 1, reason: 'better' },
+  'ai.prompts.rollback': { id: 'shape.system', toVersion: 0, reason: 'back' },
 }
 // a person only: a token is refused by the registry before the administrator check
-const PERSON_ONLY = ['ai.bindings.publish', 'ai.bindings.rollback', 'ai.connections.remove', 'ai.control.setGlobal', 'ai.providers.archive']
+const PERSON_ONLY = ['ai.bindings.publish', 'ai.bindings.rollback', 'ai.connections.remove', 'ai.control.setGlobal', 'ai.prompts.publish', 'ai.prompts.rollback', 'ai.providers.archive']
 
 // ---------- in-memory stores ----------
 const get = (doc, path) => path.split('.').reduce((value, key) => (value == null ? undefined : value[key]), doc)
@@ -272,7 +283,7 @@ test('reset use: the server\'s choices made in the app are cleared, the settings
   await assert.rejects(registry.run(person('root'), 'ai.control.reset', { target: 'use', reason: '   ' }), { status: 400 })
   const some = body(await registry.run(person('root'), 'ai.control.reset', { target: 'use', keys: ['shape'], reason: 'shape back to built in' }))
   // S4: the answer also lists the bindings a reset removed (none for target use)
-  assert.deepEqual(some, { target: 'use', cleared: ['shape'], removed: [], dbLayer: 'on' })
+  assert.deepEqual(some, { target: 'use', cleared: ['shape'], removed: [], prompts: [], dbLayer: 'on' })
   const state = await ai.serverState()
   assert.equal(state.use.shape, undefined)
   assert.equal(state.use.generation, 'server:gem')
@@ -296,7 +307,7 @@ test('reset dbLayer: the DB layer is switched off at runtime, the generation mov
   await holder.refresh({ force: true })
   assert.equal((await aiControl.bind({ surface: 'shape' })).enabled, false)
   const out = body(await registry.run(person('root'), 'ai.control.reset', { target: 'dbLayer', reason: 'bad binding, incident 12' }))
-  assert.deepEqual(out, { target: 'dbLayer', cleared: [], removed: [], dbLayer: 'off' })
+  assert.deepEqual(out, { target: 'dbLayer', cleared: [], removed: [], prompts: [], dbLayer: 'off' })
   assert.equal(collections.state.docs.get(STATE_ID).dbLayer, 'off')
   assert.equal(collections.state.docs.get(STATE_ID).generation, 2)
   assert.equal(holder.current().dbLayer, 'off')

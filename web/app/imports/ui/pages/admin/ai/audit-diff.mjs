@@ -95,6 +95,10 @@ const ACTIONS = {
   'ai.bindings.rollback': 'Rolled back a binding',
   'ai.bindings.sync': 'Published a binding from AI settings',
   'ai.bindings.migrate': 'Moved an AI settings choice to a binding',
+  'ai.prompts.saveDraft': 'Saved a prompt draft',
+  'ai.prompts.test': 'Test-ran a prompt',
+  'ai.prompts.publish': 'Published a prompt',
+  'ai.prompts.rollback': 'Rolled back a prompt',
   'chatIntentions.save': 'Saved a persona',
   'chatIntentions.delete': 'Deleted a persona',
 }
@@ -105,6 +109,7 @@ const ACTIONS = {
  */
 export function actionText(row = {}) {
   const base = ACTIONS[row.action] || row.action || 'A change'
+  if (String(row.action || '').startsWith('ai.prompts.') && row.outcome !== 'refused') return promptText(base, row)
   if (!String(row.action || '').startsWith('ai.bindings.') || row.outcome === 'refused') return base
   if (!row.after) return `${base}: removed`
   const doc = row.after
@@ -112,8 +117,18 @@ export function actionText(row = {}) {
   return `${base}: version ${doc.version} live`
 }
 
+// A prompt's rows: a version saved, a test run, or the label moved (version 0 is the built-in text).
+function promptText(base, row) {
+  const doc = row.after
+  if (!doc) return base
+  if (row.action === 'ai.prompts.test') return `${base}: ${doc.version ? `version ${doc.version}` : doc.version === 0 ? 'the built-in text' : 'unsaved text'}, ${doc.parses ? 'answer usable' : 'answer not usable'}`
+  if (doc.promptId) return `${base}: version ${doc.version} saved${doc.status === 'draft' ? ' as a draft' : ''}${doc.origin === 'ai-proposal' ? ' (suggested by an agent)' : ''}`
+  if (doc.labels) return `${base}: ${doc.labels.published ? `version ${doc.labels.published} live` : 'the built-in text live'}`
+  return base
+}
+
 // What a reset target, a state row and the other kinds of change are, in words.
-const RESETS = { use: 'the server\'s AI choices', binding: 'one binding', bindings: 'every binding', dbLayer: 'AI control\'s own settings', all: 'everything in AI control' }
+const RESETS = { use: 'the server\'s AI choices', binding: 'one binding', bindings: 'every binding', prompt: 'one prompt', prompts: 'every prompt', dbLayer: 'AI control\'s own settings', all: 'everything in AI control' }
 const STATES = { global: 'AI for everyone', dbLayer: 'AI control\'s own settings' }
 const list = (id) => String(id || '').split(',').filter(Boolean).join(', ')
 
@@ -138,5 +153,6 @@ export function targetText(target = {}, titles = {}) {
   if (kind === 'connection' || kind === 'connections') return `Server connection${String(id).includes(',') ? 's' : ''} ${list(id)}`
   if (kind === 'models') return `Model list: ${list(id)}`
   if (kind === 'intention') return 'A persona'
+  if (kind === 'prompt' || kind === 'prompts' || kind === 'promptVersions') return `Prompt ${String(id || '').split('@')[0]}`
   return `${kind}${id ? ` ${id}` : ''}`
 }

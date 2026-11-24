@@ -39,7 +39,7 @@ import { mountMermaidFiles } from './mermaid-file.mjs'
 import { createMeteorExec, ensureExecCollections } from '../exec/meteor'
 import { gatedRegistry } from '../exec/system.mjs'
 import { aiSettings } from '../methods/ai/ai-settings'
-import { aiBindings, aiCatalog, aiControl, aiControlOps, aiControlStore, aiControlWriteLimit, isAIControlAdmin } from '../ai-control/index.mjs'
+import { aiBindings, aiCatalog, aiControl, aiControlOps, aiControlStore, aiControlWriteLimit, aiPrompts, isAIControlAdmin } from '../ai-control/index.mjs'
 import { presence } from '../presence/meteor'
 import { mountTeamExport, teamTransfer } from '../team-export/meteor'
 import { shapeService } from '../shapes/meteor'
@@ -139,6 +139,7 @@ export const deps = {
     aiControlWriteLimit,
     // ai.bindings.* (ai-control/bindings.mjs)
     aiBindings,
+    aiPrompts,
     // Agents on the canvas: a saved write shows its run's pointer to everyone on the slate.
     presence,
     // team.export and teamImports.* (server/team-export)

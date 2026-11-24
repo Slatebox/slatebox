@@ -9958,7 +9958,7 @@
     {
       "id": "ai.control.reset",
       "title": "Reset AI control",
-      "description": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only.",
+      "description": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); prompt returns one prompt (promptId) to its built-in text, prompts every prompt (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only.",
       "action": "ai.control.reset",
       "toolset": "admin",
       "readOnly": false,
@@ -9983,6 +9983,7 @@
         "bodyParams": [
           "target",
           "surface",
+          "promptId",
           "keys",
           "reason"
         ],
@@ -9997,6 +9998,8 @@
               "use",
               "binding",
               "bindings",
+              "prompt",
+              "prompts",
               "dbLayer",
               "all"
             ]
@@ -10020,6 +10023,53 @@
               "connectors"
             ],
             "description": "For target binding: the part of Slatebox."
+          },
+          "promptId": {
+            "type": "string",
+            "enum": [
+              "shape.system",
+              "shape.user",
+              "shape.retry",
+              "tool.propose_shapes",
+              "workshop.map.system",
+              "workshop.lane.system",
+              "workshop.chat.retry",
+              "tool.propose_map_edits",
+              "tool.propose_workshop_edits",
+              "workshop.draft.system",
+              "workshop.draft.map",
+              "workshop.draft.release",
+              "workshop.draft.rules",
+              "workshop.draft.retry",
+              "workshop.draft.repair",
+              "tool.draft_workshop",
+              "tool.draft_concept_map",
+              "tool.draft_release_plan",
+              "tool.revise_workshop_rules",
+              "exec.chat.system",
+              "exec.chat.fix",
+              "exec.chat.retry",
+              "agent.request.notes",
+              "presentation.segments",
+              "presentation.art",
+              "presentation.system",
+              "presentation.system.dynamic",
+              "presentation.system.slides",
+              "presentation.system.template",
+              "presentation.slate",
+              "presentation.user",
+              "presentation.brief",
+              "presentation.refine",
+              "tool.create-presentation",
+              "tool.create-presentation.image-query",
+              "tool.create-presentation.image-prompt",
+              "tool.create-presentation.image-why",
+              "library.refine.system",
+              "library.refine.request",
+              "library.refine.retry",
+              "tool.propose_library_refinement"
+            ],
+            "description": "For target prompt: the prompt."
           },
           "keys": {
             "type": "array",
@@ -10072,6 +10122,12 @@
             }
           },
           "removed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "prompts": {
             "type": "array",
             "items": {
               "type": "string"
@@ -11114,6 +11170,638 @@
         "name": "save_ai_binding_draft",
         "title": "Save an AI binding draft",
         "description": "Save a draft of which models, parameters and tools a part of Slatebox uses. Changes nothing live. Administrators only.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "ai.prompts.list",
+      "title": "AI prompts",
+      "description": "Lists every prompt Slatebox sends its models, by part of Slatebox: the version served now and where it comes from (built in, published or pinned by a binding), the published and previous versions, and any draft or suggestion. Administrators only.",
+      "action": "ai.prompts.list",
+      "toolset": "admin",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "ai:admin:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/ai/control/prompts",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "surfaces": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "tool": {
+        "name": "list_ai_prompts",
+        "title": "List AI prompts",
+        "description": "List the prompts each part of Slatebox sends its model, with the version served now. Administrators only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "ai.prompts.get",
+      "title": "AI prompt",
+      "description": "Returns one prompt: the built-in text (version 0), the text served now and where it comes from, every saved version newest first with its author, note and eval results, the values it may use, and the samples a test run can send. Administrators only.",
+      "action": "ai.prompts.get",
+      "toolset": "admin",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "ai:admin:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/ai/control/prompts/{id}",
+        "pathParams": [
+          "id"
+        ],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "shape.system",
+              "shape.user",
+              "shape.retry",
+              "tool.propose_shapes",
+              "workshop.map.system",
+              "workshop.lane.system",
+              "workshop.chat.retry",
+              "tool.propose_map_edits",
+              "tool.propose_workshop_edits",
+              "workshop.draft.system",
+              "workshop.draft.map",
+              "workshop.draft.release",
+              "workshop.draft.rules",
+              "workshop.draft.retry",
+              "workshop.draft.repair",
+              "tool.draft_workshop",
+              "tool.draft_concept_map",
+              "tool.draft_release_plan",
+              "tool.revise_workshop_rules",
+              "exec.chat.system",
+              "exec.chat.fix",
+              "exec.chat.retry",
+              "agent.request.notes",
+              "presentation.segments",
+              "presentation.art",
+              "presentation.system",
+              "presentation.system.dynamic",
+              "presentation.system.slides",
+              "presentation.system.template",
+              "presentation.slate",
+              "presentation.user",
+              "presentation.brief",
+              "presentation.refine",
+              "tool.create-presentation",
+              "tool.create-presentation.image-query",
+              "tool.create-presentation.image-prompt",
+              "tool.create-presentation.image-why",
+              "library.refine.system",
+              "library.refine.request",
+              "library.refine.retry",
+              "tool.propose_library_refinement"
+            ],
+            "description": "The prompt, for example shape.system."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "object"
+          },
+          "live": {
+            "type": "object"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "tool": {
+        "name": "get_ai_prompt",
+        "title": "Read an AI prompt",
+        "description": "Read one prompt: its built-in text, the text served now and its versions. Administrators only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "ai.prompts.saveDraft",
+      "title": "Save AI prompt draft",
+      "description": "Saves a new draft version of a prompt. Changes nothing live: a person publishes it after its checks pass. An agent's draft is marked as a suggestion. Returns the version and its lint findings. Administrators only.",
+      "action": "ai.prompts.saveDraft",
+      "toolset": "admin",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "ai:admin",
+      "http": {
+        "method": "PUT",
+        "path": "/api/v1/ai/control/prompts/draft",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "id",
+          "body",
+          "wrap",
+          "note"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "shape.system",
+              "shape.user",
+              "shape.retry",
+              "tool.propose_shapes",
+              "workshop.map.system",
+              "workshop.lane.system",
+              "workshop.chat.retry",
+              "tool.propose_map_edits",
+              "tool.propose_workshop_edits",
+              "workshop.draft.system",
+              "workshop.draft.map",
+              "workshop.draft.release",
+              "workshop.draft.rules",
+              "workshop.draft.retry",
+              "workshop.draft.repair",
+              "tool.draft_workshop",
+              "tool.draft_concept_map",
+              "tool.draft_release_plan",
+              "tool.revise_workshop_rules",
+              "exec.chat.system",
+              "exec.chat.fix",
+              "exec.chat.retry",
+              "agent.request.notes",
+              "presentation.segments",
+              "presentation.art",
+              "presentation.system",
+              "presentation.system.dynamic",
+              "presentation.system.slides",
+              "presentation.system.template",
+              "presentation.slate",
+              "presentation.user",
+              "presentation.brief",
+              "presentation.refine",
+              "tool.create-presentation",
+              "tool.create-presentation.image-query",
+              "tool.create-presentation.image-prompt",
+              "tool.create-presentation.image-why",
+              "library.refine.system",
+              "library.refine.request",
+              "library.refine.retry",
+              "tool.propose_library_refinement"
+            ],
+            "description": "The prompt, for example shape.system."
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32768,
+            "description": "The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not."
+          },
+          "wrap": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "none",
+                "data"
+              ]
+            },
+            "description": "Per value: data encloses it in a <data> block so it reads as data, not instructions."
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "A short note kept with the version."
+          }
+        },
+        "required": [
+          "id",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "lint": {
+            "type": "object"
+          }
+        }
+      },
+      "tool": {
+        "name": "save_ai_prompt_draft",
+        "title": "Save an AI prompt draft",
+        "description": "Save a draft of a prompt a part of Slatebox sends its model. Changes nothing live. Administrators only.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "ai.prompts.render",
+      "title": "Render AI prompt",
+      "description": "Renders a prompt version (or text sent with the call) into the request a built-in sample sends, and reports its lint findings. No model is called. Administrators only.",
+      "action": "ai.prompts.render",
+      "toolset": "admin",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "ai:admin:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/ai/control/prompts/{id}/render",
+        "pathParams": [
+          "id"
+        ],
+        "queryParams": [
+          "version",
+          "body",
+          "wrap",
+          "sample"
+        ],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "shape.system",
+              "shape.user",
+              "shape.retry",
+              "tool.propose_shapes",
+              "workshop.map.system",
+              "workshop.lane.system",
+              "workshop.chat.retry",
+              "tool.propose_map_edits",
+              "tool.propose_workshop_edits",
+              "workshop.draft.system",
+              "workshop.draft.map",
+              "workshop.draft.release",
+              "workshop.draft.rules",
+              "workshop.draft.retry",
+              "workshop.draft.repair",
+              "tool.draft_workshop",
+              "tool.draft_concept_map",
+              "tool.draft_release_plan",
+              "tool.revise_workshop_rules",
+              "exec.chat.system",
+              "exec.chat.fix",
+              "exec.chat.retry",
+              "agent.request.notes",
+              "presentation.segments",
+              "presentation.art",
+              "presentation.system",
+              "presentation.system.dynamic",
+              "presentation.system.slides",
+              "presentation.system.template",
+              "presentation.slate",
+              "presentation.user",
+              "presentation.brief",
+              "presentation.refine",
+              "tool.create-presentation",
+              "tool.create-presentation.image-query",
+              "tool.create-presentation.image-prompt",
+              "tool.create-presentation.image-why",
+              "library.refine.system",
+              "library.refine.request",
+              "library.refine.retry",
+              "tool.propose_library_refinement"
+            ],
+            "description": "The prompt, for example shape.system."
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "A saved version; 0 is the built-in text."
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32768,
+            "description": "The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not."
+          },
+          "wrap": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "none",
+                "data"
+              ]
+            },
+            "description": "Per value: data encloses it in a <data> block so it reads as data, not instructions."
+          },
+          "sample": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "A built-in sample (ai.prompts.get lists them). Default: the first."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "sample": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rendered": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "lint": {
+            "type": "object"
+          }
+        }
+      },
+      "tool": {
+        "name": "render_ai_prompt",
+        "title": "Render an AI prompt",
+        "description": "Show the request a prompt version makes with a sample, and its lint findings. No model is called. Administrators only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "ai.prompts.test",
+      "title": "Test AI prompt",
+      "description": "Sends a prompt version (or text sent with the call) with a built-in sample through a part of Slatebox's binding (default: the prompt's own). Returns the request sent, the raw answer, whether that part could use it, the model, latency and cost. The answer is shown, never applied. Metered to the caller; 30 an hour per administrator. Administrators only.",
+      "action": "ai.prompts.test",
+      "toolset": "admin",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "ai:admin",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/ai/control/prompts/test",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "id",
+          "version",
+          "body",
+          "wrap",
+          "sample",
+          "surface"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "shape.system",
+              "shape.user",
+              "shape.retry",
+              "tool.propose_shapes",
+              "workshop.map.system",
+              "workshop.lane.system",
+              "workshop.chat.retry",
+              "tool.propose_map_edits",
+              "tool.propose_workshop_edits",
+              "workshop.draft.system",
+              "workshop.draft.map",
+              "workshop.draft.release",
+              "workshop.draft.rules",
+              "workshop.draft.retry",
+              "workshop.draft.repair",
+              "tool.draft_workshop",
+              "tool.draft_concept_map",
+              "tool.draft_release_plan",
+              "tool.revise_workshop_rules",
+              "exec.chat.system",
+              "exec.chat.fix",
+              "exec.chat.retry",
+              "agent.request.notes",
+              "presentation.segments",
+              "presentation.art",
+              "presentation.system",
+              "presentation.system.dynamic",
+              "presentation.system.slides",
+              "presentation.system.template",
+              "presentation.slate",
+              "presentation.user",
+              "presentation.brief",
+              "presentation.refine",
+              "tool.create-presentation",
+              "tool.create-presentation.image-query",
+              "tool.create-presentation.image-prompt",
+              "tool.create-presentation.image-why",
+              "library.refine.system",
+              "library.refine.request",
+              "library.refine.retry",
+              "tool.propose_library_refinement"
+            ],
+            "description": "The prompt, for example shape.system."
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "A saved version; 0 is the built-in text."
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32768,
+            "description": "The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not."
+          },
+          "wrap": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "none",
+                "data"
+              ]
+            },
+            "description": "Per value: data encloses it in a <data> block so it reads as data, not instructions."
+          },
+          "sample": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "A built-in sample (ai.prompts.get lists them). Default: the first."
+          },
+          "surface": {
+            "type": "string",
+            "enum": [
+              "default",
+              "chat",
+              "chat.route",
+              "generation",
+              "presentation",
+              "vision",
+              "images",
+              "shape",
+              "workshop",
+              "workshop.draft",
+              "canvas",
+              "agent.slatebox",
+              "library",
+              "connectors"
+            ],
+            "description": "Whose binding (model chain) to test against."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "rendered": {
+            "type": "object"
+          },
+          "answer": {
+            "type": "object"
+          },
+          "parses": {
+            "type": "object"
+          },
+          "latencyMs": {
+            "type": "integer"
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "costMicros": {
+            "type": "integer"
+          }
+        }
+      },
+      "tool": {
+        "name": "test_ai_prompt",
+        "title": "Test an AI prompt",
+        "description": "Send a prompt version with a sample to a model and see the answer and whether it can be used. Nothing is applied. Administrators only.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": false,

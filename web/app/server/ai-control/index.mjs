@@ -15,10 +15,16 @@ import { setProviderSource } from '../methods/ai/connections.mjs'
 import { assertEndpointHost, checkEndpointUrl, endpointRules } from '../methods/ai/endpoint-policy.mjs'
 import { createConnectionStore } from '../methods/ai/connection-store.mjs'
 import { createCatalogOps, createWriteLimit, dbPriceFor, providersView } from './models.mjs'
-import { SURFACES } from './catalogue.mjs'
+import { SURFACES, builtinFeatureFor, surface as surfaceById } from './catalogue.mjs'
 import { createAdminOps, createStatusHub, surfacesStatus } from './admin.mjs'
 import { promptFor, resolveBinding } from './resolve.mjs'
-import { CODE_PROMPTS, CODE_SLOTS, PROMPT_IDS, prompts as promptRegistry } from './prompts/index.mjs'
+import { CODE_PROMPTS, CODE_SLOTS, PROMPT_IDS, promptText, prompts as promptRegistry } from './prompts/index.mjs'
+import { createPromptOps } from './prompt-ops.mjs'
+import { fixtureFor } from './fixtures/index.mjs'
+import { evalsFor } from './evals/index.mjs'
+import req from '../methods/ai/req'
+import { runAIAction } from '../metering/context.mjs'
+import { resolveAIFeatureConfig } from '../methods/ai/feature-config.mjs'
 import { operatorConfig } from '../methods/ai/connections.mjs'
 import { createSnapshotHolder, fileDbLayer, parsePromptRef } from './snapshot.mjs'
 import { STATE_ID, createControlStore, ensureAIControlIndexes } from './store.mjs'
@@ -157,6 +163,32 @@ export const aiCatalog = createCatalogOps({
   readProvider: (id) => raw.providers.findOne({ _id: id }),
 })
 
+/**
+ * Prompts (prompt-ops.mjs): drafts, test runs, the eval gate, publish and rollback, for the
+ * ai.prompts.* actions. A test run and the eval cases are sent through the chosen surface's binding
+ * (its request feature, so its model chain applies) and metered to the administrator as admin.test;
+ * test runs are 30 an hour per administrator (spec 4).
+ */
+export const aiPrompts = createPromptOps({
+  store: aiControlStore,
+  prompts: raw.prompts,
+  versions: raw.promptVersions,
+  registry: promptRegistry,
+  live: promptText,
+  fixtureFor,
+  evalsFor,
+  costOf: aiCostMicros,
+  snapshot: () => snapshotHolder.current(),
+  testLimit: createWriteLimit({ count: 30, windowMs: 60 * 60 * 1000 }),
+  // the catalogue's admin.test estimate (it meters no feature of its own, so the meter's tables stay as they are)
+  request: (opts, { surface, actor }) => runAIAction({ feature: 'admin.test', estimateMicros: surfaceById('admin.test').estimate, userId: actor.userId }, () => req({
+    ...resolveAIFeatureConfig(builtinFeatureFor(surface) || 'generation', Meteor.settings),
+    ...opts,
+    feature: surfaceById(surface)?.requestFeatures?.[0] || surface,
+    userId: actor.userId,
+  })),
+})
+
 /** AI control writes per administrator: 60 in 10 minutes (spec 4). */
 export const aiControlWriteLimit = createWriteLimit()
 
@@ -174,6 +206,7 @@ export const aiControlOps = createAdminOps({
   aiSettings,
   costOf: aiCostMicros,
   bindings: aiBindings,
+  prompts: aiPrompts,
   // the Changes tab names people, never their account ids (ai.audit.list is administrators only)
   namesOf: async (userIds) => {
     const users = await Meteor.users.rawCollection().find({ _id: { $in: userIds } }, { projection: { profile: 1, emails: 1, username: 1 } }).toArray()

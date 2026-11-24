@@ -87,10 +87,13 @@ const sentenceList = (lines) => (lines.length ? lines.map((line) => '- ' + line)
  * the user turn (refineRequest). The text is a prompt an administrator can edit
  * (library.refine.system, server/ai-control/prompts/library.mjs).
  */
-export function refinePrompt(item, board) {
+export const refinePrompt = (item, board) => promptText('library.refine.system', refineValues(item, board))
+
+/** The code's values for the refine instructions: the item's kind, the categories, limits and edits. */
+export function refineValues(item, board) {
   const componentBoard = item.kind === 'component' && Boolean(board)
   const edits = componentBoard ? acceptedEdits(board) : []
-  return promptText('library.refine.system', {
+  return {
     kind: String(KIND_LABELS[item.kind] || item.kind),
     categories: LIBRARY_CATEGORIES.map((id) => `${CATEGORY_LABELS[id]} (${id})`).join(', '),
     titleMax: LIBRARY_LIMITS.title,
@@ -103,11 +106,14 @@ export function refinePrompt(item, board) {
     hasEdits: edits.length > 0,
     edits: sentenceList(edits.map((edit) => `${edit.kind}: ${edit.summary}`)),
     notComponent: item.kind !== 'component',
-  })
+  }
 }
 
 /** What the AI is told about the item and asked, as one user turn: one data block, the author's words fenced inside it. */
-export function refineRequest({ item, board, message }) {
+export const refineRequest = (args) => promptText('library.refine.request', refineData(args))
+
+/** The item and the message as the data block's JSON, with any code fence inside it broken. */
+export function refineData({ item, board, message }) {
   let rules = []
   if (board) { try { rules = rulebook().lines(validateWorkshop(board)) } catch { rules = [] } }
   const shown = {
@@ -118,7 +124,7 @@ export function refineRequest({ item, board, message }) {
     ...(board && { board: { kind: board.kind, title: board.title, lanes: board.lanes, cards: board.cards, behaviour: board.behaviour, rules } }),
   }
   const fence = '`'.repeat(3)
-  return promptText('library.refine.request', { data: JSON.stringify({ item: shown, message }).replaceAll(fence, "'''") })
+  return { data: JSON.stringify({ item: shown, message }).replaceAll(fence, "'''") }
 }
 
 // What the server itself flags before publishing, whatever the AI says: email addresses, phone numbers
