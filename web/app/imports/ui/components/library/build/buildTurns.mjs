@@ -80,6 +80,18 @@ export function statusWords(status) {
   }
 }
 
+/**
+ * The status in the header's short words, when the header is short of room: always the start of statusWords (the rest
+ * is still read out), so it never says something else. "Saved to your library" is "Saved", "Submitted for review" is
+ * "Submitted"; the others are short already.
+ */
+export function statusShort(status) {
+  const words = statusWords(status)
+  if (status === 'draft') return 'Saved'
+  if (status === 'submitted') return 'Submitted'
+  return words
+}
+
 /** The saved toast (§4.2). */
 export const SAVED_SENTENCE = 'Saved. It’s in your library: add it to any slate from Add to this slate › Yours.'
 export const SUBMITTED_SENTENCE = 'Submitted for review. You’ll hear back in My library.'

@@ -20,7 +20,7 @@ import { workshopFromLaneBrief } from "../web/app/imports/api/common/native-lane
 import { proposeLaneReply } from "../web/app/imports/api/common/lane-conversation.mjs";
 import "../web/app/imports/api/common/board-chat.mjs";
 import { CANVAS_RULE_EDITS, RULES_ALONE, playWorkshopChanges, readWorkshopChanges } from "../web/app/server/methods/workshop-play.mjs";
-import { BUILD_SHAPES, buildBarWords, buildFirstTurn, buildLink, readBuildHash, readSaveSheet, readSynonyms } from "../web/app/imports/ui/components/library/build/buildTurns.mjs";
+import { BUILD_SHAPES, buildBarWords, buildFirstTurn, buildLink, readBuildHash, readSaveSheet, readSynonyms, statusShort, statusWords } from "../web/app/imports/ui/components/library/build/buildTurns.mjs";
 
 const app = (path) => readFileSync(new URL("../web/app/" + path, import.meta.url), "utf8");
 
@@ -340,4 +340,20 @@ test("the build bar is drawn into the canvas header and Ask Slatebox, never fixe
   assert.ok(toolbar.indexOf("sb-board-builder") < toolbar.indexOf("{presentButton}"), "before the header's buttons");
   assert.match(app("imports/ui/components/ConversationPanel.jsx"), /ref=\{setIntroSlot\}/);
   assert.match(app("imports/ui/common/main.css"), /\.sb-board-builder\{display:contents\}/);
+});
+
+// Owner rule (2026-11-24 review): nothing covers notes or a note's toolbar, and the header reads in full at 1440. The
+// header's short words for where an item stands are always the start of the whole words (the rest is read out); the
+// review panel is docked (the canvas resizes around it), never fixed over the canvas; from 1024px the bar never folds.
+test("short status words start the whole ones; the review panel is docked; the bar folds only below 1024px", () => {
+  for (const status of ["draft", "submitted", "in_review", "changes_requested", "published", "rejected", "unpublished"]) {
+    assert.ok(statusWords(status).startsWith(statusShort(status)), status);
+  }
+  assert.deepEqual([statusShort("draft"), statusShort("submitted"), statusShort(null)], ["Saved", "Submitted", null]);
+  const panel = app("imports/ui/components/library/review/ReviewPanel.jsx");
+  assert.doesNotMatch(panel, /position: 'fixed'/);
+  assert.match(panel, /order: -1, flex: '0 0 384px'/);
+  const barSource = app("imports/ui/components/library/build/BuildBar.jsx");
+  assert.match(barSource, /const lastLevel = desktop \? 4 : 5/);
+  assert.match(barSource, /const desktop = useMediaQuery\('\(min-width:1024px\)'\)/);
 });

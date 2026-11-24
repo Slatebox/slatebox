@@ -21,6 +21,8 @@ import libraryApi from '../../../../api/client/library'
 import { categoryLabel, reviewStateOf } from '../../../../api/common/library-model.mjs'
 import { CATEGORY_CHIPS, KindTitle, REFINE_STARTERS, diffLines, eventLine } from '../libraryCopy.mjs'
 import { refineHistory, proposalChanges } from './refineTurns.mjs'
+import { useAtom } from 'jotai'
+import { conversationOpen } from '../../../jotai/atoms'
 
 const STATE_WORDS = { submitted: 'Submitted', in_review: 'In review', changes_requested: 'Changes asked for', published: 'Published', rejected: 'Not accepted', unpublished: 'Taken out' }
 
@@ -28,12 +30,21 @@ const STATE_WORDS = { submitted: 'Submitted', in_review: 'In review', changes_re
 // library.review.open). The canvas beside it is the item: notes and boards change there as on any
 // slate. Here: the item's details, a chat that refines it with AI (each proposal a diff to keep or
 // discard), the thread with its author, and the decision. Approve publishes what is on the canvas.
-// Docked on the left on a wide screen (Ask Slatebox keeps the right); a sheet from the bottom on a phone.
+// Docked on the left on a wide screen (Ask Slatebox keeps the right); below 1000px docked under the canvas, foldable.
+// Either way it takes its own room: the canvas shrinks around it, so it never covers a card or a card's bar.
 export default function ReviewPanel({ slate }) {
   const wide = useMediaQuery('(min-width:1000px)')
   const navigate = useNavigate()
   const itemId = slate?.library?.itemId
   const [open, setOpen] = React.useState(true)
+  // Below 1000px the canvas, Ask Slatebox and this panel share one column: one of the two panels open at a time, so the
+  // canvas always keeps its room. Ask Slatebox opening folds this panel to its heading; this panel opening closes it.
+  const [askOpen, setAskOpen] = useAtom(conversationOpen)
+  React.useEffect(() => { if (!wide && askOpen) setOpen(false) }, [wide, askOpen])
+  const toggle = () => {
+    if (!open && !wide) setAskOpen(false)
+    setOpen(!open)
+  }
   const [data, setData] = React.useState(null)
   const [problem, setProblem] = React.useState('')
   const [reload, setReload] = React.useState(0)
@@ -178,21 +189,23 @@ export default function ReviewPanel({ slate }) {
         <Typography variant="subtitle1" noWrap sx={{ fontWeight: 650 }} title={shown?.title}>{shown?.title || 'Loading…'}</Typography>
       </Box>
       <Button size="small" component={RouterLink} to="/admin/library">Queue</Button>
-      {!wide && <IconButton aria-label={open ? 'Fold the review panel' : 'Open the review panel'} onClick={() => setOpen((now) => !now)}>{open ? <ExpandMoreIcon /> : <ExpandLessIcon />}</IconButton>}
+      {!wide && <IconButton aria-label={open ? 'Fold the review panel' : 'Open the review panel'} onClick={toggle}>{open ? <ExpandMoreIcon /> : <ExpandLessIcon />}</IconButton>}
     </Box>
   )
 
   return (
-    <Paper component="aside" elevation={6} aria-label="Library review" data-testid="review-panel" square={!wide}
+    <Paper component="aside" elevation={0} square aria-label="Library review" data-testid="review-panel" data-docked=""
       sx={{
-        position: 'fixed', zIndex: 1250, display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflow: 'hidden',
+        // Docked beside the canvas, never over it: the canvas page's row (or, below 1000px, its column) gives it its own
+        // room and the canvas shrinks to what is left, as it does for Ask Slatebox. A selected card's bar stays whole.
+        position: 'relative', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflow: 'hidden', minWidth: 0, minHeight: 0,
         ...(wide
-          ? { left: 12, top: 76, bottom: 12, width: 372, borderRadius: 2 }
-          : { left: 0, right: 0, bottom: 0, maxHeight: open ? '62dvh' : 'auto', borderTopLeftRadius: 12, borderTopRightRadius: 12 }),
+          ? { order: -1, flex: '0 0 384px', width: 384, height: '100%', borderRight: 1, borderColor: 'divider' }
+          : { flex: 'none', width: '100%', maxHeight: open ? '46dvh' : 'none', borderTop: 1, borderColor: 'divider' }),
       }}>
       {header}
       {(wide || open) && (
-        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', px: 2, py: 1.5, display: 'grid', gap: 1.5, alignContent: 'start' }}>
+        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', px: 2.5, py: 2, display: 'grid', gap: 1.5, alignContent: 'start' }}>
           {problem && <Alert severity="error" role="alert" onClose={() => setProblem('')}>{problem}</Alert>}
           {selfAsk && !selfReview && (
             <Alert severity="info" data-testid="self-review-ask"

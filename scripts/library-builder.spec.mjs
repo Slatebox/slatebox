@@ -51,6 +51,16 @@ async function builderInHeader(page) {
     expect(b.y >= head.y - 0.5 && b.y + b.height <= head.y + head.height + 0.5, 'each builder button sits inside the header').toBe(true)
   }
 }
+// At 1440 the header reads in full: the slate's name, the bar's buttons and (`lines`) both lines of the bar (where it
+// stands, the item's name), with Ask Slatebox open or closed; and from 1024px the bar is never the one Builder button.
+// (A long slate name, such as a new builder slate's "Untitled smart component", keeps its room first and may leave the bar
+// its dot alone: a click on it shows all of it. The Retro branch below, like the owner's Impact × effort, reads in full.)
+async function headerReadsInFull(page, { lines = true } = {}) {
+  await expect(bar(page).getByRole('button', { name: 'Builder', exact: true }), 'the whole bar on a desktop').toHaveCount(0)
+  const cut = await page.evaluate((lines) => [document.querySelector('.sb-board-title strong'), ...document.querySelectorAll(lines ? '[data-build-line], [data-build-bar] button' : '[data-build-bar] button')]
+    .filter(e => !e || e.scrollWidth > e.clientWidth + 1).map(e => e ? e.innerText : 'no slate name'), lines)
+  expect(cut, 'nothing in the header is cut short').toEqual([])
+}
 async function noteToolbarClear(page, label) {
   await page.getByRole('button', { name: 'Got it' }).click({ timeout: 3000 }).catch(() => {})
   await page.locator(`g[data-node-id][aria-label^="${label}"]`).first().click()
@@ -93,7 +103,9 @@ for (const size of [{ name: 'desktop', width: 1440, height: 900 }, { name: 'phon
     await expect(bar(page)).toBeVisible({ timeout: 60000 })
     await expect(bar(page)).toContainText(size.name === 'phone' ? 'Builder' : 'Building a smart component')
     await builderInHeader(page)
+    if (size.name === 'desktop') await headerReadsInFull(page, { lines: false })
     await openPanel(page)
+    if (size.name === 'desktop') await headerReadsInFull(page, { lines: false })
     await expect(panel(page).getByText('What should this board do?')).toBeVisible({ timeout: 30000 })
     await shot(page, `${size.name}-01-first-turn`)
 
@@ -173,6 +185,11 @@ for (const size of [{ name: 'desktop', width: 1440, height: 900 }, { name: 'phon
     await expect(sheet).toBeHidden({ timeout: 30000 })
     await expect((await builderControls(page)).locator('[data-build-status="draft"]')).toBeVisible({ timeout: 30000 })
     await doneWithBuilder(page)
+    // A guest who has saved keeps the whole bar on a desktop (never the phone's Builder button), all of it readable.
+    if (size.name === 'desktop') {
+      await headerReadsInFull(page, { lines: false })
+      await builderInHeader(page)
+    }
 
     // 5. On another slate: Add to this slate › Yours › Add, then Keep.
     await page.goto(ORIGIN + '/new')
@@ -208,6 +225,7 @@ for (const size of [{ name: 'desktop', width: 1440, height: 900 }, { name: 'phon
       await expect(submit).toBeHidden({ timeout: 30000 })
       await expect(await builderControls(page)).toContainText('Submitted for review', { timeout: 30000 })
       await doneWithBuilder(page)
+      if (size.name === 'desktop') await headerReadsInFull(page, { lines: false })
     } else {
       await expect(submit.getByRole('alert')).toContainText('Sign up to publish', { timeout: 30000 })
     }
@@ -227,6 +245,12 @@ test('a branch off Retro keeps Meetings, locked; its controls are on the board f
   // Its first words are in Ask Slatebox, not over the board; the bar is in the header.
   await expect(panel(page).locator('[data-build-greeting]')).toHaveCount(1)
   await builderInHeader(page)
+  await headerReadsInFull(page)
+  // What the header has no room for (where it came from) is a click away, in full.
+  await page.locator('[data-build-summary]').click()
+  await expect(page.locator('[data-build-about]')).toContainText('Branched from Retro (Meetings)')
+  await page.locator('[data-build-about]').getByRole('button', { name: 'Close' }).click()
+  await expect(page.locator('[data-build-about]')).toBeHidden()
   await expect(page.locator('g[data-rule-controls]')).toHaveCount(1, { timeout: 60000 })
   // A selected card's toolbar (Edit, Move to, Ask Slatebox, delete) is clear of every part of the builder.
   await expect(await noteToolbarClear(page, 'Shipped on time')).toContainText('Move to')
@@ -252,8 +276,10 @@ test('on a phone the build bar is one Builder button in the header; its sheet ho
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 120000 })
   await expect(bar(page).getByRole('button', { name: 'Builder', exact: true })).toBeVisible({ timeout: 60000 })
   await builderInHeader(page)
-  // The header never overflows at 390.
+  // The header never overflows at 390, and the slate's name keeps a readable width beside the Builder button (all of a short one).
   expect(await header(page).evaluate(h => h.scrollWidth <= h.clientWidth + 1), 'the header fits').toBe(true)
+  const name = await page.locator('.sb-board-title strong').evaluate(e => ({ text: e.textContent, width: e.clientWidth, whole: e.scrollWidth <= e.clientWidth + 1 }))
+  expect(name.whole || name.width >= 96, `the slate name is whole or at least 96px wide: ${JSON.stringify(name)}`).toBe(true)
   if (await panel(page).isVisible().catch(() => false)) {
     await expect(panel(page).locator('[data-build-greeting]')).toContainText('This is your copy of Retro.')
     await panel(page).getByRole('button', { name: 'Close conversation' }).click()

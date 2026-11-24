@@ -108,6 +108,36 @@ test('a slate is published from Share, refined and moved on the review canvas, a
   const page = reviewer.page
   await shot(page, '05-review-canvas')
 
+  // Owner rule: nothing covers a note or a note's toolbar. The review panel is docked beside the canvas (the canvas
+  // resizes around it, as for Ask Slatebox), so no visible note is under it, and the leftmost card's toolbar is whole and clickable.
+  await page.waitForTimeout(1500)
+  const dock = await page.evaluate(() => {
+    const p = document.querySelector('[data-testid="review-panel"]'), pr = p.getBoundingClientRect()
+    const cr = document.querySelector('.sb-canvas-page [id]').getBoundingClientRect()
+    const under = [...document.querySelectorAll('g[data-node-id]')].map(g => g.getBoundingClientRect())
+      .map(r => ({ l: Math.max(r.left, cr.left), r: Math.min(r.right, cr.right), t: Math.max(r.top, cr.top), b: Math.min(r.bottom, cr.bottom) }))
+      .filter(r => r.r > r.l && r.b > r.t && r.l < pr.right && r.r > pr.left && r.t < pr.bottom && r.b > pr.top).length
+    const leftmost = [...document.querySelectorAll('g[data-node-id]:not([aria-hidden="true"]):not([data-governed="decoration"])')]
+      .map(g => ({ id: g.getAttribute('data-node-id'), label: g.getAttribute('aria-label') || '', r: g.getBoundingClientRect() }))
+      .filter(n => / in /.test(n.label) && n.r.width > 20 && n.r.left >= cr.left && n.r.right <= cr.right && n.r.top > cr.top + 60 && n.r.bottom < cr.bottom)
+      .sort((a, b) => a.r.left - b.r.left)[0]?.id ?? null
+    return { position: getComputedStyle(p).position, panelRight: pr.right, canvasLeft: cr.left, under, leftmost }
+  })
+  expect(dock.position, 'the review panel is not fixed over the canvas').not.toBe('fixed')
+  expect(dock.canvasLeft, 'the canvas starts where the review panel ends').toBeGreaterThanOrEqual(dock.panelRight - 1)
+  expect(dock.under, 'no note is under the review panel').toBe(0)
+  expect(dock.leftmost, 'a card to select').toBeTruthy()
+  await page.locator(`g[data-node-id="${dock.leftmost}"]`).first().click()
+  const cardBar = page.locator('.sb-style-bar[role="toolbar"]').first()
+  await expect(cardBar).toBeVisible({ timeout: 30000 })
+  const barBox = await cardBar.boundingBox(), panelBox = await review(page).boundingBox()
+  expect(barBox.x >= panelBox.x + panelBox.width - 0.5 || barBox.y >= panelBox.y + panelBox.height, 'the card\'s toolbar is clear of the review panel').toBe(true)
+  const topmost = await cardBar.evaluate(t => [...t.querySelectorAll('button')].filter(b => b.offsetWidth)
+    .map(b => { const r = b.getBoundingClientRect(); return t.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)) }))
+  expect(topmost.length > 0 && topmost.every(Boolean), 'every button of the card\'s toolbar can be clicked').toBe(true)
+  await shot(page, '05b-review-card-toolbar')
+  await page.keyboard.press('Escape')
+
   // The review chat: a starter; with no AI connected locally, the local grammar ("rename it to …") instead.
   await review(page).getByTestId('refine-starter').filter({ hasText: 'Write a clearer one-line summary' }).click()
   const keepButton = review(page).getByTestId('refine-keep')
