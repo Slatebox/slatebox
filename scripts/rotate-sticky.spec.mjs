@@ -8,7 +8,9 @@
 //     paste, a sibling added from its plug, and the SVG export;
 //   - the dock tile is drawn as that yellow note;
 //   - the rotate knob (engine) is a screen-sized circle with a rotate icon outside the top-right corner, and a drag on
-//     it (mouse, or a finger on the phone) turns the note, with Shift snapping to 15°.
+//     it (mouse, or a finger on the phone) turns the note, with Shift snapping to 15°;
+//   - with Ask Slatebox open and a note at its edge, the knob is not hidden under the panel: it moves to the note's
+//     top-left corner, where nothing covers it, and turns the note from there.
 //
 // Against a running app (a fresh guest per run: no cookies, no storage):
 //   cd scripts && SLATEBOX_ORIGIN=http://127.0.0.1:3911 npx playwright test rotate-sticky.spec.mjs
@@ -342,6 +344,55 @@ test('desktop 1440: a multi-note selection has the same rotate knob; it turns bo
   await page.mouse.move(p.x, p.y, { steps: 5 })
   await page.mouse.up()
   for (const id of ids) expect(Math.abs((await angleOf(page, id)) - 45)).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+  await context.close()
+})
+
+test('desktop 1440: with Ask Slatebox open, a note at its edge keeps its rotate knob in view (top-left corner)', async ({ browser }) => {
+  const { context, page, errors } = await freshSlate(browser, { viewport: { width: 1440, height: 900 } })
+  await page.locator('.MuiSpeedDial-fab').hover()
+  const before = await notes(page)
+  await page.locator('.MuiSpeedDial-root [aria-label="stickyNote"]').click()
+  const [note] = await newest(page, before)
+  await page.mouse.move(40, 450)
+  const panel = page.locator('aside[aria-label="Ask Slatebox"]')
+  if (!(await panel.count())) await page.locator('[data-conversation-toggle]').first().click()
+  await expect(panel).toBeVisible({ timeout: 15000 })
+  await page.waitForTimeout(600)
+  const edge = (await panel.boundingBox()).x
+  // Slide the note so its right side sits 8px left of the panel: the top-right corner's knob would be under it.
+  await page.evaluate(({ key, edge }) => {
+    const slate = window.__slateboxInstances.find((s) => s.element.id === 'slateCanvas')
+    const n = slate.nodes.one(key)
+    const r = n.svgGroup.node.getBoundingClientRect()
+    const z = slate.getZoom?.() || 1
+    n.position(n.options.x + (edge - 8 - r.right) / z, n.options.y)
+  }, { key: note.id, edge })
+  await selectNote(page, note.id)
+  const k = await page.evaluate(() => {
+    const g = document.querySelector('#slateCanvas g.svg_select_handle_rot')
+    const c = g.querySelector('circle').getBoundingClientRect()
+    const x = c.x + c.width / 2, y = c.y + c.height / 2
+    const poly = document.querySelector('#slateCanvas .svg_select_shape')
+    const pt = (i) => poly.points.getItem(i).matrixTransform(poly.getScreenCTM())
+    const lt = pt(0), rb = pt(4)
+    const top = document.elementFromPoint(x, y)
+    return { x, y, side: g.getAttribute('data-knob-side'), onTop: !!top && g.contains(top), lt: { x: lt.x, y: lt.y }, centre: { x: (lt.x + rb.x) / 2, y: (lt.y + rb.y) / 2 } }
+  })
+  await shot(page, 'after-knob-beside-ask-slatebox')
+  expect(k.side).toBe('left')
+  expect(k.onTop, 'nothing covers the knob').toBe(true)
+  expect(k.x).toBeLessThan(k.lt.x)
+  expect(k.x + 14).toBeLessThan(edge)
+  const start = await angleOf(page, note.id)
+  await page.mouse.move(k.x, k.y)
+  await page.mouse.down()
+  for (const deg of [10, 20, 30]) {
+    const p = around(k.centre, k, deg)
+    await page.mouse.move(p.x, p.y, { steps: 3 })
+  }
+  expect(Math.abs((await angleOf(page, note.id)) - start - 30)).toBeLessThanOrEqual(1)
+  await page.mouse.up()
   expect(errors).toEqual([])
   await context.close()
 })
