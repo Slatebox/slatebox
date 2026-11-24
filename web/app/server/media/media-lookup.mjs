@@ -156,7 +156,9 @@ export function createMediaLookup({ storePoster, fetch = safeFetch, cache = crea
       allowHosts: host.posterHosts,
       maxBytes: MEDIA_FETCH_LIMITS.posterBytes,
       timeoutMs: MEDIA_FETCH_LIMITS.timeoutMs,
-      contentTypes: IMAGE_TYPES,
+      // Loom's picture server labels its JPEGs application/octet-stream; the bytes are sniffed below
+      // and only a real JPEG, PNG, WEBP or GIF is stored.
+      contentTypes: [...IMAGE_TYPES, 'application/octet-stream', 'binary/octet-stream'],
       accept: 'image/*',
       userAgent: USER_AGENT,
     })

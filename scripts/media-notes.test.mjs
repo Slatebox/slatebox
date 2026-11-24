@@ -106,6 +106,14 @@ test("lookup: bytes that are not a picture are not stored, whatever the header s
   assert.equal(found.media.poster, undefined);
   assert.equal(host.stored.length, 0);
   assert.equal(sniffImage(JPEG), "image/jpeg");
+  // A picture server that labels a JPEG application/octet-stream (Loom's) is read by its bytes.
+  const loom = fakeHost();
+  const seen = [];
+  const labelled = async (url, options) => { seen.push(options.contentTypes); return loom.fetch(url, options); };
+  const fromLoom = createMediaLookup({ fetch: labelled, storePoster: loom.storePoster });
+  await fromLoom(`https://youtu.be/${YT}`, { subject: "ada" });
+  assert.ok(seen[1].includes("application/octet-stream"));
+  assert.equal(loom.stored[0].contentType, "image/jpeg");
   assert.equal(sniffImage(Buffer.from("GIF89a......")), "image/gif");
 });
 
