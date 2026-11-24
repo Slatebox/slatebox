@@ -21,6 +21,7 @@ import execGet from './exec-get.mjs'
 import aiGet from './ai-get.mjs'
 import aiUpdate from './ai-update.mjs'
 import aiCheck from './ai-check.mjs'
+import aiControlActions from './ai-control-get.mjs'
 import presencePlan from './presence-plan.mjs'
 import presenceStep from './presence-step.mjs'
 import componentsList, { componentsGet } from './components-list.mjs'
@@ -59,6 +60,7 @@ export const actions = [
   aiGet,
   aiUpdate,
   aiCheck,
+  ...aiControlActions,
   presencePlan,
   presenceStep,
   componentsList,

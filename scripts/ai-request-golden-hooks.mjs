@@ -58,7 +58,8 @@ export async function resolve(specifier, context, next) {
     if (!/\.(m?js|cjs|json)$/.test(path)) {
       for (const ext of ['.js', '.mjs', '/index.js']) if (existsSync(path + ext)) { path += ext; break }
     }
-    if (path.startsWith(appRoot)) {
+    // packages under the app (node_modules) load as they are
+    if (path.startsWith(appRoot) && !path.slice(appRoot.length).startsWith('node_modules/')) {
       const rel = path.slice(appRoot.length)
       const isTarget = targets.includes(path)
       const stub = !isTarget && (/\.js$/.test(rel) || STUBBED_MJS.includes(rel))

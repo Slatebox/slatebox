@@ -31,13 +31,16 @@ const store = createConnectionStore({ keys: ProviderKeys.rawCollection(), choice
 // connection reads less.
 export const guardedFetch = (rules, options) => (url, init) => connectionFetch(String(url), rules, undefined, options)(url, init)
 
+// An administrator of this server (the uberMensch claim): the one who changes the server's AI.
+export const isServerAdmin = async (userId) => Boolean(userId && await Permissions.findOneAsync({ userId, claimId: CONSTANTS.claims.uberMensch._id }, { fields: { _id: 1 } }))
+
 export const aiSettings = createAISettings({
   store,
   master: loadMasterKey(process.env),
   settings: Meteor.settings,
   hosted,
   loadUser: (id) => Meteor.users.findOneAsync(id, { fields: { orgId: 1, isAnonymous: 1 } }),
-  isAdmin: async (userId) => Boolean(userId && await Permissions.findOneAsync({ userId, claimId: CONSTANTS.claims.uberMensch._id }, { fields: { _id: 1 } })),
+  isAdmin: isServerAdmin,
   isTeamAdmin: async (user) => Boolean(user?.orgId && await Permissions.findOneAsync({ userId: user._id, orgId: user.orgId, claimId: CONSTANTS.claims.admin._id }, { fields: { _id: 1 } })),
   check: (connection, rules) => checkConnection(connection, { fetch: guardedFetch(rules, { maxBytes: MAX_CHECK_RESPONSE_BYTES }) }),
   assertHost: (baseUrl, rules) => assertEndpointHost(baseUrl, rules),

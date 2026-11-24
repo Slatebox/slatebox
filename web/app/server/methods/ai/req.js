@@ -8,7 +8,8 @@ import { aiRequestGate, chargeProviderCall, currentAIAction } from '../../meteri
 import { resolveRequestConnection } from './ai-settings'
 import { connectionFetch } from './endpoint-policy.mjs'
 import { connectionRequest } from './connection-request.mjs'
-import { carriesImages, featureTitle } from './connections.mjs'
+import { carriesImages, featureTitle, surfaceFor } from './connections.mjs'
+import { requestOptionsFromBinding } from '../../ai-control/request-binding.mjs'
 import { chosenShapeAbort } from './shape-abort.mjs'
 import utils from '../../../imports/api/common/utils'
 import {
@@ -88,6 +89,13 @@ async function recordProviderTelemetry({
         fallbackFromProvider: aiOpts?.fallbackFromProvider,
         fallbackReason: aiOpts?.fallbackReason,
       }),
+      // which configuration served the call: the surface, the connection (a choice ref, or builtin)
+      // and the place in the model chain (0 the primary, 1 its fallback)
+      surface: aiOpts?.surface ?? surfaceFor(aiOpts?.feature) ?? null,
+      connection: aiOpts?.connectionRef ?? null,
+      attempt: aiOpts?.chainIndex ?? 0,
+      ...(aiOpts?.bindingVersion && { bindingVersion: aiOpts.bindingVersion }),
+      ...(aiOpts?.promptVersions && { promptVersions: aiOpts.promptVersions }),
       levelOfDetail: aiOpts?.detailLevel,
       wordsPerNode: aiOpts?.wordsPerNode,
       userId: user?._id ?? null,
@@ -149,6 +157,7 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
   const withImages = carriesImages(prompts)
   const chosen = operatorWorkshop ? null : await resolveRequestConnection({ feature: aiOpts.feature, request: { images: withImages, tools: Boolean(aiOpts.functions?.length) }, userId: callerId })
   const chosenConnection = chosen?.connection || null
+  aiOpts.connectionRef = operatorWorkshop ? 'selfhost-workshop' : chosen?.ref ?? 'builtin'
   // the label a person may read: an operator's connection by its model, not its host
   const chosenLabel = chosenConnection ? chosen.label : null
   if (chosen?.gap || chosen?.error || (ownKey && !chosen?.own)) {
@@ -256,7 +265,7 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
     })
     const requestStartedAt = Date.now()
     const maxInfraRetries =
-      Meteor.settings?.ai?.providerInfraRetries ?? INFRA_RETRY_LIMIT
+      aiOpts.infraRetries ?? Meteor.settings?.ai?.providerInfraRetries ?? INFRA_RETRY_LIMIT
     let attempt = 0
 
     while (true) {
@@ -629,7 +638,11 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
   return named
 }
 
-export default async function req(options, localWorkshop) {
+export default async function req(requested, localWorkshop) {
+  // a resolved AI control binding (ai-control/resolve.mjs) fills in what the call site left out;
+  // without one the options are used exactly as given
+  const { options, refusal } = requestOptionsFromBinding(requested)
+  if (refusal) return refusal
   if (localWorkshop) return requestFromProvider(options, localWorkshop)
   const { fallback } = options
   const originalPrompts = fallback
@@ -661,6 +674,7 @@ export default async function req(options, localWorkshop) {
     ...fallback,
     prompts: originalPrompts,
     fallback: undefined,
+    chainIndex: 1,
     fallbackFromProvider: primaryResponse.provider,
     fallbackReason: primaryResponse.abortMessage,
   })

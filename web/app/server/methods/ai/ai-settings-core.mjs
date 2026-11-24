@@ -114,6 +114,10 @@ export function createAISettings({
     return {
       connections: [...config.connections, ...saved.filter((c) => !config.connections.some((f) => f.name === c.name))],
       use: { ...config.use, ...(stored?.use || {}) },
+      // where each server choice comes from: the settings file, or what an administrator saved ('app')
+      useSource: Object.fromEntries([
+        ...Object.keys(config.use).map((key) => [key, 'file']), ...Object.keys(stored?.use || {}).map((key) => [key, 'app']),
+      ]),
       ownProviders,
       ownProvidersLocked: locked,
     }
@@ -398,7 +402,22 @@ export function createAISettings({
     return { ...choice, connection, rules, label, ...(gap && { gap }), ...(error && { error }) }
   }
 
-  return { view, update, check: checkOne, resolveFor, serverState }
+  /**
+   * Today's AI settings for one person as the AI control resolver reads them (ai-control/resolve.mjs
+   * holders): their connections and choices, their team's and the server's, never a key.
+   * → { person, team, server, ownProviders, serverUseSource, admin }
+   */
+  async function choiceHolders(userId) {
+    const user = userId ? await loadUser(userId) : null
+    const server = await serverState()
+    const { person, team } = await holders(user, server)
+    return {
+      person, team, server: { connections: server.connections, use: server.use }, ownProviders: server.ownProviders,
+      serverUseSource: server.useSource, orgId: user?.orgId ?? null,
+    }
+  }
+
+  return { view, update, check: checkOne, resolveFor, serverState, choiceHolders }
 }
 
 export { parseRef }
