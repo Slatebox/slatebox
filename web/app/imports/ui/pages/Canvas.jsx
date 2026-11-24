@@ -83,7 +83,8 @@ import CollaborationUsers from '../components/CollaborationUsers'
 import SlateAIRunner from '../components/ai/SlateAIRunner'
 import CanvasBottomBar from '../components/CanvasBottomBar'
 import QuickNodeActions from '../components/node/QuickNodeActions'
-import UndoRedoControls from '../components/UndoRedoControls'
+// The Undo and Redo controls load after the canvas (the keys work from the engine at once): a dynamic import.
+const UndoRedoControls = React.lazy(() => import('../components/UndoRedoControls'))
 import { expectOwnRuns } from '../../api/client/ownRuns.mjs'
 import { customShapePackage } from '../../api/common/note-style.mjs'
 import { LIBRARY_EVENT } from '../components/library/libraryBus'
@@ -1483,7 +1484,7 @@ export default function Canvas() {
         <KeepNativeSlate key={id} routeKey={id} proof={keepOffer.proof} slateId={keepOffer.slateId} visitor={keepOffer.visitor} />}
       <NeuralThinking />
       {/* Undo and Redo of this person's own steps (the drawing's and their board changes), on every screen. */}
-      {showTools && slate.current && <UndoRedoControls key={id} slate={slate.current} narrow={phone} />}
+      {showTools && slate.current && <React.Suspense fallback={null}><UndoRedoControls key={id} slate={slate.current} narrow={phone} /></React.Suspense>}
       {showTools && !phone && (
           <QuickNodeActions
             slate={slate?.current}

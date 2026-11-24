@@ -90,3 +90,29 @@ test('labels name the change, and the drawing keeps the steps it puts back itsel
   for (const change of [{ cardId: 'a', laneId: 'doing' }, { rename: { laneId: 'done' } }, { edits: [] }])
     assert.equal(drawingOwnsBoardChange(change), false)
 })
+
+test('a move made anyway is one step of its own, named as one, and the words that offer it name the canvas Undo', async () => {
+  const { undoWords } = await import('../web/app/imports/api/common/undo-redo-keys.mjs')
+  const sprint = board([{ id: 'a', label: 'Login', laneId: 'todo' }])
+  assert.equal(boardStepLabel([{ cardId: 'a', laneId: 'doing', override: true, reason: 'Doing is full.' }], sprint), 'Move Login to Doing anyway')
+  assert.equal(boardStepLabel([{ cardId: 'a', laneId: 'doing' }], sprint), 'Move Login to Doing')
+  assert.equal(undoWords('MacIntel'), 'Undo (⌘Z)')
+  assert.equal(undoWords('Win32'), 'Undo (Ctrl+Z)')
+  assert.equal(undoWords('iPhone', true), 'Undo')
+  const { readFile } = await import('node:fs/promises')
+  const read = (path) => readFile(new URL('../web/app/imports/ui/components/' + path, import.meta.url), 'utf8')
+  const hook = await read('workshop/useWorkshopOnCanvas.js')
+  // Every change made anyway (a drop, the card bar's Move to, the server asking again) is queued as a step of its
+  // own, and played alone, so a batch (one step) never holds a move made anyway with other changes.
+  assert.equal((hook.match(/queue\.current\.push\(/g) || []).length, 1, 'only queueChange queues a change')
+  assert.match(hook, /queueChange\(\{ cardId, laneId, override: true, reason: agreed \}\)/)
+  assert.match(hook, /queueChange\(\{ \.\.\.again, reason: err\.reason \}\)/)
+  assert.match(hook, /const alone = queue\.current\.findIndex\(change => change\.override\)/)
+  assert.match(hook, /queue\.current\.splice\(0, alone === 0 \? 1 : alone > 0 \? alone : queue\.current\.length\)/)
+  // The board's one-step "Undo last change" is gone: the dialog, the board's chat and the card bar name the canvas Undo.
+  for (const path of ['workshop/MoveAnywayDialog.jsx', 'workshop/WorkshopConversation.jsx', 'stylebar/CardBar.jsx']) {
+    const source = await read(path)
+    assert.match(source, /undoWordsHere\(\)/, path)
+    assert.doesNotMatch(source, /Undo last change/, path)
+  }
+})

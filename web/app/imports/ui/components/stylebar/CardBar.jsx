@@ -4,6 +4,7 @@ import EastIcon from '@mui/icons-material/East'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { BarButton, Pop, useRoving } from './parts'
+import { undoWordsHere } from '../../../api/common/undo-redo-keys.mjs'
 
 /**
  * A workshop card's bar: only what the workshop allows. Edit the card's name on the canvas,
@@ -40,12 +41,12 @@ export default function CardBar({ bar, mode, onEdit, onMove, onAsk, onRemove, la
             onClick={() => { setOpen(false); setAsking((a) => !a) }}><DeleteOutlineIcon aria-hidden /></BarButton>
         )}
       </div>
-      {/* Removing a card asks first. Once removed, "Undo last change" on the workshop strip brings it back. */}
+      {/* Removing a card asks first. Once removed, the canvas's Undo (Ctrl/Cmd+Z) brings it back: one step of the person's history. */}
       <Pop id="sb-pop-card-remove" open={asking} onClose={(refocus) => { setAsking(false); if (refocus) removeRef.current?.focus() }}
         anchor={removeRef.current} layer={layer} note={noteRect} label={`Remove ${bar.card?.label || 'card'}?`} takeFocus>
         <div style={{ display: 'grid', gap: 8, width: 260 }}>
           <div className="sb-label" style={{ margin: 0 }}>Remove {bar.card?.label || 'this card'}?</div>
-          <p className="sb-value" style={{ margin: 0 }}>It leaves the workshop for everyone. Undo last change brings it back.</p>
+          <p className="sb-value" style={{ margin: 0 }}>It leaves the workshop for everyone. {undoWordsHere()} brings it back.</p>
           <div className="sb-actions">
             <button type="button" className="sb-quiet" data-autofocus="" onClick={() => { setAsking(false); removeRef.current?.focus() }}>Cancel</button>
             <button type="button" className="sb-primary sb-danger-fill" onClick={() => { setAsking(false); onRemove() }}>Remove {bar.card?.label || 'card'}</button>

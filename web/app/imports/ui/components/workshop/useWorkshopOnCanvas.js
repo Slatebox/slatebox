@@ -198,7 +198,10 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
   async function play() {
     const board = live.current
     if (!board || inFlight.current || !queue.current.length) return
-    const changes = queue.current.splice(0)
+    // A move made anyway goes alone, so it is one step of the person's undo history by itself (a batch is one step);
+    // the changes after it follow in the next batch (reconcile plays what is left).
+    const alone = queue.current.findIndex(change => change.override)
+    const changes = queue.current.splice(0, alone === 0 ? 1 : alone > 0 ? alone : queue.current.length)
     inFlight.current = true
     setSaving(true)
     setError('')
@@ -257,7 +260,7 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
         askMoveAnyway({ cardId: moving.id, laneId: again.laneId ?? moving.laneId, card: moving.label, lane: lane?.label ?? '', reason: err.reason,
           ...(again.edits && { to: 'where you put it' }) }).then(yes => {
           if (!yes || live.current !== board) return
-          queue.current.push({ ...again, reason: err.reason })
+          queueChange({ ...again, reason: err.reason })
           playRef.current()
         })
       }
@@ -819,7 +822,7 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
             const forced = workshopOverrideCandidate(board.value, cardId, laneId, { by: moverName(Meteor.user()), at: new Date().toISOString() })
             if (!forced) return
             board.update(forced)
-            queue.current.push({ cardId, laneId, override: true, reason: agreed })
+            queueChange({ cardId, laneId, override: true, reason: agreed })
             playRef.current()
           })
           return false

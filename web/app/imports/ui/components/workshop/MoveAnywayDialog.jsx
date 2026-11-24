@@ -5,19 +5,21 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogContentText from '@mui/material/DialogContentText'
 import DialogActions from '@mui/material/DialogActions'
 import Button from '@mui/material/Button'
+import { undoWordsHere } from '../../../api/common/undo-redo-keys.mjs'
 
 /**
  * "Move anyway?" (owner, 2026-11-23): a drop the board's rules refuse, offered with the rule's sentence. Move anyway
- * moves the card, marked on it with who and when (Undo puts it back); Cancel leaves it where it was. Escape cancels.
+ * moves the card, marked on it with who and when; it is one step of the person's undo history, so the canvas's Undo
+ * (or Ctrl/Cmd+Z) puts it back, and the dialog names that key. Cancel leaves it where it was. Escape cancels.
  * `ask`: { card, lane, reason, to? } (the engine's WorkshopOverrideAsk): `to` says where the move takes the card when it
  * is more than a lane ("to start Thu 17 Dec" on a plan, "under Activation to 40%" on a nested board). The dialog is
  * the keyboard's too: Move anyway has the focus, Escape cancels, and the focus goes back where it was (a card moved
  * with the arrow keys keeps its place).
  */
 /** What happens once it is moved: who and when on the card; a board with numbers works them out again (a nested board has none). */
-export function moveAnywayNote(ask) {
-  return ask?.numbers === false ? 'The card will show who moved it and when. Undo puts it back.'
-    : 'The card will show who moved it and when, and the board works out its numbers again. Undo puts it back.'
+export function moveAnywayNote(ask, undo = undoWordsHere()) {
+  return ask?.numbers === false ? `The card will show who moved it and when. ${undo} puts it back.`
+    : `The card will show who moved it and when, and the board works out its numbers again. ${undo} puts it back.`
 }
 
 export default function MoveAnywayDialog({ ask, onAnswer }) {

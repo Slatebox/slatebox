@@ -94,7 +94,7 @@ export function boardStepLabel(changes, workshop) {
     const change = list[0] || {}
     if (change.rename?.laneId) return `Rename ${lane(change.rename.laneId) ?? 'a lane'}`
     if (change.rename?.title !== undefined) return 'Rename the board'
-    if (change.cardId && change.laneId) return `Move ${card(change.cardId) ?? 'a card'}${lane(change.laneId) ? ' to ' + lane(change.laneId) : ''}`
+    if (change.cardId && change.laneId) return `Move ${card(change.cardId) ?? 'a card'}${lane(change.laneId) ? ' to ' + lane(change.laneId) : ''}${change.override ? ' anyway' : ''}`
   }
   return 'Board change'
 }

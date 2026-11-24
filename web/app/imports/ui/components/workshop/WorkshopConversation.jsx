@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { moverName } from '../../../api/common/mover-name.mjs'
+import { undoWordsHere } from '../../../api/common/undo-redo-keys.mjs'
 import { Meteor } from 'meteor/meteor'
 import { Box, Button, IconButton, Typography } from '@mui/material'
 import Close from '@mui/icons-material/Close'
@@ -330,7 +331,7 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
       const saved = await save(preview.workshop, preview.revision)
       if (!mounted.current) return
       if (!saved) { setError(map ? 'Could not save. Check the latest map and try again.' : 'Could not save. Check the latest workshop and try again.'); return }
-      append({ role: 'assistant', content: preview.override ? 'Moved ' + preview.override.card + ' to ' + preview.override.lane + ' anyway. The card shows who moved it and when; Undo puts it back.'
+      append({ role: 'assistant', content: preview.override ? 'Moved ' + preview.override.card + ' to ' + preview.override.lane + ' anyway. The card shows who moved it and when; ' + undoWordsHere() + ' puts it back.'
         : map ? 'Saved to the map.' : 'Saved to the workshop.' })
       setPreview(null)
     } finally { running.current = false; if (mounted.current) setBusy(false) }
