@@ -89,6 +89,9 @@ test('only the refusing turn carries the buttons, and "Run it now" drops the she
   // The refusal marks its own turn; a later turn ("Which board?", "what can it do?") is never replaced by the refusal.
   assert.match(workshop, /append\(\{ role: 'user', content: message \}, \{ role: 'assistant', content: err\.reason, \.\.\.\(pays && \{ pay: true \}\) \}\)/)
   assert.match(workshop, /\.\.\.\(pay === true && \{ pay: true \}\)/)
+  // On a phone the starters make way for the refusing message's buttons.
+  assert.match(workshop, /starters=\{!hold && ownButtons\(history\.at\(-1\), payRefusal\) && isPhone\(\) \? null : /)
+  assert.match(workshop, /const ownButtons = \(turn, payRefusal\) => Boolean\(turn\?\.role === 'assistant' && \(\(turn\.pay && payRefusal\) \|\| turn\.choices\?\.length \|\| turn\.boards\?\.length\)\)/)
   const notice = read('imports/ui/components/PayNotice.jsx')
   assert.match(notice, /dropPendingRetry\(\)\s*\n\s*return retry\?\.\(\)/)
   const host = read('imports/ui/components/billing/pay/PaySheetHost.jsx')

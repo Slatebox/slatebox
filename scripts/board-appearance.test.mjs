@@ -185,6 +185,11 @@ test('looks that did nothing or cost an agent turn: bigger cards, every column a
   assert.deepEqual(edits(team(), 'highlight Doing'), [{ kind: 'set_appearance', lane: { id: 'doing' }, color: 'yellow' }])
   assert.deepEqual(edits(matrix(), 'make Do now stand out'), [{ kind: 'set_appearance', lane: { id: 'q-do-now' }, color: 'yellow' }])
   assert.deepEqual(edits(team(), 'highlight the columns'), [{ kind: 'set_appearance', emphasis: 'strong' }])
+  // With a column selected, "make it pop" is still the choices (found on a phone, where the board's lane was selected).
+  const square = matrix()
+  for (const said of ['make it pop', 'make this stand out', 'highlight it']) {
+    assert.throws(() => edits(square, said, { kind: 'lane', id: square.lanes[0].id }), error => error.code === 'appearance-choices', said)
+  }
 })
 
 test('"the cards in Backlog" goes to the board of the Backlog column, not to a board titled Backlog', async () => {

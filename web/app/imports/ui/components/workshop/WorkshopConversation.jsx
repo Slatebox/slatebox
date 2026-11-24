@@ -25,6 +25,8 @@ const LibraryCards = lazy(() => loadLibrary().then(m => ({ default: m.LibraryCar
 const BoardMoves = lazy(() => loadLibrary().then(m => ({ default: m.BoardMoves })))
 const libraryModule = () => import('../../../api/common/library.mjs')
 // On a phone the composer gives the conversation room once it has turns: the prompt line goes.
+/** Whether the newest turn carries buttons of its own to answer (the refusal's ways on, looks to choose from, which board). */
+const ownButtons = (turn, payRefusal) => Boolean(turn?.role === 'assistant' && ((turn.pay && payRefusal) || turn.choices?.length || turn.boards?.length))
 const isPhone = () => typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 600px)').matches
 // "Add a retro" typed on a slate that holds 8 boards (the most for now): the same question the Add buttons ask.
 const newSlateTurnOf = (lib, id, said) => ({ ...lib.newSlateTurn(lib.catalogEntry(id)), opens: said })
@@ -467,7 +469,9 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
       </Box>}
       {!hold && !view && <AddStrip hasBoard onAdd={addEntry} onBrowse={() => browse()} compact={history.length > 0 || Boolean(moves)} />}
     </>}
-    starters={<Box role="group" aria-label="Starter messages" sx={{ display: 'flex', flexWrap: 'wrap', gap: .5, my: 1 }}>
+    // On a phone the newest turn's own buttons (Pro and a balance, looks to choose from, which board) need the room: the
+    // starters wait until it is answered.
+    starters={!hold && ownButtons(history.at(-1), payRefusal) && isPhone() ? null : <Box role="group" aria-label="Starter messages" sx={{ display: 'flex', flexWrap: 'wrap', gap: .5, my: 1 }}>
       {/* Where a phone (no hover, no gear) finds "Change this board": first, unless a lane or card is
           selected, whose own phrases ("Make this 3 days") come first. */}
       {!focus && !context && changeBoard}

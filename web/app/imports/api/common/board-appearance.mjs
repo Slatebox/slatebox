@@ -135,7 +135,8 @@ export function appearanceEdits(board, message, selection = null) {
   }
   // One column made to stand out ("highlight Doing", "make Do now stand out"): it takes a color of its own.
   if ((m = is('(?:highlight|emphasi[sz]e|accentuate|spotlight)\\s+' + THE + '(.+?)')) || (m = is(make + THE + '(.+?)\\s+(?:stand out|pop)(?: more)?'))) {
-    const part = partNamed(board, m[1], selection)
+    // Only a column said by name: "make it pop" with a column selected is still the look choices, not a color.
+    const part = !/^(?:it|this|that|everything|things|the board|this board)$/.test(m[1].trim()) && partNamed(board, m[1], selection)
     if (part) {
       const now = board.appearance?.colors?.[part.ref.id]
       return edit({ lane: part.ref, color: now === 'yellow' ? 'orange' : 'yellow' })
