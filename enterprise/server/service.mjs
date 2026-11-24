@@ -37,8 +37,10 @@ import { KEY_PATTERN } from './signin.mjs'
 import { capabilitySummary, defaultPolicy, normalizeTools, plainText, POLICIES, reconcile } from './tools.mjs'
 import { quarantine } from './results.mjs'
 import { CONTEXT_LEVELS, packContext } from './context.mjs'
+// The plan and layout words: the registry's (a version an administrator published, else the code's).
+import { promptText } from '/server/ai-control/prompts/index.mjs'
 import {
-  checkLayout, checkPlan, excalidrawElements, excalidrawGroup, itemsFromLayout, LAYOUT_TOOL, linksIn, PLAN_LIMITS, PLAN_TOOL, planPrompt, translatePrompt,
+  checkLayout, checkPlan, excalidrawElements, excalidrawGroup, itemsFromLayout, layoutTool, linksIn, PLAN_LIMITS, planPrompt, planTool, translatePrompt,
 } from './translate.mjs'
 
 export const AGENT_LIMITS = Object.freeze({ perSlate: 8, perOwnerPerSlate: 3, beatMs: 450, requestChars: 1000, nameChars: 32, proEndedDays: 30, orphanHours: 24, concurrentPerUser: 3, helloMs: 8000 })
@@ -121,6 +123,7 @@ export function createConnectorService({
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   later = (fn, ms) => setTimeout(fn, ms),
   audit = () => {},
+  promptOf = promptText, // (id, values) -> the prompt's text (the registry)
 }) {
   // How many outside reaches each person has running now: a few at once, never a flood.
   const running = new Map()
@@ -483,8 +486,8 @@ export function createConnectorService({
         const entries = []
         let say = ''
         for (let round = 0; round < PLAN_LIMITS.rounds; round++) {
-          const { system, user } = planPrompt({ serverName: doc.name, tools: allowed, packed, previous: entries })
-          const planned = checkPlan(await model({ feature: 'connectors', tool: PLAN_TOOL, system, user, userId: principal.userId, shareId: slate.shareId }), allowed)
+          const { system, user } = planPrompt({ serverName: doc.name, tools: allowed, packed, previous: entries, text: promptOf })
+          const planned = checkPlan(await model({ feature: 'connectors', tool: planTool(promptOf), system, user, userId: principal.userId, shareId: slate.shareId }), allowed)
           say = say || planned.say
           if (!planned.calls.length) break
           for (const { tool, args } of planned.calls) {
@@ -521,10 +524,10 @@ export function createConnectorService({
           else if (!entry.result.isError) rest.push(entry)
         }
         if (rest.length && (rest.some((e) => e.result.text) || rest.some((e) => e.result.links.length))) {
-          const { system, user } = translatePrompt({ serverName: doc.name, packed, entries: rest })
+          const { system, user } = translatePrompt({ serverName: doc.name, packed, entries: rest, text: promptOf })
           let layout = { groups: [], say: '' }
           try {
-            layout = checkLayout(await model({ feature: 'connectors', tool: LAYOUT_TOOL, system, user, userId: principal.userId, shareId: slate.shareId }), { aliases: packed.aliases, allowedLinks: linksIn(rest) })
+            layout = checkLayout(await model({ feature: 'connectors', tool: layoutTool(promptOf), system, user, userId: principal.userId, shareId: slate.shareId }), { aliases: packed.aliases, allowedLinks: linksIn(rest) })
           } catch (error) {
             if (error instanceof ConnectorRefused) throw error
           }
