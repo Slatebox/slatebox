@@ -71,6 +71,8 @@ test('danger zone: only the owner deletes, only once no one else is left, and th
   assert.match(businessOnly.first[0], /Slatebox Business for the team ends/)
   // slates outside the team are named: the delete does not remove them, and no one can open them after
   const outside = deleteTeamState({ implications: { otherUsers: 0, otherSlates: 0, mySlates: 2, myOtherSlates: 1 }, owner: true, teamName: 'SBTEST' })
+  const none = deleteTeamState({ implications: { otherUsers: 0, otherSlates: 0, mySlates: 0 }, owner: true, teamName: 'SBTEST' })
+  assert.ok(!none.removed.some((l) => /0 slates/.test(l)), 'no "Your 0 slates" line')
   assert.match(outside.removed[3], /Your 1 slate outside the team: no one can open it once your account is gone/)
   // the check failed: say so (the page offers a retry), never "checking" forever
   assert.equal(deleteTeamState({ implications: null, failed: true, owner: true, teamName: 'SBTEST' }).state, 'failed')

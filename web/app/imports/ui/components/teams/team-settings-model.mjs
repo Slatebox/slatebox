@@ -86,9 +86,10 @@ export function deleteTeamState({ implications, failed = false, owner, teamName,
       ],
     }
   }
+  const mine = implications.mySlates ?? 0
   const removed = [
     `The ${noun} ${teamName}.`,
-    `Your ${count(implications.mySlates ?? 0, 'slate', 'slates')} in it.`,
+    ...(mine > 0 ? [`Your ${count(mine, 'slate', 'slates')} in it.`] : []),
     'Your Slatebox account. You are signed out and cannot sign in with it again.',
   ]
   const outside = implications.myOtherSlates ?? 0
