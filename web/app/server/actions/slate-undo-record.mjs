@@ -77,6 +77,16 @@ export function stepPlan(record, current, direction) {
   const notes = notesById(current), links = connectorsById(current)
   const adds = [], connects = [], updates = [], lineUpdates = [], disconnects = [], deletes = [], left = []
   const changedSince = (kind, id, key) => left.push({ kind, id, ...(key ? { key } : {}), reason: 'changed since by someone else' })
+  // A line someone else drew to a note since: one this step does not take from `from` (its own line, as
+  // it left it). Removing the note would remove that line with it, so the note stays.
+  const theirLineOn = (noteId) => {
+    for (const [lineId, link] of links) {
+      if (link.parentId !== noteId && link.childId !== noteId) continue
+      const own = record?.connectors?.[lineId]?.[fromKey]
+      if (!own || !same(readConnector(link), own)) return true
+    }
+    return false
+  }
 
   for (const [id, part] of Object.entries(record?.notes ?? {})) {
     const from = part[fromKey], to = part[toKey]
@@ -89,8 +99,9 @@ export function stepPlan(record, current, direction) {
     } else if (from && !to) {
       // The step made this note: it goes, unless someone else has changed it since.
       if (!now) continue
-      if (same(now, from)) deletes.push(id)
-      else changedSince('note', id)
+      if (!same(now, from)) changedSince('note', id)
+      else if (theirLineOn(id)) left.push({ kind: 'note', id, reason: 'connected since by someone else' })
+      else deletes.push(id)
     } else if (from && to) {
       if (!now) { changedSince('note', id); continue }
       const changes = {}

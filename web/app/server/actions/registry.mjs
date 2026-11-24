@@ -84,6 +84,11 @@ export function defineAction(definition) {
   // The exec gate names "removes" as the reason to hold only for those (destructive stays the hint).
   if (definition.removes != null && (typeof definition.removes !== 'function' || !definition.destructive))
     fail(id, 'removes is a function, on a destructive action')
+  // peek(principal, input, ctx): what a destructive call would do to the slate as it stands, read without
+  // saving ({ edit, removes }). The exec gate holds the call only when it removes something, and the
+  // person's agreement names that edit (registry.peek).
+  if (definition.peek != null && (typeof definition.peek !== 'function' || !definition.destructive))
+    fail(id, 'peek is a function, on a destructive action')
   const confirm = Boolean(definition.confirm)
   const idempotent = kind === 'read' ? true : Boolean(definition.idempotent)
   const modes = kind === 'read' ? [] : definition.modes || ['save']
@@ -151,6 +156,7 @@ export function defineAction(definition) {
     load: definition.load || null,
     precheck: definition.precheck || null,
     removes: definition.removes || null,
+    peek: definition.peek || null,
     handler,
     failure: definition.failure || null,
     successStatus: definition.successStatus || (kind === 'write' ? 201 : 200),
@@ -392,6 +398,21 @@ export function createRegistry({
     return principal
   }
 
+  // What a call would do, read without saving (the action's peek), or null when the action cannot say.
+  // Runs the call's own checks (who calls, its input, loading the slate) and throws their refusal.
+  async function peek(caller, id, rawInput = {}) {
+    const action = byId.get(id)
+    if (!action?.peek) return null
+    const principal = admit(action, caller)
+    const { mode: _ignored, ...input } = rawInput && typeof rawInput === 'object' ? rawInput : {}
+    for (const [name, schema] of Object.entries(action.input.properties))
+      if (input[name] === undefined && schema.default !== undefined) input[name] = schema.default
+    if (validate(action.input, input, components)) return null
+    const ctx = { action, deps, mode: 'save', now, idempotencyKey: null, resource: null }
+    if (action.load) ctx.resource = await action.load(principal, input, ctx)
+    return action.peek(principal, input, ctx)
+  }
+
   // Every scope a token may need for the actions an agent can call, in the vocabulary's order:
   // what /mcp's challenge and the OAuth metadata advertise.
   const needed = new Set(
@@ -404,6 +425,7 @@ export function createRegistry({
     get: (id) => byId.get(id),
     list: () => [...byId.values()],
     admits,
+    peek,
     components,
     scopes,
     run,

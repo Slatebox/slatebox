@@ -52,8 +52,11 @@ function put(doc, path, value) {
   target[last] = value;
 }
 const matches = (doc, query) => Object.entries(query).every(([path, want]) => {
+  // slates.undo takes an edit no other call holds ($or of no hold and a stale one).
+  if (path === "$or") return want.some((branch) => matches(doc, branch));
   const have = at(doc, path);
   if (want && typeof want === "object") {
+    if ("$lt" in want) return have != null && have < want.$lt;
     if ("$ne" in want) return want.$ne === null ? have != null : have !== want.$ne;
     // slates.undo and slates.redo read the caller's receipts by these.
     if ("$exists" in want) return (have !== undefined) === want.$exists;
@@ -385,13 +388,18 @@ test("every client method succeeds against the app, and refusals keep status, co
   assert.equal((await stored("canvas")).options.name, "Renamed");
   await ok(edit([{ kind: "update_nodes", target: { ids: ["a"] }, changes: { text: "Plan" } }]));
   assert.deepEqual(await texts(), ["Plan", "Beta", "Gamma"]);
-  // slates.undo and slates.redo: the caller's own last edit, taken back and made again. Either may remove
-  // notes (an undo of an add), so a script's call is held for the person, as a delete is.
-  const undone = await confirmed(`return slatebox.slates.undo({ shareId: "canvas" })`, ["removes"]);
+  // slates.undo and slates.redo: the caller's own last edit, taken back and made again. One that removes
+  // nothing (an undo of a rename) saves at once; one that removes notes (an undo of an add) is held for the
+  // person, as a delete is, naming the edit it takes back.
+  const undone = await ok(`return slatebox.slates.undo({ shareId: "canvas" })`);
   assert.equal(typeof undone.undone, "string");
   assert.deepEqual(undone.left, []);
   assert.deepEqual(await texts(), ["Alpha", "Beta", "Gamma"]);
-  await confirmed(`return slatebox.slates.redo({ shareId: "canvas" })`, ["removes"]);
+  await ok(`return slatebox.slates.redo({ shareId: "canvas" })`);
+  assert.deepEqual(await texts(), ["Plan", "Beta", "Gamma"]);
+  await ok(edit([{ kind: "add_nodes", count: 1, shape: "circle", text: "Epsilon" }]));
+  const unadded = await confirmed(`return slatebox.slates.undo({ shareId: "canvas" })`, ["removes"]);
+  assert.equal(typeof unadded.undone, "string");
   assert.deepEqual(await texts(), ["Plan", "Beta", "Gamma"]);
 
   // A full lane: the rule's sentence, its code and status, the legal lanes and the board.

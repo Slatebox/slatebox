@@ -14,6 +14,7 @@ import { buildClientManifest, renderExecTool } from "../web/app/server/actions/c
 import { boundActions } from "../web/app/server/actions/exec-binding.mjs";
 import { EXEC_LIMITS } from "../web/app/server/exec/limits.mjs";
 import { memoryCollection, makeExecWorld } from "./exec-test-world.mjs";
+import { memoryMongo } from "./memory-mongo.mjs";
 
 const appRequire = createRequire(new URL("../web/app/package.json", import.meta.url));
 const { readNote, applyPlanToJSON } = await import(appRequire.resolve("slateboxjs/operations"));
@@ -473,4 +474,99 @@ test("one chip per agent: an invited agent stays on the roster while it is on th
   assert.equal(working.filter((a) => a.agentId === "inv1").length, 1);
   assert.equal(working[0].live, true);
   assert.equal(working[0].invited, true);
+});
+
+// Run receipts that slates.undo can read and mark (a Meteor collection in the app).
+function undoableRuns(w) {
+  const rows = memoryMongo();
+  let n = 0;
+  const order = (sort = {}) => (a, b) => {
+    for (const [key, dir] of Object.entries(sort)) {
+      if ((a[key] ?? -Infinity) < (b[key] ?? -Infinity)) return -dir;
+      if ((a[key] ?? -Infinity) > (b[key] ?? -Infinity)) return dir;
+    }
+    return 0;
+  };
+  Object.assign(w.deps.operationRuns, {
+    findOneAsync: async (selector, options = {}) => (await rows.find(selector).toArray()).sort(order(options.sort))[0] ?? null,
+    insertAsync: (row) => rows.insertOne({ _id: "run-" + n++, ...row }),
+    updateAsync: (selector, update) => rows.updateOne(selector, update),
+  });
+  return rows;
+}
+async function directAgent(w) {
+  const agent = await w.principalFor(["slates:read", "slates:write"]);
+  const probe = await edit(w, agent, [add("Probe")]);
+  const agentId = probe.body.suggestion.agentId;
+  await decide(w, person(), { decision: "discard", actionId: probe.body.suggestion.actionId });
+  w.flags.editDirectly = true;
+  await w.registry.run(person(), "agents.control", { shareId: "demo", agentId, editing: "direct" });
+  return { agent, agentId };
+}
+const slateUndo = (w, principal, direction = "undo") => w.registry.run(principal, direction === "undo" ? "slates.undo" : "slates.redo", { shareId: "demo" });
+
+test("an agent's slates.undo and slates.redo meet the rules its edits meet: paused, suggesting, and work a person already undid", async (t) => {
+  const w = world();
+  t.after(() => w.close());
+  undoableRuns(w);
+  const { agent, agentId } = await directAgent(w);
+  // The agent adds n1 straight to the slate; a person takes it back with the agent's Undo chip.
+  const saved = await edit(w, agent, [add("Straight in")]);
+  assert.equal(saved.body.outcome, "saved");
+  const n1 = saved.body.report.created[0];
+  const direct = (await list(w)).actions.at(-1);
+  await decide(w, person(), { decision: "undo", actionId: direct.actionId });
+  assert.ok(!ids(w).includes(n1));
+  // Nothing of the agent's is left to undo, and its redo never brings back what the person undid.
+  await assert.rejects(slateUndo(w, agent), { status: 409, code: "nothing_to_undo" });
+  await assert.rejects(slateUndo(w, agent, "redo"), { status: 409, code: "nothing_to_redo" });
+  assert.ok(!ids(w).includes(n1), "the person's undo stands");
+
+  const again = await edit(w, agent, [add("Second try")]);
+  const n2 = again.body.report.created[0];
+  // People paused agents: refused, saved nothing.
+  await w.registry.run(person(), "agents.control", { shareId: "demo", paused: true });
+  await assert.rejects(slateUndo(w, agent), { status: 423, code: "agents_paused" });
+  await w.registry.run(person(), "agents.control", { shareId: "demo", paused: false });
+  // Suggesting again: the agent cannot undo straight to the slate.
+  await w.registry.run(person(), "agents.control", { shareId: "demo", agentId, editing: "suggest" });
+  await assert.rejects(slateUndo(w, agent), { status: 409, code: "needs_direct_edit" });
+  assert.ok(ids(w).includes(n2));
+  // Direct again: the undo saves, and is filed as one action of the agent's (its own Undo chip).
+  await w.registry.run(person(), "agents.control", { shareId: "demo", agentId, editing: "direct" });
+  const before = (await list(w)).actions.length;
+  const undone = await slateUndo(w, agent);
+  assert.equal(undone.status, 200, JSON.stringify(undone.body));
+  assert.ok(!ids(w).includes(n2));
+  const actions = (await list(w)).actions;
+  assert.equal(actions.length, before + 1);
+  assert.equal(actions.at(-1).mode, "direct");
+  assert.equal(actions.at(-1).undoable, true, "a person can take the agent's undo back");
+});
+
+test("a held slates.undo names the edit it takes back: a newer edit makes the agreement stale; an undo that removes nothing is not held", async (t) => {
+  const w = world();
+  t.after(() => w.close());
+  undoableRuns(w);
+  const { agent } = await directAgent(w);
+  const gate = w.exec.gate;
+  await edit(w, agent, [add("First")]);
+  const held = await gate.directCall(agent, "slates.undo", { shareId: "demo" }).catch((error) => error);
+  assert.equal(held.code, "confirmation_required");
+  assert.deepEqual(held.details.reasons, [{ rule: "removes", shareId: "demo", count: 1, edit: "run-0" }]);
+  // The agent saves another edit before the person agrees: the agreement was for run-0, not the new one.
+  const newer = await edit(w, agent, [add("Newer")]);
+  const newest = newer.body.report.created[0];
+  await assert.rejects(gate.directCall(agent, "slates.undo", { shareId: "demo" }, { confirm: held.details.confirmationId }), { status: 409, code: "confirmation_invalid" });
+  assert.ok(ids(w).includes(newest), "nothing was undone");
+  // Agreed to the edit it takes back now, it saves.
+  const again = await gate.directCall(agent, "slates.undo", { shareId: "demo" }).catch((error) => error);
+  assert.equal(again.details.reasons[0].edit, "run-1");
+  const done = await gate.directCall(agent, "slates.undo", { shareId: "demo" }, { confirm: again.details.confirmationId });
+  assert.equal(done.body.undone, "run-1");
+  assert.ok(!ids(w).includes(newest));
+  // Redo adds the note back: it removes nothing, so it is not held.
+  const redone = await gate.directCall(agent, "slates.redo", { shareId: "demo" });
+  assert.equal(redone.body.redone, "run-1");
+  assert.ok(ids(w).includes(newest));
 });

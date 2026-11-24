@@ -7406,7 +7406,7 @@
       "post": {
         "operationId": "redoSlateEdit",
         "summary": "Redo",
-        "description": "Makes again the edit this caller last took back with slates.undo, if the caller has saved no edit on this slate since (a new edit clears what can be redone). Each part goes back to how the edit left it, unless someone else changed it since: that part stays as they left it and is listed in left[]. Saved as an edit, as slates.undo is. 409 nothing_to_redo when there is nothing of the caller's to redo.",
+        "description": "Makes again the edit this caller last took back with slates.undo, if the caller has saved no edit on this slate since (a new edit clears what can be redone). Each part goes back to how the edit left it, unless someone else changed it since: that part stays as they left it and is listed in left[]. Saved as an edit, and refused for an agent, as slates.undo is. 409 nothing_to_redo when there is nothing of the caller's to redo.",
         "x-required-scope": "slates:write",
         "x-slatebox": {
           "action": "slates.redo",
@@ -8076,7 +8076,7 @@
       "post": {
         "operationId": "undoSlateEdit",
         "summary": "Undo",
-        "description": "Takes back the newest canvas edit this caller saved on the slate with slates.applyOperations (notes, connections, slate settings) that is not undone yet: the same account and the same token, so it never takes back a person's or another agent's edit. Each note, connection and setting the edit changed goes back to how it was, unless someone else changed it since: that part stays as they left it and is listed in left[]. The undo is saved as an edit (the revision goes up, every open canvas shows it) and answers the run it undid (undone). Workshop and map edits are undone with undo_workshop_edit. 409 nothing_to_undo when no edit of the caller is left to undo; 409 slate_changed when the slate changed while it was being saved (call again).",
+        "description": "Takes back the newest canvas edit this caller saved on the slate with slates.applyOperations (notes, connections, slate settings) that is not undone yet: the same account and the same token, so it never takes back a person's or another agent's edit. Each note, connection and setting the edit changed goes back to how it was, unless someone else changed it since: that part stays as they left it and is listed in left[]. The undo is saved as an edit (the revision goes up, every open canvas shows it) and answers the run it undid (undone). Workshop and map edits are undone with undo_workshop_edit. An agent undoes by the rules its edits meet: 423 agents_paused while people paused agents, 409 needs_direct_edit unless a person lets it edit directly. 409 nothing_to_undo when no edit of the caller is left to undo; 409 slate_changed when the slate changed while it was being saved (call again).",
         "x-required-scope": "slates:write",
         "x-slatebox": {
           "action": "slates.undo",

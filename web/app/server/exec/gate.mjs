@@ -167,6 +167,20 @@ export function createGate({
     // connection, or changesNoSlate, such as drawing shape candidates) widens nothing.
     const widensAccess =
       (action.scope === 'slates:share' && !action.destructive) || (action.openWorld && !action.changesNoSlate) || action.confirm
+    // A call whose effect depends on the slate as it stands (slates.undo: the edit it takes back) is read
+    // first: held only when it removes something, and the agreement names the edit it would take back.
+    if (action.peek && typeof registry.peek === 'function') {
+      if (widensAccess) reasons.push({ rule: 'widens_access', ...(shareId && { shareId }) })
+      let seen = null
+      try {
+        seen = await registry.peek(ctx.principal, action.id, input)
+      } catch {
+        // The save itself answers with the same refusal.
+        return { reasons }
+      }
+      if (seen?.removes) reasons.push({ rule: 'removes', ...(shareId && { shareId }), count: seen.removes, ...(seen.edit && { edit: seen.edit }) })
+      return { reasons, ...(seen?.edit && { fingerprintInput: { ...input, edit: seen.edit } }) }
+    }
     if (action.id !== 'slates.applyOperations') {
       if (action.destructive && (!action.removes || action.removes(input))) reasons.push({ rule: 'removes', ...(shareId && { shareId }) })
       if (widensAccess) reasons.push({ rule: 'widens_access', ...(shareId && { shareId }) })
@@ -299,7 +313,7 @@ export function createGate({
       const assessed = await assess(ctx, action, given)
       rewrites = assessed.rewrites || 0
       if (assessed.reasons.length) {
-        const fingerprint = callFingerprint(name, given)
+        const fingerprint = callFingerprint(name, assessed.fingerprintInput ?? given)
         const confirmed =
           ctx.confirmation &&
           ctx.confirmation.fingerprints.includes(fingerprint) &&
@@ -548,7 +562,7 @@ export function createGate({
     if (refusedBeforeHold(principal, action, input)) return registry.run(principal, actionId, input, { idempotencyKey })
     const assessed = await assess(ctx, action, input)
     if (assessed.reasons.length) {
-      const fingerprint = callFingerprint(actionId, input)
+      const fingerprint = callFingerprint(actionId, assessed.fingerprintInput ?? input)
       if (confirm !== undefined) {
         // Single use: the first request that presents the id takes it.
         const claimed = await store.claimConfirmation({ id: confirm, subject, codeSha256: DIRECT_CODE, execId: 'api:' + confirm })

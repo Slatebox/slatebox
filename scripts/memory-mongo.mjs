@@ -1,5 +1,6 @@
 // An in-memory stand-in for a MongoDB driver collection, with the calls the save core and its
-// callers make: findOne (selectors on dotted paths, null matching a missing field, $ne, $in),
+// callers make: findOne (selectors on dotted paths, null matching a missing field, $ne, $in, $lt,
+// $gt, and a top-level $or),
 // insertOne (duplicate _id answers code 11000), updateOne ($set, $unset, $inc on dotted paths;
 // $push with $each and $slice) and find().toArray().
 
@@ -19,12 +20,14 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 function matches(doc, selector = {}) {
   return Object.entries(selector).every(([path, want]) => {
+    if (path === "$or") return want.some((branch) => matches(doc, branch));
     const have = get(doc, path);
     if (want && typeof want === "object" && !Array.isArray(want)) {
       if ("$ne" in want) return !same(have, want.$ne);
       if ("$in" in want) return want.$in.some((item) => (Array.isArray(have) ? have.some((h) => same(h, item)) : same(have, item)));
       if ("$exists" in want) return (have !== undefined) === want.$exists;
       if ("$gt" in want) return have > want.$gt;
+      if ("$lt" in want) return have != null && have < want.$lt;
     }
     if (want === null) return have === null || have === undefined;
     if (Array.isArray(have) && !Array.isArray(want)) return have.some((h) => same(h, want));

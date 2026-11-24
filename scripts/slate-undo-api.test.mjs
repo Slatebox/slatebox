@@ -200,6 +200,45 @@ test("an agent's work kept or undone through its suggestions is never slates.und
   assert.equal(await textOf(env, "b"), "Beta, the agent's action undone");
 });
 
+test("undo leaves a note it added when someone else has drawn a line to it since, and says so; the line stays", async (t) => {
+  const env = await seeded(t);
+  await edit(env, "owner", { kind: "add_nodes", count: 1, ids: ["n1"], text: "Agent idea", shape: "rectangle" });
+  await edit(env, "peer", { kind: "connect_nodes", from: { ids: ["a"] }, to: { ids: ["n1"] }, ids: ["L1"] });
+  const undone = await undo(env, "owner");
+  assert.equal(undone.status, 200, JSON.stringify(undone.body));
+  assert.deepEqual(undone.body.operations, []);
+  assert.deepEqual(undone.body.left, [{ kind: "note", id: "n1", reason: "connected since by someone else" }]);
+  assert.ok((await stored(env)).some((n) => n.options.id === "n1"));
+  const a = (await stored(env)).find((n) => n.options.id === "a");
+  assert.deepEqual(a.relationships.associations.map((l) => l.childId), ["n1"]);
+});
+
+test("a note the caller added with its own line goes, line and all, when nobody else connected to it", async (t) => {
+  const env = await seeded(t);
+  await edit(env, "owner",
+    { kind: "add_nodes", count: 1, ids: ["n1"], text: "Agent idea", shape: "rectangle" },
+    { kind: "connect_nodes", from: { ids: ["a"] }, to: { ids: ["n1"] }, ids: ["mine"] });
+  const undone = await undo(env, "owner");
+  assert.equal(undone.status, 200, JSON.stringify(undone.body));
+  assert.deepEqual(undone.body.left, []);
+  assert.equal((await stored(env)).some((n) => n.options.id === "n1"), false);
+});
+
+test("two undo calls at once take back two different edits, never the same one twice", async (t) => {
+  const env = await seeded(t);
+  await edit(env, "owner", { kind: "update_nodes", target: { ids: ["a"] }, changes: { text: "Alpha 2" } });
+  await edit(env, "owner", { kind: "update_nodes", target: { ids: ["b"] }, changes: { text: "Beta 2" } });
+  // Both calls read their edit before either marks it: a slow database.
+  const read = env.deps.operationRuns.findOneAsync;
+  env.deps.operationRuns.findOneAsync = async (...args) => { const found = await read(...args); await new Promise((resolve) => setTimeout(resolve, 5)); return found; };
+  const [first, second] = await Promise.all([undo(env, "owner"), undo(env, "owner")]);
+  assert.deepEqual([first.status, second.status], [200, 200], JSON.stringify([first.body, second.body]));
+  assert.deepEqual([first.body.undone, second.body.undone].sort(), ["run-0", "run-1"]);
+  assert.equal(await textOf(env, "a"), "Alpha");
+  assert.equal(await textOf(env, "b"), "Beta");
+  assert.ok(env.runs.docs().every((run) => run.claimedAt == null), "no edit is left held");
+});
+
 test("slates.undo and slates.redo are in the action contract with factual descriptions", async () => {
   const contract = JSON.parse(await (await import("node:fs/promises")).readFile(new URL("../web/app/server/actions/generated/contract.json", import.meta.url), "utf8"));
   const text = JSON.stringify(contract);
