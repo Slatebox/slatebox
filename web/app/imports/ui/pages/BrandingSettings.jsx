@@ -75,7 +75,10 @@ export default function BrandingSettings() {
   useEffect(() => {
     let live = true
     if (userId) AuthManager.userHasClaim(userId, [CONSTANTS.claims.admin._id]).then((yes) => live && setAdmin(Boolean(yes)))
-    return () => { live = false }
+    // The client check waits for the person to hold some permission: someone with none is told the
+    // page is read-only after a moment (a late answer still counts).
+    const wait = setTimeout(() => live && setAdmin((known) => (known === null ? false : known)), 5000)
+    return () => { live = false; clearTimeout(wait) }
   }, [userId])
 
   const { ready, orgId, settings, intentions } = useTracker(() => {
