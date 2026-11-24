@@ -211,7 +211,6 @@ const CONSTANTS = {
   },
   systemSettings: {
     videoMetaData: 'videoMetaData',
-    welcomeMessage: 'welcomeMessage',
     youTubeAudioToNotesMessage: 'youTubeAudioToNotesMessage',
     presentationPrompts: 'presentationPrompts',
   },
@@ -270,8 +269,6 @@ const CONSTANTS = {
       getTokenByEmailForTesting: 'users.getTokenByEmailForTesting',
       allowedInPrivateBeta: 'users.allowedInPrivateBeta',
       isMasterUser: 'users.isMasterUser',
-      getHelpStatus: 'users.getHelpStatus',
-      setHelpStatus: 'users.setHelpStatus',
       generateSpecialUseLoginToken: 'users.generateSpecialUseLoginToken',
       attemptLoginWithLink: 'users.attemptLoginWithLink',
       getConversationWelcome: 'users.getConversationWelcome',

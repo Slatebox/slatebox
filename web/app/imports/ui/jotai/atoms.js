@@ -1,5 +1,4 @@
 import { atom } from 'jotai'
-import { atomWithStorage } from 'jotai/utils'
 import CONSTANTS from '../../api/common/constants'
 
 export const siteLocale = atom('en-US')
@@ -174,10 +173,6 @@ export const currentAISettings = atom({
   url: '',
   levelOfDetail: 1,
   wordsPerNode: 5,
-})
-
-export const pulseCurrentHelpStatus = atomWithStorage({
-  pulseCurrentPath: true,
 })
 
 export const aiSettingsModalOpen = atom(false)

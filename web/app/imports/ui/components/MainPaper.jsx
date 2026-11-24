@@ -4,7 +4,6 @@ import Paper from '@mui/material/Paper'
 import SBRoutes from '../SBRoutes'
 import Register from '../common/Register'
 import VideoHelpGuides from '../common/VideoHelpGuides'
-import InitialHelp from '../common/InitialHelp'
 
 function MainPaper({ isOnCanvas, embeddedSlate, loadedUser }) {
   const theme = useTheme()
@@ -25,7 +24,6 @@ function MainPaper({ isOnCanvas, embeddedSlate, loadedUser }) {
       <SBRoutes />
       <Register user={loadedUser} />
       <VideoHelpGuides />
-      <InitialHelp />
     </Paper>
   )
 }

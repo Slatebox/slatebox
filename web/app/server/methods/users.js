@@ -30,7 +30,6 @@ import {
   SlateApiTokens,
   SlateOperationRuns,
   SlatePresentations,
-  SystemSettings,
   LoginLinks,
   APILinks,
   ChatIntentions,
@@ -648,52 +647,6 @@ method[CONSTANTS.methods.users.delete] = async function removeOwnAccount() {
   }
   if (connection) await this.setUserId(null)
   return true
-}
-
-method[CONSTANTS.methods.users.getHelpStatus] = async () => {
-  const user = await Meteor.userAsync()
-  if (user) {
-    const hs = user.helpStatus || {
-      firstTime: true,
-      locales: ['/'],
-    }
-    const slateCount = await Slates.find({
-      userId: Meteor.userId(),
-    }).countAsync()
-    // Joining someone else's slate is already a first session. The generic
-    // first-slate tutorial would cover the board link when this teammate returns.
-    let welcomeMessage
-    if (hs.firstTime && !await JoinedSlates.findOneAsync(user._id, { fields: { _id: 1 } })) {
-      welcomeMessage = await SystemSettings.findOneAsync({ _id: CONSTANTS.systemSettings.welcomeMessage })
-    }
-    return { status: hs, slateCount, welcomeMessage }
-  }
-  return null
-}
-
-method[CONSTANTS.methods.users.setHelpStatus] = async ({
-  path,
-  confirmFirstTime,
-}) => {
-  const user = await Meteor.userAsync()
-  if (user) {
-    const currentStatus = user.helpStatus || {
-      firstTime: true,
-      locales: ['/'],
-    }
-    if (confirmFirstTime) {
-      currentStatus.firstTime = false
-    }
-    if (path && !currentStatus.locales.includes(path)) {
-      currentStatus.locales.push(path)
-    }
-    await Meteor.users.updateAsync(
-      { _id: Meteor.userId() },
-      { $set: { helpStatus: currentStatus } }
-    )
-    return true
-  }
-  return null
 }
 
 // A team member with canEditUsers changes the team roles of members of the same team. The

@@ -34,17 +34,9 @@ if ((await Collaboration.find().countAsync()) === 0) {
   })
 }
 
-// if (
-//   !(await SystemSettings.findOneAsync({
-//     _id: CONSTANTS.systemSettings.welcomeMessage,
-//   }))
-// ) {
-//   await SystemSettings.insertAsync({
-//     _id: CONSTANTS.systemSettings.welcomeMessage,
-//     title: `Welcome To Slatebox!`,
-//     body: `<p>Thanks so much for trying Slatebox!</p><br /><p>TWO things:</p><ul><li>There is no save button, slates are always automatically saved.</li><li>Click the NEW button in the upper right to create your first slate. All slates are automatically connected to Slatebox AI for collaboration. Have fun!</li></ul><p>If you have any questions click the contact support icon <img src='https://files.slatebox.com/contact_support.png' style='height:25px;'/> in the upper right.</p><p>We're excited to see what you create!</p>`,
-//   })
-// }
+// The old first-visit welcome dialog (its help-icon tour and video) is gone; a database that still
+// holds its text drops it here, so nothing can show it again.
+await SystemSettings.removeAsync({ _id: 'welcomeMessage' })
 
 await SystemSettings.removeAsync({
   _id: CONSTANTS.systemSettings.youTubeAudioToNotesMessage,
