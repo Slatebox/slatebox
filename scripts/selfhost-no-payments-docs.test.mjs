@@ -8,7 +8,9 @@ import { readFileSync } from 'node:fs'
 
 const read = path => readFileSync(new URL('../' + path, import.meta.url), 'utf8')
 const ALLOWED = /Slatebox Pro and balances exist only on Slatebox Cloud\./
-const ALLOWED_ALL = new RegExp(ALLOWED.source, 'g')
+// Restated (round-2 review finding 9): self-host documents never mention balances; their one sentence is this
+const SELF_HOST_ALLOWED = /Slatebox Pro exists only on Slatebox Cloud\./
+const ALLOWED_ALL = new RegExp(SELF_HOST_ALLOWED.source, 'g')
 const PAYMENTS = [
   [/stripe/i, 'Stripe'], [/\bmeter(ing|ed|s)?\b/i, 'the meter'], [/\btop(ped)?[- ]?ups?\b|\btop up\b/i, 'top-ups'],
   [/\bbalances?\b/i, 'balances'], [/\bprice[ _-]?ids?\b|\bprice_[A-Za-z0-9]/i, 'price IDs'], [/\bwebhooks?\b/i, 'webhooks'],
@@ -25,7 +27,8 @@ test('the self-hosting kit never mentions payments, the meter, top-ups, balances
 })
 
 test('the READMEs say Slatebox Pro and balances are Slatebox Cloud only', () => {
-  assert.match(read('self-host/README.md'), ALLOWED)
+  assert.match(read('self-host/README.md'), SELF_HOST_ALLOWED)
+  assert.doesNotMatch(read('self-host/README.md'), /\bbalances?\b/i)
   assert.match(read('README.md'), ALLOWED)
   assert.doesNotMatch(read('web/README.md'), /self-hosted (server|Slatebox) has no meter unless|operator turns one on/i, 'web/README.md: a self-hoster has no meter to turn on')
 })

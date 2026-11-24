@@ -132,7 +132,7 @@ Profile, AI. An agent can set and test all of this through the API (`ai`,
 `ai-set`, `ai-check`) with a token that has the `ai:settings` permission.
 
 Your provider bills the account that issued its key; Slatebox charges nothing on
-your own server. Slatebox Pro and balances exist only on Slatebox Cloud.
+your own server. Slatebox Pro exists only on Slatebox Cloud.
 
 ## Enterprise features (Upgrade on prem)
 
