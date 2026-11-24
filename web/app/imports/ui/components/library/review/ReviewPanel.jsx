@@ -44,6 +44,11 @@ export default function ReviewPanel({ slate }) {
   const [savingMeta, setSavingMeta] = React.useState(false)
   const [reply, setReply] = React.useState('')
   const [decision, setDecision] = React.useState(null)
+  // The dialog keeps its words while it fades out after a decision (decision is null by then).
+  const [asked, setAsked] = React.useState(null)
+  const [askedVersion, setAskedVersion] = React.useState(null)
+  React.useEffect(() => { if (decision) setAsked(decision) }, [decision])
+  const askedNow = decision || asked
   const [decisionText, setDecisionText] = React.useState('')
   const [deciding, setDeciding] = React.useState(false)
   const [done, setDone] = React.useState(null)
@@ -67,6 +72,8 @@ export default function ReviewPanel({ slate }) {
   const state = item ? reviewStateOf(item) : null
   const reviewing = state === 'in_review'
   const nextVersion = (item?.versionCount || 0) + 1
+  // A decision is asked about the version as it stands when the button is pressed.
+  const choose = (kind) => { setAskedVersion(nextVersion); setDecision(kind) }
 
   async function ask(text) {
     const said = (text ?? message).trim()
@@ -278,35 +285,35 @@ export default function ReviewPanel({ slate }) {
       {(wide || open) && item && (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, px: 2, py: 1.25, borderTop: 1, borderColor: 'divider' }} data-testid="review-actions">
           {reviewing && <>
-            <Button variant="contained" color="success" onClick={() => setDecision('approve')} data-testid="review-approve">Approve and publish</Button>
-            <Button variant="outlined" onClick={() => setDecision('changes')} data-testid="review-changes">Request changes</Button>
-            <Button color="error" onClick={() => setDecision('reject')} data-testid="review-reject">Reject</Button>
+            <Button variant="contained" color="success" onClick={() => choose('approve')} data-testid="review-approve">Approve and publish</Button>
+            <Button variant="outlined" onClick={() => choose('changes')} data-testid="review-changes">Request changes</Button>
+            <Button color="error" onClick={() => choose('reject')} data-testid="review-reject">Reject</Button>
           </>}
-          {item.status === 'published' && !reviewing && <Button color="error" onClick={() => setDecision('unpublish')}>Unpublish</Button>}
+          {item.status === 'published' && !reviewing && <Button color="error" onClick={() => choose('unpublish')}>Unpublish</Button>}
         </Box>
       )}
       <Dialog open={Boolean(decision)} onClose={() => !deciding && setDecision(null)} fullWidth maxWidth="xs">
         <DialogTitle>
-          {decision === 'approve' && `Publish version ${nextVersion} for everyone?`}
-          {decision === 'changes' && 'Ask the author for changes'}
-          {decision === 'reject' && 'Turn this down?'}
-          {decision === 'unpublish' && 'Take it out of the library?'}
+          {askedNow === 'approve' && `Publish version ${askedVersion ?? nextVersion} for everyone?`}
+          {askedNow === 'changes' && 'Ask the author for changes'}
+          {askedNow === 'reject' && 'Turn this down?'}
+          {askedNow === 'unpublish' && 'Take it out of the library?'}
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1.5 }}>
-            {decision === 'approve' && 'What is on this canvas now is what people will get. The author is told.'}
-            {decision === 'changes' && 'Say what to change. The author sees your message and can submit it again.'}
-            {decision === 'reject' && 'Say why. The author sees your reason.'}
-            {decision === 'unpublish' && 'Copies people already made stay theirs. Say why: the author is told.'}
+            {askedNow === 'approve' && 'What is on this canvas now is what people will get. The author is told.'}
+            {askedNow === 'changes' && 'Say what to change. The author sees your message and can submit it again.'}
+            {askedNow === 'reject' && 'Say why. The author sees your reason.'}
+            {askedNow === 'unpublish' && 'Copies people already made stay theirs. Say why: the author is told.'}
           </Typography>
-          <TextField autoFocus fullWidth multiline minRows={2} label={decision === 'approve' ? 'Message to the author (optional)' : 'Message to the author'}
+          <TextField autoFocus fullWidth multiline minRows={2} label={askedNow === 'approve' ? 'Message to the author (optional)' : 'Message to the author'}
             value={decisionText} onChange={(event) => setDecisionText(event.target.value)} inputProps={{ maxLength: 2000, 'data-testid': 'decision-message' }} />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDecision(null)} disabled={deciding}>Cancel</Button>
-          <Button variant="contained" color={decision === 'approve' ? 'success' : decision === 'changes' ? 'primary' : 'error'} onClick={decide}
-            disabled={deciding || (decision !== 'approve' && !decisionText.trim())} data-testid="decision-confirm">
-            {decision === 'approve' ? 'Publish' : decision === 'changes' ? 'Send back' : decision === 'reject' ? 'Reject' : 'Unpublish'}
+          <Button variant="contained" color={askedNow === 'approve' ? 'success' : askedNow === 'changes' ? 'primary' : 'error'} onClick={decide}
+            disabled={deciding || (askedNow !== 'approve' && !decisionText.trim())} data-testid="decision-confirm">
+            {askedNow === 'approve' ? 'Publish' : askedNow === 'changes' ? 'Send back' : askedNow === 'reject' ? 'Reject' : 'Unpublish'}
           </Button>
         </DialogActions>
       </Dialog>

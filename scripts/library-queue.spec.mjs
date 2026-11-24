@@ -163,6 +163,7 @@ test('a slate is published from Share, refined and moved on the review canvas, a
   const n = (await confirmDialog.getByRole('heading').innerText()).match(/version (\d+)/)[1]
   await page.getByTestId('decision-confirm').click()
   await expect(review(page).getByTestId('review-done')).toContainText(`Published as version ${n}`, { timeout: 60000 })
+  await expect(confirmDialog).toBeHidden()
   await shot(page, '09-approved')
 
   // Signed out: the public API lists it and answers it with the moved note; the page opens.
@@ -226,6 +227,8 @@ test('request changes goes to the author with its message, and the resubmission 
   const row = author.page.getByTestId('mine-row').filter({ hasText: title })
   await expect(row.getByTestId('mine-status')).toHaveText('Needs changes', { timeout: 30000 })
   await expect(row.getByTestId('mine-last-message')).toContainText('Name the columns after your own process')
+  // Its still, drawn by the one renderer, for the author too.
+  await expect(row.getByTestId('library-preview').locator('svg').first()).toBeVisible({ timeout: 30000 })
   await shot(author.page, '13-mine-needs-changes')
   await author.page.goto(author.slate)
   const bell = author.page.getByRole('button', { name: /notification|message/i }).first()
