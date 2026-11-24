@@ -236,7 +236,7 @@ assert.equal(
 )
 assert.match(
   reqSourceForPolicy,
-  /if \(errs >= SHAPE_RETRY_LIMIT\)\s*\{[\s\S]{0,600}?return \{\s*abort: true,[\s\S]{0,200}fallbackBlocked:/,
+  /if \(errs >= (?:SHAPE_RETRY_LIMIT|\(aiOpts\.shapeRetries \?\? SHAPE_RETRY_LIMIT\))\)\s*\{[\s\S]{0,600}?return \{\s*abort: true,[\s\S]{0,200}fallbackBlocked:/,
   'the invalid-JSON ladder must DEGRADE at the cap with an explicit policy gate — the old throw re-entered the infra-failure catch and re-burned the full fallback ladder (12-call dead chains, audit share …427121)',
 )
 assert.doesNotMatch(
