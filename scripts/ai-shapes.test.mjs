@@ -415,7 +415,7 @@ test("chat: a program that draws a rocket and puts it on the selected notes prev
 });
 
 test("the self-host settings example documents choosing a connection for shapes", async () => {
-  const readme = await readFile(new URL("../self-host/README.md", import.meta.url), "utf8");
+  const readme = await readFile(new URL("../self-host/COMPOSE-KIT.md", import.meta.url), "utf8");
   assert.match(readme, /"shape": "meta-muse"/);
   assert.match(readme, /`images` or `shape` \(drawing custom note shapes/);
 });

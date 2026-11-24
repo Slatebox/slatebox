@@ -47,7 +47,7 @@ export default async function processScratch(aiOpts) {
     slateShareId: aiOpts.shareId,
   })
 
-  console.log('kicking off processing', prompts)
+  console.log('kicking off processing', { aid: aiOpts.id, prompts: prompts.length })
   let nodeError = null
 
   async function kickOff() {
@@ -57,7 +57,7 @@ export default async function processScratch(aiOpts) {
       return false
     }
 
-    console.log('full JSON', JSON.stringify(response, null, 2))
+    console.log('full JSON', { aid: aiOpts.id, ideas: response?.json?.ideaPlan?.length ?? 0, nouns: response?.json?.nouns?.length ?? 0 })
     if (
       !response?.json?.ideaPlan ||
       response?.json?.ideaPlan?.length === 0 ||
@@ -182,7 +182,7 @@ export default async function processScratch(aiOpts) {
       prompts.push({ role: 'user', content: JSON.stringify({ id: idea }) })
       try {
         const nextIdea = await req(prompts, aiOpts)
-        console.log('got nextIdea', nextIdea)
+        console.log('got nextIdea', { aid: aiOpts.id, errs: nextIdea?.errs ?? 0 })
         aiOpts.errorCount = nextIdea.errs
         prompts.push({
           role: 'assistant',

@@ -372,7 +372,7 @@ test('self-host passes GEMINI_API_KEY and META_API_KEY as optional blanks and do
   const compose = readFileSync(new URL('self-host/compose.yaml', root), 'utf8')
   assert.match(compose, /GEMINI_API_KEY: \$\{GEMINI_API_KEY:-\}/)
   assert.match(compose, /META_API_KEY: \$\{META_API_KEY:-\}/)
-  const readme = readFileSync(new URL('self-host/README.md', root), 'utf8')
+  const readme = readFileSync(new URL('self-host/COMPOSE-KIT.md', root), 'utf8')
   assert.match(readme, /"apiKeyEnv": "META_API_KEY"/)
   assert.match(readme, /"apiKeyEnv": "GEMINI_API_KEY"/)
   assert.match(readme, /"toolChoice": "required"/)

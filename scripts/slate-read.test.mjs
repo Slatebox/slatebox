@@ -390,7 +390,7 @@ test("self-host passes HTTP_FORWARDED_COUNT to the app and says what to set it t
   const compose = await readFile(new URL("../self-host/compose.yaml", import.meta.url), "utf8");
   const app = compose.slice(compose.indexOf("\n  app:\n"));
   assert.match(app.slice(0, app.indexOf("\n    ports:")), /\n {6}HTTP_FORWARDED_COUNT: \$\{HTTP_FORWARDED_COUNT:-\}$/m);
-  const readme = await readFile(new URL("../self-host/README.md", import.meta.url), "utf8");
+  const readme = await readFile(new URL("../self-host/COMPOSE-KIT.md", import.meta.url), "utf8");
   assert.match(readme, /Set `HTTP_FORWARDED_COUNT` in `\.state\/instance\.env`/);
   assert.match(readme, /`1` behind the bundled Caddy/);
 });

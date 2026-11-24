@@ -426,14 +426,9 @@ async function createAIConversationNode(
     const { cx, cy, adjustedVectorPath, width, height } =
       slate.scaleProportionateToSlateFit({ path: nodeToCreate.backgroundNoun })
 
-    console.log(
-      'Scaling background noun with transform:',
-      cx,
-      cy,
-      width,
-      height,
-      adjustedVectorPath
-    )
+    console.log('Scaling background noun with transform:', cx, cy, width, height, {
+      pathLength: adjustedVectorPath?.length ?? 0,
+    })
 
     // do NOT ADD filters to the background noun
     // it kills the mobile experience

@@ -4,6 +4,7 @@
 import { Meteor } from 'meteor/meteor'
 import { Random } from 'meteor/random'
 import { Accounts } from 'meteor/accounts-base'
+import { attemptedPassword, isSharedGuestPassword } from './shared-guest-password.mjs'
 
 const trusted = new Meteor.EnvironmentVariable()
 
@@ -12,6 +13,7 @@ export function createTrustedUser(options, fields = {}) {
 }
 
 export function onCreateUser(suggested, user) {
+  if (isSharedGuestPassword(suggested.password)) throw new Meteor.Error(403, 'Choose another password.')
   const fields = trusted.get() || {}
   const muser = user
   muser.isAnonymous = fields.isAnonymous === true
@@ -52,6 +54,10 @@ export async function guestLoginToken(userId) {
 Accounts.validateLoginAttempt((attempt) => {
   if (attempt.type === 'password' && attempt.user?.isAnonymous) {
     throw new Meteor.Error(403, 'Guests sign in with their saved session.')
+  }
+  // An account saved from such a guest may still have that password: it is refused for everyone.
+  if (attempt.type === 'password' && isSharedGuestPassword(attemptedPassword(attempt))) {
+    throw new Meteor.Error(403, 'That password is no longer accepted. Reset your password to sign in.')
   }
   return attempt.allowed
 })

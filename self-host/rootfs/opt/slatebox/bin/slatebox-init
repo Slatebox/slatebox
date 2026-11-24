@@ -1,0 +1,301 @@
+#!/usr/bin/env bash
+# The supervisor of the Slatebox container. tini is PID 1: it reaps orphaned
+# processes and hands SIGTERM to this script, which is its only child.
+#
+#   mongod   the database, a single-member replica set under /data/db
+#   relay    live editing, on loopback
+#   app      the Slatebox app, on loopback
+#   proxy    Caddy, the one published port in front of the app and the relay
+#   sso      Keycloak, on loopback under /auth; only with SLATEBOX_SSO=keycloak
+#
+# Every service is required. If one ends by itself, the others are stopped in
+# order and the container exits with status 1 so Docker's restart policy can
+# act. `docker stop` ends with status 0 after MongoDB has closed its files.
+set -Eeuo pipefail
+umask 077
+
+readonly ROOT=/opt/slatebox
+readonly LIB=$ROOT/lib
+readonly RUN=/run/slatebox
+
+declare -A SERVICE=()   # pid -> name, for the services that must stay up
+LOGGERS=()
+signal=''
+ended=''
+status=0
+
+say() { printf '[slatebox] %s\n' "$*"; }
+
+on_signal() { [[ $signal == stop ]] || signal=$1; }
+trap 'on_signal stop' TERM INT
+trap 'on_signal pause' USR1
+trap 'on_signal resume' USR2
+
+# Send a process's output to the container log with its name in front.
+# MongoDB reports every routine event and every host-tuning hint as a JSON
+# line; keep its errors and leave the rest out so the log stays readable.
+logger() {
+  case $1 in
+    mongo) exec sed -u -e '/^{"t":.*"s":"[IWD][0-9]*"/d' -e "s/^/[mongo] /" ;;
+    *) exec sed -u "s/^/[$1] /" ;;
+  esac
+}
+
+# start NAME [LABEL] -- COMMAND...   run a service in the background
+start() {
+  local name=$1 label=$1 fd
+  shift
+  if [[ $1 != -- ]]; then label=$1; shift; fi
+  shift
+  exec {fd}> >(logger "$label")
+  LOGGERS+=("$!")
+  "$@" >&"$fd" 2>&1 &
+  SERVICE[$!]=$name
+  exec {fd}>&-
+}
+
+# MongoDB 8.0 is built for newer processors than Docker itself needs. On an
+# older one it dies at once with SIGILL (exit 132); say what that means.
+cpu_unsupported() {
+  case $(uname -m) in
+    x86_64) say 'This processor cannot run MongoDB 8.0: it needs the AVX instruction set (Intel Sandy Bridge, AMD Bulldozer or newer). In a virtual machine, give the guest the host CPU type so that AVX is passed through.' ;;
+    aarch64) say 'This processor cannot run MongoDB 8.0: it needs ARMv8.2-A or newer (a Raspberry Pi 5 works; a Raspberry Pi 4 or older does not).' ;;
+    *) say 'This processor cannot run MongoDB 8.0.' ;;
+  esac
+  say 'Run Slatebox on a newer machine, or keep the database on a MongoDB server elsewhere and set MONGO_URL.'
+}
+
+with_env() {
+  local file=$1 dir=$2
+  shift 2
+  cd "$dir"
+  set -a
+  # shellcheck disable=SC1090
+  . "$file"
+  set +a
+  exec "$@"
+}
+
+# Wait until one of the given processes ends or a signal arrives.
+# Bash 5.2's wait -n can miss a child that bash has already reaped, and then
+# blocks for good (seen as a start that hung after "Database ready."). A
+# short-lived ticker makes wait -n return every two seconds at the latest, and
+# a process that is gone by then is collected with a plain wait, which knows
+# the status of every reaped child.
+await() {
+  local tick pid
+  ended=''
+  status=0
+  sleep 2 &
+  tick=$!
+  wait -n -p ended "$@" "$tick" || status=$?
+  ended=${ended:-}
+  if [[ $ended == "$tick" ]]; then
+    ended=''
+    status=0
+  else
+    kill "$tick" 2>/dev/null || true
+    wait "$tick" 2>/dev/null || true
+  fi
+  [[ -z $ended ]] || return 0
+  for pid in "$@"; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      ended=$pid
+      status=0
+      wait "$pid" 2>/dev/null || status=$?
+      return 0
+    fi
+  done
+}
+
+# TERM the named services, give them three seconds (GRACE), then KILL. The app
+# and the relay hold no state of their own: slates live in MongoDB.
+stop_services() {
+  local pid name alive deadline pids=()
+  for pid in "${!SERVICE[@]}"; do
+    for name in "$@"; do
+      if [[ ${SERVICE[$pid]} == "$name" ]]; then pids+=("$pid"); fi
+    done
+  done
+  ((${#pids[@]})) || return 0
+  for pid in "${pids[@]}"; do unset "SERVICE[$pid]"; done
+  kill -TERM "${pids[@]}" 2>/dev/null || true
+  deadline=$((SECONDS + ${GRACE:-3}))
+  while ((SECONDS < deadline)); do
+    alive=0
+    for pid in "${pids[@]}"; do
+      if kill -0 "$pid" 2>/dev/null; then alive=1; fi
+    done
+    ((alive)) || break
+    sleep 0.1
+  done
+  kill -KILL "${pids[@]}" 2>/dev/null || true
+  wait "${pids[@]}" 2>/dev/null || true
+}
+
+shutdown() {
+  local pid mongo=()
+  trap '' TERM INT USR1 USR2
+  say 'Stopping.'
+  # The database's clients go first; they end at once.
+  stop_services ready sso-setup app relay
+  # Then the proxy, Keycloak and MongoDB side by side. The two databases are
+  # waited for, so that they can close their files inside the time Docker
+  # allows a stopping container.
+  for pid in "${!SERVICE[@]}"; do
+    kill -TERM "$pid" 2>/dev/null || true
+    if [[ ${SERVICE[$pid]} == mongo || ${SERVICE[$pid]} == sso ]]; then mongo+=("$pid"); fi
+  done
+  if ((${#mongo[@]})); then wait "${mongo[@]}" 2>/dev/null || true; fi
+  stop_services proxy
+  SERVICE=()
+  wait "${LOGGERS[@]}" 2>/dev/null || true
+  say 'Stopped.'
+}
+
+# Run a start-up step to completion while staying alert to `docker stop` and
+# to a service that ends underneath it.
+step() {
+  local fd pid rc
+  exec {fd}> >(logger slatebox)
+  LOGGERS+=("$!")
+  "$@" >&"$fd" 2>&1 &
+  pid=$!
+  exec {fd}>&-
+  while :; do
+    await "$pid" "${!SERVICE[@]}"
+    if [[ $ended == "$pid" ]]; then
+      rc=$status
+      break
+    fi
+    if [[ $signal == stop ]]; then
+      kill -TERM "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      shutdown
+      exit 0
+    fi
+    if [[ -n $ended ]]; then
+      say "${SERVICE[$ended]} stopped during start-up (exit $status)."
+      if [[ ${SERVICE[$ended]} == mongo && $status == 132 ]]; then cpu_unsupported; fi
+      unset "SERVICE[$ended]"
+      kill -TERM "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      shutdown
+      exit 1
+    fi
+  done
+  return "$rc"
+}
+
+# Keycloak, and the step that sets up its realm. Only with SLATEBOX_SSO=keycloak.
+start_sso() {
+  [[ $SLATEBOX_SSO == keycloak ]] || return 0
+  start sso -- with_env "$RUN/keycloak.env" /opt/keycloak /opt/keycloak/bin/kc.sh start --optimized
+  start sso-setup slatebox -- node "$LIB/keycloak-init.mjs" 600
+}
+
+start_app() {
+  start relay -- with_env "$RUN/relay.env" "$ROOT/relay" node bin/server.js
+  start app -- with_env "$RUN/app.env" "$ROOT/app/bundle" node main.js
+  # Announce readiness only after a signed live-editing connection works
+  # end to end through the published port. A busy or small machine can take
+  # minutes to boot the app; only after ten is the start given up.
+  start ready slatebox -- node "$LIB/health.mjs" --deep --wait 600
+}
+
+pause() {
+  [[ ! -e $RUN/paused ]] || return 0
+  say 'Pausing the app and the relay.'
+  stop_services ready sso-setup app relay
+  # Keycloak is given time to close its database: a restore may replace it.
+  GRACE=30 stop_services sso
+  : > "$RUN/paused"
+}
+
+resume() {
+  [[ -e $RUN/paused ]] || return 0
+  say 'Starting the app and the relay again.'
+  start_sso
+  start_app
+  rm -f "$RUN/paused"
+}
+
+supervise() {
+  local name
+  while :; do
+    await "${!SERVICE[@]}"
+    if [[ $signal == stop ]]; then
+      shutdown
+      exit 0
+    fi
+    if [[ -n $ended ]]; then
+      name=${SERVICE[$ended]}
+      unset "SERVICE[$ended]"
+      if [[ $name == sso-setup && $status == 0 ]]; then
+        :
+      elif [[ $name == ready && $status == 0 ]]; then
+        say "Ready. Open $SLATEBOX_PUBLIC_URL"
+      else
+        if [[ $name == sso-setup ]]; then
+          say 'Single sign-on could not be set up. Stopping the container.'
+        elif [[ $name == ready ]]; then
+          say 'Slatebox did not become ready. Stopping the container.'
+        else
+          say "$name stopped unexpectedly (exit $status). Stopping the container so that Docker can restart it."
+          if [[ $name == mongo && $status == 132 ]]; then cpu_unsupported; fi
+        fi
+        shutdown
+        exit 1
+      fi
+    fi
+    case $signal in
+      pause) signal=''; pause ;;
+      resume) signal=''; resume ;;
+    esac
+  done
+}
+
+main() {
+  if ! mkdir -p "$RUN" /data/tmp 2>/dev/null || [[ ! -w /data ]]; then
+    local owner
+    owner=$(stat -c %u:%g /data)
+    say "/data is not writable by this container's user ($(id -u):$(id -g)). It belongs to $owner."
+    say "For a folder on the host, run the container as the folder's owner: add --user $owner to docker run."
+    say 'Or keep the data in a Docker volume, for example -v slatebox-data:/data'
+    exit 1
+  fi
+  # Left over only if the container was killed in the middle of a restore.
+  rm -rf "$RUN/paused" "$RUN/restore.lock" "$RUN/sso-ready" /data/tmp/*
+  echo "$$" > "$RUN/init.pid"
+
+  step node "$LIB/configure.mjs" || exit 1
+  # shellcheck disable=SC1091
+  . "$RUN/state.env"
+
+  if [[ $SLATEBOX_BUNDLED_MONGO == 1 ]]; then
+    local probe=0
+    mongod --version >/dev/null 2>&1 || probe=$?
+    if ((probe == 132)); then
+      cpu_unsupported
+      exit 1
+    fi
+    start mongo -- mongod --dbpath /data/db --replSet rs0 --bind_ip 127.0.0.1 --port 27017 \
+      --keyFile /data/secrets/mongo.key --nounixsocket --quiet \
+      --setParameter shutdownTimeoutMillisForSignaledShutdown=0
+    if ! step node "$LIB/mongo-init.mjs"; then
+      say 'The database could not be prepared. Stopping the container.'
+      shutdown
+      exit 1
+    fi
+  fi
+
+  # The proxy comes up first so a browser sees "Slatebox is starting" rather
+  # than a refused connection while the app boots.
+  start proxy -- caddy run --config "$RUN/Caddyfile" --adapter caddyfile
+  # Keycloak boots beside the app; the realm is set up as soon as it answers.
+  start_sso
+  start_app
+  supervise
+}
+
+main "$@"

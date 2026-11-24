@@ -1,0 +1,183 @@
+// What the image contains, checked without starting Slatebox.
+import assert from 'node:assert/strict'
+import { readFileSync, readdirSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
+import { IMAGE, docker, ok } from './lib.mjs'
+
+const here = dirname(fileURLToPath(import.meta.url))
+const appTree = join(here, '../../web/app')
+
+// Read-only look inside the image, as root so that no directory is skipped.
+// No Slatebox process is started and the container has no network.
+const inside = (script, options) =>
+  docker(['run', '--rm', '-i', '--network', 'none', '--user', '0', '--entrypoint', 'sh', IMAGE, '-c', script], options)
+
+test('the image identifies what it was built from', async () => {
+  const config = JSON.parse(await ok(['image', 'inspect', IMAGE]))[0]
+  const labels = config.Config.Labels
+  for (const label of ['org.opencontainers.image.revision', 'com.slatebox.engine.revision', 'com.slatebox.relay.revision']) {
+    assert.match(labels[label] || '', /^[0-9a-f]{12}(-dirty)?$/, `${label} names a source revision`)
+  }
+  // The version label is Slatebox's own, not the base image's.
+  assert.equal(labels['org.opencontainers.image.version'], labels['org.opencontainers.image.revision'])
+  const identity = JSON.parse((await inside('cat /opt/slatebox/identity.json')).stdout)
+  assert.equal(identity.app, labels['org.opencontainers.image.revision'])
+  assert.equal(identity.engine, labels['com.slatebox.engine.revision'])
+  assert.equal(identity.relay, labels['com.slatebox.relay.revision'])
+  // The engine inside is the one built for this image, not a registry release.
+  const engine = JSON.parse((await inside('cat /opt/slatebox/app/bundle/programs/server/npm/node_modules/slateboxjs/package.json')).stdout)
+  assert.ok(engine.version.endsWith(`+selfhost.${identity.engine}`), `engine version ${engine.version} carries its revision`)
+  assert.deepEqual(Object.keys(config.Config.Volumes), ['/data'])
+  assert.ok(config.Config.Healthcheck?.Test?.length, 'a health check is defined')
+})
+
+test('every process runs as an unprivileged user', async () => {
+  const config = JSON.parse(await ok(['image', 'inspect', IMAGE]))[0]
+  assert.equal(config.Config.User, 'slatebox')
+  const id = (await docker(['run', '--rm', '--network', 'none', '--entrypoint', 'sh', IMAGE, '-c', 'id -u; id -g; stat -c %U:%a /data'])).stdout.trim().split('\n')
+  assert.deepEqual(id, ['10001', '10001', 'slatebox:700'])
+})
+
+test('license notices say which parts are MIT and which are not', async () => {
+  const notice = (await inside('cat /opt/slatebox/licenses/NOTICE.md')).stdout
+  assert.match(notice, /not under a single license/)
+  assert.match(notice, /MongoDB Community Server.*Server Side Public License/)
+  const files = (await inside('cd /opt/slatebox/licenses && find . -type f | sort')).stdout.trim().split('\n')
+  for (const file of [
+    './NOTICE.md', './slatebox-app-LICENSE.md', './slateboxjs-LICENSE.txt', './slatebox-relay-LICENSE.txt',
+    './third-party/mongodb-server-SSPL.txt', './third-party/mongodb-database-tools-LICENSE.md',
+    './third-party/caddy-LICENSE.txt', './third-party/node-LICENSE.txt', './third-party/meteor-LICENSE.txt',
+    './third-party/tini-LICENSE.txt', './third-party/fonts.md', './third-party/fonts-OFL-1.1.txt', './third-party/fonts-Apache-2.0.txt',
+    './third-party/interface-fonts.md', './third-party/mongodb-server-third-party.md',
+    './third-party/mongodb-database-tools-THIRD-PARTY-NOTICES.txt',
+  ]) assert.ok(files.includes(file), `${file} is in the image`)
+  // Every file NOTICE.md names under third-party/ is in the image.
+  for (const named of new Set(notice.match(/third-party\/[\w.-]+/g))) {
+    assert.ok(files.includes(`./${named}`), `NOTICE.md names ${named}, which is in the image`)
+  }
+  assert.match((await inside('head -c 400 /opt/slatebox/licenses/third-party/mongodb-server-third-party.md')).stdout, /MongoDB Third Party Dependencies/)
+  // Every bundled Google Fonts family is listed with its copyright and one of the two license texts.
+  const fonts = (await inside('cat /opt/slatebox/licenses/third-party/fonts.md')).stdout
+  const families = (await inside("fc-list : family | tr ',' '\\n' | sort -u")).stdout.trim().split('\n')
+  for (const family of ['Roboto', 'Caveat', 'EB Garamond', 'Permanent Marker', 'IBM Plex Mono']) {
+    assert.ok(families.includes(family), `${family} is installed`)
+    assert.match(fonts, new RegExp(`^\\| ${family} \\| Copyright .+ \\| (SIL Open Font License 1\\.1|Apache License 2\\.0) \\|`, 'm'))
+  }
+  assert.match((await inside('head -c 200 /opt/slatebox/licenses/third-party/fonts-OFL-1.1.txt')).stdout, /SIL OPEN FONT LICENSE Version 1\.1/)
+  // The interface fonts browsers load from the instance are listed the same way.
+  const interfaceFonts = (await inside('cat /opt/slatebox/licenses/third-party/interface-fonts.md')).stdout
+  for (const family of ['Manrope', 'Readex Pro']) {
+    assert.match(interfaceFonts, new RegExp(`^\\| ${family} \\| Copyright .+ \\| SIL Open Font License 1\\.1 \\|`, 'm'))
+  }
+  const heads = (await inside('cd /opt/slatebox/licenses && head -c 200 slatebox-app-LICENSE.md slateboxjs-LICENSE.txt third-party/mongodb-server-SSPL.txt')).stdout
+  assert.match(heads, /MIT License[\s\S]*MIT License[\s\S]*Server Side Public License/)
+})
+
+test('the interface fonts are served from the image, not from Google', async () => {
+  const css = (await inside('cat /opt/slatebox/share/fonts/fonts.css')).stdout
+  assert.match(css, /font-family: 'Manrope'/)
+  assert.match(css, /font-family: 'Readex Pro'/)
+  assert.doesNotMatch(css, /https?:\/\//, 'the stylesheet names no outside address')
+  const sources = [...css.matchAll(/url\(\/_fonts\/([^)]+)\)/g)].map(match => match[1])
+  assert.ok(sources.length >= 10, `${sources.length} font files are named`)
+  const files = (await inside('ls /opt/slatebox/share/fonts')).stdout.trim().split('\n')
+  for (const file of sources) assert.ok(files.includes(file), `${file} is in the image`)
+})
+
+test('no settings file, environment file or private key is in the image', async () => {
+  const found = (await inside(
+    `find / -xdev \\( -path /proc -o -path /sys -o -path /dev \\) -prune -o -type f \\( ` +
+    `-name 'settings*.json' -o -name '.env' -o -name '.env.*' -o -name '*.pem' -o -name '*.p12' -o -name '*.pfx' -o -name 'id_rsa*' -o -name 'id_ed25519*' -o -name '*.key' \\) -print`)).stdout
+    .trim().split('\n').filter(Boolean)
+  assert.deepEqual(found, [], 'files that could hold settings or keys')
+})
+
+// The scanner runs inside the image, as root and without a network. What it
+// is asked to find arrives on standard input, so no secret is ever part of a
+// command line, and it reports only where something was found.
+const scan = async request => {
+  const result = await docker(['run', '--rm', '-i', '--network', 'none', '--user', '0', '--entrypoint', 'node', IMAGE,
+    '--input-type=module', '-e', readFileSync(join(here, 'in-image-scan.mjs'), 'utf8')], { input: JSON.stringify(request) })
+  assert.equal(result.code, 0, result.stderr)
+  return JSON.parse(result.stdout)
+}
+
+test('no value from the app tree\'s settings files appears anywhere in the image', async () => {
+  // Collect every distinctive value from the hosted service's settings files
+  // and search every file of the image for each of them. Values are never
+  // printed: a failure names the setting and the file it was found in.
+  const names = new Map() // value -> names of the settings that hold it
+  let addresses = 0
+  const isPlainAddress = value => {
+    // A name made of lowercase words, or an address without credentials or a
+    // query string, is not a secret, and ordinary ones (http://localhost:3000)
+    // appear in any software.
+    if (/^[a-z]+(-[a-z]+)*$/.test(value)) return true
+    if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?(\/[\w./-]*)?$/i.test(value)) return true // a bare host name, with or without a path
+    try {
+      const url = new URL(value)
+      return ['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol) && !url.username && !url.password && !url.search
+    } catch { return false }
+  }
+  const keep = (name, value) => {
+    if (value.length < 16 || /\s/.test(value)) return
+    if (isPlainAddress(value)) { addresses += 1; return }
+    names.set(value, (names.get(value) || new Set()).add(name))
+  }
+  const collect = (node, name) => {
+    if (typeof node === 'string') keep(name, node)
+    else if (node && typeof node === 'object') for (const [key, value] of Object.entries(node)) collect(value, name ? `${name}.${key}` : key)
+  }
+  const sources = [appTree, ...(process.env.SLATEBOX_SETTINGS_DIRS || '').split(':').filter(Boolean)]
+  let files = 0
+  for (const dir of sources) {
+    for (const file of readdirSync(dir).filter(entry => /^settings.*\.json$/.test(entry))) {
+      const text = readFileSync(join(dir, file), 'utf8')
+      try {
+        collect(JSON.parse(text), '')
+      } catch {
+        // Some are lists of NAME=value lines despite their name.
+        for (const line of text.split(/\r?\n/)) {
+          const [, name, raw] = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/) || []
+          if (!raw) continue
+          const value = raw.replace(/^(['"])(.*)\1$/, '$2')
+          try { collect(JSON.parse(value), name) } catch { keep(name, value) }
+        }
+      }
+      files += 1
+    }
+  }
+  const values = [...names.keys()]
+  assert.ok(files >= 1 && values.length >= 5, `read ${files} settings files with ${values.length} distinctive values`)
+  const report = await scan({ values })
+  console.log(`searched ${report.files} files (${(report.bytes / 1e9).toFixed(2)} GB) for ${values.length} values from ${files} settings files; ${addresses} plain names and addresses were left out`)
+  assert.ok(report.files > 50_000, 'the whole image was searched')
+  const found = report.hits.flatMap(hit => hit.found.map(index => `${[...names.get(values[index])].join(', ')} in ${hit.path}`))
+  assert.deepEqual(found, [], 'settings whose value is in the image')
+})
+
+test('nothing Slatebox adds to the image looks like a credential', async () => {
+  // The app's own server code, the bundles it serves to browsers, its assets,
+  // the relay's own code, the start-up scripts and the system configuration.
+  // Third-party packages are covered by the exact search above; their
+  // documentation is full of sample keys.
+  const report = await scan({ roots: [
+    '/opt/slatebox/app/bundle/programs/server/app', '/opt/slatebox/app/bundle/programs/server/assets',
+    '/opt/slatebox/app/bundle/programs/web.browser', '/opt/slatebox/app/bundle/programs/web.browser.legacy',
+    '/opt/slatebox/app/bundle/programs/server/npm/node_modules/slateboxjs',
+    '/opt/slatebox/relay/bin', '/opt/slatebox/relay/src', '/opt/slatebox/bin', '/opt/slatebox/lib', '/opt/slatebox/share',
+    '/etc', '/data', '/run',
+  ] })
+  console.log(`searched ${report.files} files (${(report.bytes / 1e6).toFixed(0)} MB) for credential-shaped strings`)
+  assert.ok(report.files > 300, 'the app, the relay and the scripts were searched')
+  assert.deepEqual(report.hits, [], 'files with credential-shaped strings')
+})
+
+test('only the programs Slatebox needs were taken from the MongoDB image', async () => {
+  const listing = (await inside('ls /usr/local/bin')).stdout.trim().split('\n').sort()
+  assert.deepEqual(listing, ['caddy', 'mongod', 'mongodump', 'mongorestore', 'node', 'slatebox'])
+  const versions = (await inside('node --version; mongod --version | head -1; caddy version; tini --version')).stdout
+  assert.match(versions, /^v24\.15\.0\n.*v8\.0\.\d+\nv2\.\d+\.\d+ .*\ntini version/)
+})

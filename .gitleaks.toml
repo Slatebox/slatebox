@@ -22,3 +22,24 @@ condition = "AND"
 paths = ['''(^|/)scripts/exec-api\.integration\.test\.mjs$''']
 regexTarget = "secret"
 regexes = ['''^plain-remove-\d+$''']
+
+[[allowlists]]
+description = "Self-host test fixtures: made-up keys that contain the word 'secret' ('di-secret-12345678', 'sk-provider-…', 'endpoint-secret-1234') in the image's AI settings tests; they never reach a provider."
+condition = "AND"
+paths = ['''(^|/)self-host/tests/[^/]+\.test\.mjs$''']
+regexTarget = "secret"
+regexes = ['''secret''']
+
+[[allowlists]]
+description = "Not a secret: the path of Keycloak's embedded H2 database inside the image ('h2/keycloakdb')."
+condition = "AND"
+paths = ['''(^|/)self-host/rootfs/opt/slatebox/lib/sso\.mjs$''']
+regexTarget = "secret"
+regexes = ['''^h2/keycloakdb$''']
+
+[[allowlists]]
+description = "Not a secret: the SHA-256 of the one password every early guest shared, kept so that password is refused everywhere (web/app/server/common/shared-guest-password.mjs)."
+condition = "AND"
+paths = ['''(^|/)web/app/server/common/shared-guest-password\.mjs$''']
+regexTarget = "secret"
+regexes = ['''^9dbf8057012e99a692df37f984b92232c1aeee59ba9576be9f440d2ae0bef774$''']

@@ -94,3 +94,6 @@ import './heartbeats/manage'
 import './methods/presentations'
 // Custom shapes: the AI feature `shape`, the shape library and its methods.
 import './shapes/meteor'
+
+// single sign-on (off unless settings.sso.enabled; see server/sso)
+import './sso'

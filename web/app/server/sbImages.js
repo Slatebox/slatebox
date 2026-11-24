@@ -6,7 +6,7 @@ import { Meteor } from 'meteor/meteor'
 import { Random } from 'meteor/random'
 import { Accounts } from 'meteor/accounts-base'
 import { CachedImages } from '../imports/api/common/models'
-import { uploadS3Object } from './common/s3Utils'
+import { readDatabaseFile, storeFile, storedFileKey } from './common/fileStore'
 import app from './expressApp'
 
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024
@@ -25,11 +25,10 @@ async function signedInUser(req) {
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 10 } }).single('file')
 
 const uploadsRemembered = /^u_([A-Za-z0-9]{17})_[A-Za-z0-9]{17}\.(png|jpg|gif|webp|pdf|txt)$/
-// The bucket key of an upload, when the url is one this app stored for that person.
+// The stored key of an upload, when the url is one this app stored for that person.
 export function uploadKeyOf(url, userId) {
-  const prefix = `${Meteor.settings.aws?.cloudUrl}/`
-  if (typeof url !== 'string' || !url.startsWith(prefix)) return null
-  const key = url.slice(prefix.length)
+  const key = storedFileKey(url)
+  if (!key) return null
   const m = /^\d{4}\/\d{2}\/\d{2}\/([^/]+)$/.exec(key)
   const name = m && uploadsRemembered.exec(m[1])
   return name && name[1] === userId ? key : null
@@ -49,7 +48,7 @@ app.post('/sbupload/image', async (req, res) => {
     const kind = await classifyUpload(req.file.buffer, req.file.originalname)
     if (!kind) return res.status(415).type('text/plain').send('Upload a PNG, JPG, GIF, WEBP, SVG, PDF or text file.')
     const key = `${dateFolder()}/u_${user._id}_${Random.id()}.${kind.ext}`
-    const url = await uploadS3Object({ body: kind.body, key, contentType: kind.type })
+    const url = await storeFile({ body: kind.body, key, contentType: kind.type })
     return res.status(200).type('text/plain').send(url)
   } catch (error) {
     if (error?.code === 'LIMIT_FILE_SIZE') return res.status(413).type('text/plain').send('The file is larger than 20 MB.')
@@ -85,6 +84,33 @@ app.get('/sbimages/:url', async (req, res) => {
     return res.end(bytes)
   } catch (error) {
     console.error('Cached image failed', error?.message)
+    return res.status(500).end()
+  }
+})
+
+// A file stored in the database (a self-hosted instance; Slatebox Cloud serves them from the
+// bucket). It is never shown as a page of this site: no script runs, nothing is sniffed.
+export const STORED_FILE_ROUTE = /^\/files\/(.+)$/
+const storedTypes = {
+  'image/png': 'image/png', 'image/jpeg': 'image/jpeg', 'image/gif': 'image/gif', 'image/webp': 'image/webp',
+  'application/pdf': 'application/pdf', 'text/plain': 'text/plain; charset=utf-8',
+}
+app.get(STORED_FILE_ROUTE, async (req, res) => {
+  try {
+    const file = await readDatabaseFile(req.params[0])
+    if (!file) return res.status(404).type('text/plain').send('Not found.')
+    const type = storedTypes[String(file.contentType).split(';')[0].trim()]
+    res.writeHead(200, {
+      'Content-Type': type || 'application/octet-stream',
+      'Content-Length': file.bytes.length,
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "default-src 'none'; sandbox",
+      'Cache-Control': 'private, max-age=3600',
+      ...(type && file.contentDisposition !== 'attachment' ? {} : { 'Content-Disposition': 'attachment' }),
+    })
+    return res.end(file.bytes)
+  } catch (error) {
+    console.error('Stored file failed', error?.message)
     return res.status(500).end()
   }
 })

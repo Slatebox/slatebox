@@ -10,6 +10,9 @@ node_modules
 # web/app/settings.example.json to web/app/settings.dev.json for a local run.
 settings*
 !settings.example.json
+# the one-container image's settings module is code, not settings: it must be committed, or a
+# fresh checkout builds an image that cannot configure itself (self-host/tests/tracked.test.mjs)
+!/self-host/rootfs/opt/slatebox/lib/settings.mjs
 !.vscode/settings.json
 
 # Slatebox Cloud's legal documents are added to the hosted build from private

@@ -13,14 +13,14 @@ import { generateImages } from './ai/image-connection.mjs'
 
 import fetch from 'node-fetch'
 import CONSTANTS from '../../imports/api/common/constants'
-import { uploadS3Object } from '../common/s3Utils'
+import { storeFile } from '../common/fileStore'
 
 const method = {}
 
 async function uploadImage(imgBuffer, userId) {
   const now = new Date()
   const folder = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`
-  return uploadS3Object({
+  return storeFile({
     body: imgBuffer,
     key: `${folder}/ai_${userId}_${Random.id()}.png`,
     contentType: 'image/png',

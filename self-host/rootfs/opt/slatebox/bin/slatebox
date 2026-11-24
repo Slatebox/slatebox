@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# Commands for a running Slatebox container:
+#
+#   docker exec slatebox slatebox backup > slatebox-backup.gz
+#   docker exec -i slatebox slatebox restore < slatebox-backup.gz
+#   docker exec slatebox slatebox password-link person@example.com
+#   docker exec slatebox slatebox health
+#   docker exec slatebox slatebox version
+#   docker exec slatebox slatebox sso [admin-password | scim-secret | events [N]]
+#   docker exec slatebox slatebox ai [check]
+#   docker run --rm --entrypoint /opt/slatebox/bin/slatebox IMAGE settings --json
+set -euo pipefail
+umask 077
+
+readonly ROOT=/opt/slatebox
+readonly LIB=$ROOT/lib
+readonly RUN=/run/slatebox
+readonly TMP=/data/tmp
+readonly TOOLS=$RUN/mongo-tools.yaml
+# The first four bytes of every mongodump archive.
+readonly ARCHIVE_MAGIC=6de29981
+
+die() { printf '%s\n' "$*" >&2; exit 1; }
+note() { printf '%s\n' "$*" >&2; }
+
+bundled_database() {
+  [[ -f $RUN/state.env ]] || die 'Slatebox is still starting. Try again in a moment.'
+  # shellcheck disable=SC1091
+  . "$RUN/state.env"
+  [[ $SLATEBOX_BUNDLED_MONGO == 1 ]] ||
+    die 'This Slatebox uses an external database (MONGO_URL). Back it up and restore it with that database'"'"'s own tools.'
+}
+
+sso_on() { grep -qx "SLATEBOX_SSO='keycloak'" "$RUN/state.env"; }
+
+dump() { # dump FILE: a complete, verified, compressed archive of the database
+  # With single sign-on on, Keycloak's database and secrets ride along inside it.
+  if sso_on; then node "$LIB/keycloak-backup.mjs" save || return 1; fi
+  local rc=0
+  mongodump --config "$TOOLS" --db slatebox --archive --quiet | gzip > "$1" && gzip -t "$1" || rc=1
+  if sso_on; then node "$LIB/keycloak-backup.mjs" drop || true; fi
+  return $rc
+}
+
+load() { # load FILE: replace the database with the archive (Keycloak's too, when it carries one)
+  node "$LIB/drop-database.mjs" &&
+    gzip -dc "$1" | mongorestore --config "$TOOLS" --archive --nsInclude 'slatebox.*' --quiet || return 1
+  local rc=0
+  node "$LIB/keycloak-backup.mjs" restore || rc=$?
+  if ((rc == 3)); then
+    if sso_on; then note 'This backup carries no single sign-on data; Keycloak keeps what it has.'; fi
+    return 0
+  fi
+  if ((rc == 0)); then
+    # Keycloak's database came with its own secrets: render the settings again from them.
+    node "$LIB/configure.mjs" > /dev/null || return 1
+    note 'Single sign-on (Keycloak) data restored.'
+  fi
+  return $rc
+}
+
+backup() {
+  bundled_database
+  [[ ! -t 1 ]] || die 'Send the backup to a file: docker exec slatebox slatebox backup > slatebox-backup.gz'
+  file=$(mktemp "$TMP/backup.XXXXXXXX")
+  trap 'rm -f "$file"' EXIT
+  # Nothing is written to the output until the whole archive exists and checks out.
+  dump "$file" || die 'The backup could not be made. No backup was written.'
+  cat "$file"
+  note "Backup complete: $(stat -c %s "$file") bytes."
+}
+
+restore() {
+  bundled_database
+  [[ ! -t 0 ]] || die 'Give the backup on standard input: docker exec -i slatebox slatebox restore < slatebox-backup.gz'
+  mkdir "$RUN/restore.lock" 2>/dev/null || die 'Another restore is already running.'
+  local i
+  paused=0
+  file=$(mktemp "$TMP/restore.XXXXXXXX")
+  before=$(mktemp "$TMP/before-restore.XXXXXXXX")
+  # Whatever happens, Slatebox is started again and no working file is left behind.
+  finish() {
+    if ((paused)); then kill -USR2 "$(cat "$RUN/init.pid")" 2>/dev/null || true; fi
+    rm -rf "$file" "$before" "$RUN/restore.lock"
+  }
+  trap finish EXIT
+
+  cat > "$file"
+  [[ -s $file ]] ||
+    die 'No backup arrived. Run it with -i: docker exec -i slatebox slatebox restore < slatebox-backup.gz'
+  if ! gzip -t "$file" 2>/dev/null ||
+     [[ $(gzip -dc "$file" 2>/dev/null | head -c 4 | od -An -tx1 | tr -d ' \n') != "$ARCHIVE_MAGIC" ]]; then
+    die 'This is not a complete Slatebox backup. Nothing was changed.'
+  fi
+  node "$LIB/health.mjs" 2>/dev/null ||
+    die 'Slatebox is not ready yet. Wait until it is healthy, then run the restore again. Nothing was changed.'
+
+  note 'Pausing Slatebox.'
+  paused=1
+  kill -USR1 "$(cat "$RUN/init.pid")"
+  for ((i = 0; i < 300; i++)); do
+    [[ ! -e $RUN/paused ]] || break
+    sleep 0.1
+  done
+  [[ -e $RUN/paused ]] || die 'Slatebox could not be paused. Nothing was changed.'
+
+  # Keep what is there now, so a failed restore can put it back.
+  dump "$before" || die 'The current database could not be saved first. Nothing was changed.'
+  note 'Restoring the backup.'
+  if ! load "$file"; then
+    note 'The backup could not be restored. Putting the previous data back.'
+    load "$before" || die 'The previous data could not be put back. Keep this container and its volume as they are and restore a complete backup.'
+    die 'Restore failed. Slatebox continues with the data it had before.'
+  fi
+
+  note 'Starting Slatebox again.'
+  kill -USR2 "$(cat "$RUN/init.pid")"
+  paused=0
+  node "$LIB/health.mjs" --deep --wait 600 || die 'The backup was restored, but Slatebox did not become ready. See docker logs.'
+  note 'Restore complete. Slatebox is ready.'
+}
+
+password_link() {
+  [[ -f $RUN/app.env && -f $RUN/state.env ]] || die 'Slatebox is still starting. Try again in a moment.'
+  (
+    set -a
+    # shellcheck disable=SC1091
+    . "$RUN/app.env"
+    # shellcheck disable=SC1091
+    . "$RUN/state.env"
+    set +a
+    exec node "$LIB/password-link.mjs" "$@"
+  )
+}
+
+case ${1:-} in
+  backup) backup ;;
+  password-link) shift; password_link "$@" ;;
+  restore) restore ;;
+  health) shift; exec node "$LIB/health.mjs" "$@" ;;
+  version) cat "$ROOT/identity.json" ;;
+  # What this image accepts, for an installer; needs no running Slatebox.
+  settings) shift; exec node "$LIB/settings.mjs" "$@" ;;
+  ai)
+    shift
+    [[ -f $RUN/app.env ]] || die 'Slatebox is still starting. Try again in a moment.'
+    (
+      set -a
+      # shellcheck disable=SC1091
+      . "$RUN/app.env"
+      set +a
+      exec node "$LIB/ai-cli.mjs" "$@"
+    )
+    ;;
+  sso)
+    shift
+    [[ -f $RUN/state.env ]] || die 'Slatebox is still starting. Try again in a moment.'
+    exec node "$LIB/sso-cli.mjs" "$@"
+    ;;
+  *)
+    cat >&2 <<'EOF'
+Usage, from the Docker host:
+  docker exec slatebox slatebox backup > slatebox-backup.gz
+  docker exec -i slatebox slatebox restore < slatebox-backup.gz
+  docker exec slatebox slatebox password-link person@example.com
+  docker exec slatebox slatebox health
+  docker exec slatebox slatebox version
+  docker exec slatebox slatebox sso [admin-password | scim-secret | events [N]]
+  docker exec slatebox slatebox ai [check]
+  docker exec slatebox slatebox settings --json
+EOF
+    exit 2
+    ;;
+esac

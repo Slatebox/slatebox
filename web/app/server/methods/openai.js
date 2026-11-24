@@ -11,6 +11,7 @@
 import { Meteor } from 'meteor/meteor'
 import { check, Match } from 'meteor/check'
 import { safeFetch } from '../common/safe-fetch.mjs'
+import { readStoredFile, storedFileBase } from '../common/fileStore'
 import { canEditSlate, canReadSlate, findSlate } from '../common/slate-access'
 import { Random } from 'meteor/random'
 // import { Configuration, OpenAIApi } from 'openai'
@@ -113,11 +114,10 @@ async function initUsage({
         content = [content]
       }
 
-      console.log(
-        'ongoingConversationRider is ->',
-        ongoingConversationRider,
-        currentLayout
-      )
+      console.log('ongoingConversationRider', {
+        riderLength: ongoingConversationRider?.length ?? 0,
+        layout: !!currentLayout,
+      })
 
       let augmentConversation = ongoingConversationRider ?? ''
       if (currentLayout) {
@@ -368,10 +368,11 @@ async function invokeTool({
           function_call: welcomePrompt.function_call,
         })
 
-        console.log(
-          'got resp after sending templates',
-          JSON.stringify(resp, null, 2)
-        )
+        console.log('got resp after sending templates', {
+          aid,
+          tool: resp?.json?.content?.find?.((c) => c?.type === 'tool_use')?.name || null,
+          bytes: JSON.stringify(resp ?? null).length,
+        })
 
         // insert the latest from the system
         const latestAssistantMessage = {
@@ -661,11 +662,10 @@ async function invokeTool({
             }
             technicalInstructions = techInstructions.join(' ').trim()
           }
-          console.log(
-            'custom tech instructions',
-            overrideBackground,
-            technicalInstructions
-          )
+          console.log('custom tech instructions', {
+            background: !!overrideBackground,
+            length: technicalInstructions?.length ?? 0,
+          })
         }
 
         systemResponse = {
@@ -933,7 +933,7 @@ method[CONSTANTS.methods.openai.welcome] = metered({ feature: 'welcome' }, async
 
         const extractedToolAndMessage = extractToolAndMessage(resp)
 
-        console.log('anyToolUsed', extractedToolAndMessage)
+        console.log('anyToolUsed', { aid, tool: extractedToolAndMessage?.anyToolUsed?.name || null })
 
         return invokeTool({
           extractedToolAndMessage,
@@ -1118,7 +1118,7 @@ method[CONSTANTS.methods.openai.welcome] = metered({ feature: 'welcome' }, async
     })
 
     const extractedToolAndMessage = extractToolAndMessage(resp)
-    console.log('check to see if message is inserted', extractedToolAndMessage)
+    console.log('check to see if message is inserted', { aid, tool: extractedToolAndMessage?.anyToolUsed?.name || null })
 
     const nextMessage = {
       aid,
@@ -1277,8 +1277,8 @@ async function checkConversationTarget(user, opts) {
   }
   const docs = opts.isConversation?.uploadedDocs
   if (docs !== undefined && docs !== null) {
-    const ownBucket = `${Meteor.settings.aws?.cloudUrl}/`
-    if (!Array.isArray(docs) || docs.length > 5 || docs.some(d => typeof d?.url !== 'string' || !d.url.startsWith(ownBucket) || typeof d.docType !== 'string')) {
+    const ownFiles = `${storedFileBase()}/`
+    if (!Array.isArray(docs) || docs.length > 5 || docs.some(d => typeof d?.url !== 'string' || !d.url.startsWith(ownFiles) || typeof d.docType !== 'string')) {
       throw new Meteor.Error('documents-denied', 'Only files uploaded to Slatebox can be read in a conversation.')
     }
   }
@@ -1396,9 +1396,12 @@ method[CONSTANTS.methods.openai.chat] = metered({ feature: 'generation' }, async
             const shiftedPrompts = []
             for (const doc of opts.isConversation.uploadedDocs) {
               if (doc.docType.includes('text')) {
+                // A file stored in this app's database is read from there (fileStore.js).
+                const stored = await readStoredFile(doc.url)
+                if (stored && !/^text\/plain\b/.test(stored.contentType)) throw new Meteor.Error('documents-denied', 'That file is not text.')
                 shiftedPrompts.push({
                   type: 'text',
-                  text: (await safeFetch(doc.url, { maxBytes: 2 * 1024 * 1024, contentTypes: ['text/plain'] })).bytes.toString('utf8'),
+                  text: (stored ?? (await safeFetch(doc.url, { maxBytes: 2 * 1024 * 1024, contentTypes: ['text/plain'] }))).bytes.toString('utf8'),
                   cache_control: { type: 'ephemeral' },
                 })
               } else {

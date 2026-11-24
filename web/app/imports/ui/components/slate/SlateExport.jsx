@@ -16,6 +16,10 @@ import promisify from '../../../api/client/promisify'
 import { Messages } from '../../../api/common/models'
 import { currentSlate, globalMessage, mermaidDialog, slateOutputOpen } from '../../jotai/atoms'
 
+// A cloud link stores the image in the hosted service's S3 bucket. A
+// self-hosted instance offers it only when its operator configured one.
+const cloudLinks = Meteor.settings.public.env !== 'selfhost' || Meteor.settings.public.cloudLinks === true
+
 export default function SlateExport({ onExport }) {
   const slate = useAtomValue(currentSlate)
   const [message, setMessage] = useAtom(globalMessage)
@@ -219,7 +223,7 @@ export default function SlateExport({ onExport }) {
           Mermaid: export or import
         </Button>
       </Grid>
-      <Grid size={2}>
+      {cloudLinks && <Grid size={2}>
         <Tooltip title="Copy PNG Slatebox Cloud Link">
           <IconButton
             aria-label="copy png slatebox cloud link"
@@ -232,8 +236,8 @@ export default function SlateExport({ onExport }) {
             <FileCopyIcon />
           </IconButton>
         </Tooltip>
-      </Grid>
-      <Grid size={10}>
+      </Grid>}
+      <Grid size={cloudLinks ? 10 : 12}>
         <Button
           variant="outlined"
           color="secondary"
@@ -243,7 +247,7 @@ export default function SlateExport({ onExport }) {
           Download PNG
         </Button>
       </Grid>
-      <Grid size={2}>
+      {cloudLinks && <Grid size={2}>
         <Tooltip title="Copy SVG Slatebox Cloud Link">
           <IconButton
             aria-label="copy svg slatebox cloud link"
@@ -255,8 +259,8 @@ export default function SlateExport({ onExport }) {
             <FileCopyIcon />
           </IconButton>
         </Tooltip>
-      </Grid>
-      <Grid size={10}>
+      </Grid>}
+      <Grid size={cloudLinks ? 10 : 12}>
         <Button
           variant="outlined"
           color="secondary"

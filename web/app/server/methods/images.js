@@ -9,7 +9,7 @@ import { Random } from 'meteor/random'
 import fetch from 'node-fetch'
 import CONSTANTS from '../../imports/api/common/constants'
 import { check, Match } from 'meteor/check'
-import { deleteImageByKey, uploadImage } from '../common/s3Utils'
+import { deleteStoredFile, storeImage } from '../common/fileStore'
 import { uploadKeyOf } from '../sbImages'
 import extractImagePalette from '../common/imagePalette.mjs'
 import { renderSvgToPng } from '../common/render-svg.mjs'
@@ -104,7 +104,7 @@ method[CONSTANTS.methods.images.removeImage] = async function removeImage(opts) 
   if (!this.userId) return null
   const key = uploadKeyOf(opts.url, this.userId)
   if (!key) return false
-  await deleteImageByKey(key)
+  await deleteStoredFile(key)
   return true
 }
 
@@ -148,10 +148,9 @@ export async function svgToPng({
       })
 
       if (externalizeUrl) {
-        const slateImageUrl = await uploadImage(
+        const slateImageUrl = await storeImage(
           pngBuffer,
           fileName || new Date().valueOf(),
-          false,
           false,
           'image/png',
           'png',

@@ -173,7 +173,8 @@ export default function SlateDrawer({
           </AccordionDetails>
         </Accordion>
       )}
-      <Accordion
+      {/* Background images come from Pixabay, which needs the instance's own key. */}
+      {Meteor.settings.public.pixabayAPIKey && <Accordion
         expanded={expandedPanel === 'backgroundPanel'}
         onChange={handleChange('backgroundPanel')}
       >
@@ -191,7 +192,7 @@ export default function SlateDrawer({
         <AccordionDetails sx={{ margin: (theme) => theme.spacing(1) }}>
           <SlateBackgrounds slate={slate} onChange={updateSlate} />
         </AccordionDetails>
-      </Accordion>
+      </Accordion>}
     </Paper> : null
   )
 }

@@ -6,7 +6,7 @@ import { svgToPng, searchGoogleImages } from './images'
 import { generateImagesFor } from './stabilityai'
 import { fetchPublicImage } from '../common/safe-fetch.mjs'
 import { Random } from 'meteor/random'
-import { deleteImageByKey, uploadS3Object } from '../common/s3Utils'
+import { deleteStoredFile, storeFile, storedFileBase } from '../common/fileStore'
 import { finishSnapshot, ownedSnapshotKey } from '../common/presentationSnapshot.mjs'
 import CONSTANTS from '../../imports/api/common/constants'
 import {
@@ -77,7 +77,7 @@ async function copyPicture(link, userId) {
   const ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }[image.contentType] || 'img'
   const now = new Date()
   const key = `${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/presentation_${userId}_${Random.id()}.${ext}`
-  return uploadS3Object({ body: image.bytes, key, contentType: image.contentType }).catch(() => null)
+  return storeFile({ body: image.bytes, key, contentType: image.contentType }).catch(() => null)
 }
 
 // How many new pictures this person's decks of this slate found today (the daily cap).
@@ -332,12 +332,12 @@ async function renderShareCard(presentationId, generation, { look = null, rawSVG
 }
 
 async function discardSnapshot(presentation, url) {
-  const key = ownedSnapshotKey(url, Meteor.settings.aws?.cloudUrl, presentation._id, presentation.snapshotGeneration)
+  const key = ownedSnapshotKey(url, storedFileBase(), presentation._id, presentation.snapshotGeneration)
   if (!key) return
   // A previously remixed presentation may still use the same image.
   if (await SlatePresentations.findOneAsync({ isPublished: true, imageUrl: url }, { fields: { _id: 1 } })) return
   try {
-    await deleteImageByKey(key)
+    await deleteStoredFile(key)
   } catch {
     // Viewer access is independent of the storage provider's availability.
     console.warn('Unable to remove a withdrawn presentation snapshot from storage')
@@ -848,7 +848,7 @@ method[CONSTANTS.methods.presentations.update] = async ({
       if (updatedViewpoint.height) {
         existingViewpoint.height = updatedViewpoint.height
       }
-      console.log('existingViewpoint updated', existingViewpoint)
+      console.log('existingViewpoint updated', { nodes: existingViewpoint.nodeIds?.length ?? 0, narrativeLength: existingViewpoint.narrative?.length ?? 0 })
     } else {
       const newViewpoint = {
         nodeIds: updatedViewpoint.nodeIds,
