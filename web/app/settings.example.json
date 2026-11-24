@@ -83,12 +83,10 @@
     "alertEmail": ""
   },
   "public": {
-    "//": "Everything under public reaches every browser. Only keys that are meant to be public belong here. edition: \"self-host\" (the default when missing) or \"cloud\" (Slatebox Cloud only: loads the enterprise/ code, imports/api/common/edition.mjs).",
+    "//": "Everything under public reaches every browser. Only keys that are meant to be public belong here. edition: \"self-host\" (the default when missing) or \"cloud\" (Slatebox Cloud only, imports/api/common/edition.mjs). The server adds public.enterprise itself at start (whether enterprise code is unlocked here); do not set it.",
     "env": "dev",
     "edition": "self-host",
     "agents": {
-      "//": "Inviting outside agents (MCP servers) onto a slate. Slatebox Cloud only: it needs edition \"cloud\" and the enterprise/ code, and stays off on self-host whatever this says. Off unless invite is true.",
-      "invite": false,
       "//editDirectly": "Lets the person who brought an agent (or the slate owner) let it save without suggestions, each change undoable. Off unless true.",
       "editDirectly": false
     },
@@ -112,8 +110,15 @@
       "gaId": ""
     }
   },
+  "enterprise": {
+    "//": "Enterprise features (enterprise/: outside agent connections, invited agents and their integrations) run on Slatebox Cloud, and on a self-hosted install once a license key from Slatebox LLC unlocks them (Upgrade on prem). license: the key itself; or licenseFile: a file holding it; or the SLATEBOX_LICENSE or SLATEBOX_LICENSE_FILE environment variables. Checked offline at start (server/enterprise-license.mjs). Single sign-on with the bundled Keycloak needs no license.",
+    "license": "",
+    "licenseFile": ""
+  },
   "connectors": {
-    "//": "Slatebox Cloud only (enterprise/). oauthApps: apps registered with a vendor ahead of time. The client id is public; the client secret comes from this file or the environment that fills it, never from code. The OAuth callback is <public.baseUrl>/connectors/oauth/callback. Sign-in to outside servers also needs the SLATEBOX_KEY_ENCRYPTION_KEY environment variable.",
+    "//off": "The kill switch for invited agents wherever enterprise code runs: true takes \"+ Invite agent\" and every connectors call away. Leave false.",
+    "off": false,
+    "//": "Enterprise (enterprise/). oauthApps: apps registered with a vendor ahead of time. The client id is public; the client secret comes from this file or the environment that fills it, never from code. The OAuth callback is <public.baseUrl>/connectors/oauth/callback. Sign-in to outside servers also needs the SLATEBOX_KEY_ENCRYPTION_KEY environment variable.",
     "oauthApps": { "github": { "clientId": "", "clientSecret": "" } }
   }
 }

@@ -1,6 +1,6 @@
 ## Welcome to the Slatebox Repository!
 
-**Slatebox is an open source visual intelligence platform where you can invite any AI via MCP to collaborate with you and your team.** Mind maps, diagrams, project plans and presentations, drawn by your assistant and edited live with your team. An open-source alternative to whiteboard tools such as Miro. MIT licensed, except the Cloud-only `enterprise/` directory. The canvas is free. On Slatebox Cloud, AI comes with Slatebox Pro; a self-hosted Slatebox can use its own AI key. [slatebox.com](https://slatebox.com)
+**Slatebox is an open source visual intelligence platform where you can invite any AI via MCP to collaborate with you and your team.** Mind maps, diagrams, project plans and presentations, drawn by your assistant and edited live with your team. An open-source alternative to whiteboard tools such as Miro. MIT licensed, except the `enterprise/` directory. The canvas is free. On Slatebox Cloud, AI comes with Slatebox Pro; a self-hosted Slatebox can use its own AI key. [slatebox.com](https://slatebox.com)
 
 *Not affiliated with or endorsed by Miro. Miro is a trademark of its owner.*
 
@@ -24,7 +24,7 @@ Connect your assistant: add `https://app.slatebox.com/mcp` as a remote MCP serve
 
 SlateboxJS and the Slatebox app are MIT licensed and their source is public. Anyone can run the app, collaboration service and database on their own infrastructure. [License](LICENSE.md) · [Self-hosting guide](self-host/README.md) · [Local development](web/README.md#quick-start)
 
-One directory is not MIT: [`enterprise/`](enterprise/README.md) holds the features that run only on Slatebox Cloud, starting with outside agent connections (Slatebox as an MCP client: inviting outside agents onto a slate, and connectors). It is under the source-available [Slatebox Enterprise License](enterprise/LICENSE): you may read, change and test it, but running it in production needs an agreement with Slatebox LLC. A self-hosted Slatebox does not include it. Slatebox's own MCP server, CLI and API are MIT and work on every install.
+One directory is not MIT: [`enterprise/`](enterprise/README.md) holds the enterprise features, starting with outside agent connections (Slatebox as an MCP client: inviting outside agents onto a slate, and connectors). It is under the source-available [Slatebox Enterprise License](enterprise/LICENSE): you may read, change and test it, but running it in production needs an agreement with Slatebox LLC. Slatebox Cloud runs it, where inviting agents is part of Slatebox Pro. A self-hosted Slatebox includes it locked; a paid on-prem license key from Slatebox LLC unlocks it on that install ("Upgrade on prem"). Single sign-on with the bundled Keycloak is free on every install. Slatebox's own MCP server, CLI and API are MIT and work on every install.
 
 ## So...what is Slatebox?
 

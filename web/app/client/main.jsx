@@ -16,7 +16,8 @@ import GetStarted from '../imports/ui/pages/GetStarted'
 import { legacyTemplateDestination } from '../imports/api/common/template-policy.mjs'
 import Login from '../imports/ui/pages/Login'
 import { globalMessage } from '../imports/ui/jotai/atoms'
-// Slatebox Cloud only: loads the enterprise/ browser chunk after start; self-host loads nothing.
+// Loads the enterprise/ browser chunk after start where the server says it is unlocked (Cloud, or a
+// licensed self-hosted install); a locked install loads nothing.
 import './enterprise'
 
 // Pages a first visit to a slate never opens: each loads when its route is first opened.

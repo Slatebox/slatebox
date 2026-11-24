@@ -1,11 +1,11 @@
 // Copyright (c) 2026 Slatebox LLC. Licensed under the Slatebox Enterprise License (enterprise/LICENSE).
 // Not MIT: see enterprise/README.md.
 //
-// The browser half of Slatebox Cloud's outside agent connections. Loaded with import() on Cloud
-// only (web/app/client/enterprise.js), as its own chunk. It fills the app's named slots
+// The browser half of outside agent connections. Loaded with import() as its own chunk where the
+// server says enterprise code is unlocked (web/app/client/enterprise.js). It fills the app's named slots
 // (<EnterpriseSlot name="..."/>) through api.fill(name, Component).
-// context: { edition: 'cloud', agentInvite }; the invite UI fills its slots only when
-// agentInvite is true (settings.public.agents.invite).
+// context: { edition, via, features, agentInvite }; the invite UI fills its slots unless the
+// server's kill switch took invited agents away (agentInvite false).
 import AgentsOnSlate, { InvitedAgentControls } from './AgentsOnSlate'
 
 export const manifest = Object.freeze({ name: 'slatebox-enterprise', features: ['agents.invite'] })

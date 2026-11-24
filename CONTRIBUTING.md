@@ -28,11 +28,11 @@ Slatebox is structured in a yarn workspace mono-repo, despite not utilizing its 
  - [/web/app](/web/app) - This is the main Slatebox app, built with Meteor
  - [/desktop](/desktop) - Reserved for a future desktop app
  - [/packages](/packages) - Reserved for a future package integration
- - [/enterprise](/enterprise) - Slatebox Cloud-only features (outside agent connections). **Not MIT**: under the [Slatebox Enterprise License](enterprise/LICENSE). See [enterprise/README.md](enterprise/README.md)
+ - [/enterprise](/enterprise) - Enterprise features (outside agent connections): on Slatebox Cloud, and locked on a self-hosted install until a license key unlocks them. **Not MIT**: under the [Slatebox Enterprise License](enterprise/LICENSE). See [enterprise/README.md](enterprise/README.md)
 
 ### Licensing of contributions
 
-Everything in this repository is MIT ([LICENSE.md](LICENSE.md)) except the `enterprise/` directory, which is under [enterprise/LICENSE](enterprise/LICENSE). A contribution to MIT code is made under MIT. A contribution to `enterprise/` is made under the terms in section 3 of enterprise/LICENSE. MIT code must work without `enterprise/`: never import from it. Enterprise code reaches the app only through the loader (`web/app/server/enterprise-loader.mjs`, `web/app/imports/api/client/enterprise-slots.mjs`), and only when `settings.public.edition` is `"cloud"`.
+Everything in this repository is MIT ([LICENSE.md](LICENSE.md)) except the `enterprise/` directory, which is under [enterprise/LICENSE](enterprise/LICENSE). A contribution to MIT code is made under MIT. A contribution to `enterprise/` is made under the terms in section 3 of enterprise/LICENSE. MIT code must work without `enterprise/`: never import from it. Enterprise code reaches the app only through the loader (`web/app/server/enterprise-loader.mjs`, `web/app/imports/api/client/enterprise-slots.mjs`), and only where enterprise code is unlocked: `settings.public.edition` is `"cloud"`, or a self-hosted install has a license key (`web/app/server/enterprise-license.mjs`).
 
 ## Development Setup
 

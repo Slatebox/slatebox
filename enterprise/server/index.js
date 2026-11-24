@@ -1,23 +1,24 @@
 // Copyright (c) 2026 Slatebox LLC. Licensed under the Slatebox Enterprise License (enterprise/LICENSE).
 // Not MIT: see enterprise/README.md.
 //
-// The server half of Slatebox Cloud's outside agent connections. The MIT app calls register()
-// once at start, on Cloud only (web/app/server/enterprise-loader.mjs), and never on self-host.
+// The server half of outside agent connections. The MIT app calls register() once at start where
+// enterprise code is unlocked (web/app/server/enterprise-loader.mjs): on Slatebox Cloud, and on a
+// self-hosted install with a license key from Slatebox LLC. A locked install never calls it.
 // Everything here reaches the app only through `api`:
 //   api.addActions([...])   one registry action = Meteor method + /api/v1 route + exec + MCP tool
 //   api.addMethods({...})   plain Meteor methods (prefer actions)
 //   api.addRoute({ method, path, handler })   e.g. GET /connectors/oauth/callback
 //   api.onStartup(fn)
 /* eslint-disable no-console */
-// context: { edition: 'cloud', settings, agentInvite } where agentInvite is
-// settings.public.agents.invite === true (the invite feature switch, off by default).
+// context: { edition, settings, unlocked, via: 'cloud'|'license', features, agentInvite } where
+// agentInvite is true unless the server-side kill switch settings.connectors.off is set.
 import { connectorActions } from './actions.mjs'
 import { signInRoutes } from './routes.mjs'
 
 export const manifest = Object.freeze({ name: 'slatebox-enterprise', features: ['agents.invite'] })
 
 export function register(api, context) {
-  // Nothing a person can reach is added while the invite switch is off.
+  // Nothing a person can reach is added while the kill switch is on.
   if (!context?.agentInvite) return
   let started = null
   const starting = () => Object.assign(new Error('Outside agents are starting. Try again in a moment.'), { status: 409, code: 'starting' })

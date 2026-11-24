@@ -104,6 +104,15 @@ The registry updates the two `latest` tags separately. If promotion stops after 
 - **Calls** — Add `daily.apiKey` to the server-only `.state/settings.json` using your organization’s Daily credential. Turn on audio or video huddles in the slate settings. Daily hosts the media rooms and handles network traversal. The bundled WebSocket service carries board changes. For browser microphone and camera access, serve the app over HTTPS or use localhost for development.
 - **Published presentation images** — Configure your own `aws.region`, `aws.accessKey`, `aws.secretKey`, `aws.imageBucket` and `aws.cloudUrl` for the app's S3 image-storage integration. Published images need an HTTPS asset origin reachable by viewers.
 
+### Unlock enterprise features (Upgrade on prem)
+
+The app image includes Slatebox's enterprise features (inviting outside agents such as GitHub, Linear or Excalidraw onto a slate, and the connectors behind them), locked. An on-prem license from Slatebox unlocks them on one install, for a flat yearly fee, without moving to Slatebox Cloud. Single sign-on with the bundled Keycloak needs no license and is never locked. To ask for a license, use **Admin tools → Upgrade on prem** in the app, or [contact Slatebox](https://slatebox.com/contact/).
+
+1. Add the license key you receive to the server-only part of `.state/settings.json`: `"enterprise": { "license": "sblic1.…" }`. A file works too: `"enterprise": { "licenseFile": "/path/inside/the/container" }`.
+2. Run `./run up -d --no-deps --force-recreate --wait app`. The app log says `[enterprise] licensed to …` and **Admin tools** shows the license and its end date.
+
+The key is checked inside the app, offline: nothing is sent to Slatebox. A key may name the host names it is for; it then works only at those addresses (`public.baseUrl`). After its end date a key keeps working for 14 more days, so a renewal never interrupts anyone. Without a valid key the features stay locked and the rest of Slatebox works as before.
+
 ### Tell the app how many proxies are in front of it
 
 The API counts a caller without a token (a public slate read, `GET /api/v1/instance`) by its address, and Meteor uses the same address for its own clients. Behind a proxy, every request seems to come from the proxy, so all signed-out callers would share one rate-limit window. Set `HTTP_FORWARDED_COUNT` in `.state/instance.env` to the number of proxies that add an `X-Forwarded-For` entry before the app: `1` behind the bundled Caddy (`--https`) or behind one reverse proxy of your own, `2` behind a load balancer and a proxy. Leave it unset only when nothing sits in front of the app. Too high a number lets a caller choose the address it is counted by; too low counts everyone as the proxy.

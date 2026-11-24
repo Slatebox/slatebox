@@ -1576,7 +1576,7 @@ export default function Canvas() {
       {slate.current && !asEmbed && Meteor.userId() && (
         <AgentTasksPanel shareId={slate.current.shareId} canEdit={!accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly && !Meteor.user()?.isAnonymous} />
       )}
-      {/* Outside agents invited onto this slate (Slatebox Cloud only): their ghosts and chips. Empty on self-host. */}
+      {/* Outside agents invited onto this slate (enterprise: Slatebox Cloud, or a licensed self-hosted install): their chips and "+ Invite agent". Empty where enterprise code is locked. */}
       {slate.current && !asEmbed && (
         <EnterpriseSlot name="canvas.agents" slate={slate.current} canEdit={!accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly}
           readSelection={() => selectedOwnNotes().map((n) => n.options?.id).filter(Boolean)}

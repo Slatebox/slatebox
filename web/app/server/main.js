@@ -16,8 +16,9 @@ console.log(engineIdentity(() => require('slateboxjs/dist/BUILD.json')))
 // refuse Mongo operators and unsafe field names in every method and publication argument
 import './argument-guard'
 
-// Slatebox Cloud only: the enterprise/ code (outside agent connections), registered before any
-// module builds the action registry. Self-host registers nothing (server/enterprise-loader.mjs).
+// The enterprise/ code (outside agent connections), registered before any
+// module builds the action registry, where it is unlocked: Slatebox Cloud, or a self-hosted install
+// with a license key. A locked install registers nothing (server/enterprise-loader.mjs).
 import './enterprise'
 
 // global methods

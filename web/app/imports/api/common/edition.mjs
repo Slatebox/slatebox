@@ -2,12 +2,13 @@
 // settings.public.edition, read the same way by the server and the browser.
 //
 // - 'cloud': Slatebox Cloud. The code in the repository's enterprise/ directory (outside agent
-//   connections: the MCP client and the integrations built on it) is loaded and registered.
-// - 'self-host': every other install. Nothing from enterprise/ is loaded, and a self-host image
-//   does not contain it (self-host/build-images.sh, scripts/enterprise-stage.mjs).
+//   connections: the MCP client, invited agents and the integrations built on them) runs.
+// - 'self-host': every other install. Its image carries the same enterprise code, locked: it runs
+//   only once a license key from Slatebox LLC unlocks it (an on-prem license,
+//   server/enterprise-license.mjs). Single sign-on (the bundled Keycloak) is free and never locked.
 //
 // A missing or unknown value is self-host, so a settings file without the key never turns
-// Cloud-only code on.
+// Cloud behaviour (such as Slatebox Pro for invited agents) on.
 export const EDITIONS = Object.freeze(['cloud', 'self-host'])
 
 export function editionOf(settings) {
@@ -16,8 +17,21 @@ export function editionOf(settings) {
 
 export const isCloudEdition = (settings) => editionOf(settings) === 'cloud'
 
-// Inviting an outside agent onto a slate (Cloud only). settings.public.agents.invite turns the
-// invite UI and its server methods on; it is off unless set to true, and it is always off on
-// self-host whatever the setting says.
-export const agentInviteEnabled = (settings) =>
-  isCloudEdition(settings) && settings?.public?.agents?.invite === true
+// What the server worked out at start (server/enterprise.js writes settings.public.enterprise
+// before any browser loads): whether enterprise code is unlocked here, how ('cloud' or 'license'),
+// and which of its features are on. Invited agents are on wherever enterprise code is unlocked;
+// only the server-side kill switch (settings.connectors.off, never public) takes them away.
+export function enterpriseState(settings) {
+  const state = settings?.public?.enterprise
+  const unlocked = state?.unlocked === true
+  return {
+    unlocked,
+    via: unlocked && (state.via === 'cloud' || state.via === 'license') ? state.via : null,
+    features: unlocked && Array.isArray(state.features) ? state.features.filter((name) => typeof name === 'string') : [],
+  }
+}
+
+export const agentInviteOn = (settings) => enterpriseState(settings).features.includes('agents.invite')
+
+// The server-side kill switch for invited agents: on unless settings.connectors.off is true.
+export const agentInviteKilled = (settings) => settings?.connectors?.off === true

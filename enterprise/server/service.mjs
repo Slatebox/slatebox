@@ -21,9 +21,10 @@
 //   disconnect the inviter removes the agent; its waiting suggestions are discarded, and when no
 //              other slate of theirs uses that server, its sign-in is revoked and forgotten.
 //
-// Rules every entry point enforces (owner decisions 2026-11-23): Cloud only and the invite switch
-// on (the loader registers nothing otherwise); the inviter needs Slatebox Pro (checked on every
-// discover, connect and call, not only in the browser); only the inviter can call the agent;
+// Rules every entry point enforces (owner decisions 2026-11-23/24): enterprise code unlocked
+// (Slatebox Cloud, or a licensed self-hosted install) and the kill switch off (the loader registers
+// nothing otherwise); on Cloud the inviter needs Slatebox Pro (checked on every discover, connect
+// and call, not only in the browser; a licensed install has no Pro, so `pro` answers true there); only the inviter can call the agent;
 // everyone who can read the slate sees its cursor and ghosts; the person who keeps must be able
 // to edit the slate.
 import { randomBytes } from 'node:crypto'

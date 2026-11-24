@@ -32,6 +32,14 @@ Initiative.
    Slatebox Cloud under its terms of service is the agreement that covers
    people who use these features there.
 
+   The self-hosted Slatebox images that Slatebox LLC publishes include the
+   Enterprise Software, locked. Receiving and running such an image is
+   allowed; the Enterprise Software in it stays locked. An on-prem license
+   key that Slatebox LLC issues for an install, under the terms it is sold
+   with, is the written agreement for running the Enterprise Software in
+   production on that install while the key is valid. Removing, changing or
+   getting around the license check, or making license keys, is not allowed.
+
 3. Changes and contributions
 
    Slatebox LLC and its licensors own all rights in the Enterprise Software.

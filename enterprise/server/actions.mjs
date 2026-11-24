@@ -3,7 +3,7 @@
 //
 // Outside agents as registry actions: each one is a Meteor method (the slate's walkthrough and
 // agent chips call these), an /api/v1 route, an exec call and an MCP tool, with the same checks
-// (exec everywhere). The service (service.mjs) enforces Cloud-only (nothing registers elsewhere),
+// (exec everywhere). The service (service.mjs) runs only where enterprise code is unlocked (nothing registers elsewhere),
 // Pro for the inviter, inviter-only calls and edit rights; the registry adds scopes, rate limits
 // and input validation.
 import { defineAction } from '/server/actions/registry.mjs'

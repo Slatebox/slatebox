@@ -16,6 +16,7 @@ import { globalMessage } from '../jotai/atoms'
 import AuthManager from '../../api/common/AuthManager'
 import FreeBudget from './admin/FreeBudget'
 import TeamImports from './admin/TeamImports'
+import EnterpriseLicense from './admin/EnterpriseLicense'
 
 export default function AdminTools() {
   const [txtSearch, setSearch] = React.useState('')
@@ -109,6 +110,9 @@ export default function AdminTools() {
                 <FreeBudget />
               </Grid>
             )}
+            <Grid size={12}>
+              <EnterpriseLicense />
+            </Grid>
             <Grid size={12}>
               <TeamImports />
             </Grid>

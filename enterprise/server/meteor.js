@@ -8,7 +8,8 @@
 // choice), the metered request, the registry (as the agent, with the inviter's rights) and
 // presence; and sign-in (S2b): the vault (mcpCredentials, sealed under the app's master key), the
 // sign-in flows (mcpSignins, 10 minutes, used once) and automatic registrations (mcpClients).
-// Loaded at server start on Cloud only, when the invite switch is on (index.js).
+// Loaded at server start where enterprise code is unlocked (Cloud, or a licensed self-hosted
+// install) unless the kill switch settings.connectors.off is on (index.js).
 /* eslint-disable no-console */
 import { Meteor } from 'meteor/meteor'
 import { Mongo } from 'meteor/mongo'
@@ -24,6 +25,7 @@ import req from '/server/methods/ai/req'
 import { resolveAIFeatureConfig } from '/server/methods/ai/feature-config.mjs'
 import { runAIAction } from '/server/metering/context.mjs'
 import { proActive } from '/server/pro-billing.mjs'
+import { isCloudEdition } from '/imports/api/common/edition.mjs'
 import { presence } from '/server/presence/meteor'
 import { firstNameOf, sanitizeClientName } from '/imports/api/common/agent-label.mjs'
 import { Slates } from '/imports/api/common/models'
@@ -178,7 +180,10 @@ export function startConnectors() {
     applyOperations: (principal, input, mode) =>
       registry.run(principal, 'slates.applyOperations', { ...input, mode }, mode === 'save' ? { idempotencyKey: `${principal.runId}:${input.plan.operations[0]?.ids?.[0] || 'k'}` } : {}),
     access: { forUser, forToken, reload: (shareId) => Slates.findOneAsync({ shareId }, { fields: { revision: 1 } }) },
+    // Slatebox Pro is needed to invite agents on Slatebox Cloud. A licensed self-hosted install has
+    // no Pro: its license is what unlocks invited agents for everyone who may edit there.
     pro: async (userId) => {
+      if (!isCloudEdition(Meteor.settings)) return true
       const user = await Meteor.users.findOneAsync(userId, { fields: { pro: 1 } })
       return proActive(user?.pro)
     },

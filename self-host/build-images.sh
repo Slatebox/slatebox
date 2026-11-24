@@ -22,10 +22,12 @@ git -C "$engine" archive "$engine_sha" | tar -x -C "$stage/engine"
 git -C "$relay" archive "$relay_sha" | tar -x -C "$stage/relay"
 # Only the installed operator's runtime settings enter the app container.
 find "$stage/app/app" -maxdepth 1 -type f -name 'settings*.json' -delete
-# Slatebox Cloud's enterprise/ code (enterprise/LICENSE, not MIT) never enters a self-host image:
-# the app's '/enterprise' path gets a stub, then the whole build context is checked for it.
-node "$app/scripts/enterprise-stage.mjs" stub "$stage/app/app"
-node "$app/scripts/enterprise-stage.mjs" check-absent "$stage/app"
+# The committed enterprise/ code (enterprise/LICENSE, not MIT) goes in at the app's '/enterprise'
+# path. It stays locked on a self-hosted install until a license key from Slatebox LLC unlocks it
+# (web/app/server/enterprise-license.mjs); single sign-on with the bundled Keycloak is never locked.
+mkdir -p "$stage/app/app/enterprise"
+git -C "$app" archive "$app_sha:enterprise" | tar -x -C "$stage/app/app/enterprise"
+node "$app/scripts/enterprise-stage.mjs" check-present "$stage/app"
 (
   cd "$stage/engine"
   npm ci --no-audit --no-fund

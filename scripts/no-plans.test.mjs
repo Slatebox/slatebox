@@ -43,12 +43,18 @@ test('no plan code remains in the app', () => {
   assert.deepEqual(hits, [])
 })
 
+// The one exception (owner decision 2026-11-24): a self-hosted install's administrator sees
+// "Upgrade on prem" in Admin tools, the button that asks Slatebox for an on-prem license. Only that
+// label, only on that admin page: people using Slatebox are still never asked to upgrade.
+const ownerAllowed = { 'imports/ui/pages/admin/EnterpriseLicense.jsx': ['Upgrade on prem'] }
+
 test('no user-facing string asks anyone to upgrade or unlock a feature', () => {
   const hits = []
   const strings = /(['"`])((?:\\.|(?!\1).)*)\1|>([^<>{}]+)</g
   for (const file of files) {
     for (const m of read(file).matchAll(strings)) {
       const text = m[2] ?? m[3] ?? ''
+      if ((ownerAllowed[file] || []).includes(text.trim())) continue
       if (/\bupgrade\b|upgrade today|upgrade now|unlock (themes|more|pro|features|video|ai)\b/i.test(text)) hits.push(`${file}: ${text.slice(0, 80)}`)
     }
   }

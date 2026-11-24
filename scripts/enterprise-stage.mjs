@@ -1,14 +1,17 @@
-// Puts the right thing at web/app/enterprise, the path the app loads Cloud-only code from
+// Puts the right thing at web/app/enterprise, the path the app loads enterprise code from
 // ('/enterprise/server', '/enterprise/client'). Meteor builds only web/app, and the repository's
 // enterprise/ directory (enterprise/LICENSE, not MIT) sits outside it.
 //
+// Every image carries enterprise/: Slatebox Cloud runs it, and a self-hosted install runs it only
+// once a license key unlocks it (web/app/server/enterprise-license.mjs).
+//
 //   node scripts/enterprise-stage.mjs link                 local development: web/app/enterprise → ../../enterprise
-//   node scripts/enterprise-stage.mjs copy <meteor app>    a Cloud build context: a real copy of enterprise/
-//   node scripts/enterprise-stage.mjs stub <meteor app>    a self-host build context: a stub with no enterprise code
+//   node scripts/enterprise-stage.mjs copy <meteor app>    a build context: a real copy of enterprise/
+//   node scripts/enterprise-stage.mjs check-present <dir>  fails unless <dir> holds the real enterprise code
+//   node scripts/enterprise-stage.mjs stub <meteor app>    a stub with no enterprise code (tests, MIT-only builds)
 //   node scripts/enterprise-stage.mjs check-absent <dir>   fails when anything from enterprise/ is under <dir>
 //
-// web/app/enterprise is git-ignored, so `git archive HEAD:web` (self-host/build-images.sh) never
-// contains it.
+// web/app/enterprise is git-ignored, so `git archive HEAD:web` never contains it: builds add it.
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -100,17 +103,28 @@ export function checkAbsent(dir) {
   }
 }
 
+/** Fails unless the build context holds the real enterprise code at app/enterprise (or enterprise/ for a Meteor app dir). */
+export function checkPresent(dir) {
+  const candidates = [join(dir, 'app', 'enterprise'), join(dir, 'enterprise')]
+  const slot = candidates.find((path) => existsSync(join(path, 'server', 'index.js')))
+  const real = slot && readFileSync(join(slot, 'server', 'index.js'), 'utf8').includes(ENTERPRISE_MARKER) && existsSync(join(slot, 'client', 'index.jsx')) &&
+    existsSync(join(slot, 'LICENSE')) && readFileSync(join(slot, 'LICENSE'), 'utf8').startsWith(LICENSE_TITLE)
+  if (!real) throw new Error(`There is no enterprise code in this build under ${dir} (node scripts/enterprise-stage.mjs copy <meteor app>)`)
+  return slot
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [command, dir] = process.argv.slice(2)
   try {
     if (command === 'link') console.log(`linked ${link()}`)
     else if (command === 'copy' && dir) console.log(`copied enterprise/ to ${copy(resolve(dir))}`)
+    else if (command === 'check-present' && dir) console.log(`enterprise code is at ${checkPresent(resolve(dir))}`)
     else if (command === 'stub' && dir) console.log(`wrote the self-host stub at ${stub(resolve(dir))}`)
     else if (command === 'check-absent' && dir) {
       checkAbsent(resolve(dir))
       console.log(`no enterprise code under ${resolve(dir)}`)
     } else {
-      console.error('Usage: node scripts/enterprise-stage.mjs link | copy <meteor app> | stub <meteor app> | check-absent <dir>')
+      console.error('Usage: node scripts/enterprise-stage.mjs link | copy <meteor app> | check-present <dir> | stub <meteor app> | check-absent <dir>')
       process.exit(2)
     }
   } catch (error) {

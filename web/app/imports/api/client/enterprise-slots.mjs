@@ -1,9 +1,11 @@
-// Where the browser half of the Cloud-only enterprise/ code plugs into the MIT app. The app
+// Where the browser half of the enterprise/ code plugs into the MIT app. The app
 // leaves named slots (<EnterpriseSlot name="..."/>, imports/ui/common/EnterpriseSlot.jsx); on
-// Cloud, client/enterprise.js loads enterprise/client with import() (its own chunk, never part of
-// the first load) and its register(api, context) fills slots. On self-host the chunk is never
-// requested and every slot renders nothing.
-import { agentInviteEnabled, editionOf } from '../common/edition.mjs'
+// installs where enterprise code is unlocked (Slatebox Cloud, or a self-hosted install with a license
+// key: the server says so in settings.public.enterprise), client/enterprise.js loads
+// enterprise/client with import() (its own chunk, never part of the first load) and its
+// register(api, context) fills slots. Where it is locked the chunk is never requested and every
+// slot renders nothing.
+import { editionOf, enterpriseState } from '../common/edition.mjs'
 
 export function createSlots() {
   const components = new Map()
@@ -30,12 +32,13 @@ export function createSlots() {
 export const enterpriseSlots = createSlots()
 
 /**
- * Loads the enterprise browser module on Cloud only.
+ * Loads the enterprise browser module where the server says enterprise code is unlocked.
  * @param {{ settings: object, load: () => Promise<object>, slots?: ReturnType<typeof createSlots> }} options
  */
 export async function loadEnterpriseClient({ settings, load, slots = enterpriseSlots }) {
   const edition = editionOf(settings)
-  if (edition !== 'cloud') return { edition, loaded: false, reason: 'self-host' }
+  const state = enterpriseState(settings)
+  if (!state.unlocked) return { edition, loaded: false, reason: 'locked' }
   let mod
   try {
     mod = await load()
@@ -43,6 +46,6 @@ export async function loadEnterpriseClient({ settings, load, slots = enterpriseS
     return { edition, loaded: false, reason: 'missing' }
   }
   if (typeof mod?.register !== 'function') return { edition, loaded: false, reason: 'stub' }
-  mod.register(slots.api, { edition, agentInvite: agentInviteEnabled(settings) })
+  mod.register(slots.api, { edition, via: state.via, features: state.features, agentInvite: state.features.includes('agents.invite') })
   return { edition, loaded: true }
 }
