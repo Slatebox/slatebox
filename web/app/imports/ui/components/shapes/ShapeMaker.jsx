@@ -38,25 +38,23 @@ const viewBoxOf = (aspect = 1) => {
   return { w, h, box: `-4 -4 ${(w + 8).toFixed(1)} ${(h + 8).toFixed(1)}` }
 }
 
-/** One outline, filled with the target note's colours, with a sample label where text sits. */
-export function ShapePreview({ shape, fill = '#c9d8f0', stroke = '#3c5a8a', label = true, size = 88 }) {
-  const { w, h, box } = viewBoxOf(shape.aspect)
-  const tb = shape.textBox
+/**
+ * One outline, filled with the target note's colours, and nothing else: no stand-in for the note's
+ * text (a grey bar where text sits read as a stray dash across every tile).
+ */
+export function ShapePreview({ shape, fill = '#c9d8f0', stroke = '#3c5a8a', size = 88 }) {
+  const { box } = viewBoxOf(shape.aspect)
   return (
     <svg viewBox={box} width={size} height={size} aria-hidden style={{ display: 'block' }}>
       <path d={shape.d} fill={fill} fillRule={shape.fillRule === 'evenodd' ? 'evenodd' : 'nonzero'} stroke={stroke} strokeWidth={2} vectorEffect="non-scaling-stroke" />
-      {label && tb && (
-        <rect x={tb.x * w + tb.w * w * 0.15} y={tb.y * h + tb.h * h * 0.4} width={tb.w * w * 0.7} height={Math.max(3, tb.h * h * 0.2)} rx={2} fill="#000" fillOpacity={0.18} />
-      )}
     </svg>
   )
 }
 
 ShapePreview.propTypes = {
-  shape: PropTypes.shape({ d: PropTypes.string, aspect: PropTypes.number, fillRule: PropTypes.string, textBox: PropTypes.object }).isRequired,
+  shape: PropTypes.shape({ d: PropTypes.string, aspect: PropTypes.number, fillRule: PropTypes.string }).isRequired,
   fill: PropTypes.string,
   stroke: PropTypes.string,
-  label: PropTypes.bool,
   size: PropTypes.number,
 }
 

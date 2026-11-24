@@ -4,6 +4,7 @@
 //   - clicking an icon puts it on a new note whose outline is stored normalised (a 0..100 box, never the
 //     canvas coordinates of where the note landed);
 //   - "Create a custom shape with AI" draws exactly one shape (a stand-in model answers), and Your shapes keeps it.
+//   - every tile draws only its outline: no grey bar for the note's text (it read as a stray dash).
 //
 // The app must be started with settings that point the icon search and the shape model at the stand-in this
 // spec serves on SLATEBOX_SHAPE_MOCK_PORT (3929 unless set):
@@ -151,6 +152,19 @@ async function newestNoteOutline(page) {
   })
 }
 
+// What each tile draws: only the shape's outline (one path), no grey stand-in bar for the note's text,
+// which read as a small horizontal dash across the middle of every icon.
+async function tileDrawings(scope) {
+  return scope.locator('[data-shape-tile] svg').evaluateAll((svgs) => svgs.map((svg) => ({
+    paths: svg.querySelectorAll('path').length,
+    others: [...svg.children].filter((c) => c.tagName.toLowerCase() !== 'path').map((c) => c.tagName.toLowerCase()),
+  })))
+}
+function expectOutlineOnly(drawings, where) {
+  expect(drawings.length, `${where}: tiles are drawn`).toBeGreaterThan(0)
+  for (const d of drawings) expect(d, `${where}: one outline and nothing else`).toEqual({ paths: 1, others: [] })
+}
+
 const SIZES = [
   { name: 'desktop', viewport: { width: 1440, height: 900 } },
   { name: 'tablet', viewport: { width: 1024, height: 768 } },
@@ -177,6 +191,7 @@ for (const { name, viewport } of SIZES) {
     const tiles = pane.locator('[data-shape-tile^="icon-"]')
     await expect(pane.getByRole('button', { name: `Use ${words}` })).toBeVisible({ timeout: 20000 })
     expect(await tiles.count()).toBe(3)
+    expectOutlineOnly(await tileDrawings(pane), 'icon results')
     expect(seen.searches.length).toBe(before + 1)
     expect(seen.signed, 'the API request is signed (OAuth 1.0a)').toBeGreaterThan(0)
     await expect(pane.getByRole('link', { name: 'Icons from Noun Project' })).toBeVisible()
@@ -223,6 +238,7 @@ test('AI create draws exactly one shape, and Your shapes keeps it and the icon p
   await expect(drawn.getByRole('button', { name: 'Use this shape' })).toBeVisible({ timeout: 30000 })
   expect(seen.models.slice(models), 'one model call, asking for exactly one shape').toEqual([1])
   expect(await drawn.locator('[data-shape-tile]').count(), 'one shape, not three candidates').toBe(1)
+  expectOutlineOnly(await tileDrawings(drawn), 'the drawn shape')
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/after-desktop-1440-ai-one-shape.png` })
   const count = (await newestNoteOutline(page))?.count ?? 0
   await drawn.getByRole('button', { name: 'Use this shape' }).click()
@@ -245,6 +261,7 @@ test('AI create draws exactly one shape, and Your shapes keeps it and the icon p
   await expect(kept).toBeVisible({ timeout: 10000 })
   await expect(kept.getByRole('button', { name: 'Use Rocket' })).toBeVisible()
   await expect(kept.getByRole('button', { name: 'Use songbird' })).toBeVisible()
+  expectOutlineOnly(await tileDrawings(kept), 'Your shapes')
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/after-desktop-1440-your-shapes.png` })
   expect(errors).toEqual([])
   await context.close()

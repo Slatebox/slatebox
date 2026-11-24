@@ -80,7 +80,7 @@ function RecentShapes({ onCustom }) {
       <div className="sb-label" style={{ marginTop: 10 }}>Your shapes</div>
       <div className="sb-shapes" role="group" aria-label="Your shapes">
         {shapes.map((s) => (
-          <BarButton key={s.id} label={s.name} onClick={() => onCustom(s)}><ShapePreview shape={s} fill="currentColor" stroke="currentColor" label={false} size={24} /></BarButton>
+          <BarButton key={s.id} label={s.name} onClick={() => onCustom(s)}><ShapePreview shape={s} fill="currentColor" stroke="currentColor" size={24} /></BarButton>
         ))}
       </div>
     </>
