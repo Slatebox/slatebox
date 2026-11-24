@@ -95,6 +95,8 @@ test('a move made anyway is one step of its own, named as one, and the words tha
   const { undoWords } = await import('../web/app/imports/api/common/undo-redo-keys.mjs')
   const sprint = board([{ id: 'a', label: 'Login', laneId: 'todo' }])
   assert.equal(boardStepLabel([{ cardId: 'a', laneId: 'doing', override: true, reason: 'Doing is full.' }], sprint), 'Move Login to Doing anyway')
+  // A plan's task moved in time is named as the dialog asked it, never by its team's lane.
+  assert.equal(boardStepLabel([{ cardId: 'a', laneId: 'doing', override: true, to: 'to start day 21' }], sprint), 'Move Login to start day 21 anyway')
   assert.equal(boardStepLabel([{ cardId: 'a', laneId: 'doing' }], sprint), 'Move Login to Doing')
   assert.equal(undoWords('MacIntel'), 'Undo (⌘Z)')
   assert.equal(undoWords('Win32'), 'Undo (Ctrl+Z)')
@@ -134,4 +136,22 @@ test('a step made again ends where the server stored it: the next undo takes bac
   // A part the step takes away stays away, even if the server's copy still has it.
   const keptMark = board([{ ...before.cards[0], override: after.cards[0].override }, before.cards[1]])
   assert.deepEqual(settleBoardSide({ from: after, to: before, saved: keptMark }).cards, before.cards)
+})
+
+test("after an undo that left a teammate's change alone, Redo leaves it alone too: settling never takes their value as the step's", () => {
+  // A's step relabels c1 and moves c2.
+  const before = board([{ id: 'c1', label: 'L0', laneId: 'todo' }, { id: 'c2', label: 'C2', laneId: 'todo' }])
+  const after = board([{ id: 'c1', label: 'LA', laneId: 'todo' }, { id: 'c2', label: 'C2', laneId: 'doing' }])
+  // B relabels c1.
+  const current = board([{ id: 'c1', label: 'LB', laneId: 'todo' }, { id: 'c2', label: 'C2', laneId: 'doing' }])
+  const undone = rebaseBoardStep({ from: after, to: before, current })
+  assert.equal(undone.conflicts, 1)
+  assert.deepEqual(undone.board.cards, [{ id: 'c1', label: 'LB', laneId: 'todo' }, { id: 'c2', label: 'C2', laneId: 'todo' }])
+  // The undo is stored as sent; the step's "before" side is settled to it.
+  const settled = settleBoardSide({ from: after, to: before, saved: undone.board, sent: undone.board })
+  assert.equal(settled.cards[0].label, 'L0', "B's label is not the step's");
+  // Redo: c2 moves again, and B's label stays, reported as a conflict.
+  const redone = rebaseBoardStep({ from: settled, to: after, current: undone.board })
+  assert.equal(redone.conflicts, 1)
+  assert.deepEqual(redone.board.cards, [{ id: 'c1', label: 'LB', laneId: 'todo' }, { id: 'c2', label: 'C2', laneId: 'doing' }])
 })

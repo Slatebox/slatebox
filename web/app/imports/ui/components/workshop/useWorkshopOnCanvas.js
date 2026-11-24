@@ -96,8 +96,11 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
   // `numbers`: whether the board works out numbers from where its cards are (a plan, a pipeline, a budget), for the dialog's words.
   const askMoveAnyway = useCallback(ask => new Promise(resolve => {
     const numbers = NUMBER_BOARDS.has(known.current?.model?.workshop?.kind)
-    setMoveAnyway(previous => { previous?.answer(false); return { ask: { ...ask, numbers }, answer: resolve } })
+    // Agreed, the words it was asked in ("to start day 21") name its undo step too.
+    const answer = yes => { if (yes === true && ask?.to && ask.cardId) overrideWords.current.set(ask.cardId, ask.to); resolve(yes) }
+    setMoveAnyway(previous => { previous?.answer(false); return { ask: { ...ask, numbers }, answer } })
   }), [])
+  const overrideWords = useRef(new Map())
   // Whether the board draws its cards with rounded corners (the slate's own notes do).
   const roundCards = useRef(false)
   // What a change of this person's own would say of a shape, said once the server has saved it.
@@ -329,8 +332,9 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
       // redo or undo of the step starts from there (a move made anyway made again carries the server's new mark).
       if (result.ok && result.revision) {
         const saved = await storedAt(result.revision, result.board)
-        if (back) step.before = settleBoardSide({ from: step.after, to: step.before, saved })
-        else step.after = settleBoardSide({ from: step.before, to: step.after, saved })
+        const sent = result.board
+        if (back) step.before = settleBoardSide({ from: step.after, to: step.before, saved, sent })
+        else step.after = settleBoardSide({ from: step.before, to: step.after, saved, sent })
       }
       return { ok: result.ok, message: result.message }
     }
@@ -348,7 +352,9 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
   }
   // A change made on the board goes to the server in its turn, and is a step of this person's history now.
   function queueChange(change) {
-    if (!drawingOwnsBoardChange(change)) steps.current.set(change, pendingStep(boardStepLabel([change], known.current?.model.workshop)))
+    const to = change.override && change.cardId ? overrideWords.current.get(change.cardId) : undefined
+    if (to) overrideWords.current.delete(change.cardId)
+    if (!drawingOwnsBoardChange(change)) steps.current.set(change, pendingStep(boardStepLabel([to ? { ...change, to } : change], known.current?.model.workshop)))
     queue.current.push(change)
   }
 
