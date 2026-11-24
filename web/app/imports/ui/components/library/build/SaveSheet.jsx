@@ -2,28 +2,29 @@ import React, { useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Box, Button, Chip, Link, TextField, Typography } from '@mui/material'
 import LockIcon from '@mui/icons-material/LockOutlined'
-import { CATEGORY_LABELS, LIBRARY_CATEGORIES, LIBRARY_LICENSE_LINE, categoryLabel, readSaveSheet } from './buildTurns.mjs'
+import { CATEGORY_LABELS, CREDIT_HELP, CREDIT_QUESTION, LIBRARY_CATEGORIES, LIBRARY_LICENSE_LINE, categoryLabel, readSaveSheet } from './buildTurns.mjs'
 
 /**
  * Save, or Submit to the library (library spec §4.2): a sheet under the build bar, never a modal. A name, one line,
  * a category (five chips, or a branch's locked line), words people might search for and, to submit, a note for the
  * reviewer and the licence line. Escape or Cancel closes it; nothing is saved until Save or Submit is pressed.
  */
-export default function SaveSheet({ submitting, defaults, locked, parentTitle, busy, error, guest, onSave, onCancel }) {
+export default function SaveSheet({ submitting, defaults, locked, parentTitle, busy, error, guest, askName, onSave, onCancel }) {
   const [title, setTitle] = useState(defaults.title)
   const [summary, setSummary] = useState(defaults.summary)
   const [category, setCategory] = useState(locked ?? defaults.category)
   const [synonyms, setSynonyms] = useState(defaults.synonyms)
   const [note, setNote] = useState('')
+  const [credit, setCredit] = useState('')
   const [problem, setProblem] = useState(null)
   const first = useRef(null)
   useEffect(() => { first.current?.focus() }, [])
   const send = (event) => {
     event.preventDefault()
-    const read = readSaveSheet({ title, summary, category, synonyms, note }, { locked, submitting })
+    const read = readSaveSheet({ title, summary, category, synonyms, note, credit }, { locked, submitting, askName })
     if (read.problem) { setProblem(read); return }
     setProblem(null)
-    onSave(read.input, read.note)
+    onSave(read.input, read.note, read.credit)
   }
   const said = (field) => (problem?.field === field ? problem.problem : undefined)
   return <Box component="form" aria-label={submitting ? 'Submit to the library' : 'Save to your library'} onSubmit={send}
@@ -49,6 +50,8 @@ export default function SaveSheet({ submitting, defaults, locked, parentTitle, b
     </Box>
     <TextField label="Words people might search for (optional)" size="small" value={synonyms} onChange={(e) => setSynonyms(e.target.value)}
       helperText="Separate them with commas: standup, sprint, to do" />
+    {submitting && askName && <TextField label={CREDIT_QUESTION} size="small" value={credit} onChange={(e) => setCredit(e.target.value)} required
+      error={Boolean(said('credit'))} helperText={said('credit') ?? CREDIT_HELP} slotProps={{ htmlInput: { maxLength: 80, 'data-credit-name': '' } }} />}
     {submitting && <>
       <TextField label="Note for the reviewer (optional)" size="small" multiline minRows={2} maxRows={5} value={note} onChange={(e) => setNote(e.target.value)}
         slotProps={{ htmlInput: { maxLength: 2000 }, inputLabel: { shrink: true } }} />
@@ -74,7 +77,8 @@ SaveSheet.propTypes = {
   busy: PropTypes.string,
   error: PropTypes.shape({ code: PropTypes.string, reason: PropTypes.string }),
   guest: PropTypes.bool,
+  askName: PropTypes.bool,
   onSave: PropTypes.func.isRequired,
   onCancel: PropTypes.func.isRequired,
 }
-SaveSheet.defaultProps = { submitting: false, locked: null, parentTitle: null, busy: null, error: null, guest: false }
+SaveSheet.defaultProps = { submitting: false, locked: null, parentTitle: null, busy: null, error: null, guest: false, askName: false }

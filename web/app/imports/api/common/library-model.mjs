@@ -185,3 +185,25 @@ export function canReadItem(item, { userId = null, reviewer = false } = {}) {
 /** The waiting statuses the review queue shows by default. */
 export const QUEUE_WAITING = Object.freeze(['submitted', 'changes_requested'])
 export const QUEUE_STATUSES = Object.freeze(['submitted', 'in_review', 'changes_requested', 'rejected'])
+
+// ---------- the name an item credits ----------
+// An item credits its author by the name on their account (firstName and lastName), never their email.
+// Someone signed in with no name is asked once, as they submit ("How should we credit you?"); the answer
+// is saved to their profile, so this item and the next credit it. A guest can't submit at all.
+export const CREDIT_QUESTION = 'How should we credit you?'
+export const CREDIT_HELP = 'Shown with what you publish. Saved to your profile.'
+
+/** Whether this account has no name to credit: signed in (not a guest) with no first or last name. */
+export function needsCreditName(user) {
+  if (!user || user.isAnonymous) return false
+  return ![user.profile?.firstName, user.profile?.lastName].some((part) => typeof part === 'string' && part.trim())
+}
+
+/** The name typed as the profile keeps it ({ firstName, lastName, name }), or { problem } to show. */
+export function readCreditName(text) {
+  const name = plainText(text).slice(0, LIBRARY_LIMITS.title).trim()
+  if (!name) return { problem: 'Say how we should credit you: a name or a nickname.' }
+  if (/@/.test(name)) return { problem: 'Use a name rather than an email address: it is shown to everyone.' }
+  const [firstName, ...rest] = name.split(' ')
+  return { firstName, lastName: rest.join(' '), name }
+}

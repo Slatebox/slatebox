@@ -259,3 +259,64 @@ test("no HTML overlay draws a control: the page lends the board its controls and
     assert.doesNotMatch(app(file), /ruleControls|drawRuleControls/, file + " draws no control");
   }
 });
+
+// aicontrol fixes (2026-11-24): submitting asks someone with no name on their account how to credit them,
+// saves it to their profile, and the item credits that name. A guest can't submit at all.
+test("submit asks for a name when the account has none, saves it to the profile, and the item credits it", async (t) => {
+  const { CREDIT_QUESTION, needsCreditName, readCreditName, UNNAMED_AUTHOR } = await import("../web/app/imports/api/common/library-model.mjs");
+  assert.equal(CREDIT_QUESTION, "How should we credit you?");
+  assert.equal(needsCreditName({ _id: "a", profile: {} }), true);
+  assert.equal(needsCreditName({ _id: "a", profile: { firstName: " ", lastName: "" } }), true);
+  assert.equal(needsCreditName({ _id: "a", profile: { firstName: "Ada" } }), false);
+  assert.equal(needsCreditName({ _id: "g", isAnonymous: true }), false, "a guest is asked to sign up instead");
+  assert.equal(needsCreditName(null), false);
+  assert.deepEqual(readCreditName("  Ada   Lovelace "), { firstName: "Ada", lastName: "Lovelace", name: "Ada Lovelace" });
+  assert.deepEqual(readCreditName("Prince"), { firstName: "Prince", lastName: "", name: "Prince" });
+  assert.match(readCreditName(" ").problem, /credit you/);
+  assert.match(readCreditName("ada@example.com").problem, /email/);
+  // The sheet asks only to submit, only when asked to, and the answer travels with the submit.
+  const sheet = { title: "Mine", summary: "Does it", category: "plan" };
+  assert.deepEqual(readSaveSheet(sheet, { submitting: true, askName: true }), { problem: "Say how we should credit you: a name or a nickname.", field: "credit" });
+  assert.deepEqual(readSaveSheet({ ...sheet, credit: "Ada Lovelace" }, { submitting: true, askName: true }), { input: { title: "Mine", summary: "Does it", category: "plan" }, credit: "Ada Lovelace" });
+  assert.deepEqual(readSaveSheet({ ...sheet, credit: "Ada Lovelace" }, { submitting: true }), { input: { title: "Mine", summary: "Does it", category: "plan" } });
+  assert.deepEqual(readSaveSheet(sheet, { askName: true }), { input: { title: "Mine", summary: "Does it", category: "plan" } }, "Save never asks");
+
+  // The server credits the profile's name at submit: none yet is "A Slatebox user"; once saved, that name.
+  const users = { owner: { name: "" } };
+  const world = makeExecWorld({ library: { users } });
+  t.after(() => world.close());
+  await world.libraryReady;
+  world.users.docs.push({ _id: "guest1", isAnonymous: true });
+  const person = (userId) => principalFromUser(world.users.docs.find((user) => user._id === userId), API_TOKEN_SCOPES);
+  const run = (principal, id, input) => world.registry.run(principal, id, input).then((result) => result.body);
+  const ada = person("owner");
+  const { shareId } = await run(ada, "library.branch", { itemId: "retro" });
+  const draft = await run(ada, "library.saveDraft", { shareId, title: "Credit retro", summary: "Went well, change, try", category: "meetings" });
+  await run(ada, "library.submit", { kind: "component", itemId: draft.itemId });
+  const item = () => world.library.items.docs.find((doc) => doc._id === draft.itemId);
+  assert.equal(item().authorName, UNNAMED_AUTHOR);
+  await run(ada, "library.withdraw", { itemId: draft.itemId });
+  users.owner.name = [readCreditName("Ada Lovelace").firstName, readCreditName("Ada Lovelace").lastName].join(" ");
+  await run(ada, "library.submit", { kind: "component", itemId: draft.itemId });
+  assert.equal(item().authorName, "Ada Lovelace");
+  // A guest can't submit (they are asked to sign up), and can't name a profile they don't have.
+  const guest = person("guest1");
+  const { shareId: guestShare } = await run(guest, "library.branch", { itemId: "retro" });
+  const guestDraft = await run(guest, "library.saveDraft", { shareId: guestShare, title: "Guest retro", summary: "x" });
+  await assert.rejects(run(guest, "library.submit", { kind: "component", itemId: guestDraft.itemId }), { status: 403, code: "sign_in_to_publish" });
+
+  // The app: the method saves the name to the profile (never for a guest), the meteor loadUser reads it back,
+  // and both submit surfaces ask before they send.
+  const app = (path) => readFileSync(new URL("../web/app/" + path, import.meta.url), "utf8");
+  const users_js = app("server/methods/users.js");
+  const method = users_js.slice(users_js.indexOf("method[CONSTANTS.methods.users.setCreditName]"), users_js.indexOf("method[CONSTANTS.methods.users.certifyForEducation]"));
+  assert.match(method, /if \(user\.isAnonymous\) throw new Meteor\.Error\('sign_in_to_publish'/);
+  assert.match(method, /\$set: \{ 'profile\.firstName': read\.firstName, 'profile\.lastName': read\.lastName \}/);
+  assert.match(app("server/library/meteor.js"), /\[user\.profile\?\.firstName, user\.profile\?\.lastName\]/);
+  const builder = app("imports/ui/components/library/build/useBuilder.js");
+  assert.ok(builder.indexOf("Meteor.callAsync('users.setCreditName', credit)") > 0 && builder.indexOf("Meteor.callAsync('users.setCreditName', credit)") < builder.indexOf("libraryApi.submit("), "the name is saved before the submit");
+  assert.match(app("imports/ui/components/library/build/SaveSheet.jsx"), /submitting && askName && <TextField label=\{CREDIT_QUESTION\}/);
+  const dialog = app("imports/ui/components/library/PublishDialog.jsx");
+  assert.match(dialog, /askName && <TextField label=\{CREDIT_QUESTION\}/);
+  assert.ok(dialog.indexOf("Meteor.callAsync('users.setCreditName', credited.name)") < dialog.indexOf("libraryApi.submit("));
+});

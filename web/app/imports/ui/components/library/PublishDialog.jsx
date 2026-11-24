@@ -11,7 +11,10 @@ import Box from '@mui/material/Box'
 import Alert from '@mui/material/Alert'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
+import { Meteor } from 'meteor/meteor'
+import { useTracker } from 'meteor/react-meteor-data'
 import libraryApi from '../../../api/client/library'
+import { CREDIT_HELP, CREDIT_QUESTION, needsCreditName, readCreditName } from '../../../api/common/library-model.mjs'
 import LibraryPreview from './LibraryPreview'
 import { PUBLISH_LINE, kindLabel, publishDefaults, publishInput } from './libraryCopy.mjs'
 
@@ -25,6 +28,10 @@ export default function PublishDialog({ open, onClose, onSubmitted, kind, shareI
   const [fields, setFields] = React.useState(() => publishDefaults({ kind, name, description, libraryOrigin }))
   const [busy, setBusy] = React.useState(false)
   const [problem, setProblem] = React.useState('')
+  // Signed in with no name: asked how to credit them, saved to their profile before the item is sent.
+  const askName = useTracker(() => needsCreditName(Meteor.user()), [])
+  const [credit, setCredit] = React.useState('')
+  const [creditProblem, setCreditProblem] = React.useState('')
   React.useEffect(() => {
     if (!open) return
     const start = publishDefaults({ kind, name, description, libraryOrigin })
@@ -38,9 +45,13 @@ export default function PublishDialog({ open, onClose, onSubmitted, kind, shareI
 
   async function submit() {
     if (!ready || busy) return
+    const credited = askName ? readCreditName(credit) : null
+    if (credited?.problem) { setCreditProblem(credited.problem); return }
+    setCreditProblem('')
     setBusy(true)
     setProblem('')
     try {
+      if (credited) await Meteor.callAsync('users.setCreditName', credited.name)
       const result = await libraryApi.submit(publishInput(fields, { shareId }))
       // The result shows where the dialog was opened (the Share dialog's or the presentation settings' Library
       // section), not in a second dialog on top of the first.
@@ -70,6 +81,8 @@ export default function PublishDialog({ open, onClose, onSubmitted, kind, shareI
             inputProps={{ maxLength: 2000 }} InputLabelProps={{ shrink: true }} fullWidth />
           <TextField label="Note for the reviewer (optional)" value={fields.note} onChange={set('note')} multiline minRows={2}
             inputProps={{ maxLength: 2000 }} InputLabelProps={{ shrink: true }} fullWidth />
+          {askName && <TextField label={CREDIT_QUESTION} value={credit} onChange={(event) => setCredit(event.target.value)} required fullWidth
+            error={Boolean(creditProblem)} helperText={creditProblem || CREDIT_HELP} inputProps={{ maxLength: 80, 'data-credit-name': '' }} />}
           <Typography variant="caption" color="text.secondary">{PUBLISH_LINE}</Typography>
           {problem && <Alert severity="error" role="alert">{problem}</Alert>}
         </Box>

@@ -4,6 +4,7 @@ import { useTracker } from 'meteor/react-meteor-data'
 import { CreativeStates } from '../../../../api/client/creativeSlateStates'
 import libraryApi from '../../../../api/client/library'
 import { boardName } from './buildTurns.mjs'
+import { needsCreditName } from '../../../../api/common/library-model.mjs'
 
 /**
  * A builder slate's library state (library spec §4.2): the item it is saving to (once saved), the board being built
@@ -25,6 +26,8 @@ export default function useBuilder(slate) {
     return record?.model?.kind === 'workshop' ? record.model.workshop : null
   }, [shareId, boardId])
   const guest = useTracker(() => Boolean(Meteor.user()?.isAnonymous), [])
+  // Signed in with no name: submitting asks how to credit them (saved to their profile).
+  const askName = useTracker(() => needsCreditName(Meteor.user()), [])
 
   // The saved item: its name, line, category and where it stands.
   useEffect(() => {
@@ -49,9 +52,11 @@ export default function useBuilder(slate) {
   }, [shareId, itemId])
 
   // Submitting saves the board first (the item is made on the first save), then sends it to the review queue.
-  const submit = useCallback(async (input, note) => {
+  // A name asked for (`credit`) is saved to the profile first, so the item credits it.
+  const submit = useCallback(async (input, note, credit) => {
     setBusy('submitting'); setError(null)
     try {
+      if (credit) await Meteor.callAsync('users.setCreditName', credit)
       const saved = await libraryApi.saveDraft({ shareId, ...(itemId && { itemId }), ...input })
       setItemId(saved.itemId)
       const sent = await libraryApi.submit({ kind: 'component', itemId: saved.itemId, ...(note && { note }) })
@@ -66,7 +71,7 @@ export default function useBuilder(slate) {
 
   const status = item ? (item.reviewStatus || item.status) : null
   return {
-    shareId, library, board, guest, itemId, item, status, busy, error, clearError: () => setError(null),
+    shareId, library, board, guest, askName, itemId, item, status, busy, error, clearError: () => setError(null),
     // The category a branch keeps (its parent's): never a choice.
     locked: library?.parent?.category ?? (item?.categoryLocked ? item.category : null),
     // What the save sheet starts from: what was saved, or the board's own name.

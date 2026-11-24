@@ -2,9 +2,9 @@
 // server's tests read the same ones the page shows. A builder slate is an ordinary slate whose server-only
 // `library` field says it is building one ({mode:'build', itemId?, boardId?, parent?}); the component is a
 // real board on it, grown by the same chat (preview, then Keep) and the board's own rule controls.
-import { CATEGORY_LABELS, LIBRARY_CATEGORIES, LIBRARY_LICENSE_LINE, LIBRARY_LIMITS, categoryLabel } from '../../../../api/common/library-model.mjs'
+import { CATEGORY_LABELS, CREDIT_HELP, CREDIT_QUESTION, LIBRARY_CATEGORIES, LIBRARY_LICENSE_LINE, LIBRARY_LIMITS, categoryLabel, readCreditName } from '../../../../api/common/library-model.mjs'
 
-export { CATEGORY_LABELS, LIBRARY_CATEGORIES, LIBRARY_LICENSE_LINE, categoryLabel }
+export { CATEGORY_LABELS, CREDIT_HELP, CREDIT_QUESTION, LIBRARY_CATEGORIES, LIBRARY_LICENSE_LINE, categoryLabel }
 
 /**
  * The link that opens a builder: `/new#build` (from scratch) or `/new#build=<itemId>` (a copy of a component
@@ -100,9 +100,10 @@ export function readSynonyms(text) {
 
 /**
  * The save sheet's fields as the server takes them, or the first thing to fix (`problem`, `field`). A branch's
- * category is its parent's (locked): it is never sent as a choice, so the server fills it in.
+ * category is its parent's (locked): it is never sent as a choice, so the server fills it in. Submitting with no
+ * name on the account (`askName`) asks how to credit them: `credit` is that name, saved to their profile first.
  */
-export function readSaveSheet({ title, summary, category, synonyms, note } = {}, { locked = null, submitting = false } = {}) {
+export function readSaveSheet({ title, summary, category, synonyms, note, credit } = {}, { locked = null, submitting = false, askName = false } = {}) {
   const name = String(title ?? '').replace(/\s+/g, ' ').trim()
   const line = String(summary ?? '').replace(/\s+/g, ' ').trim()
   if (!name) return { problem: 'Give it a name.', field: 'title' }
@@ -112,11 +113,14 @@ export function readSaveSheet({ title, summary, category, synonyms, note } = {},
   const chosen = locked ?? category ?? null
   if (chosen && !LIBRARY_CATEGORIES.includes(chosen)) return { problem: 'Pick one of the categories.', field: 'category' }
   if (submitting && !chosen) return { problem: 'Pick a category, so people can find it.', field: 'category' }
+  const credited = submitting && askName ? readCreditName(credit) : null
+  if (credited?.problem) return { problem: credited.problem, field: 'credit' }
   const words = readSynonyms(synonyms)
   const message = String(note ?? '').trim().slice(0, LIBRARY_LIMITS.message)
   return {
     input: { title: name, summary: line, ...(!locked && chosen && { category: chosen }), ...(words.length && { synonyms: words }) },
     ...(message && { note: message }),
+    ...(credited && { credit: credited.name }),
   }
 }
 

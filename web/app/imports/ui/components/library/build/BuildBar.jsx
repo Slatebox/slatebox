@@ -29,8 +29,8 @@ export default function BuildBar({ slate }) {
   const first = buildFirstTurn(builder.library)
   const hasBoard = Boolean(builder.board)
   const open = (which) => { builder.clearError(); setSheet(which) }
-  const done = async (input, note) => {
-    const sent = sheet === 'submit' ? await builder.submit(input, note) : await builder.save(input)
+  const done = async (input, note, credit) => {
+    const sent = sheet === 'submit' ? await builder.submit(input, note, credit) : await builder.save(input)
     if (!sent) return
     setToast(sheet === 'submit' ? SUBMITTED_SENTENCE : SAVED_SENTENCE)
     setSheet(null)
@@ -70,7 +70,7 @@ export default function BuildBar({ slate }) {
         ? { position: 'fixed', zIndex: 1300, left: 0, right: 0, bottom: 0, maxHeight: '80dvh', overflowY: 'auto', borderRadius: '16px 16px 0 0', p: 2 }
         : { position: 'fixed', zIndex: 1300, top: 160, left: '50%', transform: 'translateX(-50%)', width: 420, maxHeight: 'calc(100dvh - 188px)', overflowY: 'auto', borderRadius: 3, p: 2 }}>
       <SaveSheet submitting={sheet === 'submit'} defaults={builder.defaults} locked={builder.locked} parentTitle={builder.library?.parent?.title ?? null}
-        busy={builder.busy} error={builder.error} guest={builder.guest} onSave={done} onCancel={() => setSheet(null)} />
+        busy={builder.busy} error={builder.error} guest={builder.guest} askName={builder.askName} onSave={done} onCancel={() => setSheet(null)} />
     </Paper>}
     <Snackbar open={Boolean(toast)} message={toast} autoHideDuration={6000} onClose={() => setToast(null)}
       anchorOrigin={{ vertical: phone ? 'top' : 'bottom', horizontal: 'center' }} />

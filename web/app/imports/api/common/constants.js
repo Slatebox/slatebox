@@ -250,6 +250,7 @@ const CONSTANTS = {
     users: {
       createAnonymous: 'users.createAnonymous',
       identify: 'users.identify',
+      setCreditName: 'users.setCreditName',
       verificationMailAvailable: 'users.verificationMailAvailable',
       sendVerification: 'users.sendVerification',
       search: 'users.search',

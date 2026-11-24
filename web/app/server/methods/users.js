@@ -19,6 +19,7 @@ import { createGuestAccount, createTrustedUser, guestLoginToken } from '../commo
 import { resolveSlateRole, slateVisibility } from './slate-role.mjs'
 import CONSTANTS from '../../imports/api/common/constants'
 import AuthManager from '../../imports/api/common/AuthManager'
+import { readCreditName } from '../../imports/api/common/library-model.mjs'
 
 import {
   Permissions,
@@ -154,6 +155,19 @@ method[CONSTANTS.methods.users.identify] = async (opts) => {
     return sendVerification(user._id)
   }
   return false
+}
+
+// The name what someone publishes credits ("How should we credit you?", asked as they submit to the
+// library when their account has no name): saved to their profile. A guest has no profile to name.
+method[CONSTANTS.methods.users.setCreditName] = async function setCreditName(text) {
+  check(text, String)
+  const user = this.userId && await Meteor.users.findOneAsync(this.userId, { fields: { isAnonymous: 1 } })
+  if (!user) throw new Meteor.Error('sign-in', 'Sign in first.')
+  if (user.isAnonymous) throw new Meteor.Error('sign_in_to_publish', 'Sign up to publish to the library. Your slates come with you.')
+  const read = readCreditName(text)
+  if (read.problem) throw new Meteor.Error('invalid-name', read.problem)
+  await Meteor.users.updateAsync({ _id: user._id }, { $set: { 'profile.firstName': read.firstName, 'profile.lastName': read.lastName } })
+  return { name: read.name }
 }
 
 method[CONSTANTS.methods.users.certifyForEducation] = async (opts) => {
@@ -684,6 +698,7 @@ const limited = [
   [CONSTANTS.methods.users.resetPassword, 5, 60000],
   [CONSTANTS.methods.users.generateSpecialUseLoginToken, 5, 60000],
   [CONSTANTS.methods.users.identify, 10, 60000],
+  [CONSTANTS.methods.users.setCreditName, 10, 60000],
   [CONSTANTS.methods.users.changeEmail, 5, 60000],
   [CONSTANTS.methods.users.createAnonymous, 10, 60000],
   [CONSTANTS.methods.users.get, 30, 60000],
