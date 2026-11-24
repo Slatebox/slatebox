@@ -50,8 +50,8 @@ export default function SaveSheet({ submitting, defaults, locked, parentTitle, b
     </Box>
     <TextField label="Words people might search for (optional)" size="small" value={synonyms} onChange={(e) => setSynonyms(e.target.value)}
       helperText="Separate them with commas: standup, sprint, to do" />
-    {submitting && askName && <TextField label={CREDIT_QUESTION} size="small" value={credit} onChange={(e) => setCredit(e.target.value)} required
-      error={Boolean(said('credit'))} helperText={said('credit') ?? CREDIT_HELP} slotProps={{ htmlInput: { maxLength: 80, 'data-credit-name': '' } }} />}
+    {submitting && askName && <TextField label={CREDIT_QUESTION} size="small" value={credit} onChange={(e) => setCredit(e.target.value)}
+      error={Boolean(said('credit'))} helperText={said('credit') ?? CREDIT_HELP} slotProps={{ htmlInput: { maxLength: 80, 'data-credit-name': '' }, inputLabel: { shrink: true } }} />}
     {submitting && <>
       <TextField label="Note for the reviewer (optional)" size="small" multiline minRows={2} maxRows={5} value={note} onChange={(e) => setNote(e.target.value)}
         slotProps={{ htmlInput: { maxLength: 2000 }, inputLabel: { shrink: true } }} />

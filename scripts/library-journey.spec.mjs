@@ -6,7 +6,12 @@
 //   3. another person branches off it: the branch keeps Track, locked (the server answers 409 to another
 //      category), and adds the published component to a slate of their own;
 //   4. the author publishes a slate from Share and a presentation from the presentation's settings; the
-//      reviewer approves both; another person opens a copy of each.
+//      reviewer approves both; another person opens a copy of each;
+//   5. with no AI to draft it, a board described in the builder is answered with the reason, never drawn as a
+//      note of the prompt; someone with no name is asked how to credit them as they submit, and is credited.
+// Throughout: the version said on approval is the stored publishedVersion (the item page's, a branch's), the
+// item page's chat examples never rename a column to a name another column has, and the old first-visit
+// welcome dialog never opens (on /signup or anywhere).
 //
 //   cd scripts && SLATEBOX_ORIGIN=http://127.0.0.1:3630 SLATEBOX_PROMOTE=<cmd> npx playwright test library-journey.spec.mjs
 // SLATEBOX_PROMOTE names a command, run as `<cmd> <userId> <first> <last> [reviewer]`, that turns a guest into a
@@ -51,7 +56,7 @@ async function openPanel(page) {
   await expect(panel(page)).toBeVisible()
 }
 /** A fresh person: a new context with no login token; a guest from `start`; promoted to a signed-in account. */
-async function person(browser, { first, last, reviewer = false, start = '/new' }) {
+async function person(browser, { first, last, reviewer = false, start = '/new', beforePromote = null }) {
   const context = await browser.newContext({ viewport: DESK })
   const page = await context.newPage()
   const errors = []
@@ -61,6 +66,7 @@ async function person(browser, { first, last, reviewer = false, start = '/new' }
   // A fresh guest: nothing carried in from another session.
   expect(await page.evaluate(() => window.Meteor?.user()?.isAnonymous ?? true)).toBe(true)
   const id = await page.evaluate(() => window.Meteor.userId())
+  if (beforePromote) await beforePromote(page)
   execFileSync(PROMOTE, [id, first, last, ...(reviewer ? ['reviewer'] : [])], { stdio: 'inherit' })
   await page.reload()
   await expect.poll(() => page.evaluate(() => window.Meteor.user()?.isAnonymous === false), { timeout: 30000 }).toBe(true)
@@ -80,7 +86,15 @@ async function approve(page) {
   await review(page).getByTestId('review-approve').click()
   await expect(page.getByRole('dialog', { name: /Publish version \d+ for everyone\?/ })).toBeVisible()
   await page.getByTestId('decision-confirm').click()
-  await expect(review(page).getByTestId('review-done')).toContainText('Published as version', { timeout: 60000 })
+  const done = review(page).getByTestId('review-done')
+  await expect(done).toContainText('Published as version', { timeout: 60000 })
+  // The version said is the one asked about: approving publishes the version its author sent.
+  return Number((await done.innerText()).match(/Published as version (\d+)/)[1])
+}
+/** No trace of the old first-visit welcome dialog (pulsing help icons, a 60-second video). */
+async function noLegacyWelcome(page) {
+  await page.waitForTimeout(2500)
+  await expect(page.getByText(/Welcome To Slatebox!|pulsing help icons|60-second video/i)).toHaveCount(0)
 }
 /** A multiline field's label sits on its outline, above the text box, never over what is typed in it. */
 async function labelClear(scope, name) {
@@ -102,7 +116,12 @@ test('1. an author builds a smart component from scratch by chat, saves it in Tr
   const author = await person(browser, { first: 'Ada', last: 'Author', start: '/new#build' })
   shared.author = author
   const { page } = author
+  // A new account's first pages: no legacy welcome dialog over /signup, nor over the builder.
+  await page.goto(ORIGIN + '/signup')
+  await noLegacyWelcome(page)
+  await page.goto(author.slate)
   await expect(bar(page)).toBeVisible({ timeout: 60000 })
+  await noLegacyWelcome(page)
   await openPanel(page)
   await expect(panel(page).getByText('What should this board do?')).toBeVisible({ timeout: 30000 })
   await shot(page, '01-build-first-turn')
@@ -126,6 +145,8 @@ test('1. an author builds a smart component from scratch by chat, saves it in Tr
   await bar(page).getByRole('button', { name: /Submit/ }).click()
   const submit = page.locator('[data-build-sheet="submit"]')
   await expect(submit.getByText('Shared under CC BY 4.0')).toBeVisible()
+  // Ada has a name on her account: she is not asked how to credit her.
+  await expect(submit.locator('[data-credit-name]')).toHaveCount(0)
   await submit.getByLabel('Note for the reviewer (optional)').fill('Built in the journey test')
   await labelClear(submit, 'Note for the reviewer (optional)')
   // The sheet opens below the build bar: nothing of the bar's second line is covered.
@@ -170,7 +191,7 @@ test('2. the reviewer refines it with the AI, approves it, and it is public: API
   await keep.last().click()
   await expect(review(page).getByTestId('refine-kept').last()).toBeVisible({ timeout: 60000 })
   await shot(page, '09-refine-kept')
-  await approve(page)
+  const version = await approve(page)
   await shot(page, '10-approved')
 
   const visitor = await playwright.request.newContext()
@@ -185,7 +206,11 @@ test('2. the reviewer refines it with the AI, approves it, and it is public: API
   expect(item.summary).toMatch(/^Stand-up board: /) // the AI's refinement, kept
   const one = await api(visitor, `/library/${item.id}`)
   expect(one.body.item.category).toBe('track')
+  // The version said on approval is the stored one, and the one served.
+  expect(one.body.item.publishedVersion).toBe(version)
+  expect(one.body.version.n).toBe(version)
   shared.component = item
+  shared.version = version
   await visitor.dispose()
 
   // The in-app gallery, signed out.
@@ -198,6 +223,16 @@ test('2. the reviewer refines it with the AI, approves it, and it is public: API
   await out.locator(`[data-library-card="${item.slug}"]`).click()
   await expect(out.getByRole('heading', { name: COMPONENT, level: 1 })).toBeVisible({ timeout: 30000 })
   await expect(out.locator(`[data-library-still="${item.id}"][data-state="drawn"]`)).toBeVisible({ timeout: 60000 })
+  await expect(out.locator('dd').filter({ hasText: /^Version \d+/ })).toContainText(`Version ${version} `)
+  // "Say it like this": every rename example gives a name the board does not already have.
+  const examples = out.getByRole('region', { name: 'Say it like this' }).or(out.locator('section[aria-labelledby="say-heading"]'))
+  await expect(examples.first()).toBeVisible({ timeout: 30000 })
+  const lanes = (one.body.version.content.workshop.lanes || []).map(lane => lane.label.toLowerCase())
+  const said = await examples.first().locator('li').allInnerTexts()
+  for (const line of said) {
+    const rename = /Rename (.+?) to (.+?)”/.exec(line)
+    if (rename && lanes.includes(rename[1].toLowerCase())) expect(lanes, line).not.toContain(rename[2].toLowerCase())
+  }
   await shot(out, '12-gallery-item')
   await outsider.close()
   expect(reviewer.errors).toEqual([])
@@ -229,6 +264,8 @@ test('3. another person branches off it (the branch keeps Track, locked) and add
   const branch = await page.evaluate(async () => (await window.Meteor.callAsync('library.mine', {})).items.find(row => row.provenance?.branchedFrom))
   expect(branch.category).toBe('track')
   expect(branch.categoryLocked).toBe(true)
+  // The branch names the version the item page shows.
+  expect(branch.provenance.branchedFrom.version).toBe(shared.version)
   const refused = await page.evaluate(async ({ shareId, itemId }) => window.Meteor.callAsync('library.saveDraft', { shareId, itemId, title: 'Moved', summary: 'x', category: 'decide' })
     .then(() => 'saved', error => String(error.error)), { shareId: canvasId(page), itemId: branch.id })
   expect(refused).toMatch(/409|category/)
@@ -290,7 +327,7 @@ test('4. a slate and a presentation go through the queue, and another person ope
   const reviewer = shared.reviewer
   for (const title of [SLATE, DECK]) {
     await openFromQueue(reviewer.page, title)
-    await approve(reviewer.page)
+    shared.published = { ...(shared.published || {}), [title]: await approve(reviewer.page) }
   }
   await shot(reviewer.page, '17-presentation-approved')
   const visitor = await playwright.request.newContext()
@@ -301,6 +338,8 @@ test('4. a slate and a presentation go through the queue, and another person ope
   const slate = await find('slate', SLATE)
   const deck = await find('presentation', DECK)
   expect(slate && deck).toBeTruthy()
+  // Each served at the version its approval said.
+  for (const [row, title] of [[slate, SLATE], [deck, DECK]]) expect((await api(visitor, `/library/${row.id}`)).body.item.publishedVersion).toBe(shared.published[title])
   await visitor.dispose()
 
   // Another person opens a copy of each: private slates of theirs that remember where they came from.
@@ -317,4 +356,51 @@ test('4. a slate and a presentation go through the queue, and another person ope
   }
   expect(shared.author.errors.concat(reviewer.errors, other.errors)).toEqual([])
   for (const who of [shared.author, reviewer, other]) await who.context.close()
+})
+
+test('5. with no AI, a described board gets the reason; someone with no name is asked how to credit them, and is credited', async ({ browser }) => {
+  // A guest has no AI to draft with: describing a board says so, and draws nothing.
+  const nia = await person(browser, { first: '', last: '', start: '/new#build', beforePromote: async page => {
+    await expect(bar(page)).toBeVisible({ timeout: 60000 })
+    await openPanel(page)
+    const notes = await page.locator('[data-node-id]').count()
+    await say(page, 'A board where ideas go in piles of five')
+    await expect(panel(page).getByText(/Sign in|signed-in members/)).toBeVisible({ timeout: 30000 })
+    await expect(panel(page).getByRole('button', { name: 'Keep changes' })).toHaveCount(0)
+    await page.waitForTimeout(1500)
+    expect(await page.locator('[data-node-id]').count()).toBe(notes)
+    await expect(page.locator('[data-node-id]').filter({ hasText: 'piles of five' })).toHaveCount(0)
+    await shot(page, '20-no-ai-described-board')
+  } })
+  const { page } = nia
+  await noLegacyWelcome(page)
+  expect(await page.evaluate(() => [window.Meteor.user().profile?.firstName ?? '', window.Meteor.user().profile?.lastName ?? ''].join('').trim())).toBe('')
+  await expect(bar(page)).toBeVisible({ timeout: 60000 })
+  await openPanel(page)
+  await panel(page).locator('[data-shape="columns"]').click()
+  await panel(page).getByRole('button', { name: 'Keep changes' }).click({ timeout: 60000 })
+  await expect(page.locator('g[data-rule-controls]')).toHaveCount(1, { timeout: 60000 })
+  await bar(page).getByRole('button', { name: /Submit/ }).click()
+  const submit = page.locator('[data-build-sheet="submit"]')
+  await submit.getByLabel('Name').fill(`Credit board ${RUN}`)
+  await submit.getByLabel('What it does, in one line').fill('Three columns to try crediting')
+  await submit.getByRole('button', { name: 'Plan' }).click()
+  const credit = submit.locator('[data-credit-name]')
+  await expect(submit.getByLabel(/How should we credit you\?/)).toBeVisible()
+  await submit.getByRole('button', { name: 'Submit for review' }).click()
+  await expect(submit.getByText('Say how we should credit you')).toBeVisible()
+  await credit.fill('Nia Okafor')
+  // A one-line field: its label sits on the outline, above the typed name, never over it.
+  const creditLabel = await submit.locator('label', { hasText: 'How should we credit you?' }).boundingBox()
+  const creditBox = await credit.boundingBox()
+  expect(creditLabel.y + creditLabel.height, 'the credit label lies over the name').toBeLessThanOrEqual(creditBox.y + creditBox.height / 2)
+  await shot(page, '21-credit-name')
+  await submit.getByRole('button', { name: 'Submit for review' }).click()
+  await expect(bar(page)).toContainText('Submitted for review', { timeout: 30000 })
+  // Saved to the profile, and the item credits it.
+  await expect.poll(() => page.evaluate(() => window.Meteor.user().profile?.firstName)).toBe('Nia')
+  const mine = await page.evaluate(async () => (await window.Meteor.callAsync('library.mine', {})).items)
+  expect(mine.find(row => row.title === `Credit board ${RUN}`)?.authorName).toBe('Nia Okafor')
+  expect(nia.errors).toEqual([])
+  await nia.context.close()
 })

@@ -82,7 +82,7 @@ export default function PublishDialog({ open, onClose, onSubmitted, kind, shareI
           <TextField label="Note for the reviewer (optional)" value={fields.note} onChange={set('note')} multiline minRows={2}
             inputProps={{ maxLength: 2000 }} InputLabelProps={{ shrink: true }} fullWidth />
           {askName && <TextField label={CREDIT_QUESTION} value={credit} onChange={(event) => setCredit(event.target.value)} required fullWidth
-            error={Boolean(creditProblem)} helperText={creditProblem || CREDIT_HELP} inputProps={{ maxLength: 80, 'data-credit-name': '' }} />}
+            error={Boolean(creditProblem)} helperText={creditProblem || CREDIT_HELP} inputProps={{ maxLength: 80, 'data-credit-name': '' }} InputLabelProps={{ shrink: true }} />}
           <Typography variant="caption" color="text.secondary">{PUBLISH_LINE}</Typography>
           {problem && <Alert severity="error" role="alert">{problem}</Alert>}
         </Box>
