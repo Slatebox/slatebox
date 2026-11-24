@@ -55,7 +55,7 @@ const refuse = (status, code, message, details) => {
   throw new ConnectorRefused(status, code, message, details)
 }
 
-export const PRO_REQUIRED = 'Inviting agents onto your slates is part of Slatebox Pro.'
+export const PRO_REQUIRED = 'Inviting agents onto your slates is part of Slatebox Pro and Slatebox Business.'
 
 /** The principal an invited agent's work runs as: the inviter's account, named after the agent. */
 export const connectorPrincipal = (connection, runId) => ({

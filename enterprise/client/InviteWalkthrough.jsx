@@ -196,12 +196,12 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
                   sx={{ textAlign: 'left', p: 1.5, border: '1px solid', borderColor: item.featured ? 'primary.main' : 'divider', borderRadius: 2, bgcolor: 'background.paper', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
                   <Typography variant="subtitle2">⬡ {item.name}</Typography>
                   <Typography variant="caption" color="text.secondary" component="div">{item.job} · {cardCost(item)}</Typography>
-                  {cloud && <Typography variant="caption" color="text.secondary" component="div">Needs Slatebox Pro</Typography>}
+                  {cloud && <Typography variant="caption" color="text.secondary" component="div">Needs Slatebox Pro or Business</Typography>}
                   <Typography variant="body2" sx={{ mt: 0.5 }}>{item.lands}</Typography>
                 </Box>
               ))}
             </Box>
-            <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 2 }}>Any MCP server works: open ones straight away, others after you sign in on their own page or paste a key. Slatebox AI turns what it answers into notes on your slate.{cloud ? ' Inviting agents is part of Slatebox Pro.' : ''}</Typography>
+            <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 2 }}>Any MCP server works: open ones straight away, others after you sign in on their own page or paste a key. Slatebox AI turns what it answers into notes on your slate.{cloud ? ' Inviting agents is part of Slatebox Pro and Slatebox Business.' : ''}</Typography>
           </>
         )}
         {step === 'discovering' && (

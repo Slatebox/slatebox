@@ -25,9 +25,10 @@ import req from '/server/methods/ai/req'
 import { resolveAIFeatureConfig } from '/server/methods/ai/feature-config.mjs'
 import { runAIAction } from '/server/metering/context.mjs'
 import { proActive } from '/server/pro-billing.mjs'
+import { invitesAgents } from '/imports/api/business/membership.mjs'
 import { presence } from '/server/presence/meteor'
 import { firstNameOf, sanitizeClientName } from '/imports/api/common/agent-label.mjs'
-import { Slates } from '/imports/api/common/models'
+import { Organizations, Slates } from '/imports/api/common/models'
 import { loadMasterKey } from '/server/metering/vault.mjs'
 import { createMcpFetch } from './mcp-fetch.mjs'
 import { callTool, discover } from './mcp-session.mjs'
@@ -179,12 +180,15 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     applyOperations: (principal, input, mode) =>
       registry.run(principal, 'slates.applyOperations', { ...input, mode }, mode === 'save' ? { idempotencyKey: `${principal.runId}:${input.plan.operations[0]?.ids?.[0] || 'k'}` } : {}),
     access: { forUser, forToken, reload: (shareId) => Slates.findOneAsync({ shareId }, { fields: { revision: 1 } }) },
-    // Slatebox Pro is needed to invite agents on Slatebox Cloud. A licensed self-hosted install has
-    // no Pro: its license is what unlocks invited agents for everyone who may edit there.
+    // Slatebox Pro, or a seat on a team with an active Slatebox Business membership (owner, 2026-11-24:
+    // Business members count as Pro for this), is needed to invite agents on Slatebox Cloud. A licensed
+    // self-hosted install has no Pro: its license is what unlocks invited agents for everyone who may edit there.
     pro: async (userId) => {
       if (via !== 'cloud') return true
-      const user = await Meteor.users.findOneAsync(userId, { fields: { pro: 1 } })
-      return proActive(user?.pro)
+      const user = await Meteor.users.findOneAsync(userId, { fields: { pro: 1, orgId: 1 } })
+      if (proActive(user?.pro)) return true
+      const org = user?.orgId ? await Organizations.findOneAsync(user.orgId, { fields: { business: 1 } }) : null
+      return invitesAgents({ pro: false, org })
     },
     firstName: async (userId) => firstNameOf(await Meteor.users.findOneAsync(userId, { fields: { profile: 1, emails: 1 } })),
     sanitizeName: sanitizeClientName,

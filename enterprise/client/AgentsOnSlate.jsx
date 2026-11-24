@@ -50,7 +50,7 @@ export function rosterEntries(connections) {
 export function cannotAskText(c) {
   if (!c.mine) return `Only ${c.inviterName || 'the person who invited it'} can ask ${c.name}.`
   if (c.status === 'needs_sign_in') return `${c.name} needs you to sign in again. Open its chip below the canvas to sign in.`
-  if (c.status === 'pro_ended') return `Asking ${c.name} is part of Slatebox Pro. Open its chip below the canvas to renew Pro.`
+  if (c.status === 'pro_ended') return `Asking ${c.name} is part of Slatebox Pro and Slatebox Business. Open its chip below the canvas to renew Pro.`
   if (c.status === 'paused') return `${c.name}'s tools changed. Open its chip below the canvas to look at them again.`
   return ''
 }
