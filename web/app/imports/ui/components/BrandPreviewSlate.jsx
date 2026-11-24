@@ -11,6 +11,10 @@ import { sampleSlate } from './brand/brandKit.mjs'
 import { fitInPage, fontsReady } from './brand/measure'
 import { stillPicture } from './stillPicture.mjs'
 
+// The editing chrome a picture of a slate leaves out (the engine's own export list: Export.ts).
+export const CHROME = ['[class*="svg_select"]', '.connection-handle', '.connector-handle', '.connector-handle-glyph', '.line-tool-preview',
+  '.line-tool-tip', '.comment-badge', '.node-link-badge', '.node-cog', '.node-toolbar', '.line-cog']
+
 export default function BrandPreviewSlate({ previewId, style, height, onDrawn }) {
   const containerId = `brand-preview-${previewId}`
   const slateRef = useRef(null)
@@ -93,7 +97,7 @@ export default function BrandPreviewSlate({ previewId, style, height, onDrawn })
   }, [ready, styleKey])
 
   return (
-    <Box ref={boxRef} data-brand-preview-slate="" sx={{ position: 'relative', width: '100%', height, borderRadius: '10px', overflow: 'hidden', border: '1px solid', borderColor: 'divider', bgcolor: style.background }}>
+    <Box ref={boxRef} data-brand-preview-slate="" sx={{ position: 'relative', width: '100%', height, borderRadius: '10px', overflow: 'hidden', border: '1px solid', borderColor: 'divider', bgcolor: style.background, [`& ${CHROME.join(', & ')}`]: { display: 'none' } }}>
       <Box id={containerId} sx={{ width: '100%', height: '100%', pointerEvents: 'none' }} />
     </Box>
   )

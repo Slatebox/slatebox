@@ -64,7 +64,7 @@ test('a title in a fixed frame shrinks until every word is whole and the lines f
   assert.ok(fit.lines.every((line) => measureAt(line, fit.size) <= 230))
 })
 
-test('the sample slate sizes every note with fit and links each heading to its notes', () => {
+test('the sample slate sizes every note with fit and links each heading to its notes in a chain', () => {
   const style = effectiveStyle({ categoryStyles: [{ backgroundColor: '#123456' }], categoryFont: 'Lora', categoryFontSize: 120, noteFont: 'Caveat', noteFontSize: 44 })
   const seen = []
   const fit = ({ text, fontSize, fontFamily, ...limits }) => {
@@ -80,7 +80,10 @@ test('the sample slate sizes every note with fit and links each heading to its n
   }
   const heading = notes.find((n) => n.id === 'brand-heading-0')
   assert.deepEqual([heading.backgroundColor, heading.foregroundColor, heading.fontFamily, heading.fontSize], ['#123456', '#ffffff', 'Lora', 120])
-  assert.equal(json.nodes.find((n) => n.options.id === 'brand-heading-1').relationships.associations.length, SAMPLE_NOTES[1].length)
+  // Lines run as a chain, heading to first note to the next, so none crosses a note.
+  const linksFrom = (id) => json.nodes.find((n) => n.options.id === id).relationships.associations.map((a) => [a.parentId, a.childId])
+  assert.deepEqual(linksFrom('brand-heading-1'), [['brand-heading-1', 'brand-note-1-0']])
+  assert.deepEqual(linksFrom('brand-note-1-0'), [['brand-note-1-0', 'brand-note-1-1']])
   // Columns never overlap however wide the words make them.
   const heads = notes.filter((n) => n.id.startsWith('brand-heading-')).sort((a, b) => a.xPos - b.xPos)
   heads.slice(1).forEach((h, i) => assert.ok(h.xPos >= heads[i].xPos + heads[i].width))

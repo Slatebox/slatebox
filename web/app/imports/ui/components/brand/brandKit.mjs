@@ -432,7 +432,10 @@ export function sampleSlate(style, fit, { headings = SAMPLE_HEADINGS, notes = SA
         },
         relationships: { associations: [] },
       })
-      associations.push({ parentId: headId, childId: id, lineColor: hs.backgroundColor, lineWidth: 3, showChildArrow: false, lineType: 'bezier' })
+      // A chain (heading to the first note, each note to the next), so no line crosses a note.
+      const link = { childId: id, lineColor: hs.backgroundColor, lineWidth: 3, showChildArrow: false, lineType: 'bezier' }
+      if (row === 0) associations.push({ parentId: headId, ...link })
+      else nodes[nodes.length - 2].relationships.associations.push({ parentId: `brand-note-${col}-${row - 1}`, ...link })
       y += k.box.height + STACK
     })
     nodes.unshift({

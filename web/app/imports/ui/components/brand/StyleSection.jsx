@@ -18,14 +18,15 @@ import CloseIcon from '@mui/icons-material/Close'
 import CONSTANTS from '../../../api/common/constants'
 import {
   BRAND_FONTS, SIZE_CHOICES, MIN_FONT_SIZE, MAX_FONT_SIZE, SLATEBOX_DEFAULTS,
-  backgroundKind, backgroundOf, backgroundValue, fontInfo, fontSize, inkOn, normalHex,
+  backgroundKind, backgroundOf, backgroundValue, colorName, fontInfo, fontSize, inkOn, normalHex,
 } from './brandKit.mjs'
 import { ContrastBadge, Dot, Label } from './ui'
 
 /** A button showing a color; opens the kit's swatches, black and white, and any color. */
 export function ColorChoice({ value, palette, onChange, label, allowAuto, disabled, testId }) {
   const [anchor, setAnchor] = useState(null)
-  const name = value ? (palette.find((c) => c.value === value)?.name || value) : 'Automatic'
+  const plain = { '#ffffff': 'White', '#111111': 'Black', '#000000': 'Black' }
+  const name = value ? (palette.find((c) => c.value === value)?.name || plain[value] || colorName(value)) : 'Automatic'
   const swatches = [...palette.map((c) => ({ value: c.value, name: c.name })), { value: '#ffffff', name: 'White' }, { value: '#111111', name: 'Black' }]
     .filter((s, i, all) => all.findIndex((o) => o.value === s.value) === i)
   const pick = (v) => { setAnchor(null); onChange(v) }
@@ -70,7 +71,7 @@ function FontField({ label, family, size, isSet, onFamily, onSize, sample, disab
       <Label hint={isSet ? null : unsetHint}>{label}</Label>
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
         <TextField select size="small" value={info.family} disabled={disabled} onChange={(e) => onFamily(e.target.value)}
-          SelectProps={{ inputProps: { 'aria-label': `${label} font` } }} sx={{ minWidth: 200, flex: '1 1 200px' }}>
+          SelectProps={{ inputProps: { 'aria-label': `${label} font` }, renderValue: (v) => <Box component="span" sx={{ fontFamily: `"${v}"` }}>{v}</Box> }} sx={{ minWidth: 200, flex: '1 1 200px' }}>
           {options.map((f) => (
             <MenuItem key={f.family} value={f.family} sx={{ fontFamily: `"${f.family}"`, display: 'flex', gap: 1 }}>
               <span>{f.label === f.family ? f.family : `${f.family}`}</span>

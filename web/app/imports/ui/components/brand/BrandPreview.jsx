@@ -10,7 +10,7 @@ import Typography from '@mui/material/Typography'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore'
 import NavigateNextIcon from '@mui/icons-material/NavigateNext'
-import BrandPreviewSlate from '../BrandPreviewSlate'
+import BrandPreviewSlate, { CHROME } from '../BrandPreviewSlate'
 import { fitSize } from './fitNote.mjs'
 import { fontsReady, measurer } from './measure'
 
@@ -26,24 +26,37 @@ Caption.propTypes = { title: PropTypes.string.isRequired, children: PropTypes.no
 Caption.defaultProps = { children: null }
 
 /** A title in a fixed box, at the largest size that fits with every word whole (fitNote.mjs). */
-function FittedTitle({ text, font, maxSize, width, height }) {
+function FittedTitle({ text, font, maxSize }) {
+  const box = useRef(null)
+  const [room, setRoom] = useState(null)
   const [fit, setFit] = useState(null)
   useEffect(() => {
+    const el = box.current
+    if (!el || typeof ResizeObserver === 'undefined') return undefined
+    const watch = new ResizeObserver(([entry]) => setRoom({ width: Math.floor(entry.contentRect.width), height: Math.floor(entry.contentRect.height) }))
+    watch.observe(el)
+    return () => watch.disconnect()
+  }, [])
+  useEffect(() => {
     let live = true
+    if (!room?.width || !room?.height) return undefined
     fontsReady([font]).then(() => {
       if (!live) return
-      setFit(fitSize({ text, width, height, maxSize, measureAt: (s, size) => measurer({ fontSize: size, fontFamily: font })(s) }))
+      setFit(fitSize({ text, width: room.width - 8, height: room.height - 4, maxSize, measureAt: (s, size) => measurer({ fontSize: size, fontFamily: font })(s) }))
     })
     return () => { live = false }
-  }, [text, font, maxSize, width, height])
-  if (!fit) return null
+  }, [text, font, maxSize, room?.width, room?.height])
   return (
-    <Box component="span" sx={{ fontFamily: `"${font}"`, fontSize: fit.size, lineHeight: 1.3, display: 'block', textAlign: 'center', whiteSpace: 'pre' }}>
-      {fit.lines.join('\n')}
+    <Box ref={box} sx={{ position: 'absolute', inset: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {fit && (
+        <Box component="span" data-fitted-title={fit.size} sx={{ fontFamily: `"${font}"`, fontSize: fit.size, lineHeight: 1.3, textAlign: 'center', whiteSpace: 'pre' }}>
+          {fit.lines.join('\n')}
+        </Box>
+      )}
     </Box>
   )
 }
-FittedTitle.propTypes = { text: PropTypes.string.isRequired, font: PropTypes.string.isRequired, maxSize: PropTypes.number.isRequired, width: PropTypes.number.isRequired, height: PropTypes.number.isRequired }
+FittedTitle.propTypes = { text: PropTypes.string.isRequired, font: PropTypes.string.isRequired, maxSize: PropTypes.number.isRequired }
 
 function PresentationFrame({ style, logoUrl }) {
   const heading = style.headings[0]
@@ -54,7 +67,7 @@ function PresentationFrame({ style, logoUrl }) {
         <Box component="img" src={logoUrl || '/images/sb_yellow_boxes.svg'} alt={logoUrl ? 'Your square logo' : 'The Slatebox mark (no square logo yet)'} sx={{ width: '100%' }} />
       </Box>
       <Box sx={{ position: 'absolute', inset: '18% 16% 30%', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '10px', bgcolor: heading.backgroundColor, color: heading.foregroundColor, px: 1 }}>
-        <FittedTitle text="Quarterly roadmap" font={style.headingFont} maxSize={Math.min(style.headingSize * 1.6, 40)} width={230} height={70} />
+        <FittedTitle text="Quarterly roadmap" font={style.headingFont} maxSize={Math.min(style.headingSize * 1.6, 40)} />
       </Box>
       <Box sx={{ position: 'absolute', left: '15%', right: '15%', bottom: 0, display: 'flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.5,
         bgcolor: style.barColor, color: style.controlsColor, borderTopLeftRadius: 10, borderTopRightRadius: 10 }}>
@@ -99,6 +112,7 @@ export default function BrandPreview({ style, logoUrl, compact }) {
       const copy = svg.cloneNode(true)
       copy.removeAttribute('id')
       copy.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'))
+      copy.querySelectorAll(CHROME.join(',')).forEach((el) => el.remove())
       const html = copy.outerHTML
       if (html !== last.current) { last.current = html; setPicture(html) }
     }, 400)

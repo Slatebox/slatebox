@@ -7,7 +7,8 @@
 //   - a single word wider than that is cut into pieces (what the brand kit's preview used to show:
 //     "Categor / y 1"), so the note must be at least as wide as its longest word plus that margin;
 //   - the text is shrunk (never grown) when its box is wider than width - 12 or taller than height - 10;
-//   - a line is 1.3 times the font size.
+//   - a line is 1.3 times the font size; a script font's swashes (Caveat) reach past it, so a note
+//     gets six tenths of a line more.
 // `measure(text)` is the text's width in pixels at the note's font: in the page, a canvas measureText
 // with the same font string the engine uses, after the font has loaded.
 
@@ -74,12 +75,13 @@ export function fitNote({ text, fontSize, measure, minWidth = 120, maxWidth = 32
   const words = String(text ?? '').split(/\s+/).filter(Boolean)
   const longest = words.reduce((w, word) => Math.max(w, measure(word)), 0)
   const oneLine = Math.max(0, ...String(text ?? '').split('\n').map((line) => measure(line.trim())))
-  const pad = WRAP_MARGIN + SAFETY
+  // Glyphs whose ink reaches past their advance (a script font's swashes) grow with the size.
+  const pad = WRAP_MARGIN + SAFETY + size * 0.04
   let width = Math.min(Math.max(oneLine + pad, minWidth), maxWidth)
   width = Math.ceil(Math.max(width, longest + pad))
   const lines = wrapLines(text, width - WRAP_MARGIN, measure)
   const textHeight = lines.length * size * LINE_HEIGHT
-  const height = Math.ceil(Math.max(minHeight, textHeight + FIT_MARGIN_Y + SAFETY + size * 0.3))
+  const height = Math.ceil(Math.max(minHeight, textHeight + FIT_MARGIN_Y + SAFETY + size * 0.6))
   return { width, height, lines }
 }
 
