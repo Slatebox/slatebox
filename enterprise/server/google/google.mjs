@@ -33,7 +33,7 @@ export const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file'
 export const GOOGLE_SCOPES = Object.freeze([DRIVE_FILE_SCOPE])
 // Granted alongside by Google itself when a person already allowed them to this client; harmless.
 const TOLERATED = new Set([DRIVE_FILE_SCOPE, 'openid', 'email', 'profile', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'])
-export const GOOGLE_LIMITS = Object.freeze({ uploadBytes: 20 * 1024 * 1024, downloadBytes: 2 * 1024 * 1024, files: 20, readChars: 6000 })
+export const GOOGLE_LIMITS = Object.freeze({ uploadBytes: 20 * 1024 * 1024, downloadBytes: 2 * 1024 * 1024, files: 20, readChars: 6000, pictureBytesPerCall: 30 * 1024 * 1024, picturesPerHour: 60 })
 export const GOOGLE_PRO = 'Google integration is part of Slatebox Pro and Slatebox Business.'
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
 
@@ -94,10 +94,13 @@ export function createGoogleService({
   config, // () => googleSettings(...)
   pro, // async (userId) -> boolean
   enabled = async () => true, // the Google card is on in /admin/ai › Gallery
-  access, // { forUser(shareId, userId) -> { slate, canRead, canEdit } | null }
+  access, // { forUser(shareId, userId), forToken(principal, shareId) } -> { slate, canRead, canEdit } | null
   applyOperations, // the registry's slates.applyOperations as an agent (a save is a live suggestion)
   presence = { end: async () => {} },
-  publishImage = null, // async ({ buffer, slateId }) -> a public https address (Docs and Slides fetch pictures from one)
+  // async ({ buffer, slateId }) -> { url, remove() } (or a bare url): a public https address Docs and
+  // Slides fetch a picture from once, at insertion (they keep their own copy); removed right after.
+  publishImage = null,
+  onConnected = async () => {}, // async (integration): the connector service resumes its agents on every slate
   itemsFromLayout, // translate.mjs
   audit = () => {},
   now = Date.now,
@@ -115,14 +118,27 @@ export function createGoogleService({
     if (!vault?.available?.()) refuse(422, 'vault_off', 'Google needs the server\'s key-encryption key, which is not set.')
     if (!(await pro(principal.userId))) refuse(402, 'pro_required', GOOGLE_PRO)
   }
+  // A token (API, exec, MCP) by the token rule: its account's own rights, never an unlisted link's
+  // (a bearer token carries no invitation). A signed-in page by its session's rule.
+  async function accessOf(principal, shareId) {
+    if (typeof shareId !== 'string') return null
+    if (principal.kind === 'agent' && !principal.connector) return access.forToken ? access.forToken(principal, shareId) : null
+    return access.forUser(shareId, principal.userId)
+  }
   async function slateFor(principal, shareId, { edit = false } = {}) {
-    const found = typeof shareId === 'string' ? await access.forUser(shareId, principal.userId) : null
+    const found = await accessOf(principal, shareId)
     if (!found?.slate || !found.canRead) refuse(404, 'not_found', 'Slate not found or unavailable.')
     if (edit && !found.canEdit) refuse(403, 'forbidden', 'Only people who can edit this slate can do that.')
     return found.slate
   }
 
   const integrationOf = (userId) => integrations.findOne({ ownerId: userId, address: GOOGLE_ADDRESS })
+
+  /** Whether Google works on this server at all: the card on, a client, the vault key (agents check this too). */
+  async function usable() {
+    const cfg = config()
+    return Boolean((await enabled()) && cfg.clientId && cfg.clientSecret && vault?.available?.())
+  }
 
   // The person's Google token (renewed under the vault's lease when it is about to end).
   async function tokenOf(userId) {
@@ -179,7 +195,7 @@ export function createGoogleService({
       pickerReady: Boolean(on && cfg.pickerApiKey && cfg.appId),
       scopes: [...GOOGLE_SCOPES],
       connected: Boolean(row && row.status !== 'needs_sign_in'),
-      ...(row && { integrationId: row._id, status: !isPro && row.status === 'active' ? 'pro_ended' : row.status, grantedScopes: row.scopes || [] }),
+      ...(row && { integrationId: row._id, status: !isPro && row.status === 'active' ? 'pro_ended' : row.status, grantedScopes: row.scopes || [], account: row.account || null }),
       pro: isPro,
     }
   }
@@ -229,21 +245,29 @@ export function createGoogleService({
       server: { issuer: GOOGLE_ISSUER, tokenEndpoint: `${bases().oauth}/token`, revocationEndpoint: `${bases().oauth}/revoke` },
       tokens: { ...tokens, scopes: granted },
     })
+    // Which Google account this is (Drive's about, allowed under drive.file): the Picker is told to use
+    // the same one, so the files picked there are ones this sign-in may open.
+    const about = await fetch(`${bases().drive}/drive/v3/about?fields=user(emailAddress)`, { method: 'GET', headers: { authorization: `Bearer ${tokens.accessToken}` } })
+      .then((response) => (response.ok ? response.json() : null)).catch(() => null)
+    const email = typeof about?.user?.emailAddress === 'string' && /^[^\s@]{1,64}@[^\s@]{1,190}$/.test(about.user.emailAddress) ? about.user.emailAddress : null
     const at = new Date(now())
     const tools = normalizeTools(DRIVE_TOOLS).map(({ name, title, description, group, hash }) => ({ name, title, description, group, hash, policy: 'allow' }))
     const existing = await integrationOf(principal.userId)
     let integrationId = existing?._id
-    if (existing) await integrations.update(existing._id, { status: 'active', auth: { kind: 'oauth', issuer: GOOGLE_ISSUER }, scopes: granted, tools, changed: null, updatedAt: at })
+    if (existing) await integrations.update(existing._id, { status: 'active', auth: { kind: 'oauth', issuer: GOOGLE_ISSUER }, scopes: granted, tools, changed: null, account: email, updatedAt: at })
     else {
       integrationId = 'i' + randomBytes(9).toString('base64url').replace(/[^A-Za-z0-9]/g, 'x')
       await integrations.insert({
         _id: integrationId, ownerType: 'user', ownerId: principal.userId, kind: 'google', address: GOOGLE_ADDRESS, host: GOOGLE_HOST, galleryId: 'googledrive',
         name: 'Google Drive', serverName: 'Google Drive', tools, auth: { kind: 'oauth', issuer: GOOGLE_ISSUER }, scopes: granted, defaultContextLevel: 'request', rule: 'ask',
-        colorIndex: 2, status: 'active', createdAt: at, updatedAt: at, lastUsedAt: null,
+        colorIndex: 2, status: 'active', account: email, createdAt: at, updatedAt: at, lastUsedAt: null,
       })
     }
+    // Connecting again is consenting again: the Drive agent resumes on every slate it is on (paused
+    // ones too, e.g. after its fixed tools changed in a release).
+    await onConnected(await integrationOf(principal.userId)).catch(() => {})
     audit({ kind: 'google_connect', userId: principal.userId, scopes: granted.length })
-    return { ok: true, integrationId, scopes: granted }
+    return { ok: true, integrationId, scopes: granted, account: email }
   }
 
   // The app-made "Slatebox" folder in the person's Drive (found again, or made once).
@@ -306,39 +330,117 @@ export function createGoogleService({
 
   const docLinkId = (userId, slateId) => `${userId}:${slateId}`
 
+  // Pictures for Docs and Slides. Google fetches each from a public address once, when it is inserted,
+  // and keeps its own copy, so the app's copy lives only for that request: each picture is checked to
+  // be a PNG, counted against the person's hourly budget, published, and removed right after.
+  const pictureLog = new Map() // userId -> the times of their recent pictures
+  function budgetPictures(userId, count) {
+    if (!count) return
+    const since = now() - 3600000
+    const times = (pictureLog.get(userId) || []).filter((at) => at > since)
+    if (times.length + count > GOOGLE_LIMITS.picturesPerHour) refuse(429, 'too_many_pictures', 'That is a lot of pictures in one hour. Try again later, or export without pictures.')
+    for (let i = 0; i < count; i++) times.push(now())
+    pictureLog.set(userId, times)
+  }
+  function decodePictures(images) {
+    const buffers = images.map((image) => (image ? decode('png', image) : null))
+    const total = buffers.reduce((sum, buffer) => sum + (buffer?.length || 0), 0)
+    if (buffers.some((buffer) => buffer && buffer.length > GOOGLE_LIMITS.uploadBytes) || total > GOOGLE_LIMITS.pictureBytesPerCall) refuse(413, 'too_large', 'Those pictures are too large.')
+    return buffers
+  }
+  // Google must be able to fetch it: https, and not an address only this network knows (a self-hosted
+  // install's own file store often is). Anything else goes without its picture.
+  const PRIVATE_V4 = /^(0|10|127)\.|^169\.254\.|^192\.168\.|^172\.(1[6-9]|2\d|3[01])\.|^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./
+  function reachableByGoogle(url) {
+    let parsed
+    try {
+      parsed = new URL(url)
+    } catch {
+      return false
+    }
+    const host = parsed.hostname.toLowerCase()
+    if (parsed.protocol !== 'https:' || !host.includes('.') || host.startsWith('[')) return false
+    if (/(^|\.)(localhost|local|internal|intranet|lan|home|corp|localdomain|home\.arpa)$/.test(host)) return false
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(host) && PRIVATE_V4.test(host)) return false
+    return true
+  }
+  async function publishPictures(slateId, buffers) {
+    const out = []
+    for (const buffer of buffers) {
+      const made = buffer && publishImage ? await publishImage({ buffer, slateId }).catch(() => null) : null
+      const url = typeof made === 'string' ? made : made?.url
+      const remove = typeof made?.remove === 'function' ? made.remove : async () => {}
+      if (url && reachableByGoogle(url)) out.push({ url, remove })
+      else {
+        await remove().catch(() => {})
+        out.push(null)
+      }
+    }
+    return out
+  }
+  const removePictures = (pictures) => Promise.all(pictures.filter(Boolean).map((picture) => picture.remove().catch(() => {})))
+
+  // A batchUpdate (all or nothing at Google) with its pictures; when Google can't take them (it
+  // couldn't fetch one), the same again without them. → whether the pictures went in.
+  async function batchWithPictures(userId, url, requestsFor, withPictures) {
+    if (!withPictures) {
+      await api(userId, 'POST', url, { body: { requests: requestsFor(false) } })
+      return false
+    }
+    try {
+      await api(userId, 'POST', url, { body: { requests: requestsFor(true) } })
+      return true
+    } catch (error) {
+      if (!(error instanceof GoogleRefused) || !['google_failed', 'google_forbidden'].includes(error.code)) throw error
+      await api(userId, 'POST', url, { body: { requests: requestsFor(false) } })
+      return false
+    }
+  }
+  // A file this export just made, when writing into it failed: never left behind empty.
+  const discard = (userId, fileId) => api(userId, 'DELETE', `${bases().drive}/drive/v3/files/${encodeURIComponent(fileId)}`).catch(() => {})
+
   /**
    * Export a slate to Google Docs: its title, each branch as a heading with its notes as bullets
    * (links kept), and its picture at the end. update: write over the last Doc made from this slate.
+   * Only people who can edit the slate (as before): its picture is published for Google for a moment.
    */
   async function exportDoc(principal, { shareId, image = null, update = false }) {
     // The slate first: someone who can't open it learns nothing else.
     await requirePerson(principal)
-    const slate = await slateFor(principal, shareId)
+    const slate = await slateFor(principal, shareId, { edit: true })
     await requireOn(principal)
     const outline = slateOutline(slate)
-    let imageUri = null
-    if (image) {
-      const buffer = decode('png', image)
-      if (buffer.length > GOOGLE_LIMITS.uploadBytes) refuse(413, 'too_large', 'That picture is too large.')
-      imageUri = publishImage ? await publishImage({ buffer, slateId: slate._id }).catch(() => null) : null
-    }
+    const [buffer] = decodePictures([image])
+    budgetPictures(principal.userId, buffer ? 1 : 0)
     const link = await docLinks.findOne({ _id: docLinkId(principal.userId, slate._id) })
+    const pictures = await publishPictures(slate._id, [buffer])
+    const imageUri = pictures[0]?.url || null
     let documentId = null
-    if (update && link?.documentId) {
-      const current = await api(principal.userId, 'GET', `${bases().docs}/v1/documents/${encodeURIComponent(link.documentId)}?fields=body(content(endIndex))`)
-      const endIndex = Math.max(...(current.body?.content || []).map((c) => Number(c.endIndex) || 0), 1)
-      await api(principal.userId, 'POST', `${bases().docs}/v1/documents/${encodeURIComponent(link.documentId)}:batchUpdate`, { body: { requests: replaceRequests(endIndex, outline, { imageUri }) } })
-      documentId = link.documentId
-    } else {
-      const made = await api(principal.userId, 'POST', `${bases().docs}/v1/documents`, { body: { title: outline.title } })
-      if (typeof made.documentId !== 'string' || !made.documentId) refuse(502, 'google_failed', 'Google didn\'t make the document. Try again.')
-      documentId = made.documentId
-      await api(principal.userId, 'POST', `${bases().docs}/v1/documents/${encodeURIComponent(documentId)}:batchUpdate`, { body: { requests: docRequests(outline, { imageUri }) } })
-      if (link) await docLinks.update(link._id, { documentId, updatedAt: new Date(now()) })
-      else await docLinks.insert({ _id: docLinkId(principal.userId, slate._id), userId: principal.userId, slateId: slate._id, documentId, updatedAt: new Date(now()) })
+    let picture = false
+    try {
+      if (update && link?.documentId) {
+        const current = await api(principal.userId, 'GET', `${bases().docs}/v1/documents/${encodeURIComponent(link.documentId)}?fields=body(content(endIndex))`)
+        const endIndex = Math.max(...(current.body?.content || []).map((c) => Number(c.endIndex) || 0), 1)
+        picture = await batchWithPictures(principal.userId, `${bases().docs}/v1/documents/${encodeURIComponent(link.documentId)}:batchUpdate`, (withPicture) => replaceRequests(endIndex, outline, { imageUri: withPicture ? imageUri : null }), Boolean(imageUri))
+        documentId = link.documentId
+      } else {
+        const made = await api(principal.userId, 'POST', `${bases().docs}/v1/documents`, { body: { title: outline.title } })
+        if (typeof made.documentId !== 'string' || !made.documentId) refuse(502, 'google_failed', 'Google didn\'t make the document. Try again.')
+        try {
+          picture = await batchWithPictures(principal.userId, `${bases().docs}/v1/documents/${encodeURIComponent(made.documentId)}:batchUpdate`, (withPicture) => docRequests(outline, { imageUri: withPicture ? imageUri : null }), Boolean(imageUri))
+        } catch (error) {
+          await discard(principal.userId, made.documentId)
+          throw error
+        }
+        documentId = made.documentId
+        if (link) await docLinks.update(link._id, { documentId, updatedAt: new Date(now()) })
+        else await docLinks.insert({ _id: docLinkId(principal.userId, slate._id), userId: principal.userId, slateId: slate._id, documentId, updatedAt: new Date(now()) })
+      }
+    } finally {
+      await removePictures(pictures)
     }
-    audit({ kind: 'google_doc', userId: principal.userId, update: Boolean(update && link), sections: outline.sections.length })
-    return { documentId, url: `https://docs.google.com/document/d/${encodeURIComponent(documentId)}/edit`, updated: Boolean(update && link?.documentId) }
+    audit({ kind: 'google_doc', userId: principal.userId, update: Boolean(update && link), sections: outline.sections.length, picture })
+    return { documentId, url: `https://docs.google.com/document/d/${encodeURIComponent(documentId)}/edit`, updated: Boolean(update && link?.documentId), picture }
   }
 
   /** The last Doc this person made from this slate, if any ("Update this Doc"). */
@@ -349,26 +451,37 @@ export function createGoogleService({
     return link?.documentId ? { documentId: link.documentId, url: `https://docs.google.com/document/d/${encodeURIComponent(link.documentId)}/edit` } : { documentId: null, url: null }
   }
 
-  /** Presentation frames to Google Slides: one slide per frame, its title and picture. */
+  /** Presentation frames to Google Slides: one slide per frame, its title and picture (people who can edit). */
   async function exportSlides(principal, { shareId, slides = [] }) {
     // The slate first: someone who can't open it learns nothing else.
     await requirePerson(principal)
-    const slate = await slateFor(principal, shareId)
+    const slate = await slateFor(principal, shareId, { edit: true })
     await requireOn(principal)
     if (!Array.isArray(slides) || !slides.length) refuse(400, 'invalid_request', 'This slate has no frames to make slides from.')
-    const frames = []
-    for (const slide of slides.slice(0, DOC_LIMITS.slides)) {
-      const buffer = slide.image ? decode('png', slide.image) : null
-      const imageUri = buffer && publishImage ? await publishImage({ buffer, slateId: slate._id }).catch(() => null) : null
-      frames.push({ title: slide.title, imageUri })
+    const chosen = slides.slice(0, DOC_LIMITS.slides)
+    const buffers = decodePictures(chosen.map((slide) => slide?.image || null))
+    budgetPictures(principal.userId, buffers.filter(Boolean).length)
+    const pictures = await publishPictures(slate._id, buffers)
+    let made = null
+    let picture = false
+    try {
+      made = await api(principal.userId, 'POST', `${bases().slides}/v1/presentations`, { body: { title: plainText(slate.options?.name || 'Slatebox', DOC_LIMITS.titleChars) } })
+      if (typeof made.presentationId !== 'string') refuse(502, 'google_failed', 'Google didn\'t make the presentation. Try again.')
+      const frames = (withPictures) => chosen.map((slide, i) => ({ title: slide?.title, imageUri: withPictures ? pictures[i]?.url || null : null }))
+      try {
+        picture = await batchWithPictures(principal.userId, `${bases().slides}/v1/presentations/${encodeURIComponent(made.presentationId)}:batchUpdate`, (withPictures) => slideRequests(frames(withPictures)), pictures.some(Boolean))
+      } catch (error) {
+        await discard(principal.userId, made.presentationId)
+        throw error
+      }
+    } finally {
+      await removePictures(pictures)
     }
-    const made = await api(principal.userId, 'POST', `${bases().slides}/v1/presentations`, { body: { title: plainText(slate.options?.name || 'Slatebox', DOC_LIMITS.titleChars) } })
-    if (typeof made.presentationId !== 'string') refuse(502, 'google_failed', 'Google didn\'t make the presentation. Try again.')
-    await api(principal.userId, 'POST', `${bases().slides}/v1/presentations/${encodeURIComponent(made.presentationId)}:batchUpdate`, { body: { requests: slideRequests(frames) } })
-    audit({ kind: 'google_slides', userId: principal.userId, slides: frames.length })
-    return { presentationId: made.presentationId, url: `https://docs.google.com/presentation/d/${encodeURIComponent(made.presentationId)}/edit`, slides: frames.length }
+    audit({ kind: 'google_slides', userId: principal.userId, slides: chosen.length, picture })
+    return { presentationId: made.presentationId, url: `https://docs.google.com/presentation/d/${encodeURIComponent(made.presentationId)}/edit`, slides: chosen.length, picture }
   }
 
+  const DOC_FIELDS = 'title,body(content(paragraph(elements(textRun(content,textStyle(link(url)))),paragraphStyle(namedStyleType))))'
   const fileIdOk = (id) => typeof id === 'string' && /^[A-Za-z0-9_-]{10,200}$/.test(id)
 
   // A file's text, by its kind: a Google Doc's structure, a sheet's rows, or a text file's lines.
@@ -378,7 +491,8 @@ export function createGoogleService({
     const name = plainText(meta.name || 'Drive file', 120)
     const link = safeLink(meta.webViewLink)?.url || null
     if (meta.mimeType === 'application/vnd.google-apps.document') {
-      const doc = await api(userId, 'GET', `${bases().docs}/v1/documents/${encodeURIComponent(fileId)}`)
+      // Only what becomes notes (a Doc's full JSON is wordy: pictures and styles would overrun the cap).
+      const doc = await api(userId, 'GET', `${bases().docs}/v1/documents/${encodeURIComponent(fileId)}?fields=${encodeURIComponent(DOC_FIELDS)}`)
       return { name, link, mimeType: meta.mimeType, groups: groupsFromDoc({ ...doc, title: name }) }
     }
     if (meta.mimeType === 'application/vnd.google-apps.spreadsheet') {
@@ -461,6 +575,8 @@ export function createGoogleService({
       return { serverInfo: { name: 'Google Drive' }, instructions: '', tools: DRIVE_TOOLS.map((tool) => ({ ...tool })) }
     },
     async callTool(address, _fetch, { name, args, check }, { ownerId, slateId } = {}) {
+      // Turned off in /admin/ai (or its client or key gone): stored sign-ins are not used.
+      if (!(await usable())) return { isError: true, content: [{ type: 'text', text: 'Google integration is turned off on this server.' }] }
       if (check) check(DRIVE_TOOLS.map((tool) => ({ ...tool })))
       const row = ownerId && slateId ? await slateFiles.findOne({ _id: filesId(ownerId, slateId) }) : null
       const picked = row?.files || []
@@ -479,5 +595,10 @@ export function createGoogleService({
     },
   }
 
-  return { status, connect, saveToDrive, exportDoc, lastDoc, exportSlides, importFile, slateFiles: slateFilesList, attachFiles, driveSession, tokenOf }
+  /** Disconnecting Google forgets what it kept per slate: the files picked for the Drive agent, the last Docs. */
+  async function forget(userId) {
+    for (const store of [slateFiles, docLinks]) for (const row of await store.find({ userId })) await store.remove(row._id)
+  }
+
+  return { usable, forget, status, connect, saveToDrive, exportDoc, lastDoc, exportSlides, importFile, slateFiles: slateFilesList, attachFiles, driveSession, tokenOf }
 }

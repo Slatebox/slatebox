@@ -94,7 +94,7 @@ function ReviewDialog({ integration, onClose, onDone }) {
                 control={<Checkbox checked={Boolean(allowed[tool.name])} onChange={(e) => setAllowed({ ...allowed, [tool.name]: e.target.checked })} />}
                 label={<span><b>{tool.title || tool.name}</b>{tool.changed ? ' (changed)' : tool.added ? ' (new)' : ''}<br /><Typography component="span" variant="caption" color="text.secondary">{tool.description || '(no description)'}</Typography></span>} />
             ))}
-            <Typography variant="caption" color="text.secondary">Saving resumes {integration.name} on every slate it is on.</Typography>
+            <Typography variant="caption" color="text.secondary">Saving resumes {integration.name} on every slate it is on. A tool you turned off on one slate stays off there.</Typography>
           </Box>
         )}
         {error && <Typography role="alert" color="error" variant="body2" sx={{ mt: 1 }}>{error}</Typography>}
@@ -147,6 +147,11 @@ function IntegrationRow({ integration, pro, cloud, onChanged, onReview, onSignIn
           {Object.entries(RULE_WORDS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
         </TextField>
       </Box>
+      {integration.rule === 'my_slates' && (
+        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.75 }} data-integration-rule-note="">
+          It shows on those slates to everyone who can open them. Slates anyone with the link can view get it only when you invite it.
+        </Typography>
+      )}
       {note && <Typography role="status" variant="body2" sx={{ mt: 1 }}>{note}</Typography>}
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.25 }}>
         {integration.kind === 'mcp' && <Button size="small" variant={integration.status === 'paused' ? 'contained' : 'outlined'} data-integration-review-open="" onClick={() => onReview(integration)}>Review tools</Button>}

@@ -20,9 +20,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   chooses who may bring outside agents. Google: Save to Google Drive, Export to Google Docs (and
   Update this Doc), Import from Google Drive as a suggestion, and Google Drive as an agent that reads
   the files you pick for a slate, all with the `drive.file` scope only. Actions `integrations.*` and
-  `google.*` (Meteor method, `/api/v1`, exec; MCP tools `list_integrations`, `connect_integration`,
-  `invite_integration_to_slate`, `set_integration_rule`, `disconnect_integration`,
-  `import_google_file`). See docs/integrations.md.
+  `google.*` (Meteor method, `/api/v1`, exec; MCP tools `list_integrations`,
+  `invite_integration_to_slate`, `import_google_file`). Connecting, keys, standing rules and
+  disconnecting are for people in the app only, never a token. See docs/integrations.md.
 
 - Agents create presentations: `presentations.create` (`POST /api/v1/slates/{shareId}/presentation`,
   the MCP tool `create_presentation`, `slatebox.presentations.create` in exec and so `slatebox exec`)

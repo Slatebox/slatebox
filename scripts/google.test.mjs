@@ -67,12 +67,14 @@ const slateFixture = () => ({
   ],
 })
 
-function makeWorld({ pro = ['ada'], enabled = true, settings = null } = {}) {
+function makeWorld({ pro = ['ada'], enabled = true, settings = null, imageBase = 'https://images.example' } = {}) {
   const slate = slateFixture()
-  const roles = { ada: 'edit', sam: 'edit', vic: 'read' }
+  // lin may edit through the slate's unlisted link only: a signed-in page has that right, a token never.
+  const roles = { ada: 'edit', sam: 'edit', vic: 'read', lin: 'edit' }
+  const tokenRoles = { ada: 'edit', sam: 'edit', vic: 'read' }
   const master = loadMasterKey({ SLATEBOX_KEY_ENCRYPTION_KEY: randomBytes(32).toString('base64') })
   const cfg = googleSettings(settings || { googleDocs: { web: { client_id: 'test-client.apps.googleusercontent.com', client_secret: 'test-secret' } }, public: { google: { pickerApiKey: 'picker-key', appId: '123456789' } }, google: { apiBase: google.origin } }, { development: true })
-  const fetch = createMcpFetch({ devOrigins: cfg.devOrigins, methods: ['GET', 'POST', 'PATCH'] })
+  const fetch = createMcpFetch({ devOrigins: cfg.devOrigins, methods: ['GET', 'POST', 'PATCH', 'DELETE'] })
   const credentials = credentialMemory()
   const vault = createVault({ store: credentials, master, fetch, secretFor: (reg) => (reg.provider === 'google' ? cfg.clientSecret : null), sleep: async () => {} })
   const integrations = memoryStore()
@@ -81,23 +83,34 @@ function makeWorld({ pro = ['ada'], enabled = true, settings = null } = {}) {
   const audits = []
   const proList = [...pro]
   const published = []
-  const access = { forUser: async (shareId, userId) => (shareId === 'shareA' && roles[userId] ? { slate, canRead: true, canEdit: roles[userId] === 'edit' } : null), reload: async () => slate }
+  const unpublished = []
+  const state = { enabled }
+  const access = {
+    forUser: async (shareId, userId) => (shareId === 'shareA' && roles[userId] ? { slate, canRead: true, canEdit: roles[userId] === 'edit' } : null),
+    forToken: async (principal, shareId) => (shareId === 'shareA' && tokenRoles[principal.userId] ? { slate, canRead: true, canEdit: tokenRoles[principal.userId] === 'edit' } : null),
+    reload: async () => slate,
+  }
+  let connectors = null
   const googleService = createGoogleService({
     vault, integrations, docLinks: memoryStore(), slateFiles: memoryStore(), fetch, config: () => cfg,
-    pro: async (userId) => proList.includes(userId), enabled: async () => enabled, access,
+    pro: async (userId) => proList.includes(userId), enabled: async () => state.enabled, access,
     applyOperations: live.applyOperations,
     publishImage: async ({ slateId }) => {
       published.push(slateId)
-      return `https://images.example/${slateId}.png`
+      const url = `${imageBase}/${slateId}-${published.length}.png`
+      return { url, remove: async () => void unpublished.push(url) }
     },
+    onConnected: (integration) => connectors.resumeIntegration(integration),
     itemsFromLayout, audit: (entry) => audits.push(entry),
   })
   const session = {
     discover: (address, f, o) => googleService.driveSession.discover(address, f, o),
     callTool: (address, f, call, o) => googleService.driveSession.callTool(address, f, call, o),
   }
-  const connectors = createConnectorService({
+  connectors = createConnectorService({
     connections, integrations, suggestions: live.suggestions, fetch, session,
+    nativeOn: (address) => (address === GOOGLE_ADDRESS ? googleService.usable() : true),
+    forget: (integration) => (integration.address === GOOGLE_ADDRESS ? googleService.forget(integration.ownerId) : null),
     model: async ({ tool, user }) => (tool.name === 'plan_calls'
       ? { calls: [/read_drive_file/.test(user) && /docFile0000001/.test(user) ? { tool: 'read_drive_file', arguments: { fileId: 'docFile0000001' } } : { tool: 'list_slate_files', arguments: {} }], done: true }
       : { groups: [{ label: 'From Drive', notes: [{ key: 'a', text: 'Retry after 24 hours' }] }] }),
@@ -107,7 +120,8 @@ function makeWorld({ pro = ['ada'], enabled = true, settings = null } = {}) {
     vault, sleep: async () => {}, later: () => {}, audit: (entry) => audits.push(entry),
   })
   const person = (userId) => ({ kind: 'person', userId, scopes: ['slates:read', 'slates:write'] })
-  return { google: googleService, connectors, vault, credentials, integrations, connections, live, audits, proList, published, slate, cfg, ada: person('ada'), sam: person('sam'), vic: person('vic') }
+  const token = (userId) => ({ kind: 'agent', userId, tokenId: 'pat-' + userId, scopes: ['slates:read', 'slates:write'] })
+  return { google: googleService, connectors, vault, credentials, integrations, connections, live, audits, proList, published, unpublished, state, slate, cfg, ada: person('ada'), sam: person('sam'), vic: person('vic'), lin: person('lin'), token }
 }
 
 // Everything a person, page or log could see must hold no Google token.
@@ -190,7 +204,9 @@ test('Export to Google Docs: the golden batchUpdate from the slate outline, the 
   assert.equal(batch.requests.filter((r) => r.createParagraphBullets).length, 3)
   const link = batch.requests.find((r) => r.updateTextStyle)
   assert.equal(link.updateTextStyle.textStyle.link.url, 'https://example.org/retries')
-  assert.deepEqual(batch.requests.at(-1).insertInlineImage.uri, 'https://images.example/slateA.png')
+  assert.deepEqual(batch.requests.at(-1).insertInlineImage.uri, 'https://images.example/slateA-1.png')
+  // the published copy lived only for the request: Google keeps its own
+  assert.deepEqual(world.unpublished, ['https://images.example/slateA-1.png'])
   // the indices run on without overlaps (bullets eat their leading tabs)
   assert.deepEqual(docRequests(slateOutline(world.slate)).filter((r) => r.insertText).map((r) => r.insertText.location.index), [1, 16, 25, 43, 57, 69])
   // Update this Doc: the same document, its body cleared, then written again
@@ -318,8 +334,165 @@ test('the google actions join the one registry; signing in is the app\'s own; th
   const tool = renderExecTool(manifest)
   assert.ok(tool.exec.description.length <= 3500, String(tool.exec.description.length))
   // every new method stays named: on its own line, or in its namespace's one line
-  for (const name of ['integrations.invite', 'integrations.setRule', 'google.importFile', 'google.exportDoc']) {
+  for (const name of ['integrations.invite', 'integrations.applyRules', 'google.importFile', 'google.exportDoc']) {
     const [namespace, fn] = [name.slice(0, name.lastIndexOf('.')), name.slice(name.lastIndexOf('.') + 1)]
     assert.ok(tool.exec.description.includes(name) || new RegExp(`${namespace.replace('.', '\\.')}\\.\\{[^}]*\\b${fn}\\b`).test(tool.exec.description), name)
   }
+})
+
+// ---------- review fixes (2026-11-24) ----------
+
+test('a token (API, exec, MCP) gets its account\'s own rights only: never a slate it reaches by an unlisted link', async () => {
+  const world = makeWorld({ pro: ['ada', 'lin'] })
+  await world.google.connect(world.lin, { code: 'good-code' })
+  // in the app, lin's session may use the unlisted link
+  assert.ok((await world.google.saveToDrive(world.lin, { shareId: 'shareA', format: 'slatebox' })).fileId)
+  // a token of lin's never: nothing is saved, exported, read or written
+  const uploads = google.state.uploads.length
+  await refusedWith(world.google.saveToDrive(world.token('lin'), { shareId: 'shareA', format: 'slatebox' }), 'not_found')
+  await refusedWith(world.google.exportDoc(world.token('lin'), { shareId: 'shareA' }), 'not_found')
+  await refusedWith(world.google.importFile(world.token('lin'), { shareId: 'shareA', fileId: 'docFile0000001' }), 'not_found')
+  await refusedWith(world.google.lastDoc(world.token('lin'), { shareId: 'shareA' }), 'not_found')
+  await refusedWith(world.google.attachFiles(world.token('lin'), { shareId: 'shareA', files: [] }), 'not_found')
+  assert.equal(google.state.uploads.length, uploads)
+  // Ada's own token keeps her own rights
+  await world.google.connect(world.ada, { code: 'good-code' })
+  assert.ok((await world.google.saveToDrive(world.token('ada'), { shareId: 'shareA', format: 'slatebox' })).fileId)
+})
+
+test('Docs and Slides export: only people who can edit; every published picture removed right after; an hourly picture budget and a size cap', async () => {
+  const world = makeWorld({ pro: ['ada', 'vic'] })
+  await world.google.connect(world.ada, { code: 'good-code' })
+  await world.google.connect(world.vic, { code: 'good-code' })
+  await refusedWith(world.google.exportDoc(world.vic, { shareId: 'shareA', image: PNG }), 'forbidden')
+  await refusedWith(world.google.exportSlides(world.vic, { shareId: 'shareA', slides: [{ title: 'x', image: PNG }] }), 'forbidden')
+  assert.equal(world.published.length, 0, 'a reader publishes nothing')
+  const deck = await world.google.exportSlides(world.ada, { shareId: 'shareA', slides: [{ title: 'One', image: PNG }, { title: 'Two', image: PNG }, { title: 'Three' }] })
+  assert.equal(deck.picture, true)
+  assert.equal(world.published.length, 2)
+  assert.deepEqual([...world.unpublished].sort(), world.published.map((id, i) => `https://images.example/${id}-${i + 1}.png`).sort())
+  // too many bytes in one call
+  const big = 'data:image/png;base64,' + Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(11 * 1024 * 1024)]).toString('base64')
+  await refusedWith(world.google.exportSlides(world.ada, { shareId: 'shareA', slides: [{ image: big }, { image: big }, { image: big }] }), 'too_large')
+  // the hourly budget (60 pictures): 2 used, 58 more fit, the next is refused
+  for (let i = 0; i < 2; i++) await world.google.exportSlides(world.ada, { shareId: 'shareA', slides: Array.from({ length: 29 }, () => ({ image: PNG })) })
+  await refusedWith(world.google.exportDoc(world.ada, { shareId: 'shareA', image: PNG }), 'too_many_pictures')
+  // without a picture it still works
+  assert.equal((await world.google.exportDoc(world.ada, { shareId: 'shareA' })).picture, false)
+  assert.equal(world.unpublished.length, world.published.length, 'nothing left in the public store')
+})
+
+test('self-hosted: a picture Google can\'t fetch (an internal address, or Google refusing it) goes without; a failed export leaves no empty file behind', async () => {
+  const internal = makeWorld({ imageBase: 'https://slatebox.internal' })
+  await internal.google.connect(internal.ada, { code: 'good-code' })
+  google.state.batches.length = 0
+  const plain = await internal.google.exportDoc(internal.ada, { shareId: 'shareA', image: PNG })
+  assert.equal(plain.picture, false)
+  assert.ok(!google.state.batches.at(-1).requests.some((r) => r.insertInlineImage), 'never sends Google an address it cannot reach')
+  assert.equal(internal.unpublished.length, 1, 'the unusable copy is removed too')
+  for (const bad of ['http://images.example/a.png', 'https://10.0.0.5/a.png', 'https://localhost/a.png', 'https://files/a.png', 'https://[::1]/a.png']) {
+    const world = makeWorld({ imageBase: bad.replace(/\/a\.png$/, '') })
+    await world.google.connect(world.ada, { code: 'good-code' })
+    assert.equal((await world.google.exportDoc(world.ada, { shareId: 'shareA', image: PNG })).picture, false, bad)
+  }
+  // Google refuses the picture: the Doc is written again without it (all or nothing at Google)
+  const world = makeWorld()
+  await world.google.connect(world.ada, { code: 'good-code' })
+  google.state.failPictures = true
+  try {
+    const made = await world.google.exportDoc(world.ada, { shareId: 'shareA', image: PNG })
+    assert.equal(made.picture, false)
+    assert.ok(google.state.batches.at(-1).requests.some((r) => r.insertText))
+    const deck = await world.google.exportSlides(world.ada, { shareId: 'shareA', slides: [{ title: 'One', image: PNG }] })
+    assert.equal(deck.picture, false)
+  } finally {
+    google.state.failPictures = false
+  }
+  // writing fails outright: the new Doc (and deck) is deleted, never left empty
+  google.state.failBatches = 1
+  const deleted = google.state.deleted.length
+  await refusedWith(world.google.exportDoc(world.ada, { shareId: 'shareA' }), 'google_failed')
+  assert.equal(google.state.deleted.length, deleted + 1)
+  assert.match(google.state.deleted.at(-1), /^newDoc/)
+  google.state.failBatches = 1
+  await refusedWith(world.google.exportSlides(world.ada, { shareId: 'shareA', slides: [{ title: 'One' }] }), 'google_failed')
+  assert.equal(google.state.deleted.at(-1), 'deck00000001')
+  // a failed first export made no "last Doc" to update
+  assert.ok((await world.google.lastDoc(world.ada, { shareId: 'shareA' })).documentId)
+})
+
+test('Google turned off in /admin/ai: Drive agents already on slates stop, none can be invited, and a rule brings none', async () => {
+  const world = makeWorld()
+  const { integrationId } = await world.google.connect(world.ada, { code: 'good-code' })
+  const agent = await world.connectors.integrationInvite(world.ada, { shareId: 'shareA', integrationId })
+  await world.google.attachFiles(world.ada, { shareId: 'shareA', files: [{ id: 'docFile0000001', name: 'Retry plan' }] })
+  world.state.enabled = false
+  const before = google.state.calls.length
+  await refusedWith(world.connectors.call(world.ada, { connectionId: agent.connectionId, request: 'What does docFile0000001 say?' }), 'disabled')
+  // the native session refuses on its own too, with no call to Google
+  const direct = await world.google.driveSession.callTool(GOOGLE_ADDRESS, null, { name: 'read_drive_file', args: { fileId: 'docFile0000001' } }, { ownerId: 'ada', slateId: 'slateA' })
+  assert.equal(direct.isError, true)
+  assert.equal(google.state.calls.length, before, 'no stored token was used')
+  await world.connectors.disconnect(world.ada, { connectionId: agent.connectionId })
+  await refusedWith(world.connectors.integrationInvite(world.ada, { shareId: 'shareA', integrationId }), 'disabled')
+  await world.connectors.integrationSetRule(world.ada, { integrationId, rule: 'my_slates' })
+  world.connections.rows.length = 0
+  const ruled = await world.connectors.applyRules(world.ada, { shareId: 'shareA' })
+  assert.deepEqual(ruled.joined, [])
+  assert.deepEqual(ruled.skipped.map((s) => s.code), ['disabled'])
+  // back on: it works again
+  world.state.enabled = true
+  assert.equal((await world.connectors.applyRules(world.ada, { shareId: 'shareA' })).joined.length, 1)
+})
+
+test('the Picker is told which Google account is connected (Drive\'s about, under drive.file): the owner sees it, nobody else', async () => {
+  const world = makeWorld({ pro: ['ada', 'sam'] })
+  const connected = await world.google.connect(world.ada, { code: 'good-code' })
+  assert.equal(connected.account, 'ada@example.com')
+  assert.equal((await world.google.status(world.ada)).account, 'ada@example.com')
+  assert.equal((await world.google.status(world.sam)).account, undefined)
+  // no wider scope was asked for to learn it
+  assert.deepEqual(connected.scopes, [DRIVE_FILE])
+  // the account is the owner's own business: never on a slate's agent chip for others
+  const agent = await world.connectors.integrationInvite(world.ada, { shareId: 'shareA', integrationId: connected.integrationId })
+  const { connections } = await world.connectors.list(world.sam, { shareId: 'shareA' })
+  assert.ok(!JSON.stringify(connections).includes('ada@example.com'))
+  assert.equal(connections.find((c) => c.connectionId === agent.connectionId).host, undefined)
+})
+
+test('Drive agents paused by a change to their fixed tools resume when Google is connected again', async () => {
+  const world = makeWorld()
+  const { integrationId } = await world.google.connect(world.ada, { code: 'good-code' })
+  const agent = await world.connectors.integrationInvite(world.ada, { shareId: 'shareA', integrationId })
+  // a release changed DRIVE_TOOLS: the stored hashes no longer match, and the agent pauses everywhere
+  const row = world.connections.rows.find((r) => r._id === agent.connectionId)
+  row.tools = row.tools.map((tool) => ({ ...tool, hash: 'old'.padEnd(64, '0') }))
+  await refusedWith(world.connectors.call(world.ada, { connectionId: agent.connectionId, request: 'list the files' }), 'tools_changed')
+  assert.equal(row.status, 'paused')
+  assert.equal(world.integrations.rows[0].status, 'paused')
+  // review refuses for fixed tools; connecting Google again is the review
+  await world.google.connect(world.ada, { code: 'good-code' })
+  assert.equal(row.status, 'active')
+  assert.equal(world.integrations.rows[0].status, 'active')
+  assert.equal((await world.connectors.call(world.ada, { connectionId: agent.connectionId, request: 'list the files' })).items >= 0, true)
+})
+
+test('disconnecting Google forgets the files picked per slate and the last Docs: reconnecting starts clean', async () => {
+  const world = makeWorld()
+  const { integrationId } = await world.google.connect(world.ada, { code: 'good-code' })
+  await world.google.attachFiles(world.ada, { shareId: 'shareA', files: [{ id: 'docFile0000001', name: 'Retry plan' }] })
+  await world.google.exportDoc(world.ada, { shareId: 'shareA' })
+  await world.connectors.integrationDisconnect(world.ada, { integrationId })
+  await world.google.connect(world.ada, { code: 'good-code' })
+  assert.deepEqual((await world.google.slateFiles(world.ada, { shareId: 'shareA' })).files, [])
+  assert.deepEqual(await world.google.lastDoc(world.ada, { shareId: 'shareA' }), { documentId: null, url: null })
+})
+
+test('a Doc is read with only the fields that become notes; a sheet\'s quoted cells keep their commas and line breaks', async () => {
+  const world = makeWorld()
+  await world.google.connect(world.ada, { code: 'good-code' })
+  await world.google.importFile(world.ada, { shareId: 'shareA', fileId: 'docFile0000001' })
+  const get = google.state.calls.filter((c) => c.method === 'GET' && c.path === '/v1/documents/docFile0000001').at(-1)
+  assert.match(decodeURIComponent(get.query), /fields=title,body\(content\(paragraph\(elements\(textRun\(content,textStyle\(link\(url\)\)\)\),paragraphStyle\(namedStyleType\)\)\)\)/)
+  assert.deepEqual(groupsFromCsv('Item,Note\n"Paint, white","Two coats\nthen dry"\n"Say ""hi""",x\n')[0].notes.map((n) => n.text), ['Paint, white · Two coats then dry', 'Say "hi" · x'])
 })

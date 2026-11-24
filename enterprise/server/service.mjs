@@ -172,11 +172,12 @@ export function publicConnection(doc, viewerId, cards = GALLERY) {
     // How it came here: a person invited it, or its owner's standing rule brought it.
     joinedBy: doc.joinedBy === 'rule' ? 'rule' : 'invite',
     integrationId: doc.integrationId || null,
-    host: doc.host,
     status: doc.status,
     signedIn: Boolean(doc.auth),
     mine,
+    // The server's host is its inviter's business (an internal address says a lot): theirs alone.
     ...(mine && {
+      host: doc.host,
       address: doc.address,
       contextLevel: doc.contextLevel,
       tools: (doc.tools || []).map(({ name, title, group, policy }) => ({ name, title, group, policy })),
@@ -211,6 +212,8 @@ export function createConnectorService({
   integrations = memoryStore(), // { insert, findOne, find, update, remove }: each person's connected agent servers, apart from any slate
   slateSettings = memoryStore(), // { findOne({ _id: slateId }), insert, update }: a slate owner's outsideAgents choice
   slateList = async () => [], // async (slateIds, viewerId) -> [{ slateId, shareId, name }]: those slates the viewer can still open
+  nativeOn = async () => true, // async (address) -> whether a native integration (Google) works on this server now
+  forget = async () => {}, // async (integration): what a native integration kept per slate, forgotten when it is disconnected
 }) {
   // How many outside reaches each person has running now: a few at once, never a flood.
   const running = new Map()
@@ -568,11 +571,14 @@ export function createConnectorService({
     for (const other of await agentsOf(integration)) if (other._id !== doc._id && other.status !== 'paused') await connections.update(other._id, { status: 'paused', changed: changes, updatedAt: at })
   }
 
-  // One consent again resumes every slate the integration is on, with the tools just consented to.
+  // One consent again resumes every slate the integration is on, with the tools just consented to. A
+  // tool someone turned off on one slate stays off there: a new consent never switches it back on.
   async function resumeEverywhere(integration, tools) {
     const at = new Date(now())
     for (const other of await agentsOf(integration)) {
-      const set = { tools, changed: null, integrationId: integration._id, updatedAt: at, ...((other.status === 'paused' || other.status === 'needs_sign_in') && { status: 'active' }) }
+      const offHere = new Set((other.tools || []).filter((tool) => tool.policy === 'off').map((tool) => tool.name))
+      const kept = tools.map((tool) => (offHere.has(tool.name) && tool.policy === 'allow' ? { ...tool, policy: 'off' } : tool))
+      const set = { tools: kept, changed: null, integrationId: integration._id, updatedAt: at, ...((other.status === 'paused' || other.status === 'needs_sign_in') && { status: 'active' }) }
       await connections.update(other._id, set)
     }
   }
@@ -722,6 +728,12 @@ export function createConnectorService({
       await setStatus(doc, 'pro_ended')
       refuse(402, 'pro_required', PRO_REQUIRED)
     }
+    // A native integration an administrator turned off (Google's card in /admin/ai): its stored sign-in is not used.
+    if (!(await nativeOn(doc.address))) refuse(403, 'disabled', `${doc.name} is turned off on this server.`)
+    // The slate owner's choice holds for agents already here too, not only for new invitations.
+    const outside = await outsideAgentsOf(slate)
+    if (outside === 'off') refuse(403, 'agents_off', 'This slate\'s owner turned off outside agents here.')
+    if (outside === 'owner' && doc.ownerId !== slate.userId) refuse(403, 'owner_only', 'This slate\'s owner now lets only their own outside agents work here.')
     // Paused: refused before anything reaches the outside server or the model. The asker can edit
     // the slate, so they may resume agents themselves.
     if (await suggestions.paused?.(slate)) refuse(423, 'agents_paused', `Agents are paused on this slate. Resume agents to ask ${doc.name}.`)
@@ -1017,8 +1029,14 @@ export function createConnectorService({
    */
   async function sweep(credentialRows) {
     let removed = 0
+    // Pro is looked at here, not only when its owner opens a page: a lapse nobody looks at still ends.
+    const proOf = new Map()
     for (const row of await credentialRows()) {
       const integration = await integrations.findOne({ ownerId: row.ownerId, address: row.address })
+      if (integration && ['active', 'pro_ended'].includes(integration.status)) {
+        if (!proOf.has(row.ownerId)) proOf.set(row.ownerId, await pro(row.ownerId).catch(() => true))
+        await followPro(integration, proOf.get(row.ownerId))
+      }
       const orphan = !integration && now() - new Date(row.createdAt).getTime() > AGENT_LIMITS.orphanHours * 3600000
       const lapsed = Boolean(integration) && integration.status === 'pro_ended' && now() - new Date(integration.proEndedAt || integration.updatedAt).getTime() > AGENT_LIMITS.proEndedDays * 86400000
       if (!orphan && !lapsed) continue
@@ -1155,6 +1173,7 @@ export function createConnectorService({
       await presence.end('hello:' + agent._id, 'done').catch(() => {})
     }
     const signedOut = vault ? (await vault.remove(doc.ownerId, doc.address).catch(() => ({ removed: false }))).removed : false
+    await forget(doc).catch(() => {})
     await integrations.remove(doc._id)
     audit({ kind: 'integration_disconnect', userId: principal.userId, host: doc.host, integrationId: doc._id, removedFrom, signedOut })
     return { ok: true, integrationId: doc._id, removedFrom, signedOut }
@@ -1163,6 +1182,7 @@ export function createConnectorService({
   // Puts an integration on a slate as a named agent: no sign-in and no consent again (the
   // integration's carry over). The slate's limits and its owner's choice still apply.
   async function placeOnSlate(principal, slate, integration, { by, contextLevel = null, name: rawName = null, view = null }) {
+    if (!(await nativeOn(integration.address))) refuse(403, 'disabled', `${integration.name} is turned off on this server.`)
     if (integration.status === 'paused') refuse(409, 'tools_changed', `${integration.name}'s tools changed. Review them on the Integrations page first.`)
     if (integration.status === 'needs_sign_in') refuse(401, 'needs_sign_in', `${integration.name} needs you to sign in again on the Integrations page.`)
     const level = contextLevel || integration.defaultContextLevel || 'request'
@@ -1248,13 +1268,18 @@ export function createConnectorService({
     if (!isPro) return { ...none, pro: false }
     const rules = ruled.filter((row) => row.status === 'active')
     if ((await outsideAgentsOf(slate)) === 'off') return { joined: [], skipped: rules.map((row) => ({ integrationId: row._id, name: row.name, code: 'agents_off', why: 'Outside agents are turned off on this slate.' })) }
+    // A slate anyone with its link may view: the agent's chip would show there to everyone, so a rule
+    // never brings it; its owner invites it there themselves.
+    if (slate.options?.isPublic || slate.options?.isUnlisted) return { joined: [], skipped: rules.map((row) => ({ integrationId: row._id, name: row.name, code: 'public_slate', why: 'Anyone with the link can view this slate, so it joins only when you invite it.' })) }
     const here = await connections.find({ slateId: slate._id })
     const joined = []
     const skipped = []
     for (const integration of rules) {
-      // On this slate already, or removed from it before (remembered): nothing to do.
+      // On this slate already, or removed from it before (remembered): nothing to do. A removal is
+      // remembered by its server too, so one from before integrations existed, or from before a
+      // reconnect, still holds (a whole-integration Disconnect is not a removal from this slate).
       if (here.some((doc) => doc.integrationId === integration._id)) continue
-      if (here.some((doc) => doc.ownerId === principal.userId && doc.status !== 'removed' && canonicalAddress(doc.address) === integration.address)) continue
+      if (here.some((doc) => doc.ownerId === principal.userId && canonicalAddress(doc.address) === integration.address && (doc.status !== 'removed' || doc.removedBy !== 'disconnect'))) continue
       try {
         const doc = await placeOnSlate(principal, slate, integration, { by: 'rule' })
         here.push(doc)
@@ -1283,7 +1308,14 @@ export function createConnectorService({
     return { outsideAgents: await outsideAgentsOf(found.slate), canChange: owner }
   }
 
+  /** A native integration connected again (Google): its agents resume on every slate with its tools. */
+  async function resumeIntegration(integration) {
+    if (!integration?._id) return
+    await resumeEverywhere(integration, integration.tools || [])
+  }
+
   return {
+    resumeIntegration,
     startSignIn,
     signInStatus,
     useKey,

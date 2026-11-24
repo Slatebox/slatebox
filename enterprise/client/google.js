@@ -67,17 +67,20 @@ export function connectGoogle(clientId) {
 }
 
 // The Picker's own short browser token: in memory for this page, never sent to Slatebox.
+// account: the Google account connected on the server, so the Picker uses the same one (files picked
+// under another account are ones Slatebox's sign-in could never open).
 let pickerToken = null
-function tokenForPicker(clientId) {
-  if (pickerToken && pickerToken.until > Date.now() + 60000) return Promise.resolve(pickerToken.value)
+function tokenForPicker(clientId, account = null) {
+  if (pickerToken && pickerToken.until > Date.now() + 60000 && pickerToken.account === account) return Promise.resolve(pickerToken.value)
   return new Promise((resolve, reject) => {
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: DRIVE_FILE,
       prompt: '',
+      ...(account && { login_hint: account }),
       callback: (answer) => {
         if (!answer?.access_token) return reject({ code: 'cancelled', message: 'Google sign-in was cancelled.' })
-        pickerToken = { value: answer.access_token, until: Date.now() + (Number(answer.expires_in) || 0) * 1000 }
+        pickerToken = { value: answer.access_token, until: Date.now() + (Number(answer.expires_in) || 0) * 1000, account }
         resolve(pickerToken.value)
       },
       error_callback: () => reject({ code: 'cancelled', message: 'Google sign-in was cancelled.' }),
@@ -90,9 +93,9 @@ function tokenForPicker(clientId) {
  * The Google Picker (inside a click): Docs, Sheets, Slides and text files. → [{ id, name, mimeType }]
  * ([] when the person closes it).
  */
-export async function pickFiles({ clientId, apiKey, appId, multiple = false }) {
+export async function pickFiles({ clientId, apiKey, appId, account = null, multiple = false }) {
   if (!ready() || !window.google?.picker) throw { code: 'loading', message: 'Google is still loading. Try again in a moment.' }
-  const token = await tokenForPicker(clientId)
+  const token = await tokenForPicker(clientId, account)
   const { picker } = window.google
   return new Promise((resolve) => {
     const view = new picker.DocsView(picker.ViewId.DOCS).setMimeTypes('application/vnd.google-apps.document,application/vnd.google-apps.spreadsheet,application/vnd.google-apps.presentation,text/plain,text/markdown,text/csv')

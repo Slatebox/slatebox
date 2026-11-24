@@ -43,7 +43,9 @@ import { migrateIntegrations } from './integrations-migrate.mjs'
 import { itemsFromLayout } from './translate.mjs'
 import { createGoogleService, googleConfiguration, googleSettings, GOOGLE_ADDRESS } from './google/google.mjs'
 import { NATIVE_CARDS } from '../common/gallery.mjs'
-import { storeImage } from '/server/common/fileStore'
+import { randomBytes } from 'node:crypto'
+import sharp from 'sharp'
+import { deleteStoredFile, storeImage, storedFileKey } from '/server/common/fileStore'
 
 export const McpConnections = new Mongo.Collection('mcpConnections')
 // Never published: sealed tokens, sign-in flows and registrations stay on the server.
@@ -208,7 +210,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
   // Sign-in's own fetch: the same checks, may GET metadata, follows no redirect, small answers.
   const signInFetch = createMcpFetch({ devOrigins: [...settings.devOrigins, ...google().devOrigins], userAgent: settings.userAgent, methods: ['GET', 'POST'], maxRedirects: 0, maxBytes: 256 * 1024, timeoutMs: 10000 })
   // Google's APIs: the same address checks; uploads are larger, downloads follow Google's own redirects.
-  const googleFetch = createMcpFetch({ devOrigins: google().devOrigins, userAgent: settings.userAgent, methods: ['GET', 'POST', 'PATCH'], maxBytes: 4 * 1024 * 1024, timeoutMs: 30000 })
+  const googleFetch = createMcpFetch({ devOrigins: google().devOrigins, userAgent: settings.userAgent, methods: ['GET', 'POST', 'PATCH', 'DELETE'], maxBytes: 4 * 1024 * 1024, timeoutMs: 30000 })
   // The app's existing master key (never generated here). Without it, sign-in servers are not offered.
   const master = loadMasterKey()
   if (!master) console.warn('[connectors] SLATEBOX_KEY_ENCRYPTION_KEY is not set: agents that need sign-in are not offered')
@@ -236,6 +238,8 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     const org = user?.orgId ? await Organizations.findOneAsync(user.orgId, { fields: { business: 1 } }) : null
     return invitesAgents({ pro: false, org })
   }
+  // Google tells the connector service when it is connected again (set once the service exists).
+  let resumeGoogle = async () => {}
   const agentSave = (principal, input, mode) =>
     registry.run(principal, 'slates.applyOperations', { ...input, mode }, mode === 'save' ? { idempotencyKey: `${principal.runId}:${input.plan.operations[0]?.ids?.[0] || 'k'}` } : {})
   const googleService = createGoogleService({
@@ -247,11 +251,18 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     config: google,
     pro: proOf,
     enabled: googleEnabled,
-    access: { forUser },
+    access: { forUser, forToken },
     applyOperations: agentSave,
     presence,
-    // Docs and Slides fetch a picture from a public address: the app's own image store.
-    publishImage: ({ buffer, slateId }) => storeImage(buffer, slateId),
+    // Docs and Slides fetch a picture from a public address once (they keep their own copy): the
+    // app's image store, drawn again by sharp (only a real PNG survives, at most 2400 px a side),
+    // removed as soon as Google has it.
+    publishImage: async ({ buffer, slateId }) => {
+      const png = await sharp(buffer, { limitInputPixels: 64e6 }).resize({ width: 2400, height: 2400, fit: 'inside', withoutEnlargement: true }).png().toBuffer()
+      const url = await storeImage(png, `g_${slateId}_${randomBytes(6).toString('hex')}`)
+      return { url, remove: () => deleteStoredFile(storedFileKey(url)) }
+    },
+    onConnected: (integration) => resumeGoogle(integration),
     itemsFromLayout,
     audit: (entry) => console.log('[google]', JSON.stringify({ ...entry, at: new Date().toISOString() })),
   })
@@ -292,7 +303,11 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     integrations: integrationsStore,
     slateSettings: slateSettingsStore,
     slateList,
+    // Google's card off in /admin/ai (or its client or key gone): Drive agents stop, and none joins.
+    nativeOn: (address) => (address === GOOGLE_ADDRESS ? googleService.usable() : true),
+    forget: (integration) => (integration.address === GOOGLE_ADDRESS ? googleService.forget(integration.ownerId) : null),
   })
+  resumeGoogle = (integration) => service.resumeIntegration(integration)
   Meteor.startup(async () => {
     await McpConnections.rawCollection().createIndex({ slateId: 1, status: 1 })
     await McpConnections.rawCollection().createIndex({ ownerId: 1, address: 1 })
@@ -330,8 +345,9 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     const ownsSlate = Boolean(viewer && found.slate.userId === viewer)
     // The address stays on the server: each screen gets the gallery card it came from (galleryId), so the
     // gallery can mark an agent "On this slate" and the chip can say what it adds.
-    const shown = ({ _id, ownerId, address, galleryId, ...fields }) => ({
-      ...fields, galleryId: galleryId || cardFor(address)?.id || null, retired: retiredFor(address)?.why || null, mine: Boolean(viewer && ownerId === viewer), removable: Boolean(viewer && (ownerId === viewer || ownsSlate)),
+    // The host only to the agent's own inviter (an internal server's address is theirs to share).
+    const shown = ({ _id, ownerId, address, galleryId, host, ...fields }) => ({
+      ...fields, ...(viewer && ownerId === viewer && { host }), galleryId: galleryId || cardFor(address)?.id || null, retired: retiredFor(address)?.why || null, mine: Boolean(viewer && ownerId === viewer), removable: Boolean(viewer && (ownerId === viewer || ownsSlate)),
     })
     const handle = await McpConnections.find({ slateId, status: { $ne: 'removed' } }, { fields: { name: 1, inviterName: 1, host: 1, status: 1, ownerId: 1, slateId: 1, contextLevel: 1, colorIndex: 1, agentId: 1, createdAt: 1, address: 1, galleryId: 1, joinedBy: 1, integrationId: 1 } })
       .observeAsync({

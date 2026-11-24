@@ -152,9 +152,43 @@ export function groupsFromDoc(doc) {
   return groups.filter((group) => group.notes.length).slice(0, DOC_LIMITS.importGroups)
 }
 
+/**
+ * CSV rows as Google exports them (RFC 4180): a quoted cell may hold commas, line breaks and "" for
+ * a quote. At most importNotes + 1 rows are read.
+ */
+export function csvRows(text, max = DOC_LIMITS.importNotes + 1) {
+  const src = String(text || '')
+  const rows = []
+  let row = []
+  let cell = ''
+  let quoted = false
+  for (let i = 0; i < src.length && rows.length < max; i++) {
+    const ch = src[i]
+    if (quoted) {
+      if (ch === '"' && src[i + 1] === '"') {
+        cell += '"'
+        i++
+      } else if (ch === '"') quoted = false
+      else cell += ch
+    } else if (ch === '"' && cell === '') quoted = true
+    else if (ch === ',') {
+      row.push(cell)
+      cell = ''
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && src[i + 1] === '\n') i++
+      row.push(cell)
+      rows.push(row)
+      row = []
+      cell = ''
+    } else cell += ch
+  }
+  if ((cell || row.length) && rows.length < max) rows.push([...row, cell])
+  return rows
+}
+
 /** A sheet exported as CSV: the first row names the group, each row after it is a note. */
 export function groupsFromCsv(csv, title = 'From Google Sheets') {
-  const rows = String(csv || '').split(/\r?\n/).map((row) => row.split(',').map((cell) => cell.replace(/^"|"$/g, '').trim()).filter(Boolean).join(' · ')).filter(Boolean)
+  const rows = csvRows(csv).map((row) => row.map((cell) => cell.replace(/\s+/g, ' ').trim()).filter(Boolean).join(' · ')).filter(Boolean)
   if (!rows.length) return []
   const notes = rows.slice(1, 1 + DOC_LIMITS.importNotes).map((text, i) => ({ key: 'r' + i, text: clampNote(text) }))
   return notes.length ? [{ label: clampNote(rows[0]) || clampNote(title), layout: 'grid', notes, lines: [] }] : [{ label: clampNote(title), layout: 'grid', notes: [{ key: 'r0', text: clampNote(rows[0]) }], lines: [] }]

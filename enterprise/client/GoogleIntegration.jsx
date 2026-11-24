@@ -86,14 +86,15 @@ export default function GoogleIntegration({ integrations = [], pro = true, onPay
       {row && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mt: 1.25 }}>
           <Typography variant="body2" sx={{ flex: 1, minWidth: 200 }}>
-            {row.status === 'needs_sign_in' ? 'Google needs you to connect again.' : row.status === 'pro_ended' ? 'Pro ended: Google is paused.' : 'Connected.'}
+            {row.status === 'needs_sign_in' ? 'Google needs you to connect again.' : row.status === 'pro_ended' ? 'Pro ended: Google is paused.' : row.status === 'paused' ? 'Google Drive\'s tools changed: connect again to resume it.' : status.account ? `Connected as ${status.account}.` : 'Connected.'}
             {row.slateCount ? ` The Drive agent is on ${row.slateCount} ${row.slateCount === 1 ? 'slate' : 'slates'}.` : ''}
           </Typography>
-          {row.status === 'needs_sign_in' && <Button size="small" variant="contained" onClick={connect}>Connect again</Button>}
+          {['needs_sign_in', 'paused'].includes(row.status) && <Button size="small" variant="contained" data-google-reconnect="" onClick={connect}>Connect again</Button>}
           <TextField select size="small" label="Drive agent joins slates" value={row.rule} onChange={(e) => setRule(e.target.value)} sx={{ minWidth: 220 }} inputProps={{ 'data-google-rule': '' }}>
             <MenuItem value="ask">When I invite it</MenuItem>
             <MenuItem value="my_slates">On every slate I own</MenuItem>
           </TextField>
+          {row.rule === 'my_slates' && <Typography variant="caption" color="text.secondary" component="div" sx={{ flexBasis: '100%' }}>It shows on those slates to everyone who can open them. Slates anyone with the link can view get it only when you invite it.</Typography>}
         </Box>
       )}
       {confirming && (
@@ -117,9 +118,13 @@ function useGoogleAction() {
   const setMessage = useSetAtom(globalMessage)
   const say = (text, line2, severity = 'info') => setMessage({ visible: true, text, line2, severity, autoHide: 6000 })
   const [status, refresh] = useGoogleStatus()
-  const run = async (fn) => {
-    if (!status?.enabled) return
-    if (cloud() && status.pro === false) return openPay({ action: 'pro', from: 'google', reason: PAY_REASON, retry: () => refresh() })
+  const run = async (fn, { tab = null } = {}) => {
+    const drop = () => tab && !tab.closed && tab.close()
+    if (!status?.enabled) return drop()
+    if (cloud() && status.pro === false) {
+      drop()
+      return openPay({ action: 'pro', from: 'google', reason: PAY_REASON, retry: () => refresh() })
+    }
     try {
       if (!status.connected) {
         await connectGoogle(status.clientId)
@@ -127,17 +132,26 @@ function useGoogleAction() {
       }
       await fn()
     } catch (e) {
+      drop()
       if (e?.error === 'pro_required') return openPay({ action: 'pro', from: 'google', reason: PAY_REASON, retry: () => refresh() })
       say(errorText(e), undefined, 'error')
     }
   }
-  return { status, run, say }
+  // A tab for the result, opened inside the click (a tab opened after waiting is blocked as a pop-up);
+  // only when Google is connected already (otherwise Google's own window comes first).
+  const tabNow = () => {
+    if (!status?.connected || (cloud() && status.pro === false)) return null
+    const tab = window.open('', '_blank')
+    if (tab) tab.opener = null
+    return tab
+  }
+  return { status, run, say, tabNow }
 }
 
 /** slate.export.google: "Save to Google Drive" and "Export to Google Docs" in the slate's export panel. */
 export function GoogleExport({ onExport }) {
   const slate = useAtomValue(currentSlate)
-  const { status, run, say } = useGoogleAction()
+  const { status, run, say, tabNow } = useGoogleAction()
   const [last, setLast] = useState(null)
   useEffect(() => { if (status?.enabled) preloadGoogle().catch(() => {}) }, [status?.enabled])
   useEffect(() => {
@@ -146,21 +160,31 @@ export function GoogleExport({ onExport }) {
   }, [status?.connected, slate?.shareId])
   if (!status?.enabled || !slate?.shareId) return null
   const png = () => new Promise((resolve) => onExport('png', { base64: true }, resolve))
-  const saveToDrive = () => run(async () => {
-    say('Saving to Google Drive…')
-    const data = await png()
-    const saved = await Meteor.callAsync('google.saveToDrive', { shareId: slate.shareId, format: 'png', data })
-    say('Saved to Google Drive.', saved.webViewLink)
-    window.open(saved.webViewLink, '_blank', 'noopener')
-  })
-  const exportDoc = (update) => run(async () => {
-    say(update ? 'Updating your Google Doc…' : 'Exporting to Google Docs…')
-    const image = await png()
-    const made = await Meteor.callAsync('google.exportDoc', { shareId: slate.shareId, image, ...(update && { update: true }) })
-    setLast({ url: made.url, documentId: made.documentId })
-    say(update ? 'Google Doc updated.' : 'Exported to Google Docs.', made.url)
-    window.open(made.url, '_blank', 'noopener')
-  })
+  const show = (tab, url) => {
+    if (tab && !tab.closed) tab.location.replace(url)
+  }
+  const saveToDrive = () => {
+    const tab = tabNow()
+    run(async () => {
+      say('Saving to Google Drive…')
+      const data = await png()
+      const saved = await Meteor.callAsync('google.saveToDrive', { shareId: slate.shareId, format: 'png', data })
+      say('Saved to Google Drive.', saved.webViewLink)
+      show(tab, saved.webViewLink)
+    }, { tab })
+  }
+  const exportDoc = (update) => {
+    const tab = tabNow()
+    run(async () => {
+      say(update ? 'Updating your Google Doc…' : 'Exporting to Google Docs…')
+      const image = await png()
+      const made = await Meteor.callAsync('google.exportDoc', { shareId: slate.shareId, image, ...(update && { update: true }) })
+      setLast({ url: made.url, documentId: made.documentId })
+      const done = update ? 'Google Doc updated' : 'Exported to Google Docs'
+      say(made.picture === false && image ? `${done}, without the slate's picture (Google couldn't fetch it from this server).` : `${done}.`, made.url)
+      show(tab, made.url)
+    }, { tab })
+  }
   return (
     <>
       <Grid size={12}>
@@ -186,7 +210,7 @@ export function GoogleImport({ onDone, variant = 'row' }) {
   useEffect(() => { if (status?.enabled && status?.pickerReady) preloadGoogle({ picker: true }).catch(() => {}) }, [status?.enabled, status?.pickerReady])
   if (!status?.enabled || !status?.pickerReady || !slate?.shareId) return null
   const go = () => run(async () => {
-    const [file] = await pickFiles({ clientId: status.clientId, apiKey: Meteor.settings.public?.google?.pickerApiKey, appId: Meteor.settings.public?.google?.appId })
+    const [file] = await pickFiles({ clientId: status.clientId, apiKey: Meteor.settings.public?.google?.pickerApiKey, appId: Meteor.settings.public?.google?.appId, account: status.account || null })
     onDone?.()
     if (!file) return
     say(`Bringing in ${file.name}…`)
@@ -213,7 +237,7 @@ export function DriveFiles({ shareId }) {
   useEffect(() => { if (status?.pickerReady) preloadGoogle({ picker: true }).catch(() => {}) }, [status?.pickerReady])
   if (!status?.pickerReady) return null
   const pick = () => run(async () => {
-    const picked = await pickFiles({ clientId: status.clientId, apiKey: Meteor.settings.public?.google?.pickerApiKey, appId: Meteor.settings.public?.google?.appId, multiple: true })
+    const picked = await pickFiles({ clientId: status.clientId, apiKey: Meteor.settings.public?.google?.pickerApiKey, appId: Meteor.settings.public?.google?.appId, account: status.account || null, multiple: true })
     if (!picked.length) return
     const answer = await Meteor.callAsync('google.attachFiles', { shareId, files: picked })
     if (live.current) setFiles(answer.files)

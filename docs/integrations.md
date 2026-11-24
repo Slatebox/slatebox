@@ -60,11 +60,7 @@ another person, an agent's prompt or a log.
 | --- | --- | --- |
 | `integrations.list` | `GET /api/v1/integrations` | `list_integrations` |
 | `integrations.discover` | `POST /api/v1/integrations/discover` | |
-| `integrations.useKey` | `POST /api/v1/integrations/key` | |
-| `integrations.connect` | `POST /api/v1/integrations` | `connect_integration` |
 | `integrations.review` | `POST /api/v1/integrations/{integrationId}/review` | |
-| `integrations.setRule` | `POST /api/v1/integrations/{integrationId}/rule` | `set_integration_rule` |
-| `integrations.disconnect` | `POST /api/v1/integrations/{integrationId}/disconnect` | `disconnect_integration` |
 | `integrations.invite` | `POST /api/v1/slates/{shareId}/integrations/{integrationId}` | `invite_integration_to_slate` |
 | `integrations.applyRules` | `POST /api/v1/slates/{shareId}/integrations/apply-rules` | |
 | `integrations.slateSetting` / `setSlateSetting` | `GET`/`POST /api/v1/slates/{shareId}/agent-settings` | |
@@ -75,6 +71,9 @@ another person, an agent's prompt or a log.
 | `google.importFile` | `POST /api/v1/slates/{shareId}/google/import` | `import_google_file` |
 | `google.slateFiles` / `attachFiles` | `GET`/`POST /api/v1/slates/{shareId}/google/files` | |
 
+Connecting, pasting a key, setting a standing rule and disconnecting (`integrations.connect`,
+`integrations.useKey`, `integrations.setRule`, `integrations.disconnect`) are for people in their own
+signed-in browser only: they decide what reaches every slate you own, so no token can do them.
 Removing an agent from one slate is `connectors.disconnect` (`remove_agent`). Signing in (to an MCP
 server or to Google) happens only in your own signed-in browser: no token, route or tool can start
 one. The Google Picker is browser-only, so over exec or the API `google.importFile` works on files

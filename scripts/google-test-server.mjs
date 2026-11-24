@@ -17,6 +17,10 @@ export async function startGoogleTestServer() {
     folders: [],
     issued: 0,
     refreshCalls: 0,
+    account: 'ada@example.com', // Drive's about: the connected Google account
+    deleted: [], // files deleted (an export that failed never leaves an empty one)
+    failPictures: false, // a batchUpdate with a picture fails, as when Google can't fetch it
+    failBatches: 0, // the next n batchUpdates fail
     files: {
       docFile0000001: { id: 'docFile0000001', name: 'Retry plan', mimeType: 'application/vnd.google-apps.document', webViewLink: 'https://docs.google.com/document/d/docFile0000001/edit' },
       sheetFile00001: { id: 'sheetFile00001', name: 'Budget', mimeType: 'application/vnd.google-apps.spreadsheet', webViewLink: 'https://docs.google.com/spreadsheets/d/sheetFile00001/edit' },
@@ -90,6 +94,18 @@ export async function startGoogleTestServer() {
     const valid = bearer && state.tokens.has(bearer) && !state.tokens.get(bearer).expired
     if (!valid) return json(res, 401, { error: { code: 401, message: 'Request had invalid authentication credentials.' } })
     // Drive
+    if (url.pathname === '/drive/v3/about' && req.method === 'GET') return json(res, 200, { user: { emailAddress: state.account } })
+    const deleteMatch = url.pathname.match(/^\/drive\/v3\/files\/([A-Za-z0-9_-]+)$/)
+    if (deleteMatch && req.method === 'DELETE') {
+      state.deleted.push(deleteMatch[1])
+      return res.writeHead(204).end()
+    }
+    const batchUrl = /:batchUpdate$/.test(url.pathname) && req.method === 'POST'
+    if (batchUrl && state.failBatches > 0) {
+      state.failBatches--
+      return json(res, 500, { error: { code: 500, message: 'Internal error' } })
+    }
+    if (batchUrl && state.failPictures && /"(insertInlineImage|createImage)"/.test(body.toString('utf8'))) return json(res, 400, { error: { code: 400, message: 'There was a problem retrieving the image.' } })
     if (url.pathname === '/drive/v3/files' && req.method === 'GET') return json(res, 200, { files: state.folders.slice(0, 1) })
     if (url.pathname === '/drive/v3/files' && req.method === 'POST') {
       const meta = JSON.parse(body.toString('utf8') || '{}')
