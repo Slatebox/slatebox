@@ -410,9 +410,9 @@ test('keep, discard and undo are the app\'s own: each group is one action; remov
   assert.equal(kept.kept.length, 1)
   assert.equal(world.slate.revision, 2)
   assert.ok(world.slate.nodes.some((n) => n.options.text === 'A'))
-  // an agent never keeps its own suggestions
+  // no agent keeps suggestions: a person on the slate does
   const agent = connectorPrincipal(world.connections.rows[0], 'k1')
-  await refusedWith(world.store.keep(agent, world.slate, { actionId: two }, world.live.saver), 'own_suggestion')
+  await refusedWith(world.store.keep(agent, world.slate, { actionId: two }, world.live.saver), 'people_only')
   await world.store.discard(world.ada, world.slate, { actionId: two })
   // per-agent undo takes back only what it kept
   const undone = await world.store.undo(world.ada, world.slate, { actionId: one }, world.live.saver)

@@ -2,10 +2,14 @@
 // Keep and Discard on each ghost and on an agent's chip, REST, exec, the MCP tools):
 //   suggestions.list    anyone who may open the slate: what is waiting, and each agent's activity
 //   suggestions.decide  keep or discard waiting suggestions, or undo one agent action (kept
-//                       suggestions, or a direct edit): whoever may edit the slate; an agent never
-//                       keeps its own (a person does, or lets it edit directly)
+//                       suggestions, or a direct edit): whoever may edit the slate; only people
+//                       keep (no agent keeps any agent's suggestions), and an agent undoes only
+//                       its own actions
 //   agents.control      people only (the app): pause or resume every agent on the slate, or let one
-//                       agent edit directly (settings.public.agents.editDirectly)
+//                       agent edit directly (settings.public.agents.editDirectly), which only the
+//                       person who brought that agent or the slate's owner may choose. Not on the
+//                       token surfaces (exec, MCP, API) on purpose: an agent never resumes agents or
+//                       widens an agent's rights. The one documented exception to exec everywhere.
 // The store and its rules: server/agents/suggestions.mjs.
 import { defineAction } from './registry.mjs'
 import { problem } from './errors.mjs'
@@ -138,7 +142,7 @@ const decide = defineAction({
   id: 'suggestions.decide',
   title: 'Keep/discard/undo',
   description:
-    'Decide what an agent\'s work on a slate becomes, as the canvas does. keep or discard: what it suggested, as Keep and Discard on each ghost: name the action (actionId, from your edit or slates.get include=suggestions), optionally some of its items (itemIds); Keep all on an agent\'s chip decides each of its actions. Keeping saves them as one change (a line brings the new notes at its ends); an item whose note is gone is refused and says why. Discarding saves nothing. undo: one action (actionId) that was kept or saved directly, as Undo in the agent\'s activity list: only that action, and only what nobody changed since (left[] says what stayed and why), so it never undoes another agent\'s work or a person\'s. Needs the edit right on the slate; an agent cannot keep its own suggestions.',
+    'Decide what an agent\'s work on a slate becomes, as the canvas does. keep or discard: what it suggested, as Keep and Discard on each ghost: name the action (actionId, from your edit or slates.get include=suggestions), optionally some of its items (itemIds); Keep all on an agent\'s chip decides each of its actions. Keeping saves them as one change (a line brings the new notes at its ends); an item whose note is gone is refused and says why. Discarding saves nothing. undo: one action (actionId) that was kept or saved directly, as Undo in the agent\'s activity list: only that action, and only what nobody changed since (left[] says what stayed and why), so it never undoes another agent\'s work or a person\'s. Needs the edit right on the slate. Only people keep: an agent never keeps suggestions, and undoes only its own work.',
   toolset: 'slates',
   kind: 'write',
   // Keeping a suggested removal, or undoing an added note, removes a note.
@@ -205,7 +209,7 @@ const control = defineAction({
   // People's controls over agents (the roster's Pause all agents and an agent's Edit directly): an
   // agent never resumes agents or widens an agent's rights, so this is not on the token surfaces.
   description:
-    'On a slate: paused true stops every agent\'s edits there (Pause all agents), paused false lets them edit again; agentId with editing "direct" lets that agent\'s edits save at once (each one undoable), editing "suggest" puts it back to suggesting. Needs the edit right. "direct" is offered where settings allow it (settings.public.agents.editDirectly).',
+    'On a slate: paused true stops every agent\'s edits there (Pause all agents), paused false lets them edit again; agentId with editing "direct" lets that agent\'s edits save at once (each one undoable): only the person who brought the agent, or the slate\'s owner; editing "suggest" puts it back to suggesting (any editor). Needs the edit right. "direct" is offered where settings allow it (settings.public.agents.editDirectly).',
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:write',
@@ -246,8 +250,12 @@ const control = defineAction({
     let state = await store.controlsOf(slate._id)
     if (input.editing === 'direct' && !editDirectlyOn(deps))
       throw problem(403, 'edit_directly_off', 'Letting an agent edit directly is not available here yet. Its edits stay suggestions.')
+    // Edit directly is the choice of the person who brought the agent (or the slate's owner); any
+    // editor may put an agent back to suggesting.
+    if (input.editing === 'direct' && !(await store.maySetDirect(slate, input.agentId, principal.userId)))
+      throw problem(403, 'agent_owner_only', 'Only the person who brought this agent, or the slate\'s owner, can let it edit directly.')
     if (input.paused !== undefined) state = await store.pause(slate._id, input.paused, principal)
-    if (input.editing !== undefined) state = await store.setMode(slate._id, input.agentId, input.editing)
+    if (input.editing !== undefined) state = await store.setMode(slate._id, input.agentId, input.editing, principal)
     return { ok: true, shareId: slate.shareId, paused: state.paused, modes: state.modes }
   },
 })

@@ -134,8 +134,10 @@ test("people who may edit keep or discard right on the ghost; readers, other peo
   const reader = await w.principalFor(["slates:read"]);
   await assert.rejects(decide(w, reader, { decision: "keep", actionId }), { code: "insufficient_scope" });
   w.slate("demo").options.isPublic = false;
-  // The agent cannot keep its own suggestions.
-  await assert.rejects(decide(w, agent, { decision: "keep", actionId }), { status: 403, code: "own_suggestion" });
+  // The agent cannot keep its own suggestions, and no other agent (even the same person's) keeps them either.
+  await assert.rejects(decide(w, agent, { decision: "keep", actionId }), { status: 403, code: "people_only" });
+  const sibling = await w.principalFor(["slates:read", "slates:write"]);
+  await assert.rejects(decide(w, sibling, { decision: "keep", actionId }), { status: 403, code: "people_only" });
   assert.equal(ids(w).length, 2);
   // The owner keeps one: it is saved with its own id and words, through the edit path canvases draw.
   const kept = await decide(w, person(), { decision: "keep", actionId, itemIds: [keepItem.id] });
@@ -232,8 +234,17 @@ test("edit directly: off unless settings allow it; a person turns it on for one 
   // An agent cannot widen its own rights, nor can a guest; agents.control is not on the token surfaces.
   await assert.rejects(w.registry.run(agent, "agents.control", { shareId: "demo", agentId, editing: "direct" }), { status: 403, code: "session_required" });
   await assert.rejects(w.registry.run(person("owner", "guest"), "agents.control", { shareId: "demo", agentId, editing: "direct" }), { status: 403, code: "person_required" });
+  // Another editor of the slate cannot let someone else's agent edit directly: only the person who brought it, or the slate's owner.
+  w.editors.add("other");
+  await assert.rejects(w.registry.run(person("other"), "agents.control", { shareId: "demo", agentId, editing: "direct" }), { status: 403, code: "agent_owner_only" });
+  assert.equal(await w.deps.suggestions.maySetDirect(w.slate("demo"), agentId, "other"), false);
+  // The person whose token the agent runs as may (its actions say whose it is), and so may the slate's owner.
+  assert.deepEqual(await w.deps.suggestions.agentsOf(w.slate("demo")._id, "owner"), [agentId]);
+  assert.deepEqual(await w.deps.suggestions.agentsOf(w.slate("demo")._id, "other"), []);
   const set = await w.registry.run(person(), "agents.control", { shareId: "demo", agentId, editing: "direct" });
   assert.deepEqual(set.body.modes, { [agentId]: "direct" });
+  assert.equal((await w.deps.suggestions.controlsOf(w.slate("demo")._id)).modeBy[agentId], "Ada");
+  // ...but any editor may put it back to suggesting (checked below); here it stays direct.
   const saved = await edit(w, agent, [add("Straight in"), { kind: "update_nodes", target: { ids: ["welcome"] }, changes: { text: "Hello" } }]);
   assert.equal(saved.status, 201);
   assert.equal(saved.body.outcome, "saved");
@@ -313,15 +324,17 @@ return { outcome: r.outcome, waiting: read.suggestions.actions[0].items.filter((
   const ownHeld = await w.exec.service.run({ principal: agent, intent: "Keep", code: own });
   assert.equal(ownHeld.status, "confirmation_required", "keeping may remove notes: exec holds it for the person");
   const ownTry = await w.exec.service.run({ principal: agent, intent: "Keep", code: own, confirm: ownHeld.confirmation.id, idempotencyKey: ownHeld.idempotencyKey });
-  assert.equal(ownTry.error?.code, "own_suggestion", JSON.stringify(ownTry));
-  // Another agent of the same person keeps one once the person agrees, and discards the other at once.
+  assert.equal(ownTry.error?.code, "people_only", JSON.stringify(ownTry));
+  // Another agent of the same person cannot keep it either (a person keeps, on the slate); it may discard at once.
   const other = await w.principalFor(["slates:read", "slates:write"]);
   const keep = own.replace(first, first);
   const held = await w.exec.service.run({ principal: other, intent: "Keep", code: keep });
   assert.deepEqual([held.status, held.confirmation.reasons[0].rule], ["confirmation_required", "removes"]);
-  const kept = await w.exec.service.run({ principal: other, intent: "Keep", code: keep, confirm: held.confirmation.id, idempotencyKey: held.idempotencyKey });
-  assert.equal(kept.status, "completed", JSON.stringify(kept.error ?? kept));
-  assert.equal(kept.result.kept.length, 1);
+  const refusedKeep = await w.exec.service.run({ principal: other, intent: "Keep", code: keep, confirm: held.confirmation.id, idempotencyKey: held.idempotencyKey });
+  assert.equal(refusedKeep.error?.code, "people_only", JSON.stringify(refusedKeep));
+  assert.equal(ids(w).length, 2);
+  const kept = await decide(w, person(), { decision: "keep", actionId, itemIds: [first] });
+  assert.equal(kept.body.kept.length, 1);
   assert.equal(ids(w).length, 3);
   const discard = await w.exec.service.run({ principal: other, intent: "Discard", code: own.replace('"keep"', '"discard"').replace(first, second) });
   assert.equal(discard.status, "completed", JSON.stringify(discard.error ?? discard));
@@ -418,4 +431,27 @@ test("an agent's video note is a live suggestion like any canvas edit; a person'
   // A person's own video note saves at once.
   const mine = await w.registry.run(person(), "slates.addMedia", { shareId: "demo", url: "https://youtu.be/dQw4w9WgXcQ" });
   assert.equal(mine.status, 201);
+});
+
+test("an agent undoes only its own work; who brought an agent is known from its live presence before it suggests anything", async (t) => {
+  const w = world();
+  t.after(() => w.close());
+  w.flags.editDirectly = true;
+  const agent = await w.principalFor(["slates:read", "slates:write"]);
+  const sibling = await w.principalFor(["slates:read", "slates:write"]);
+  const probe = await edit(w, agent, [add("Mine")]);
+  const kept = await decide(w, person(), { decision: "keep", actionId: probe.body.suggestion.actionId });
+  assert.equal(kept.body.kept.length, 1);
+  // Another agent cannot undo what a person kept of this agent's work; the agent itself may take its own back.
+  await assert.rejects(decide(w, sibling, { decision: "undo", actionId: probe.body.suggestion.actionId }), { status: 403, code: "people_only" });
+  const undone = await decide(w, agent, { decision: "undo", actionId: probe.body.suggestion.actionId });
+  assert.equal(undone.body.undone.length, 1);
+  // Presence: an agent working on the slate that has not suggested yet still has a known owner.
+  const store = createSuggestionStore({
+    collection: memoryCollection(), controls: memoryCollection(), identify: w.presence.identify,
+    applyPlan: async () => ({ revision: 0 }), presenceOwners: async () => [{ agentId: "fresh", ownerId: "other" }],
+  });
+  assert.equal(await store.maySetDirect({ _id: "s", userId: "owner" }, "fresh", "other"), true);
+  assert.equal(await store.maySetDirect({ _id: "s", userId: "owner" }, "fresh", "third"), false);
+  assert.equal(await store.maySetDirect({ _id: "s", userId: "owner" }, "fresh", "owner"), true, "the slate's owner may");
 });

@@ -3,7 +3,7 @@
 import { Meteor } from 'meteor/meteor'
 import { Random } from 'meteor/random'
 import { Mongo } from 'meteor/mongo'
-import { AgentSuggestions } from '../../imports/api/common/models'
+import { AgentPresence, AgentSuggestions } from '../../imports/api/common/models'
 import { firstNameOf } from '../../imports/api/common/agent-label.mjs'
 import { editDirectlyEnabled } from '../../imports/api/common/agent-settings.mjs'
 import { deps } from '../actions/mount'
@@ -22,6 +22,9 @@ export const suggestions = createSuggestionStore({
   },
   findName: async (userId) => firstNameOf(await Meteor.users.findOneAsync(userId, { fields: { profile: 1, emails: 1 } })),
   newId: () => Random.id(17),
+  // The agents working on a slate now and whose account each runs as (never published).
+  presenceOwners: async (slateId) => (await AgentPresence.rawCollection().find({ slateId, agentKey: { $exists: true } }, { projection: { agentKey: 1, ownerId: 1 } }).toArray())
+    .map((row) => ({ agentId: row.agentKey, ownerId: row.ownerId })),
 })
 
 deps.suggestions = suggestions

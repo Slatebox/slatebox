@@ -67,6 +67,9 @@ export function useAgentSuggestions(shareId) {
 
 const decide = (shareId, input) => Meteor.callAsync('suggestions.decide', { shareId, ...input })
 
+// Edit directly is offered to the person who brought the agent, and to the slate's owner (the server checks again).
+export const mayDirect = (controls, agentId) => Boolean(controls?.owner || (Array.isArray(controls?.mine) && controls.mine.includes(agentId)))
+
 export default function AgentPresenceListener({ slate, canEdit = false }) {
   const { all } = useAgentPresence(slate.shareId)
   const { actions } = useAgentSuggestions(slate.shareId)
@@ -241,7 +244,18 @@ export function AgentChips({ records, shareId = null }) {
                 ))}
               </Box>
             )}
-            {canEdit && controls.editDirectly && openAgent.agentId && !Meteor.user()?.isAnonymous && (
+            {controls.editDirectly && openAgent.agentId && controls.modes?.[openAgent.agentId] === 'direct' && !mayDirect(controls, openAgent.agentId) && (
+              <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }} data-agent-direct-by="">
+                <Typography variant="body2" sx={{ flex: 1 }}>
+                  Edits directly{controls.modeBy?.[openAgent.agentId] ? ` (set by ${controls.modeBy[openAgent.agentId]})` : ''}
+                </Typography>
+                {canEdit && (
+                  <Button size="small" disabled={busy} data-agent-back-to-suggest=""
+                    onClick={() => run(() => Meteor.callAsync('agents.control', { shareId, agentId: openAgent.agentId, editing: 'suggest' }))}>Back to suggestions</Button>
+                )}
+              </Box>
+            )}
+            {canEdit && controls.editDirectly && openAgent.agentId && !Meteor.user()?.isAnonymous && mayDirect(controls, openAgent.agentId) && (
               <FormControlLabel
                 sx={{ mt: 1 }}
                 control={(

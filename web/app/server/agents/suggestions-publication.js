@@ -16,12 +16,13 @@ export const CONTROLS_ID = 'controls'
 async function read(shareId, userId) {
   const slate = (await resolvePresentationSlate(shareId, userId))?.slateBase
   if (!slate?._id) return null
-  const [actions, controls] = await Promise.all([suggestions.list(slate._id), suggestions.controlsOf(slate._id)])
+  const [actions, controls, mine] = await Promise.all([suggestions.list(slate._id), suggestions.controlsOf(slate._id), suggestions.agentsOf(slate._id, userId)])
   const editDirectly = editDirectlyEnabled(Meteor.settings)
   return {
     slateId: slate._id,
     rows: [
-      { _id: CONTROLS_ID, paused: controls.paused, pausedBy: controls.pausedBy, modes: editDirectly ? controls.modes : {}, editDirectly },
+      // mine: this subscriber's own agents (they may let those edit directly); owner: the slate is theirs (any agent).
+      { _id: CONTROLS_ID, paused: controls.paused, pausedBy: controls.pausedBy, modes: editDirectly ? controls.modes : {}, modeBy: editDirectly ? controls.modeBy : {}, editDirectly, mine, owner: Boolean(userId && slate.userId === userId) },
       ...actions.map((doc) => ({ _id: doc._id, ...publicAction(doc) })),
     ],
   }

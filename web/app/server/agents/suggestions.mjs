@@ -242,6 +242,8 @@ export function publicAction(doc) {
  * ({ paused, modes: { agentId: 'direct' } }). identify(principal, slate): the agent's name on the
  * slate (presence.identify). applyPlan(principal, slate, plan, message, attribution): saves engine
  * operations through the edit path and answers { revision }. findName(userId): a person's first name.
+ * presenceOwners(slateId): [{ agentId, ownerId }] of the agents working on the slate now (presence),
+ * so an agent that has not suggested anything yet still has a known owner.
  */
 export function createSuggestionStore({
   collection,
@@ -249,6 +251,7 @@ export function createSuggestionStore({
   identify,
   applyPlan,
   findName = async () => 'Someone',
+  presenceOwners = async () => [],
   now = () => new Date(),
   newId = () => createHash('sha256').update(String(Math.random()) + String(process.hrtime.bigint())).digest('hex').slice(0, 17),
 }) {
@@ -267,7 +270,30 @@ export function createSuggestionStore({
 
   async function controlsOf(slateId) {
     const row = await controls.findOne({ _id: slateId })
-    return { paused: Boolean(row?.paused), pausedBy: row?.pausedBy ?? null, modes: { ...(row?.modes || {}) } }
+    return { paused: Boolean(row?.paused), pausedBy: row?.pausedBy ?? null, modes: { ...(row?.modes || {}) }, modeBy: { ...(row?.modeBy || {}) } }
+  }
+
+  /**
+   * The agents on this slate a person brought (their own token's agent, or an outside agent they
+   * invited): the account each agent's work runs as, from its actions and its live presence.
+   */
+  async function agentsOf(slateId, userId) {
+    if (!userId) return []
+    const [fromActions, fromPresence] = await Promise.all([
+      collection.distinct ? collection.distinct('agentId', { slateId, ownerId: userId }) : forSlate(slateId).then((all) => all.filter((a) => a.ownerId === userId).map((a) => a.agentId)),
+      presenceOwners(slateId).catch(() => []),
+    ])
+    return [...new Set([...fromActions, ...fromPresence.filter((row) => row.ownerId === userId).map((row) => row.agentId)])].filter(Boolean)
+  }
+
+  /**
+   * Who may let an agent edit directly: the person who brought it, or the slate's owner. Never
+   * another editor: letting an agent save without review is its owner's choice (owner decision 2).
+   */
+  async function maySetDirect(slate, agentId, userId) {
+    if (!userId) return false
+    if (slate.userId && slate.userId === userId) return true
+    return (await agentsOf(slate._id, userId)).includes(agentId)
   }
 
   /** How this agent's edits land on this slate: 'suggest' (ghosts) or 'direct' (saved at once). */
@@ -456,11 +482,10 @@ export function createSuggestionStore({
         }
       }
     }
-    if (principal.kind === 'agent') {
-      const self = await identify(principal, slate)
-      if (picked.some(({ action }) => action.agentId === self.agentId))
-        throw problem(403, 'own_suggestion', 'An agent cannot keep its own suggestions: a person on the slate keeps them (or lets the agent edit directly).')
-    }
+    // A person approves on the slate: no agent keeps suggestions, its own or another agent's
+    // (otherwise one token, or a prompt-injected client, could save another agent's work unreviewed).
+    if (principal.kind === 'agent')
+      throw problem(403, 'people_only', 'Only a person on the slate keeps what agents suggest (or lets an agent edit directly).')
     if (!picked.length) return { kept: [], refused: [], revision: slate.revision ?? 0 }
     picked = picked.sort((a, b) => ORDER[a.item.kind] - ORDER[b.item.kind])
     const nodes = slate.nodes || []
@@ -519,6 +544,9 @@ export function createSuggestionStore({
   async function undo(principal, slate, { actionId }, apply = applyPlan) {
     const action = await collection.findOne({ _id: actionId, slateId: slate._id })
     if (!action) throw problem(404, 'not_found', 'There is no such agent action on this slate.')
+    // An agent may take back its own work only, never another agent's or what a person kept of another's.
+    if (principal.kind === 'agent' && action.agentId !== (await identify(principal, slate)).agentId)
+      throw problem(403, 'people_only', 'Only a person on the slate undoes another agent\'s work.')
     const items = action.items.filter((item) => (item.state === 'kept' || item.state === 'applied') && Array.isArray(item.undo))
     if (!items.length) throw problem(409, 'nothing_to_undo', 'Nothing of this action is on the slate to undo.')
     const nodes = slate.nodes || []
@@ -594,9 +622,12 @@ export function createSuggestionStore({
     return controlsOf(slateId)
   }
 
-  async function setMode(slateId, agentId, mode) {
+  async function setMode(slateId, agentId, mode, principal = null) {
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(String(agentId))) throw problem(400, 'invalid_request', 'agentId is the id list_suggestions gives.')
-    await controls.findOneAndUpdate({ _id: slateId }, mode === 'direct' ? { $set: { ['modes.' + agentId]: 'direct' } } : { $unset: { ['modes.' + agentId]: '' } }, { upsert: true })
+    const by = mode === 'direct' && principal ? (await decider(principal)).name : null
+    await controls.findOneAndUpdate({ _id: slateId }, mode === 'direct'
+      ? { $set: { ['modes.' + agentId]: 'direct', ['modeBy.' + agentId]: by } }
+      : { $unset: { ['modes.' + agentId]: '', ['modeBy.' + agentId]: '' } }, { upsert: true })
     return controlsOf(slateId)
   }
 
@@ -605,5 +636,5 @@ export function createSuggestionStore({
     await collection.createIndex({ slateId: 1, createdAt: 1 })
   }
 
-  return { suggest, applied, keep, discard, undo, list, ghostIds, controlsOf, modeOf, pause, setMode, ensureIndexes, withOwnGhosts }
+  return { suggest, applied, keep, discard, undo, list, ghostIds, controlsOf, modeOf, pause, setMode, agentsOf, maySetDirect, ensureIndexes, withOwnGhosts }
 }
