@@ -9,6 +9,17 @@ import { SlateOperationRuns } from '../../api/common/models'
 import executeSlateOperations from '../../api/client/executeSlateOperations'
 import { waitForRun } from '../../api/client/waitForRun.mjs'
 import { appliesToCanvas, runsSince } from '../../api/common/slate-operation-runs.mjs'
+import { exportForSave } from '../../api/client/saveSlateLite'
+import { foldIntoBase } from '../../api/common/slate-save-patch.mjs'
+
+// The notes as this page has them, by id, as text: to see what a run it drew changed.
+function notesAsText(slate) {
+  try {
+    return new Map((exportForSave(slate).nodes || []).map((note) => [note?.options?.id, JSON.stringify(note)]))
+  } catch {
+    return null
+  }
+}
 
 // What changes as a run draws: the notes on this canvas, how many are drawn (a note gets its
 // relationships once drawn), and their lines.
@@ -41,6 +52,10 @@ export default function SlateOperationListener({ slate, revision }) {
         // A workshop edit reaches this canvas through creativeSlates.state, not here.
         if (!appliesToCanvas(run)) return
         queue.current = queue.current.then(async () => {
+          // A run is saved on the server already: what it draws here is what the server holds, so it
+          // joins this page's save base (slate-save-patch.mjs) and the page's next save does not send
+          // it back as an edit of its own over someone's later change.
+          const before = slate.saveBase ? notesAsText(slate) : null
           let drawing
           try {
             drawing = executeSlateOperations({
@@ -68,6 +83,10 @@ export default function SlateOperationListener({ slate, revision }) {
           if (outcome === 'stalled') {
             // eslint-disable-next-line no-console
             console.warn('A replayed slate operation run stopped drawing; drawing the next one.')
+          }
+          if (before && slate.saveBase) {
+            const after = exportForSave(slate).nodes || []
+            foldIntoBase(slate.saveBase, after.filter((note) => before.get(note?.options?.id) !== JSON.stringify(note)))
           }
         })
       },

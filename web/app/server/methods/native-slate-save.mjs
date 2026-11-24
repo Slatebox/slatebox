@@ -1,6 +1,7 @@
 import { resolveSlateRole, slateVisibility } from './slate-role.mjs'
 import { hasWorkshop, workshopNamesSlate } from '../../imports/api/common/workshop-notes.mjs'
 import { holdsManyBoards, slateBoards } from '../../imports/api/common/slate-boards.mjs'
+import { applySavePatch, validSavePatch } from '../../imports/api/common/slate-save-patch.mjs'
 
 // Visibility, tenant and identity change through their own workflows. Canvas
 // autosaves update content without replacing the persisted options document.
@@ -88,6 +89,10 @@ export async function saveNativeSlate({ slates, saveCore, access, guestViews, is
   const snapshot = request?.slate
   const id = snapshot?.options?.id
   if (typeof id !== 'string' || !id.length || !Array.isArray(snapshot.nodes)) throw denied()
+  // What the page changed since it last knew what the server held (slate-save-patch.mjs). A page
+  // that sends it changes only that; one that does not (a previous release) saves its whole slate.
+  const patch = request.patch
+  if (patch !== undefined && !validSavePatch(patch)) throw denied()
   const options = Object.fromEntries(Object.entries(snapshot.options).filter(([key]) => validKey(key)))
   if (user?.isMasterUser === true && options.isTemplate) {
     options.templateApproved = true
@@ -130,15 +135,19 @@ export async function saveNativeSlate({ slates, saveCore, access, guestViews, is
   // trades of all of them are recorded at the slate's counter for all its boards, slate-boards.mjs).
   const many = holdsManyBoards(board)
   const trades = many ? Object.assign({}, ...slateBoards(board).map(item => item.trades ?? {})) : board.creative?.trades
-  const nodes = await settleSavedTrades(snapshot.nodes, trades, request.tradesThrough,
-    async () => (await slates.findOne({ _id: id }, { projection: { nodes: 1 } }))?.nodes ?? [])
+  // The notes to store are made on the slate as the core reads it, on every attempt: a page that is
+  // behind changes the notes it changed and leaves everyone else's as stored.
+  const notesFor = async current => settleSavedTrades(patch ? applySavePatch(current?.nodes, patch) : snapshot.nodes, trades, request.tradesThrough,
+    async () => (patch ? current?.nodes : (await slates.findOne({ _id: id }, { projection: { nodes: 1 } }))?.nodes) ?? [])
   // The undo marker (collabBaseline: the room's whole-slate replacement this drawing holds) is the
   // save's own or none. A save from a screen that had not seen someone's undo must not leave that
   // undo's marker on its notes: the next to load would keep them and never replay the undo.
-  const fields = { nodes, 'options.collabBaseline': null }
+  const fields = { 'options.collabBaseline': null }
   // The workshop's title names its slate. A canvas save holds whatever name the page loaded with.
   const named = workshopNamesSlate(board)
-  for (const [key, value] of Object.entries(options)) {
+  // A patch names the settings the page changed; a whole slate sends them all.
+  const sentOptions = patch ? Object.fromEntries(Object.entries(patch.options).filter(([key]) => validKey(key))) : options
+  for (const [key, value] of Object.entries(sentOptions)) {
     if (protectedOptions.has(key) || (named && (key === 'name' || key === 'description'))) continue
     // Where the workshop sits is two finite numbers, or it is not stored.
     if (key === 'workshopOrigin') {
@@ -151,10 +160,12 @@ export async function saveNativeSlate({ slates, saveCore, access, guestViews, is
   const conditions = { nativeConversationRevision: board.nativeConversationRevision ?? null, _id: id, userId: board.userId ?? null, orgId: board.orgId ?? null, shareId: board.shareId ?? null,
     ...(revision !== undefined && { 'creative.revision': revision }), ...(many && { boardsRevision: board.boardsRevision ?? null }), ...sharedSaveConditions(board, user?._id) }
   // The save core diffs what is stored against this snapshot, records the notes it touched,
-  // raises the revision and builds the search fields. The browser names no revision (P05b).
+  // raises the revision and builds the search fields. The browser names no revision (P05b): it sends
+  // what it changed (patch), so a save never needs one to leave other people's notes alone.
   const { _id: _slateId, ...holding } = conditions
   try {
-    await saveCore.save({ slateId: id, actor: browserActor(user, request), source: 'autosave', conditions: holding, build: () => ({ set: fields }) })
+    await saveCore.save({ slateId: id, actor: browserActor(user, request), source: 'autosave', conditions: holding,
+      build: async current => ({ set: { nodes: await notesFor(current), ...fields } }) })
   } catch (error) {
     if (error?.code !== 'save_refused') throw error
     // A workshop change was saved between this save's read and its write: made again on it.

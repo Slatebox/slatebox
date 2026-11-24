@@ -21,7 +21,7 @@ import omit from 'lodash.omit'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { dailyCall } from '../components/huddle/daily-call.mjs'
 import createSlate from '../../api/client/createSlate'
-import saveSlateLite from '../../api/client/saveSlateLite'
+import saveSlateLite, { rememberSaveBase } from '../../api/client/saveSlateLite'
 import { watchCanvasKeys } from '../../api/client/canvasKeys'
 import CONSTANTS from '../../api/common/constants'
 import utils from '../../api/common/utils'
@@ -848,6 +848,9 @@ export default function Canvas() {
     }
     slate.current.userId = sBase.userId
     slate.current.orgId = sBase.orgId
+    // What the server holds, as this page drew it: its saves send what changes from here (a page whose
+    // relay drops then saves only its own edits). A slate this page just made has saved itself above.
+    if (!slate.current.saveBase && !isNew) rememberSaveBase(slate.current)
 
     contextuallySetSlate(slate.current)
 

@@ -3,6 +3,21 @@
 import { Meteor } from 'meteor/meteor'
 import CONSTANTS from '../common/constants'
 import promisify from './promisify'
+import { saveBaseOf, savePatch } from '../common/slate-save-patch.mjs'
+
+// The slate as a save sends it: what the engine exports, with where its workshop sits.
+export function exportForSave(slate) {
+  const exportedSlate = JSON.parse(slate.exportJSON())
+  exportedSlate.shareId ||= slate.shareId
+  if (slate.workshopOrigin) exportedSlate.options.workshopOrigin = slate.workshopOrigin
+  return exportedSlate
+}
+
+// What this page knows the server holds (slate-save-patch.mjs): set when the slate is drawn from the
+// server, and after each save this page makes. Its saves send what changed since.
+export function rememberSaveBase(slate, exportedSlate = exportForSave(slate)) {
+  slate.saveBase = saveBaseOf(exportedSlate)
+}
 
 const saveSlateLite = async ({
   userId,
@@ -18,10 +33,7 @@ const saveSlateLite = async ({
   // is not stored with it: closed first or refused, the stored slate never had a half trade.
   const engine = slate.v2 ?? slate
   await engine.whenHeldSettled?.()
-  const exportedSlate = JSON.parse(slate.exportJSON())
-  exportedSlate.shareId ||= slate.shareId
-  // Where this slate's workshop sits on the canvas, when it has one.
-  if (slate.workshopOrigin) exportedSlate.options.workshopOrigin = slate.workshopOrigin
+  const exportedSlate = exportForSave(slate)
   // if (slate.userId !== userId) {
   //   ;['isPrivate', 'isPublic', 'isUnlisted', 'isUnlisted'].forEach(
   //     (o) => delete exportedSlate.options[o]
@@ -49,8 +61,13 @@ const saveSlateLite = async ({
     exportedSlate.orgId = Meteor.user().orgId
   }
 
+  // What this page changed since it last knew what the server held. A page that is behind (its relay
+  // dropped) then changes only its own edits. The whole slate still goes too, for a server of the
+  // previous release during a deploy.
+  const patch = slate.saveBase ? savePatch(slate.saveBase, exportedSlate) : null
   const result = await Meteor.callAsync(CONSTANTS.methods.slates.update, {
     slate: exportedSlate,
+    ...(patch && { patch }),
     nativeConversationRevision: slate.nativeConversationRevision ?? 0,
     // The workshop revision this screen draws every note and card trade through (see native-slate-save).
     ...(typeof engine.tradesThrough === 'function' && { tradesThrough: engine.tradesThrough() }),
@@ -59,6 +76,7 @@ const saveSlateLite = async ({
     ...(hasLocalEdit && { hasLocalEdit: true }),
     ...(keepProof && { keepProof }),
   })
+  rememberSaveBase(slate, exportedSlate)
   // auto save theme as well if need be
   if (slate.options.eligibleForThemeCompilation) {
     await Meteor.callAsync(CONSTANTS.methods.themes.parseSlateIntoTheme, {
