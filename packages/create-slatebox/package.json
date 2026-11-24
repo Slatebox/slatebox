@@ -10,11 +10,14 @@
     "bin",
     "LICENSE.md"
   ],
+  "scripts": {
+    "prepublishOnly": "SLATEBOX_PUBLISH=1 npm test --prefix ../slatebox"
+  },
   "engines": {
     "node": ">=22.13"
   },
   "dependencies": {
-    "slatebox": "^0.1.0"
+    "slatebox": "0.1.0"
   },
   "license": "MIT"
 }
