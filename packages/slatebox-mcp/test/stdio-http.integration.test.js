@@ -116,7 +116,7 @@ test("--http listens on loopback only and answers only the token it was started 
   assert.equal(result.structuredContent.result, 3);
 });
 
-test("without a token, over stdio: the install_slatebox prompt works, every tool answers sign_in_required, nothing is sent", async (t) => {
+test("without a token, over stdio: the prompts work, every tool answers sign_in_required, nothing is sent", async (t) => {
   const { received, origin } = await fakeSlatebox(t);
   const child = spawn(process.execPath, [bin], { env: { PATH: process.env.PATH, SLATEBOX_BASE_URL: origin } });
   let stdout = "", stderr = "";
@@ -128,13 +128,12 @@ test("without a token, over stdio: the install_slatebox prompt works, every tool
   send({ id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "probe", version: "1" } } });
   await until(() => stdout.includes('"id":1'));
   send({ method: "notifications/initialized" });
-  send({ id: 2, method: "prompts/get", params: { name: "install_slatebox", arguments: { where: "my Ubuntu server" } } });
+  send({ id: 2, method: "prompts/get", params: { name: "mind_map", arguments: { topic: "launch ideas" } } });
   send({ id: 3, method: "tools/call", params: { name: "exec", arguments: { intent: "Count", code: "return 1" } } });
   await until(() => stdout.includes('"id":3'));
   const messages = stdout.trim().split("\n").map((line) => JSON.parse(line));
   const text = messages.find((m) => m.id === 2).result.messages[0].content.text;
-  assert.match(text, /install my own Slatebox on my Ubuntu server/);
-  assert.match(text, /npx slatebox/);
+  assert.match(text, /mind map of launch ideas/);
   const call = messages.find((m) => m.id === 3).result;
   assert.equal(call.isError, true);
   assert.match(call.content[0].text, /sign_in_required: No Slatebox token/);

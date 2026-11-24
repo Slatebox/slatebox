@@ -34,7 +34,8 @@
   ],
   "scripts": {
     "test": "node --test --test-concurrency=1 test/*.test.mjs",
-    "test:integration": "node --test --test-concurrency=1 test/integration/*.test.mjs"
+    "test:integration": "node --test --test-concurrency=1 test/integration/*.test.mjs",
+    "prepublishOnly": "SLATEBOX_PUBLISH=1 npm test"
   },
   "engines": {
     "node": ">=22.13"

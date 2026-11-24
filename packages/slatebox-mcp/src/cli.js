@@ -20,7 +20,7 @@ export const DEFAULT_HTTP_PORT = 3917;
 
 /** What every tool answers when the server started without a token. */
 function tokenRequired() {
-  return Object.assign(new Error("No Slatebox token: set SLATEBOX_API_TOKEN to a personal access token from your Slatebox and restart this server. The install_slatebox prompt works without one."), { code: "sign_in_required", status: 401 });
+  return Object.assign(new Error("No Slatebox token: set SLATEBOX_API_TOKEN to a personal access token from your Slatebox and restart this server. The prompts work without one."), { code: "sign_in_required", status: 401 });
 }
 
 async function main() {
@@ -41,7 +41,7 @@ async function main() {
   const baseUrl = apiOrigin(values["base-url"] || process.env.SLATEBOX_BASE_URL || DEFAULT_ORIGIN);
   const generated = defaultGenerated();
   if (!token) {
-    // No Slatebox yet: the prompts (install_slatebox among them) and the client docs still work;
+    // No Slatebox yet: the prompts and the client docs still work;
     // every tool answers that it needs a token. The HTTP server always needs one: it is the bearer.
     if (values.http) throw new UsageError("Set SLATEBOX_API_TOKEN to a personal access token.");
     if (values.port !== undefined || values.host !== undefined) throw new UsageError("--port and --host go with --http.");

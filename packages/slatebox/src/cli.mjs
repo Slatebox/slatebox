@@ -107,8 +107,9 @@ function parse(argv) {
 // The slate commands (exec, describe, ...) belong to the slatebox-mcp package.
 // It is not a dependency: both packages name a `slatebox` command, and npx
 // would link two. A sibling checkout or an installed copy is used when there
-// is one; otherwise npx fetches it.
-export const SLATE_PACKAGE = 'slatebox-mcp@^0.3.4'
+// is one; otherwise npx fetches this exact version (a range would install
+// whatever 0.3.x is newest on first use, unasked).
+export const SLATE_PACKAGE = 'slatebox-mcp@0.3.4'
 
 function slateCli() {
   try { return createRequire(import.meta.url).resolve('slatebox-mcp/src/slatebox.js') } catch { /* not installed */ }

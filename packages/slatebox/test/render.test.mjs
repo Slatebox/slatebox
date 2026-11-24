@@ -132,3 +132,12 @@ test('the Secret is rendered on its own, only for apply on standard input, with 
   assert.equal(secret.metadata.name, 'slatebox-env')
   assert.deepEqual(secret.stringData, { SLATEBOX_KEY_ENCRYPTION_KEY: 'k'.repeat(44) })
 })
+
+test('kubernetes pulls a registry tag every start (nodes never keep different builds); a digest or a local tag as it is', () => {
+  const answers = k8sAnswers({})
+  const policies = image => renderK8s(answers, { image, ...settingsFor(answers, caps), record: '' })
+    .find(object => object.kind === 'StatefulSet').spec.template.spec.containers.map(container => container.imagePullPolicy)
+  assert.deepEqual(policies('ghcr.io/slatebox/slatebox:latest'), ['Always', 'Always'])
+  assert.deepEqual(policies(IMAGE), ['IfNotPresent', 'IfNotPresent'])
+  assert.deepEqual(policies('slatebox:dev'), ['IfNotPresent', 'IfNotPresent'])
+})

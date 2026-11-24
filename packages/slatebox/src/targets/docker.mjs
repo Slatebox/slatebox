@@ -372,7 +372,10 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
     secretsLocation: `${secretsPath} on ${host.where} (mode 0600${host.kind === 'ssh' ? ', root' : ''})`,
     warnings: [...settings.warnings], notes: [...settings.notes], changes: fresh ? [] : changes,
   })
-  if (dockerMissing) plan.commands.push(`install Docker Engine on ${host.where}: curl -fsSL https://get.docker.com | sh`)
+  if (dockerMissing) {
+    plan.commands.push(`install Docker Engine on ${host.where}: curl -fsSL https://get.docker.com | sh`)
+    plan.warnings.push(`--install-docker runs Docker's install script from get.docker.com as root on ${host.where}, as it is on the day you run it (it is not pinned or checked by this installer). To install Docker yourself instead, see https://docs.docker.com/engine/install/ and run this again without --install-docker.`)
+  }
   if (!imageReady) {
     plan.commands.push(archive ? `docker load < ${archive} (on ${host.where}, after you confirm)` : `docker pull ${wanted} (on ${host.where}, after you confirm)`)
     plan.notes.push(`${archive ? `The image is loaded from ${archive}` : `${wanted} is not on ${host.where} yet: it is pulled`} after you confirm, and checked before anything starts. Until then the plan assumes the current image's settings.`)

@@ -8,6 +8,7 @@
 // purpose, and the image's supervisor already ends the container when any of
 // its services dies.
 import { createHash } from 'node:crypto'
+import { hasRegistry, isTag } from '../image.mjs'
 
 export const MANAGER = 'slatebox-installer'
 
@@ -74,6 +75,10 @@ function backupAt(schedule) {
  * @param {{image: string, env: Record<string,string>, secretsHash?: string, record: string}} options
  */
 export function renderK8s(answers, { image, env, secretsHash = '', record }) {
+  // A digest is the same bytes on every node. A registry tag can move, and with IfNotPresent each
+  // node would keep whichever build it pulled first: pull a tag every start instead. A local tag
+  // (loaded into kind or minikube, no registry) can only be used as it is.
+  const imagePullPolicy = isTag(image) && hasRegistry(image) ? 'Always' : 'IfNotPresent'
   const n = names(answers)
   const backups = answers.backups.to !== 'off'
   const objects = []
@@ -96,7 +101,7 @@ export function renderK8s(answers, { image, env, secretsHash = '', record }) {
   const app = {
     name: 'slatebox',
     image,
-    imagePullPolicy: 'IfNotPresent',
+    imagePullPolicy,
     ports: [{ name: 'http', containerPort: 7070 }],
     envFrom: [{ configMapRef: { name: n.config } }, { secretRef: { name: n.secret } }],
     volumeMounts: [{ name: 'data', mountPath: '/data' }, { name: 'run', mountPath: '/run/slatebox' }],
@@ -111,7 +116,7 @@ export function renderK8s(answers, { image, env, secretsHash = '', record }) {
     containers.push({
       name: 'backups',
       image,
-      imagePullPolicy: 'IfNotPresent',
+      imagePullPolicy,
       command: ['/bin/bash', '/opt/slatebox-backup/backup-loop.sh'],
       env: [{ name: 'BACKUP_AT', value: backupAt(answers.backups.schedule) }, { name: 'BACKUP_KEEP', value: String(answers.backups.keep) }],
       volumeMounts: [

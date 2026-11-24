@@ -146,6 +146,7 @@ test('ssh: without Docker on the server and without consent, exit 4 and nothing 
   const planned = await cli(['plan', 'ssh', 'root@203.0.113.5', '--admin-email', 'ops@example.com', '--ai', 'none', '--install-docker', '--json'], { run, home })
   assert.equal(planned.code, 0, planned.stderr)
   assert.match(planned.events.find(event => event.event === 'plan').commands.join('\n'), /get\.docker\.com/)
+  assert.match(planned.events.find(event => event.event === 'plan').warnings.join('\n'), /get\.docker\.com as root on root@203\.0\.113\.5.*not pinned/)
 })
 
 test('ssh: snap Docker and a host without root or sudo are refused before anything changes', async () => {
