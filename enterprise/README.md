@@ -12,6 +12,15 @@ Outside agent connections: Slatebox as an MCP *client*.
 - Its suggestions, shown live on the slate as ghost notes that anyone can Keep or Discard.
 - Connectors and the integrations built on them, with their OAuth sign-in (callback `/connectors/oauth/callback`).
 
+### What is built (S2a: open servers)
+
+- `server/mcp-fetch.mjs`: the only network path (https only, every resolved address public, redirects re-checked, size and time caps, a real User-Agent, no listening stream).
+- `server/mcp-session.mjs`: one short `@modelcontextprotocol/client` session per job (2026 servers through `server/discover`, older ones through `initialize`). Servers that need sign-in are refused until S2b.
+- `server/tools.mjs`, `results.mjs`, `context.mjs`, `translate.mjs`: consent to tool hashes, quarantine of results, the context packer ("what leaves Slatebox"), and the two-step translator (plan lookups, then lay out notes; Excalidraw diagrams by a fixed recipe).
+- `server/service.mjs`, `actions.mjs`, `meteor.js`: `connectors.list/discover/connect/disconnect/call/keep/discard`, each a Meteor method, `/api/v1` route, exec call and MCP tool. Pro for the inviter, only the inviter asks, any editor keeps.
+- `client/`: "+ Invite agent", the walkthrough, the agent chips (Keep all / Discard all) and the live ghosts on the canvas with Keep and Discard on each.
+- Tests: `npm run test:enterprise` (with the hostile server in `scripts/mcp-test-servers.mjs`).
+
 Slatebox as an MCP *server* (`/mcp`, the CLI, `/api/v1`) is not here. It is MIT and works on every install.
 
 ## Cloud only

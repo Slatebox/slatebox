@@ -16,13 +16,17 @@ export const AI_FEATURES = Object.freeze([
   Object.freeze({ id: 'shape', title: 'Drawing custom shapes', verb: 'call tools', needs: Object.freeze(['tools']) }),
 ])
 const FEATURE_IDS = AI_FEATURES.map((f) => f.id)
-export const USE_KEYS = Object.freeze(['default', ...FEATURE_IDS])
+// Choices that only a settings file (or a person's saved choices) name, with no row of their own in
+// the AI settings page: each follows another choice when it is not set. connectors: the model that
+// plans and lays out invited agents' work (Slatebox Cloud), following the conversation's.
+export const FEATURE_FALLBACKS = Object.freeze({ connectors: 'chat' })
+export const USE_KEYS = Object.freeze(['default', ...FEATURE_IDS, ...Object.keys(FEATURE_FALLBACKS)])
 
 // The features the server's AI paths name, by the choice that serves them.
 const REQUEST_FEATURES = Object.freeze({
   welcome: 'chat', workshop: 'chat', 'lane-chat': 'chat', 'map-chat': 'chat',
   generation: 'generation', layout: 'generation', presentation: 'presentation', vision: 'vision',
-  'image-generation': 'images', images: 'images', chat: 'chat', shape: 'shape',
+  'image-generation': 'images', images: 'images', chat: 'chat', shape: 'shape', connectors: 'connectors',
 })
 // Paths that are not a model at all (image search, video calls): the built-in service serves them.
 export const BUILTIN_ONLY_FEATURES = Object.freeze(['image-search', 'call'])
@@ -221,7 +225,7 @@ const find = (holder, name) => holder?.connections?.find((c) => c.name === name)
 
 function fromUse(holder, feature, scopes, people) {
   if (!holder) return null
-  for (const key of [feature, 'default']) {
+  for (const key of [feature, ...(FEATURE_FALLBACKS[feature] ? [FEATURE_FALLBACKS[feature]] : []), 'default']) {
     const parsed = parseRef(holder.use?.[key])
     if (!parsed) continue
     if (parsed.scope === 'builtin') return { ref: 'builtin', scope: 'builtin', connection: null }

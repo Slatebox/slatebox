@@ -10,12 +10,22 @@
 //   api.onStartup(fn)
 // context: { edition: 'cloud', settings, agentInvite } where agentInvite is
 // settings.public.agents.invite === true (the invite feature switch, off by default).
+import { connectorActions } from './actions.mjs'
 
 export const manifest = Object.freeze({ name: 'slatebox-enterprise', features: ['agents.invite'] })
 
-// eslint-disable-next-line no-unused-vars
 export function register(api, context) {
-  // Outside agent connections (the MCP client, connectors and their OAuth callback) register
-  // here as their slices land. Each one checks context.agentInvite before it adds anything a
-  // person can reach.
+  // Nothing a person can reach is added while the invite switch is off.
+  if (!context?.agentInvite) return
+  let service = null
+  const running = () => {
+    if (!service) throw Object.assign(new Error('Outside agents are starting. Try again in a moment.'), { status: 409, code: 'starting' })
+    return service
+  }
+  // S2a: outside agents on open MCP servers (connectors.list/discover/connect/disconnect/call/keep/discard).
+  api.addActions(connectorActions(running))
+  api.onStartup(async () => {
+    const { startConnectors } = await import('./meteor.js')
+    service = startConnectors()
+  })
 }

@@ -102,6 +102,7 @@ import SlateOperationListener from '../components/SlateOperationListener'
 import LineToolStatus from '../components/stylebar/LineToolStatus'
 import AgentPresenceListener from '../components/AgentPresenceListener'
 import AgentTasksPanel from '../components/AgentTasksPanel'
+import EnterpriseSlot from '../common/EnterpriseSlot'
 import { CreativeStates, livePresentationTicket, NativePresentationStates } from '../../api/client/creativeSlateStates'
 import { presentPeople } from '../../api/common/presence.mjs'
 import { sidePanels } from '../../api/common/side-panels.mjs'
@@ -1534,6 +1535,11 @@ export default function Canvas() {
       {slate.current && <AgentPresenceListener slate={slate.current} canEdit={!accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly} />}
       {slate.current && !asEmbed && Meteor.userId() && (
         <AgentTasksPanel shareId={slate.current.shareId} canEdit={!accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly && !Meteor.user()?.isAnonymous} />
+      )}
+      {/* Outside agents invited onto this slate (Slatebox Cloud only): their ghosts and chips. Empty on self-host. */}
+      {slate.current && !asEmbed && (
+        <EnterpriseSlot name="canvas.agents" slate={slate.current} canEdit={!accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly}
+          readSelection={() => selectedOwnNotes().map((n) => n.options?.id).filter(Boolean)} />
       )}
       {/* {currentAIContext?.aid &&
         slate.current &&

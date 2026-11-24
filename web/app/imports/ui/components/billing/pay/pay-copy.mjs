@@ -30,6 +30,7 @@ const GOALS = {
   pictures: { title: 'Search for pictures', back: 'Back to your slate', again: 'your picture search is ready to run again' },
   image: { title: 'Make your image', back: 'Back to your slate', again: 'your image is ready to make again' },
   plan: { title: 'Plan your presentation', back: 'Back to your slate', again: 'your plan is ready to make again' },
+  agents: { title: 'Invite your agent', back: 'Back to your slate', again: 'your agent is ready to join' },
 }
 
 /** The sheet's eyebrow and heading. */
