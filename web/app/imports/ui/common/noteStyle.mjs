@@ -74,9 +74,15 @@ export const STICKY_NOTE = Object.freeze({
   foregroundColor: DARK_TEXT,
 })
 
-/** The sticky note's own options (the rest, its font and place, come from the caller). */
-export function stickyNoteLook(style) {
-  const { width, height } = noteAt(style, { x: 0, y: 0 })
+/**
+ * The sticky note's own options (the rest, its font and place, come from the caller). `fontSize` is
+ * the size the note's words will really have (the dock copies the slate's last note's): the note is as
+ * tall as the default note would be for it.
+ */
+export function stickyNoteLook(style, fontSize) {
+  const s = style || presetNoteStyle(null)
+  const size = Number(fontSize)
+  const { width, height } = noteAt(size > 0 ? { ...s, fontSize: size } : s, { x: 0, y: 0 })
   return {
     width,
     height,

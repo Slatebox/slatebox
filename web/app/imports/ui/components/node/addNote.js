@@ -139,9 +139,10 @@ export default function addNote(slate, shape) {
     nodeOpts.fontSize = 20
     nodeOpts.fontFamily = 'Bangers'
   } else if (shape.key === 'stickyNote') {
-    // The default note's rounded shape and size, in sticky yellow, no border, the post-it shadow on.
+    // The default note's rounded shape and size, in sticky yellow, no border, the post-it shadow on;
+    // as tall as the default note for the font size it copied from the last note.
     nodeOpts = setDimens(`T${xPos},${yPos}s6,6`)
-    Object.assign(nodeOpts, stickyNoteLook(slate?.noteStyle))
+    Object.assign(nodeOpts, stickyNoteLook(slate?.noteStyle, nodeOpts.fontSize))
   } else {
     if (shape.key === 'line') {
       nodeOpts.borderWidth = 3

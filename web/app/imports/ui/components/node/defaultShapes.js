@@ -95,8 +95,9 @@ const defaultShapes = [
   {
     key: 'stickyNote',
     name: 'Sticky Note',
-    // The note it makes: a landscape rounded note in sticky yellow with a shadow.
-    path: 'M5 7h14a3 3 0 0 1 3 3v4a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-4a3 3 0 0 1 3-3z',
+    // The note it makes, filling the tile like the others (20 x 15 in the 24 box): a rounded note in
+    // sticky yellow with a shadow, its top-right corner folded over so it reads as a sticky note.
+    path: 'M5 4.5h12l5 5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-9a3 3 0 0 1 3-3z M17 4.5v3a2 2 0 0 0 2 2h3',
     iconFill: '#fdeea6',
   },
 ]
