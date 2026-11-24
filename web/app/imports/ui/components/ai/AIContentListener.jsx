@@ -72,6 +72,8 @@ export default function AIContentListener({
           message: 'Laid out the slate.',
           operations: [{ kind: 'arrange_nodes', target: { all: true }, layout }],
         },
+        // The layout is one undo step.
+        as: 'own',
       })
       clearTimeout(window.fitAIContentLayout)
       window.fitAIContentLayout = setTimeout(() => {

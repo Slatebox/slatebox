@@ -196,6 +196,19 @@ Meteor.methods({
       counters: { calls: saved.length }, startedAt: new Date(), endedAt: new Date(),
     }).catch(() => {})
     if (board.userId !== this.userId) await rememberInvitedEdit(this.userId, board, shareId).catch(() => {})
-    return true
+    // The page that kept it draws the kept change itself, as one step its person can undo, instead of
+    // reloading (which lost their undo history): the revisions its saves were stored at name the runs
+    // it draws as its own (SlateOperationListener), and the conversation revision fences its autosave.
+    // Only for a Keep that changed the drawing alone: one that added a board (add_component, a workshop edit)
+    // opens it the way it always has.
+    const stored = await Slates.rawCollection().findOne({ _id: board._id }, { projection: { nativeConversationRevision: 1, 'creative.revision': 1 } })
+    const edits = saved.filter(({ method }) => !String(method).startsWith('presence.'))
+    const drawingOnly = edits.length > 0 && edits.every(({ method, body }) => method === 'slates.applyOperations' && !body?.boardId && !body?.workshop) &&
+      (stored?.creative?.revision ?? null) === (board.creative?.revision ?? null)
+    if (!drawingOnly) return true
+    return {
+      revisions: edits.map(({ body }) => body?.revision).filter(Number.isInteger),
+      nativeConversationRevision: stored?.nativeConversationRevision ?? 0,
+    }
   },
 })

@@ -83,6 +83,8 @@ import CollaborationUsers from '../components/CollaborationUsers'
 import SlateAIRunner from '../components/ai/SlateAIRunner'
 import CanvasBottomBar from '../components/CanvasBottomBar'
 import QuickNodeActions from '../components/node/QuickNodeActions'
+import UndoRedoControls from '../components/UndoRedoControls'
+import { expectOwnRuns } from '../../api/client/ownRuns.mjs'
 import { customShapePackage } from '../../api/common/note-style.mjs'
 import { LIBRARY_EVENT } from '../components/library/libraryBus'
 import StyleBar from '../components/stylebar/StyleBar'
@@ -1437,8 +1439,16 @@ export default function Canvas() {
               readNodes={()=>JSON.stringify(JSON.parse(slate.current.exportJSON()).nodes)} /></React.Suspense>
           : <React.Suspense fallback={null}><NativeCanvasConversation key={id} shareId={id} board={nativeBoard} library={libraryRequest}
               about={<AskAboutNote send={(ids, pkg) => updateNode([pkg], ids.map((nid) => slate.current?.v2?.getNode(nid)))} />}
-              onClose={()=>setNativeChatOpen(false)} onKeep={kept=>{
+              onClose={()=>setNativeChatOpen(false)}
+              onKeeping={asked=>expectOwnRuns(slate.current, asked, kept=>kept?.revisions)}
+              onKeep={kept=>{
                 takeBoardName(kept?.name)
+                // A drawing kept in the chat is drawn here as the server saved it (SlateOperationListener), as one
+                // step this person can undo; the conversation's revision fences this page's autosave from now on.
+                if(Array.isArray(kept?.revisions)) {
+                  if(slate.current && Number.isInteger(kept.nativeConversationRevision)) slate.current.nativeConversationRevision = kept.nativeConversationRevision
+                  return
+                }
                 if(kept?.board && (slate.current?.creativeKind==='workshop' || takeBoard(kept))) {
                   // On a phone the sheet gives the screen to the board just kept (as it opens after a reload).
                   if(window.innerWidth<600) setNativeChatOpen(false)
@@ -1468,6 +1478,8 @@ export default function Canvas() {
       {!asEmbed && !creativeKind && keepOffer?.key === id &&
         <KeepNativeSlate key={id} routeKey={id} proof={keepOffer.proof} slateId={keepOffer.slateId} visitor={keepOffer.visitor} />}
       <NeuralThinking />
+      {/* Undo and Redo of this person's own steps (the drawing's and their board changes), on every screen. */}
+      {showTools && slate.current && <UndoRedoControls key={id} slate={slate.current} narrow={phone} />}
       {showTools && !phone && (
           <QuickNodeActions
             slate={slate?.current}

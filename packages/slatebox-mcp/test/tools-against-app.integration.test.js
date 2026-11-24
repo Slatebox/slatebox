@@ -51,8 +51,24 @@ function put(doc, path, value) {
   for (const key of keys) target = target[key] ??= {};
   target[last] = value;
 }
-const matches = (doc, query) => Object.entries(query).every(([path, want]) =>
-  want && typeof want === "object" && "$ne" in want ? at(doc, path) !== want.$ne : (at(doc, path) ?? null) === want);
+const matches = (doc, query) => Object.entries(query).every(([path, want]) => {
+  const have = at(doc, path);
+  if (want && typeof want === "object") {
+    if ("$ne" in want) return want.$ne === null ? have != null : have !== want.$ne;
+    // slates.undo and slates.redo read the caller's receipts by these.
+    if ("$exists" in want) return (have !== undefined) === want.$exists;
+    if ("$gt" in want) return have > want.$gt;
+  }
+  return (have ?? null) === want;
+});
+// A Meteor findOneAsync's sort: { field: 1 | -1 }, in order.
+const sorted = (rows, sort = {}) => [...rows].sort((a, b) => {
+  for (const [path, dir] of Object.entries(sort)) {
+    const x = at(a, path) ?? -Infinity, y = at(b, path) ?? -Infinity;
+    if (x !== y) return x < y ? -dir : dir;
+  }
+  return 0;
+});
 
 /** Enough of a Mongo collection, raw and Meteor-shaped, for the API handlers. */
 function collection(rows = []) {
@@ -69,8 +85,9 @@ function collection(rows = []) {
     findOne: async (query) => structuredClone(rows.find((row) => matches(row, query)) ?? null),
     insertOne: async (row) => { rows.push(structuredClone(row)); },
     updateOne: async (selector, modifier) => ({ matchedCount: update(selector, modifier) }),
-    findOneAsync: async (query) => structuredClone(rows.find((row) => matches(row, query)) ?? null),
-    insertAsync: async (row) => { rows.push(structuredClone(row)); },
+    findOneAsync: async (query, options = {}) => structuredClone(sorted(rows.filter((row) => matches(row, query)), options.sort)[0] ?? null),
+    // A Meteor insert gives the row an _id when it has none.
+    insertAsync: async (row) => { rows.push(structuredClone({ _id: "row-" + rows.length, ...row })); },
     updateAsync: async (selector, modifier) => update(selector, modifier),
   };
 }
@@ -367,6 +384,14 @@ test("every client method succeeds against the app, and refusals keep status, co
   await ok(edit([{ kind: "update_slate", changes: { name: "Renamed" } }]));
   assert.equal((await stored("canvas")).options.name, "Renamed");
   await ok(edit([{ kind: "update_nodes", target: { ids: ["a"] }, changes: { text: "Plan" } }]));
+  assert.deepEqual(await texts(), ["Plan", "Beta", "Gamma"]);
+  // slates.undo and slates.redo: the caller's own last edit, taken back and made again. Either may remove
+  // notes (an undo of an add), so a script's call is held for the person, as a delete is.
+  const undone = await confirmed(`return slatebox.slates.undo({ shareId: "canvas" })`, ["removes"]);
+  assert.equal(typeof undone.undone, "string");
+  assert.deepEqual(undone.left, []);
+  assert.deepEqual(await texts(), ["Alpha", "Beta", "Gamma"]);
+  await confirmed(`return slatebox.slates.redo({ shareId: "canvas" })`, ["removes"]);
   assert.deepEqual(await texts(), ["Plan", "Beta", "Gamma"]);
 
   // A full lane: the rule's sentence, its code and status, the legal lanes and the board.

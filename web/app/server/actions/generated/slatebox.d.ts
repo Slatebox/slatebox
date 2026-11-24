@@ -980,6 +980,35 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.slates {
+  /** Redo. Makes again the edit this caller last took back with slates.undo, if the caller has saved no edit on this slate since (a new edit clears what can be redone). Each part goes back to how the edit left it, unless someone else changed it since: that part stays as they left it and is listed in left[]. Saved as an edit, as slates.undo is. 409 nothing_to_redo when there is nothing of the caller's to redo. @scope slates:write @destructive */
+  function redo(input: {
+    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
+    shareId: string;
+  }): Promise<({
+    ok: boolean;
+    shareId: string;
+    /** The slate revision after this save. (at least 0) */
+    revision?: number;
+    message?: string;
+    /** slates.undo: the edit it took back (its run id). */
+    undone?: string;
+    /** slates.redo: the edit it made again (its run id). */
+    redone?: string;
+    /** The canvas plan that was saved to do it. */
+    operations: Array<Record<string, unknown>>;
+    /** Each note, connection or setting someone else changed since, left as they left it. */
+    left: Array<{
+      kind?: string;
+      id?: string;
+      key?: string;
+      reason?: string;
+      [key: string]: unknown;
+    }>;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.slates {
   /** Unshare. Withdraws exactly this invitation. Named team grants stay. Repeating the request confirms the same withdrawal; a newer invitation is never withdrawn by an old command. @scope slates:share @destructive @idempotent */
   function revokeInvite(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
@@ -990,6 +1019,35 @@ declare namespace slatebox.slates {
     inviteId: string;
     revoked: true;
     mode?: "save";
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.slates {
+  /** Undo. Takes back the newest canvas edit this caller saved on the slate with slates.applyOperations (notes, connections, slate settings) that is not undone yet: the same account and the same token, so it never takes back a person's or another agent's edit. Each note, connection and setting the edit changed goes back to how it was, unless someone else changed it since: that part stays as they left it and is listed in left[]. The undo is saved as an edit (the revision goes up, every open canvas shows it) and answers the run it undid (undone). Workshop and map edits are undone with undo_workshop_edit. 409 nothing_to_undo when no edit of the caller is left to undo; 409 slate_changed when the slate changed while it was being saved (call again). @scope slates:write @destructive */
+  function undo(input: {
+    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
+    shareId: string;
+  }): Promise<({
+    ok: boolean;
+    shareId: string;
+    /** The slate revision after this save. (at least 0) */
+    revision?: number;
+    message?: string;
+    /** slates.undo: the edit it took back (its run id). */
+    undone?: string;
+    /** slates.redo: the edit it made again (its run id). */
+    redone?: string;
+    /** The canvas plan that was saved to do it. */
+    operations: Array<Record<string, unknown>>;
+    /** Each note, connection or setting someone else changed since, left as they left it. */
+    left: Array<{
+      kind?: string;
+      id?: string;
+      key?: string;
+      reason?: string;
+      [key: string]: unknown;
+    }>;
     [key: string]: unknown;
   }) & { mode: "save" }>;
 }

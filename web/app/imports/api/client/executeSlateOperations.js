@@ -8,8 +8,10 @@ export default async function executeSlateOperations({
   userMessage,
   replay = false,
   send = true,
+  as,
 }) {
-  const result = SlateOperations.applySlateOperations(slate, plan, { userMessage, replay, send })
+  // `as`: whose undo step a saved run is on this page ("own" or "others", see SlateOperationListener).
+  const result = SlateOperations.applySlateOperations(slate, plan, { userMessage, replay, send, ...(as ? { as } : {}) })
   await result.applied
   return result
 }

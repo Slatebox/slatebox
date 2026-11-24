@@ -10129,6 +10129,242 @@
       }
     },
     {
+      "id": "slates.undo",
+      "title": "Undo",
+      "description": "Takes back the newest canvas edit this caller saved on the slate with slates.applyOperations (notes, connections, slate settings) that is not undone yet: the same account and the same token, so it never takes back a person's or another agent's edit. Each note, connection and setting the edit changed goes back to how it was, unless someone else changed it since: that part stays as they left it and is listed in left[]. The undo is saved as an edit (the revision goes up, every open canvas shows it) and answers the run it undid (undone). Workshop and map edits are undone with undo_workshop_edit. 409 nothing_to_undo when no edit of the caller is left to undo; 409 slate_changed when the slate changed while it was being saved (call again).",
+      "action": "slates.undo",
+      "toolset": "slates",
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "slates:write",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/slates/{shareId}/undo",
+        "pathParams": [
+          "shareId"
+        ],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "shareId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The slate ID from its address: /canvas/<shareId>."
+          }
+        },
+        "required": [
+          "shareId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "shareId": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The slate revision after this save."
+          },
+          "message": {
+            "type": "string"
+          },
+          "undone": {
+            "type": "string",
+            "description": "slates.undo: the edit it took back (its run id)."
+          },
+          "redone": {
+            "type": "string",
+            "description": "slates.redo: the edit it made again (its run id)."
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "The canvas plan that was saved to do it."
+          },
+          "left": {
+            "type": "array",
+            "description": "Each note, connection or setting someone else changed since, left as they left it.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "ok",
+          "shareId",
+          "operations",
+          "left"
+        ]
+      },
+      "tool": {
+        "name": "undo_my_edit",
+        "title": "Undo my last edit",
+        "description": "Take back your own newest canvas edit on a slate (never anyone else's); what someone changed since stays and is listed.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "slates.redo",
+      "title": "Redo",
+      "description": "Makes again the edit this caller last took back with slates.undo, if the caller has saved no edit on this slate since (a new edit clears what can be redone). Each part goes back to how the edit left it, unless someone else changed it since: that part stays as they left it and is listed in left[]. Saved as an edit, as slates.undo is. 409 nothing_to_redo when there is nothing of the caller's to redo.",
+      "action": "slates.redo",
+      "toolset": "slates",
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "slates:write",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/slates/{shareId}/redo",
+        "pathParams": [
+          "shareId"
+        ],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "shareId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The slate ID from its address: /canvas/<shareId>."
+          }
+        },
+        "required": [
+          "shareId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "shareId": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The slate revision after this save."
+          },
+          "message": {
+            "type": "string"
+          },
+          "undone": {
+            "type": "string",
+            "description": "slates.undo: the edit it took back (its run id)."
+          },
+          "redone": {
+            "type": "string",
+            "description": "slates.redo: the edit it made again (its run id)."
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "The canvas plan that was saved to do it."
+          },
+          "left": {
+            "type": "array",
+            "description": "Each note, connection or setting someone else changed since, left as they left it.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "ok",
+          "shareId",
+          "operations",
+          "left"
+        ]
+      },
+      "tool": {
+        "name": "redo_my_edit",
+        "title": "Redo my last undo",
+        "description": "Make again the canvas edit you last undid on a slate, if you have made no edit there since.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
       "id": "team.export",
       "title": "Export team",
       "description": "For a team admin: a one-time address (15 minutes) to download everything the team owns as one archive, in the open team export format: slates with their boards and smart components, recent versions and events, comments, presentations, files, people and roles, published-link settings, AI connections (never keys) and the names and scopes of API tokens (never secrets). A POST to downloadUrl downloads it; a passphrase (form or JSON field \"passphrase\", the Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or the Slatebox-Export-Passphrase header when it is plain ASCII; at least 12 characters, not starting or ending with a space) encrypts the archive. The archive is signed and checked; teamImports.start imports it on any Slatebox server.",

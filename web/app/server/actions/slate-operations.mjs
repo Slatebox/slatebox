@@ -9,6 +9,7 @@ import { sharedSaveConditions } from '../methods/native-slate-save.mjs'
 import { applyAddComponent, isAddComponentPlan } from './component-add-op.mjs'
 import { runExpiry } from '../../imports/api/common/slate-operation-runs.mjs'
 import { choreography, publicAction, withOwnGhosts } from '../agents/suggestions.mjs'
+import { undoRecord } from './slate-undo-record.mjs'
 
 // Where update_slate's keys are stored: the fields the engine applier writes on
 // the slate's options (slateboxjs/operations SLATE_KEYS). The line colour also
@@ -126,7 +127,8 @@ function applyPlanTo(deps, target, plan, userMessage, requireMatches) {
 
 // attribution: which agent a kept suggestion or an undo came from (on the run every canvas draws).
 // onApplied({ before, after, revision }): told what a save changed (an agent editing directly is filed as one action).
-export async function applyToCanvas(principal, input, { deps, mode, now, idempotencyKey, resource: slate, attribution = null, onApplied = null }) {
+// stepOf: an undo or redo (slates.undo/redo) names the edit it takes back or makes again (see slate-undo.mjs).
+export async function applyToCanvas(principal, input, { deps, mode, now, idempotencyKey, resource: slate, attribution = null, onApplied = null, stepOf = null }) {
   const { plan, userMessage = '', expectedRevision } = input
   if (expectedRevision === undefined)
     throw problem(400, 'invalid_request', EXPECTED_REVISION_REQUIRED, { details: { field: 'expectedRevision' } })
@@ -175,6 +177,8 @@ export async function applyToCanvas(principal, input, { deps, mode, now, idempot
   let result
   let saved
   let before = null
+  // What this edit changed, as it found the slate and as it stored it: what slates.undo puts back.
+  let undoable = null
   try {
     saved = await deps.saveCore.save({
       slateId: slate._id,
@@ -189,6 +193,8 @@ export async function applyToCanvas(principal, input, { deps, mode, now, idempot
       build(current) {
         before = current
         result = apply(current)
+        const settingKeys = result.materializedPlan.operations.flatMap((operation) => operation.kind === 'update_slate' ? Object.keys(operation.changes || {}) : [])
+        undoable = stepOf ? null : undoRecord(current, result.slate, settingKeys)
         return { set: setFor(result) }
       },
     })
@@ -211,6 +217,10 @@ export async function applyToCanvas(principal, input, { deps, mode, now, idempot
     report: result.report,
     response: { ...response, mode },
     ...(attribution && { agent: attribution }),
+    // slates.undo and slates.redo: an edit of the caller's own keeps what it changed; an undo or redo
+    // names the edit it took back or made again, and is not an edit to undo itself.
+    ...(undoable ? { undoable, undoneBy: null } : {}),
+    ...(stepOf ? { stepOf } : {}),
     createdAt: now(),
     expiresAt: runExpiry(now()),
   })

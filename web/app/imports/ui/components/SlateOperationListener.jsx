@@ -11,6 +11,7 @@ import { waitForRun } from '../../api/client/waitForRun.mjs'
 import { appliesToCanvas, runsSince } from '../../api/common/slate-operation-runs.mjs'
 import { exportForSave } from '../../api/client/saveSlateLite'
 import { foldIntoBase } from '../../api/common/slate-save-patch.mjs'
+import { isOwnRun } from '../../api/client/ownRuns.mjs'
 
 // The notes as this page has them, by id, as text: to see what a run it drew changed.
 function notesAsText(slate) {
@@ -56,9 +57,13 @@ export default function SlateOperationListener({ slate, revision }) {
           // joins this page's save base (slate-save-patch.mjs) and the page's next save does not send
           // it back as an edit of its own over someone's later change.
           const before = slate.saveBase ? notesAsText(slate) : null
+          // A run this page's person caused (a Keep, an import) is a step of theirs, which they can undo;
+          // anyone else's (an agent's, another page's) is not, and no undo of theirs takes it away.
+          const own = await isOwnRun(slate, run)
           let drawing
           try {
             drawing = executeSlateOperations({
+              as: own ? 'own' : 'others',
               slate,
               plan: run.plan,
               userMessage: run.userMessage || '',

@@ -22,6 +22,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   journey, calm), palette and brief; `mode: "preview"` plans without saving. It answers with the
   presentation id, its steps (layout, kicker, caption) and a link, `/canvas/<shareId>?present=1`,
   that opens the slate and plays it.
+- Undo and Redo on every slate: a pill at the canvas's bottom-left from a tablet up and a column at the
+  left on a phone, with Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl+Y. They take back and redo the person's own
+  steps only: a teammate's or an agent's later change is never undone by them, and a step someone else
+  has changed since is passed over with "Someone else changed that since, so there was nothing of yours to
+  take back there." A drag, resize or rotation is one step. Board changes (a card moved, moved anyway past a
+  rule, a lane renamed, a card taken off, a Keep in the board's chat) are steps in the same history, made
+  again on the board as it stands (what someone else changed since stays). A Keep in Ask Slatebox is drawn
+  in place, without a reload, as one step; so is a Mermaid import into the open slate and an in-app AI plan.
+  The board strip's one-step "Undo last change" is replaced by them.
+- `slates.undo` and `slates.redo` (`POST /api/v1/slates/{shareId}/undo|redo`, `undo_my_edit`,
+  `redo_my_edit`): the caller's own canvas edits (same account, same token), taken back and made again; a
+  part someone else changed since stays and is listed in `left`. In exec a call is held for the person, as
+  any removal is.
+
 
 - Agents reach what a person does on the Slates page and in the comment drawer, with the app's own
   rules: list your slates or your team's (`slates.list`, `GET /api/v1/slates`, `list_slates`), copy a
@@ -94,6 +108,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   presenter's deck (-1 is the whole slate); it no longer has `laneId`. The read
   no longer has `publication`: a workshop slate is published like any slate.
   `set_presentation_order` is unchanged. Note this in the MCP publish runbook.
+
+### Fixed
+
+- A run another page or an agent saved, drawn on this canvas, became this person's undo step (their undo
+  took the agent's work away for everyone).
 
 ## [1.3.21] - 2026-07-16
 

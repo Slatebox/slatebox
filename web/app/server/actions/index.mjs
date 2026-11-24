@@ -25,6 +25,7 @@ import presencePlan from './presence-plan.mjs'
 import presenceStep from './presence-step.mjs'
 import componentsList, { componentsGet } from './components-list.mjs'
 import slatesCheckMove from './slate-check-move.mjs'
+import { slatesUndo, slatesRedo } from './slate-undo.mjs'
 import teamTransfer from './team-transfer.mjs'
 import shapeActions from './shapes.mjs'
 import presentationActions from './presentations.mjs'
@@ -60,6 +61,8 @@ export const actions = [
   componentsList,
   componentsGet,
   slatesCheckMove,
+  slatesUndo,
+  slatesRedo,
   ...teamTransfer,
   ...shapeActions,
   ...presentationActions,

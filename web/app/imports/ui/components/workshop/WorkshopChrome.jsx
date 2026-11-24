@@ -14,15 +14,16 @@ const reasonLines = { ...twoLines, WebkitLineClamp: 3, cursor: 'pointer', border
   '&:focus': { display: 'block', overflow: 'visible', WebkitLineClamp: 'none' }, '&:focus-visible': { outline: '2px solid currentColor' } }
 
 /**
- * What a person may do with the workshop on this slate, and the one change they can take back.
+ * What a person may do with the workshop on this slate. Their changes are taken back with the canvas's
+ * own Undo and Redo (UndoRedoControls), with the rest of their steps.
  * A small strip in the lower corner of the canvas, clear of the toolbar's own floating controls;
  * `docked` gives it a row of its own under the canvas instead (a phone, where it would cover a card).
  */
 export function WorkshopStatus({ board, docked = false, conversationOpen = false, onReview }) {
-  const { editable, canJoin, joining, canUndo, saving, offline, error, failure, previewing, notice } = board
+  const { editable, canJoin, joining, saving, offline, error, failure, previewing, notice } = board
   // An embed is always read-only and says nothing about it.
   const viewOnly = board.ready && !editable && !canJoin && !board.embedded
-  if (!failure && !canJoin && !viewOnly && !canUndo && !saving && !error && !previewing && !notice) return null
+  if (!failure && !canJoin && !viewOnly && !saving && !error && !previewing && !notice) return null
   // Docked, it is drawn over the collaborator names pinned near the bottom of the page, so a
   // name never covers "Join to edit" or another of its buttons.
   const place = docked
@@ -41,7 +42,6 @@ export function WorkshopStatus({ board, docked = false, conversationOpen = false
       ? 'Preview: a proposed change, not saved yet.'
       : 'Preview: a proposed change is on the canvas. Cards stay where they are until you keep or discard it.'}</Typography>}
     {previewing && !conversationOpen && onReview && <Button variant="contained" size="small" onClick={onReview}>Review proposal</Button>}
-    {canUndo && <Button size="small" disabled={saving} onClick={board.undo}>Undo last change</Button>}
     {saving && <Typography variant="body2" role="status">{offline ? 'Offline. Your changes will be saved when the connection is back.' : 'Saving…'}</Typography>}
     {failure && <Typography variant="body2" role="alert" tabIndex={0} title={failure} sx={reasonLines}>{failure}</Typography>}
     {failure && board.retryBoard && <Button size="small" onClick={board.retryBoard}>Try again</Button>}

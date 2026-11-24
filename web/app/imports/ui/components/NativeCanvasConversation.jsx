@@ -61,7 +61,7 @@ function useDrawnEmpty(liveNodes) {
   return empty
 }
 
-export default function NativeCanvasConversation({shareId,board,onClose,onKeep,onPreview,readNodes,readSelection=null,about=null,library=null}) {
+export default function NativeCanvasConversation({shareId,board,onClose,onKeep,onKeeping=null,onPreview,readNodes,readSelection=null,about=null,library=null}) {
   // The library view, when it is open in place of the conversation (Back returns to the chat).
   const [view,setView]=useState(null)
   const [text,setText]=useState(''), [draft,setDraft]=useState(null), [error,setError]=useState('')
@@ -163,7 +163,10 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     if(readNodes()!==before.current) {setError('Your drawing changed. Discard this preview and ask again.');return}
     inFlight.current=true;setBusy('keeping');setError('')
     try {
-      const kept=await Meteor.callAsync(draft.via+'.keep',shareId,draft.id)
+      const keeping=Meteor.callAsync(draft.via+'.keep',shareId,draft.id)
+      // The page hears of the Keep before it is saved: the change it saves is drawn here as its person's own step.
+      onKeeping?.(keeping)
+      const kept=await keeping
       // Said as a sentence ("Added a retro: Went well, Change and Try, up to three cards each."), naming
       // a library board the way its own add message does.
       const lib=draft.component ? await libraryModule().catch(()=>null) : null
@@ -176,6 +179,13 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
       if(draft.mode==='play' && kept?.kept) {
         setDraft(null);inFlight.current=false;setBusy(null)
         onKeep({board:true,origin:kept.origin,nativeConversationRevision:kept.nativeConversationRevision,...(kept.name && {name:kept.name})})
+        return
+      }
+      // A drawing kept here is drawn on this page as the server saved it (no reload), as one step its person can undo.
+      if(Array.isArray(kept?.revisions)) {
+        setDraft(null);inFlight.current=false;setBusy(null)
+        onKeep({revisions:kept.revisions,nativeConversationRevision:kept.nativeConversationRevision})
+        requestAnimationFrame(()=>input.current?.focus())
         return
       }
       focusMessageAfterReload(shareId)

@@ -48,10 +48,12 @@ export default function SlateAIRunner({
     if (resp?.operationPlan) {
       try {
         setRequestStatus('Applying those changes…')
+        // The whole plan is one step this person can undo.
         await executeSlateOperations({
           slate,
           plan: resp.operationPlan,
           userMessage,
+          as: 'own',
         })
         await Meteor.callAsync(CONSTANTS.methods.openai.operationCompleted, {
           shareId: slate.shareId,

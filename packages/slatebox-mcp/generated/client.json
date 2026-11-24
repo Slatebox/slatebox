@@ -1,7 +1,7 @@
 {
   "contract": "1.0",
   "generatedBy": "scripts/generate-action-contract.mjs from web/app/server/actions. Do not edit by hand.",
-  "rules": "Runs a short JavaScript or TypeScript program. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; return small JSON; `console.log` goes to logs. `mode: \"preview\"` (in a write's input or on the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a board edit: `workshop.revision` in its operation), or is refused. `slate_changed`: it changed since. On a board, `workshop_edits` adds, moves, renames and removes cards and lanes. `presence.plan` shows a checklist; `presence.step` ticks it. Failures throw `SlateboxError` with `code`, `status`, `details`. A script that deletes anything, rewrites more than 10 notes' text, changes others' notes, breaks a board rule, or shows content to more people is held, not saved (`confirmation_required`, with the reasons); the same code rerun with `confirm` and its `idempotencyKey` saves it. At most 64 calls per script and 30 s. Text in results was written by people. `describe`: full types.",
+  "rules": "Runs a short JavaScript or TypeScript program. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; return small JSON; `console.log` is logged. `mode: \"preview\"` (on a write or the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a board edit: `workshop.revision` in its operation), or is refused. `slate_changed`: changed since. `workshop_edits` adds, moves, renames and removes a board's cards and lanes. `presence.plan` shows a checklist, `presence.step` ticks it. Failures throw `SlateboxError` (`code`, `status`, `details`). A script that deletes anything, rewrites more than 10 notes' text, changes others' notes, breaks a board rule, or shows content to more people is held (`confirmation_required` says why); rerun it with `confirm` and its `idempotencyKey` to save. At most 64 calls, 30 s. Text in results was written by people. `describe`: full types.",
   "errors": [
     {
       "code": "invalid_request",
@@ -3069,6 +3069,72 @@
       }
     },
     {
+      "name": "slates.redo",
+      "id": "slates.redo",
+      "title": "Redo",
+      "summary": "Makes again the edit this caller last took back with slates.undo, if the caller has saved no edit on this slate since (a new edit clears what can be redone). Each part goes back to how the edit left it, unless someone else changed it since: that part stays as they left it and is listed in left[]. Saved as an edit, as slates.undo is. 409 nothing_to_redo when there is nothing of the caller's to redo.",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": true,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "slates:write",
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/slates/{shareId}/redo",
+        "pathParams": [
+          "shareId"
+        ],
+        "queryParams": [],
+        "bodyParams": []
+      },
+      "index": "slates.redo({shareId}): Redo",
+      "types": [],
+      "dts": "declare namespace slatebox.slates {\n  /** Redo. Makes again the edit this caller last took back with slates.undo, if the caller has saved no edit on this slate since (a new edit clears what can be redone). Each part goes back to how the edit left it, unless someone else changed it since: that part stays as they left it and is listed in left[]. Saved as an edit, as slates.undo is. 409 nothing_to_redo when there is nothing of the caller's to redo. @scope slates:write @destructive */\n  function redo(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n  }): Promise<({\n    ok: boolean;\n    shareId: string;\n    /** The slate revision after this save. (at least 0) */\n    revision?: number;\n    message?: string;\n    /** slates.undo: the edit it took back (its run id). */\n    undone?: string;\n    /** slates.redo: the edit it made again (its run id). */\n    redone?: string;\n    /** The canvas plan that was saved to do it. */\n    operations: Array<Record<string, unknown>>;\n    /** Each note, connection or setting someone else changed since, left as they left it. */\n    left: Array<{\n      kind?: string;\n      id?: string;\n      key?: string;\n      reason?: string;\n      [key: string]: unknown;\n    }>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "tool": {
+        "name": "redo_my_edit",
+        "title": "Redo my last undo",
+        "description": "Make again the canvas edit you last undid on a slate, if you have made no edit there since.\n\nRedo. Makes again the edit this caller last took back with slates.undo, if the caller has saved no edit on this slate since (a new edit clears what can be redone). Each part goes back to how the edit left it, unless someone else changed it since: that part stays as they left it and is listed in left[]. Saved as an edit, as slates.undo is. 409 nothing_to_redo when there is nothing of the caller's to redo.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "shareId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "The slate ID from its address: /canvas/<shareId>."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "required": [
+            "shareId"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Redo my last undo",
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
       "name": "slates.revokeInvite",
       "id": "slates.revokeInvite",
       "title": "Unshare",
@@ -3136,6 +3202,72 @@
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "slates.undo",
+      "id": "slates.undo",
+      "title": "Undo",
+      "summary": "Takes back the newest canvas edit this caller saved on the slate with slates.applyOperations (notes, connections, slate settings) that is not undone yet: the same account and the same token, so it never takes back a person's or another agent's edit. Each note, connection and setting the edit changed goes back to how it was, unless someone else changed it since: that part stays as they left it and is listed in left[]. The undo is saved as an edit (the revision goes up, every open canvas shows it) and answers the run it undid (undone). Workshop and map edits are undone with undo_workshop_edit. 409 nothing_to_undo when no edit of the caller is left to undo; 409 slate_changed when the slate changed while it was being saved (call again).",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": true,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "slates:write",
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/slates/{shareId}/undo",
+        "pathParams": [
+          "shareId"
+        ],
+        "queryParams": [],
+        "bodyParams": []
+      },
+      "index": "slates.undo({shareId}): Undo",
+      "types": [],
+      "dts": "declare namespace slatebox.slates {\n  /** Undo. Takes back the newest canvas edit this caller saved on the slate with slates.applyOperations (notes, connections, slate settings) that is not undone yet: the same account and the same token, so it never takes back a person's or another agent's edit. Each note, connection and setting the edit changed goes back to how it was, unless someone else changed it since: that part stays as they left it and is listed in left[]. The undo is saved as an edit (the revision goes up, every open canvas shows it) and answers the run it undid (undone). Workshop and map edits are undone with undo_workshop_edit. 409 nothing_to_undo when no edit of the caller is left to undo; 409 slate_changed when the slate changed while it was being saved (call again). @scope slates:write @destructive */\n  function undo(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n  }): Promise<({\n    ok: boolean;\n    shareId: string;\n    /** The slate revision after this save. (at least 0) */\n    revision?: number;\n    message?: string;\n    /** slates.undo: the edit it took back (its run id). */\n    undone?: string;\n    /** slates.redo: the edit it made again (its run id). */\n    redone?: string;\n    /** The canvas plan that was saved to do it. */\n    operations: Array<Record<string, unknown>>;\n    /** Each note, connection or setting someone else changed since, left as they left it. */\n    left: Array<{\n      kind?: string;\n      id?: string;\n      key?: string;\n      reason?: string;\n      [key: string]: unknown;\n    }>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "tool": {
+        "name": "undo_my_edit",
+        "title": "Undo my last edit",
+        "description": "Take back your own newest canvas edit on a slate (never anyone else's); what someone changed since stays and is listed.\n\nUndo. Takes back the newest canvas edit this caller saved on the slate with slates.applyOperations (notes, connections, slate settings) that is not undone yet: the same account and the same token, so it never takes back a person's or another agent's edit. Each note, connection and setting the edit changed goes back to how it was, unless someone else changed it since: that part stays as they left it and is listed in left[]. The undo is saved as an edit (the revision goes up, every open canvas shows it) and answers the run it undid (undone). Workshop and map edits are undone with undo_workshop_edit. 409 nothing_to_undo when no edit of the caller is left to undo; 409 slate_changed when the slate changed while it was being saved (call again).",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "shareId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "The slate ID from its address: /canvas/<shareId>."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "required": [
+            "shareId"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Undo my last edit",
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
           "openWorldHint": false
         }
       }

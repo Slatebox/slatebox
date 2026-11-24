@@ -17,6 +17,7 @@ import UploadFile from '@mui/icons-material/UploadFile'
 import { slateToMermaid, parseMermaid, diagramPlans } from '../../../api/common/mermaid/index.mjs'
 import { mermaidNewSlateRoom, mermaidNewSlateNote } from '../../common/accountCopy.mjs'
 import { useSaveYourWork } from '../AccountMenu'
+import { expectOwnRuns } from '../../../api/client/ownRuns.mjs'
 
 const FORMAT_NAMES = { auto: 'Automatic', flowchart: 'Flowchart', mindmap: 'Mind map', gantt: 'Gantt chart' }
 const KIND_NAMES = { flowchart: 'flowchart', mindmap: 'mind map', gantt: 'Gantt chart' }
@@ -120,10 +121,12 @@ export default function MermaidDialog({ open, onClose, slate, row, canEdit, init
     setBusy(true)
     setFailure('')
     try {
-      const result = await Meteor.callAsync('slates.importMermaid', {
+      const asked = Meteor.callAsync('slates.importMermaid', {
         mermaid: source,
         ...(here ? { shareId: row.shareId } : {}),
       })
+      // Drawn into the open slate, the import is one step its person can undo.
+      const result = await (here && slate ? expectOwnRuns(slate, asked, (answer) => answer?.revision) : asked)
       if (!here) {
         onClose()
         navigate(`/canvas/${result.shareId}`)

@@ -8,6 +8,7 @@ import createAnonymousUser from '../../../api/client/createAnonymousUser'
 import { workshopStyle, lanesPerRow } from '../../../api/common/workshop-look.mjs'
 import { shapeNotice as shapeSentence, withShapeNotice } from '../../../api/common/shape-notice.mjs'
 import { boardsCounterRecordId } from '../../../api/common/slate-boards.mjs'
+import { BOARD_STEP_SAID, boardStepLabel, drawingOwnsBoardChange, rebaseBoardStep } from '../../../api/common/board-undo.mjs'
 import { ensureBoardChromeStyles } from './boardChromeStyles'
 import { KIT_KINDS } from './boardRender'
 import { moverName } from '../../../api/common/mover-name.mjs'
@@ -44,6 +45,9 @@ function changedLane(change, workshop) {
  * collaborator's save arrives through the creativeSlates.state publication and the same notes
  * move to their new places. A whole model from the page (a kept proposal, an undo) is saved on
  * the revision it was made on.
+ * Every change this person saves on the board is a step of their undo history on the canvas
+ * (engine.recordHostStep), between the drawing's own steps: Undo and Redo make it again on the
+ * board as it stands, leaving what someone else has changed since (board-undo.mjs).
  * `origin` is where the slate has recorded the workshop to be; `onPlaced` hears where it was put.
  * A launch plan, pipeline or budget waits for its kit (slateboxjs/boards, loaded only for such a
  * slate), which plugs the board's rules into the model before the board is drawn; its changes go
@@ -81,7 +85,6 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
   const [failure, setFailure] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [undo, setUndo] = useState(null)
   // A warn rule's sentence for a card that landed anyway: said under the board and in the chat.
   const [notice, setNotice] = useState(null)
   // A shaped note that became a card, or a card that is its shape again: said once, to the person
@@ -217,10 +220,11 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
       known.current = { revision: result.revision, model: result.model }
       // The server's record of the trade comes first: the canvas then tells the room of it.
       settleTrades(result)
-      // A note and a card trading places is undone with the canvas's own undo, which puts back the
-      // drawing and the board together; putting back the board alone would lose the note.
-      const traded = changes.some(change => change.noteToCard || change.cardToNote)
-      setUndo(result.previous && !traded ? { revision: result.revision, previous: result.previous } : null)
+      // A step of this person's undo history on the canvas. A note and a card trading places, a card's
+      // line and a card's name are put back by the canvas's own undo, which puts back the drawing and
+      // the board together; putting back the board alone would lose the note.
+      if (result.previous?.workshop && result.model?.workshop && !changes.some(drawingOwnsBoardChange))
+        recordStep(result.previous.workshop, result.model.workshop, boardStepLabel(changes, result.model.workshop))
       // A shaped note that became a card says so, and so does a card that is its shape again. An undo
       // or redo says nothing. When a rule of the board speaks for the same drop, the shape joins it.
       const shapes = changes.map(change => shapeSaid.current.get(change)).filter(Boolean)
@@ -265,10 +269,12 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
   }
   playRef.current = play
 
-  // A whole model from the page (a kept proposal, an undo) is saved on the revision it was made on.
-  async function send(next, { revision = known.current.revision, undoing = false } = {}) {
+  // A whole model from the page (a kept proposal, a card taken off) is saved on the revision it was made
+  // on, and is a step of this person's undo history. An undo or redo of a step is saved the same way,
+  // and is not a step itself (undoing).
+  async function commit(next, { revision = known.current.revision, undoing = false } = {}) {
     const board = live.current
-    if (!board) return false
+    if (!board) return { ok: false, gone: true }
     inFlight.current = true
     setSaving(true)
     setError('')
@@ -276,18 +282,58 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     const model = { kind: 'workshop', version: 1, workshop: next }
     try {
       const committed = await serialRef.current(() => Meteor.callAsync('creativeSlates.save', shareId, revision, model, ...onBoard))
-      if (live.current !== board) return true
+      if (live.current !== board) return { ok: true }
       known.current = { revision: committed, model }
-      setUndo(undoing ? null : { revision: committed, previous })
-      return true
+      if (!undoing && previous?.workshop) recordStep(previous.workshop, next, 'Board change')
+      return { ok: true }
     } catch (err) {
-      if (live.current !== board) return false
-      setError(err.error === 'stale' ? lostRace : err.reason || 'Could not save this change.')
-      return false
+      if (live.current !== board) return { ok: false, gone: true }
+      const said = err.error === 'stale' ? lostRace : err.reason || 'Could not save this change.'
+      if (!undoing) setError(said)
+      return { ok: false, stale: err.error === 'stale', reason: err.error === 'stale' ? null : err.reason || null }
     } finally {
       inFlight.current = false
       if (live.current === board) { setSaving(false); reconcile() }
     }
+  }
+  const send = async (next, options) => (await commit(next, options)).ok
+
+  // Resolves once no change of this board waits to be saved or is on its way.
+  async function idle() {
+    for (let waited = 0; (inFlight.current || queue.current.length || pressed.current) && waited < 15000; waited += 50)
+      await new Promise(resolve => setTimeout(resolve, 50))
+  }
+
+  // A change this person saved on the board, as a step of their undo history on the canvas.
+  function recordStep(before, after, label) {
+    if (!before || !after || same(before, after)) return
+    const step = {
+      label,
+      undo: () => replay(after, before),
+      redo: () => replay(before, after),
+    }
+    engineRef.current?.recordHostStep?.(step)
+  }
+
+  // Make the step from `from` to `to` again on the board as it stands now: what someone else changed
+  // since stays as they left it (rebaseBoardStep). Answers what the engine tells the person.
+  async function replay(from, to) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await idle()
+      if (!live.current || !known.current) return { ok: false, message: BOARD_STEP_SAID.gone }
+      const current = known.current.model.workshop
+      const { board, changed, conflicts } = rebaseBoardStep({ from, to, current })
+      if (!changed) return { ok: false, message: conflicts ? BOARD_STEP_SAID.overwritten : null }
+      let next
+      try { next = validateWorkshop(board) } catch { return { ok: false, message: BOARD_STEP_SAID.overwritten } }
+      const result = await commit(next, { revision: known.current.revision, undoing: true })
+      if (result.ok) return { ok: true, message: conflicts ? BOARD_STEP_SAID.partly : null }
+      if (result.gone) return { ok: false, message: BOARD_STEP_SAID.gone }
+      // Someone saved the board meanwhile: try once more on the board they left.
+      if (result.stale && attempt === 0) { await new Promise(resolve => setTimeout(resolve, 400)); continue }
+      return { ok: false, message: result.reason ? result.reason + ' Nothing was changed.' : lostRace.replace('Your change', 'Your undo') }
+    }
+    return { ok: false, message: lostRace.replace('Your change', 'Your undo') }
   }
 
   // Attach once per slate, as soon as the model is here. The callbacks read the latest closures.
@@ -563,7 +609,6 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
       setPreview(null)
       setSelection(null)
       setCandidate(null)
-      setUndo(null)
       setShapeNotice(null)
       setFocus(null)
     }
@@ -654,7 +699,6 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
   // without its rules. The rulebook arrives in a moment and the board is drawn again with them.
   if (hasRules && !rules && !rulebookLoaded()) return { boardId, active: true, ready: false, failure, retryBoard: failure ? retryBoard : null, unavailable: false }
 
-  const canUndo = Boolean(editable && undo && undo.revision === newest.revision && !preview)
   // The room this board keeps (world units): where it sits and the widest it can become, as tall as it is
   // now. The page hands it to the other boards (avoid) and places nothing over it.
   let room = null
@@ -724,7 +768,6 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     // outlines nothing, undefined until it is drawn.
     changed: proposal && changed?.proposal === proposal ? changed.box : undefined,
     setPreview,
-    canUndo,
     clearSelection: () => engine?.clearSelection?.(),
     // A card taken off the lanes as an ordinary note beside the board (the conversation's "make
     // this a note"). Null when done; otherwise the reason it stays a card.
@@ -780,7 +823,6 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     },
     // A save from the page. False when it did not go through; the reason is in `error`.
     save: (next, revision) => inFlight.current || queue.current.length ? Promise.resolve(false) : send(next, { revision }),
-    undo: () => canUndo && !inFlight.current && !queue.current.length && send(undo.previous.workshop, { revision: undo.revision, undoing: true }),
     // A new name for the slate is a new title for its workshop: a change like any other, so it
     // waits its turn behind a save in flight and is never dropped. A name the workshop cannot
     // take is said, and the saved one goes back in the toolbar.

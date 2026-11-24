@@ -7402,6 +7402,226 @@
         }
       }
     },
+    "/slates/{shareId}/redo": {
+      "post": {
+        "operationId": "redoSlateEdit",
+        "summary": "Redo",
+        "description": "Makes again the edit this caller last took back with slates.undo, if the caller has saved no edit on this slate since (a new edit clears what can be redone). Each part goes back to how the edit left it, unless someone else changed it since: that part stays as they left it and is listed in left[]. Saved as an edit, as slates.undo is. 409 nothing_to_redo when there is nothing of the caller's to redo.",
+        "x-required-scope": "slates:write",
+        "x-slatebox": {
+          "action": "slates.redo",
+          "toolset": "slates",
+          "readOnly": false,
+          "destructive": true,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shareId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "The slate ID from its address: /canvas/<shareId>."
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "shareId": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "The slate revision after this save."
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "undone": {
+                      "type": "string",
+                      "description": "slates.undo: the edit it took back (its run id)."
+                    },
+                    "redone": {
+                      "type": "string",
+                      "description": "slates.redo: the edit it made again (its run id)."
+                    },
+                    "operations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      },
+                      "description": "The canvas plan that was saved to do it."
+                    },
+                    "left": {
+                      "type": "array",
+                      "description": "Each note, connection or setting someone else changed since, left as they left it.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "key": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "shareId",
+                    "operations",
+                    "left"
+                  ]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "shareId": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "The slate revision after this save."
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "undone": {
+                      "type": "string",
+                      "description": "slates.undo: the edit it took back (its run id)."
+                    },
+                    "redone": {
+                      "type": "string",
+                      "description": "slates.redo: the edit it made again (its run id)."
+                    },
+                    "operations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      },
+                      "description": "The canvas plan that was saved to do it."
+                    },
+                    "left": {
+                      "type": "array",
+                      "description": "Each note, connection or setting someone else changed since, left as they left it.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "key": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "shareId",
+                    "operations",
+                    "left"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/slates/{shareId}/shape": {
       "post": {
         "operationId": "applyShape",
@@ -7834,6 +8054,226 @@
                   "required": [
                     "ok",
                     "shareId"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/slates/{shareId}/undo": {
+      "post": {
+        "operationId": "undoSlateEdit",
+        "summary": "Undo",
+        "description": "Takes back the newest canvas edit this caller saved on the slate with slates.applyOperations (notes, connections, slate settings) that is not undone yet: the same account and the same token, so it never takes back a person's or another agent's edit. Each note, connection and setting the edit changed goes back to how it was, unless someone else changed it since: that part stays as they left it and is listed in left[]. The undo is saved as an edit (the revision goes up, every open canvas shows it) and answers the run it undid (undone). Workshop and map edits are undone with undo_workshop_edit. 409 nothing_to_undo when no edit of the caller is left to undo; 409 slate_changed when the slate changed while it was being saved (call again).",
+        "x-required-scope": "slates:write",
+        "x-slatebox": {
+          "action": "slates.undo",
+          "toolset": "slates",
+          "readOnly": false,
+          "destructive": true,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shareId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "The slate ID from its address: /canvas/<shareId>."
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "shareId": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "The slate revision after this save."
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "undone": {
+                      "type": "string",
+                      "description": "slates.undo: the edit it took back (its run id)."
+                    },
+                    "redone": {
+                      "type": "string",
+                      "description": "slates.redo: the edit it made again (its run id)."
+                    },
+                    "operations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      },
+                      "description": "The canvas plan that was saved to do it."
+                    },
+                    "left": {
+                      "type": "array",
+                      "description": "Each note, connection or setting someone else changed since, left as they left it.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "key": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "shareId",
+                    "operations",
+                    "left"
+                  ]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "shareId": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "The slate revision after this save."
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "undone": {
+                      "type": "string",
+                      "description": "slates.undo: the edit it took back (its run id)."
+                    },
+                    "redone": {
+                      "type": "string",
+                      "description": "slates.redo: the edit it made again (its run id)."
+                    },
+                    "operations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      },
+                      "description": "The canvas plan that was saved to do it."
+                    },
+                    "left": {
+                      "type": "array",
+                      "description": "Each note, connection or setting someone else changed since, left as they left it.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "key": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "shareId",
+                    "operations",
+                    "left"
                   ]
                 }
               }
