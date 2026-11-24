@@ -46,7 +46,7 @@ export function warningsOf(snapshot, { isPriced = () => true } = {}) {
  *   innerBindings?(userId, orgId) → { me, team } team and person bindings (read per request)
  * }
  */
-export function createAIControl({ holder, choiceHolders, settings = {}, codePrompts = {}, codeSlots = {}, innerBindings = async () => null, isPriced = () => true, providerView = null }) {
+export function createAIControl({ holder, choiceHolders, settings = {}, codePrompts = {}, codeSlots = {}, innerBindings = async () => null, isPriced = () => true, providerView = null, extraHealth = () => [] }) {
   // Problems found while serving (a published prompt that would not render), newest last; shown
   // with the snapshot's own health. Per pod, in memory, bounded.
   const runtimeHealth = []
@@ -99,7 +99,7 @@ export function createAIControl({ holder, choiceHolders, settings = {}, codeProm
       bindings: Object.values(snap.bindings),
       agents: Object.values(snap.agents),
       prompts: Object.values(snap.prompts).map((p) => ({ id: p._id, surface: p.surface ?? null, kind: p.kind ?? null, title: p.title ?? null, labels: p.labels ?? { published: null } })),
-      health: [...snap.health, ...runtimeHealth],
+      health: [...snap.health, ...runtimeHealth, ...extraHealth()],
       warnings: warningsOf(snap, { isPriced }),
     }
   }
@@ -129,7 +129,7 @@ export function createAIControl({ holder, choiceHolders, settings = {}, codeProm
     renderSlot,
     effective,
     get,
-    health: () => [...holder.current().health, ...runtimeHealth],
+    health: () => [...holder.current().health, ...runtimeHealth, ...extraHealth()],
     warnings: () => warningsOf(holder.current(), { isPriced }),
     render: renderPrompt,
     snapshot: () => holder.current(),

@@ -98,11 +98,11 @@ export function dbPriceFor(snapshot, model) {
   return best
 }
 
-/** The published bindings whose model chain names a model of one of these server connections. */
+/** The published bindings whose model chain names one of these server connections, or a model of one. */
 export function bindingsUsing(snapshot, names) {
   const refs = new Set(names.map((name) => `server:${name}`))
   const models = new Set(Object.values(snapshot?.models || {}).filter((m) => refs.has(m.connection)).map((m) => m._id))
-  return Object.values(snapshot?.bindings || {}).filter((b) => (b.chain || []).some((entry) => models.has(entry.model))).map((b) => b._id)
+  return Object.values(snapshot?.bindings || {}).filter((b) => (b.chain || []).some((entry) => models.has(entry.model) || refs.has(entry.connection))).map((b) => b._id)
 }
 
 /** The providers an administrator reads: the built-in rows and the administrators' own, active and archived. */

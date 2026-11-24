@@ -57,6 +57,18 @@ export function createAISettings({
   env = globalThis.process?.env || {}, checkLimit = { count: 20, windowMs: 10 * 60 * 1000 }, audit = null,
 }) {
   const file = () => operatorConfig(settings)
+  // AI control's resolver for one surface (ai-control/index.mjs sets it): a published binding's
+  // on/off, model chain, parameters and tools apply to the request path through resolveFor.
+  let bindingSource = null
+  // ai.update at the server level also writes the server's bindings (ai-control bindings.mjs
+  // syncServerUse), so a choice and a published binding never disagree. Set by ai-control/index.mjs.
+  let useSync = null
+  // the server's choices that changed: { [key]: ref | null }
+  const useChanges = (before = {}, after = {}) => Object.fromEntries([...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter((key) => (before[key] ?? null) !== (after[key] ?? null)).map((key) => [key, after[key] ?? null]))
+  const syncServerUse = async (changes, actor, reason = null) => {
+    if (useSync && Object.keys(changes).length) await useSync({ changes, actor, reason })
+  }
   // the endpoint rules for one level of configuration, with the operator's private-network setting
   const contextFor = (ruleLevel) => ({ hosted, level: ruleLevel, privateEndpoints: file().privateEndpoints })
   const rulesFor = (ruleLevel) => endpointRules(contextFor(ruleLevel))
@@ -401,6 +413,7 @@ export function createAISettings({
     if (!cleared.length) return { cleared }
     for (const key of cleared) delete use[key]
     const docs = await store.listConnections(SERVER)
+    await syncServerUse(useChanges(stored.use, use), actorFor(userId, actor), reason)
     await store.setUse(SERVER, { ...stored, use })
     await recordChange({
       action: 'ai.control.reset', actor: actorFor(userId, actor), target: { kind: 'aiSettings', id: 'server' }, reason,
@@ -442,6 +455,7 @@ export function createAISettings({
     const beforeDocs = await store.listConnections(owner)
     for (const name of removing) await store.removeConnection(owner, name)
     await writeConnections(owner, prepared)
+    if (level === 'server') await syncServerUse(useChanges(stored.use, use), actorFor(userId, actor))
     const next = { ...stored, use }
     if (input.ownProviders !== undefined) next.ownProviders = input.ownProviders === 'on'
     await store.setUse(owner, next)
@@ -523,6 +537,7 @@ export function createAISettings({
     const use = { ...(stored.use || {}) }
     for (const name of names) for (const [key, ref] of Object.entries(use)) if (ref === `server:${name}`) delete use[key]
     for (const name of names) await store.removeConnection(SERVER, name)
+    await syncServerUse(useChanges(stored.use, use), actorFor(userId, actor), reason)
     const next = { ...stored, use }
     await store.setUse(SERVER, next)
     await recordChange({
@@ -683,19 +698,45 @@ export function createAISettings({
     const user = userId ? await loadUser(userId) : null
     const server = await serverState()
     const { person, team, meOwner, teamOwner } = await holders(user, server)
-    const choice = resolveAIChoice({ feature: surface, person, team, server, ownProviders: server.ownProviders })
-    if (!choice.connection) return { ...choice, rules: null }
-    let connection = choice.connection
+    // AI control (ai-control/resolve.mjs): a published binding's on/off, model chain and parameters
+    const binding = await controlBinding({ surface, user, person, team, server })
+    if (binding?.enabled === false) {
+      return { ref: 'disabled', scope: 'disabled', connection: null, own: false, feature: surface, rules: null, disabled: true, message: binding.disabledMessage, control: controlOf(binding) }
+    }
+    const control = binding && touchesRequest(binding) ? controlOf(binding) : null
+    if (binding?.chainFromBinding && !binding.tripped) {
+      // the surface whose binding applied names it in messages (a part that follows names its parent)
+      const named = binding.followed || surface
+      const chain = []
+      for (const entry of binding.chain) chain.push(await routeForEntry(entry, { user, feature: named, request }))
+      // always with the surface and version: each attempt's audit row and this pod's breaker need them
+      return { ...chain[0], chain, control: controlOf(binding) }
+    }
+    // a surface whose binding kept failing on this pod (ai-control/breaker.mjs): the settings file
+    // and the built-in AI only, until the breaker closes
+    const choice = binding?.tripped
+      ? resolveAIChoice({ feature: surface, server: { connections: file().connections, use: file().use }, ownProviders: false })
+      : resolveAIChoice({ feature: surface, person, team, server, ownProviders: server.ownProviders })
+    if (!choice.connection) return { ...choice, rules: null, ...(control && { control }) }
     const owner = choice.scope === 'me' ? meOwner : choice.scope === 'team' ? teamOwner : SERVER
+    const chosen = await loadChosen({ connection: choice.connection, owner, scope: choice.scope, user, feature: choice.feature, request })
+    return { ...choice, ...chosen, ...(control && { control }) }
+  }
+
+  // The connection a choice or a chain entry names, with its key, the endpoint rules of its level,
+  // the label a person may read, and why it cannot be used (turned off, key unreadable, address
+  // refused, a capability the request needs).
+  async function loadChosen({ connection: named, owner, scope, user, feature, request }) {
+    let connection = named
     if (connection.source !== 'file') {
       const docs = await connectionsOf(owner, true)
       connection = docs.find((c) => c.name === connection.name) || connection
     } else {
       connection = keyFromEnv(connection, env)
     }
-    const rules = rulesFor(connection.source === 'file' ? 'file' : RULE_LEVEL[choice.scope])
+    const rules = rulesFor(connection.source === 'file' ? 'file' : RULE_LEVEL[scope])
     // a person reads about the operator's connection by its model, not by where it lives
-    const withHost = choice.scope !== 'server' || Boolean(user && await isAdmin(user._id))
+    const withHost = scope !== 'server' || Boolean(user && await isAdmin(user._id))
     const label = connectionLabel(connection, { withHost })
     let error = null
     if (connection.disabled) error = `${label} is turned off by your administrator. Choose another model in your AI settings.`
@@ -708,8 +749,42 @@ export function createAISettings({
         error = `${label} cannot be used: ${refused.message}`
       }
     }
-    const gap = capabilityGap({ feature: choice.feature, connection, request, label })
-    return { ...choice, connection, rules, label, ...(gap && { gap }), ...(error && { error }) }
+    const gap = capabilityGap({ feature, connection, request, label })
+    return { connection, rules, label, ...(gap && { gap }), ...(error && { error }) }
+  }
+
+  // One entry of a published binding's model chain as the request path walks it.
+  async function routeForEntry(entry, { user, feature, request }) {
+    const on = entry.on?.length ? [...entry.on] : ['any']
+    if (entry.connection === 'builtin') {
+      // the surface's own built-in model (the call site's), or a built-in model the registry names
+      const builtin = entry.builtinDefault || !entry.model ? null : { provider: entry.provider, engine: entry.model }
+      return { ref: 'builtin', scope: 'builtin', connection: null, own: false, feature, rules: null, on, ...(builtin && { builtin }) }
+    }
+    const name = String(entry.connection).replace(/^server:/, '')
+    const server = await serverState()
+    const listed = server.connections.find((c) => c.name === name)
+    if (!listed) return { ref: entry.connection, scope: 'server', connection: null, own: false, feature, rules: null, on, error: `The connection ${name} is no longer on this server.` }
+    // a model registry row names the model and adds what it knows the model can do
+    const named = entry.modelId ? { ...listed, model: entry.model, capabilities: { ...(listed.capabilities || {}), ...(entry.capabilities || {}) } } : listed
+    const chosen = await loadChosen({ connection: named, owner: SERVER, scope: 'server', user, feature, request })
+    if (entry.modelId && chosen.connection) chosen.connection = { ...chosen.connection, model: entry.model, capabilities: named.capabilities }
+    return { ref: entry.connection, scope: 'server', own: false, feature, on, ...chosen }
+  }
+
+  // The resolved AI control binding for a surface, or null without the control plane (tests, or
+  // before ai-control/index.mjs set its source). Never throws: a broken binding is skipped.
+  async function controlBinding({ surface, user, person, team, server }) {
+    if (!bindingSource) return null
+    try {
+      return await bindingSource({
+        surface, userId: user?._id ?? null, orgId: user?.orgId ?? null,
+        holders: { person, team, server: { connections: server.connections, use: server.use }, ownProviders: server.ownProviders, serverUseSource: server.useSource },
+      })
+    } catch (error) {
+      console.warn(`ai-settings: the AI control binding for ${surface} could not be read; the AI settings apply: ${error.message}`)
+      return null
+    }
   }
 
   /**
@@ -729,12 +804,33 @@ export function createAISettings({
 
   return {
     view, update, resetServerUse, check: checkOne, resolveFor, serverState, choiceHolders,
+    setBindingSource: (source) => { bindingSource = typeof source === 'function' ? source : null },
+    setServerUseSync: (sync) => { useSync = typeof sync === 'function' ? sync : null },
     serverConnections, saveServerConnections, removeServerConnections, dropProviderKeys, connectionsOfProvider, discoverModels,
     auxCredential, hasAuxKey,
   }
 }
 
 export { parseRef }
+
+// Whether a resolved binding changes anything in a request beyond its model chain: parameters,
+// tools or limits a published binding set (provenance db:...).
+function touchesRequest(binding) {
+  return Object.entries(binding.provenance || {}).some(([field, layer]) => /^(params|tools)\./.test(field) && String(layer).startsWith('db:'))
+}
+
+/** What req.js reads of a resolved binding: the surface, its version, parameters and tools a binding set. */
+export function controlOf(binding) {
+  const fromBinding = (field) => String(binding.provenance?.[field] || '').startsWith('db:')
+  const params = {}
+  for (const [key, value] of Object.entries(binding.params || {})) if (fromBinding(`params.${key}`) && value !== null && value !== undefined) params[key] = value
+  return {
+    surface: binding.surface,
+    bindingVersion: binding.bindingVersion ?? null,
+    params,
+    tools: { mode: fromBinding('tools.mode') ? binding.tools?.mode ?? null : null, allow: fromBinding('tools.allow') ? binding.tools?.allow ?? null : null },
+  }
+}
 
 
 /**

@@ -877,6 +877,359 @@
         }
       }
     },
+    "/ai/control/bindings": {
+      "get": {
+        "operationId": "listAIBindings",
+        "summary": "AI bindings",
+        "description": "Lists every part of Slatebox that can be bound on this server, with its published binding (model chain, parameters, tools, limits, on/off), its versions newest first with author and note, and why a binding was skipped if it no longer passes its checks. Administrators only.",
+        "x-required-scope": "ai:admin:read",
+        "x-slatebox": {
+          "action": "ai.bindings.list",
+          "toolset": "admin",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ]
+        },
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "generation": {
+                      "type": "integer"
+                    },
+                    "surfaces": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/control/bindings/draft": {
+      "put": {
+        "operationId": "saveAIBindingDraft",
+        "summary": "Save AI binding draft",
+        "description": "Saves a draft binding for one part of Slatebox: its model chain (primary, then fallbacks with the failures each is tried for), parameters, allowed tools, limits and on/off. Changes nothing live: a person publishes it. An agent's draft is marked as a suggestion. Administrators only.",
+        "x-required-scope": "ai:admin",
+        "x-slatebox": {
+          "action": "ai.bindings.saveDraft",
+          "toolset": "admin",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "binding": {
+                    "type": "object",
+                    "properties": {
+                      "surface": {
+                        "type": "string",
+                        "enum": [
+                          "default",
+                          "chat",
+                          "chat.route",
+                          "generation",
+                          "presentation",
+                          "vision",
+                          "images",
+                          "shape",
+                          "workshop",
+                          "workshop.draft",
+                          "canvas",
+                          "agent.slatebox",
+                          "library",
+                          "connectors"
+                        ],
+                        "description": "The part of Slatebox, for example agent.slatebox or shape."
+                      },
+                      "scope": {
+                        "type": "object",
+                        "properties": {
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "server"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "level"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Only server in this build."
+                      },
+                      "enabled": {
+                        "type": "boolean",
+                        "description": "false turns this part off for everyone; people see disabledMessage."
+                      },
+                      "disabledMessage": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 300,
+                        "description": "What people see while it is off."
+                      },
+                      "chain": {
+                        "type": "array",
+                        "maxItems": 5,
+                        "description": "The primary model, then fallbacks. Each entry names a model from the model list (model) or a connection with its own model (connection: server:<name>, or builtin for the built-in AI). Empty: follow what it follows.",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "model": {
+                              "type": "string",
+                              "maxLength": 260
+                            },
+                            "connection": {
+                              "type": "string",
+                              "maxLength": 60
+                            },
+                            "on": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "infra",
+                                  "shape",
+                                  "context",
+                                  "any"
+                                ]
+                              },
+                              "description": "A fallback is tried when the previous model failed this way: infra (5xx, 429, timeout), shape (answers it could not use), context (too long), any."
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "params": {
+                        "type": "object",
+                        "properties": {
+                          "timeoutMs": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 1000,
+                            "maximum": 600000
+                          },
+                          "maxTokens": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 1000000
+                          },
+                          "infraRetries": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 0,
+                            "maximum": 10
+                          },
+                          "shapeRetries": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 10
+                          },
+                          "temperature": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "minimum": 0,
+                            "maximum": 2
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "timeoutMs, maxTokens (only lowers the call site's), infraRetries, shapeRetries, temperature. null or absent: the built-in value."
+                      },
+                      "prompts": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string",
+                          "maxLength": 120
+                        },
+                        "description": "slot: prompt id, or id@version to pin one."
+                      },
+                      "tools": {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "forced",
+                              "auto",
+                              "none",
+                              null
+                            ]
+                          },
+                          "allow": {
+                            "type": [
+                              "array",
+                              "null"
+                            ],
+                            "maxItems": 30,
+                            "items": {
+                              "type": "string",
+                              "maxLength": 64
+                            }
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "allow: the only tools sent and accepted back; mode forced, auto or none (none only where the part needs no tools)."
+                      },
+                      "limits": {
+                        "type": "object",
+                        "properties": {
+                          "estimate": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 1
+                          },
+                          "ceiling": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 1
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "Micro-dollars per request; can only lower the built-in values."
+                      }
+                    },
+                    "required": [
+                      "surface"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "A short note kept with the version."
+                  }
+                },
+                "required": [
+                  "binding"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bindingId": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/ai/control/connections": {
       "get": {
         "operationId": "listAIConnections",
@@ -1818,7 +2171,7 @@
       "post": {
         "operationId": "resetAIControl",
         "summary": "Reset AI control",
-        "description": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does both. Needs a reason, which the audit trail keeps. Administrators only.",
+        "description": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. Needs a reason, which the audit trail keeps. Administrators only.",
         "x-required-scope": "ai:admin",
         "x-slatebox": {
           "action": "ai.control.reset",
@@ -1872,9 +2225,31 @@
                     "type": "string",
                     "enum": [
                       "use",
+                      "binding",
+                      "bindings",
                       "dbLayer",
                       "all"
                     ]
+                  },
+                  "surface": {
+                    "type": "string",
+                    "enum": [
+                      "default",
+                      "chat",
+                      "chat.route",
+                      "generation",
+                      "presentation",
+                      "vision",
+                      "images",
+                      "shape",
+                      "workshop",
+                      "workshop.draft",
+                      "canvas",
+                      "agent.slatebox",
+                      "library",
+                      "connectors"
+                    ],
+                    "description": "For target binding: the part of Slatebox."
                   },
                   "keys": {
                     "type": "array",
@@ -1929,6 +2304,12 @@
                       "type": "string"
                     },
                     "cleared": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "removed": {
                       "type": "array",
                       "items": {
                         "type": "string"

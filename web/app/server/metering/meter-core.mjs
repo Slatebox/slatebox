@@ -2,7 +2,7 @@
 // provider call or fixed-price use, and release the hold when the request ends. Pure apart
 // from the injected io and lookups; meteor.js supplies Mongo, tests an in-memory store.
 import { aiActionsPerDay, creditsForShare, messageFor } from './policy.mjs'
-import { ESTIMATES, actionCeilingMicros, aiCostMicros } from './prices.mjs'
+import { ESTIMATES, actionCeilingMicros, actionEstimateMicros, aiCostMicros } from './prices.mjs'
 import { recordUsage } from './record.mjs'
 import { holdFree, holdWallet, releaseHold } from './holds.mjs'
 import { addressBucket } from './client-address.mjs'
@@ -23,7 +23,7 @@ export function createMeter({ enabled, io, settings: loadSettings, decide, crede
     async begin(opts) {
       const settings = await loadSettings()
       const kind = opts.kind || 'ai'
-      const estimateMicros = opts.estimateMicros ?? ESTIMATES[opts.feature] ?? ESTIMATES.workshop
+      const estimateMicros = opts.estimateMicros ?? actionEstimateMicros(opts.feature) ?? ESTIMATES.workshop
       const { decision, userId, address = null } = await decide({ ...opts, kind, estimateMicros })
       // makeError may be async: meteor.js adds the pay sheet's action for who was refused (refusal-pay.mjs)
       if (!decision.ok) throw await makeError(decision.code, decision.message, { userId })

@@ -10,7 +10,7 @@ import { DDPRateLimiter } from 'meteor/ddp-rate-limiter'
 import OAuth from 'oauth'
 import req from '../methods/ai/req'
 import { runAIAction } from '../metering/context.mjs'
-import { ESTIMATES } from '../metering/prices.mjs'
+import { actionEstimateMicros } from '../metering/prices.mjs'
 import { resolveAIFeatureConfig } from '../methods/ai/feature-config.mjs'
 import { resolveRequestConnection } from '../methods/ai/ai-settings'
 import { GENERATION_TTL_MS, SHAPE_FEATURE, ShapeProblem } from './shape-core.mjs'
@@ -41,6 +41,8 @@ Meteor.startup(async () => {
 // The model that will serve this person (the cache key only: a new choice draws anew).
 async function modelFor(principal) {
   const chosen = await resolveRequestConnection({ feature: SHAPE_FEATURE, request: { tools: true }, userId: principal.userId }).catch(() => null)
+  // turned off by an administrator: no cached drawing either (req.js answers with their message)
+  if (chosen?.disabled) return 'disabled'
   if (chosen?.connection) return `${chosen.ref || 'connection'}:${chosen.connection.model || ''}`
   return resolveAIFeatureConfig(SHAPE_FEATURE, Meteor.settings).engine || 'builtin'
 }
@@ -88,7 +90,7 @@ export const shapeService = createShapeService({
   // explicitly: agents, exec and HTTP calls run outside any Meteor method.
   request: (options, principal) =>
     req({ ...resolveAIFeatureConfig(SHAPE_FEATURE, Meteor.settings), ...options, allowPlainText: true, userId: principal?.userId, maxTokens: 6000 }),
-  run: (fn, principal) => runAIAction({ feature: SHAPE_FEATURE, kind: 'ai', estimateMicros: ESTIMATES.shape, userId: principal.userId }, fn),
+  run: (fn, principal) => runAIAction({ feature: SHAPE_FEATURE, kind: 'ai', estimateMicros: actionEstimateMicros('shape'), userId: principal.userId }, fn),
 })
 
 async function principalOf() {

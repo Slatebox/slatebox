@@ -10,7 +10,7 @@ import {
   AIAudit, AIAgents, AIBindingVersions, AIBindings, AIChoices, AIControlAudit, AIControlState, AIModels, AIPromptVersions, AIPrompts, AIProviders, ProviderKeys,
 } from '../../imports/api/common/models'
 import { aiSettings, hosted, isServerAdmin, setAISettingsAudit } from '../methods/ai/ai-settings'
-import { aiCostMicros, isPriced, setDbPriceSource } from '../metering/prices.mjs'
+import { aiCostMicros, isPriced, setDbPriceSource, setLimitSource } from '../metering/prices.mjs'
 import { setProviderSource } from '../methods/ai/connections.mjs'
 import { assertEndpointHost, checkEndpointUrl, endpointRules } from '../methods/ai/endpoint-policy.mjs'
 import { createConnectionStore } from '../methods/ai/connection-store.mjs'
@@ -22,6 +22,9 @@ import { operatorConfig } from '../methods/ai/connections.mjs'
 import { createSnapshotHolder, fileDbLayer, parsePromptRef } from './snapshot.mjs'
 import { STATE_ID, createControlStore, ensureAIControlIndexes } from './store.mjs'
 import { createAIControl } from './facade.mjs'
+import { createBindingOps, limitsFor } from './bindings.mjs'
+import { requestBreaker } from './breaker.mjs'
+import { runAIControl001 } from '../migrations/ai-control-001.mjs'
 
 // A wrong ai.control section in the settings stops the start with a plain message.
 const dbLayer = fileDbLayer(Meteor.settings)
@@ -83,7 +86,36 @@ export const aiControl = createAIControl({
   settings: Meteor.settings,
   isPriced,
   providerView: (snap) => providersView(snap),
+  // a binding that kept failing on this pod (breaker.mjs) shows with the snapshot's health
+  extraHealth: () => requestBreaker.health(),
 })
+
+/** Bindings: drafts, publish, rollback and removal (bindings.mjs), for the ai.bindings.* actions. */
+export const aiBindings = createBindingOps({
+  store: aiControlStore,
+  bindings: raw.bindings,
+  versions: raw.bindingVersions,
+  snapshot: () => snapshotHolder.current(),
+  // the server's connections a chain may name: the settings file's and the app's
+  connections: async () => (await aiSettings.serverState()).connections.map((c) => ({ name: c.name, status: c.disabled ? 'disabled' : 'active', capabilities: c.capabilities || {} })),
+  breaker: requestBreaker,
+})
+
+// Every AI request asks this for its surface (ai-settings-core.mjs resolveFor): a published binding
+// turns it off, or gives it a model chain, parameters and tools. A surface whose binding kept
+// failing on this pod is served from the settings file and built-in AI until the breaker closes.
+aiSettings.setBindingSource(async ({ surface, userId, orgId, holders }) => {
+  const snapshot = await snapshotHolder.ready()
+  const binding = resolveBinding(snapshot, { surface, userId, orgId, holders, settings: Meteor.settings })
+  const open = requestBreaker.isOpen(binding.surface)
+  // a new version (published on any pod) starts with the breaker closed
+  if (open && open.bindingVersion !== binding.bindingVersion) requestBreaker.reset(binding.surface)
+  return { ...binding, tripped: Boolean(binding.chainFromBinding && requestBreaker.isOpen(binding.surface)) }
+})
+// ai.update at the server level writes the server's bindings too (spec 4), so they never disagree.
+aiSettings.setServerUseSync(({ changes, actor, reason }) => aiBindings.syncServerUse({ actor, changes, reason }))
+// A binding's limits tighten the meter's estimate and ceiling for its surface, from the next call.
+setLimitSource((feature) => limitsFor(snapshotHolder.current(), feature))
 
 // The providers an administrator added are connection types (connections.mjs), and the prices set
 // on models win in the meter (metering/prices.mjs): both read the snapshot, so a change reaches
@@ -121,6 +153,7 @@ export const aiControlOps = createAdminOps({
   aiAudit: AIAudit.rawCollection(),
   aiSettings,
   costOf: aiCostMicros,
+  bindings: aiBindings,
 })
 
 // ai.surfaces.status: for every signed-in page, whether each AI surface is on and the message to
@@ -166,6 +199,12 @@ Meteor.startup(() => {
   AIAudit.rawCollection().createIndex({ created: -1 }, { name: 'created_desc' })
     .catch((error) => console.error('ai-control: could not create the aiAudit index:', error.message))
   snapshotHolder.start()
+  // the server's AI choices become bindings, once per database (migrations/ai-control-001.mjs)
+  if (dbLayer !== 'off') {
+    snapshotHolder.ready()
+      .then(() => runAIControl001({ state: raw.state, aiSettings, ops: aiBindings, snapshot: () => snapshotHolder.current(), settings: Meteor.settings }))
+      .catch((error) => console.error('ai-control-001: the server\'s AI choices were not moved to bindings; they keep working as choices:', error.message))
+  }
   // a rotated key's grace period ends: the key it replaced is dropped (spec 6.3), checked hourly
   const keyStore = createConnectionStore({ keys: ProviderKeys.rawCollection(), choices: AIChoices.rawCollection() })
   const clearGrace = () => keyStore.clearExpiredGrace(new Date())

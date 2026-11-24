@@ -31,6 +31,8 @@ async function uploadImage(imgBuffer, userId) {
 // null for the built-in image service. A model that cannot make images says so.
 async function imagesFromChoice(user, opts) {
   const chosen = await resolveRequestConnection({ feature: 'image-generation', userId: user._id })
+  // turned off by an administrator (AI control): their message, nothing is sent
+  if (chosen?.disabled) return [{ error: true, message: chosen.message || 'Making pictures is turned off by your administrator.' }]
   if (chosen?.gap || chosen?.error) return [{ error: true, message: chosen.gap?.message || chosen.error }]
   if (!chosen?.connection) return null
   const viaConnection = () => imagesFromConnection(chosen, opts, user._id)

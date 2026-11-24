@@ -13,7 +13,10 @@ function toolChoiceFor(config, functionCall) {
   return 'auto'
 }
 
-export function localWorkshopRequest(config, { prompts, system, functions, functionCall }) {
+// controlMaxTokens and temperature: what an administrator's published binding sets (AI control);
+// the answer size only ever shrinks below the connection's own cap.
+export function localWorkshopRequest(config, { prompts, system, functions, functionCall, controlMaxTokens, temperature }) {
+  const maxTokens = Number.isFinite(controlMaxTokens) ? Math.min(config.maxTokens || Infinity, controlMaxTokens) : config.maxTokens
   return {
     method: 'POST',
     redirect: 'error', // Keep the brief and authorization on the operator-selected endpoint.
@@ -29,7 +32,8 @@ export function localWorkshopRequest(config, { prompts, system, functions, funct
       messages: [{ role: 'system', content: system }, ...prompts],
       tools: toDeepInfraTools(functions),
       tool_choice: toolChoiceFor(config, functionCall),
-      ...(config.maxTokens && { max_tokens: config.maxTokens }),
+      ...(maxTokens && { max_tokens: maxTokens }),
+      ...(Number.isFinite(temperature) && { temperature }),
       stream: false,
     }),
   }

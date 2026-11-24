@@ -25,6 +25,7 @@ const AREAS = [
   { value: 'ai.providers.', label: 'Providers' },
   { value: 'ai.connections.', label: 'Server connections and keys' },
   { value: 'ai.models.', label: 'Models and prices' },
+  { value: 'ai.bindings.', label: 'Bindings (models, fallbacks, on and off per part)' },
   { value: 'chatIntentions.', label: 'Personas' },
 ]
 const ACTIONS = {

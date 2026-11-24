@@ -169,6 +169,77 @@ declare namespace slatebox.ai.audit {
   }>;
 }
 
+declare namespace slatebox.ai.bindings {
+  /** AI bindings. Lists every part of Slatebox that can be bound on this server, with its published binding (model chain, parameters, tools, limits, on/off), its versions newest first with author and note, and why a binding was skipped if it no longer passes its checks. Administrators only. @scope ai:admin:read */
+  function list(input: Record<string, unknown>): Promise<{
+    generation?: number;
+    surfaces?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.ai.bindings {
+  /** Save AI binding draft. Saves a draft binding for one part of Slatebox: its model chain (primary, then fallbacks with the failures each is tried for), parameters, allowed tools, limits and on/off. Changes nothing live: a person publishes it. An agent's draft is marked as a suggestion. Administrators only. @scope ai:admin */
+  function saveDraft(input: {
+    binding: {
+      /** The part of Slatebox, for example agent.slatebox or shape. */
+      surface: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors";
+      /** Only server in this build. */
+      scope?: {
+        level: "server";
+      };
+      /** false turns this part off for everyone; people see disabledMessage. */
+      enabled?: boolean;
+      /** What people see while it is off. (at most 300 characters) */
+      disabledMessage?: string | null;
+      /** The primary model, then fallbacks. Each entry names a model from the model list (model) or a connection with its own model (connection: server:<name>, or builtin for the built-in AI). Empty: follow what it follows. (at most 5 items) */
+      chain?: Array<{
+        /** (at most 260 characters) */
+        model?: string;
+        /** (at most 60 characters) */
+        connection?: string;
+        /** A fallback is tried when the previous model failed this way: infra (5xx, 429, timeout), shape (answers it could not use), context (too long), any. */
+        on?: Array<"infra" | "shape" | "context" | "any">;
+      }>;
+      /** timeoutMs, maxTokens (only lowers the call site's), infraRetries, shapeRetries, temperature. null or absent: the built-in value. */
+      params?: {
+        /** (1000 to 600000) */
+        timeoutMs?: number | null;
+        /** (1 to 1000000) */
+        maxTokens?: number | null;
+        /** (0 to 10) */
+        infraRetries?: number | null;
+        /** (1 to 10) */
+        shapeRetries?: number | null;
+        /** (0 to 2) */
+        temperature?: number | null;
+      };
+      /** slot: prompt id, or id@version to pin one. */
+      prompts?: Record<string, string>;
+      /** allow: the only tools sent and accepted back; mode forced, auto or none (none only where the part needs no tools). */
+      tools?: {
+        mode?: "forced" | "auto" | "none" | null;
+        /** (at most 30 items) */
+        allow?: string[] | null;
+      };
+      /** Micro-dollars per request; can only lower the built-in values. */
+      limits?: {
+        /** (at least 1) */
+        estimate?: number | null;
+        /** (at least 1) */
+        ceiling?: number | null;
+      };
+    };
+    /** A short note kept with the version. (at most 200 characters) */
+    note?: string;
+  }): Promise<({
+    bindingId?: string;
+    version?: number;
+    status?: string;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
 declare namespace slatebox.ai {
   /** Test AI. Tests a saved connection (name) or one not yet saved (connection): whether Slatebox can reach it, whether it accepts the key, which models it lists where it lists them, whether the model answers and whether it calls tools (which conversation, drafts and presentations need). Saves nothing. A saved key is only sent to the address it was saved for. A token needs ai:admin as well for level team or server. On a self-hosted server a model on the host is at host.docker.internal, not localhost. @scope ai:settings @openWorld @idempotent */
   function check(input: {
@@ -303,9 +374,11 @@ declare namespace slatebox.ai.control {
 }
 
 declare namespace slatebox.ai.control {
-  /** Reset AI control. Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does both. Needs a reason, which the audit trail keeps. Administrators only. @scope ai:admin @destructive @confirm @idempotent */
+  /** Reset AI control. Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. Needs a reason, which the audit trail keeps. Administrators only. @scope ai:admin @destructive @confirm @idempotent */
   function reset(input: {
-    target: "use" | "dbLayer" | "all";
+    target: "use" | "binding" | "bindings" | "dbLayer" | "all";
+    /** For target binding: the part of Slatebox. */
+    surface?: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors";
     /** For target use: only these feature choices. (1–15 items) */
     keys?: Array<"default" | "chat" | "chat.route" | "generation" | "generation.notes" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors">;
     /** (1–500 characters) */
@@ -313,6 +386,7 @@ declare namespace slatebox.ai.control {
   }): Promise<({
     target?: string;
     cleared?: string[];
+    removed?: string[];
     dbLayer?: string;
     [key: string]: unknown;
   }) & { mode: "save" }>;

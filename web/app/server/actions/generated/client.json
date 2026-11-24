@@ -565,6 +565,309 @@
       }
     },
     {
+      "name": "ai.bindings.list",
+      "id": "ai.bindings.list",
+      "title": "AI bindings",
+      "summary": "Lists every part of Slatebox that can be bound on this server, with its published binding (model chain, parameters, tools, limits, on/off), its versions newest first with author and note, and why a binding was skipped if it no longer passes its checks. Administrators only.",
+      "kind": "read",
+      "readOnly": true,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "ai:admin:read",
+      "modes": [],
+      "idempotency": "none",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/ai/control/bindings",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": []
+      },
+      "index": "ai.bindings.list({}): AI bindings",
+      "toolset": "admin",
+      "types": [],
+      "dts": "declare namespace slatebox.ai.bindings {\n  /** AI bindings. Lists every part of Slatebox that can be bound on this server, with its published binding (model chain, parameters, tools, limits, on/off), its versions newest first with author and note, and why a binding was skipped if it no longer passes its checks. Administrators only. @scope ai:admin:read */\n  function list(input: Record<string, unknown>): Promise<{\n    generation?: number;\n    surfaces?: Array<Record<string, unknown>>;\n    [key: string]: unknown;\n  }>;\n}",
+      "tool": {
+        "name": "list_ai_bindings",
+        "title": "List AI bindings",
+        "description": "List which model chain, parameters, tools and limits each part of Slatebox uses, with versions. Administrators only.\n\nAI bindings. Lists every part of Slatebox that can be bound on this server, with its published binding (model chain, parameters, tools, limits, on/off), its versions newest first with author and note, and why a binding was skipped if it no longer passes its checks. Administrators only.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "List AI bindings",
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "ai.bindings.saveDraft",
+      "id": "ai.bindings.saveDraft",
+      "title": "Save AI binding draft",
+      "summary": "Saves a draft binding for one part of Slatebox: its model chain (primary, then fallbacks with the failures each is tried for), parameters, allowed tools, limits and on/off. Changes nothing live: a person publishes it. An agent's draft is marked as a suggestion. Administrators only.",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "ai:admin",
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "PUT",
+        "path": "/api/v1/ai/control/bindings/draft",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "binding",
+          "note"
+        ]
+      },
+      "index": "ai.bindings.saveDraft({binding,note?}): Save AI binding draft",
+      "toolset": "admin",
+      "types": [],
+      "dts": "declare namespace slatebox.ai.bindings {\n  /** Save AI binding draft. Saves a draft binding for one part of Slatebox: its model chain (primary, then fallbacks with the failures each is tried for), parameters, allowed tools, limits and on/off. Changes nothing live: a person publishes it. An agent's draft is marked as a suggestion. Administrators only. @scope ai:admin */\n  function saveDraft(input: {\n    binding: {\n      /** The part of Slatebox, for example agent.slatebox or shape. */\n      surface: \"default\" | \"chat\" | \"chat.route\" | \"generation\" | \"presentation\" | \"vision\" | \"images\" | \"shape\" | \"workshop\" | \"workshop.draft\" | \"canvas\" | \"agent.slatebox\" | \"library\" | \"connectors\";\n      /** Only server in this build. */\n      scope?: {\n        level: \"server\";\n      };\n      /** false turns this part off for everyone; people see disabledMessage. */\n      enabled?: boolean;\n      /** What people see while it is off. (at most 300 characters) */\n      disabledMessage?: string | null;\n      /** The primary model, then fallbacks. Each entry names a model from the model list (model) or a connection with its own model (connection: server:<name>, or builtin for the built-in AI). Empty: follow what it follows. (at most 5 items) */\n      chain?: Array<{\n        /** (at most 260 characters) */\n        model?: string;\n        /** (at most 60 characters) */\n        connection?: string;\n        /** A fallback is tried when the previous model failed this way: infra (5xx, 429, timeout), shape (answers it could not use), context (too long), any. */\n        on?: Array<\"infra\" | \"shape\" | \"context\" | \"any\">;\n      }>;\n      /** timeoutMs, maxTokens (only lowers the call site's), infraRetries, shapeRetries, temperature. null or absent: the built-in value. */\n      params?: {\n        /** (1000 to 600000) */\n        timeoutMs?: number | null;\n        /** (1 to 1000000) */\n        maxTokens?: number | null;\n        /** (0 to 10) */\n        infraRetries?: number | null;\n        /** (1 to 10) */\n        shapeRetries?: number | null;\n        /** (0 to 2) */\n        temperature?: number | null;\n      };\n      /** slot: prompt id, or id@version to pin one. */\n      prompts?: Record<string, string>;\n      /** allow: the only tools sent and accepted back; mode forced, auto or none (none only where the part needs no tools). */\n      tools?: {\n        mode?: \"forced\" | \"auto\" | \"none\" | null;\n        /** (at most 30 items) */\n        allow?: string[] | null;\n      };\n      /** Micro-dollars per request; can only lower the built-in values. */\n      limits?: {\n        /** (at least 1) */\n        estimate?: number | null;\n        /** (at least 1) */\n        ceiling?: number | null;\n      };\n    };\n    /** A short note kept with the version. (at most 200 characters) */\n    note?: string;\n  }): Promise<({\n    bindingId?: string;\n    version?: number;\n    status?: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "tool": {
+        "name": "save_ai_binding_draft",
+        "title": "Save an AI binding draft",
+        "description": "Save a draft of which models, parameters and tools a part of Slatebox uses. Changes nothing live. Administrators only.\n\nSave AI binding draft. Saves a draft binding for one part of Slatebox: its model chain (primary, then fallbacks with the failures each is tried for), parameters, allowed tools, limits and on/off. Changes nothing live: a person publishes it. An agent's draft is marked as a suggestion. Administrators only.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "binding": {
+              "type": "object",
+              "properties": {
+                "surface": {
+                  "type": "string",
+                  "enum": [
+                    "default",
+                    "chat",
+                    "chat.route",
+                    "generation",
+                    "presentation",
+                    "vision",
+                    "images",
+                    "shape",
+                    "workshop",
+                    "workshop.draft",
+                    "canvas",
+                    "agent.slatebox",
+                    "library",
+                    "connectors"
+                  ],
+                  "description": "The part of Slatebox, for example agent.slatebox or shape."
+                },
+                "scope": {
+                  "type": "object",
+                  "properties": {
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "server"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "level"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Only server in this build."
+                },
+                "enabled": {
+                  "type": "boolean",
+                  "description": "false turns this part off for everyone; people see disabledMessage."
+                },
+                "disabledMessage": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 300,
+                  "description": "What people see while it is off."
+                },
+                "chain": {
+                  "type": "array",
+                  "maxItems": 5,
+                  "description": "The primary model, then fallbacks. Each entry names a model from the model list (model) or a connection with its own model (connection: server:<name>, or builtin for the built-in AI). Empty: follow what it follows.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "type": "string",
+                        "maxLength": 260
+                      },
+                      "connection": {
+                        "type": "string",
+                        "maxLength": 60
+                      },
+                      "on": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "infra",
+                            "shape",
+                            "context",
+                            "any"
+                          ]
+                        },
+                        "description": "A fallback is tried when the previous model failed this way: infra (5xx, 429, timeout), shape (answers it could not use), context (too long), any."
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "params": {
+                  "type": "object",
+                  "properties": {
+                    "timeoutMs": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 1000,
+                      "maximum": 600000
+                    },
+                    "maxTokens": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 1,
+                      "maximum": 1000000
+                    },
+                    "infraRetries": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0,
+                      "maximum": 10
+                    },
+                    "shapeRetries": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 1,
+                      "maximum": 10
+                    },
+                    "temperature": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": 0,
+                      "maximum": 2
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "timeoutMs, maxTokens (only lowers the call site's), infraRetries, shapeRetries, temperature. null or absent: the built-in value."
+                },
+                "prompts": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "description": "slot: prompt id, or id@version to pin one."
+                },
+                "tools": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "forced",
+                        "auto",
+                        "none",
+                        null
+                      ]
+                    },
+                    "allow": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "maxItems": 30,
+                      "items": {
+                        "type": "string",
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "allow: the only tools sent and accepted back; mode forced, auto or none (none only where the part needs no tools)."
+                },
+                "limits": {
+                  "type": "object",
+                  "properties": {
+                    "estimate": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 1
+                    },
+                    "ceiling": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 1
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "Micro-dollars per request; can only lower the built-in values."
+                }
+              },
+              "required": [
+                "surface"
+              ],
+              "additionalProperties": false
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "A short note kept with the version."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "required": [
+            "binding"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Save an AI binding draft",
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
       "name": "ai.check",
       "id": "ai.check",
       "title": "Test AI",
@@ -1084,7 +1387,7 @@
       "name": "ai.control.reset",
       "id": "ai.control.reset",
       "title": "Reset AI control",
-      "summary": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does both. Needs a reason, which the audit trail keeps. Administrators only.",
+      "summary": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. Needs a reason, which the audit trail keeps. Administrators only.",
       "kind": "write",
       "readOnly": false,
       "destructive": true,
@@ -1102,18 +1405,19 @@
         "queryParams": [],
         "bodyParams": [
           "target",
+          "surface",
           "keys",
           "reason"
         ]
       },
-      "index": "ai.control.reset({target,keys?,reason}): Reset AI control",
+      "index": "ai.control.reset({target,surface?,keys?,reason}): Reset AI control",
       "toolset": "admin",
       "types": [],
-      "dts": "declare namespace slatebox.ai.control {\n  /** Reset AI control. Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does both. Needs a reason, which the audit trail keeps. Administrators only. @scope ai:admin @destructive @confirm @idempotent */\n  function reset(input: {\n    target: \"use\" | \"dbLayer\" | \"all\";\n    /** For target use: only these feature choices. (1–15 items) */\n    keys?: Array<\"default\" | \"chat\" | \"chat.route\" | \"generation\" | \"generation.notes\" | \"presentation\" | \"vision\" | \"images\" | \"shape\" | \"workshop\" | \"workshop.draft\" | \"canvas\" | \"agent.slatebox\" | \"library\" | \"connectors\">;\n    /** (1–500 characters) */\n    reason: string;\n  }): Promise<({\n    target?: string;\n    cleared?: string[];\n    dbLayer?: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.ai.control {\n  /** Reset AI control. Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. Needs a reason, which the audit trail keeps. Administrators only. @scope ai:admin @destructive @confirm @idempotent */\n  function reset(input: {\n    target: \"use\" | \"binding\" | \"bindings\" | \"dbLayer\" | \"all\";\n    /** For target binding: the part of Slatebox. */\n    surface?: \"default\" | \"chat\" | \"chat.route\" | \"generation\" | \"presentation\" | \"vision\" | \"images\" | \"shape\" | \"workshop\" | \"workshop.draft\" | \"canvas\" | \"agent.slatebox\" | \"library\" | \"connectors\";\n    /** For target use: only these feature choices. (1–15 items) */\n    keys?: Array<\"default\" | \"chat\" | \"chat.route\" | \"generation\" | \"generation.notes\" | \"presentation\" | \"vision\" | \"images\" | \"shape\" | \"workshop\" | \"workshop.draft\" | \"canvas\" | \"agent.slatebox\" | \"library\" | \"connectors\">;\n    /** (1–500 characters) */\n    reason: string;\n  }): Promise<({\n    target?: string;\n    cleared?: string[];\n    removed?: string[];\n    dbLayer?: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "reset_ai_control",
         "title": "Reset AI control",
-        "description": "Return this server's AI choices to the settings file and built-in defaults, or switch AI control's own settings off. Needs a reason; a person agrees first. Administrators only.\n\nReset AI control. Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does both. Needs a reason, which the audit trail keeps. Administrators only.",
+        "description": "Return this server's AI choices to the settings file and built-in defaults, or switch AI control's own settings off. Needs a reason; a person agrees first. Administrators only.\n\nReset AI control. Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. Needs a reason, which the audit trail keeps. Administrators only.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -1121,9 +1425,31 @@
               "type": "string",
               "enum": [
                 "use",
+                "binding",
+                "bindings",
                 "dbLayer",
                 "all"
               ]
+            },
+            "surface": {
+              "type": "string",
+              "enum": [
+                "default",
+                "chat",
+                "chat.route",
+                "generation",
+                "presentation",
+                "vision",
+                "images",
+                "shape",
+                "workshop",
+                "workshop.draft",
+                "canvas",
+                "agent.slatebox",
+                "library",
+                "connectors"
+              ],
+              "description": "For target binding: the part of Slatebox."
             },
             "keys": {
               "type": "array",

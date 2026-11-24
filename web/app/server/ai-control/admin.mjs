@@ -5,8 +5,10 @@
 // index.mjs gives it the Meteor ones, the tests give it in-memory ones.
 import { surfaceForRequest } from './catalogue.mjs'
 import { STATE_ID } from './store.mjs'
+import { ModelError } from './models.mjs'
 
-export const RESET_TARGETS = Object.freeze(['use', 'dbLayer', 'all'])
+export const RESET_TARGETS = Object.freeze(['use', 'binding', 'bindings', 'dbLayer', 'all'])
+export const GLOBAL_MESSAGE_MAX = 300
 export const AUDIT_PAGE = 50
 export const AUDIT_PAGE_MAX = 200
 // aiAudit statuses that are not a failed call: an answer, or a call the meter never sent.
@@ -21,10 +23,11 @@ const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  *   aiAudit?      the aiAudit collection (aggregate → cursor with toArray)
  *   aiSettings?   ai-settings-core.mjs (resetServerUse)
  *   costOf?({ model, usage }) → { costMicros } (metering/prices.mjs aiCostMicros)
+ *   bindings?     bindings.mjs createBindingOps (heads, remove) for the binding targets
  *   now?()        → ms
  * }
  */
-export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null, costOf = () => ({ costMicros: 0 }), now = Date.now }) {
+export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null, costOf = () => ({ costMicros: 0 }), bindings = null, now = Date.now }) {
   /**
    * The audit trail, newest first, filtered. filter: { limit, before (the next page: a previous
    * answer's next, '<ISO time>|<row id>', or an ISO time alone for rows older than it), since (ISO
@@ -90,17 +93,29 @@ export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null
    * ai.control.reset. target:
    *   use      clears what an administrator chose in the app for the server's features (keys:
    *            only those), so the settings file and built-in AI answer again;
+   *   binding  removes the published server binding of one surface (surface): it follows what it
+   *            follows again, then the settings file and built-in AI; its versions stay;
+   *   bindings removes every published server binding;
    *   dbLayer  switches the DB layer off at runtime (aiControlState.dbLayer 'off'): every AI
    *            control document is ignored until it is switched on again;
-   *   all      both.
-   * A reason is required. → { target, cleared: [keys], dbLayer: 'on' | 'off' }
+   *   all      every one of the above.
+   * A reason is required. → { target, cleared: [keys], removed: [binding ids], dbLayer: 'on' | 'off' }
    */
-  async function reset({ userId, actor, target, keys = null, reason }) {
+  async function reset({ userId, actor, target, keys = null, surface = null, reason }) {
     if (!RESET_TARGETS.includes(target)) throw new Error(`target is ${RESET_TARGETS.join(', ')}`)
     let cleared = []
+    const removed = []
     if (target === 'use' || target === 'all') {
       if (!aiSettings) throw new Error('ai-control admin: needs aiSettings to reset choices')
       ;({ cleared } = await aiSettings.resetServerUse(userId, { keys, reason, actor }))
+    }
+    if (target === 'binding' || target === 'bindings' || target === 'all') {
+      if (!bindings) throw new Error('ai-control admin: needs the binding store to reset bindings')
+      const surfaces = target === 'binding' ? [surface] : (await bindings.heads()).map((doc) => doc.surface)
+      for (const id of surfaces) {
+        const out = await bindings.remove({ actor, surface: id, reason })
+        if (out.removed) removed.push(out.bindingId)
+      }
     }
     let { dbLayer } = await store.state()
     if (target === 'dbLayer' || target === 'all') {
@@ -109,10 +124,28 @@ export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null
       await store.write({ kind: 'state', id: STATE_ID, doc: { aiEnabled: true, ...rest, dbLayer: 'off' }, action: 'ai.control.reset', actor, reason, target: { kind: 'state', id: 'dbLayer' } })
       dbLayer = 'off'
     }
-    return { target, cleared, dbLayer: dbLayer === 'off' ? 'off' : 'on' }
+    return { target, cleared, removed, dbLayer: dbLayer === 'off' ? 'off' : 'on' }
   }
 
-  return { listAudit, usage, reset }
+  /**
+   * ai.control.setGlobal: AI on or off for everyone on this server, with the message people see
+   * while it is off, and AI control's own documents on or off at runtime (dbLayer). Admin pages and
+   * actions never depend on it. → the global state { aiEnabled, aiDisabledMessage, dbLayer, generation }
+   */
+  async function setGlobal({ actor, aiEnabled, message, dbLayer, reason }) {
+    const state = await store.state()
+    const { _id: _ignored, updatedAt: _at, updatedBy: _by, ...rest } = state
+    const next = { aiEnabled: true, dbLayer: 'on', ...rest }
+    if (aiEnabled !== undefined) next.aiEnabled = aiEnabled
+    if (message !== undefined) next.aiDisabledMessage = message === null ? null : String(message).trim() || null
+    if (dbLayer !== undefined) next.dbLayer = dbLayer
+    if (next.aiEnabled === false && !next.aiDisabledMessage) throw new ModelError('Write the message people see while AI is off.')
+    if (next.aiDisabledMessage && (next.aiDisabledMessage.length > GLOBAL_MESSAGE_MAX || /[\r\n]/.test(next.aiDisabledMessage))) throw new ModelError(`The message is one line of at most ${GLOBAL_MESSAGE_MAX} characters.`)
+    const result = await store.write({ kind: 'state', id: STATE_ID, doc: next, action: 'ai.control.setGlobal', actor, reason, target: { kind: 'state', id: 'global' } })
+    return { aiEnabled: next.aiEnabled !== false, aiDisabledMessage: next.aiDisabledMessage ?? null, dbLayer: next.dbLayer === 'off' ? 'off' : 'on', generation: result.generation }
+  }
+
+  return { listAudit, usage, reset, setGlobal }
 }
 
 // ---------- what a signed-in page may know (ai.surfaces.status) ----------

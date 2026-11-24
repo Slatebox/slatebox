@@ -4,6 +4,8 @@ import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Dialog from '@mui/material/Dialog'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import Switch from '@mui/material/Switch'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
@@ -15,6 +17,7 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
+import { ReasonDialog } from './BindingEditor'
 
 const usd = (micros) => `$${(micros / 1_000_000).toFixed(2)}`
 const mono = { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.75rem' }
@@ -94,12 +97,72 @@ function ResetChoices({ open, onClose, onDone, parts }) {
   )
 }
 
+// AI for everyone: on, or off with the message people see (ai.control.setGlobal, a person only).
+// Also switches AI control's own settings back on after a reset switched them off.
+function GlobalSwitch({ open, onClose, onDone }) {
+  const [message, setMessage] = useState('')
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    if (open) {
+      setMessage(open.message || '')
+      setReason('')
+      setError('')
+    }
+  }, [open])
+  if (!open) return null
+  const turningOff = open.kind === 'ai' && open.to === false
+  const titles = {
+    ai: open.to ? 'Turn AI back on for everyone' : 'Turn AI off for everyone',
+    dbLayer: 'Switch AI control\'s settings back on',
+  }
+  const run = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      const input = open.kind === 'dbLayer' ? { dbLayer: 'on' } : { aiEnabled: open.to, ...(turningOff && { message: message.trim() }) }
+      await Meteor.callAsync('ai.control.setGlobal', { ...input, reason: reason.trim() })
+      onDone(open.kind === 'dbLayer' ? 'AI control\'s settings are on again.' : open.to ? 'AI is on for everyone.' : 'AI is off for everyone. People see your message.')
+    } catch (err) {
+      setError(failure(err, 'That did not work.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth aria-labelledby="global-switch-title">
+      <DialogTitle id="global-switch-title">{titles[open.kind]}</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" sx={{ mb: 2 }}>
+          {open.kind === 'dbLayer'
+            ? 'Bindings, providers and models saved in AI control apply again on every server within seconds.'
+            : open.to ? 'Every part of Slatebox answers with AI again within seconds.' : 'No part of Slatebox asks a model until AI is turned back on. These admin pages keep working.'}
+        </Typography>
+        {turningOff && (
+          <TextField label="What people see" value={message} onChange={(e) => setMessage(e.target.value)} fullWidth inputProps={{ maxLength: 300 }} sx={{ mb: 2 }} />
+        )}
+        <TextField label="Why (kept in the change history)" value={reason} onChange={(e) => setReason(e.target.value)} fullWidth multiline minRows={2} inputProps={{ maxLength: 500 }} autoFocus />
+        {error && <Alert severity="warning" sx={{ mt: 2 }}>{error}</Alert>}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" color={turningOff ? 'error' : 'primary'} disabled={busy || !reason.trim() || (turningOff && !message.trim())} onClick={run}>
+          {open.kind === 'dbLayer' ? 'Switch on' : open.to ? 'Turn AI on' : 'Turn AI off'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 export default function Overview() {
   const [snapshot, setSnapshot] = useState(null)
   const [effective, setEffective] = useState(null)
   const [error, setError] = useState('')
   const [note, setNote] = useState(null)
   const [resetting, setResetting] = useState(false)
+  const [switching, setSwitching] = useState(null)
+  const [rollingBack, setRollingBack] = useState(null)
 
   const load = async () => {
     try {
@@ -128,9 +191,14 @@ export default function Overview() {
     <Box>
       {health.length > 0 ? (
         <Alert severity="error" sx={{ mb: 2 }} data-testid="ai-control-health">
-          <Typography variant="subtitle2">Some AI settings were skipped, so those parts use the settings file or built-in AI</Typography>
+          <Typography variant="subtitle2">Some AI settings are not in use, so those parts use the settings file or built-in AI</Typography>
           <ul style={{ margin: '4px 0 0', paddingLeft: 20 }}>
-            {health.map((h) => <li key={`${h.kind}:${h.id}`}><span style={mono}>{h.id}</span>: {h.problem}</li>)}
+            {health.map((h) => (
+              <li key={`${h.kind}:${h.id}`}>
+                <span style={mono}>{h.id}</span>: {h.problem}
+                {h.kind === 'breaker' && <Button size="small" color="inherit" sx={{ ml: 1 }} onClick={() => setRollingBack(h.id)}>Roll back</Button>}
+              </li>
+            ))}
           </ul>
         </Alert>
       ) : (
@@ -145,7 +213,7 @@ export default function Overview() {
         </Alert>
       )}
       {snapshot.dbLayer === 'off' && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
+        <Alert severity="warning" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={() => setSwitching({ kind: 'dbLayer' })}>Switch back on</Button>}>
           AI control&apos;s own settings are switched off on this server. Every part uses AI settings, the settings file and the built-in AI.
         </Alert>
       )}
@@ -153,9 +221,11 @@ export default function Overview() {
 
       <Box display="flex" alignItems="baseline" gap={2} flexWrap="wrap" mb={1}>
         <Typography variant="h6" component="h2">Who answers what</Typography>
-        <Typography variant="body2" color="text.secondary" data-testid="ai-control-global">
-          AI for everyone: {snapshot.global.aiEnabled ? 'on' : `off (“${snapshot.global.aiDisabledMessage || 'AI is turned off on this server.'}”)`}
-        </Typography>
+        <FormControlLabel
+          data-testid="ai-control-global"
+          control={<Switch checked={snapshot.global.aiEnabled} disabled={snapshot.dbLayer === 'off'} onChange={(e) => setSwitching({ kind: 'ai', to: e.target.checked, message: snapshot.global.aiDisabledMessage })} />}
+          label={snapshot.global.aiEnabled ? 'AI for everyone: on' : `AI for everyone: off (“${snapshot.global.aiDisabledMessage || 'AI is turned off on this server.'}”)`}
+        />
       </Box>
       <Typography variant="body2" color="text.secondary" mb={1}>
         As it resolves for someone not signed in. Calls, failures and spend are for the last 24 hours.
@@ -213,6 +283,32 @@ export default function Overview() {
           <Button variant="outlined" color="error" onClick={() => setResetting(true)}>Remove the server&apos;s AI choices…</Button>
         </Box>
       )}
+      <ReasonDialog
+        open={Boolean(rollingBack)}
+        title={rollingBack ? `Roll back ${titles[rollingBack] || rollingBack}` : ''}
+        action="Roll back"
+        body={<Typography variant="body2">Publishes the version before the one that keeps failing, or removes the binding when there is none, so it follows its parent and the built-in AI again.</Typography>}
+        onClose={() => setRollingBack(null)}
+        onConfirm={async (reason) => {
+          const list = await Meteor.callAsync('ai.bindings.list', {})
+          const entry = list.surfaces.find((e) => e.surface === rollingBack)
+          const previous = entry?.versions.find((v) => v.status === 'superseded' && v.version < (entry.head?.version ?? 0))
+          if (previous) await Meteor.callAsync('ai.bindings.rollback', { surface: rollingBack, toVersion: previous.version, reason })
+          else await Meteor.callAsync('ai.control.reset', { target: 'binding', surface: rollingBack, reason })
+          setNote({ severity: 'success', text: previous ? `Rolled ${titles[rollingBack]} back to version ${previous.version}.` : `Removed the binding of ${titles[rollingBack]}.` })
+          setRollingBack(null)
+          load()
+        }}
+      />
+      <GlobalSwitch
+        open={switching}
+        onClose={() => setSwitching(null)}
+        onDone={(text) => {
+          setSwitching(null)
+          setNote({ severity: 'success', text })
+          load()
+        }}
+      />
       <ResetChoices
         open={resetting}
         parts={appChoices.map((s) => s.title)}

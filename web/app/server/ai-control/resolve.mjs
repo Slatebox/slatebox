@@ -21,13 +21,13 @@ import { followChain, rootSurface, surface as surfaceById, surfaceForRequest, bu
 import { resolveAIChoice } from '../methods/ai/connections.mjs'
 import { DEFAULT_AI_FEATURES, resolveAIFeatureConfig } from '../methods/ai/feature-config.mjs'
 import { EMPTY_SNAPSHOT, parsePromptRef } from './snapshot.mjs'
+import { codeFallbackOn } from '../methods/ai/provider.mjs'
 
 export const CODE_PARAMS = Object.freeze({
   temperature: null, maxTokens: null, timeoutMs: 90000, infraRetries: 2, shapeRetries: 3, toolChoice: null,
 })
-// After shape exhaustion only these keep their fallback model (provider.mjs SHAPE_FALLBACK_FEATURES);
-// the code default `on` list of a built-in fallback says the same.
-const SHAPE_FALLBACK_FROM = new Set(['generation', 'vision'])
+// The failure classes a built-in fallback model is tried for: provider.mjs codeFallbackOn (infra
+// and shape for generation and vision, infra elsewhere), by the surface's top-level feature.
 const STABILITY = Object.freeze({ provider: 'stabilityai', engine: 'stable-diffusion-v1-6' })
 
 /** A surface id, or a request feature (lane-chat -> workshop), to its surface id; null for built-in-only paths. */
@@ -54,8 +54,11 @@ function scopedDocs(snapshot, surfaceId, { userId, orgId, plan, ownProviders, in
 
 const isInner = (layer) => layer.startsWith('db:me') || layer.startsWith('db:team')
 
-// A model registry row as a chain entry (never a key: keys are opened per request).
-function chainEntry(snapshot, entry, server) {
+// A chain entry as the request path reads it (never a key: keys are opened per request). An entry
+// names a model registry row ({ model: '<connection>:<model>' }), or a connection with its own model
+// ({ connection: 'server:<name>' }), or the surface's built-in model ({ connection: 'builtin' }).
+function chainEntry(snapshot, entry, server, surfaceId, settings) {
+  if (!entry?.model && entry?.connection) return connectionEntry(snapshot, entry, server, surfaceId, settings)
   const model = snapshot.models[entry.model]
   if (!model) return null
   const [scope, name] = model.connection.split(':')
@@ -76,6 +79,29 @@ function chainEntry(snapshot, entry, server) {
   }
 }
 
+function connectionEntry(snapshot, entry, server, surfaceId, settings) {
+  const on = entry.on?.length ? [...entry.on] : ['any']
+  if (entry.connection === 'builtin') {
+    const primary = builtinChain(surfaceId, settings).chain[0]
+    return primary ? { ...primary, on, builtinDefault: true } : null
+  }
+  const [scope, name] = String(entry.connection).split(':')
+  if (scope !== 'server' || !name) return null
+  const fromDb = snapshot.connections[name]
+  const fromSettings = server?.connections?.find((c) => c.name === name)
+  const connection = fromSettings || fromDb
+  if (!connection) return null
+  const provider = connection.type || connection.provider
+  return {
+    connection: `server:${name}`, provider, model: connection.model ?? null, modelId: null,
+    protocol: snapshot.providers[provider]?.protocol ?? null, baseUrl: connection.baseUrl ?? null,
+    keyRef: connection.apiKeyEnv ? { kind: 'env', name: connection.apiKeyEnv }
+      : connection.source === 'file' && connection.apiKey ? { kind: 'file' }
+        : fromDb?.keyRef ?? { kind: connection.hasKey || fromDb?.hasKey ? 'sealed' : 'none' },
+    capabilities: { ...(connection.capabilities || {}) }, prices: null, on,
+  }
+}
+
 // The built-in model of a surface (ai-defaults.json via builtinFrom, overlaid by settings.ai.features).
 function builtinChain(surfaceId, settings) {
   const from = builtinFeatureFor(surfaceId)
@@ -91,7 +117,7 @@ function builtinChain(surfaceId, settings) {
     chain.push({
       connection: 'builtin', provider: config.fallback.provider ?? config.provider ?? null, model: config.fallback.engine ?? null,
       protocol: null, baseUrl: null, keyRef: { kind: 'builtin' }, capabilities: {}, prices: null,
-      on: SHAPE_FALLBACK_FROM.has(rootSurface(surfaceId)) ? ['infra', 'shape'] : ['infra'],
+      on: [...codeFallbackOn(rootSurface(surfaceId))],
     })
   }
   return { chain, layer, from }
@@ -219,14 +245,17 @@ export function resolveBinding(snapshot, args = {}) {
   let followed = null
   let bindingVersion = null
   const fromDb = firstSet((doc) => (Array.isArray(doc.chain) && doc.chain.length ? doc.chain : null), { innerAllowed: true })
-  const resolvedDb = fromDb ? fromDb.value.map((entry) => chainEntry(snap, entry, holders.server)).filter(Boolean) : []
-  if (fromDb && resolvedDb.length) {
+  const resolvedDb = fromDb ? fromDb.value.map((entry) => chainEntry(snap, entry, holders.server, id, settings)).filter(Boolean) : []
+  // A person's or team's own choice in their AI settings is their layer (me, team): it outranks the
+  // server's and a plan's bindings, as it outranks the server's choices today.
+  const legacy = legacyChain(id, holders, settings)
+  const ownChoice = ['me', 'team'].includes(legacy.choice.scope)
+  if (fromDb && resolvedDb.length && (isInner(fromDb.layer) || !ownChoice)) {
     chain = resolvedDb
     provenance.chain = fromDb.layer
     followed = fromDb.sid === id ? null : fromDb.sid
     bindingVersion = `${fromDb.doc._id}@v${fromDb.doc.version ?? 1}`
   } else {
-    const legacy = legacyChain(id, holders, settings)
     chain = legacy.chain
     provenance.chain = legacy.layer
     followed = legacy.choice.feature && legacy.choice.feature !== id ? legacy.choice.feature : null
@@ -301,6 +330,8 @@ export function resolveBinding(snapshot, args = {}) {
   return {
     surface: id, builtinOnly: false, enabled, disabledMessage, chain, params, prompts, tools, limits,
     provenance, followed, bindingVersion, builtinFrom: builtinFeatureFor(id),
+    // the model chain came from a published binding (not an AI settings choice, the file or code)
+    chainFromBinding: Boolean(bindingVersion),
   }
 }
 

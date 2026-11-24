@@ -112,8 +112,30 @@ export const ESTIMATES = METER_ESTIMATES
 // the prompt before it is sent. A shape request is a short prompt and at most one retry.
 const CEILINGS = METER_CEILINGS
 const DEFAULT_CEILING = 50_000
+// An administrator's published binding may tighten a surface's estimate and ceiling (AI control,
+// spec 1.4 limits: tighten only). source(meterFeature) → { estimate, ceiling } (µ$, either null),
+// set by ai-control/index.mjs from the snapshot.
+let limitSource = () => null
+export function setLimitSource(source) {
+  limitSource = typeof source === 'function' ? source : () => null
+}
+const limitOf = (feature, key) => {
+  try {
+    const value = limitSource(feature)?.[key]
+    return Number.isFinite(value) && value > 0 ? value : null
+  } catch {
+    return null
+  }
+}
+const tighter = (code, set) => (set !== null && (code === undefined || code === null || set < code) ? set : code)
+
 export function actionCeilingMicros(feature) {
-  return CEILINGS[feature] ?? DEFAULT_CEILING
+  return tighter(CEILINGS[feature] ?? DEFAULT_CEILING, limitOf(feature, 'ceiling'))
+}
+
+/** The pre-check estimate for a meter feature: the catalogue's, or a binding's lower one. */
+export function actionEstimateMicros(feature) {
+  return tighter(ESTIMATES[feature], limitOf(feature, 'estimate'))
 }
 
 // Prices an administrator set on a model in AI control (aiModels, spec 1.3), read from the

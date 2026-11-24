@@ -64,9 +64,19 @@ export function shouldFallbackToModel(primaryResponse) {
  * Oct 22–Nov 5 window — every FB chain on those duplicated a dead ladder.
  * Default for unknown features is BLOCK (cost-safe).
  */
-const SHAPE_FALLBACK_FEATURES = new Set(['generation', 'vision'])
+// As data (AI control spec 2.1): the failure classes a built-in fallback model is tried for, the
+// code default `on` list of a binding's fallback entry. infra = 5xx, 429, timeout; shape = answers
+// that never took the shape the feature needs. An administrator's binding may set its own.
+export const CODE_FALLBACK_ON = Object.freeze({
+  generation: Object.freeze(['infra', 'shape']),
+  vision: Object.freeze(['infra', 'shape']),
+})
+export const DEFAULT_FALLBACK_ON = Object.freeze(['infra'])
+export function codeFallbackOn(feature) {
+  return CODE_FALLBACK_ON[feature] || DEFAULT_FALLBACK_ON
+}
 export function keepsFallbackAfterShapeExhaustion(feature) {
-  return SHAPE_FALLBACK_FEATURES.has(feature)
+  return codeFallbackOn(feature).includes('shape')
 }
 
 export function resolveAIModel({
@@ -165,6 +175,7 @@ export function buildProviderBody({
   functionCall,
   userId,
   maxTokens,
+  temperature,
 } = {}) {
   const embeddedSystem = prompts
     .filter((prompt) => prompt?.role === 'system')
@@ -194,6 +205,8 @@ export function buildProviderBody({
 
   // a chosen connection's own output cap
   if (maxTokens) body.max_tokens = maxTokens
+  // an administrator's binding (AI control) may set the sampling temperature
+  if (Number.isFinite(temperature)) body.temperature = temperature
 
   if (functions?.length) {
     if (provider === AI_PROVIDERS.anthropic) {

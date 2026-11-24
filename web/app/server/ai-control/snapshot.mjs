@@ -147,8 +147,12 @@ const parsePin = (ref) => {
   return match ? { id: match[1], version: match[2] ? Number(match[2]) : null } : null
 }
 export { parsePin as parsePromptRef }
+export { bindingProblem }
 
-function bindingProblem(doc, { models, prompts, promptVersions, codePromptIds }) {
+/** The most entries a model chain holds: the primary and up to four fallbacks. */
+export const MAX_CHAIN = 5
+
+function bindingProblem(doc, { models, prompts, promptVersions, codePromptIds, connectionRefs = new Set(), connections = {} }) {
   const at = surfaceById(doc.surface)
   if (!at || !at.useKey) return `${doc.surface} is not a surface that can be bound`
   const key = scopeKey(doc.scope)
@@ -160,7 +164,19 @@ function bindingProblem(doc, { models, prompts, promptVersions, codePromptIds })
   if (inner && (doc.params || doc.prompts || doc.tools || doc.limits)) return 'a team or person binding sets only its models and on/off'
   if (doc.chain !== undefined) {
     if (!Array.isArray(doc.chain)) return 'chain is a list of models'
+    if (doc.chain.length > MAX_CHAIN) return `chain holds at most ${MAX_CHAIN} entries`
     for (const [index, entry] of doc.chain.entries()) {
+      if (entry?.on !== undefined && (!Array.isArray(entry.on) || entry.on.some((c) => !FAILURE_CLASSES.includes(c)))) return `chain ${index + 1}: on is a list of ${FAILURE_CLASSES.join(', ')}`
+      // a connection with its own model, or the surface's built-in model
+      if (!entry?.model && typeof entry?.connection === 'string') {
+        if (entry.connection === 'builtin') continue
+        if (!/^server:[a-z0-9][a-z0-9-]{0,39}$/.test(entry.connection) || !connectionRefs.has(entry.connection)) return `chain ${index + 1}: connection ${entry.connection} does not exist`
+        const conn = connections[entry.connection.slice('server:'.length)]
+        if (conn?.status === 'disabled') return `chain ${index + 1}: connection ${entry.connection} is turned off`
+        const gap = at.needs.find((need) => (need === 'images' ? conn && conn.capabilities?.images !== true : conn?.capabilities?.[need] === false))
+        if (gap) return `chain ${index + 1}: ${entry.connection} cannot do ${gap}, which ${at.id} needs`
+        continue
+      }
       const model = models[entry?.model]
       if (!model) return `chain ${index + 1}: model ${entry?.model} does not exist`
       if (model.status === 'disabled') return `chain ${index + 1}: model ${entry.model} is disabled`
@@ -260,7 +276,7 @@ export function buildSnapshot(raw = {}, { fileConnections = [], codePromptIds = 
     }
   }
   const codeIds = new Set(codePromptIds)
-  const bindings = pick(raw.bindings, 'binding', (doc) => bindingProblem(doc, { models, prompts, promptVersions, codePromptIds: codeIds }))
+  const bindings = pick(raw.bindings, 'binding', (doc) => bindingProblem(doc, { models, prompts, promptVersions, codePromptIds: codeIds, connectionRefs, connections }))
   const agents = pick(raw.agents, 'agent', agentProblem)
 
   return frozen({
