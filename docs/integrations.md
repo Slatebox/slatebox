@@ -45,28 +45,44 @@ Linear issue, a GitHub comment), as much as its server allows. Nothing changes w
   and *Change things outside Slatebox*. Changes start **on**; ones that delete, close or merge
   something start **off**, with a warning. Slatebox reads each tool's own annotations
   (`readOnlyHint`, `destructiveHint`) first, then its name; an administrator can correct a tool in
-  the gallery recipe (`recipe.tools`, /admin/ai › Agent gallery).
+  the gallery recipe (`recipe.tools`, /admin/ai › Agent gallery). A server's read-only claim never
+  turns a tool whose name writes (`create_issue`, `delete_repository`) into a lookup, and an
+  administrator's correction never loosens a tool you already allowed as a change: it still waits on
+  a card.
 - **Ask for a change in plain words**: "@Linear file the retry bug", "@GitHub open an issue for this",
-  "@Linear mark ENG-12 done". The agent proposes it only when your own words ask for a change; never
-  because a note or a server's description says so.
+  "@Linear mark ENG-12 done". The agent proposes it only when your own words ask for a change (a part
+  of your ask that starts with a verb such as *file*, *open an*, *create*, *comment*, *mark*); never
+  because a note or a server's description says so. Questions such as "list the open issues" or
+  "make a list of bugs" are lookups, as before.
 - **It lands as an action card**, in the same frame as the agent's other suggestions: what would
-  happen, where, and with what ("Create Linear issue: Retry fails on 502 · Team: ENG", then the start
-  of its description). **Keep** the card to approve it, **Discard** to decline. Keep all never
+  happen, where, and with what ("Create Linear issue: Retry fails on 502 · Team: ENG", then its
+  description and **every other value it sends**, such as labels or an assignee, in full). What you
+  approve is exactly what is sent; a change too long to show on a card in full is not proposed.
+  **Keep** the card to approve it, **Discard** to decline. Keep all never
   approves a card: each one is approved on its own. The agent's chip lists its cards too, with
   **Approve** and **Decline**.
 - **When you approve**, the change is made then, as you, after Slatebox checks the tool is still the
   one you allowed. The card then says *Done*, with a link to what was made. If the server refuses,
-  the card says why in plain words and stays, to try again or discard.
+  the card says why in plain words and stays, to try again or discard. If the request went out but
+  no answer came back (a timeout, a lost connection), the card says *Not sure it was made*: look in
+  the other system first. Keep never sends it twice; *Try again anyway* on the agent's chip does,
+  on purpose. A change being made right now cannot be stopped: Discard and Decline leave its card,
+  which then says how it went.
 - **Undo** takes back the agent's notes on the slate, never what was done outside it: the card stays,
   and the undo says so. Change it where it was made (the card links there).
-- **Who approves.** Only the person who invited the agent (the same rule as asking), unless they let
-  anyone who can edit the slate approve (its chip: *Who approves*). The slate's owner can narrow that
-  back, never widen it.
+- **Who approves.** Only the person who invited the agent (the same rule as asking), unless they or
+  the slate's owner let anyone who can edit the slate approve (its chip: *Who approves*). Either can
+  narrow it back. A token (exec, MCP, API) approves only for an agent that acts without asking, and
+  never a destructive change; Slatebox's own conversation and teammate never approve.
 - **Act without asking** (off by default): for one slate on the agent's chip, or for every slate on
   its row on the Integrations page. Its changes are then made during the ask and its cards say *Done
-  without asking*. Deleting, closing or merging still waits for a person. Only the person who
-  invited it turns this on; they or the slate's owner can turn it off. Every change of this setting
-  is kept in the agent's activity and the audit log.
+  without asking*. Deleting, closing, cancelling or merging still waits for a person, whether the
+  tool says so or the change's own values do (an update that sets an issue to *closed* or
+  *Canceled*). Only the person who invited it turns this on; they or the slate's owner can turn it
+  off, and the owner's *off* holds until the owner lets the inviter choose again. The Integrations
+  page setting reaches only slates you own; on someone else's slate you turn it on there. Every
+  change of this setting is kept in the agent's activity and the audit log; each change made names
+  the account that approved it (and the token, for a token).
 - **Gallery recipes.** Linear (connected at `https://mcp.linear.app/mcp`; agents invited earlier at
   its read-only address keep working and show the same card): create an issue, comment, update an
   issue's status. GitHub: open an issue, comment, and open a pull request from a branch that already

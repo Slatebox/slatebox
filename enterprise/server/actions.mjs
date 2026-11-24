@@ -13,7 +13,7 @@ const id = (description) => ({ type: 'string', minLength: 1, maxLength: 40, patt
 const connectionId = id('The invited agent\'s id, as connectors.list gives it.')
 const addressInput = { type: 'string', minLength: 8, maxLength: 500, description: 'The server\'s https address, such as https://mcp.linear.app/mcp' }
 const cardIdInput = { type: 'string', minLength: 7, maxLength: 41, pattern: '^o[A-Za-z0-9_-]+$', description: 'The change\'s card, as list_agent_changes (connectors.outsideActions) or ask_invited_agent (cards[].cardId) gives it.' }
-const cardOut = { type: 'object', description: 'An action card: cardId, connectionId, agentId, system, label ("Create Linear issue"), tool, preview { title, body, target, item }, destructive, state (waiting, running, done, failed, declined), link (when done), error (when failed), decidedBy, actedWithoutAsking, mine.' }
+const cardOut = { type: 'object', description: 'An action card: cardId, connectionId, agentId, system, label ("Create Linear issue"), tool, preview { title, body, target, item, more[] (every other argument, "Name: value") }, args (exactly what approving it sends), destructive (by its tool, or by its arguments: an update that closes, cancels or archives), state (waiting, running, done, failed, unclear: sent but no answer came back, so it may have been made; declined), link (when done), error (when failed or unclear), decidedBy, actedWithoutAsking, mine.' }
 const obj = (properties) => ({ type: 'object', properties })
 const OUT = {
   list: obj({ connections: { type: 'array', items: { type: 'object' } }, pro: { type: 'boolean' }, canInvite: { type: 'boolean' } }),
@@ -261,7 +261,7 @@ export function connectorActions(service) {
     defineAction({
       id: 'connectors.approve',
       title: 'Approve an agent\'s change outside Slatebox',
-      description: 'Approve one action card: its change is made now (a new Linear issue, a comment, a status), as the agent\'s inviter, after its tool is checked against what they allowed; the card then says it was done, with a link. People approve: only the inviter, unless they let the slate\'s editors approve; a token (exec, MCP, API) approves only for an agent its inviter lets act without asking, and never a destructive change. What is made outside Slatebox cannot be undone from Slatebox.',
+      description: 'Approve one action card: its change is made now (a new Linear issue, a comment, a status) with exactly the arguments the card shows (args), as the agent\'s inviter, after its tool is checked against what they allowed; the card then says it was done, with a link. People approve: only the inviter, unless the inviter or the slate\'s owner lets the slate\'s editors approve; an API token (exec, MCP, API) approves only for an agent its inviter lets act without asking, and never a destructive change. A card left unclear (sent, no answer: it may have been made) is tried again only by a person who sends again: true after looking. What is made outside Slatebox cannot be undone from Slatebox.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
@@ -269,7 +269,7 @@ export function connectorActions(service) {
       scope: 'slates:write',
       principals: ['person', 'agent'],
       mounts: { ddp: true, http: { method: 'POST', path: '/agent-changes/{cardId}/approve', operationId: 'approveAgentChange' } },
-      input: { type: 'object', properties: { cardId: cardIdInput }, required: ['cardId'], additionalProperties: false },
+      input: { type: 'object', properties: { cardId: cardIdInput, again: { type: 'boolean', description: 'A person only: try a card whose outcome was unclear once more (look in the outside system first: it may have been made).' } }, required: ['cardId'], additionalProperties: false },
       output: OUT.card,
       tool: { name: 'approve_agent_change', title: 'Approve an invited agent\'s change outside Slatebox', description: 'Approve one action card so its change outside Slatebox is made. A token may only for an agent that acts without asking.' },
       handler: run('approve'),
@@ -277,7 +277,7 @@ export function connectorActions(service) {
     defineAction({
       id: 'connectors.decline',
       title: 'Decline an agent\'s change outside Slatebox',
-      description: 'Decline one action card: nothing is changed outside Slatebox, and its card leaves the slate. Anyone who can edit the slate.',
+      description: 'Decline one action card: nothing is changed outside Slatebox, and its card leaves the slate. Anyone who can edit the slate. A change being made right now cannot be declined (card_busy); an unclear one is dropped as it is.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
@@ -293,7 +293,7 @@ export function connectorActions(service) {
       id: 'connectors.setActing',
       title: 'Choose how an agent\'s changes are approved on a slate',
       // People only, like agents.control's Edit directly: an agent never widens an agent's rights.
-      description: 'On one slate: actWithoutAsking on (its changes outside Slatebox are made at once; destructive ones still wait), off (each waits on a card), or inherit (its integration\'s choice); approvers inviter (default) or editors (anyone who can edit may approve). Turning either wider is the inviter\'s alone; the inviter or the slate\'s owner may narrow it. Audited and shown in the agent\'s activity.',
+      description: 'On one slate: actWithoutAsking on (its changes outside Slatebox are made at once; destructive ones still wait), off (each waits on a card), or inherit (its integration\'s choice); approvers inviter (default) or editors (anyone who can edit may approve), set by the inviter or the slate\'s owner. Turning acting on is the inviter\'s alone; the slate\'s owner may turn it off, and that holds against the inviter until the owner sets inherit again. An integration\'s choice reaches only slates its inviter owns. Audited and shown in the agent\'s activity.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
@@ -436,7 +436,7 @@ export function integrationActions(service) {
       id: 'integrations.setActing',
       title: 'Let an integration act without asking',
       // People only: an agent never widens an agent's rights.
-      description: 'Whether an integration\'s changes outside Slatebox are made at once on every slate it is on (destructive ones still wait for approval), unless a slate chooses otherwise. Off by default. Audited and shown in each slate\'s agent activity.',
+      description: 'Whether an integration\'s changes outside Slatebox are made at once on the slates you own that it is on (destructive ones still wait for approval), unless a slate chooses otherwise; on someone else\'s slate it is turned on there, by name. Off by default. Audited and shown in each slate\'s agent activity.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',

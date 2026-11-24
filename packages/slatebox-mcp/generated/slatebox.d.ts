@@ -2049,7 +2049,7 @@ declare namespace slatebox.suggestions {
     undone?: string[];
     /** undo: the items left as they are, each with its reason. */
     left?: Array<Record<string, unknown>>;
-    /** keep: waiting items that stand for a change outside Slatebox (an action card) and were not approved, each with why (approve each card on its own; only its inviter approves unless they let others). */
+    /** keep: waiting items that stand for a change outside Slatebox (an action card) and were not approved, each with why (approve each card on its own; only its inviter approves unless they let others). discard: cards whose change is being made right now (they cannot be stopped) or was already made. */
     held?: Array<Record<string, unknown>>;
     [key: string]: unknown;
   }) & { mode: "save" }>;

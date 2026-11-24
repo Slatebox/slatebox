@@ -11,7 +11,7 @@
 //              extraction (short ids and names only, never the server's words), so the planner
 //              never reads what the server said; and a fixed way to turn the answer into notes.
 //   dedupe     notes with the same words in one group are one note.
-import { plainText } from './tools.mjs'
+import { changeClauses, plainText } from './tools.mjs'
 import { safeLink } from './results.mjs'
 
 export const RECIPE_LIMITS = Object.freeze({ steps: 4, calls: 5, runCalls: 6, each: 3, rounds: 3, notes: 12, valueChars: 100, rawBytes: 400000, patternChars: 200, patternText: 20000 })
@@ -486,13 +486,18 @@ export function checkWriteParts(raw) {
   return out
 }
 
-/** The known change a request asks for (its keywords, any one matching), whose tool the agent may use: { write, tool } or null. */
+/**
+ * The known change a request asks for (its keywords, any one matching one of the request's clauses
+ * that ask for a change: tools.mjs changeClauses, so "show open issues" never matches "open ...
+ * issues"), whose tool the agent may use: { write, tool } or null.
+ */
 export function matchWrite(recipe, request, writableNames) {
-  const text = String(request || '').slice(0, 1000)
+  const clauses = changeClauses(String(request || '').slice(0, 1000))
   for (const write of Array.isArray(recipe?.writes) ? recipe.writes : []) {
     const ok = write.keywords.some((pattern) => {
       try {
-        return new RegExp(pattern, 'i').test(text)
+        const re = new RegExp(pattern, 'i')
+        return clauses.some((clause) => re.test(clause))
       } catch {
         return false
       }

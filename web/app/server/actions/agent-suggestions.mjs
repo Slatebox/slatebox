@@ -175,7 +175,7 @@ const decide = defineAction({
       refused: { type: 'array', items: { type: 'object' } },
       undone: { type: 'array', items: { type: 'string' }, description: 'undo: the items undone.' },
       left: { type: 'array', items: { type: 'object' }, description: 'undo: the items left as they are, each with its reason.' },
-      held: { type: 'array', items: { type: 'object' }, description: 'keep: waiting items that stand for a change outside Slatebox (an action card) and were not approved, each with why (approve each card on its own; only its inviter approves unless they let others).' },
+      held: { type: 'array', items: { type: 'object' }, description: 'keep: waiting items that stand for a change outside Slatebox (an action card) and were not approved, each with why (approve each card on its own; only its inviter approves unless they let others). discard: cards whose change is being made right now (they cannot be stopped) or was already made.' },
     },
     required: ['ok', 'shareId'],
   },
@@ -202,8 +202,13 @@ const decide = defineAction({
       return { ok: true, shareId: slate.shareId, ...out, left: [...(out.left || []), ...(gate?.left || [])] }
     }
     if (input.decision === 'discard') {
+      // A card whose change is being made right now cannot be declined: the gate holds it back.
+      if (Array.isArray(gate?.itemIds)) {
+        if (!gate.itemIds.length) return { ok: true, shareId: slate.shareId, revision: slate.revision ?? 0, discarded: [], refused: [], ...held }
+        choice.itemIds = gate.itemIds
+      }
       const out = await store.discard(principal, slate, choice)
-      return { ok: true, shareId: slate.shareId, revision: slate.revision ?? 0, ...out }
+      return { ok: true, shareId: slate.shareId, revision: slate.revision ?? 0, ...out, ...held }
     }
     if (Array.isArray(gate?.itemIds)) {
       if (!gate.itemIds.length) return { ok: true, shareId: slate.shareId, revision: slate.revision ?? 0, kept: [], refused: [], ...held }

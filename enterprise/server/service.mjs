@@ -57,9 +57,9 @@ import { checkMcpUrl, McpFetchRefused } from './mcp-fetch.mjs'
 import { SignInNeeded } from './credentials.mjs'
 import { SignInProblem } from './oauth.mjs'
 import { KEY_PATTERN } from './signin.mjs'
-import { asksForChange, capabilitySummary, defaultPolicy, normalizeTools, plainText, POLICIES, reconcile } from './tools.mjs'
+import { asksForChange, capabilitySummary, defaultPolicy, destructiveArgs, normalizeTools, plainText, POLICIES, reconcile } from './tools.mjs'
 import { quarantine } from './results.mjs'
-import { actsWithoutAsking, APPROVERS, CARD_LIMITS, cardLabel, cardText, failureOf, linkOf, previewOf, publicCard } from './outside.mjs'
+import { actsWithoutAsking, APPROVERS, CARD_LIMITS, cardLabel, cardText, failureOf, fitsOnCard, isApiToken, linkOf, previewOf, publicCard } from './outside.mjs'
 import { CONTEXT_LEVELS, packContext } from './context.mjs'
 // The plan and layout words: the registry's (a version an administrator published, else the code's).
 import { promptText } from '/server/ai-control/prompts/index.mjs'
@@ -97,6 +97,13 @@ export function memoryStore() {
     findOne: async (query) => rows.find((row) => matches(row, query)) || null,
     find: async (query) => rows.filter((row) => matches(row, query)),
     update: async (id, set) => Object.assign(rows.find((row) => row._id === id) || {}, set),
+    // Moves a row out of one of these states at once (no await between the look and the change).
+    claim: async (id, from, set) => {
+      const row = rows.find((r) => r._id === id)
+      if (!row || !from.includes(row.state)) return false
+      Object.assign(row, set)
+      return true
+    },
     remove: async (id) => {
       const at = rows.findIndex((row) => row._id === id)
       if (at >= 0) rows.splice(at, 1)
@@ -665,12 +672,12 @@ export function createConnectorService({
       const agentId = doc.agentId || (await suggestions.agentIdOf(connectorPrincipal(doc, 'remove:' + doc._id), found.slate))
       await suggestions.withdraw(principal, found.slate, agentId).catch(() => {})
     }
-    await declineWaiting(doc, principal)
+    const running = await declineWaiting(doc, principal)
     await presence.end('hello:' + doc._id, 'done').catch(() => {})
     // Its integration and sign-in stay: the person connected it once and may invite it anywhere.
     // Disconnecting the integration (Integrations page) is what revokes the sign-in.
-    audit({ kind: 'disconnect', userId: principal.userId, host: doc.host, connectionId: doc._id, ...(doc.ownerId !== principal.userId && { byOwner: true }) })
-    return { ok: true, connectionId: doc._id }
+    audit({ kind: 'disconnect', userId: principal.userId, host: doc.host, connectionId: doc._id, ...(doc.ownerId !== principal.userId && { byOwner: true }), ...(running && { running }) })
+    return { ok: true, connectionId: doc._id, ...(running && { running, say: `${running === 1 ? 'One change was' : `${running} changes were`} already being made in ${doc.name} and could not be stopped: ${running === 1 ? 'its card says' : 'their cards say'} how it went.` }) }
   }
 
   // The asker's visible part of the canvas (slate units), when the page sent it: suggestions land there.
@@ -908,6 +915,7 @@ export function createConnectorService({
         const proposals = []
         if (wantsChange) {
           const names = new Set(writable.map((tool) => tool.name))
+          // A recipe's known change, by the clauses that ask for one (never by a read question's words).
           const known = recipe ? matchWrite(recipe, text, names) : null
           const tools = known ? [toolOf.get(known.tool)] : writable
           const limit = Math.min(limits.calls, PLAN_LIMITS.writes, CARD_LIMITS.perAsk)
@@ -916,7 +924,13 @@ export function createConnectorService({
           for (const call of planned.calls) {
             const tool = toolOf.get(call.tool)
             const write = known?.write || (recipe?.writes || []).find((w) => [].concat(w.tool).includes(call.tool)) || null
-            proposals.push({ tool: call.tool, args: call.args, hash: tool.hash, title: tool.title, destructive: Boolean(tool.destructive), write })
+            // Shown in full or not proposed: a card never sends what it does not show.
+            if (!fitsOnCard(call.args, write?.fields || {})) {
+              say = say || `${doc.name}'s change was too long to show on a card in full, so it was not proposed. Ask for a shorter one.`
+              continue
+            }
+            // Destructive by its tool, or by its own arguments (an update that closes or cancels).
+            proposals.push({ tool: call.tool, args: call.args, hash: tool.hash, title: tool.title, destructive: Boolean(tool.destructive) || destructiveArgs(call.args), write })
           }
           if (!proposals.length) say = say || planned.say || `${doc.name} needs more to make that change. Say what it should be called and where it goes.`
         }
@@ -1032,7 +1046,7 @@ export function createConnectorService({
   // acts without asking here (never a destructive change).
   async function cardsFor(doc, slate, proposals, principal) {
     if (!proposals.length) return []
-    const acting = actsWithoutAsking(doc, await integrationOf(doc))
+    const acting = actsWithoutAsking(doc, await integrationOf(doc), slate)
     const at = new Date(now())
     const cards = []
     for (const proposal of proposals.slice(0, CARD_LIMITS.perAsk)) {
@@ -1056,13 +1070,14 @@ export function createConnectorService({
         state: 'waiting',
         nodeId: null,
         actionId: null,
+        requestedById: principal.userId,
         createdAt: at,
         updatedAt: at,
         expiresAt: new Date(at.getTime() + CARD_LIMITS.keepDays * 86400000),
       }
       await outside.insert(card)
-      audit({ kind: 'outside_proposed', userId: principal.userId, host: doc.host, connectionId: doc._id, cardId: card._id, tool: card.tool })
-      if (acting && !card.destructive) await performNow(card, doc, { acted: true, by: null, slate })
+      audit({ kind: 'outside_proposed', userId: principal.userId, host: doc.host, connectionId: doc._id, cardId: card._id, tool: card.tool, destructive: card.destructive })
+      if (acting && !card.destructive) await performNow(card, doc, { acted: true, by: null, approver: principal, slate })
       cards.push(card)
     }
     return cards
@@ -1070,7 +1085,7 @@ export function createConnectorService({
 
   async function cardNotes(doc, cards) {
     const inviter = doc.inviterName || 'its inviter'
-    return cards.map((card, index) => ({ key: 'card' + index, text: cardText(card, { inviter, approvers: doc.approvers }), ...(card.result?.link && { link: card.result.link }) }))
+    return cards.map((card, index) => ({ key: 'card' + index, wide: true, text: cardText(card, { inviter, approvers: doc.approvers }), ...(card.result?.link && { link: card.result.link }) }))
   }
 
   // The card's note says what became of it (only while its note still waits as a ghost).
@@ -1079,18 +1094,33 @@ export function createConnectorService({
     await suggestions.retext(slate, { actionId: card.actionId, nodeId: card.nodeId, text: cardText(card, { inviter: doc.inviterName, approvers: doc.approvers }), link: card.result?.link || null }).catch(() => {})
   }
 
-  // Taken once: a card is made by one approval at a time (two people pressing Keep make it once).
-  async function claimCard(card) {
-    const set = { state: 'running', updatedAt: new Date(now()) }
+  // Moves a card from one of these states to another, once (two approvals make a change once).
+  async function moveCard(card, from, set) {
     if (outside.claim) {
-      if (!(await outside.claim(card._id, ['waiting', 'failed'], set))) return false
+      if (!(await outside.claim(card._id, from, set))) return false
     } else {
       const fresh = await outside.findOne({ _id: card._id })
-      if (!fresh || !['waiting', 'failed'].includes(fresh.state)) return false
+      if (!fresh || !from.includes(fresh.state)) return false
       await outside.update(card._id, set)
     }
     Object.assign(card, set)
     return true
+  }
+
+  // Taken once: a card is made by one approval at a time (two people pressing Keep make it once).
+  // again: the person looked and asks to try a change whose outcome was unclear once more.
+  const claimCard = (card, { again = false } = {}) =>
+    moveCard(card, again ? ['waiting', 'failed', 'unclear'] : ['waiting', 'failed'], { state: 'running', runningSince: new Date(now()), updatedAt: new Date(now()) })
+
+  // A card left running past its lease (the process stopped, or saving its outcome failed) may have
+  // been made: it becomes unclear, never waiting again, so a plain Keep cannot make it twice.
+  async function settleStale(card) {
+    if (card?.state !== 'running') return card
+    const since = new Date(card.runningSince || card.updatedAt || 0).getTime()
+    if (now() - since < CARD_LIMITS.runningMs) return card
+    await moveCard(card, ['running'], { state: 'unclear', error: `Slatebox lost track of it while it ran.`, updatedAt: new Date(now()) })
+    audit({ kind: 'outside_unclear', userId: card.ownerId, cardId: card._id, connectionId: card.connectionId, tool: card.tool })
+    return card
   }
 
   /**
@@ -1098,10 +1128,13 @@ export function createConnectorService({
    * consented to (a moved definition pauses the agent everywhere, as an ask does), then called once.
    * The card ends done (with the server's link) or failed (with plain words); it never retries itself.
    */
-  async function performNow(card, doc, { acted = false, by = null, slate = null }) {
-    if (!(await claimCard(card))) refuse(409, 'card_busy', 'That change is already being made, or was decided.')
+  async function performNow(card, doc, { acted = false, by = null, approver = null, slate = null, again = false }) {
+    if (!(await claimCard(card, { again }))) refuse(409, 'card_busy', 'That change is already being made, or was decided.')
     let raw = null
     let problem = null
+    // Whether the call itself went out: an error before it is a plain failure (try again); an error
+    // after it (a timeout, a dropped connection) leaves the outcome unclear.
+    let sent = false
     try {
       const reached = await discoverAs(doc.ownerId, doc.address)
       if (reached.needsSignIn) {
@@ -1120,20 +1153,38 @@ export function createConnectorService({
       const check = (now) => {
         if (reconcile(doc.tools, normalizeTools(now, recipe?.tools || null)).changed.length)
           throw new ConnectorRefused(409, 'tools_changed', `${doc.name}'s tools changed since they were allowed. Look at them again before approving.`)
+        sent = true
       }
       raw = await session.callTool(doc.address, fetch, { name: card.tool, args: card.args, check }, { token: reached.token, ownerId: doc.ownerId, slateId: doc.slateId })
     } catch (error) {
       const known = fromSignIn(error)
-      problem = known instanceof ConnectorRefused || known?.name === 'McpProblem' ? known.message : 'The server could not be reached. Try again.'
+      problem = known instanceof ConnectorRefused || known?.name === 'McpProblem' ? known.message : 'The server could not be reached.'
+      // The server refused before doing anything (signed out, blocked, no access): a plain failure.
+      if (error instanceof ConnectorRefused || ['needs_sign_in', 'needs_more_access', 'blocked', 'not_mcp'].includes(error?.code)) sent = false
     }
     const at = new Date(now())
     const failed = problem || raw?.isError === true
-    const set = failed
-      ? { state: 'failed', error: plainText(problem || failureOf(raw), CARD_LIMITS.reason), updatedAt: at }
-      : { state: 'done', error: null, result: { link: linkOf(raw) }, actedWithoutAsking: acted, decidedBy: by, decidedAt: at, updatedAt: at }
-    await outside.update(card._id, set)
+    const unclear = Boolean(problem) && sent
+    const record = new Date(at.getTime() + CARD_LIMITS.recordDays * 86400000)
+    const set = unclear
+      ? { state: 'unclear', error: plainText(`${problem} It may have been made anyway.`, CARD_LIMITS.reason), updatedAt: at }
+      : failed
+        ? { state: 'failed', error: plainText(problem ? `${problem} Try again.` : failureOf(raw), CARD_LIMITS.reason), updatedAt: at }
+        : { state: 'done', error: null, result: { link: linkOf(raw, card.args) }, actedWithoutAsking: acted, decidedBy: by, decidedById: approver?.userId || null, decidedAt: at, updatedAt: at, expiresAt: record }
+    try {
+      await outside.update(card._id, set)
+    } catch {
+      // Its outcome could not be saved: the lease turns it unclear later, never waiting again.
+    }
     Object.assign(card, set)
-    audit({ kind: 'outside_write', userId: doc.ownerId, host: doc.host, connectionId: doc._id, cardId: card._id, tool: card.tool, ok: !failed, acted, ...(by && { by }) })
+    audit({
+      kind: 'outside_write', userId: doc.ownerId, host: doc.host, connectionId: doc._id, cardId: card._id, tool: card.tool, ok: !failed, unclear, acted,
+      ...(by && { by }),
+      // Which account approved it (or, acting without asking, whose ask made it), and which token.
+      ...(approver?.userId && { approverId: approver.userId, approverKind: approver.kind }),
+      ...(approver?.tokenId && { tokenId: approver.tokenId }),
+      ...(card.requestedById && { requestedById: card.requestedById }),
+    })
     if (slate) await retextCard(card, doc, slate)
     return card
   }
@@ -1143,7 +1194,8 @@ export function createConnectorService({
   function mayApprove(principal, card, doc, canEdit, acting) {
     if (!principal?.userId) return false
     if (principal.kind === 'person') return principal.userId === doc.ownerId || (doc.approvers === 'editors' && canEdit)
-    if (principal.kind === 'agent' && !principal.connector) return principal.userId === doc.ownerId && acting && !card.destructive
+    // Only a real API token: never a conversation, a teammate or an invited agent (all model-driven).
+    if (isApiToken(principal)) return principal.userId === doc.ownerId && acting && !card.destructive
     return false
   }
 
@@ -1155,7 +1207,7 @@ export function createConnectorService({
     if (!found?.slate || !found.canRead) refuse(404, 'not_found', 'Slate not found or unavailable.')
     if (!found.canEdit) refuse(403, 'forbidden', 'Only people who can edit this slate approve its agents\' changes.')
     const slate = found.slate
-    const acting = actsWithoutAsking(doc, await integrationOf(doc))
+    const acting = actsWithoutAsking(doc, await integrationOf(doc), slate)
     if (!mayApprove(principal, card, doc, found.canEdit, acting))
       refuse(403, 'approver_only', principal.kind === 'person' ? `Only ${doc.inviterName || 'the person who invited it'} can approve ${doc.name}'s changes.` : 'Only a person approves an agent\'s changes on the slate, unless its inviter lets it act without asking.')
     if (!(await pro(doc.ownerId))) refuse(402, 'pro_required', PRO_REQUIRED)
@@ -1169,11 +1221,15 @@ export function createConnectorService({
   }
 
   /** Approve one card from the slate (Keep on its note) or any surface: its change is made now. */
-  async function approveCard(principal, card, { fromSlate = false } = {}) {
+  async function approveCard(principal, card, { fromSlate = false, again = false } = {}) {
+    await settleStale(card)
     const { doc, slate } = await approvable(principal, card)
     if (card.state === 'done') return { card, doc, slate }
     if (card.state === 'declined') refuse(409, 'declined', 'That change was declined. Ask the agent again for a new one.')
     if (card.state === 'running') refuse(409, 'card_busy', 'That change is already being made.')
+    // It may already have been made: only a person who looked, asking for it once more on purpose.
+    if (card.state === 'unclear' && !(again && principal.kind === 'person'))
+      refuse(409, 'unclear', `${doc.name} may already have made that change. Look in ${doc.name} first; if it is not there, try it again from the agent's changes ("Try again anyway").`)
     // Its note was discarded (or expired) meanwhile: the change is not made.
     if (!fromSlate && card.actionId && suggestions.actionOf) {
       const action = await suggestions.actionOf(slate, card.actionId).catch(() => null)
@@ -1183,32 +1239,32 @@ export function createConnectorService({
         refuse(409, 'declined', 'That change\'s card is no longer on the slate. Ask the agent again for a new one.')
       }
     }
-    const by = principal.kind === 'person' ? await firstName(principal.userId).catch(() => 'Someone') : `${doc.inviterName || 'Its inviter'}'s token`
-    await oneAtATime({ userId: doc.ownerId }, () => performNow(card, doc, { acted: false, by, slate }))
+    const by = principal.kind === 'person' ? await firstName(principal.userId).catch(() => 'Someone') : `${doc.inviterName || 'Its inviter'}'s token ${plainText(principal.tokenName || '', 40)}`.trim()
+    await oneAtATime({ userId: doc.ownerId }, () => performNow(card, doc, { acted: false, by, approver: principal, slate, again }))
     return { card, doc, slate }
   }
 
   /** connectors.approve: make a card's change; a person's approval also keeps its note (its record). */
-  async function approve(principal, { cardId }) {
+  async function approve(principal, { cardId, again = false }) {
     const card = await cardRow(cardId)
     if (!card || card.kind !== 'card') refuse(404, 'not_found', 'There is no such change waiting.')
-    const { doc, slate } = await approveCard(principal, card)
+    const { doc, slate } = await approveCard(principal, card, { again: again === true })
     let kept = false
     if (card.state === 'done' && principal.kind === 'person' && card.actionId && suggestions.keep && suggestions.actionOf) {
       const action = await suggestions.actionOf(slate, card.actionId).catch(() => null)
       const item = action?.items?.find((i) => i.kind === 'add' && i.nodeId === card.nodeId && i.state === 'pending')
       if (item) kept = Boolean(await suggestions.keep(principal, slate, card.actionId, [item.id]).catch(() => null))
     }
-    return { card: publicCard(card, principal.userId), kept, ...(card.state === 'failed' && { say: `${doc.name} couldn't do it: ${card.error}` }) }
+    return { card: publicCard(card, principal.userId), kept, ...(card.state === 'failed' && { say: `${doc.name} couldn't do it: ${card.error}` }), ...(card.state === 'unclear' && { say: `${doc.name} may or may not have done it: ${card.error} Look in ${doc.name} before trying again.` }) }
   }
 
   // A card declined: nothing is changed outside; who declined is remembered.
+  // An unclear card is dropped the same way (whatever happened outside stays as it is).
   async function declineRow(card, principal) {
-    if (!['waiting', 'failed'].includes(card.state)) return false
-    const set = { state: 'declined', decidedBy: principal?.userId ? await firstName(principal.userId).catch(() => 'Someone') : null, decidedAt: new Date(now()), updatedAt: new Date(now()) }
-    await outside.update(card._id, set)
-    Object.assign(card, set)
-    audit({ kind: 'outside_declined', userId: principal?.userId || null, cardId: card._id, connectionId: card.connectionId, tool: card.tool })
+    await settleStale(card)
+    const set = { state: 'declined', decidedBy: principal?.userId ? await firstName(principal.userId).catch(() => 'Someone') : null, decidedById: principal?.userId || null, decidedAt: new Date(now()), updatedAt: new Date(now()), expiresAt: new Date(now() + CARD_LIMITS.recordDays * 86400000) }
+    if (!(await moveCard(card, ['waiting', 'failed', 'unclear'], set))) return false
+    audit({ kind: 'outside_declined', userId: principal?.userId || null, cardId: card._id, connectionId: card.connectionId, tool: card.tool, ...(principal?.tokenId && { tokenId: principal.tokenId }) })
     return true
   }
 
@@ -1219,8 +1275,11 @@ export function createConnectorService({
     const found = principal?.userId ? await accessOf(principal, card.shareId) : null
     if (!found?.slate || !found.canRead) refuse(404, 'not_found', 'Slate not found or unavailable.')
     if (!found.canEdit) refuse(403, 'forbidden', 'Only people who can edit this slate decline its agents\' changes.')
+    await settleStale(card)
     if (card.state === 'done') refuse(409, 'already_done', 'That change was already made. Change it where it was made.')
-    await declineRow(card, principal)
+    // Being made right now: it cannot be stopped, so it is not declined (and its card stays).
+    if (card.state === 'running') refuse(409, 'card_busy', `That change is being made in ${card.system} right now and cannot be stopped. Its card will say how it went.`)
+    if (!(await declineRow(card, principal)) && card.state !== 'declined') refuse(409, 'card_busy', 'That change was decided meanwhile.')
     if (card.actionId && suggestions.actionOf && suggestions.discardItems) {
       const action = await suggestions.actionOf(found.slate, card.actionId).catch(() => null)
       const item = action?.items?.find((i) => i.kind === 'add' && i.nodeId === card.nodeId && i.state === 'pending')
@@ -1246,8 +1305,24 @@ export function createConnectorService({
     const pending = action.items.filter((i) => i.state === 'pending').map((i) => i.id)
     const named = Array.isArray(itemIds) && itemIds.length ? itemIds : null
     if (decision === 'discard') {
-      for (const id of named || pending) if (cardOf.has(id)) await declineRow(cardOf.get(id), principal)
-      return null
+      // A card whose change is being made right now stays (it cannot be stopped); every other card is declined.
+      const out = []
+      const held = []
+      for (const id of named || pending) {
+        const card = cardOf.get(id)
+        if (card) await settleStale(card)
+        if (card?.state === 'running') {
+          held.push({ itemId: id, cardId: card._id, reason: `${card.label} is being made in ${card.system} right now and cannot be stopped. Its card will say how it went.` })
+          continue
+        }
+        if (card?.state === 'done') {
+          held.push({ itemId: id, cardId: card._id, reason: `${card.label} was already made in ${card.system}; its card stays as the record.` })
+          continue
+        }
+        if (card) await declineRow(card, principal)
+        out.push(id)
+      }
+      return held.length ? { itemIds: out, held } : null
     }
     if (decision === 'undo') {
       const left = []
@@ -1262,8 +1337,13 @@ export function createConnectorService({
     const held = []
     for (const id of named || pending) {
       const card = cardOf.get(id)
+      if (card) await settleStale(card)
       if (!card || card.state === 'done') {
         out.push(id)
+        continue
+      }
+      if (card.state === 'unclear') {
+        held.push({ itemId: id, cardId: card._id, reason: card.error ? `${card.error} Look in ${card.system} before trying again.` : `It may already be in ${card.system}.` })
         continue
       }
       if (!named) {
@@ -1293,8 +1373,14 @@ export function createConnectorService({
 
   /**
    * On one slate: whether this agent acts without asking (on, off, or its integration's choice) and
-   * who approves its cards. Turning either wider is its inviter's alone (their account does the
-   * change); its inviter or the slate's owner may narrow it. Audited, and shown in its activity.
+   * who approves its cards.
+   *   - Acting without asking runs changes as its inviter's account, so only its inviter turns it on.
+   *     The slate's owner may turn it off, and that holds: its inviter cannot turn it back on here
+   *     until the owner sets it back to the integration's choice (on a slate its inviter does not
+   *     own, the integration's choice is off: actsWithoutAsking).
+   *   - Its inviter or the slate's owner may let the slate's editors approve its cards, or narrow
+   *     that back to its inviter.
+   * Audited, and shown in its activity.
    */
   async function setActing(principal, { connectionId, actWithoutAsking, approvers }) {
     if (!principal?.userId || principal.kind !== 'person') refuse(403, 'person_required', 'Only a signed-in person changes how an agent acts.')
@@ -1309,23 +1395,28 @@ export function createConnectorService({
     const set = {}
     if (actWithoutAsking !== undefined) {
       if (!['on', 'off', 'inherit'].includes(actWithoutAsking)) refuse(400, 'invalid_request', 'Choose on, off or inherit.')
-      const wider = actWithoutAsking === 'on' || (actWithoutAsking === 'inherit' && integration?.actWithoutAsking === true)
-      if (wider && !inviter) refuse(403, 'inviter_only', `Only ${doc.inviterName || 'the person who invited it'} can let ${doc.name} act without asking.`)
+      const ownersSlate = found.slate.userId === doc.ownerId
+      const wider = actWithoutAsking === 'on' || (actWithoutAsking === 'inherit' && ownersSlate && integration?.actWithoutAsking === true)
+      if (actWithoutAsking === 'on' && !inviter) refuse(403, 'inviter_only', `Only ${doc.inviterName || 'the person who invited it'} can let ${doc.name} act without asking.`)
+      if (wider && !inviter && !owner) refuse(403, 'inviter_only', `Only ${doc.inviterName || 'the person who invited it'} can let ${doc.name} act without asking.`)
+      // The slate owner's "off" holds against its inviter until the owner lifts it.
+      if (wider && doc.actingLockedBy && !owner) refuse(403, 'owner_locked', `This slate's owner turned off acting without asking for ${doc.name} here. Only they can lift that.`)
       set.acting = actWithoutAsking === 'inherit' ? null : actWithoutAsking
+      if (owner && !inviter) set.actingLockedBy = actWithoutAsking === 'off' ? principal.userId : null
+      else if (owner) set.actingLockedBy = null
     }
     if (approvers !== undefined) {
       if (!APPROVERS.includes(approvers)) refuse(400, 'invalid_request', 'Choose inviter or editors.')
-      if (approvers === 'editors' && !inviter) refuse(403, 'inviter_only', `Only ${doc.inviterName || 'the person who invited it'} can let others approve ${doc.name}'s changes.`)
       set.approvers = approvers
     }
     if (!Object.keys(set).length) refuse(400, 'invalid_request', 'Send actWithoutAsking or approvers.')
     await connections.update(doc._id, { ...set, updatedAt: new Date(now()) })
     Object.assign(doc, set)
-    const acting = actsWithoutAsking(doc, integration)
-    audit({ kind: 'act_without_asking', userId: principal.userId, connectionId: doc._id, acting: doc.acting ?? 'inherit', approvers: doc.approvers || 'inviter', byOwner: !inviter })
-    if (set.acting !== undefined) await recordSetting(principal, doc, acting ? `${doc.name} acts without asking here: its changes are made at once (destructive ones still wait).` : `${doc.name} asks first here: each change waits on a card.`)
+    const acting = actsWithoutAsking(doc, integration, found.slate)
+    audit({ kind: 'act_without_asking', userId: principal.userId, connectionId: doc._id, acting: doc.acting ?? 'inherit', approvers: doc.approvers || 'inviter', byOwner: !inviter, ...(doc.actingLockedBy && { lockedByOwner: true }) })
+    if (set.acting !== undefined) await recordSetting(principal, doc, acting ? `${doc.name} acts without asking here: its changes are made at once (destructive ones still wait).` : `${doc.name} asks first here: each change waits on a card.${set.actingLockedBy ? ' Set by this slate\'s owner.' : ''}`)
     if (set.approvers !== undefined) await recordSetting(principal, doc, set.approvers === 'editors' ? `Anyone who can edit may approve ${doc.name}'s changes here.` : `Only ${doc.inviterName || 'its inviter'} approves ${doc.name}'s changes here.`)
-    return { connectionId: doc._id, actWithoutAsking: acting, acting: doc.acting === 'on' || doc.acting === 'off' ? doc.acting : 'inherit', approvers: APPROVERS.includes(doc.approvers) ? doc.approvers : 'inviter' }
+    return { connectionId: doc._id, actWithoutAsking: acting, acting: doc.acting === 'on' || doc.acting === 'off' ? doc.acting : 'inherit', approvers: APPROVERS.includes(doc.approvers) ? doc.approvers : 'inviter', lockedByOwner: Boolean(doc.actingLockedBy) }
   }
 
   /** On the Integrations page: whether this integration acts without asking on every slate (unless a slate says otherwise). */
@@ -1336,9 +1427,13 @@ export function createConnectorService({
     await integrations.update(doc._id, { actWithoutAsking, updatedAt: new Date(now()) })
     doc.actWithoutAsking = actWithoutAsking
     audit({ kind: 'integration_act_without_asking', userId: principal.userId, integrationId: doc._id, actWithoutAsking })
-    for (const agent of await agentsOf(doc))
-      if (agent.acting !== 'on' && agent.acting !== 'off')
-        await recordSetting(principal, agent, actWithoutAsking ? `${agent.name} acts without asking (set for the integration): its changes are made at once (destructive ones still wait).` : `${agent.name} asks first (set for the integration): each change waits on a card.`)
+    // It reaches only the slates its inviter owns (on anyone else's, acting without asking is set there, by name).
+    for (const agent of await agentsOf(doc)) {
+      if (agent.acting === 'on' || agent.acting === 'off') continue
+      const found = await access.forUser(agent.shareId, principal.userId).catch(() => null)
+      if (!found?.slate || found.slate.userId !== doc.ownerId) continue
+      await recordSetting(principal, agent, actWithoutAsking ? `${agent.name} acts without asking (set for the integration): its changes are made at once (destructive ones still wait).` : `${agent.name} asks first (set for the integration): each change waits on a card.`)
+    }
     return publicIntegration(doc, { cards: await gallery() })
   }
 
@@ -1346,10 +1441,11 @@ export function createConnectorService({
   async function outsideList(principal, { shareId, connectionId }) {
     const { slate } = await requireReader(principal, shareId)
     const rows = (await outside.find({ slateId: slate._id })).filter((row) => !connectionId || row.connectionId === connectionId)
+    for (const row of rows) if (row.kind === 'card') await settleStale(row)
     rows.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     const docs = await connections.find({ slateId: slate._id, status: { $ne: 'removed' } })
     const agents = []
-    for (const doc of docs) agents.push({ connectionId: doc._id, agentId: doc.agentId || null, name: doc.name, actWithoutAsking: actsWithoutAsking(doc, await integrationOf(doc)), approvers: APPROVERS.includes(doc.approvers) ? doc.approvers : 'inviter', mine: doc.ownerId === principal.userId })
+    for (const doc of docs) agents.push({ connectionId: doc._id, agentId: doc.agentId || null, name: doc.name, actWithoutAsking: actsWithoutAsking(doc, await integrationOf(doc), slate), approvers: APPROVERS.includes(doc.approvers) ? doc.approvers : 'inviter', lockedByOwner: Boolean(doc.actingLockedBy), mine: doc.ownerId === principal.userId })
     return {
       cards: rows.filter((row) => row.kind === 'card').slice(0, 50).map((row) => publicCard(row, principal.userId)),
       activity: rows.filter((row) => row.kind === 'setting').slice(0, 50).map((row) => ({ connectionId: row.connectionId, agentId: row.agentId, text: row.text, by: row.by, at: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt })),
@@ -1357,9 +1453,16 @@ export function createConnectorService({
     }
   }
 
-  // Its waiting cards go with an agent that leaves a slate.
+  // Its waiting cards go with an agent that leaves a slate. → how many were being made right then
+  // (those cannot be stopped: they finish, and their cards say how it went).
   async function declineWaiting(doc, principal) {
-    for (const card of await outside.find({ connectionId: doc._id })) if (card.kind === 'card') await declineRow(card, principal)
+    let running = 0
+    for (const card of await outside.find({ connectionId: doc._id })) {
+      if (card.kind !== 'card') continue
+      await declineRow(card, principal)
+      if (card.state === 'running') running++
+    }
+    return running
   }
 
   // ---------- signing in ----------

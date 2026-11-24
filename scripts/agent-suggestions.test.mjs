@@ -703,3 +703,24 @@ test("a host's gate (deps.suggestionGate) decides first: Keep keeps only what it
   await decide(w, person(), { decision: "discard", actionId: second.body.suggestion.actionId });
   assert.deepEqual(seen.map(([d]) => d), ["keep", "keep", "undo", "undo"]);
 });
+
+test("a host's gate on discard holds what it cannot decline (a change being made outside): the rest is discarded, held[] says why", async (t) => {
+  const w = world();
+  t.after(() => w.close());
+  const agent = await w.principalFor(["slates:read", "slates:write"]);
+  const out = await edit(w, agent, [add("A note"), add("A running card")]);
+  const { actionId, items } = out.body.suggestion;
+  const [note, card] = items;
+  w.deps.suggestionGate = async (principal, slate, choice) => (choice.decision === "discard" ? { itemIds: [note.id], held: [{ itemId: card.id, reason: "It is being made right now and cannot be stopped." }] } : null);
+  const all = await decide(w, person(), { decision: "discard", actionId });
+  assert.deepEqual(all.body.discarded.map((d) => d.itemId ?? d), [note.id]);
+  assert.deepEqual(all.body.held, [{ itemId: card.id, reason: "It is being made right now and cannot be stopped." }]);
+  // nothing let through: nothing discarded
+  w.deps.suggestionGate = async () => ({ itemIds: [], held: [{ itemId: card.id, reason: "Still running." }] });
+  const none = await decide(w, person(), { decision: "discard", actionId, itemIds: [card.id] });
+  assert.deepEqual([none.body.discarded, none.body.held[0].reason], [[], "Still running."]);
+  // the held card can still be decided later (it was never discarded)
+  w.deps.suggestionGate = null;
+  const later = await decide(w, person(), { decision: "discard", actionId, itemIds: [card.id] });
+  assert.deepEqual(later.body.discarded.map((d) => d.itemId ?? d), [card.id]);
+});

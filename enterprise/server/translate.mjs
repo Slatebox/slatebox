@@ -25,7 +25,7 @@ import { resultsEnvelope, resultsSummary, safeLink } from './results.mjs'
 
 export const PLAN_LIMITS = Object.freeze({ calls: 3, writes: 3, rounds: 2, groups: 6, notesPerGroup: 12, linesPerGroup: 24, noteChars: 400, labelChars: 60, sayChars: 240 })
 export const SHAPES = ['rectangle', 'roundedrectangle', 'ellipse', 'diamond']
-const NOTE = Object.freeze({ width: 200, height: 90, gap: 40, columns: 3, groupGap: 120 })
+const NOTE = Object.freeze({ width: 200, wideWidth: 360, height: 90, gap: 40, columns: 3, groupGap: 120 })
 
 export class TranslateProblem extends Error {
   constructor(code, message) {
@@ -330,7 +330,11 @@ function placeNotes(group) {
   }
   const columns = group.layout === 'row' || group.layout === 'flow' ? group.notes.length : group.layout === 'column' ? 1 : Math.min(NOTE.columns, group.notes.length)
   // Taller notes for longer text (about 24 characters a line at the default size), rows as tall as their tallest note.
-  const heightOf = (n) => Math.min(400, Math.max(NOTE.height, 30 + 28 * Math.ceil(n.text.length / 24)))
+  // An action card (wide) is wider and as tall as its words need: it shows everything its change sends.
+  const widthOf = (n) => (n.wide ? NOTE.wideWidth : NOTE.width)
+  const heightOf = (n) => (n.wide
+    ? Math.min(1400, Math.max(NOTE.height, 30 + 26 * String(n.text).split('\n').reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 40)), 0)))
+    : Math.min(400, Math.max(NOTE.height, 30 + 28 * Math.ceil(n.text.length / 24))))
   const rows = []
   group.notes.forEach((n, index) => {
     const row = Math.floor(index / columns)
@@ -339,7 +343,7 @@ function placeNotes(group) {
   const top = (row) => rows.slice(0, row).reduce((sum, h) => sum + h + NOTE.gap, 0)
   return group.notes.map((n, index) => ({
     ...n,
-    at: { x: (index % columns) * (NOTE.width + NOTE.gap), y: top(Math.floor(index / columns)), width: NOTE.width, height: heightOf(n) },
+    at: { x: (index % columns) * (Math.max(...group.notes.map(widthOf)) + NOTE.gap), y: top(Math.floor(index / columns)), width: widthOf(n), height: heightOf(n) },
   }))
 }
 

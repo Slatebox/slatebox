@@ -15949,7 +15949,7 @@
             "items": {
               "type": "object"
             },
-            "description": "keep: waiting items that stand for a change outside Slatebox (an action card) and were not approved, each with why (approve each card on its own; only its inviter approves unless they let others)."
+            "description": "keep: waiting items that stand for a change outside Slatebox (an action card) and were not approved, each with why (approve each card on its own; only its inviter approves unless they let others). discard: cards whose change is being made right now (they cannot be stopped) or was already made."
           }
         },
         "required": [

@@ -35,7 +35,8 @@ const REPO = 'Try naming the repository (owner/name).'
 // The repositories a pull request search names (organization repositories included), from its text.
 const PR_REPOS = 're:"repository_url"\\s*:\\s*"https://api\\.github\\.com/repos/([A-Za-z0-9-]+/[A-Za-z0-9._-]+)"'
 const ITEM_NOTE = (label) => ({ list: 'items[*]', text: '{repo} #{number} · {title}', link: 'html_url', maxNotes: 6, label })
-const ISSUE_WORDS = '\\b(file|open|create|log|raise|add|make|report|track|write up)\\b.*\\b(issues?|bugs?|tickets?|tasks?)\\b'
+// Tried on the request's clauses that ask for a change (tools.mjs changeClauses), each starting with its verb.
+const ISSUE_WORDS = '^(file|open|create|log|raise|add|make|report|track|write up)\\b.*\\b(issues?|bugs?|tickets?|tasks?)\\b'
 const COMMENT_WORDS = '\\b(comment|reply)\\b'
 
 export const GALLERY = Object.freeze([

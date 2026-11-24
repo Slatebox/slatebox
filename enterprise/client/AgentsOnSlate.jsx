@@ -182,7 +182,7 @@ AgentsOnSlate.propTypes = {
  * agents.chip: an invited agent's own part of its roster chip's popover: what it adds and sees, how to
  * ask it (Ask in chat opens Ask Slatebox replying to it), and Sign in again, Renew Pro, Remove.
  */
-const CARD_WORDS = { waiting: 'Waiting', running: 'Sending', done: 'Done', failed: 'Failed', declined: 'Declined' }
+const CARD_WORDS = { waiting: 'Waiting', running: 'Sending', done: 'Done', failed: 'Failed', unclear: 'Not sure it was made', declined: 'Declined' }
 
 /** An invited agent's changes outside Slatebox on this slate, and how they are approved. */
 export function AgentChanges({ c, shareId, canEdit, waiting }) {
@@ -219,17 +219,21 @@ export function AgentChanges({ c, shareId, canEdit, waiting }) {
         <Box key={card.cardId} sx={{ py: 0.5, borderTop: '1px solid', borderColor: 'divider' }} data-agent-change={card.state}>
           <Typography variant="body2"><b>{CARD_WORDS[card.state] || card.state}</b> · {card.label}{card.preview?.item ? ` ${card.preview.item}` : ''}{card.preview?.title ? `: ${card.preview.title}` : ''}</Typography>
           {card.preview?.target && <Typography variant="caption" color="text.secondary" component="div">{card.preview.target}</Typography>}
+          {/* Everything approving it sends, in full, while it waits. */}
+          {(card.state === 'waiting' || card.state === 'failed') && card.preview?.body && <Typography variant="caption" component="div" sx={{ whiteSpace: 'pre-wrap' }} data-agent-change-body="">{card.preview.body}</Typography>}
+          {(card.state === 'waiting' || card.state === 'failed') && (card.preview?.more || []).map((line) => <Typography key={line} variant="caption" color="text.secondary" component="div" data-agent-change-more="">{line}</Typography>)}
           {card.destructive && card.state === 'waiting' && <Typography variant="caption" color="error" component="div">Deletes, closes or merges something; Slatebox cannot undo it.</Typography>}
-          {card.state === 'failed' && <Typography variant="caption" component="div">{card.error}</Typography>}
+          {(card.state === 'failed' || card.state === 'unclear') && <Typography variant="caption" component="div">{card.error}</Typography>}
+          {card.state === 'unclear' && <Typography variant="caption" color="text.secondary" component="div">Look in {card.system} first: it may already be there.</Typography>}
           {card.link && <Typography variant="caption" component="div"><a href={card.link} target="_blank" rel="noopener noreferrer">{card.link}</a></Typography>}
           {card.actedWithoutAsking && <Typography variant="caption" color="text.secondary" component="div">Done without asking.</Typography>}
-          {(card.state === 'waiting' || card.state === 'failed') && canEdit && (
+          {['waiting', 'failed', 'unclear'].includes(card.state) && canEdit && (
             <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
-              {mayApprove && <Button size="small" variant="contained" disabled={busy} data-agent-change-approve="" onClick={run(() => Meteor.callAsync('connectors.approve', { cardId: card.cardId }))}>{card.state === 'failed' ? 'Try again' : 'Approve'}</Button>}
-              <Button size="small" disabled={busy} data-agent-change-decline="" onClick={run(() => Meteor.callAsync('connectors.decline', { cardId: card.cardId }))}>Decline</Button>
+              {mayApprove && <Button size="small" variant={card.state === 'unclear' ? 'outlined' : 'contained'} disabled={busy} data-agent-change-approve="" onClick={run(() => Meteor.callAsync('connectors.approve', { cardId: card.cardId, ...(card.state === 'unclear' && { again: true }) }))}>{card.state === 'unclear' ? 'Try again anyway' : card.state === 'failed' ? 'Try again' : 'Approve'}</Button>}
+              <Button size="small" disabled={busy} data-agent-change-decline="" onClick={run(() => Meteor.callAsync('connectors.decline', { cardId: card.cardId }))}>{card.state === 'unclear' ? 'Dismiss' : 'Decline'}</Button>
             </Box>
           )}
-          {(card.state === 'waiting' || card.state === 'failed') && !mayApprove && <Typography variant="caption" color="text.secondary" component="div">Only {c.inviterName || 'the person who invited it'} can approve it.</Typography>}
+          {['waiting', 'failed', 'unclear'].includes(card.state) && !mayApprove && <Typography variant="caption" color="text.secondary" component="div">Only {c.inviterName || 'the person who invited it'} can approve it.</Typography>}
         </Box>
       ))}
       {(c.mine || owner) && agent && (
@@ -238,12 +242,14 @@ export function AgentChanges({ c, shareId, canEdit, waiting }) {
             inputProps={{ 'data-agent-acting': '' }}
             onChange={(e) => run(() => Meteor.callAsync('connectors.setActing', { connectionId: c._id, actWithoutAsking: e.target.value }))()}>
             <MenuItem value="off">Ask first: each waits on a card</MenuItem>
-            <MenuItem value="on" disabled={!c.mine}>Act without asking (not deleting, closing or merging)</MenuItem>
+            <MenuItem value="on" disabled={!c.mine || agent.lockedByOwner}>Act without asking (not deleting, closing or merging)</MenuItem>
+            {owner && agent.lockedByOwner && <MenuItem value="inherit">Let {c.inviterName || 'its inviter'} choose again</MenuItem>}
           </TextField>
+          {agent.lockedByOwner && <Typography variant="caption" color="text.secondary" component="div" data-agent-acting-locked="">{owner ? `You turned acting without asking off here; ${c.inviterName || 'its inviter'} cannot turn it back on until you let them.` : 'This slate\'s owner turned acting without asking off here.'}</Typography>}
           <TextField select size="small" label="Who approves" value={agent.approvers} inputProps={{ 'data-agent-approvers': '' }}
             onChange={(e) => run(() => Meteor.callAsync('connectors.setActing', { connectionId: c._id, approvers: e.target.value }))()}>
             <MenuItem value="inviter">{c.mine ? 'Only me' : `Only ${c.inviterName || 'its inviter'}`}</MenuItem>
-            <MenuItem value="editors" disabled={!c.mine}>Anyone who can edit</MenuItem>
+            <MenuItem value="editors">Anyone who can edit</MenuItem>
           </TextField>
         </Box>
       )}
