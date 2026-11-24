@@ -75,8 +75,9 @@ test("the app delegates live operation execution to SlateboxJS", async () => {
     source,
     // RESTATED: the executor also passes replay, which the run listener sets
     // for a saved run's carried-out plan (review-P03 F2), and send, which it
-    // sets false for a visitor with no account (fix/agent-edits-live).
-    /SlateOperations\.applySlateOperations\(slate, plan, \{ userMessage, replay, send \}\)/,
+    // sets false for a visitor with no account (fix/agent-edits-live), and, when given, as: whose undo step
+    // a saved run is on this page ("own" or "others", first-class undo).
+    /SlateOperations\.applySlateOperations\(slate, plan, \{ userMessage, replay, send, \.\.\.\(as \? \{ as \} : \{\}\) \}\)/,
   );
   assert.doesNotMatch(source, /function addNodes|function updateNodes/);
 });
