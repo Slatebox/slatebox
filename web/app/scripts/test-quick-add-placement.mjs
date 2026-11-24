@@ -52,9 +52,10 @@ const addTransformed = addSrc
   .replace("import cloneDeep from 'lodash.clonedeep'", 'const cloneDeep = (o) => (o === undefined ? o : structuredClone(o))')
   .replace("import { Slatebox } from 'slateboxjs'", '')
   .replace("import defaultShapes from './defaultShapes'", `import defaultShapes from '${pathToFileURL(path.join(nodeDir, 'defaultShapes.js')).href}'`)
+  // Whatever addNote takes from noteStyle (dockNoteStyle, and stickyNoteLook for the + menu Sticky Note).
   .replace(
-    "import { dockNoteStyle } from '../../common/noteStyle.mjs'",
-    `import { dockNoteStyle } from '${pathToFileURL(path.join(appRoot, 'imports/ui/common/noteStyle.mjs')).href}'`
+    /from '\.\.\/\.\.\/common\/noteStyle\.mjs'/,
+    `from '${pathToFileURL(path.join(appRoot, 'imports/ui/common/noteStyle.mjs')).href}'`
   )
   .replace("import pathAtOrigin from './pathAtOrigin'", `import pathAtOrigin from '${pathToFileURL(pathOut).href}'`)
 const leftover = addTransformed.split('\n').filter((l) => /^import /.test(l) && !l.includes('file://'))
