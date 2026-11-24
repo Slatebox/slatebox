@@ -105,10 +105,17 @@ export function createLibraryCore(deps) {
     copyPresentation = async () => {}, applyWorkshopOperations = null, refineWithAI = async () => ({ reply: '' }), notify = async () => {},
     listingGate = null, generateShareId, newId, now = Date.now, appOrigin = () => '', samples = {},
     countReviewers = async () => Number.POSITIVE_INFINITY,
+    // Whether people on a slate paused its agents (agents.control): an agent's call that changes that slate is refused,
+    // as its slates.applyOperations is (423 agents_paused).
+    agentsPaused = async () => false,
   } = deps
   const at = () => new Date(now())
 
   const isReviewer = async (userId) => Boolean(userId && (await isLibraryReviewer(userId)))
+  async function agentsGate(principal, slate) {
+    if (principal?.kind === 'agent' && slate?._id && (await agentsPaused(slate._id)))
+      throw fail(423, 'agents_paused', 'People on this slate paused its agents. Ask one of them to resume agents, then retry.')
+  }
   async function requireReviewer(principal) {
     if (!(await isReviewer(principal?.userId))) throw fail(403, 'reviewer_required', 'Only an administrator of this server reviews library submissions.')
   }
@@ -349,6 +356,7 @@ export function createLibraryCore(deps) {
       throw fail(409, 'slate_changed', 'The slate changed since you read it. Read it again and send its revision.', { revision: slate.revision ?? 0 })
     const placed = componentPlacing(slate, workshop)
     if (mode === 'preview') return { shareId: slate.shareId, revision: slate.revision ?? 0, boardId: placed.boardId, itemId: item._id, version: version.n, canvas: { workshop, origin: placed.origin } }
+    await agentsGate(principal, slate)
     let made = placed
     let saved
     try {
@@ -706,7 +714,10 @@ export function createLibraryCore(deps) {
         const lines = rulebook().diff(before, after).lines
         if (lines.length) diff.rules = lines
       } catch { /* a board without a rulebook has no rule lines to show */ }
-      if (mode === 'save') applied = await applyWorkshopOperations({ slate, token, plan, dryRun: false, key: newId(), ruleActor: { by: actor.name, via: 'chat' } })
+      if (mode === 'save') {
+        await agentsGate(principal, slate)
+        applied = await applyWorkshopOperations({ slate, token, plan, dryRun: false, key: newId(), ruleActor: { by: actor.name, via: 'chat' } })
+      }
     }
     await log(item, 'refine_proposed', { kind: local ? 'system' : 'ai', userId: null, name: 'Slatebox' }, {
       message: message, ...(Object.keys(diff).length && { diff }), ...(raw?.ai && { ai: raw.ai }),

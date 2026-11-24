@@ -12,7 +12,7 @@ export const libraryFork = defineAction({
   id: 'library.fork',
   title: 'Use a library item',
   description:
-    'Use a library item: a slate or presentation becomes a new private slate of yours (a presentation with its deck), and a smart component goes onto a new slate, or beside the boards of a slate you can edit (targetShareId; a slate holds up to 8 boards, past that 409 component_opens_new_slate). The copy remembers where it came from. Preview first to see the board and where it goes (canvas); save makes it. topic names the board ("Retro: Q3 launch").',
+    'Use a library item: a slate or presentation becomes a new private slate of yours (a presentation with its deck), and a smart component goes onto a new slate, or beside the boards of a slate you can edit (targetShareId; a slate holds up to 8 boards, past that 409 component_opens_new_slate; an agent gets 423 agents_paused while people there paused agents). The copy remembers where it came from. Preview first to see the board and where it goes (canvas); save makes it. topic names the board ("Retro: Q3 launch").',
   scope: 'slates:write',
   principals: ['person', 'guest', 'agent'],
   modes: ['save', 'preview'],

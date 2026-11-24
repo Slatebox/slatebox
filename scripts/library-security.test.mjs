@@ -238,3 +238,22 @@ test("a published board says 'The author' for who set its rules; a published sla
   const slate = snapshotSlate({ _id: "s", options: { name: "Plan", creationBrief: "Plan Q1 layoffs: Bob 120k", collabBaseline: { nodes: [] }, templatePrompt: "x" }, nodes: [] });
   assert.deepEqual([slate.options.creationBrief, slate.options.collabBaseline, slate.options.templatePrompt], [undefined, undefined, undefined]);
 });
+
+test("an agent adds a library board to a slate, or keeps a refinement, only while people there have not paused agents", async (t) => {
+  const paused = new Set();
+  const env = await setup(t, { agentsPaused: async (slateId) => paused.has(slateId) });
+  const { world, run } = env;
+  const agent = await world.principalFor(["slates:read", "slates:write"], "owner");
+  const demo = world.slate("demo");
+  paused.add(demo._id);
+  const preview = await run(agent, "library.fork", { itemId: "retro", targetShareId: "demo", mode: "preview" });
+  assert.ok(preview.canvas.workshop, "a preview saves nothing, so it is not held");
+  const before = world.slate("demo").revision;
+  await assert.rejects(run(agent, "library.fork", { itemId: "retro", targetShareId: "demo" }), { status: 423, code: "agents_paused" });
+  assert.equal(world.slate("demo").revision, before, "nothing saved");
+  // A person on the slate is never held by the agents' pause.
+  const ada = env.person("owner");
+  assert.ok((await run(ada, "library.fork", { itemId: "retro", targetShareId: "demo" })).boardId);
+  paused.delete(demo._id);
+  assert.ok((await run(agent, "library.fork", { itemId: "retro", targetShareId: "demo" })).boardId, "resumed: the agent adds it");
+});

@@ -83,6 +83,8 @@ export function createAppLibrary(shared) {
     now: Date.now,
     appOrigin: shared.appOrigin,
     samples: catalogSamples,
+    // deps.suggestions is set once the agents' suggestion store starts (server/agents/suggestions-meteor.js).
+    agentsPaused: async (slateId) => Boolean(shared.suggestions && (await shared.suggestions.controlsOf(slateId))?.paused),
   })
 }
 

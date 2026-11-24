@@ -135,7 +135,7 @@ let counter = 0;
  * the rest of the world uses, and who reviews. → { library, items, versions, events, notices, decks, ready } (ready: the seed).
  */
 export function makeLibrary({ slates, saveCore, reviewers = ["admin"], users = {}, teamAdmins = [], resolveSlateForUser, latestPresentation, publishedPresentation,
-  copyPresentation, applyWorkshopOperations, refineWithAI, listingGate, now = () => Date.parse("2026-11-23T12:00:00.000Z"), seed = true } = {}) {
+  copyPresentation, applyWorkshopOperations, refineWithAI, listingGate, agentsPaused, now = () => Date.parse("2026-11-23T12:00:00.000Z"), seed = true } = {}) {
   const items = libraryCollection();
   const versions = libraryCollection();
   const events = libraryCollection();
@@ -161,6 +161,7 @@ export function makeLibrary({ slates, saveCore, reviewers = ["admin"], users = {
     applyWorkshopOperations: applyWorkshopOperations || null,
     ...(refineWithAI && { refineWithAI }),
     ...(listingGate && { listingGate }),
+    ...(agentsPaused && { agentsPaused }),
     notify: async (notice) => { notices.push({ type: notice.type, itemId: notice.item._id, message: notice.message }); },
     generateShareId: async () => "lib" + (++share),
     newId: () => "id" + String(++counter).padStart(8, "0"),
