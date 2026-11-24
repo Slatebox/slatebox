@@ -30,8 +30,12 @@ async function dismissWelcome(page) {
   if (await ok.waitFor({ timeout: 4000 }).then(() => true, () => false)) await ok.click()
 }
 
+// The slate's canvas is drawn: it holds a note, or (a new slate opens empty) it shows the
+// "Your slate is ready" welcome in its middle (SlateWelcome.jsx, which appears only once the
+// empty canvas has settled).
 const canvasReady = page => page.waitForFunction(() =>
-  window.__slateboxInstances?.some(slate => slate.element?.id === 'slateCanvas' && slate.nodes.allNodes.length > 0),
+  window.__slateboxInstances?.some(slate => slate.element?.id === 'slateCanvas' && slate.nodes.allNodes.length > 0) ||
+  [...document.querySelectorAll('[data-slate-welcome] h2')].some(heading => heading.textContent.trim() === 'Your slate is ready'),
 null, { timeout: 90_000 })
 
 /** The text of every note on the open slate, as the canvas engine holds it. */
@@ -58,10 +62,14 @@ export async function openSlate(page, url) {
   await dismissWelcome(page)
 }
 
-/** Type into the first note the way a person does: double-click, type, Enter. */
+/**
+ * Type into the first note the way a person does: double-click, type, Enter. On an empty slate
+ * the first note comes from the welcome's Add a note, which opens it for typing.
+ */
 export async function writeNote(page, text) {
   const note = page.locator('#slateCanvas [data-node-id]').first()
-  await note.dblclick()
+  if (await note.count()) await note.dblclick()
+  else await page.locator('[data-slate-welcome]').getByRole('button', { name: 'Add a note', exact: true }).click()
   const editor = page.locator('#slateCanvas [contenteditable="true"]').first()
   await editor.waitFor({ timeout: 15_000 })
   await editor.fill(text)

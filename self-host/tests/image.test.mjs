@@ -8,6 +8,9 @@ import { IMAGE, docker, ok } from './lib.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const appTree = join(here, '../../web/app')
+// Meteor serves web/app/public from here; the app's fonts are in its fonts/ folder.
+const APP_FONTS = '/opt/slatebox/app/bundle/programs/web.browser/app/fonts'
+const APP_FONT_FAMILIES = readdirSync(join(appTree, 'public/fonts'), { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name)
 
 // Read-only look inside the image, as root so that no directory is skipped.
 // No Slatebox process is started and the container has no network.
@@ -50,7 +53,7 @@ test('license notices say which parts are MIT and which are not', async () => {
     './third-party/mongodb-server-SSPL.txt', './third-party/mongodb-database-tools-LICENSE.md',
     './third-party/caddy-LICENSE.txt', './third-party/node-LICENSE.txt', './third-party/meteor-LICENSE.txt',
     './third-party/tini-LICENSE.txt', './third-party/fonts.md', './third-party/fonts-OFL-1.1.txt', './third-party/fonts-Apache-2.0.txt',
-    './third-party/interface-fonts.md', './third-party/mongodb-server-third-party.md',
+    './third-party/mongodb-server-third-party.md',
     './third-party/mongodb-database-tools-THIRD-PARTY-NOTICES.txt',
   ]) assert.ok(files.includes(file), `${file} is in the image`)
   // Every file NOTICE.md names under third-party/ is in the image.
@@ -66,24 +69,31 @@ test('license notices say which parts are MIT and which are not', async () => {
     assert.match(fonts, new RegExp(`^\\| ${family} \\| Copyright .+ \\| (SIL Open Font License 1\\.1|Apache License 2\\.0) \\|`, 'm'))
   }
   assert.match((await inside('head -c 200 /opt/slatebox/licenses/third-party/fonts-OFL-1.1.txt')).stdout, /SIL OPEN FONT LICENSE Version 1\.1/)
-  // The interface fonts browsers load from the instance are listed the same way.
-  const interfaceFonts = (await inside('cat /opt/slatebox/licenses/third-party/interface-fonts.md')).stdout
-  for (const family of ['Manrope', 'Readex Pro']) {
-    assert.match(interfaceFonts, new RegExp(`^\\| ${family} \\| Copyright .+ \\| SIL Open Font License 1\\.1 \\|`, 'm'))
+  // The interface and note fonts browsers load from the instance are the app's own
+  // (web/app/public/fonts): NOTICE.md names them, and each family's folder carries its OFL.txt.
+  assert.match(notice, /Interface and note fonts .*SIL Open Font License 1\.1/)
+  for (const family of APP_FONT_FAMILIES) {
+    const ofl = (await inside(`cat ${APP_FONTS}/${family}/OFL.txt`)).stdout
+    assert.match(ofl, /Copyright/, `${family}/OFL.txt names the copyright`)
+    assert.match(ofl, /SIL OPEN FONT LICENSE Version 1\.1/i, `${family}/OFL.txt is the OFL 1.1`)
   }
   const heads = (await inside('cd /opt/slatebox/licenses && head -c 200 slatebox-app-LICENSE.md slateboxjs-LICENSE.txt third-party/mongodb-server-SSPL.txt')).stdout
   assert.match(heads, /MIT License[\s\S]*MIT License[\s\S]*Server Side Public License/)
 })
 
-test('the interface fonts are served from the image, not from Google', async () => {
-  const css = (await inside('cat /opt/slatebox/share/fonts/fonts.css')).stdout
-  assert.match(css, /font-family: 'Manrope'/)
-  assert.match(css, /font-family: 'Readex Pro'/)
+// The app serves its own interface and note fonts at /fonts/ (web/app/public/fonts, linked from
+// client/main.html); the image neither fetches them nor serves them from a path of its own.
+test('the interface fonts are the app\'s own, served at /fonts/, not from Google', async () => {
+  const css = (await inside(`cat ${APP_FONTS}/fonts.css`)).stdout
+  assert.equal(css, readFileSync(join(appTree, 'public/fonts/fonts.css'), 'utf8'), 'the image serves the app\'s fonts.css')
+  for (const family of ['Manrope', 'Lora', 'Courier Prime', 'Caveat']) assert.match(css, new RegExp(`font-family: '${family}'`))
   assert.doesNotMatch(css, /https?:\/\//, 'the stylesheet names no outside address')
-  const sources = [...css.matchAll(/url\(\/_fonts\/([^)]+)\)/g)].map(match => match[1])
+  const sources = [...css.matchAll(/url\('([^')]+)'\)/g)].map(match => match[1])
   assert.ok(sources.length >= 10, `${sources.length} font files are named`)
-  const files = (await inside('ls /opt/slatebox/share/fonts')).stdout.trim().split('\n')
-  for (const file of sources) assert.ok(files.includes(file), `${file} is in the image`)
+  const files = new Set((await inside(`cd ${APP_FONTS} && find . -type f`)).stdout.trim().split('\n').map(file => file.replace(/^\.\//, '')))
+  for (const file of sources) assert.ok(files.has(file), `${file} is in the image`)
+  // The old setup (fonts fetched at build time, served at /_fonts/) is gone.
+  assert.equal((await inside('test -e /opt/slatebox/share/fonts && echo present || echo absent')).stdout.trim(), 'absent')
 })
 
 test('no settings file, environment file or private key is in the image', async () => {
