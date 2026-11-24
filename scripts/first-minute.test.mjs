@@ -203,8 +203,8 @@ test('#15 one way to browse at a time: no strip under the library or under the f
 test('#6 a new slate starts with no note; a designed welcome invites the first action', () => {
   const create = app('imports/api/client/createSlate.js')
   assert.doesNotMatch(create, /'Welcome!'/)
-  // A theme still styles a first note (it is what the theme is applied to); a plain slate starts empty.
-  assert.match(create, /if \(createWithTheme\) \{/)
+  // A new slate starts empty: nothing makes a first note for it.
+  assert.doesNotMatch(create, /new Slatebox\.node\(/)
   const welcome = ui('components/SlateWelcome.jsx')
   assert.match(welcome, /Your slate is ready/)
   assert.match(welcome, /Add a note/)

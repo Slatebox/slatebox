@@ -20,7 +20,7 @@ import {
 import { Meteor } from 'meteor/meteor'
 import Pulse from '../../common/Pulse'
 
-export default function CanvasAIIntentions({ themes, templates }) {
+export default function CanvasAIIntentions({ templates }) {
   const [currentAIContext, setAIContext] = useAtom(createSlateWithAIContent)
   const theme = useTheme()
   const mdmq = useMediaQuery(theme.breakpoints.up('md'))
@@ -80,7 +80,6 @@ export default function CanvasAIIntentions({ themes, templates }) {
     setCustomAIOpen({
       open: !slate?.options?.basedOnTemplate,
       autoOpenAIConversation: !!slate?.options?.basedOnTemplate,
-      themes,
       templates,
     })
     // }

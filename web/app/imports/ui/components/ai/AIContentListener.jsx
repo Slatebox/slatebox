@@ -48,7 +48,7 @@ export default function AIContentListener({
     [onAIContextChange, setAtomAIContext]
   )
   const setHuddleEnabled = useSetAtom(huddleEnabled)
-  const { themes, templates } = useAtomValue(isCanvasAICustomActionsOpen)
+  const { templates } = useAtomValue(isCanvasAICustomActionsOpen)
   const setSlateAudioURL = useSetAtom(currentSlateAudioUrl)
   // console.log('ailistener context', currentAIContext)
   const setAllowance = useSetAtom(allowance)
@@ -240,16 +240,6 @@ export default function AIContentListener({
                 ),
                 availableVects
               )
-              if (currentAIContext.themeId) {
-                const slateTheme = await Meteor.callAsync(
-                  CONSTANTS.methods.themes.getThemes,
-                  { themeId: currentAIContext.themeId }
-                )
-                if (slateTheme) {
-                  slate?.applyTheme(slateTheme)
-                }
-              }
-
               redoLayout(uq >= 3)
             }
             break
@@ -320,7 +310,6 @@ export default function AIContentListener({
                     ),
                     doc.mainNodeId,
                     doc.isParent ?? false,
-                    themes,
                     templates,
                     collaboratorInstanceId
                   )

@@ -77,12 +77,6 @@ const saveSlateLite = async ({
     ...(keepProof && { keepProof }),
   })
   rememberSaveBase(slate, exportedSlate)
-  // auto save theme as well if need be
-  if (slate.options.eligibleForThemeCompilation) {
-    await Meteor.callAsync(CONSTANTS.methods.themes.parseSlateIntoTheme, {
-      slateId: slate.options.id,
-    })
-  }
 
   return keepProof ? result : true
 }

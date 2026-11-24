@@ -1,6 +1,5 @@
 // Delete a slate, for agents: the rule the Slates page's Delete follows (slates.remove). Only
-// the slate's owner may, and a theme other slates are built on stays. Deleting takes the slate's
-// sharing, comments and messages with it. In an exec script it is held for the person to agree.
+// the slate's owner may. Deleting takes the slate's sharing, comments and messages with it. In an exec script it is held for the person to agree.
 import { defineAction } from './registry.mjs'
 import { problem } from './errors.mjs'
 import { loadSlate } from './slate-access.mjs'
@@ -10,7 +9,7 @@ export default defineAction({
   id: 'slates.delete',
   title: 'Delete slate',
   description:
-    'Delete one of your own slates, with its sharing, comments and messages. Only the slate\'s owner can, and a theme other slates are built on cannot be deleted. This cannot be undone.',
+    'Delete one of your own slates, with its sharing, comments and messages. Only the slate\'s owner can. This cannot be undone.',
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:delete',
@@ -33,9 +32,7 @@ export default defineAction({
   },
   tool: { name: 'delete_slate', title: 'Delete a slate', description: 'Delete one of the person\'s own slates. This cannot be undone.' },
   async handler(_principal, input, { deps, resource: slate }) {
-    const result = await deps.deleteSlate(slate)
-    if (result?.themeInUse)
-      throw problem(409, 'conflict', 'This slate is a theme other slates are built on: it cannot be deleted.')
+    await deps.deleteSlate(slate)
     return { shareId: input.shareId, deleted: true }
   },
 })

@@ -6,7 +6,6 @@ import { Organizations, OrganizationSettings } from '../common/models'
 import CONSTANTS from '../common/constants'
 import { createAINodes } from '../common/ai'
 import defaultShapes from '../../ui/components/node/defaultShapes'
-import { DEFAULT_NOTE } from '../../ui/common/canvasTheme.mjs'
 import { presetNoteStyle } from '../../ui/common/noteStyle.mjs'
 
 async function createSlate(
@@ -14,7 +13,6 @@ async function createSlate(
   events,
   isNew,
   isGuest,
-  createWithTheme,
   currentAIContext
 ) {
   let publicDefault = false
@@ -97,80 +95,78 @@ async function createSlate(
     backgroundGradientStrategy: 'shades',
   }
 
-  if (!createWithTheme) {
-    // Apply default preset background if available
-    if (defaultPreset?.value?.background) {
-      const presetBg = defaultPreset.value.background
-      containerStyle = {
-        ...containerStyle,
-        backgroundColor: presetBg.colorValue || containerStyle.backgroundColor,
-        backgroundImage:
-          presetBg.backgroundImage || containerStyle.backgroundImage,
-        backgroundSize:
-          presetBg.backgroundSize || containerStyle.backgroundSize,
-        backgroundEffect:
-          presetBg.backgroundEffect || containerStyle.backgroundEffect,
-        backgroundColorAsGradient:
-          presetBg.backgroundColorAsGradient != null
-            ? presetBg.backgroundColorAsGradient
-            : containerStyle.backgroundColorAsGradient,
-        backgroundGradientType:
-          presetBg.gradientConfig?.gradientType ||
-          containerStyle.backgroundGradientType,
-        // backgroundGradientColors: // Handled below
-        //   presetBg.gradientConfig?.gradientColors ||
-        //   containerStyle.backgroundGradientColors,
-        backgroundGradientStrategy:
-          presetBg.gradientConfig?.gradientStrategy ||
-          containerStyle.backgroundGradientStrategy,
-      }
+  // Apply default preset background if available
+  if (defaultPreset?.value?.background) {
+    const presetBg = defaultPreset.value.background
+    containerStyle = {
+      ...containerStyle,
+      backgroundColor: presetBg.colorValue || containerStyle.backgroundColor,
+      backgroundImage:
+        presetBg.backgroundImage || containerStyle.backgroundImage,
+      backgroundSize:
+        presetBg.backgroundSize || containerStyle.backgroundSize,
+      backgroundEffect:
+        presetBg.backgroundEffect || containerStyle.backgroundEffect,
+      backgroundColorAsGradient:
+        presetBg.backgroundColorAsGradient != null
+          ? presetBg.backgroundColorAsGradient
+          : containerStyle.backgroundColorAsGradient,
+      backgroundGradientType:
+        presetBg.gradientConfig?.gradientType ||
+        containerStyle.backgroundGradientType,
+      // backgroundGradientColors: // Handled below
+      //   presetBg.gradientConfig?.gradientColors ||
+      //   containerStyle.backgroundGradientColors,
+      backgroundGradientStrategy:
+        presetBg.gradientConfig?.gradientStrategy ||
+        containerStyle.backgroundGradientStrategy,
+    }
 
-      if (presetBg.activeType === 'gradient' && presetBg.gradientConfig) {
-        // --- MODIFIED GRADIENT LOGIC --- START ---
-        if (
-          Array.isArray(presetBg.gradientConfig.gradientColors) &&
-          presetBg.gradientConfig.gradientColors.length > 0
-        ) {
-          // Use pre-calculated colors
-          bgColors = presetBg.gradientConfig.gradientColors
-          containerStyle.backgroundColor =
-            presetBg.gradientConfig.baseColorValue ||
-            containerStyle.backgroundColor
-          containerStyle.backgroundGradientColors = bgColors
-          containerStyle.backgroundColorAsGradient = true // Ensure gradient is active
-        } else {
-          // Fallback to solid base color if pre-calculated colors are missing
-          console.warn(
-            'createSlate: Default preset uses gradient, but pre-calculated gradientColors are missing. Using solid base color.'
-          )
-          bgColors = [
-            presetBg.gradientConfig.baseColorValue ||
-              containerStyle.backgroundColor,
-          ] // Use only base color
-          containerStyle.backgroundColor = bgColors[0]
-          containerStyle.backgroundColorAsGradient = false
-          containerStyle.backgroundGradientColors = [] // Clear gradient colors
-        }
-        // --- MODIFIED GRADIENT LOGIC --- END ---
-      } else if (presetBg.activeType === 'color' && presetBg.colorValue) {
-        // Handle single color background
-        bgColors = [presetBg.colorValue] // Use only the single color
-        containerStyle.backgroundColor = presetBg.colorValue
+    if (presetBg.activeType === 'gradient' && presetBg.gradientConfig) {
+      // --- MODIFIED GRADIENT LOGIC --- START ---
+      if (
+        Array.isArray(presetBg.gradientConfig.gradientColors) &&
+        presetBg.gradientConfig.gradientColors.length > 0
+      ) {
+        // Use pre-calculated colors
+        bgColors = presetBg.gradientConfig.gradientColors
+        containerStyle.backgroundColor =
+          presetBg.gradientConfig.baseColorValue ||
+          containerStyle.backgroundColor
+        containerStyle.backgroundGradientColors = bgColors
+        containerStyle.backgroundColorAsGradient = true // Ensure gradient is active
+      } else {
+        // Fallback to solid base color if pre-calculated colors are missing
+        console.warn(
+          'createSlate: Default preset uses gradient, but pre-calculated gradientColors are missing. Using solid base color.'
+        )
+        bgColors = [
+          presetBg.gradientConfig.baseColorValue ||
+            containerStyle.backgroundColor,
+        ] // Use only base color
+        containerStyle.backgroundColor = bgColors[0]
         containerStyle.backgroundColorAsGradient = false
-        containerStyle.backgroundGradientColors = []
+        containerStyle.backgroundGradientColors = [] // Clear gradient colors
       }
-    } else if (currentAIContext?.aid) {
-      // Fallback for AI context if no preset (kept original logic)
-      bgColors = (
-        await Meteor.callAsync(CONSTANTS.methods.themes.buildColorPalette, {
-          type: 'shades',
-        })
-      ).slice(0, 5)
-      containerStyle = {
-        ...containerStyle,
-        backgroundColor: bgColors[0],
-        backgroundGradientColors: bgColors,
-      }
+      // --- MODIFIED GRADIENT LOGIC --- END ---
+    } else if (presetBg.activeType === 'color' && presetBg.colorValue) {
+      // Handle single color background
+      bgColors = [presetBg.colorValue] // Use only the single color
+      containerStyle.backgroundColor = presetBg.colorValue
+      containerStyle.backgroundColorAsGradient = false
+      containerStyle.backgroundGradientColors = []
+    }
+  } else if (currentAIContext?.aid) {
+    // Fallback for AI context if no preset (kept original logic)
+    bgColors = (
+      await Meteor.callAsync(CONSTANTS.methods.colors.buildColorPalette, {
+        type: 'shades',
+      })
+    ).slice(0, 5)
+    containerStyle = {
+      ...containerStyle,
+      backgroundColor: bgColors[0],
+      backgroundGradientColors: bgColors,
     }
   }
 
@@ -213,9 +209,8 @@ async function createSlate(
     containerStyle, // Use the calculated containerStyle
     allowCollaboration: true,
     huddleType: newSlate.options?.huddleType ?? 'audio',
-    mindMapMode: createWithTheme?.mindMapMode || true,
-    autoResizeNodesBasedOnText:
-      createWithTheme?.autoResizeNodesBasedOnText || false,
+    mindMapMode: true,
+    autoResizeNodesBasedOnText: false,
   }
   if (isNew) {
     opts.isPublic = publicDefault
@@ -249,55 +244,15 @@ async function createSlate(
         Slatebox.utils.whiteOrBlack(bgColors[0]), // Use calculated bgColor
         [defaultShapes.find((vx) => vx.key === 'star').path]
       )
-    } else if (createWithTheme) {
-      // A theme is applied to a first note (Canvas.jsx applyTheme), so a themed slate starts with one.
-      // A plain new slate starts empty: the canvas shows its welcome (ui/components/SlateWelcome.jsx)
-      // until the first note or board, so every slate is not one more lone note.
-      const initialNodeStyle = {
-        // White on a calm blue, AA in both modes (canvasTheme.mjs).
-        backgroundColor: DEFAULT_NOTE.backgroundColor,
-        opacity: 1,
-        borderOpacity: 0,
-        fontFamily: createWithTheme.styles?.parent?.fontFamily || 'Manrope',
-        foregroundColor: DEFAULT_NOTE.foregroundColor,
-        lineColor: '#000',
-        lineWidth: 5,
-        vectorPath: 'roundedrectangle',
-        fontSize: createWithTheme.styles?.parent?.fontSize
-          ? `${createWithTheme.styles.parent.fontSize}pt`
-          : '14pt',
-      }
-      const text = 'Start here'
-      const measured = Slatebox.utils.getTextWidth(
-        text,
-        `${initialNodeStyle.fontSize} ${initialNodeStyle.fontFamily}`
-      )
-      const gid = Slatebox.utils.guid(8)
-      const node = new Slatebox.node({
-        id: gid,
-        name: gid,
-        text,
-        xPos: 10000,
-        yPos: 10000,
-        // Room around the words: 20px each side.
-        height: opts.autoResizeNodesBasedOnText
-          ? createWithTheme.styles.parent.height
-          : measured.height + 40,
-        width: measured.width + 40,
-        ...initialNodeStyle,
-      })
-      slate.nodes.add(node)
     }
-
-    // if there is no theme, save the slate - theme based slates will be saved once it is applied
-    if (!createWithTheme) {
-      await saveSlateLite({
-        slate,
-        userId: newSlate.userId, // Ensure correct user ID context
-        orgId: newSlate.orgId, // Ensure correct org ID context
-        pkg: {},
-      })
-    }
+    // A plain new slate starts empty: the canvas shows its welcome (ui/components/SlateWelcome.jsx)
+    // until the first note or board, so every slate is not one more lone note.
+    await saveSlateLite({
+      slate,
+      userId: newSlate.userId, // Ensure correct user ID context
+      orgId: newSlate.orgId, // Ensure correct org ID context
+      pkg: {},
+    })
     newSlate = JSON.parse(slate.exportJSON())
   }
 

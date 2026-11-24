@@ -159,16 +159,12 @@ test("slates.copy over HTTP copies by the app's rule: your own or a public slate
   await assert.rejects(registry.run(agent("ana", ["slates:read"]), "slates.copy", { shareId: "pub" }), { code: "insufficient_scope" });
 });
 
-test("slates.delete deletes only the owner's slate, and a theme in use stays", async () => {
+test("slates.delete deletes only the owner's slate", async () => {
   const { registry, agent, deleted } = makeWorld();
   await assert.rejects(registry.run(agent("ana"), "slates.delete", { shareId: "pub" }), (error) => error.status === 403);
   assert.deepEqual(deleted, []);
   assert.deepEqual(body(await registry.run(agent("ana"), "slates.delete", { shareId: "own" })), { shareId: "own", deleted: true });
   assert.deepEqual(deleted, ["own"]);
-
-  // The refusal names no slate: a name is people's text, never a sentence in an error.
-  const theme = makeWorld({ deleteSlate: async () => ({ themeInUse: true }) });
-  await assert.rejects(theme.registry.run(theme.agent("ana"), "slates.delete", { shareId: "own" }), (error) => error.status === 409 && !/Roadmap/.test(error.message));
 });
 
 test("comments: anyone who may open the slate reads, adds and resolves; only the author removes", async () => {

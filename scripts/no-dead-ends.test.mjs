@@ -194,7 +194,7 @@ test('#19 sentence case and real ellipses in the copy people read', () => {
   assert.match(ui('Main.jsx'), /title: 'My slates'/)
   assert.match(ui('pages/Canvas.jsx'), /name: 'Untitled slate'/)
   assert.match(app('imports/api/client/createSlate.js'), /\|\| 'Untitled slate'/)
-  for (const file of ['pages/LoginLink.jsx', 'pages/VerifyEmail.jsx', 'components/slate/SlateThemes.jsx',
+  for (const file of ['pages/LoginLink.jsx', 'pages/VerifyEmail.jsx',
     'components/slate/SlateBackgrounds.jsx', 'components/teams/CreateOrganization.jsx', 'components/slate/SlateSettings.jsx']) {
     assert.doesNotMatch(ui(file), /[A-Za-z]\.\.\.['"`<]/, `${file} uses the ellipsis character`)
   }

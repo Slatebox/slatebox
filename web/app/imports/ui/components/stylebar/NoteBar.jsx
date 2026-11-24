@@ -32,11 +32,11 @@ import {
   SIZES, sizeChoice, sizePackage, selectionStyle, barControls, moreRows, panelsStillShown, fillPackages, borderPackages,
   textColourPackage, alignPackage, shapePackage, customShapePackage, fontPackage, boldPackage, effectPackage, animationPackage,
   imagePackage, linkPackage, lockPackage, orderPackage, copyStyleOf, pasteStylePackages, recentColoursAfter,
-  MIN_SIZE, MAX_SIZE,
+  MIN_SIZE, MAX_SIZE, DEFAULT_SWATCHES,
 } from '../../../api/common/note-style.mjs'
 import { recentColoursBySlate, copiedNoteStyle, globalMessage, registrationDetails } from '../../jotai/atoms'
 import { BarButton, Pop, Sheet, Choices, useRoving, focusInto } from './parts'
-import { ColourPanel, CustomColour, useSlateColours } from './ColourPanel'
+import { ColourPanel, CustomColour } from './ColourPanel'
 import { MoreRows, Back, FontPanel, PicturePanel, EffectsPanel, LinkPanel, OrderPanel } from './MoreMenu'
 import ShapeMaker, { ShapePreview } from '../shapes/ShapeMaker'
 
@@ -156,7 +156,7 @@ export default function NoteBar({
   const anchors = React.useRef({})
   const slateId = slate?.options?.id
   const [recent, addRecent] = useRecent(slateId)
-  const slateColours = useSlateColours(slate?.options?.basedOnThemeId)
+  const slateColours = DEFAULT_SWATCHES
   const v2 = slate?.v2
   const several = nodes.length > 1
   const options = nodes.map((n) => n.options)

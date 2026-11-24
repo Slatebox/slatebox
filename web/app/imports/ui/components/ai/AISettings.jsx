@@ -44,7 +44,6 @@ export default function AISettings({
   enteredPrompt,
   onChangePrompt = null,
   userAISettings = null,
-  themes,
   templates,
 }) {
   const history = useNavigate()
@@ -191,7 +190,7 @@ export default function AISettings({
     )
     history(`/canvas/${newShareId}`)
     // setTimeout(() => {
-    setCustomAIOpen({ open: true, themes, templates })
+    setCustomAIOpen({ open: true, templates })
     // setCustomAIOpen(true)
     // }, 1500)
   }
@@ -337,18 +336,6 @@ export default function AISettings({
                     currentValue={aiSettings.wordsPerNode}
                   />
                 </Grid>
-                {aiSettings.layoutStrategy !==
-                  CONSTANTS.ai.layoutStrategy.template.name && (
-                  <Grid size={6}>
-                    <AISelect
-                      aiProp="themeId"
-                      aiPropDescription="Create with theme?"
-                      onChange={(d) => updatePreference('themeId', d)}
-                      currentValue={aiSettings.themeId}
-                      availableThemes={themes}
-                    />
-                  </Grid>
-                )}
               </Grid>
             </TabPanel>
           </>
@@ -382,7 +369,6 @@ AISettings.propTypes = {
   saveLabel: PropTypes.string.isRequired,
   shareId: PropTypes.string.isRequired,
   enteredPrompt: PropTypes.string.isRequired,
-  themes: PropTypes.node.isRequired,
   templates: PropTypes.node.isRequired,
   onChangePrompt: PropTypes.func,
   userAISettings: PropTypes.node,

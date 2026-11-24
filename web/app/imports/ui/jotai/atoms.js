@@ -31,7 +31,6 @@ export const canManageHuddleTranscription = atom(false)
 
 export const isCanvasAICustomActionsOpen = atom({
   open: false,
-  themes: [],
   templates: [],
 })
 
@@ -144,8 +143,6 @@ export const slateEmbedIsIFrame = atom(true)
 
 export const canManageSlate = atom(false)
 
-export const createSlateWithTheme = atom(null)
-
 export const createSlateWithAIContent = atom(null)
 
 export const autoPopulateTemplate = atom(null)
@@ -178,7 +175,6 @@ export const currentAISettings = atom({
   url: '',
   levelOfDetail: 1,
   wordsPerNode: 5,
-  themeId: '',
 })
 
 export const pulseCurrentHelpStatus = atomWithStorage({

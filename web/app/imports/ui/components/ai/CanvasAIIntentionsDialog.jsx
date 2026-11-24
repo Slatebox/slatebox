@@ -127,10 +127,8 @@ export default function CanvasAIIntentionsDialog({ slate }) {
           title: intention.gather.title,
           message: intention.gather.message,
           captureItems: intention.gather.items,
-          allowThemeSelect: true,
           allowVoiceSwitch: true,
           showImageDropZone: intention.ai.decisionTree.inline.isVision,
-          themes: customAIOpen.themes,
           templates: customAIOpen.templates,
           footerMessage: intention.gather.footerMessage,
           actionItems: [
@@ -369,6 +367,7 @@ export default function CanvasAIIntentionsDialog({ slate }) {
                 (k) =>
                   ![
                     'val',
+                    // Older conversations kept a theme here; it is not shown.
                     'theme',
                     'template',
                     'postProcessing',

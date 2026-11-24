@@ -12,7 +12,6 @@ import { useAtom } from 'jotai'
 import SlateSettings from './slate/SlateSettings'
 import SlateColors from './slate/SlateColors'
 import SlateBackgrounds from './slate/SlateBackgrounds'
-import SlateThemes from './slate/SlateThemes'
 import GenerateNodeColors from './slate/GenerateNodeColors'
 import slateProps from '../propTypes/slateProps'
 import {
@@ -36,7 +35,7 @@ export default function SlateDrawer({
   // const expanded =
   //   useSelector((state) => state.whichSlatePanelIsExpanded) || 'settingsPanel'
   const [slateDrawerIsOpen, setSlateDrawerOpen] = useAtom(isSlateDrawerOpen)
-  // Themes, generated colours and automatic layout restyle or move every note on a slate. On a
+  // Generated colours and automatic layout restyle or move every note on a slate. On a
   // workshop slate the lanes and cards are the workshop's drawing, so these are not offered there.
   const onWorkshop = slate?.creativeKind === 'workshop'
   const [expandedPanel, setExpanded] = useAtom(whichSlatePanelIsExpanded)
@@ -48,7 +47,7 @@ export default function SlateDrawer({
       setRegistrationDetails({
         type: 'registration',
         registrationOpen: true,
-        registrationMessage: `Save your work to use themes, exports and sharing controls.`,
+        registrationMessage: `Save your work to use colors, exports and sharing controls.`,
       })
     } else {
       setExpanded(panel)
@@ -113,27 +112,6 @@ export default function SlateDrawer({
           <SlateSettings slate={slate} onChange={updateSlate} />
         </AccordionDetails>
       </Accordion>
-      {!slate?.options?.eligibleForThemeCompilation && !onWorkshop && (
-        <Accordion
-        expanded={expandedPanel === 'themePanel'}
-        onChange={handleChange('themePanel')}
-        >
-        <AccordionSummary
-          expandIcon={<ExpandMoreIcon color="secondary" />}
-          aria-controls="themePanelbh-content"
-          id="themePanelbh-header"
-        >
-          <Typography
-            sx={{ fontSize: (theme) => theme.typography.pxToRem(15) }}
-          >
-            Themes
-          </Typography>
-        </AccordionSummary>
-        <AccordionDetails sx={{ margin: (theme) => theme.spacing(1) }}>
-          <SlateThemes slate={slate} onChange={updateSlate} />
-        </AccordionDetails>
-        </Accordion>
-      )}
       <Accordion
         expanded={expandedPanel === 'colorPanel'}
         onChange={handleChange('colorPanel')}
@@ -174,7 +152,7 @@ export default function SlateDrawer({
         </AccordionDetails>
       </Accordion>
       )}
-      {!slate?.options?.eligibleForThemeCompilation && !onWorkshop && (
+      {!onWorkshop && (
         <Accordion
           expanded={expandedPanel === 'layoutPanel'}
           onChange={handleChange('layoutPanel')}

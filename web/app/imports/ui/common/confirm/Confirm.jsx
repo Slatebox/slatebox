@@ -55,7 +55,6 @@ class Confirm extends Component {
       isOpen: false,
       errorMessage: null,
       showConfirmProps: {},
-      selectedThemeId: Meteor.user()?.profile?.aiSettings?.themeId ?? '',
       selectedTemplateId: Meteor.user()?.profile?.aiSettings?.templateId ?? '',
       disableVoiceId:
         Meteor.user()?.profile?.aiSettings?.disableVoiceId ?? false,
@@ -138,17 +137,12 @@ class Confirm extends Component {
   }
 
   async handleAction(a) {
-    const { selectedThemeId, selectedTemplateId, showConfirmProps } = this.state
+    const { selectedTemplateId, showConfirmProps } = this.state
     const ret =
       Object.keys(this.return).length > 0
         ? {
             ...this.return,
             val: a.return,
-            theme: selectedThemeId
-              ? showConfirmProps.themes.find(
-                  (t) => t.themeId === selectedThemeId
-                )
-              : null,
             template: selectedTemplateId
               ? showConfirmProps.templates.find(
                   (t) => t.templateId === selectedTemplateId
@@ -248,11 +242,6 @@ class Confirm extends Component {
       })
     }
 
-    // console.log('defaultThemeId?', possibleValue?.defaultThemeId)
-    if (possibleValue?.defaultThemeId) {
-      this.setThemeForAIConversation(possibleValue.defaultThemeId)
-    }
-
     if (possibleValue?.additionalCaptureItems) {
       this.setState({
         additionalCaptureItems: possibleValue.additionalCaptureItems,
@@ -264,10 +253,6 @@ class Confirm extends Component {
       ?.validate(this.return)
 
     this.setState({ errorMessage: anyInvalid })
-  }
-
-  async setThemeForAIConversation(themeId) {
-    this.setState({ selectedThemeId: themeId })
   }
 
   async setTemplateForAIConversation(type, val) {
@@ -302,7 +287,6 @@ class Confirm extends Component {
       isOpen,
       showConfirmProps,
       errorMessage,
-      selectedThemeId,
       selectedTemplateId,
       disableVoiceId,
       additionalCaptureItems,
@@ -312,11 +296,9 @@ class Confirm extends Component {
       message,
       title,
       captureItems = [],
-      allowThemeSelect = false,
       allowTemplateSelect = false,
       allowVoiceSwitch = false,
       showImageDropZone = false,
-      themes = [],
       templates = [],
       footerMessage = null,
       actionItems = [
@@ -432,18 +414,6 @@ class Confirm extends Component {
                     style={{ cursor: 'pointer' }}
                   />
                 )}
-                {allowThemeSelect && (
-                  <Box p={1}>
-                    <AISelect
-                      aiProp="themeId"
-                      aiPropDescription="Create with theme?"
-                      onChange={(d) => this.setThemeForAIConversation(d)}
-                      currentValue={selectedThemeId}
-                      availableThemes={themes}
-                      styleVariant="standard"
-                    />
-                  </Box>
-                )}
                 {allowTemplateSelect && (
                   <Box p={1}>
                     <AISelect
@@ -453,7 +423,7 @@ class Confirm extends Component {
                         this.setTemplateForAIConversation('templateId', d)
                       }
                       currentValue={selectedTemplateId}
-                      availableThemes={templates}
+                      availableTemplates={templates}
                       styleVariant="standard"
                     />
                   </Box>

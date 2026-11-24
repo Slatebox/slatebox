@@ -31,7 +31,6 @@ const AdminTools = lazy(() => import('./pages/AdminTools'))
 const TeamSettings = lazy(() => import('./pages/TeamSettings'))
 const BrandingSettings = lazy(() => import('./pages/BrandingSettings'))
 const SimulateUrlAction = lazy(() => import('./components/SimulateUrlAction'))
-const ShowThemes = lazy(() => import('./pages/ShowThemes'))
 
 function PrivateRoute({ children }) {
   const isAuthorized =
@@ -52,7 +51,6 @@ function SlateCreateRoute() {
   const extendedPrompt = searchparams.get('extendedPrompt')
   const templateId = searchparams.get('templateId')
   const slateIdToCopy = searchparams.get('slateIdToCopy')
-  const themeId = searchparams.get('themeId')
   const isEmbedded = searchparams.get('isEmbedded') === 'true'
   const intentionId = searchparams.get('intentionId')
   if (!bearer || !dateString) {
@@ -84,7 +82,6 @@ function SlateCreateRoute() {
         welcomeMessage={welcomeMessage}
         extendedPrompt={extendedPrompt}
         templateId={templateId}
-        themeId={themeId}
         isEmbedded={isEmbedded}
         intentionId={intentionId}
       />
@@ -146,14 +143,6 @@ export default function SBRoutes() {
         element={
           <PrivateRoute>
             <MySlates />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/themes"
-        element={
-          <PrivateRoute>
-            <ShowThemes />
           </PrivateRoute>
         }
       />

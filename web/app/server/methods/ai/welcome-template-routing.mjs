@@ -3,8 +3,7 @@
 // The welcome assistant's system prompt historically ALWAYS advertised the
 // template intention + the previewTemplate/expandTemplates tools. Live audit
 // (iteration 14): the user-selectable template catalog is EMPTY in every
-// deployed environment (the only seeded isTemplate slate is the Theme
-// Generator, which userSelectableTemplateSelector excludes). So the prompt
+// deployed environment. So the prompt
 // said "sticky-note driven ideas … use {templateIntentionId}" while that
 // intention had zero content to work with — a designed dead end: welcome
 // picked Template Population, the client kick had no template content, and

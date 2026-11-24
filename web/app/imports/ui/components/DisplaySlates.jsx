@@ -22,7 +22,6 @@ import PublicIcon from '@mui/icons-material/Public'
 import LockIcon from '@mui/icons-material/Lock'
 import VpnLockIcon from '@mui/icons-material/VpnLock'
 import FilterNoneIcon from '@mui/icons-material/FilterNone'
-import BrushIcon from '@mui/icons-material/Brush'
 import ClearIcon from '@mui/icons-material/Clear'
 import SearchIcon from '@mui/icons-material/Search'
 import Toolbar from '@mui/material/Toolbar'
@@ -340,11 +339,6 @@ export default function DisplaySlates({
       show: slate.options?.isTemplate,
       icon: <FilterNoneIcon />,
       label: 'Template',
-    },
-    {
-      show: slate.options?.eligibleForThemeCompilation,
-      icon: <BrushIcon />,
-      label: 'Theme',
     },
     {
       show: slate.options?.isPublic,

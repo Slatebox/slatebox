@@ -82,7 +82,7 @@ export default function GradientConfigurator({
 
       try {
         const paletteResult = await Meteor.callAsync(
-          CONSTANTS.methods.themes.buildColorPalette,
+          CONSTANTS.methods.colors.buildColorPalette,
           {
             type: gradientStrategy || 'shades',
             base: baseHex,

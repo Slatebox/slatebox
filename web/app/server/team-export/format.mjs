@@ -174,7 +174,7 @@ export function urlsIn(value, found = new Set()) {
 }
 
 // Directory and template flags: where a slate is listed, which only a server's administrators set.
-export const SLATE_FLAGS = ['isTemplate', 'isThemeGenerator', 'isFeatured', 'featured', 'featuredOn', 'templateApproved', 'isCommunity']
+export const SLATE_FLAGS = ['isTemplate', 'isFeatured', 'featured', 'featuredOn', 'templateApproved', 'isCommunity']
 export const OPTION_FLAGS = ['isTemplate', 'templateApproved', 'isFeatured', 'isCommunity']
 
 // A link to another slate is content, but its address is not: it changes when the slate moves.

@@ -25,7 +25,6 @@ export default function AIPassthrough({
   welcomeMessage,
   extendedPrompt,
   templateId,
-  themeId,
   isEmbedded,
   intentionId,
 }) {

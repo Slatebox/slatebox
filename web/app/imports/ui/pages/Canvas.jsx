@@ -35,7 +35,6 @@ import {
   isSlateDrawerOpen,
   slateOutputOpen,
   isSlateEmbedded,
-  createSlateWithTheme,
   huddleEnabled,
   slateHuddleType,
   slatePrivacy,
@@ -278,8 +277,6 @@ export default function Canvas() {
   const [extensionsDrawerOpen, setExtensionsDrawerOpened] = useAtom(
     isExtensionsDrawerOpen
   )
-  const [createWithTheme, setCreateSlateWithTheme] =
-    useAtom(createSlateWithTheme)
   const setOutstandingAIRequests = useSetAtom(outstandingAIRequests)
 
 
@@ -472,15 +469,6 @@ export default function Canvas() {
           })
           if (result?.canKeep) setKeepOffer({ key:id, proof, slateId:slateBase.options.id, visitor:collaborator.current?.instanceId })
           if (edit === pendingEdit) pendingEdit = null
-          // auto save theme as well if need be
-          if (slate.current.options.eligibleForThemeCompilation) {
-            await Meteor.callAsync(
-              CONSTANTS.methods.themes.parseSlateIntoTheme,
-              {
-                slateId: slate.options.id,
-              }
-            )
-          }
         }
         clearTimeout(saveTimeout)
         // Text edits are committed on Enter/blur. Dispatch their snapshot while
@@ -751,15 +739,6 @@ export default function Canvas() {
       },
       isReadOnly: () => accessLevel.current.isReadOnly,
       isCommentOnly: () => accessLevel.current.isCommentOnly,
-      onThemeRequired: (opts, cb) => {
-        Meteor.call(
-          CONSTANTS.methods.themes.getThemes,
-          { themeId: opts.themeId },
-          (err, res) => {
-            cb(err, res)
-          }
-        )
-      },
     }
 
     // Destroy any prior slate before creating a new one (a canvas switch that re-runs
@@ -770,13 +749,11 @@ export default function Canvas() {
     slate.current?.destroy?.()
 
     loadedRevision.current = Number.isInteger(sBase.revision) ? sBase.revision : 0
-    // create slate (the createWithTheme will inhibit the saving of the slate until the theme is applied)
     slate.current = await createSlate(
       sBase,
       events,
       isNew,
       isGuest,
-      createWithTheme,
       currentAIContext
     )
 
@@ -809,34 +786,6 @@ export default function Canvas() {
       return res
     }
 
-    if (createWithTheme) {
-      if (createWithTheme.styles.parent.opacity === 0) {
-        slate.current.nodes.allNodes[0].options.text = 'Welcome'
-      }
-      // this applies the theme to the current slate using the collab.invoke
-      // which stitches in the options to the slate, but does not
-      // broadcast those (using send)
-      slate.current.applyTheme(createWithTheme, true)
-      // fix for init node
-      // slate.nodes.allNodes[0].options.vectorPath = slate.nodes.allNodes[0].vect.attr("path");
-      // if the opacity of the entry node is 0 then set some text
-      // setCreateSlateWithTheme(null)
-
-      // give it 1500 ms before saving
-      // await utils.pause(1500)
-
-      // saving the slate
-      await saveSlateLite({
-        routeKey: id,
-        type: null,
-        userId: sBase.userId, // Ensure correct user ID context
-        orgId: sBase.orgId, // Ensure correct org ID context
-        slate: slate.current,
-      })
-
-      setCreateSlateWithTheme(null)
-    }
-
     // ensure the neural thinking background color is set
     setSlateBackgroundColor(
       slate.current.options.containerStyle.backgroundColor
@@ -844,7 +793,7 @@ export default function Canvas() {
 
     // set slate name and always attach shareId, userId and orgId to the dispatched slate
     slate.current.shareId = sBase.shareId
-    if (isNew && !asEmbed && Meteor.userId() && Meteor.userId()===sBase.userId && !createWithTheme) {
+    if (isNew && !asEmbed && Meteor.userId() && Meteor.userId()===sBase.userId) {
       await saveSlateLite({routeKey:id,userId:sBase.userId,orgId:sBase.orgId,slate:slate.current})
     }
     slate.current.userId = sBase.userId
@@ -1331,7 +1280,7 @@ export default function Canvas() {
   React.useEffect(() => { if (!nativeChatOpen && !askKept) for (const board of boardsRef.current) board.leaveFocus?.() }, [nativeChatOpen, askKept, boards.some(board => board.focusLocked)])
   // Another slate: nothing is kept from this one.
   React.useEffect(() => { askKeptNow.current = false; setAskKept(false); setSlateOutput(null) }, [id])
-  const showHuddle = Boolean(boardLoaded && !slate.current?.options?.eligibleForThemeCompilation && getHuddleType !== 'disabled')
+  const showHuddle = Boolean(boardLoaded && getHuddleType !== 'disabled')
   // Controls fixed to the canvas's corner (quick add) keep clear of the panel and the bar.
   const canvasArea = React.useRef(null)
   React.useLayoutEffect(() => {
@@ -1378,7 +1327,7 @@ export default function Canvas() {
   }
   const shapeNotes = (notes, shape) => updateNode((n) => customShapePackage(shape, n.options), notes)
   const showTools = Boolean(boardLoaded && slate.current && !overlayKind && !accessLevel.current.isReadOnly &&
-    !slate.current.options?.eligibleForThemeCompilation && !asEmbed && !slate.current.options?.isEmbedded)
+    !asEmbed && !slate.current.options?.isEmbedded)
   React.useLayoutEffect(() => {
     const drawing = slate.current
     if (!conversationVisible || !drawing || pendingConversationFit.current !== drawing) return

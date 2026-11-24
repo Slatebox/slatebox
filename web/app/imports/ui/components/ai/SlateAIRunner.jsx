@@ -107,7 +107,6 @@ export default function SlateAIRunner({
       result.instructions = resp.instructions
       result.technicalInstructions = resp.technicalInstructions
       result.baseColor = resp?.background?.baseColor || '#fff'
-      // result.theme = localAIContext.theme
       result.template = resp.slateTemplateId // localAIContext.template
 
       if (resp.background && resp.applyBackground) {
@@ -116,7 +115,7 @@ export default function SlateAIRunner({
 
         // build the pallette based on the colors
         const palette = await Meteor.callAsync(
-          CONSTANTS.methods.themes.buildColorPalette,
+          CONSTANTS.methods.colors.buildColorPalette,
           { type: 'shades', base: baseColor }
         )
         const payload = {

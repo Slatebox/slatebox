@@ -1446,7 +1446,7 @@ method[CONSTANTS.methods.openai.chat] = metered({ feature: 'generation' }, async
 
           if (opts.type === CONSTANTS.ai.types.conversation) {
             palette = await Meteor.callAsync(
-              CONSTANTS.methods.themes.buildColorPalette,
+              CONSTANTS.methods.colors.buildColorPalette,
               {
                 type: 'palette',
               }

@@ -1,7 +1,6 @@
 const CONSTANTS = {
   ipWhitelist: ['127.0.0.1'],
   guestCollaboratorCookieId: 'slatebox_guestCollaboratorId',
-  defaultThemeId: '05e5acd816e2',
   googleDocsCookieToken: 'slatebox_googleDocsToken',
   fonts: [
     { val: 'arial', name: 'Arial' },
@@ -288,11 +287,8 @@ const CONSTANTS = {
       removeImage: 'images.removeImage',
       search: 'images.search',
     },
-    themes: {
-      parseSlateIntoTheme: 'themes.parseSlateIntoTheme',
-      getPresetColors: 'themes.getPresetColors',
-      getThemes: 'themes.getThemes',
-      buildColorPalette: 'themes.buildColorPalette',
+    colors: {
+      buildColorPalette: 'colors.buildColorPalette',
     },
     iconPacks: {
       get: 'iconPacks.get',

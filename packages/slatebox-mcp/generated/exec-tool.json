@@ -1833,7 +1833,7 @@
     {
       "name": "delete_slate",
       "title": "Delete a slate",
-      "description": "Delete one of the person's own slates. This cannot be undone.\n\nDelete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, and a theme other slates are built on cannot be deleted. This cannot be undone.",
+      "description": "Delete one of the person's own slates. This cannot be undone.\n\nDelete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can. This cannot be undone.",
       "inputSchema": {
         "type": "object",
         "properties": {

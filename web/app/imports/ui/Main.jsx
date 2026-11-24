@@ -35,7 +35,6 @@ import PublicIcon from '@mui/icons-material/Public'
 import PaletteIcon from '@mui/icons-material/Palette'
 
 import SettingsIcon from '@mui/icons-material/Settings'
-import BrushIcon from '@mui/icons-material/Brush'
 import GroupIcon from '@mui/icons-material/Group'
 import ViewComfy from '@mui/icons-material/ViewComfy'
 import Tooltip from '@mui/material/Tooltip'
@@ -111,7 +110,6 @@ export default function Main() {
   // const [chatIsOpen, setChatOpen] = useAtom(isChatOpen)
 
   const [, setAvailableTemplates] = React.useState([])
-  const [, setAvailableThemes] = React.useState([])
 
   const location = useLocation()
   const isOnPresentPage = location.pathname.includes('/present/')
@@ -140,11 +138,6 @@ export default function Main() {
     return org && org.name
   })
 
-  async function getThemes() {
-    const themes = await Meteor.callAsync(CONSTANTS.methods.themes.getThemes)
-    setAvailableThemes(themes || [])
-  }
-
   async function getTemplates() {
     const templates = await Meteor.callAsync(CONSTANTS.methods.slates.get, {
       skip: 0,
@@ -156,7 +149,6 @@ export default function Main() {
   }
 
   useEffect(() => {
-    getThemes()
     getTemplates()
   }, [])
 
@@ -170,14 +162,14 @@ export default function Main() {
     else setMobileNavOpen(false)
   }
 
-  // A guest may name the slate; themes, exports and the rest ask them to save their work first,
+  // A guest may name the slate; colours, exports and the rest ask them to save their work first,
   // as the settings themselves do.
   const guestAskedToSave = () => {
     if (!Meteor.user()?.isAnonymous) return false
     setRegistrationDetails({
       type: 'registration',
       registrationOpen: true,
-      registrationMessage: `Save your work to use themes, exports, and sharing controls.`,
+      registrationMessage: `Save your work to use colors, exports, and sharing controls.`,
     })
     return true
   }
@@ -308,12 +300,6 @@ export default function Main() {
       path: '/slates',
       icon: <PublicIcon />,
       show: signedIn,
-    },
-    {
-      title: 'Theme library',
-      path: '/themes',
-      icon: <BrushIcon />,
-      show: true,
     },
     {
       title: loadedUser?.orgId ? `Manage ${team}` : `Create ${team}`,

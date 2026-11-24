@@ -10,18 +10,15 @@ import {
   SlateSnapshots,
   Collaboration,
   Slates,
-  Themes,
   SystemSettings,
   VideoHelpGuides,
   LoginLinks,
   ChatIntentions,
   Tags,
 } from '../../imports/api/common/models'
-import themeGenerator from './themeGenerator.json'
 import proConTemplate from './proConTemplate.json'
 import { templateCategories } from './template-categories.mjs'
 import { DEFAULT_AI_FEATURES } from '../methods/ai/feature-config.mjs'
-import defaultThemes from './defaultThemes.json'
 
 if ((await Claims.find({ _id: 'admin' }).countAsync()) === 0) {
   for (const c of Object.keys(CONSTANTS.claims)) {
@@ -735,7 +732,6 @@ if (!(await ChatIntentions.findOneAsync())) {
                 val: 'legal-advisor',
                 teaser: `Provide legal advice`,
                 supplemental: `I am a real person, so don't make anything up. Pretend you are my legal expert and we are going to have a conversation around this legal topic that I need help understanding. If it would be helpful to diagram any part of our discussion with a visual aid, use the notes and categories to explain. Only use notes and categories if it is helpful for the explanation, but always respond with a suggestion that explains step-by-step why you're providing this legal advice. If you are updating an existing note or category, make sure the isUpdate parameter is set to true. I may provide you with a document that we can discuss together, or I may just have questions and need you to respond to them.`,
-                defaultThemeId: '',
                 layoutType: {
                   val: 'twopi',
                   overlap: 'scalexy',
@@ -1208,11 +1204,6 @@ try {
 // 	// },
 // }
 
-const tg = await Slates.findOneAsync({ isThemeGenerator: true })
-if (!tg) {
-  await Slates.insertAsync(themeGenerator)
-}
-
 // Curated starter template: Pro/Con Analysis. The welcome assistant only
 // advertises the template catalog when it is NON-empty (see
 // welcome-template-routing); seeding one approved template re-arms the full
@@ -1259,10 +1250,6 @@ if ((await SlateSnapshots.find().countAsync()) === 0) {
     { created: 1 },
     { expireAfterSeconds: 60 * 60 * 24 * 3 }
   ) // 3 rolling days of snapshots for every slate
-}
-
-if (!(await Themes.findOneAsync())) {
-  Themes.rawCollection().insertMany(defaultThemes)
 }
 
 if (!(await Tags.findOneAsync())) {

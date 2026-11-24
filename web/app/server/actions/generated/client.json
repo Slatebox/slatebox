@@ -2298,7 +2298,7 @@
       "name": "slates.delete",
       "id": "slates.delete",
       "title": "Delete slate",
-      "summary": "Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, and a theme other slates are built on cannot be deleted. This cannot be undone.",
+      "summary": "Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can. This cannot be undone.",
       "kind": "write",
       "readOnly": false,
       "destructive": true,
@@ -2320,11 +2320,11 @@
       },
       "index": "slates.delete({shareId}): Delete slate",
       "types": [],
-      "dts": "declare namespace slatebox.slates {\n  /** Delete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, and a theme other slates are built on cannot be deleted. This cannot be undone. @scope slates:delete @destructive */\n  function delete(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n  }): Promise<({\n    shareId: string;\n    deleted: boolean;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.slates {\n  /** Delete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can. This cannot be undone. @scope slates:delete @destructive */\n  function delete(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n  }): Promise<({\n    shareId: string;\n    deleted: boolean;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "delete_slate",
         "title": "Delete a slate",
-        "description": "Delete one of the person's own slates. This cannot be undone.\n\nDelete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, and a theme other slates are built on cannot be deleted. This cannot be undone.",
+        "description": "Delete one of the person's own slates. This cannot be undone.\n\nDelete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can. This cannot be undone.",
         "inputSchema": {
           "type": "object",
           "properties": {

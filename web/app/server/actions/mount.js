@@ -118,7 +118,6 @@ export const deps = {
         isPublic: false,
       })
     },
-    themeTemplateId: CONSTANTS.defaultThemeId,
     loadUser: (userId) => Meteor.users.findOneAsync(userId, { fields: { _id: 1, orgId: 1, isAnonymous: 1 } }),
     generateShareId: generateSlateShareId,
     appOrigin,

@@ -48,7 +48,7 @@ export default function SlateColors({ onChange }) {
       gradientType: next.linearOrRadial, gradientStrategy: next.bgStrategy,
       gradientColors: style?.backgroundGradientColors || [] }
     if (colorType === 'onSlateBackgroundColorChanged' && next.asGradient) {
-      const palette = await Meteor.callAsync(CONSTANTS.methods.themes.buildColorPalette, {
+      const palette = await Meteor.callAsync(CONSTANTS.methods.colors.buildColorPalette, {
         type: next.bgStrategy, base: next.selectedColor,
       })
       if (sequence !== paletteRequest.current) return

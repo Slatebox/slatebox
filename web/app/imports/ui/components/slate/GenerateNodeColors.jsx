@@ -30,22 +30,21 @@ export default function GenerateNodeColors({ slate }) {
       setType(nntype)
     }
     const palette = await Meteor.callAsync(
-      CONSTANTS.methods.themes.buildColorPalette,
+      CONSTANTS.methods.colors.buildColorPalette,
       { type: newType, base: selectedColor }
     )
     const c = slate.collab
-    if (slate.options.eligibleForThemeCompilation) {
-      const ppkg = {
-        type: 'onNodeColorChanged',
-        data: { id: `parent`, opacity: selectedOpacity, color: palette[0] },
-      }
-      c.invoke(ppkg)
-      c.send(ppkg)
-      for (let p = 1; p < palette.length; p += 1) {
+    let p = -1
+    slate.nodes.allNodes.forEach((n) => {
+      if (!n.options.image.length) {
+        p += 1
+        if (p > palette.length) {
+          p = 0
+        }
         const cpkg = {
           type: 'onNodeColorChanged',
           data: {
-            id: `child_${p}`,
+            id: n.options.id,
             opacity: selectedOpacity,
             color: palette[p],
           },
@@ -53,27 +52,7 @@ export default function GenerateNodeColors({ slate }) {
         c.invoke(cpkg)
         c.send(cpkg)
       }
-    } else {
-      let p = -1
-      slate.nodes.allNodes.forEach((n) => {
-        if (!n.options.image.length) {
-          p += 1
-          if (p > palette.length) {
-            p = 0
-          }
-          const cpkg = {
-            type: 'onNodeColorChanged',
-            data: {
-              id: n.options.id,
-              opacity: selectedOpacity,
-              color: palette[p],
-            },
-          }
-          c.invoke(cpkg)
-          c.send(cpkg)
-        }
-      })
-    }
+    })
   }
 
   GenerateNodeColors.propTypes = {

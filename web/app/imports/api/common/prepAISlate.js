@@ -72,7 +72,7 @@ export default async function prepAISlate({
   const { aid, titleFont, textFont, slatePalette } = getAIDetails || {}
 
   // const slatePalette = await Meteor.callAsync(
-  //   CONSTANTS.methods.themes.buildColorPalette,
+  //   CONSTANTS.methods.colors.buildColorPalette,
   //   { type: 'palette' }
   // )
 

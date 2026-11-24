@@ -12,6 +12,7 @@ import {
   inkCanvas, withNativeInk,
 } from '../web/app/imports/ui/common/canvasTheme.mjs'
 import { JSDOM } from 'jsdom'
+import { presetNoteStyle } from '../web/app/imports/ui/common/noteStyle.mjs'
 
 const app = (path) => readFileSync(new URL('../web/app/' + path, import.meta.url), 'utf8')
 const ui = (path) => app('imports/ui/' + path)
@@ -122,11 +123,11 @@ test('note text meets AA in both modes: the default note, and the old default sh
   // The old default failed AA (about 2.9:1); slates that still carry it are drawn with the new one.
   assert.ok(contrast('#ffffff', LEGACY_DEFAULT_NOTE.backgroundColor) < 4.5)
   assert.equal(LEGACY_DEFAULT_NOTE.backgroundColor, '#699bc3')
-  // New slates make their first note from the shared default.
+  // A new slate's notes take the shared default (a slate starts empty; its notes are made in this style).
   const create = app('imports/api/client/createSlate.js')
-  assert.match(create, /import \{ DEFAULT_NOTE \} from '\.\.\/\.\.\/ui\/common\/canvasTheme\.mjs'/)
-  assert.match(create, /backgroundColor: DEFAULT_NOTE\.backgroundColor/)
-  assert.match(create, /foregroundColor: DEFAULT_NOTE\.foregroundColor/)
+  assert.match(create, /slate\.noteStyle = presetNoteStyle\(defaultPreset\?\.value, fonts\)/)
+  const plain = presetNoteStyle(null)
+  assert.deepEqual([plain.backgroundColor, plain.foregroundColor], [DEFAULT_NOTE.backgroundColor, DEFAULT_NOTE.foregroundColor])
   assert.doesNotMatch(create, /#699bc3|rgba\(255, 255, 255, 0\.87\)/)
   // The stored background stays white: it is what "follows the theme" means, and exports stay as they were.
   assert.match(create, /let bgColors = \['#ffffff'/)

@@ -298,14 +298,6 @@ export default async function initAIConversation({
       })
     }
 
-    if (result.theme) {
-      collabs.push({
-        type: 'onSlateThemeChanged',
-        data: {
-          theme: result.theme,
-        },
-      })
-    }
     slate?.collab.exe(collabs)
   }
 

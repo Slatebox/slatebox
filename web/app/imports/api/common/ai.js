@@ -22,18 +22,9 @@ async function createAIConversationNode(
   defaultLineColor,
   mainNodeId,
   isParent,
-  themes,
   templates,
   collaboratorInstanceId
 ) {
-  const theme = themes.find((t) => t._id === slate?.options?.themeId)
-  const themeOpts = theme
-    ? Slatebox.utils.buildNodeStyleFromTheme({
-        theme,
-        childNumber: groupColorIndex + 1,
-      })
-    : null
-
   let xPos = nodeToCreate.xPos
     ? slate.options.viewPort.left + nodeToCreate.xPos
     : 10000
@@ -169,17 +160,13 @@ async function createAIConversationNode(
 
   const fontSize =
     nodeToCreate.fontSize ||
-    (styleNode?.options.fontSize ??
-      (themeOpts ? themeOpts.fontSize : isCategory ? '24' : '16'))
+    (styleNode?.options.fontSize ?? (isCategory ? '24' : '16'))
   const fontStyle =
-    styleNode?.options.fontStyle ??
-    (themeOpts ? themeOpts.fontStyle ?? 'normal' : 'normal')
+    styleNode?.options.fontStyle ?? 'normal'
   const fontFamily =
     nodeToCreate.fontFamily ||
     (styleNode?.options.fontFamily ??
-      (themeOpts
-        ? themeOpts.fontFamily
-        : isCategory
+      (isCategory
         ? currentAIContext.titleFont || 'Roboto Sans'
         : currentAIContext.textFont || 'Roboto Sans'))
 
@@ -332,8 +319,6 @@ async function createAIConversationNode(
         filters: styleNode.options.filters,
         animations: styleNode.options.animations,
       }
-    : theme
-    ? { ...baseOpts, ...themeOpts }
     : {
         ...baseOpts,
         backgroundColor: bgColor === 'transparent' ? '#fff' : bgColor,

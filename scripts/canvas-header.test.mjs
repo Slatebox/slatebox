@@ -59,7 +59,7 @@ test("the notifications count is system messages only, the same set the list sho
 test("the app menu offers a guest nothing they cannot use, and drops Profile and the duplicate support item", async () => {
   const main = await read("Main.jsx");
   assert.doesNotMatch(main, /title: 'Profile'/);
-  assert.match(main, /'Theme library'/);
+  assert.doesNotMatch(main, /'Theme library'|path: '\/themes'/);
   assert.match(main, /guest/i);
   // One navigation list, rendered on and off the canvas.
   assert.equal((main.match(/const drawerItems = /g) || []).length, 1);

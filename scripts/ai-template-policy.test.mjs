@@ -6,9 +6,8 @@ import {
   userSelectableTemplateSelector,
 } from "../web/app/imports/api/common/template-policy.mjs";
 
-test("template discovery excludes internal generators and unapproved slates", () => {
+test("template discovery takes approved templates only", () => {
   assert.deepEqual(userSelectableTemplateSelector(), {
-    isThemeGenerator: { $ne: true },
     "options.isTemplate": true,
     "options.templateApproved": true,
   });
@@ -17,25 +16,17 @@ test("template discovery excludes internal generators and unapproved slates", ()
 test("template lookup preserves identity constraints alongside eligibility", () => {
   assert.deepEqual(userSelectableTemplateSelector({ shareId: "template-1" }), {
     shareId: "template-1",
-    isThemeGenerator: { $ne: true },
     "options.isTemplate": true,
     "options.templateApproved": true,
   });
 });
 
-test("only approved, non-generator templates are user-selectable", () => {
+test("only approved templates are user-selectable", () => {
   assert.equal(
     isUserSelectableTemplate({
       options: { isTemplate: true, templateApproved: true },
     }),
     true,
-  );
-  assert.equal(
-    isUserSelectableTemplate({
-      isThemeGenerator: true,
-      options: { isTemplate: true, templateApproved: true },
-    }),
-    false,
   );
   assert.equal(
     isUserSelectableTemplate({

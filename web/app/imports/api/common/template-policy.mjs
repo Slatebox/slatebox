@@ -1,7 +1,6 @@
 export function userSelectableTemplateSelector(additional = {}) {
   return {
     ...additional,
-    isThemeGenerator: { $ne: true },
     'options.isTemplate': true,
     'options.templateApproved': true,
   }
@@ -10,7 +9,6 @@ export function userSelectableTemplateSelector(additional = {}) {
 export function isUserSelectableTemplate(template) {
   return Boolean(
     template &&
-    template.isThemeGenerator !== true &&
     template.options?.isTemplate === true &&
     template.options?.templateApproved === true
   )

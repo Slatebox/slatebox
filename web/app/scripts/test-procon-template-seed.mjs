@@ -16,11 +16,7 @@ import { resolveTemplateFromText } from '../server/methods/ai/welcome-template-r
 
 assert.ok(
   isUserSelectableTemplate(proCon),
-  'seed must satisfy userSelectableTemplateSelector (isTemplate + templateApproved + not themeGenerator)'
-)
-assert.ok(
-  userSelectableTemplateSelector().isThemeGenerator.$ne === true,
-  'theme-generator exclusion stays in force'
+  'seed must satisfy userSelectableTemplateSelector (isTemplate + templateApproved)'
 )
 
 const cats = parseTemplateIntoCategories({ nodes: proCon.nodes })
@@ -40,7 +36,7 @@ assocs.forEach((a) =>
   assert.ok(ids.has(a.childId) && ids.has(a.parentId), `dangling association ${a.id}`)
 )
 
-// bootstrap must seed it exactly once per env, guarded like themeGenerator
+// bootstrap must seed it exactly once per env
 const bootstrap = await readFile(
   new URL('../server/bootstrap/all.js', import.meta.url),
   'utf8'

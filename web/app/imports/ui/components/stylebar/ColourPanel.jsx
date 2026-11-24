@@ -1,29 +1,11 @@
 import React from 'react'
-import { Meteor } from 'meteor/meteor'
-import uniq from 'lodash.uniq'
 import { RgbaColorPicker } from 'react-colorful'
 import hexToRGB from 'hex-rgb'
 import rgbToHex from 'rgb-hex'
-import CONSTANTS from '../../../api/common/constants'
 import {
-  DEFAULT_SWATCHES, toHex, BORDER_WIDTHS, BORDER_STYLES, colourName,
+  toHex, BORDER_WIDTHS, BORDER_STYLES, colourName,
 } from '../../../api/common/note-style.mjs'
 import { Choices } from './parts'
-
-/** The slate's own colours (its theme's palette), or the default readable fills. */
-export function useSlateColours(themeId) {
-  const [colours, setColours] = React.useState(DEFAULT_SWATCHES)
-  React.useEffect(() => {
-    let live = true
-    if (!themeId) { setColours(DEFAULT_SWATCHES); return undefined }
-    Meteor.callAsync(CONSTANTS.methods.themes.getPresetColors, { themeId }).then((palette) => {
-      const list = uniq((palette || []).map((p) => toHex(p.nodeColor)).filter(Boolean))
-      if (live && list.length > 2) setColours(list.slice(0, 13).map((colour) => ({ name: colourName(colour), colour })))
-    }).catch(() => {})
-    return () => { live = false }
-  }, [themeId])
-  return colours
-}
 
 function Swatch({ colour, name, checked, onPick }) {
   return (

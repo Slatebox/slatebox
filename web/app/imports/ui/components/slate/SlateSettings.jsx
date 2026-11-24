@@ -1,5 +1,5 @@
 /* eslint-disable no-underscore-dangle */
-import React, { Suspense, lazy, useEffect, useState } from 'react'
+import React, { Suspense, lazy, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import Grid from '@mui/material/Grid2'
@@ -60,25 +60,6 @@ export default function SlateSettings({ onChange }) {
   const [templateError, setTemplateError] = React.useState('')
   const [autoResizeNodesBasedOnText, setAutoResizeNodesBasedOnText] =
     React.useState(slate?.options?.autoResizeNodesBasedOnText)
-
-  const isTheme = slate?.options?.eligibleForThemeCompilation
-
-  useEffect(() => {
-    if (isTheme) {
-      // when creating a theme, just display temporarily so the user understands
-      if (mindMapMode) {
-        document.querySelectorAll('.association').forEach((el) => {
-          const ele = el
-          ele.style.display = 'block'
-        })
-      } else {
-        document.querySelectorAll('.association').forEach((el) => {
-          const ele = el
-          ele.style.display = 'none'
-        })
-      }
-    }
-  }, [mindMapMode, isTheme])
 
   const showTemplateProperties = (e) => {
     setTemplateDetails({ open: true })
@@ -174,16 +155,6 @@ export default function SlateSettings({ onChange }) {
     })
   }
 
-  const handleThemeRequest = async () => {
-    await ApprovalRequests.insertAsync({
-      slateId: slate.options.id,
-      type: 'theme',
-      userId: Meteor.userId(),
-      approved: false,
-      message: 'Your approval is pending…',
-    })
-  }
-
   const templateApproval = useTracker(() => {
     Meteor.subscribe(
       CONSTANTS.publications.approvalRequests,
@@ -195,19 +166,6 @@ export default function SlateSettings({ onChange }) {
 
   const cancelTemplateRequest = async () => {
     await ApprovalRequests.removeAsync({ _id: templateApproval?._id })
-  }
-
-  const themeApproval = useTracker(() => {
-    Meteor.subscribe(
-      CONSTANTS.publications.approvalRequests,
-      'theme',
-      slate?.options?.id
-    )
-    return ApprovalRequests.findOne()
-  })
-
-  const cancelThemeRequest = async () => {
-    await ApprovalRequests.removeAsync({ _id: themeApproval?._id })
   }
 
   SlateSettings.propTypes = {
@@ -270,184 +228,132 @@ export default function SlateSettings({ onChange }) {
           />
         </Tooltip>
       </Grid>
-      {!isTheme ? (
-        <>
-          <Grid size={12}>
-            <Select
-              value={getSlateHuddleType}
-              size="small"
-              onChange={(e) => {
-                setHuddleType(e.target.value)
-              }}
+      <Grid size={12}>
+        <Select
+          value={getSlateHuddleType}
+          size="small"
+          onChange={(e) => {
+            setHuddleType(e.target.value)
+          }}
+          variant="outlined"
+        >
+          <MenuItem key="disabled" value="disabled">
+            Disable Huddling
+          </MenuItem>
+          <MenuItem key="audio" value="audio">
+            Allow Audio-Only Huddles
+          </MenuItem>
+          <MenuItem key="video" value="video">
+            Allow Full Video Huddles
+          </MenuItem>
+        </Select>
+      </Grid>
+      <Grid size={8}>
+        <Typography variant="body2">Show Grid</Typography>
+      </Grid>
+      <Grid size={4}>
+        <Tooltip
+          title="Show underlying grid"
+          placement="top"
+          aria-label="setShowGrid"
+        >
+          <Switch onChange={setShowGrid} checked={showGrid} />
+        </Tooltip>
+      </Grid>
+      <Grid size={8}>
+        <Typography variant="body2">Snap to Neighbors</Typography>
+      </Grid>
+      <Grid size={4}>
+        <Tooltip
+          title="Automatically align objects to their neighbors"
+          placement="top"
+          aria-label="setSnapToObjects"
+        >
+          <Switch onChange={setSnapToObjects} checked={snapToObjects} />
+        </Tooltip>
+      </Grid>
+      <Grid size={8}>
+        <Typography variant="body2">&#34;Follow Me&#34; Mode</Typography>
+      </Grid>
+      <Grid size={4}>
+        <Tooltip
+          title="Synchronize the position of the canvas during collaboration"
+          placement="top"
+          aria-label="setFollowMe"
+        >
+          <Switch onChange={setFollowMe} checked={isFollowMe} />
+        </Tooltip>
+      </Grid>
+      <Grid size={8}>
+        <Typography variant="body2">Is Template</Typography>
+      </Grid>
+      <Grid size={4}>
+        <Tooltip
+          title="Mark slate as a template "
+          placement="top"
+          aria-label="markSlateAsTemplate"
+        >
+          <Switch onChange={setTemplate} checked={Boolean(isTemplate)}
+            disabled={savingTemplate || !slate?.shareId || slate?.userId !== Meteor.userId()} />
+        </Tooltip>
+      </Grid>
+      {templateError && <Grid size={12}><Typography role="alert">{templateError}</Typography></Grid>}
+      {isTemplate && (
+        <Grid size={12}>
+          <Button
+            fullWidth="true"
+            variant="outlined"
+            onClick={showTemplateProperties}
+          >
+            Provide Details
+          </Button>
+          <Typography variant="body2">
+            <p>
+              Templates provide re-usable slates that center around a topic
+              (e.g., product roadmap, user stories, swot analysis, etc).
+            </p>
+            {!templateApproval && (
+              <p>
+                Click the below button to request approval for this
+                template. When approved, it will be available for others to
+                use.
+              </p>
+            )}
+          </Typography>
+        </Grid>
+      )}
+      {isTemplate && (
+        <Grid size={12}>
+          {!templateApproval && (
+            <Button
               variant="outlined"
+              color="secondary"
+              onClick={handleTemplateRequest}
             >
-              <MenuItem key="disabled" value="disabled">
-                Disable Huddling
-              </MenuItem>
-              <MenuItem key="audio" value="audio">
-                Allow Audio-Only Huddles
-              </MenuItem>
-              <MenuItem key="video" value="video">
-                Allow Full Video Huddles
-              </MenuItem>
-            </Select>
-          </Grid>
-          <Grid size={8}>
-            <Typography variant="body2">Show Grid</Typography>
-          </Grid>
-          <Grid size={4}>
-            <Tooltip
-              title="Show underlying grid"
-              placement="top"
-              aria-label="setShowGrid"
-            >
-              <Switch onChange={setShowGrid} checked={showGrid} />
-            </Tooltip>
-          </Grid>
-          <Grid size={8}>
-            <Typography variant="body2">Snap to Neighbors</Typography>
-          </Grid>
-          <Grid size={4}>
-            <Tooltip
-              title="Automatically align objects to their neighbors"
-              placement="top"
-              aria-label="setSnapToObjects"
-            >
-              <Switch onChange={setSnapToObjects} checked={snapToObjects} />
-            </Tooltip>
-          </Grid>
-          <Grid size={8}>
-            <Typography variant="body2">&#34;Follow Me&#34; Mode</Typography>
-          </Grid>
-          <Grid size={4}>
-            <Tooltip
-              title="Synchronize the position of the canvas during collaboration"
-              placement="top"
-              aria-label="setFollowMe"
-            >
-              <Switch onChange={setFollowMe} checked={isFollowMe} />
-            </Tooltip>
-          </Grid>
-          <Grid size={8}>
-            <Typography variant="body2">Is Template</Typography>
-          </Grid>
-          <Grid size={4}>
-            <Tooltip
-              title="Mark slate as a template "
-              placement="top"
-              aria-label="markSlateAsTemplate"
-            >
-              <Switch onChange={setTemplate} checked={Boolean(isTemplate)}
-                disabled={savingTemplate || !slate?.shareId || slate?.userId !== Meteor.userId()} />
-            </Tooltip>
-          </Grid>
-          {templateError && <Grid size={12}><Typography role="alert">{templateError}</Typography></Grid>}
-          {isTemplate && (
-            <Grid size={12}>
-              <Button
-                fullWidth="true"
-                variant="outlined"
-                onClick={showTemplateProperties}
-              >
-                Provide Details
-              </Button>
-              <Typography variant="body2">
-                <p>
-                  Templates provide re-usable slates that center around a theme
-                  (e.g., product roadmap, user stories, swot analysis, etc).
-                </p>
-                {!templateApproval && (
-                  <p>
-                    Click the below button to request approval for this
-                    template. When approved, it will be available for others to
-                    use.
-                  </p>
-                )}
-              </Typography>
-            </Grid>
+              Request Template Approval
+            </Button>
           )}
-          {isTemplate && (
-            <Grid size={12}>
-              {!templateApproval && (
-                <Button
-                  variant="outlined"
-                  color="secondary"
-                  onClick={handleTemplateRequest}
-                >
-                  Request Template Approval
-                </Button>
-              )}
-              {templateApproval?.approved && (
-                <p>
-                  Hooray! Your template is{' '}
-                  <Link href="/templates">approved and available</Link>.
-                </p>
-              )}
-              {templateApproval && !templateApproval?.approved && (
-                <>
-                  <p>{templateApproval?.message}</p>
-                  <Button
-                    variant="outlined"
-                    color="secondary"
-                    onClick={() => {
-                      cancelTemplateRequest()
-                    }}
-                  >
-                    Cancel Request
-                  </Button>
-                </>
-              )}
-            </Grid>
+          {templateApproval?.approved && (
+            <p>
+              Hooray! Your template is{' '}
+              <Link href="/templates">approved and available</Link>.
+            </p>
           )}
-        </>
-      ) : (
-        <>
-          <Grid size={12}>
-            <Typography variant="body2">
-              <p>Themes provide opinionated styles to existing slates.</p>
-              {!themeApproval && (
-                <p>
-                  Click the below button to request approval for this theme.
-                  When approved, it will be available for others to use.
-                </p>
-              )}
-            </Typography>
-          </Grid>
-          <Grid size={12}>
-            {!themeApproval && (
+          {templateApproval && !templateApproval?.approved && (
+            <>
+              <p>{templateApproval?.message}</p>
               <Button
                 variant="outlined"
                 color="secondary"
-                onClick={handleThemeRequest}
+                onClick={() => {
+                  cancelTemplateRequest()
+                }}
               >
-                Request Theme Approval
+                Cancel Request
               </Button>
-            )}
-            {themeApproval?.approved && (
-              <p>
-                Hooray! Your theme is{' '}
-                <a href="/themes" style={{ color: '#fff' }}>
-                  approved and available
-                </a>
-                .
-              </p>
-            )}
-            {themeApproval && !themeApproval?.approved && (
-              <>
-                <p>{themeApproval?.message}</p>
-                <Button
-                  variant="outlined"
-                  color="secondary"
-                  onClick={(e) => {
-                    cancelThemeRequest()
-                  }}
-                >
-                  Cancel Request
-                </Button>
-              </>
-            )}
-          </Grid>
-        </>
+            </>
+          )}
+        </Grid>
       )}
       {(templateEditorWanted || getTemplateDetails.open) && <Suspense fallback={null}><TemplateDetails
         open={getTemplateDetails.open}

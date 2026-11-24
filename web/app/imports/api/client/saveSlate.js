@@ -77,17 +77,10 @@ const saveSlate = async (opts) => {
 
       async function save() {
         try {
-          const results = await Meteor.callAsync(
+          await Meteor.callAsync(
             CONSTANTS.methods.slates.update,
             { slate, guestCollaboratorId }
           )
-          // auto save theme as well if need be
-          if (slate.options.eligibleForThemeCompilation) {
-            await Meteor.callAsync(
-              CONSTANTS.methods.themes.parseSlateIntoTheme,
-              { slateId: slate.options.id }
-            )
-          }
           // uopts.pkg.dated = results
           // Collaboration.insert(uopts.pkg)
         } catch (error) {

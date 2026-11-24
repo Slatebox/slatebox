@@ -17,12 +17,11 @@ export default function AISelect({
   currentValue,
   onChange,
   availableTemplates = null,
-  availableThemes = null,
   styleVariant,
 }) {
   const [aiVal, setAIVal] = React.useState(currentValue)
   if (currentValue && currentValue !== aiVal) {
-    // seems like a hack? but this gets themes populated when selected the persona
+    // seems like a hack? but this keeps the value in step when a persona is selected
     setAIVal(currentValue)
   }
   return (
@@ -37,7 +36,7 @@ export default function AISelect({
       >
         {aiPropDescription}
       </InputLabel>
-      {['templateId', 'themeId'].includes(aiProp) ? (
+      {aiProp === 'templateId' ? (
         <Select
           labelId={`ai-${aiProp}`}
           id={`ai-${aiProp}`}
@@ -52,11 +51,6 @@ export default function AISelect({
           {aiProp === 'templateId' &&
             availableTemplates?.map((t) => (
               <MenuItem value={t.shareId}>{t.options.name}</MenuItem>
-            ))}
-          {aiProp === 'themeId' && <MenuItem value={null}>None</MenuItem>}
-          {aiProp === 'themeId' &&
-            availableThemes?.map((t) => (
-              <MenuItem value={t.themeId}>{t.name}</MenuItem>
             ))}
         </Select>
       ) : (
@@ -96,6 +90,5 @@ AISelect.propTypes = {
   currentValue: PropTypes.string.isRequired,
   onChange: PropTypes.func.isRequired,
   availableTemplates: PropTypes.array,
-  availableThemes: PropTypes.array,
   styleVariant: PropTypes.string.isRequired,
 }

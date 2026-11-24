@@ -20,7 +20,6 @@ import {
   Comments,
   Messages,
   GuestViews,
-  Themes,
   CachedImages,
   CachedImageTiming,
   SlateSnapshots,
@@ -76,14 +75,9 @@ method[CONSTANTS.methods.slates.translate] = async (opts) => {
   return null
 }
 
-// Deletes one slate the caller owns, with its sharing, messages, comments, a workshop's own
-// presentation and its theme row. A theme other slates are built on stays: { themeInUse: true }.
-// The Slates page's Delete (below) and the API's slates.delete both delete through here.
+// Deletes one slate the caller owns, with its sharing, messages, comments and a workshop's own
+// presentation. The Slates page's Delete (below) and the API's slates.delete both delete through here.
 export async function deleteOwnedSlate(slate) {
-  if (slate.options?.eligibleForThemeCompilation) {
-    const otherSlates = await Slates.find({ 'options.basedOnThemeId': slate.options.id }).countAsync()
-    if (otherSlates !== 0) return { themeInUse: true }
-  }
   await SlateAccess.removeAsync({ slateId: slate._id })
   await Messages.removeAsync({ slateId: slate._id })
   await Comments.removeAsync({ slateId: slate._id })
@@ -92,7 +86,6 @@ export async function deleteOwnedSlate(slate) {
   if (slate.creative?.model?.kind === 'workshop') {
     await SlatePresentations.removeAsync({ slateShareId: slate.shareId, userId: slate.userId, workshop: { $exists: true } })
   }
-  await Themes.removeAsync({ _id: slate._id })
   return { deleted: true }
 }
 
@@ -105,24 +98,10 @@ method[CONSTANTS.methods.slates.remove] = async (opts) => {
       { $and: queryable },
       { fields: { _id: 1, options: 1, shareId: 1, userId: 1, 'creative.model.kind': 1 } }
     ).fetchAsync()
-    const errors = []
-    const infos = []
     if (slates) {
       // eslint-disable-next-line no-restricted-syntax
       for (const slate of slates) {
-        const { themeInUse } = await deleteOwnedSlate(slate)
-        if (!themeInUse) {
-          infos.push(
-            `Slate ${slate.options.name} (${slate.options.id}) successfully deleted.`
-          )
-        } else {
-          errors.push(
-            `Slate ${slate.options.name} (${slate.options.id}) is a theme in use by others - it cannot be deleted`
-          )
-        }
-      }
-      if (errors.length > 0) {
-        throw new Meteor.Error(`${errors.join(', ')} | ${infos.join(', ')}`)
+        await deleteOwnedSlate(slate)
       }
     } else {
       throw new Meteor.Error(`Slate(s) are not deletable`)

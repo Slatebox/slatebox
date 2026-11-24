@@ -725,7 +725,7 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.slates {
-  /** Delete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, and a theme other slates are built on cannot be deleted. This cannot be undone. @scope slates:delete @destructive */
+  /** Delete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can. This cannot be undone. @scope slates:delete @destructive */
   function delete(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;

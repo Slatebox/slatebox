@@ -32,7 +32,7 @@ This document outlines the process flow when a user initiates the creation of a 
       - **Template Prompt (`{{templatePrompt}}`):** Replaced by a constructed string including category count, names, and `slate.options.templatePrompt` (if `slate.options.basedOnTemplate` is true).
       - **Items (`{{items}}`):** Replaced within the `intention.slateName` definition by a truncated primary value derived from `result` fields marked `isPrimary`.
     - Prompts are only included in the final `aiPrompts` array if all placeholders within them have been successfully replaced.
-    - It directly modifies the client-side `slate` instance's state (e.g., sets name, layout, theme via `slate.collab.exe`).
+    - It directly modifies the client-side `slate` instance's state (e.g., sets name, layout, background via `slate.collab.exe`).
     - It returns the prepared `entireAIContext` object, containing the final system prompts, user prompts (`aiPrompts`), and AI settings.
 6.  **Store AI Context (`Chat.jsx`):**
     - `Chat.jsx` receives the `entireAIContext` from `initAIConversation` and stores it in its state (`currentAIContext`), marking the conversation as active.

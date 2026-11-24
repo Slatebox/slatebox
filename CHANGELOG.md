@@ -4,12 +4,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Removed
+
+- Themes: the Themes panel, the theme library (`/themes`), theme generator slates, the "Create with
+  theme?" AI preference, theme approval and the `themeId` creation link parameter. A slate that was
+  built on a theme can be deleted like any other. Slates and people that still carry theme fields
+  open and draw as before, with their own colours; restyle a slate through chat or a presentation
+  style.
+
 ### Added
 
 - Agents reach what a person does on the Slates page and in the comment drawer, with the app's own
   rules: list your slates or your team's (`slates.list`, `GET /api/v1/slates`, `list_slates`), copy a
   slate (`slates.copy`, now also `POST /api/v1/slates/{shareId}/copy`, `copy_slate`), delete your own
-  slate (`slates.delete`, `delete_slate`; the owner only, a theme in use stays), and read, add, resolve
+  slate (`slates.delete`, `delete_slate`; the owner only), and read, add, resolve
   and remove comments (`comments.*`, `/api/v1/slates/{shareId}/comments`, `list_comments`,
   `add_comment`, `resolve_comments`, `remove_comment`; only the author removes). Every surface gets them
   from the registry: OpenAPI, the exec client, the hosted and local MCP typed tools, and

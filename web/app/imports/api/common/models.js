@@ -17,8 +17,6 @@ const Claims = new Mongo.Collection('claims')
 const SlateAccess = new Mongo.Collection('slateAccess')
 const Permissions = new Mongo.Collection('permissions')
 const FeaturedSlates = new Mongo.Collection('featuredSlates')
-const Themes = new Mongo.Collection('themes')
-const PrivateThemes = new Mongo.Collection('privateThemes')
 const SlateSnapshots = new Mongo.Collection('slateSnapshots')
 const Tags = new Mongo.Collection('tags')
 
@@ -80,8 +78,6 @@ export {
   ArchivedSlates,
   Comments,
   ApprovalRequests,
-  Themes,
-  PrivateThemes,
   SlateSnapshots,
   StripeEvents,
   CachedImages,

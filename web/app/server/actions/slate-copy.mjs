@@ -16,7 +16,7 @@ const sourceOnlyOptions = ['url_name', 'accessKey', 'allowCollaboration', 'isSha
 const projectName = (text) => typeof text === 'string' && text.toLowerCase() === 'project name'
 
 /** The new slate's document, before the save core stores it. */
-export function copyDocument(source, { id, shareId, user, now, name, project, keepTemplate = false, fromTemplate = false, themeTemplateId }) {
+export function copyDocument(source, { id, shareId, user, now, name, project, keepTemplate = false, fromTemplate = false }) {
   const copy = structuredClone(source)
   for (const key of sourceOnly) delete copy[key]
   copy.options = { ...copy.options }
@@ -44,13 +44,7 @@ export function copyDocument(source, { id, shareId, user, now, name, project, ke
       copy.options.basedOnTemplate = source.options.id
       copy.options.templateName = source.options.name
     }
-    // A copy of the theme template starts a new theme.
-    if (themeTemplateId && source.options.id === themeTemplateId) {
-      Object.assign(copy.options, {
-        showZoom: false, showUndoRedo: false, showMultiSelect: false, showbirdsEye: false,
-        name: name || '', description: '', eligibleForThemeCompilation: true,
-      })
-    } else if (!String(copy.options.name ?? '').toLowerCase().includes('copy')) {
+    if (!String(copy.options.name ?? '').toLowerCase().includes('copy')) {
       copy.options.name = `${copy.options.name ?? ''} (Copy)`.trim()
     }
     if (!fromTemplate) {
@@ -130,7 +124,6 @@ export default defineAction({
     const row = copyDocument(source, {
       id, shareId, user, now: now(),
       name: input.name, project: input.projectName, keepTemplate: input.keepTemplate, fromTemplate: input.fromTemplate,
-      themeTemplateId: deps.themeTemplateId,
     })
     const made = await deps.saveCore.create({ row, actor: principal, source: 'copy' })
     // A slate's published presentation goes with it, as a private presentation of the copier's. A

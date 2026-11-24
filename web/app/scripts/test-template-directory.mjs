@@ -34,7 +34,7 @@ test('resolves stored legacy and derived slugs and rejects missing selections', 
 
 test('listing, preview lookup and exact selected copy use the approved public selector', () => {
   assert.deepEqual(publicTemplateSelector({ shareId: 's102' }), {
-    shareId: 's102', isThemeGenerator: { $ne: true },
+    shareId: 's102',
     'options.isTemplate': true, 'options.templateApproved': true, 'options.isPublic': true,
     'options.isPrivate': { $ne: true }, 'options.isUnlisted': { $ne: true }, archivedDate: { $exists: false },
   })
