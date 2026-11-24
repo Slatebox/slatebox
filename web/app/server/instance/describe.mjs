@@ -18,12 +18,16 @@ export const AGENT_GUIDE = 'https://docs.slatebox.com/developers/slateboxapi/ter
 const UNITS = { b: 1, kb: 1024, mb: 1024 * 1024 }
 
 const selfHosted = (settings) => settings.public?.env === 'selfhost'
+// The meter runs only where settings turn it on and this server is Cloud by its Cloud key
+// (metering/policy.mjs meteringEnabled): a self-hosted server's metering.enabled means nothing.
+const meterRuns = (settings, { cloud = false } = {}) => cloud === true && settings.metering?.enabled === true
 // Payments run only on Slatebox Cloud by its signed Cloud key (cloud-lock.mjs): `cloud` says so.
 // Settings alone (a Stripe key, metering.enabled) never make billing available.
 export const billingAvailable = (settings, { cloud = false } = {}) => cloud === true && !selfHosted(settings) && Boolean(settings.stripePrivateKey)
 // Slatebox Business sold in the app: billing, and both Business prices named in settings
 // (payments.business.monthly / .yearly). Docs and site guards key on this, never on a code flag.
-export const businessCheckout = (settings, { cloud = false } = {}) => billingAvailable(settings, { cloud }) && businessOnSale(settings)
+// The Business methods also need the meter (methods/business.js cloudReady), so the report does too.
+export const businessCheckout = (settings, { cloud = false } = {}) => billingAvailable(settings, { cloud }) && meterRuns(settings, { cloud }) && businessOnSale(settings)
 
 export function instanceCapabilities(settings, { mailAvailable, env = {}, cloud = false }) {
   const self = selfHosted(settings)
@@ -35,7 +39,7 @@ export function instanceCapabilities(settings, { mailAvailable, env = {}, cloud 
     mail: Boolean(mailAvailable()),
     calls: !self && Boolean(settings.daily?.apiKey),
     // transcription is not priced in the meter, so a metered server does not offer it (calls.mjs transcriptionAllowed)
-    transcription: Boolean(settings.deepgram?.secret) && settings.metering?.enabled !== true,
+    transcription: Boolean(settings.deepgram?.secret) && !meterRuns(settings, { cloud }),
     // instance: the operator's own model or key; slatebox: Slatebox runs it (Cloud).
     aiDrafting: drafting ? { available: true, provider: self ? 'instance' : 'slatebox' } : { available: false, provider: 'none' },
     billing: billingAvailable(settings, { cloud }),

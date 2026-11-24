@@ -200,7 +200,9 @@ test('#4: a missing or misspelled public.env does not run unmetered', () => {
   // a deliberate setting is honoured
   // Restated (owner decision 2026-11-24): honoured on Slatebox Cloud by its Cloud key only
   assert.equal(meteringEnabled({ public: { env: 'production' }, metering: { enabled: true } }, { cloud: true }), true)
-  assert.equal(meteringEnabled({ public: { env: 'production' }, metering: { enabled: true } }), false)
+  // Restated (round-2 review finding 6): asking for the meter without the Cloud key outside
+  // 'selfhost' and 'dev' stops the start instead of running unmetered (stricter, not looser)
+  assert.throws(() => meteringEnabled({ public: { env: 'production' }, metering: { enabled: true } }), /Slatebox Cloud key/)
   assert.equal(meteringEnabled({ public: { env: 'staging' }, metering: { enabled: false } }), false)
   assert.equal(meteringEnabled({ public: { env: 'dev' } }), false)
   assert.equal(meteringEnabled({ public: { env: 'selfhost' } }), false)

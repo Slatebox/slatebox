@@ -168,7 +168,10 @@ test('Business: per person, inside the shared Cloud, bought in the app where its
   assert.equal(BUSINESS.contactLabel, 'Talk to us about Business')
   // what it is, and what it is not
   assert.match(BUSINESS.summary, /fully managed/)
-  assert.match(BUSINESS.summary, /per person/)
+  // Restated (round-2 review nit 12): Business is priced per member everywhere (site, docs, terms)
+  assert.match(BUSINESS.summary, /per member/)
+  assert.doesNotMatch(BUSINESS.summary, /per person/)
+  assert.doesNotMatch(readFileSync(new URL('../web/app/imports/ui/components/billing/ProPanel.jsx', import.meta.url), 'utf8'), /paid per person/)
   assert.doesNotMatch(JSON.stringify(BUSINESS), /dedicated|server of its own|\bSmall\b|\bMedium\b|6,000|by size|no seat/i)
   assert.equal(BUSINESS.sizes, undefined)
   // each member's share of the team's pool is Pro's credits

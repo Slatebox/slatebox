@@ -450,3 +450,31 @@ export async function handleBusinessEvent(event, deps) {
   if (out.org) await matchBusinessMembers(deps, out.org, { sub })
   return { handled: true }
 }
+
+/**
+ * Sign-ins on Slatebox Cloud and the member count (round-2 review: every sign-in used to read every
+ * member of the team). A sign-in can only add a member to the bill (an invitation accepted), so for
+ * a team billed through Stripe the count is checked at most once per windowMs, trailing: the first
+ * sign-in in a quiet window checks at once, later ones in the window share one check at its end, so
+ * no join is missed and a busy team costs one count per window. Teams not billed through Stripe
+ * are never counted on sign-in (the caller checks billedThroughStripe first).
+ * → (orgId) => void   run(orgId) does the count; setTimer(fn, ms) and now() are injected.
+ */
+export function signInRecounter({ run, setTimer, now = () => Date.now(), windowMs = 10 * 60_000 }) {
+  const teams = new Map()
+  return (orgId) => {
+    if (!orgId) return
+    const team = teams.get(orgId) || { last: -Infinity, waiting: false }
+    teams.set(orgId, team)
+    if (team.waiting) return
+    team.waiting = true
+    setTimer(() => {
+      team.waiting = false
+      team.last = now()
+      run(orgId)
+    }, Math.max(0, team.last + windowMs - now()))
+  }
+}
+
+/** Whether a team's Business is billed through Stripe and still running there (the sign-in check reads only this). */
+export const billedThroughStripe = (org) => org?.business?.source === 'stripe' && HELD_STATUSES.has(org.business.stripeStatus)

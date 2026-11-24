@@ -58,9 +58,16 @@ test('self-host + metering.enabled + Stripe keys + no Cloud license: no payments
   // the same with edition set to cloud by hand: the setting alone unlocks nothing
   const claimed = paidClone({ public: { env: 'test', edition: 'cloud', baseUrl: 'https://boards.example.org' } })
   assert.equal(cloudLicensed({ settings: claimed, keys, now: NOW }), false)
-  assert.equal(meteringEnabled(claimed, { cloud: false }), false)
-  // and production settings without the Cloud key refuse to start rather than run unmetered
+  // Restated (round-2 review finding 6): a server that asks for the meter outside 'selfhost' and
+  // 'dev' (here env 'test', a Cloud test deploy) without an accepted Cloud key refuses to start,
+  // where it used to run silently unmetered (unlimited AI on Slatebox's providers). Stricter, not looser.
+  assert.throws(() => meteringEnabled(claimed, { cloud: false }), /Slatebox Cloud key/)
+  // production settings without the Cloud key refuse to start rather than run unmetered
   assert.throws(() => meteringEnabled({ ...claimed, public: { ...claimed.public, env: 'prod' } }, { cloud: false }), /Slatebox Cloud key/)
+  // a missing env with the meter on and no key: the same
+  assert.throws(() => meteringEnabled({ metering: { enabled: true } }, { cloud: false }), /Slatebox Cloud key/)
+  // self-host and dev that ask for the meter simply have none, and start
+  assert.equal(meteringEnabled({ metering: { enabled: true }, public: { env: 'dev' } }, { cloud: false }), false)
 })
 
 test('an on-prem license unlocks enterprise features, never payments; nor does a Cloud key for another host', async () => {
@@ -168,4 +175,30 @@ test('every payment and meter path goes through the lock (the paths the docs pas
   // the Meteor side reuses the enterprise license check, not a copy of it
   assert.match(app('server/cloud-lock.mjs'), /import \{ enterpriseAccess \} from '\.\/enterprise-license\.mjs'/)
   assert.match(app('server/cloud-lock-meteor.js'), /console\.log\(lock\.on\(\) \? CLOUD_LOCK_LINES\.on : CLOUD_LOCK_LINES\.off\)/)
+})
+
+test('the account and instance reports follow the meter, not the raw setting (round-2 review findings 8 and 11)', async () => {
+  const { createAccounts } = await import('../web/app/server/instance/account-summary.mjs')
+  // a self-hosted server whose settings say metering.enabled: no meter runs, so no pay or top-up links
+  const accounts = createAccounts({
+    settings: paidClone(), origin: 'https://boards.example.org', meterOn: () => false,
+    findUser: async () => ({ _id: 'u', emails: [{ address: 'a@example.org', verified: true }] }), findOrganization: async () => null,
+    listClaims: async () => [], canGenerate: async () => false, proSummary: () => ({ active: true }), includedThisMonth: async () => ({ included: true }),
+  })
+  const me = await accounts.summary({ userId: 'u', kind: 'person' })
+  assert.equal(me.links.pay, undefined)
+  assert.equal(me.links.topUp, undefined)
+  assert.equal(me.links.credits, undefined)
+  assert.deepEqual([me.ai.included, me.ai.pro], [null, null])
+  assert.match(app('server/instance/meteor.js'), /meterOn,\n\}\)/, 'the Meteor glue passes the meter\'s own answer')
+  // transcription is offered where no meter runs, even when settings ask for one
+  const withDeepgram = paidClone({ deepgram: { secret: 'dg' } })
+  assert.equal(instanceCapabilities(withDeepgram, { mailAvailable: () => true, cloud: false }).transcription, true)
+  const cloud = await cloudSettings({ deepgram: { secret: 'dg' } })
+  assert.equal(instanceCapabilities(cloud, { mailAvailable: () => true, cloud: true }).transcription, false)
+  // Business checkout is reported only where the methods would take it: Cloud, prices and the meter on
+  const meterOff = await cloudSettings({ metering: { enabled: false } })
+  assert.equal(businessCheckout(meterOff, { cloud: true }), false)
+  assert.equal(instanceCapabilities(meterOff, { mailAvailable: () => true, cloud: true }).businessCheckout, false)
+  assert.equal(businessCheckout(await cloudSettings(), { cloud: true }), true)
 })

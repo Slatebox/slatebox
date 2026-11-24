@@ -16,7 +16,7 @@ export const BUSINESS_CONTACT_URL = 'https://slatebox.com/contact/?topic=busines
 
 export const BUSINESS = Object.freeze({
   name: 'Slatebox Business',
-  summary: 'A team on Slatebox Cloud, shared and fully managed, paid per person monthly or yearly, plus tax where applicable.',
+  summary: 'A team on Slatebox Cloud, shared and fully managed, paid per member monthly or yearly, plus tax where applicable.',
   includes: Object.freeze([
     'A shared AI and call pool for the team: each member adds the same amount Slatebox Pro includes',
     'Inviting outside agents onto slates, for every member: Business counts as Slatebox Pro for this (membership.mjs)',

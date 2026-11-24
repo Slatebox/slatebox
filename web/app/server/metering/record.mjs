@@ -12,7 +12,8 @@ const MONTH_FIELD = { ai: 'aiMicros', imageSearch: 'aiMicros', imageGeneration: 
 // day and month like any included use, but on the global keys as proMicros, never as the
 // freeMicros the shared budget's stages, its daily rule and its alerts read: paying people's use
 // never pauses anyone else's free use. Admin totals show both.
-export async function recordUsage(io, { ref, payer, actorId, kind, route, feature, model, units, costMicros, now, settings, hold = null, pro = false }) {
+// pool: a Business team's pool (pool.mjs) a call started on: its minutes count on the team's month.
+export async function recordUsage(io, { ref, payer, actorId, kind, route, feature, model, units, costMicros, now, settings, hold = null, pro = false, pool = null }) {
   const amounts = meterAmounts({ costMicros, route, marginPercent: settings.marginPercent })
   const month = monthKey(now), day = dayKey(now)
   const event = {
@@ -29,7 +30,7 @@ export async function recordUsage(io, { ref, payer, actorId, kind, route, featur
     const ai = MONTH_FIELD[kind] === 'aiMicros'
     const own = ai ? amounts.costMicros : units
     // a hold is taken on the same keys it was set on, even across midnight
-    const keys = hold?.keys || { day: `user:${payer.id}:${day}`, month: `user:${payer.id}:${month}`, global: `global:${month}` }
+    const keys = hold?.keys || { day: `user:${payer.id}:${day}`, month: pool?.id ? `org:${pool.id}:${month}` : `user:${payer.id}:${month}`, global: `global:${month}` }
     await io.inc(keys.month, { [MONTH_FIELD[kind]]: own, ...(released && { heldAiMicros: -released }) })
     await io.inc(keys.day, { freeMicros: amounts.costMicros, ...(released && { heldMicros: -released }) })
     if (onPro) {

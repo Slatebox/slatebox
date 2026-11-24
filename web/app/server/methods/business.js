@@ -11,7 +11,7 @@ import { Audit, Organizations } from '../../imports/api/common/models'
 import { BUSINESS_CONTACT_URL } from '../../imports/api/business/catalog.mjs'
 import { PRICING_URL } from '../../imports/api/common/contact.mjs'
 import {
-  BUSINESS_COPY, BUSINESS_INTERVALS, MEMBER_FIELDS, alertOnce, billableMembers, businessOnSale, businessPriceIds, businessSource, businessSummary, checkBusinessPrice,
+  BUSINESS_COPY, BUSINESS_INTERVALS, MEMBER_FIELDS, alertOnce, billableMembers, billedThroughStripe, signInRecounter, businessOnSale, businessPriceIds, businessSource, businessSummary, checkBusinessPrice,
   handleBusinessEvent, matchBusinessMembers, mayManageBusiness, offerOfPrice, pricingPageDiffers, setBusinessRenewal, startBusinessCheckout, syncBusinessSubscription,
 } from '../business-billing.mjs'
 import { asMethodError, inAppOn, stripeClient } from './wallet'
@@ -93,10 +93,19 @@ Meteor.startup(() => {
   }, 60 * 60_000)
 })
 
-// A member who accepts an invitation joins the bill (invitations are not billed until then): their
-// first sign-ins check the team's quantity. matchBusinessMembers changes nothing when it matches.
+// A member who accepts an invitation joins the bill (invitations are not billed until then): a
+// sign-in checks the team's quantity, only for a team billed through Stripe, and at most once per
+// ten minutes per team (signInRecounter): never a read of every member on every sign-in.
+// matchBusinessMembers changes nothing when it matches; the hourly check above catches the rest.
+const recountAfterSignIn = signInRecounter({
+  run: orgId => membersChanged(orgId, { recordedFirst: true }),
+  setTimer: (fn, ms) => Meteor.setTimeout(fn, ms),
+})
 Accounts.onLogin(({ user }) => {
-  if (user?.orgId && !user.isAnonymous) membersChanged(user.orgId, { recordedFirst: true })
+  if (!user?.orgId || user.isAnonymous || !cloudReady() || !businessOnSale(Meteor.settings)) return
+  orgs().findOne({ _id: user.orgId }, { projection: { 'business.source': 1, 'business.stripeStatus': 1 } })
+    .then(org => { if (billedThroughStripe(org)) recountAfterSignIn(user.orgId) })
+    .catch(error => console.error('Business sign-in check failed', user.orgId, error.message)) // eslint-disable-line no-console
 })
 
 // Both prices read from Stripe by id (10 minutes in memory) and checked for shape; the amount is Stripe's.

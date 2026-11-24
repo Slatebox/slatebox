@@ -506,3 +506,31 @@ test('no Pro or Business amount is typed into app copy or the READMEs: said from
   // the README does not say Business is bought in the app before its prices exist
   assert.doesNotMatch(readFileSync(root + 'README.md', 'utf8'), /gets Slatebox Business[^.]*on the team page/)
 })
+
+test('sign-ins: only a team billed through Stripe is counted, at most once per window per team, and no join is missed (round-2 review nit 13)', async () => {
+  const { billedThroughStripe, signInRecounter } = await import('../web/app/server/business-billing.mjs')
+  assert.equal(billedThroughStripe({ business: { source: 'stripe', stripeStatus: 'active' } }), true)
+  assert.equal(billedThroughStripe({ business: { source: 'stripe', stripeStatus: 'canceled' } }), false)
+  assert.equal(billedThroughStripe({ business: { status: 'active' } }), false, 'a staff contract is never counted on sign-in')
+  assert.equal(billedThroughStripe(null), false)
+  let clock = 0
+  const timers = []
+  const runs = []
+  const recount = signInRecounter({ run: id => runs.push([id, clock]), setTimer: (fn, ms) => timers.push({ fn, at: clock + ms }), now: () => clock, windowMs: 600 })
+  const fire = until => { clock = until; for (const t of timers.splice(0).sort((a, b) => a.at - b.at)) { if (t.at <= until) t.fn(); else timers.push(t) } }
+  recount('t1')
+  fire(0)
+  assert.deepEqual(runs, [['t1', 0]], 'the first sign-in in a quiet window counts at once')
+  for (let i = 0; i < 50; i++) { clock = 10 + i; recount('t1') }
+  assert.equal(timers.length, 1, 'fifty sign-ins in the window share one count')
+  fire(599)
+  assert.equal(runs.length, 1)
+  fire(600)
+  assert.deepEqual(runs, [['t1', 0], ['t1', 600]], 'the trailing count still sees whoever joined')
+  recount('t2')
+  fire(600)
+  assert.deepEqual(runs.at(-1), ['t2', 600], 'teams are counted apart')
+  const src = readFileSync(new URL('../web/app/server/methods/business.js', import.meta.url), 'utf8')
+  assert.match(src, /if \(billedThroughStripe\(org\)\) recountAfterSignIn\(user\.orgId\)/)
+  assert.doesNotMatch(src, /Accounts\.onLogin\(\(\{ user \}\) => \{\n\s+if \(user\?\.orgId && !user\.isAnonymous\) membersChanged/)
+})

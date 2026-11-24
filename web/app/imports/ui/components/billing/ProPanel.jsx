@@ -68,7 +68,7 @@ export default function ProPanel({ summary, onChange }) {
       )}
       {/* Slatebox Business: a team's owner or admin gets it on the team page; amounts on the pricing page */}
       <FinePrint sx={{ mt: SPACE.text }}>
-        For a team: {BUSINESS.name}, paid per person, with a shared AI and call pool. Get it on your team page.{' '}
+        For a team: {BUSINESS.name}, paid per member, with a shared AI and call pool. Get it on your team page.{' '}
         <Link href={PRICING_URL} target="_blank" rel="noopener noreferrer">See pricing</Link>
       </FinePrint>
     </AccountSection>

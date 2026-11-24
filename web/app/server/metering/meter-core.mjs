@@ -6,6 +6,7 @@ import { ESTIMATES, actionCeilingMicros, actionEstimateMicros, aiCostMicros } fr
 import { recordUsage } from './record.mjs'
 import { holdFree, holdWallet, releaseHold } from './holds.mjs'
 import { addressBucket } from './client-address.mjs'
+import { creditsForPool, poolMonthKey } from './pool.mjs'
 
 const defaultError = (code, message) => Object.assign(new Error(message), { error: code, reason: message })
 
@@ -42,7 +43,10 @@ export function createMeter({ enabled, io, settings: loadSettings, decide, crede
           draftsPerDay: decision.draftsPerDay ?? aiActionsPerDay(settings, decision.level ?? 0),
           ...(decision.guest && { draftsCode: 'presentations-today', address: addressBucket(address) && { id: addressBucket(address), perDay: decision.perAddressPerDay } }),
           // the month's AI is the person's share of it in the month Pro starts or ends (policy.mjs route)
-          estimateMicros, ceilingMicros: action.ceilingMicros, settings: creditsForShare(settings, decision.creditShare), now: at,
+          estimateMicros, ceilingMicros: action.ceilingMicros, now: at,
+          // a Business member draws on the team's pool: its month counter and all its members' amounts (pool.mjs)
+          settings: decision.pool ? creditsForPool(settings, decision.pool) : creditsForShare(settings, decision.creditShare),
+          ...(decision.pool && { monthCounter: poolMonthKey(decision.pool.id, at) }),
           // Pro credits are bounded by the person's own caps, not the shared budget (policy.mjs)
           enforceGlobal: decision.pro !== true,
         })
