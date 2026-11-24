@@ -625,13 +625,17 @@ export function createSuggestionStore({
    * Undo one action: its kept (or directly applied) items, each only as far as nobody changed it
    * since. Saved as one change. Answers what was undone and what was left, and why.
    */
-  async function undo(principal, slate, { actionId }, apply = applyPlan) {
+  async function undo(principal, slate, { actionId, skip = [] }, apply = applyPlan) {
     const action = await collection.findOne({ _id: actionId, slateId: slate._id })
     if (!action) throw problem(404, 'not_found', 'There is no such agent action on this slate.')
     // An agent may take back its own work only, never another agent's or what a person kept of another's.
     if (principal.kind === 'agent' && action.agentId !== (await identify(principal, slate)).agentId)
       throw problem(403, 'people_only', 'Only a person on the slate undoes another agent\'s work.')
-    const items = action.items.filter((item) => (item.state === 'kept' || item.state === 'applied') && Array.isArray(item.undo))
+    // skip: items a host keeps as they are (an outside action's card: what it did elsewhere stays, so its record does too).
+    const skipped = new Set(Array.isArray(skip) ? skip : [])
+    const undoable = action.items.filter((item) => (item.state === 'kept' || item.state === 'applied') && Array.isArray(item.undo))
+    const items = undoable.filter((item) => !skipped.has(item.id))
+    if (!items.length && undoable.length) return { actionId, undone: [], left: [], revision: slate.revision ?? 0 }
     if (!items.length) throw problem(409, 'nothing_to_undo', 'Nothing of this action is on the slate to undo.')
     const nodes = slate.nodes || []
     const notes = nodesById(nodes)
@@ -682,6 +686,25 @@ export function createSuggestionStore({
     return { actionId, undone: undone.map((item) => item.id), left, revision }
   }
 
+  /**
+   * New words (and a link) for a waiting new note, written by the host that made it: an outside
+   * action's card says it was approved, done (with its link) or failed. Only a note still waiting
+   * changes; every screen redraws its ghost. → true when it changed.
+   */
+  async function retext(slate, { actionId, nodeId, text, link = null }) {
+    const action = await collection.findOne({ _id: actionId, slateId: slate._id })
+    if (!action) return false
+    let changed = false
+    await settle([action], (item) => {
+      if (item.kind !== 'add' || item.nodeId !== nodeId || item.state !== 'pending' || !item.node?.options) return item
+      changed = true
+      const options = { ...item.node.options, text: String(text ?? '').slice(0, 2000) }
+      if (link) options.link = { show: true, type: 'url', data: link }
+      return { ...item, node: { ...item.node, options } }
+    })
+    return changed
+  }
+
   /** The actions on a slate, newest last: everything waiting, and each agent's recent activity. */
   async function list(slateId) {
     const actions = await forSlate(slateId)
@@ -722,5 +745,5 @@ export function createSuggestionStore({
     await collection.createIndex({ slateId: 1, createdAt: 1 })
   }
 
-  return { suggest, applied, keep, discard, undo, list, ghostIds, controlsOf, modeOf, pause, setMode, agentsOf, maySetDirect, ensureIndexes, withOwnGhosts }
+  return { suggest, applied, keep, discard, undo, retext, list, ghostIds, controlsOf, modeOf, pause, setMode, agentsOf, maySetDirect, ensureIndexes, withOwnGhosts }
 }

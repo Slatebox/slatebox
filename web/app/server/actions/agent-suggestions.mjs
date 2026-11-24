@@ -142,7 +142,7 @@ const decide = defineAction({
   id: 'suggestions.decide',
   title: 'Keep/discard/undo',
   description:
-    'Decide what an agent\'s work on a slate becomes, as the canvas does. keep or discard: what it suggested, as Keep and Discard on each ghost: name the action (actionId, from your edit or slates.get include=suggestions), optionally some of its items (itemIds); Keep all on an agent\'s chip decides each of its actions. Keeping saves them as one change (a line brings the new notes at its ends); an item whose note is gone is refused and says why. Discarding saves nothing. undo: one action (actionId) that was kept or saved directly, as Undo in the agent\'s activity list: only that action, and only what nobody changed since (left[] says what stayed and why), so it never undoes another agent\'s work or a person\'s. Needs the edit right on the slate. Only people keep: an agent never keeps suggestions, and undoes only its own work.',
+    'Decide what an agent\'s work on a slate becomes, as the canvas does. keep or discard: what it suggested, as Keep and Discard on each ghost: name the action (actionId, from your edit or slates.get include=suggestions), optionally some of its items (itemIds); Keep all on an agent\'s chip decides each of its actions. Keeping saves them as one change (a line brings the new notes at its ends); an item whose note is gone is refused and says why. Discarding saves nothing. undo: one action (actionId) that was kept or saved directly, as Undo in the agent\'s activity list: only that action, and only what nobody changed since (left[] says what stayed and why), so it never undoes another agent\'s work or a person\'s. Needs the edit right on the slate. Only people keep: an agent never keeps suggestions, and undoes only its own work. An invited agent\'s action card (a waiting note that stands for a change outside Slatebox, such as a new Linear issue) is approved by keeping that note on its own (itemIds) and declined by discarding it; Keep all never approves one, and held[] says why a card waits.',
   toolset: 'slates',
   kind: 'write',
   // Keeping a suggested removal, or undoing an added note, removes a note.
@@ -175,6 +175,7 @@ const decide = defineAction({
       refused: { type: 'array', items: { type: 'object' } },
       undone: { type: 'array', items: { type: 'string' }, description: 'undo: the items undone.' },
       left: { type: 'array', items: { type: 'object' }, description: 'undo: the items left as they are, each with its reason.' },
+      held: { type: 'array', items: { type: 'object' }, description: 'keep: waiting items that stand for a change outside Slatebox (an action card) and were not approved, each with why (approve each card on its own; only its inviter approves unless they let others).' },
     },
     required: ['ok', 'shareId'],
   },
@@ -190,16 +191,26 @@ const decide = defineAction({
     decide.precheck(principal, input)
     const store = storeOf(deps)
     const choice = { actionId: input.actionId, itemIds: input.itemIds }
+    // A host's gate (deps.suggestionGate, set where enterprise code runs): some waiting notes stand
+    // for a change outside Slatebox (an invited agent's action card). Keeping one approves that
+    // change, so the gate runs it first, only for whoever may approve it, and says what it held
+    // back; discarding declines it; undo leaves its record (nothing outside can be undone).
+    const gate = deps.suggestionGate ? await deps.suggestionGate(principal, slate, { decision: input.decision, actionId: input.actionId, itemIds: input.itemIds }) : null
+    const held = gate?.held?.length ? { held: gate.held } : {}
     if (input.decision === 'undo') {
-      const out = await store.undo(principal, slate, { actionId: input.actionId }, saverFor(ctx))
-      return { ok: true, shareId: slate.shareId, ...out }
+      const out = await store.undo(principal, slate, { actionId: input.actionId, skip: gate?.skip || [] }, saverFor(ctx))
+      return { ok: true, shareId: slate.shareId, ...out, left: [...(out.left || []), ...(gate?.left || [])] }
     }
     if (input.decision === 'discard') {
       const out = await store.discard(principal, slate, choice)
       return { ok: true, shareId: slate.shareId, revision: slate.revision ?? 0, ...out }
     }
+    if (Array.isArray(gate?.itemIds)) {
+      if (!gate.itemIds.length) return { ok: true, shareId: slate.shareId, revision: slate.revision ?? 0, kept: [], refused: [], ...held }
+      choice.itemIds = gate.itemIds
+    }
     const out = await store.keep(principal, slate, choice, saverFor(ctx))
-    return { ok: true, shareId: slate.shareId, ...out }
+    return { ok: true, shareId: slate.shareId, ...out, ...held }
   },
 })
 

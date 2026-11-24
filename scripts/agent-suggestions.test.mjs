@@ -659,3 +659,47 @@ test("Keep all and a Discard at the same moment never undo each other: a stale w
   const [lines] = await collection.find({ _id: "lines" }).toArray();
   assert.deepEqual(lines.items.map((i) => [i.id, i.state, i.reason ?? null]), [["c", "kept", null], ["cx", "refused", "A note at its end is gone."]]);
 });
+
+test("a host's gate (deps.suggestionGate) decides first: Keep keeps only what it lets through and says what it held; discard tells it; undo leaves what it skips; retext changes a waiting note's words", async (t) => {
+  const w = world();
+  t.after(() => w.close());
+  const agent = await w.principalFor(["slates:read", "slates:write"]);
+  const out = await edit(w, agent, [add("A note"), add("An action card")]);
+  const { actionId, items } = out.body.suggestion;
+  const [note, card] = items;
+  const seen = [];
+  // As enterprise/server/outside.mjs answers: the card's item is held unless kept on its own.
+  w.deps.suggestionGate = async (principal, slate, choice) => {
+    seen.push([choice.decision, choice.itemIds || null]);
+    if (choice.decision === "keep") return choice.itemIds ? { itemIds: choice.itemIds, held: [] } : { itemIds: [note.id], held: [{ itemId: card.id, reason: "Approve it on its own card." }] };
+    if (choice.decision === "undo") return { skip: [card.id], left: [{ itemId: card.id, reason: "It stays done outside." }] };
+    return null;
+  };
+  // a waiting note's words change for every screen (the host's card says it was done)
+  assert.equal(await w.deps.suggestions.retext(w.slate("demo"), { actionId, nodeId: card.nodeId, text: "Done · Create issue", link: "https://example.org/i/1" }), true);
+  const all = await decide(w, person(), { decision: "keep", actionId });
+  assert.deepEqual(all.body.kept.map((k) => k.itemId), [note.id]);
+  assert.deepEqual(all.body.held, [{ itemId: card.id, reason: "Approve it on its own card." }]);
+  assert.ok(!ids(w).includes(card.nodeId), "the held card still waits");
+  // kept on its own, it lands with its new words and link
+  await decide(w, person(), { decision: "keep", actionId, itemIds: [card.id] });
+  const saved = w.slate("demo").nodes.find((node) => node.options.id === card.nodeId);
+  assert.equal(saved.options.text, "Done · Create issue");
+  assert.equal(saved.options.link?.data, "https://example.org/i/1");
+  assert.equal(await w.deps.suggestions.retext(w.slate("demo"), { actionId, nodeId: card.nodeId, text: "late" }), false, "a kept note is not the host's to rewrite");
+  // undo takes back the note, never the skipped card, and says why
+  const undone = await decide(w, person(), { decision: "undo", actionId });
+  assert.deepEqual(undone.body.undone, [note.id]);
+  assert.deepEqual(undone.body.left.at(-1), { itemId: card.id, reason: "It stays done outside." });
+  assert.ok(ids(w).includes(card.nodeId) && !ids(w).includes(note.nodeId));
+  // an undo of only skipped items is nothing to do, not an error
+  const again = await decide(w, person(), { decision: "undo", actionId });
+  assert.deepEqual(again.body.undone, []);
+  // a gate that lets nothing through keeps nothing
+  const second = await edit(w, agent, [add("Another card")]);
+  w.deps.suggestionGate = async (principal, slate, choice) => (choice.decision === "keep" ? { itemIds: [], held: [{ itemId: second.body.suggestion.items[0].id, reason: "Only Ada approves." }] } : null);
+  const none = await decide(w, person(), { decision: "keep", actionId: second.body.suggestion.actionId });
+  assert.deepEqual([none.body.kept, none.body.held[0].reason], [[], "Only Ada approves."]);
+  await decide(w, person(), { decision: "discard", actionId: second.body.suggestion.actionId });
+  assert.deepEqual(seen.map(([d]) => d), ["keep", "keep", "undo", "undo"]);
+});
