@@ -28,6 +28,10 @@ import ShapeMaker from '../shapes/ShapeMaker'
 // The dock's Boards and starters row: its own chunk, fetched when the dock first draws.
 const BoardsDock = React.lazy(() => loadBoardsRows().then((m) => ({ default: m.BoardsDock })))
 
+// The open dock's own background (always dark), and its ink: the dark colour scheme's tokens, whatever the mode.
+const DOCK = '#112c44'
+const dockInk = (theme) => (theme.colorSchemes?.dark ?? theme).palette
+
 export default function QuickNodeActions({
   commentAccessOnly,
   slate,
@@ -65,6 +69,14 @@ export default function QuickNodeActions({
       setActionMenuOpen(false)
     }
   }
+
+  // The zoom pill sits under the open dock, where it can be neither read nor reached: it steps aside until the dock closes.
+  React.useEffect(() => {
+    const root = document.documentElement
+    if (actionMenuOpen && !commentAccessOnly) root.setAttribute('data-sb-add-open', '')
+    else root.removeAttribute('data-sb-add-open')
+    return () => root.removeAttribute('data-sb-add-open')
+  }, [actionMenuOpen, commentAccessOnly])
 
   const createNode = (shape) => addNote(slate, shape)
 
@@ -149,13 +161,12 @@ export default function QuickNodeActions({
     row: i,
     shapes: ds,
   }))
+  // The open dock is a dark panel in the light and the dark mode alike, so its words and edges take the dark mode's
+  // ink (theme tokens). Solid, not see-through: an opacity on the panel dimmed every word in it, and let what is
+  // under it show through as ghosts.
   let actionMenuStyle = actionMenuOpen
     ? {
-        // backgroundColor: sendSlateBgColor || '#000',
-        backgroundColor: '#112c44',
-        opacity: 0.9,
-        // border: '2px solid #fff',
-        // padding: '10px',
+        backgroundColor: DOCK,
         borderBottomRightRadius: '30px',
         borderTopLeftRadius: '10px',
         width: '420px',
@@ -247,6 +258,8 @@ export default function QuickNodeActions({
           alignItems: 'flex-end',
           '& .MuiSpeedDialAction-fab': {
             backgroundColor: 'transparent',
+            // The "Boards and starters" words: the dark mode's text ink, on the dark dock.
+            color: dockInk(theme).text.primary,
             cursor: 'pointer',
             '&:hover': {
               backgroundColor: 'transparent',
@@ -345,7 +358,7 @@ export default function QuickNodeActions({
                 '&:hover': {
                   backgroundColor: 'rgba(0,0,0,0.4)',
                 },
-                color: (theme) => theme.palette.secondary.main,
+                color: (theme) => dockInk(theme).text.primary,
               }}
             >
               <ClearIcon sx={{ fontSize: 16 }} />
@@ -373,19 +386,21 @@ export default function QuickNodeActions({
                   key={c.key}
                   size="small"
                   disableRipple={true}
-                  sx={{
-                    // color: contrastColor,
-                    height: '30px',
-                    // backgroundColor: (theme) =>
-                    //   actionMenuExpanded && c.key === 'searchCustom'
-                    //     ? theme.palette.secondary.main
-                    //     : 'transparent',
-                    // '&:hover': {
-                    //   backgroundColor: (theme) =>
-                    //     actionMenuExpanded && c.key === 'searchCustom'
-                    //       ? theme.palette.secondary.dark
-                    //       : 'rgba(255, 255, 255, 0.08)',
-                    // },
+                  sx={(theme) => {
+                    const ink = dockInk(theme)
+                    const on = actionMenuExpanded && c.key === 'searchCustom'
+                    // On the dark dock: the dark mode's text ink and edge (light words, a 3:1 outline), and its
+                    // amber for the one that is on (Custom Shape while the icon search is open).
+                    return {
+                      height: '30px',
+                      color: on ? ink.primary.contrastText : ink.text.primary,
+                      backgroundColor: on ? ink.primary.main : 'transparent',
+                      borderColor: `${on ? ink.primary.main : ink.thematic.borderColor} !important`,
+                      '&:hover': {
+                        backgroundColor: on ? ink.primary.dark : 'rgba(255, 255, 255, 0.08)',
+                        borderColor: `${on ? ink.primary.dark : ink.text.primary} !important`,
+                      },
+                    }
                   }}
                   variant={
                     c.text
@@ -410,7 +425,7 @@ export default function QuickNodeActions({
           <SpeedDialAction
             key="boards"
             tooltipTitle=""
-            icon={<React.Suspense fallback={null}><BoardsDock onDone={handleActionMenuClose} /></React.Suspense>}
+            icon={<React.Suspense fallback={null}><BoardsDock onDone={handleActionMenuClose} dark /></React.Suspense>}
             sx={speedDialActionStyles}
             // A group of real buttons, not a button holding buttons: the action's own Fab is drawn as a plain group.
             slotProps={{ fab: { component: 'div', role: 'group', tabIndex: -1, 'aria-label': 'Boards and starters', disableRipple: true, disableFocusRipple: true,

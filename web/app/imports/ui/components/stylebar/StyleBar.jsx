@@ -34,6 +34,8 @@ export default function StyleBar({
     '--sb-ink': shell.ink ?? '#193c2f',
     '--sb-secondary-ink': shell.secondaryInk ?? '#486351',
     '--sb-border': shell.border ?? '#c6d1bf',
+    // A control's own edge (an outlined button, a shape tile): 3:1 on the surface, where --sb-border is a quiet divider.
+    '--sb-edge': theme.palette.thematic?.borderColor ?? '#819786',
     '--sb-selected': shell.selected ?? '#dce9ce',
     '--sb-selected-ink': shell.selectedInk ?? '#183d28',
     '--sb-offset': shell.offset ?? '#edf0e5',

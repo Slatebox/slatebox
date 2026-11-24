@@ -9,9 +9,11 @@ import { stripPicks } from './picks'
 // sheet's. A chunk of their own, out of the eager bundle: fetched when the + menu first draws.
 
 /** "Boards and starters" in the desktop dock: three pictures (stills: nothing here moves on its own) and See all (library final.md §2.2). */
-export function BoardsDock({ onDone }) {
+export function BoardsDock({ onDone, dark = false }) {
   const go = (detail) => { onDone?.(); requestLibrary(detail) }
-  const look = { display: 'block', borderRadius: 4, overflow: 'hidden', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }
+  // On the dock's dark panel (`dark`) its link and focus ring take the dark mode's amber, in either mode.
+  const accent = (theme) => (dark ? (theme.colorSchemes?.dark ?? theme).palette.primary.main : theme.palette.primary.main)
+  const look = { display: 'block', borderRadius: 4, overflow: 'hidden', '&:focus-visible': { outline: '2px solid', outlineColor: accent } }
   return (
     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <Typography variant="caption" aria-hidden="true" sx={{ fontWeight: 700, whiteSpace: 'nowrap', mr: .5 }}>Boards and starters</Typography>
@@ -23,7 +25,7 @@ export function BoardsDock({ onDone }) {
           </ButtonBase>
         </Tooltip>
       ))}
-      <ButtonBase onClick={() => go({})} sx={{ ...look, whiteSpace: 'nowrap', fontSize: 13, px: 1, py: .5, color: 'primary.main', fontWeight: 600 }}>See all ›</ButtonBase>
+      <ButtonBase onClick={() => go({})} sx={{ ...look, whiteSpace: 'nowrap', fontSize: 13, px: 1, py: .5, color: accent, fontWeight: 600 }}>See all ›</ButtonBase>
     </span>
   )
 }

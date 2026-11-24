@@ -184,8 +184,10 @@ body:has(.sb-cookie) .sb-canvas-page{box-sizing:border-box;padding-bottom:calc(m
 #slateCanvas .slateboxjs-birdseye-zoom-controls button{background:var(--sb-offset,#edf0e5)!important;border-color:var(--sb-border,#c6d1bf)!important;color:var(--sb-ink,#193c2f)!important}
 #slateCanvas .slateboxjs-birdseye-zoom-controls span{color:var(--sb-ink,#193c2f)!important}
 .slatebox-zoom-slider.slatebox-zoom-slider{background:var(--sb-surface,#fffef8)!important;color:var(--sb-ink,#193c2f)!important;
-  border:1px solid var(--sb-border,#c6d1bf)!important;border-radius:18px!important;box-shadow:0 2px 10px rgb(25 53 41 / 12%);font-family:inherit!important}
+  border:1px solid var(--sb-edge,#819786)!important;border-radius:18px!important;box-shadow:0 2px 10px rgb(25 53 41 / 12%);font-family:inherit!important}
 .slatebox-zoom-slider.slatebox-zoom-slider button{color:inherit!important}
+/* While the + dock is open it covers the pill: the pill steps aside rather than show through dimly. */
+html[data-sb-add-open] .slatebox-zoom-slider{visibility:hidden}
 /* The dark rules carry the canvas's id too: without it the #slateCanvas rules above outrank them. */
 #slateCanvas[data-sb-canvas=dark] .slateboxjs-birdseye{box-shadow:0 4px 18px rgb(0 0 0 / 40%)!important}
 #slateCanvas[data-sb-canvas=dark] .slateboxjs-birdseye > svg > rect:first-child{fill:var(--sb-canvas-bg)}

@@ -161,7 +161,7 @@
 .sb-font span:last-child { font: 500 12px 'Manrope', system-ui, sans-serif; color: var(--sb-secondary-ink); }
 
 .sb-shapes { display: grid; grid-template-columns: repeat(5, 44px); gap: 6px; }
-.sb-shapes .sb-btn { width: 44px; height: 44px; padding: 0; border: 1px solid var(--sb-border); }
+.sb-shapes .sb-btn { width: 44px; height: 44px; padding: 0; border: 1px solid var(--sb-edge, #819786); }
 .sb-shapes .sb-btn svg { width: 26px; height: 26px; }
 .sb-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; max-height: 260px; overflow: auto; margin-top: 8px; }
 .sb-results button { appearance: none; border: 1px solid var(--sb-border); border-radius: 8px; padding: 0; background: var(--sb-offset); cursor: pointer; aspect-ratio: 1; overflow: hidden; }
@@ -198,7 +198,7 @@
 
 .sb-add { appearance: none; border: 0; border-radius: 22px; background: var(--sb-add); color: var(--sb-add-ink); font: 800 15px 'Manrope', system-ui, sans-serif; height: 44px; padding: 0 16px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .sb-add-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.sb-add-grid .sb-btn { flex-direction: column; height: 72px; border: 1px solid var(--sb-border); font-size: 12px; }
+.sb-add-grid .sb-btn { flex-direction: column; height: 72px; border: 1px solid var(--sb-edge, #819786); font-size: 12px; }
 .sb-add-grid .sb-btn svg { width: 26px; height: 26px; }
 
 @media (prefers-reduced-motion: reduce) { .sb-switch::after { transition: none; } }
