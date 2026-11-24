@@ -69,15 +69,11 @@ export const agentKeyFor = (secret, tokenId, slateId) =>
 const recordId = (runId, slateId) => createHash('sha256').update(String(runId) + '\u0000' + String(slateId)).digest('hex').slice(0, 32)
 const runOf = (principal) => principal.runId || 'token:' + principal.tokenId
 
-// A suggestion an invited agent is showing on the slate (a ghost note, not saved yet) is drawn
-// under ghost-<id>, where the server made the id: a pointer may point at it too.
-export const GHOST_TARGET = /^ghost-ag[0-9a-f]{16}$/
-
 /** A record as a screen receives it: the public fields only, its targets those on this slate. */
 export function publicRecord(doc, slateIds) {
   const out = {}
   for (const field of PUBLIC_FIELDS) if (doc[field] !== undefined) out[field] = doc[field]
-  out.targets = (Array.isArray(doc.targets) ? doc.targets : []).filter((id) => slateIds.has(id) || GHOST_TARGET.test(id))
+  out.targets = (Array.isArray(doc.targets) ? doc.targets : []).filter((id) => slateIds.has(id))
   return out
 }
 

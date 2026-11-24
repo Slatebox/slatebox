@@ -26,7 +26,8 @@ export function register(api, context) {
     return started.service
   }
   // Outside agents: open servers (S2a) and servers that need sign-in (S2b):
-  // connectors.list/discover/signIn/signInStatus/useKey/connect/disconnect/call/keep/discard.
+  // connectors.list/discover/signIn/signInStatus/useKey/connect/disconnect/call. Keeping and
+  // discarding what they suggest is the app's own suggestions.decide.
   api.addActions(connectorActions(running))
   // Sign-in's own addresses: the client document, the popup's start and the fixed callback.
   for (const route of signInRoutes({

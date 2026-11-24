@@ -1,6 +1,7 @@
 // Outside agents (Slatebox as an MCP client, enterprise/): the guarded fetch, the hostile test
 // server's cases (each refused), quarantine, the translator's checks, and the service's rules:
-// Pro for the inviter, only the inviter calls, editors keep, everyone sees.
+// Pro for the inviter, only the inviter calls, its work becomes the app's live suggestions,
+// everyone sees.
 // Run: node --import ./scripts/enterprise-resolve.mjs --test scripts/connectors.test.mjs
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
@@ -15,7 +16,7 @@ import { connectorPrincipal, createConnectorService } from '../enterprise/server
 import { connectorSettings } from '../enterprise/server/connector-settings.mjs'
 import { canonicalAddress, cardFor, GALLERY } from '../enterprise/common/gallery.mjs'
 import { sanitizeClientName } from '../web/app/imports/api/common/agent-label.mjs'
-import { canvasOfWrites } from '../web/app/server/exec/conversation.mjs'
+import { connectorSuggestions } from './connector-suggestions-world.mjs'
 import { applyPlanToJSON } from 'slateboxjs/operations'
 import { createAgentPresence, publicRecord } from '../web/app/server/presence/agentPresence.mjs'
 import { resolveAIChoice, operatorConfig } from '../web/app/server/methods/ai/connections.mjs'
@@ -146,12 +147,15 @@ test('hostile: injection in results can only become plain notes, with only the l
   const conn = await world.inviteTo('/hostile/inject/mcp')
   const result = await world.service.call(world.ada, { connectionId: conn.connectionId, request: 'retries' })
   assert.equal(result.items, 1)
-  const item = world.suggestions.rows[0].items[0]
-  assert.ok(item.plan.operations.every((op) => ['add_nodes', 'connect_nodes'].includes(op.kind)))
-  const links = item.plan.operations.map((op) => op.style?.link).filter(Boolean)
+  const [, input] = world.applied.at(-1)
+  assert.ok(input.plan.operations.every((op) => ['add_nodes', 'connect_nodes'].includes(op.kind)))
+  const links = input.plan.operations.map((op) => op.style?.link).filter(Boolean)
   assert.deepEqual(links, ['https://example.org/retries'])
-  // nothing but this slate is ever written, and only as a preview until someone keeps it
-  assert.ok(world.applied.every(([, input, mode]) => input.shareId === 'share1' && mode === 'preview'))
+  // nothing but this slate is ever written, and only as suggestions until someone keeps them
+  assert.ok(world.applied.every(([, given]) => given.shareId === 'share1'))
+  const [action] = await world.actions()
+  assert.ok(action.items.every((i) => i.kind === 'add' && i.state === 'pending'))
+  assert.equal(world.slate.nodes.length, 1, 'nothing saved')
 })
 
 test('hostile: structuredContent that breaks its outputSchema is dropped, the text is kept', async () => {
@@ -266,14 +270,6 @@ function memoryStore() {
     findOne: async (q) => rows.find((r) => Object.entries(q).every(([k, v]) => r[k] === v)) || null,
     find: async (q) => rows.filter((r) => Object.entries(q).every(([k, v]) => (v && typeof v === 'object' && '$ne' in v ? r[k] !== v.$ne : r[k] === v))),
     update: async (id, set) => Object.assign(rows.find((r) => r._id === id) || {}, set),
-    pushItem: async (id, item) => rows.find((r) => r._id === id).items.push(item),
-    async setItem(id, n, set, onlyIf) {
-      const item = rows.find((r) => r._id === id)?.items.find((i) => i.n === n)
-      if (!item || (onlyIf && item.status !== onlyIf)) return false
-      Object.assign(item, set)
-      return true
-    },
-    removeForConnection: async (cid) => rows.splice(0, rows.length, ...rows.filter((r) => r.connectionId !== cid)),
   }
 }
 
@@ -281,13 +277,14 @@ function makeWorld({ layout = null, plan = null, pro = ['ada'] } = {}) {
   const slate = { _id: 'slate1', shareId: 'share1', userId: 'ada', revision: 1, nodes: [{ options: { id: 'n0', text: 'Checkout', xPos: 0, yPos: 0, width: 200, height: 80 }, relationships: { associations: [] } }] }
   const roles = { ada: 'edit', sam: 'edit', vic: 'read' }
   const connections = memoryStore()
-  const suggestions = memoryStore()
-  const applied = []
   const presenceCalls = []
   const prompts = []
-  const service = createConnectorService({
+  // The app's real suggestion path: the agent's saves become live suggestions (ghosts).
+  const live = connectorSuggestions(slate, { presenceCalls })
+  const { applied } = live
+  const serviceOptions = {
     connections,
-    suggestions,
+    suggestions: live.suggestions,
     fetch,
     session: { discover, callTool },
     model: async ({ tool, system, user }) => {
@@ -300,12 +297,7 @@ function makeWorld({ layout = null, plan = null, pro = ['ada'] } = {}) {
       }
       return layout || { groups: [{ label: 'Ideas', notes: [{ key: 'a', text: 'Retry after 24 hours' }, { key: 'b', text: 'Smart retries', link: 'https://example.org/retries' }] }] }
     },
-    applyOperations: async (principal, input, mode) => {
-      applied.push([principal, input, mode])
-      const result = applyPlanToJSON(structuredClone(slate), input.plan, { requireMatches: mode === 'save' })
-      return { body: { ok: true, operations: result.materializedPlan.operations, report: result.report } }
-    },
-    canvasOf: canvasOfWrites,
+    applyOperations: live.applyOperations,
     access: {
       forUser: async (shareId, userId) => (shareId === 'share1' && roles[userId] ? { slate, canRead: true, canEdit: roles[userId] === 'edit' } : null),
       reload: async () => slate,
@@ -321,9 +313,11 @@ function makeWorld({ layout = null, plan = null, pro = ['ada'] } = {}) {
     },
     devOrigins: [servers.origin],
     sleep: async () => {},
-  })
+  }
+  const service = createConnectorService(serviceOptions)
   const person = (userId) => ({ kind: 'person', userId, scopes: ['slates:read', 'slates:write'] })
-  const world = { service, connections, suggestions, applied, presenceCalls, prompts, slate, ada: person('ada'), sam: person('sam'), vic: person('vic') }
+  const world = { service, serviceOptions, connections, live, store: live.store, applied, presenceCalls, prompts, slate, ada: person('ada'), sam: person('sam'), vic: person('vic') }
+  world.actions = async () => world.store.list(slate._id)
   world.inviteTo = async (path, options = {}) => {
     const found = await service.discover(world.ada, { shareId: 'share1', address: servers.url(path) })
     return service.connect(world.ada, { shareId: 'share1', address: found.address, name: options.name || 'Research', tools: found.tools.map(({ name, hash, policy }) => ({ name, hash, policy })), contextLevel: options.contextLevel || 'selection' })
@@ -336,7 +330,7 @@ test('Pro: discovering, inviting and asking all need Pro for the inviter, on the
   await refusedWith(world.service.discover(world.ada, { shareId: 'share1', address: servers.url('/open/mcp') }), 'pro_required')
   const paid = makeWorld()
   const conn = await paid.inviteTo('/open/mcp')
-  paid.service // Pro lapses: the next ask is refused, ghosts already there stay keepable
+  // Pro lapses: the next ask is refused (suggestions already there stay keepable)
   const lapsed = makeWorld({ pro: [] })
   lapsed.connections.rows.push(...paid.connections.rows)
   await refusedWith(lapsed.service.call(lapsed.ada, { connectionId: conn.connectionId, request: 'x' }), 'pro_required')
@@ -372,18 +366,25 @@ test('only the inviter can ask the agent; everyone who reads the slate sees it',
   assert.equal(seen.connections[0].tools, undefined, 'tools are the inviter\'s to see')
 })
 
-test('a call: lookups run, ghosts appear one by one with the cursor at each, nothing is saved until kept', async () => {
+test('a call: lookups run, each group becomes a live suggestion with the cursor at its ghosts, nothing is saved until kept', async () => {
   const world = makeWorld()
   const conn = await world.inviteTo('/open/mcp')
   const result = await world.service.call(world.ada, { connectionId: conn.connectionId, request: 'How do teams retry declined cards?', selection: ['n0'] })
   assert.equal(result.items, 1)
-  const doc = world.suggestions.rows[0]
-  assert.equal(doc.status, 'ready')
-  assert.equal(doc.items[0].status, 'pending')
-  assert.equal(doc.items[0].canvas.nodes.length, 2, JSON.stringify(doc.items.map((i) => i.canvas)).slice(0, 400))
+  const actions = await world.actions()
+  assert.deepEqual(result.actions, actions.map((a) => a._id))
+  const [action] = actions
+  // filed under the agent's id on this slate (the one its chip and roster use), as the invited agent
+  assert.equal(action.agentId, conn.agentId)
+  assert.equal(action.origin, 'invited')
+  assert.equal(action.label, 'Research')
+  assert.deepEqual(action.items.map((i) => [i.kind, i.state]), [['add', 'pending'], ['add', 'pending']])
+  assert.equal(world.slate.revision, 1, 'nothing saved')
+  // the cursor goes to the ghosts as they appear, saying what it suggests
   const saved = world.presenceCalls.filter(([kind]) => kind === 'saved').at(-1)
-  assert.ok(saved[3].targets.every((id) => /^ghost-ag[0-9a-f]{16}$/.test(id)))
-  assert.ok(world.applied.every(([principal, , mode]) => mode === 'preview' && principal.connector.id === conn.connectionId))
+  assert.deepEqual(saved[3].targets, action.items.map((i) => 'ghost-' + i.nodeId))
+  assert.match(saved[3].say, /^Suggesting 2 new notes/)
+  assert.ok(world.applied.every(([principal, , mode]) => mode === 'save' && principal.connector.id === conn.connectionId && principal.userId === 'ada'))
   // the planner saw the selection as text with aliases, never ids
   const planPromptSeen = world.prompts.find((p) => p.tool === 'plan_calls').user
   assert.ok(planPromptSeen.includes('Checkout') && !planPromptSeen.includes('"n0"'))
@@ -391,42 +392,55 @@ test('a call: lookups run, ghosts appear one by one with the cursor at each, not
   assert.ok(servers.calls.filter((c) => c.kind === 'open' && c.method === 'tools/call').every((c) => c.name !== 'post_message'))
 })
 
-test('keep and discard on the slate: any editor, never a viewer; each kept ghost is one save as the agent', async () => {
+test('keep, discard and undo are the app\'s own: each group is one action; removing the agent withdraws what still waits', async () => {
   const world = makeWorld({ layout: { groups: [{ label: 'One', notes: [{ key: 'a', text: 'A' }] }, { label: 'Two', notes: [{ key: 'b', text: 'B' }] }, { label: 'Three', notes: [{ key: 'c', text: 'C' }] }] } })
   const conn = await world.inviteTo('/open/mcp')
-  const { suggestionId } = await world.service.call(world.ada, { connectionId: conn.connectionId, request: 'ideas please' })
-  assert.deepEqual(world.suggestions.rows[0].items.map((i) => [i.n, i.status]), [[1, 'pending'], [2, 'pending'], [3, 'pending']])
-  await refusedWith(world.service.keep(world.vic, { suggestionId, n: 1 }), 'forbidden')
-  const kept = await world.service.keep(world.sam, { suggestionId, n: 1 })
-  assert.equal(kept.kept, 1)
-  const saves = world.applied.filter(([, , mode]) => mode === 'save')
-  assert.equal(saves.length, 1)
-  assert.equal(saves[0][0].connector.name, 'Research')
-  assert.equal(saves[0][0].userId, 'ada', 'the agent writes with its inviter\'s rights')
-  await refusedWith(world.service.keep(world.ada, { suggestionId, n: 1 }), 'already_decided')
-  const discarded = await world.service.discard(world.ada, { suggestionId, n: 2 })
-  assert.equal(discarded.discarded, 1)
-  const rest = await world.service.keep(world.ada, { suggestionId })
-  assert.equal(rest.kept, 1)
-  assert.deepEqual(world.suggestions.rows[0].items.map((i) => i.status), ['kept', 'discarded', 'kept'])
+  const asked = await world.service.call(world.ada, { connectionId: conn.connectionId, request: 'ideas please' })
+  assert.equal(asked.items, 3)
+  assert.equal(asked.actions.length, 3, 'one action per group, so each is one Undo')
+  const [one, two, three] = asked.actions
+  // Sam (an editor) keeps the first: one save, made by Sam, attributed to the agent
+  const kept = await world.store.keep(world.sam, world.slate, { actionId: one }, world.live.saver)
+  assert.equal(kept.kept.length, 1)
+  assert.equal(world.slate.revision, 2)
+  assert.ok(world.slate.nodes.some((n) => n.options.text === 'A'))
+  // an agent never keeps its own suggestions
+  const agent = connectorPrincipal(world.connections.rows[0], 'k1')
+  await refusedWith(world.store.keep(agent, world.slate, { actionId: two }, world.live.saver), 'own_suggestion')
+  await world.store.discard(world.ada, world.slate, { actionId: two })
+  // per-agent undo takes back only what it kept
+  const undone = await world.store.undo(world.ada, world.slate, { actionId: one }, world.live.saver)
+  assert.equal(undone.undone.length, 1)
+  assert.ok(!world.slate.nodes.some((n) => n.options.text === 'A'))
+  // removing the agent discards what still waits (the third group)
   await world.service.disconnect(world.ada, { connectionId: conn.connectionId })
-  assert.equal(world.suggestions.rows.length, 0)
+  const states = Object.fromEntries((await world.actions()).map((a) => [a._id, a.items.map((i) => i.state)]))
+  assert.deepEqual(states, { [one]: ['undone'], [two]: ['discarded'], [three]: ['discarded'] })
+})
+
+test('Pause all agents stops an invited agent too, in the people\'s words', async () => {
+  const world = makeWorld()
+  const conn = await world.inviteTo('/open/mcp')
+  const paused = Object.assign(new Error('People on this slate paused its agents. Ask one of them to resume agents, then retry.'), { status: 423, code: 'agents_paused' })
+  const service = createConnectorService({ ...world.serviceOptions, applyOperations: async () => { throw paused } })
+  await refusedWith(service.call(world.ada, { connectionId: conn.connectionId, request: 'ideas' }), 'agents_paused')
 })
 
 test('Excalidraw through the service: the diagram lands as one ghost of native notes and lines', async () => {
   const world = makeWorld({ plan: { calls: [{ tool: 'create_view', arguments: { elements: '[]' } }], done: true } })
   const conn = await world.inviteTo('/open/mcp', { name: 'Excalidraw' })
   await world.service.call(world.ada, { connectionId: conn.connectionId, request: 'Draw how a card payment is retried' })
-  const item = world.suggestions.rows[0].items[0]
-  assert.equal(item.label, 'Diagram')
-  assert.equal(item.plan.operations.filter((o) => o.kind === 'add_nodes').length, 3)
-  assert.equal(item.plan.operations.filter((o) => o.kind === 'connect_nodes').length, 2)
+  const [, input] = world.applied.at(-1)
+  assert.equal(input.plan.operations.filter((o) => o.kind === 'add_nodes').length, 3)
+  assert.equal(input.plan.operations.filter((o) => o.kind === 'connect_nodes').length, 2)
+  const [action] = await world.actions()
+  assert.deepEqual(action.items.map((i) => i.kind).sort(), ['add', 'add', 'add', 'link', 'link'])
   assert.equal(world.prompts.filter((p) => p.tool === 'place_suggestions').length, 0, 'no model lays out a diagram')
 })
 
 // ---------- MIT seams ----------
 
-test('presence: an invited agent wears "<name> · added by <inviter>", and may point at its ghosts', async () => {
+test('presence: an invited agent wears its name, "added by <inviter>" and its chosen colour', async () => {
   const docs = new Map()
   const presence = createAgentPresence({
     collection: {
@@ -442,12 +456,13 @@ test('presence: an invited agent wears "<name> · added by <inviter>", and may p
     findUser: async () => ({ profile: { firstName: 'Ada' } }),
     secret: 'k',
   })
-  const principal = connectorPrincipal({ _id: 'c1', ownerId: 'ada', name: 'Excalidraw' }, 'run1')
-  await presence.saved(principal, { _id: 'slate1', userId: 'ada' }, { targets: ['ghost-ag0123456789abcdef', 'n1'] })
+  const principal = connectorPrincipal({ _id: 'c1', ownerId: 'ada', name: 'Excalidraw', colorIndex: 3 }, 'run1')
+  await presence.saved(principal, { _id: 'slate1', userId: 'ada' }, { targets: ['ghost-s0001', 'n1'] })
   const [doc] = docs.values()
-  assert.equal(doc.label, 'Excalidraw · added by Ada')
-  const shown = publicRecord(doc, new Set(['n1']))
-  assert.deepEqual(shown.targets, ['ghost-ag0123456789abcdef', 'n1'])
+  assert.deepEqual([doc.label, doc.origin, doc.invitedBy, doc.colorIndex], ['Excalidraw', 'invited', 'Ada', 3])
+  assert.equal(doc.agentId, (await presence.identify(principal, { _id: 'slate1', userId: 'ada' })).agentId)
+  // a ghost target is shown only while that ghost waits (the reader adds the store's ghost ids)
+  assert.deepEqual(publicRecord(doc, new Set(['n1', 'ghost-s0001'])).targets, ['ghost-s0001', 'n1'])
   assert.deepEqual(publicRecord({ targets: ['ghost-../x', 'other-slate-note'] }, new Set()).targets, [])
 })
 
@@ -463,7 +478,9 @@ test('the connector actions join the one registry: Meteor method, /api/v1 route,
   const { connectorActions } = await import('../enterprise/server/actions.mjs')
   const registry = createAppRegistry({ extraActions: connectorActions(() => ({})) })
   const ids = registry.list().map((a) => a.id).filter((id) => id.startsWith('connectors.'))
-  assert.deepEqual(ids.sort(), ['connectors.call', 'connectors.connect', 'connectors.discard', 'connectors.disconnect', 'connectors.discover', 'connectors.keep', 'connectors.list', 'connectors.signIn', 'connectors.signInStatus', 'connectors.useKey'])
+  assert.deepEqual(ids.sort(), ['connectors.call', 'connectors.connect', 'connectors.disconnect', 'connectors.discover', 'connectors.list', 'connectors.signIn', 'connectors.signInStatus', 'connectors.useKey'])
+  // keeping, discarding and undoing what they suggest is the app's one suggestions.decide
+  assert.ok(registry.get('suggestions.decide'))
   for (const action of registry.list().filter((a) => a.id.startsWith('connectors.'))) {
     assert.ok(action.mounts.ddp && action.mounts.http && action.tool, action.id)
     assert.ok(action.principals.includes('agent') && action.principals.includes('person'))

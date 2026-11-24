@@ -11,20 +11,21 @@
 //   connect    invite it onto one slate: the name it wears, the tools it may use (consent is to
 //              each tool's hash), what it may see.
 //   call       the inviter asks it something. Slatebox's model plans the lookups, the calls run,
-//              the results are quarantined, a quarantined model lays them out, and each group
-//              appears on the slate as a live ghost (broadcast to everyone on the slate) while
-//              the agent's named cursor moves to it.
-//   keep       anyone who can edit the slate keeps a ghost (or all): it is saved as the agent
-//              ("<name> · added by <inviter>"), one save per ghost, so each is one undo step.
-//   discard    anyone who can edit the slate discards a ghost (or all).
-//   disconnect the inviter removes the agent; its waiting ghosts go with it, and when no other
-//              slate of theirs uses that server, its sign-in is revoked and forgotten.
+//              the results are quarantined, a quarantined model lays them out, and each group is
+//              saved as the agent through slates.applyOperations, where an agent's canvas edit
+//              becomes a live suggestion (server/agents/suggestions.mjs): ghosts everyone on the
+//              slate sees as they appear, the agent's named cursor moving to each.
+//              Keeping, discarding and undoing are the app's own suggestions.decide (Keep and
+//              Discard on each ghost, Keep all / Discard all on the agent's chip, Undo per action),
+//              by anyone who can edit the slate; an agent a person lets edit directly saves at once.
+//   disconnect the inviter removes the agent; its waiting suggestions are discarded, and when no
+//              other slate of theirs uses that server, its sign-in is revoked and forgotten.
 //
 // Rules every entry point enforces (owner decisions 2026-11-23): Cloud only and the invite switch
 // on (the loader registers nothing otherwise); the inviter needs Slatebox Pro (checked on every
 // discover, connect and call, not only in the browser); only the inviter can call the agent;
 // everyone who can read the slate sees its cursor and ghosts; the person who keeps must be able
-// to edit the slate, and so must the inviter.
+// to edit the slate.
 import { randomBytes } from 'node:crypto'
 import { canonicalAddress, cardFor, DEAD_HOSTS, lookalikeHost } from '../common/gallery.mjs'
 import { checkMcpUrl, McpFetchRefused } from './mcp-fetch.mjs'
@@ -38,7 +39,7 @@ import {
   checkLayout, checkPlan, excalidrawElements, excalidrawGroup, itemsFromLayout, LAYOUT_TOOL, linksIn, PLAN_LIMITS, PLAN_TOOL, planPrompt, translatePrompt,
 } from './translate.mjs'
 
-export const AGENT_LIMITS = Object.freeze({ perSlate: 8, perOwnerPerSlate: 3, ghostHours: 24, beatMs: 450, requestChars: 1000, nameChars: 32, proEndedDays: 30, orphanHours: 24 })
+export const AGENT_LIMITS = Object.freeze({ perSlate: 8, perOwnerPerSlate: 3, beatMs: 450, requestChars: 1000, nameChars: 32, proEndedDays: 30, orphanHours: 24 })
 
 export class ConnectorRefused extends Error {
   constructor(status, code, message, details) {
@@ -79,6 +80,8 @@ export function publicConnection(doc, viewerId) {
   const mine = doc.ownerId === viewerId
   return {
     connectionId: doc._id,
+    // The agent's id on this slate: its suggestions and activity are filed under it (suggestions.list).
+    agentId: doc.agentId || null,
     name: doc.name,
     colorIndex: doc.colorIndex ?? 1,
     invitedBy: doc.inviterName || '',
@@ -97,13 +100,12 @@ export function publicConnection(doc, viewerId) {
 
 export function createConnectorService({
   connections, // { insert(doc), findOne(query), find(query) -> array, update(id, set), remove(id) }
-  suggestions, // { insert(doc), findOne(query), update(id, set), pushItem(id, item), setItem(id, n, set), removeForConnection(id) }
+  suggestions, // { agentIdOf(principal, slate), withdraw(person, slate, agentId) }: the app's suggestion store (server/agents/suggestions.mjs)
   fetch, // mcpFetch
   session, // { discover(address, fetch), callTool(address, fetch, { name, args, check }) }
   model, // async ({ feature, tool, system, user, userId, shareId }) -> the tool call's arguments (object), inside the metered request
   metered = (fn) => fn(), // (fn, { userId, shareId }) runs fn inside one metered AI request (runAIAction)
-  applyOperations, // async (principal, { shareId, plan, expectedRevision }, mode) -> { body }
-  canvasOf, // (slate, writes, shareId) -> preview artwork { nodes, links } | null
+  applyOperations, // async (principal, { shareId, plan, expectedRevision }, mode) -> { status, body }: an agent's save is a suggestion (202, outcome suggested)
   access, // { forUser(shareId, userId) -> { slate, canRead, canEdit } | null, reload(shareId) -> slate }
   pro, // async (userId) -> boolean
   firstName, // async (userId) -> string
@@ -284,14 +286,17 @@ export function createConnectorService({
       auth: auth ? { kind: auth.kind, issuer: auth.issuer } : null,
       // One agent colour on its cursor, chip and ghosts (0 is the Slatebox agent's).
       colorIndex: 1 + (randomBytes(1)[0] % 5),
+      agentId: null,
       status: 'active',
       createdAt: new Date(now()),
       updatedAt: new Date(now()),
     }
+    // Its id on this slate, the one its suggestions are filed under (the same across its runs).
+    const hello = connectorPrincipal(doc, 'hello:' + doc._id)
+    doc.agentId = await suggestions.agentIdOf(hello, slate)
     await connections.insert(doc)
     audit({ kind: 'connect', userId: principal.userId, host, connectionId: doc._id })
     // It arrives: its cursor says hello once, to everyone on the slate.
-    const hello = connectorPrincipal(doc, 'hello:' + doc._id)
     await presence.saved(hello, slate, { targets: [], message: `Hi, I'm ${name}. Select notes and ask me.` }).catch(() => {})
     return publicConnection(doc, principal.userId)
   }
@@ -326,7 +331,12 @@ export function createConnectorService({
   async function disconnect(principal, { connectionId }) {
     const doc = await ownConnection(principal, connectionId)
     await connections.update(doc._id, { status: 'removed', updatedAt: new Date(now()) })
-    await suggestions.removeForConnection(doc._id)
+    // Its suggestions still waiting go with it (discarded by the inviter; kept work stays, undoable).
+    const found = await access.forUser(doc.shareId, principal.userId).catch(() => null)
+    if (found?.slate) {
+      const agentId = doc.agentId || (await suggestions.agentIdOf(connectorPrincipal(doc, 'remove:' + doc._id), found.slate))
+      await suggestions.withdraw(principal, found.slate, agentId).catch(() => {})
+    }
     // Its sign-in goes too (revoked at the server when it offers that), unless another of this
     // person's slates still has an agent on the same server.
     let signedOut = false
@@ -365,13 +375,6 @@ export function createConnectorService({
     const ids = Array.isArray(selection) ? selection.filter((id) => typeof id === 'string').slice(0, 60) : []
     const runId = newId('r')
     const agent = connectorPrincipal(doc, runId)
-    const suggestionId = newId('s')
-    const expiresAt = new Date(now() + AGENT_LIMITS.ghostHours * 3600000)
-    await suggestions.insert({
-      _id: suggestionId, slateId: slate._id, shareId: slate.shareId, connectionId: doc._id, runId, name: doc.name,
-      inviterName: doc.inviterName, ownerId: doc.ownerId, request: text, status: 'working', say: '', items: [], left: [],
-      createdAt: new Date(now()), expiresAt,
-    })
     let outcome = 'stopped'
     try {
       await presence.plan(agent, slate, [`Ask ${doc.name}`, 'Read what it found', 'Place suggestions']).catch(() => {})
@@ -466,79 +469,35 @@ export function createConnectorService({
         return { groups, say, entries }
       }, { userId: principal.userId, shareId: slate.shareId })
       const left = [...new Set(result.entries.flatMap((entry) => entry.result.left))]
-      await suggestions.update(suggestionId, { say: plainText(result.say, 240), left })
       await presence.step(agent, slate, 2, 'doing').catch(() => {})
-      // Each group appears on the slate as it is ready, and the cursor goes to it.
+      // Each group is saved as the agent as soon as it is ready: the app files it as a live
+      // suggestion (ghosts on every screen, the cursor moving to them), or saves it at once when a
+      // person lets this agent edit directly. One action per group, so each is one Undo.
       const items = itemsFromLayout({ groups: result.groups, slate, aliases: packed.aliases, selection: ids, serverName: doc.name })
-      let n = 0
+      const actions = []
+      let saved = 0
       for (const item of items) {
-        let previewed
+        let answer
         try {
-          previewed = await applyOperations(agent, { shareId: slate.shareId, plan: item.plan, expectedRevision: slate.revision ?? 0 }, 'preview')
-        } catch {
+          const current = await access.reload(slate.shareId)
+          answer = await applyOperations(agent, { shareId: slate.shareId, plan: item.plan, expectedRevision: current?.revision ?? slate.revision ?? 0 }, 'save')
+        } catch (error) {
+          // People on the slate paused its agents: stop, and say so in their words.
+          if (error?.code === 'agents_paused') refuse(423, 'agents_paused', error.message)
           continue
         }
-        const writes = [{ n: 1, method: 'slates.applyOperations', input: { shareId: slate.shareId, plan: item.plan }, body: previewed.body }]
-        const canvas = canvasOf(slate, writes, slate.shareId)
-        if (!canvas) continue
-        n++
-        await suggestions.pushItem(suggestionId, { n, label: item.label, plan: item.plan, created: item.created, frame: item.frame, canvas, status: 'pending' })
-        await presence.saved(agent, slate, { targets: item.created.map((id) => 'ghost-' + id), message: `Suggests: ${item.label}` }).catch(() => {})
+        if (answer?.body?.suggestion?.actionId) actions.push(answer.body.suggestion.actionId)
+        else if (answer?.body?.outcome === 'saved') saved++
+        else continue
         await sleep(AGENT_LIMITS.beatMs)
       }
-      await suggestions.update(suggestionId, { status: n ? 'ready' : 'empty' })
       outcome = 'done'
-      return { suggestionId, items: n, say: plainText(result.say, 240), left }
+      return { items: actions.length + saved, actions, saved, say: plainText(result.say, 240), left }
     } catch (error) {
-      await suggestions.update(suggestionId, { status: 'failed', say: plainText(error?.message || 'That did not work.', 240) }).catch(() => {})
       throw fromProblem(error)
     } finally {
       await presence.end(runId, outcome).catch(() => {})
     }
-  }
-
-  async function decide(principal, { suggestionId, n = null }, keep) {
-    const doc = typeof suggestionId === 'string' ? await suggestions.findOne({ _id: suggestionId }) : null
-    if (!doc) refuse(404, 'not_found', 'Those suggestions are gone.')
-    const slate = await requireEditor(principal, doc.shareId)
-    if (slate._id !== doc.slateId) refuse(404, 'not_found', 'Those suggestions are gone.')
-    const chosen = doc.items.filter((item) => item.status === 'pending' && (n === null || item.n === n))
-    if (!chosen.length) refuse(409, 'already_decided', n === null ? 'Nothing is waiting here.' : 'Someone already kept or discarded that.')
-    if (!keep) {
-      for (const item of chosen) await suggestions.setItem(doc._id, item.n, { status: 'discarded', by: principal.userId })
-      return { ok: true, kept: 0, discarded: chosen.length }
-    }
-    const connection = await connections.findOne({ _id: doc.connectionId })
-    if (!connection || connection.status === 'removed') refuse(404, 'not_found', 'That agent is not on this slate any more.')
-    // The agent writes with its inviter's rights: the inviter must still be able to edit here.
-    const inviterAccess = await access.forUser(doc.shareId, connection.ownerId)
-    if (!inviterAccess?.canEdit) refuse(403, 'forbidden', `${connection.inviterName || 'The person who invited it'} can no longer edit this slate, so ${connection.name}'s suggestions can't be kept.`)
-    const runId = newId('k')
-    const agent = connectorPrincipal(connection, runId)
-    let kept = 0
-    let outcome = 'stopped'
-    try {
-      for (const item of chosen) {
-        // Claim it first, so two people keeping at once save it once.
-        const claimed = await suggestions.setItem(doc._id, item.n, { status: 'keeping', by: principal.userId }, 'pending')
-        if (!claimed) continue
-        const current = await access.reload(doc.shareId)
-        try {
-          await applyOperations(agent, { shareId: doc.shareId, plan: item.plan, expectedRevision: current?.revision ?? 0 }, 'save')
-        } catch (error) {
-          await suggestions.setItem(doc._id, item.n, { status: 'pending' }).catch(() => {})
-          if (error?.code === 'no_match') refuse(409, 'slate_changed', 'A note this suggestion connects to is gone. Discard it instead.')
-          throw error
-        }
-        await suggestions.setItem(doc._id, item.n, { status: 'kept', by: principal.userId })
-        kept++
-        if (chosen.length > 1) await sleep(AGENT_LIMITS.beatMs)
-      }
-      outcome = 'done'
-    } finally {
-      await presence.end(runId, outcome).catch(() => {})
-    }
-    return { ok: true, kept, discarded: 0 }
   }
 
   // ---------- signing in ----------
@@ -620,7 +579,5 @@ export function createConnectorService({
     list,
     disconnect,
     call,
-    keep: (principal, input) => decide(principal, input, true),
-    discard: (principal, input) => decide(principal, input, false),
   }
 }

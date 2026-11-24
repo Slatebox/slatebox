@@ -2,7 +2,7 @@
 // Not MIT: see enterprise/README.md.
 //
 // Outside agents as registry actions: each one is a Meteor method (the slate's walkthrough and
-// ghosts call these), an /api/v1 route, an exec call and an MCP tool, with the same checks
+// agent chips call these), an /api/v1 route, an exec call and an MCP tool, with the same checks
 // (exec everywhere). The service (service.mjs) enforces Cloud-only (nothing registers elsewhere),
 // Pro for the inviter, inviter-only calls and edit rights; the registry adds scopes, rate limits
 // and input validation.
@@ -11,7 +11,6 @@ import { shareIdInput } from '/server/actions/slate-schemas.mjs'
 
 const id = (description) => ({ type: 'string', minLength: 1, maxLength: 40, pattern: '^[A-Za-z0-9_-]+$', description })
 const connectionId = id('The invited agent\'s id, as connectors.list gives it.')
-const suggestionId = id('The suggestions\' id, as connectors.call gives it.')
 const addressInput = { type: 'string', minLength: 8, maxLength: 500, description: 'The server\'s https address, such as https://mcp.linear.app/mcp/readonly' }
 const obj = (properties) => ({ type: 'object', properties })
 const OUT = {
@@ -22,8 +21,13 @@ const OUT = {
   key: obj({ ok: { type: 'boolean' }, host: { type: 'string' } }),
   connection: obj({ connectionId: { type: 'string' }, name: { type: 'string' }, invitedBy: { type: 'string' }, status: { type: 'string' } }),
   removed: obj({ ok: { type: 'boolean' }, connectionId: { type: 'string' } }),
-  call: obj({ suggestionId: { type: 'string' }, items: { type: 'integer' }, say: { type: 'string' }, left: { type: 'array', items: { type: 'string' } } }),
-  decide: obj({ ok: { type: 'boolean' }, kept: { type: 'integer' }, discarded: { type: 'integer' } }),
+  call: obj({
+    items: { type: 'integer', description: 'How many groups it placed on the slate.' },
+    actions: { type: 'array', items: { type: 'string' }, description: 'The suggestions it made, as suggestions.list gives them (actionId): keep, discard or undo each with suggestions.decide.' },
+    saved: { type: 'integer', description: 'Groups saved at once, when a person lets this agent edit directly.' },
+    say: { type: 'string' },
+    left: { type: 'array', items: { type: 'string' } },
+  }),
 }
 
 const toolChoice = {
@@ -186,7 +190,7 @@ export function connectorActions(service) {
     defineAction({
       id: 'connectors.call',
       title: 'Ask an invited agent',
-      description: 'Ask an outside agent you invited. Slatebox AI chooses its lookups, sends only what you allowed, and turns what comes back into ghost suggestions on the slate that anyone who can edit may keep or discard. Only the person who invited it can ask it. Needs Slatebox Pro.',
+      description: 'Ask an outside agent you invited. Slatebox AI chooses its lookups, sends only what you allowed, and turns what comes back into live suggestions on the slate (ghosts everyone there sees) that anyone who can edit may keep, discard or undo with suggestions.decide. Only the person who invited it can ask it. Needs Slatebox Pro.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
@@ -208,37 +212,6 @@ export function connectorActions(service) {
       output: OUT.call,
       tool: { name: 'ask_invited_agent', title: 'Ask an outside agent you invited; its answer lands as ghost suggestions', description: 'Ask an outside agent you invited a question; its answer appears on the slate as ghost suggestions to keep or discard.' },
       handler: run('call'),
-    }),
-    defineAction({
-      id: 'connectors.keep',
-      title: 'Keep an agent\'s suggestion',
-      description: 'Keep one ghost suggestion (n) or all of them. Each is saved as the agent, one save per suggestion. Anyone who can edit the slate may keep.',
-      toolset: 'connectors',
-      kind: 'write',
-      idempotency: 'optional',
-      scope: 'slates:write',
-      principals: ['person', 'agent'],
-      mounts: { ddp: true, http: { method: 'POST', path: '/agent-suggestions/{suggestionId}/keep', operationId: 'keepAgentSuggestion' } },
-      input: { type: 'object', properties: { suggestionId, n: { type: 'integer', minimum: 1, maximum: 50 } }, required: ['suggestionId'], additionalProperties: false },
-      output: OUT.decide,
-      tool: { name: 'keep_agent_suggestion', title: 'Keep an invited agent\'s ghost suggestion', description: 'Keep one of an invited agent\'s ghost suggestions on a slate, or all of them.' },
-      handler: run('keep'),
-    }),
-    defineAction({
-      id: 'connectors.discard',
-      title: 'Discard an agent\'s suggestion',
-      description: 'Discard one ghost suggestion (n) or all of them. Anyone who can edit the slate may discard.',
-      toolset: 'connectors',
-      kind: 'write',
-      idempotency: 'optional',
-      changesNoSlate: true,
-      scope: 'slates:write',
-      principals: ['person', 'agent'],
-      mounts: { ddp: true, http: { method: 'POST', path: '/agent-suggestions/{suggestionId}/discard', operationId: 'discardAgentSuggestion' } },
-      input: { type: 'object', properties: { suggestionId, n: { type: 'integer', minimum: 1, maximum: 50 } }, required: ['suggestionId'], additionalProperties: false },
-      output: OUT.decide,
-      tool: { name: 'discard_agent_suggestion', title: 'Discard an invited agent\'s ghost suggestion', description: 'Discard one of an invited agent\'s ghost suggestions on a slate, or all of them.' },
-      handler: run('discard'),
     }),
   ]
 }

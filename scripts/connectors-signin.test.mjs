@@ -21,8 +21,7 @@ import { connectorSettings } from '../enterprise/server/connector-settings.mjs'
 import { createConnectorService } from '../enterprise/server/service.mjs'
 import { loadMasterKey } from '../web/app/server/metering/vault.mjs'
 import { sanitizeClientName } from '../web/app/imports/api/common/agent-label.mjs'
-import { canvasOfWrites } from '../web/app/server/exec/conversation.mjs'
-import { applyPlanToJSON } from 'slateboxjs/operations'
+import { connectorSuggestions } from './connector-suggestions-world.mjs'
 
 let servers
 let mcpFetch
@@ -424,14 +423,6 @@ function memoryStore() {
     findOne: async (q) => rows.find((r) => match(r, q)) || null,
     find: async (q) => rows.filter((r) => match(r, q)),
     update: async (id, set) => Object.assign(rows.find((r) => r._id === id) || {}, set),
-    pushItem: async (id, item) => rows.find((r) => r._id === id).items.push(item),
-    async setItem(id, n, set, onlyIf) {
-      const item = rows.find((r) => r._id === id)?.items.find((i) => i.n === n)
-      if (!item || (onlyIf && item.status !== onlyIf)) return false
-      Object.assign(item, set)
-      return true
-    },
-    removeForConnection: async () => {},
   }
 }
 
@@ -440,24 +431,21 @@ function makeWorld({ pro = ['ada'] } = {}) {
   const slate = { _id: 'slate1', shareId: 'share1', userId: 'ada', revision: 1, nodes: [{ options: { id: 'n0', text: 'Checkout', xPos: 0, yPos: 0, width: 200, height: 80 }, relationships: { associations: [] } }] }
   const roles = { ada: 'edit', sam: 'edit', vic: 'read' }
   const connections = memoryStore()
-  const suggestions = memoryStore()
+  // The app's real suggestion path: the agent's saves become live suggestions.
+  const live = connectorSuggestions(slate)
   const audits = []
   const proList = [...pro]
   let planned = 0
   const service = createConnectorService({
     connections,
-    suggestions,
+    suggestions: live.suggestions,
     fetch: mcpFetch,
     session: { discover, callTool },
     model: async ({ tool }) => {
       if (tool.name === 'plan_calls') return planned++ % 2 === 0 ? { calls: [{ tool: 'list_issues', arguments: { query: 'open' } }] } : { calls: [], done: true }
       return { groups: [{ label: 'Issues', notes: [{ key: 'a', text: 'ENG-12 Retry declined cards' }] }] }
     },
-    applyOperations: async (principal, input, mode) => {
-      const result = applyPlanToJSON(structuredClone(slate), input.plan, { requireMatches: mode === 'save' })
-      return { body: { ok: true, operations: result.materializedPlan.operations, report: result.report } }
-    },
-    canvasOf: canvasOfWrites,
+    applyOperations: live.applyOperations,
     access: { forUser: async (shareId, userId) => (shareId === 'share1' && roles[userId] ? { slate, canRead: true, canEdit: roles[userId] === 'edit' } : null), reload: async () => slate },
     pro: async (userId) => proList.includes(userId),
     firstName: async (userId) => userId[0].toUpperCase() + userId.slice(1),
@@ -471,7 +459,7 @@ function makeWorld({ pro = ['ada'] } = {}) {
     audit: (entry) => audits.push(entry),
   })
   const person = (userId) => ({ kind: 'person', userId, scopes: ['slates:read', 'slates:write'] })
-  return { ...made, service, connections, suggestions, audits, proList, slate, ada: person('ada'), sam: person('sam') }
+  return { ...made, service, connections, live, audits, proList, slate, ada: person('ada'), sam: person('sam') }
 }
 
 async function signInThroughService(world, path = '/oauth/mcp') {
@@ -506,7 +494,7 @@ test('the walkthrough: "sign-in needed" with how, then the popup, then the tools
   assert.ok(made.every((c) => /^Bearer at-/.test(c.auth)))
   // the token is in no connection, suggestion, audit line or public answer
   const token = made[0].auth.slice(7)
-  for (const blob of [world.connections.rows, world.suggestions.rows, world.audits, await world.service.list(world.ada, { shareId: 'share1' })])
+  for (const blob of [world.connections.rows, await world.live.store.list(world.slate._id), world.live.applied, world.audits, await world.service.list(world.ada, { shareId: 'share1' })])
     assert.ok(!JSON.stringify(blob).includes(token))
   // and the open server never sees it
   await world.service.discover(world.ada, { shareId: 'share1', address: servers.url('/open/mcp') })
