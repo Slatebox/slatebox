@@ -55,8 +55,13 @@ export function useAgentPresence(shareId) {
     const timer = setInterval(() => tick((n) => n + 1), 1000)
     return () => clearInterval(timer)
   }, [records.length])
+  // One pointer per agent: its newest run on this slate (an agent's earlier run, such as an
+  // invited agent's greeting, never draws a second pointer beside the one at work).
   const newest = new Map()
-  for (const record of records) if (!newest.has(record.agentKey)) newest.set(record.agentKey, onScreenClock(record, offset))
+  for (const record of records) {
+    const who = record.agentId || record.agentKey
+    if (!newest.has(who)) newest.set(who, onScreenClock(record, offset))
+  }
   return { all: [...newest.values()], shown: visibleAgents([...newest.values()], Date.now()).map((item) => item.record) }
 }
 

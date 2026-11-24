@@ -7,7 +7,7 @@
 // Keep all / Discard all, the activity with Undo and Edit directly are the roster's own, and the
 // ghosts with Keep and Discard on each are the app's live suggestions (AgentPresenceListener).
 // The canvas.agents slot holds "+ Invite agent" and the walkthrough.
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import { useTracker } from 'meteor/react-meteor-data'
@@ -106,6 +106,7 @@ export function InvitedAgentControls({ agentId, shareId, canEdit = false, paused
   const [note, setNote] = useState('')
   const [left, setLeft] = useState([])
   const [confirming, setConfirming] = useState(false)
+  const removeButton = useRef(null)
   if (!c) return null
 
   const ask = async (event) => {
@@ -164,7 +165,7 @@ export function InvitedAgentControls({ agentId, shareId, canEdit = false, paused
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
         {c.mine && c.status === 'needs_sign_in' && <Button size="small" variant="outlined" data-agent-sign-in-again="" onClick={signInAgain}>Sign in again</Button>}
         {c.mine && c.status === 'pro_ended' && <Button size="small" variant="outlined" data-agent-renew-pro="" onClick={renewPro}>Renew Pro</Button>}
-        {c.removable && canEdit && !confirming && <Button size="small" data-agent-remove="" onClick={() => setConfirming(true)}>Remove</Button>}
+        {c.removable && canEdit && !confirming && <Button size="small" ref={removeButton} data-agent-remove="" onClick={() => setConfirming(true)}>Remove</Button>}
       </Box>
       {confirming && (
         <Box sx={{ mt: 1 }} role="alertdialog" aria-label={`Remove ${c.name}?`} data-agent-remove-confirm="">
@@ -173,7 +174,7 @@ export function InvitedAgentControls({ agentId, shareId, canEdit = false, paused
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
             <Button size="small" color="error" variant="contained" data-agent-remove-yes="" onClick={() => { setConfirming(false); remove() }}>Remove</Button>
-            <Button size="small" onClick={() => setConfirming(false)}>Cancel</Button>
+            <Button size="small" data-agent-remove-cancel="" onClick={() => { setConfirming(false); setTimeout(() => removeButton.current?.focus(), 0) }}>Cancel</Button>
           </Box>
         </Box>
       )}
