@@ -220,6 +220,8 @@ async function instance(t) {
       inviteImported: async (_userId, importId, email) => (transfers.push(["invite", importId, email]), { importId, email, outcome: "sent" }),
       discardImport: async (_userId, importId) => (transfers.push(["discard", importId]), { importId, state: "discarded" }),
     },
+    // Video notes (server/media): a looked-up video, as the host would answer it.
+    media: async (url) => ({ found: true, media: { provider: "youtube", id: "dQw4w9WgXcQ", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", title: "A talk", author: "Probe" } }),
     // Who calls (the app's deps.loadUser): the shape library is per person and team.
     loadUser: async (id) => (id === "owner" ? { _id: "owner", orgId: null } : null),
     // Custom shapes: drawing (a model) and the library have their own tests
@@ -514,6 +516,14 @@ return slatebox.agentTasks.update({ shareId: "canvas", taskId: ${JSON.stringify(
   // as a self-hosted app before suggestions did): the call is refused in the API's words.
   const decided = await exec(`return slatebox.suggestions.decide({ shareId: "canvas", decision: "discard", actionId: "a1" })`);
   assert.deepEqual([decided.error.status, decided.error.code], [501, "not_available"]);
+
+  // Video notes: the lookup (its host calls and poster storage have their own tests,
+  // scripts/media-notes.test.mjs) and the add, saved like any other edit.
+  const video = await ok(`return slatebox.media.lookup({ url: "https://youtu.be/dQw4w9WgXcQ" })`);
+  assert.deepEqual([video.found, video.media.provider, video.media.title], [true, "youtube", "A talk"]);
+  const added = await ok(`return slatebox.slates.addMedia({ shareId: "canvas", url: "https://youtu.be/dQw4w9WgXcQ", x: 900, y: 40 })`);
+  assert.equal(added.media.id, "dQw4w9WgXcQ");
+  assert.ok(added.nodeId);
 
   assert.deepEqual([...called].sort(), [...defaultGenerated().methods.keys()].sort(), "every client method was called");
 });

@@ -1400,12 +1400,13 @@ export default function Canvas() {
               is for the eye only. On a phone it sits at the top, clear of the message box and zoom. */}
           {/* A drop the board's rules refuse, which the person may make anyway: the rule's sentence, Move anyway or Cancel. */}
           {workshopSlate && (asking => asking ? <MoveAnywayDialog ask={asking.moveAnyway} onAnswer={asking.answerMoveAnyway} /> : null)(boards.find(board => board.moveAnyway))}
-          <Snackbar data-media-notice key={mediaNotice?.key} open={Boolean(mediaNotice)} message={mediaNotice?.text}
-            onClose={(_, reason) => { if (reason !== 'clickaway') setMediaNotice(null) }} autoHideDuration={5000}
-            anchorOrigin={{ vertical: phone ? 'top' : 'bottom', horizontal: 'center' }} sx={phone ? { top: '64px !important' } : undefined} />
           {workshopSlate && (shaped => <Snackbar data-shape-notice key={shaped.shapeNotice?.key} open={Boolean(shaped.shapeNotice)} message={shaped.shapeNotice?.text}
             onClose={(_, reason) => { if (reason !== 'clickaway') shaped.clearShapeNotice?.() }} autoHideDuration={5000} aria-hidden="true"
             anchorOrigin={{ vertical: phone ? 'top' : 'bottom', horizontal: 'center' }} sx={phone ? { top: '64px !important' } : undefined} />)(boards.find(board => board.shapeNotice) ?? workshop)}
+          {/* A video link that could not become a video note, said in plain words (the same place). */}
+          <Snackbar data-media-notice key={mediaNotice?.key} open={Boolean(mediaNotice)} message={mediaNotice?.text}
+            onClose={(_, reason) => { if (reason !== 'clickaway') setMediaNotice(null) }} autoHideDuration={5000}
+            anchorOrigin={{ vertical: phone ? 'top' : 'bottom', horizontal: 'center' }} sx={phone ? { top: '64px !important' } : undefined} />
         </div>
         {canShowConversation && (nativeChatOpen || askKept) && <div style={{ display: nativeChatOpen && !minimised ? 'contents' : 'none' }}>{workshopSlate
           ? <React.Suspense fallback={null}><WorkshopConversation key={id} shareId={id} board={current} boards={boards} onChangeBoard={changeBoard} library={libraryRequest}

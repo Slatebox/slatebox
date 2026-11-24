@@ -79,7 +79,6 @@ export const mediaLookup = defineAction({
     required: ['media', 'found'],
   },
   tool: { name: 'lookup_media', title: 'Look up a video', description: 'Read a YouTube, Vimeo or Loom link: its title, author and a stored poster, ready for a video note.' },
-  cli: { command: 'media-lookup' },
   async handler(principal, input, { deps }) {
     return lookup(principal, input.url, deps)
   },
@@ -132,7 +131,6 @@ export const slatesAddMedia = defineAction({
     if ((input.x === undefined) !== (input.y === undefined)) throw problem(400, 'invalid_request', 'Send x and y together, or neither.')
   },
   tool: { name: 'add_media_note', title: 'Add a video note', description: 'Add a YouTube, Vimeo or Loom video to a slate as a note that shows its poster and plays in place when pressed.' },
-  cli: { command: 'media-add' },
   async handler(principal, input, ctx) {
     if ((input.x === undefined) !== (input.y === undefined)) throw problem(400, 'invalid_request', 'Send x and y together, or neither.')
     const { deps, resource: slate } = ctx
