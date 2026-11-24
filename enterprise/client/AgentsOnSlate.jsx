@@ -19,7 +19,9 @@ import Typography from '@mui/material/Typography'
 import { McpConnections } from './collections'
 import InviteWalkthrough from './InviteWalkthrough'
 import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx'
-import { openAgentAtom, rosterExtrasAtom } from '/imports/ui/components/AgentPresenceListener.jsx'
+import { agentColor, openAgentAtom, rosterExtrasAtom } from '/imports/ui/components/AgentPresenceListener.jsx'
+import { askableAgentsAtom } from '/imports/ui/jotai/atoms'
+import { agentChatReply } from '/imports/api/common/agent-mention.mjs'
 
 // What a chip says about an agent that can't be asked right now (everyone sees it; its ghosts stay
 // keepable either way).
@@ -37,6 +39,34 @@ export function rosterEntries(connections) {
   return connections
     .filter((c) => c.agentId)
     .map((c) => ({ agentId: c.agentId, label: c.name, colorIndex: c.colorIndex ?? 1, invitedBy: c.mine ? 'you' : c.inviterName, state: STATE_WORDS[c.status] || null }))
+}
+
+/** Why an agent can't be asked from this screen now, in the words Ask Slatebox answers "@its name" with. */
+export function cannotAskText(c) {
+  if (!c.mine) return `Only ${c.inviterName || 'the person who invited it'} can ask ${c.name}.`
+  if (c.status === 'needs_sign_in') return `${c.name} needs you to sign in again. Open its chip below the canvas to sign in.`
+  if (c.status === 'pro_ended') return `Asking ${c.name} is part of Slatebox Pro. Open its chip below the canvas to renew Pro.`
+  if (c.status === 'paused') return `${c.name}'s tools changed. Open its chip below the canvas to look at them again.`
+  return ''
+}
+
+/** The agents Ask Slatebox can reach by "@name": each one's name, colour and how to ask it. */
+export function askableEntries(connections, { readSelection, readView } = {}) {
+  return connections
+    .filter((c) => c.agentId)
+    .map((c) => ({
+      agentId: c.agentId,
+      name: c.name,
+      color: agentColor(c.colorIndex ?? 1),
+      mine: Boolean(c.mine),
+      inviterName: c.inviterName || '',
+      canAsk: Boolean(c.mine) && c.status === 'active',
+      why: cannotAskText(c),
+      ask: (request) => {
+        const view = readView?.() || null
+        return Meteor.callAsync('connectors.call', { connectionId: c._id, request, selection: readSelection?.() || [], ...(view && { view }) })
+      },
+    }))
 }
 
 /** What the ask box says it may see. */
@@ -59,6 +89,7 @@ export default function AgentsOnSlate({ slate, canEdit, readSelection, readView,
   const connections = useConnections(shareId)
   const setExtras = useSetAtom(rosterExtrasAtom)
   const setReaders = useSetAtom(readersAtom)
+  const setAskable = useSetAtom(askableAgentsAtom)
   const openAgent = useSetAtom(openAgentAtom)
   const [reconnect, setReconnect] = useAtom(reconnectAtom)
   const [inviting, setInviting] = useState(false)
@@ -68,6 +99,12 @@ export default function AgentsOnSlate({ slate, canEdit, readSelection, readView,
     return () => setExtras([])
   }, [entries, setExtras])
   useEffect(() => { setReaders({ readSelection, readView }) }, [readSelection, readView, setReaders])
+  // "@name" in Ask Slatebox: the same call as the chip's ask box, with the same readers.
+  const askable = JSON.stringify(connections.map((c) => [c._id, c.agentId, c.name, c.colorIndex, c.mine, c.status, c.inviterName]))
+  useEffect(() => {
+    setAskable(askableEntries(connections, { readSelection, readView }))
+    return () => setAskable([])
+  }, [askable, readSelection, readView, setAskable])
   useEffect(() => { if (reconnect) setInviting(true) }, [reconnect])
 
   if (!shareId || !userId || !canEdit || guest) return null
@@ -104,7 +141,6 @@ export function InvitedAgentControls({ agentId, shareId, canEdit = false, paused
   const [request, setRequest] = useState('')
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
-  const [left, setLeft] = useState([])
   const [confirming, setConfirming] = useState(false)
   const removeButton = useRef(null)
   if (!c) return null
@@ -114,13 +150,12 @@ export function InvitedAgentControls({ agentId, shareId, canEdit = false, paused
     if (!request.trim() || paused) return
     setBusy(true)
     setNote('')
-    setLeft([])
     try {
       const view = readView?.() || null
       const result = await Meteor.callAsync('connectors.call', { connectionId: c._id, request: request.trim(), selection: readSelection?.() || [], ...(view && { view }) })
       setRequest('')
-      setLeft(result.left || [])
-      setNote(result.items ? '' : result.say || 'It had nothing to suggest for that.')
+      // The same words its turn says in Ask Slatebox ("@name"), so the two places agree.
+      setNote(agentChatReply(c.name, result))
     } catch (e) {
       setNote(errorText(e))
     } finally {
@@ -146,7 +181,7 @@ export function InvitedAgentControls({ agentId, shareId, canEdit = false, paused
     <Box sx={{ mt: 1.5 }} data-agent-invited-controls={c.name}>
       {c.mine && c.status === 'active' && (
         <Box data-agent-ask={c.name}>
-          <Typography variant="caption" color="text.secondary" component="div">{seesText(c.contextLevel)}</Typography>
+          <Typography variant="caption" color="text.secondary" component="div">{seesText(c.contextLevel)} You can also ask it in Ask Slatebox: @{c.name}.</Typography>
           <Box component="form" onSubmit={ask} sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 0.5 }}>
             <TextField size="small" sx={{ flex: '1 1 180px' }} autoFocus value={request} onChange={(e) => setRequest(e.target.value)} placeholder={`Ask ${c.name}`}
               inputProps={{ maxLength: 1000, 'data-agent-request': '', 'aria-label': `Ask ${c.name}` }} disabled={busy || paused} />
@@ -160,7 +195,6 @@ export function InvitedAgentControls({ agentId, shareId, canEdit = false, paused
         </Box>
       )}
       {!c.mine && <Typography variant="body2" color="text.secondary">Only {c.inviterName || 'the person who invited it'} can ask {c.name}.</Typography>}
-      {left.length > 0 && <Typography variant="caption" component="div" sx={{ mt: 1 }}>{left.join(' ')}</Typography>}
       {note && <Typography role="status" variant="body2" sx={{ mt: 1 }}>{note}</Typography>}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
         {c.mine && c.status === 'needs_sign_in' && <Button size="small" variant="outlined" data-agent-sign-in-again="" onClick={signInAgain}>Sign in again</Button>}

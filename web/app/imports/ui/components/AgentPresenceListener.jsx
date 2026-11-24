@@ -26,14 +26,17 @@ import { AgentPresence, AgentSuggestions } from '../../api/common/models'
 import { clockOffset, onScreenClock } from '../../api/common/agent-clock.mjs'
 import { activityLine, agentsOnRoster, pendingCount } from '../../api/common/agent-roster.mjs'
 import EnterpriseSlot from '../common/EnterpriseSlot'
+import Hexagon from './AgentMark'
 
 // Whether this person may edit the slate (Canvas sets it): Keep, Discard, Undo and Pause show only then.
 export const agentControlsAtom = atom(false)
-// Agents that stay on the roster while they are on the slate, working or not: Slatebox Cloud's
-// invited agents (enterprise/ fills it; empty on self-host). Each is one chip, like every agent.
+// Agents that stay on the roster while they are on the slate, working or not: invited agents
+// (enterprise/ fills it; empty where enterprise code is locked). Each is one chip, like every agent.
 export const rosterExtrasAtom = atom([])
 // Open one agent's chip (its agentId), e.g. right after it was invited.
 export const openAgentAtom = atom(null)
+// An agent's colour, from its colorIndex, as its chip, pointer and ghosts draw it.
+export const agentColor = (colorIndex) => AGENT_PALETTE[(Number(colorIndex) || 0) % AGENT_PALETTE.length]
 
 // The records of this slate, newest per agent, as the engine would show them now. Re-read every
 // second while any is shown, so a silent or ended run leaves on time: the server's time, carried
@@ -159,15 +162,6 @@ AgentPresenceListener.propTypes = {
 }
 
 // The agent mark: a hexagon, not the round avatar a person has.
-function Hexagon({ color }) {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style={{ marginLeft: 6 }}>
-      <polygon points="21.5,12 16.75,20.23 7.25,20.23 2.5,12 7.25,3.77 16.75,3.77" fill={color} stroke="#fff" strokeWidth="1.5" />
-      <path d="M18 2 L19 4.5 L21.5 5.5 L19 6.5 L18 9 L17 6.5 L14.5 5.5 L17 4.5 Z" fill="#fde68a" />
-    </svg>
-  )
-}
-Hexagon.propTypes = { color: PropTypes.string.isRequired }
 
 /**
  * The agents on the slate, as their own group after the people (never a Huddle participant): one chip
@@ -259,7 +253,7 @@ export function AgentChips({ records, shareId = null }) {
             ) : (
               <Typography variant="body2" sx={{ mt: 1 }}>{agentStepText(openAgent.record) || 'Working on this slate'}</Typography>
             ))}
-            {/* Slatebox Cloud: an invited agent's own controls (ask it, sign in again, remove it). Empty on self-host. */}
+            {/* Enterprise: an invited agent's own controls (ask it, sign in again, remove it). Empty where enterprise code is locked. */}
             {openAgent.invited && (
               <EnterpriseSlot name="agents.chip" agentId={openAgent.agentId} shareId={shareId} canEdit={canEdit} paused={Boolean(controls.paused)} waiting={openAgent.waiting} />
             )}

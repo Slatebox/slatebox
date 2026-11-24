@@ -206,3 +206,9 @@ export const recentColoursBySlate = atom({})
 export const copiedNoteStyle = atom(null)
 export const askAboutNotes = atom(null)
 
+
+// The invited agents on the open slate that Ask Slatebox can reach by "@name" (enterprise/ fills it;
+// empty where enterprise code is locked): { agentId, name, color, mine, inviterName, canAsk,
+// ask(request) }. ask resolves to what the agent did ({ items, say, left }); canAsk is true only on
+// its inviter's screen while it can be asked.
+export const askableAgentsAtom = atom([])

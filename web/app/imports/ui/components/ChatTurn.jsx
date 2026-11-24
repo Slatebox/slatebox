@@ -1,12 +1,14 @@
 // One turn of Ask Slatebox's conversation, as a chat bubble: what the person said on the right, in
 // their colour; what Slatebox said on the left, beside its sparkle (the mark on the "Ask Slatebox"
-// button). A screen reader hears who said it ("You:", "Slatebox:"), as the old captions said.
+// button); what an invited agent said on the left, beside its own mark and name in its colour. A
+// screen reader hears who said it ("You:", "Slatebox:", "GitHub:"), as the old captions said.
 // Theme tokens only, so it reads the same in light and dark.
 import React from 'react'
 import { Box, Typography } from '@mui/material'
 import { alpha, keyframes } from '@mui/material/styles'
 import AutoAwesome from '@mui/icons-material/AutoAwesome'
 import { SPACE } from '../common/AccountLayout'
+import Hexagon from './AgentMark'
 
 const visuallyHidden = { position: 'absolute', width: '1px', height: '1px', p: 0, m: '-1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 }
 
@@ -26,17 +28,30 @@ const bubble = (you) => ({
   color: 'text.primary',
 })
 
+/** An invited agent's mark beside its turns: its hexagon in its colour (as its chip on the people strip). */
+function AgentMark({ agent }) {
+  return <Box aria-hidden="true" sx={{ flex: 'none', width: 26, height: 26, display: 'grid', placeItems: 'center', mt: SPACE.hair / 2 }}>
+    {agent.iconUrl
+      ? <Box component="img" src={agent.iconUrl} alt="" sx={{ width: 22, height: 22, borderRadius: '6px', border: `2px solid ${agent.color}` }} />
+      : <Hexagon color={agent.color} size={24} style={{}} />}
+  </Box>
+}
+
 /**
- * A turn. `who` is 'you' or 'slatebox'; `as` is the element (a list item in a conversation list);
- * `after` sits under the bubble (a button, cards the turn answered with).
+ * A turn. `who` is 'you', 'slatebox' or 'agent' (an invited agent answering "@its name": `agent`
+ * is { name, color, iconUrl? }, and its turn carries its name, colour and mark); `as` is the element
+ * (a list item in a conversation list); `after` sits under the bubble (a button, cards the turn
+ * answered with).
  */
-export default function ChatTurn({ who, children, after = null, as = 'li', ...rest }) {
+export default function ChatTurn({ who, children, after = null, as = 'li', agent = null, ...rest }) {
   const you = who === 'you'
-  return <Box component={as} data-chat-turn={who} {...rest} sx={{ display: 'flex', flexDirection: 'column', alignItems: you ? 'flex-end' : 'stretch', my: SPACE.text, listStyle: 'none' }}>
+  const asAgent = who === 'agent' && agent?.name
+  return <Box component={as} data-chat-turn={who} {...(asAgent && { 'data-chat-agent': agent.name })} {...rest} sx={{ display: 'flex', flexDirection: 'column', alignItems: you ? 'flex-end' : 'stretch', my: SPACE.text, listStyle: 'none' }}>
     <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', justifyContent: you ? 'flex-end' : 'flex-start', width: '100%' }}>
-      {!you && <Spark />}
-      <Box sx={bubble(you)}>
-        <Box component="span" sx={visuallyHidden}>{you ? 'You: ' : 'Slatebox: '}</Box>
+      {!you && (asAgent ? <AgentMark agent={agent} /> : <Spark />)}
+      <Box sx={asAgent ? { ...bubble(false), borderLeft: `3px solid ${agent.color}` } : bubble(you)}>
+        <Box component="span" sx={visuallyHidden}>{you ? 'You: ' : asAgent ? `${agent.name}: ` : 'Slatebox: '}</Box>
+        {asAgent && <Typography variant="caption" component="span" aria-hidden="true" sx={{ display: 'block', fontWeight: 700, color: agent.color, lineHeight: 1.4 }}>{agent.name}</Typography>}
         {typeof children === 'string'
           ? <Typography variant="body2" component="span" sx={{ whiteSpace: 'pre-wrap', display: 'block', lineHeight: 1.5 }}>{children}</Typography>
           : children}

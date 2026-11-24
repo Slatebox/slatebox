@@ -11,6 +11,9 @@ import {keptReply} from '../../api/common/chat-words.mjs'
 import {loadLibrary} from './library/libraryBus'
 import BoardRules from './workshop/BoardRules'
 import {previewKeepSentence} from '../../api/common/conversation-preview.mjs'
+import {useAtomValue} from 'jotai'
+import {askableAgentsAtom} from '../jotai/atoms'
+import {agentChatReply,agentOfTurn,mentionedAgent} from '../../api/common/agent-mention.mjs'
 
 // The library (a view inside this conversation) and its cards: the library chunk, loaded on demand.
 const LibraryView=lazy(loadLibrary)
@@ -72,10 +75,14 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     try {
       const rows = JSON.parse(localStorage.getItem(historyKey) || '[]')
       return Array.isArray(rows) ? rows.filter(turn => typeof turn?.message === 'string' && typeof turn?.reply === 'string')
-        .map(({id,message,reply,attach}) => ({id,message,reply,...(attach?.type==='catalog' && Array.isArray(attach.entries) && {attach:{type:'catalog',entries:attach.entries.filter(e=>typeof e==='string').slice(0,10)}})})).slice(-6) : []
+        .map(({id,message,reply,attach,agent}) => ({id,message,reply,...(attach?.type==='catalog' && Array.isArray(attach.entries) && {attach:{type:'catalog',entries:attach.entries.filter(e=>typeof e==='string').slice(0,10)}}),...(agentOfTurn(agent) && {agent:agentOfTurn(agent)})})).slice(-6) : []
     } catch {return []}
   })
   const brief=board.options?.creationBrief
+  // Invited agents on this slate (enterprise; none where it is locked): "@GitHub …" asks one here.
+  const agents=useAtomValue(askableAgentsAtom)
+  // What Slatebox's AI is told of the conversation: its own turns, never an invited agent's.
+  const aiHistory=()=>history.filter(turn=>!turn.agent).map(({message,reply})=>({message,reply}))
   // A preview is made against the drawing as it was asked about. Once the drawing has moved on
   // (a note moved, renamed or deleted, by this person or a teammate) Keep would be refused, so it
   // is not offered, and the preview, drawn against the old drawing, leaves the canvas.
@@ -97,12 +104,26 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     setHistory(next)
     try {localStorage.setItem(historyKey,JSON.stringify(next))} catch {}
   }
+  // "@name …": the invited agent of that name answers in this conversation, as itself (its name,
+  // colour and mark), and what it suggests appears on the slate as ghosts to keep or discard there.
+  // The same call as its chip's ask box (connectors.call): only its inviter can ask it.
+  async function askAgent({agent,request},message,turn) {
+    const who=agentOfTurn(agent)
+    const answer=reply=>{remember({id:'agent-'+Date.now(),message,reply,agent:who});setText('')}
+    if(!agent.canAsk) return answer(agent.why || `Only ${agent.inviterName || 'the person who invited it'} can ask ${agent.name}.`)
+    if(request.length<2) return answer(`What should ${agent.name} do? Write it after @${agent.name}.`)
+    const result=await agent.ask(request)
+    if(turn!==asked.current) return
+    answer(agentChatReply(agent.name,result))
+  }
   async function ask(message) {
     if(inFlight.current || !message.trim()) return
     inFlight.current=true;setBusy('asking');setError('');setRefusal(null)
     const turn=++asked.current
     before.current=readNodes()
     try {
+      const mention=mentionedAgent(message,agents)
+      if(mention) return await askAgent(mention,message,turn)
       // The library reads "Add a retro" and answers "what can I add?" here, with no AI call.
       const lib=await libraryModule().catch(()=>null)
       if(turn!==asked.current) return
@@ -115,7 +136,7 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
       const via=methodsFor(message)
       // The line selected on the canvas is what “this line” means.
       const selection=via==='canvasConversation' ? (readSelection?.() ?? null) : null
-      const res=await Meteor.callAsync(via+'.preview',shareId,message,history.map(({message,reply})=>({message,reply})),...(selection ? [selection] : []))
+      const res=await Meteor.callAsync(via+'.preview',shareId,message,aiHistory(),...(selection ? [selection] : []))
       if(turn!==asked.current) return
       if(res.reply) {
         // A question answered in words: nothing to keep, so it joins the conversation.
@@ -176,7 +197,9 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
   const removing = draft && !stale && busy!=='keeping' && draft.warnings?.find(w=>w.rule==='removes')
   const removeCount = draft?.removed?.length || removing?.count || 0
   const removeWhat = draft?.removed?.length ? (removeCount===1?'1 note':removeCount+' notes') : (removeCount===1?'a note or connection':(removeCount||'some')+' notes or connections')
-  const hold = busy==='asking' ? {reason:'Preparing the preview…',actions:<Button size="small" onClick={cancel}>Cancel</Button>}
+  const asking = busy==='asking' && mentionedAgent(text,agents)
+  const hold = asking ? {reason:`${asking.agent.name} is working…`,actions:null}
+    : busy==='asking' ? {reason:'Preparing the preview…',actions:<Button size="small" onClick={cancel}>Cancel</Button>}
     : removing ? {reason:agentLabel(firstNameOf(Meteor.user()))+' wants to remove '+removeWhat+'. Remove '+(removeCount===1?'it':'them')+'?',actions:<>
       <Button variant="contained" size="small" disabled={Boolean(busy)} onClick={keep}>Yes</Button>
       <Button size="small" disabled={Boolean(busy)} onClick={discard}>No</Button>
@@ -207,7 +230,7 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     else browse(library.start ?? {})
   }, [library?.nonce])
   const composer = <ConversationComposer shareId={shareId} inputRef={input} value={text} onChange={setText} onSubmit={()=>ask(text)}
-    hold={hold} canSubmit={Boolean(text.trim())} placeholder={empty ? 'What are you working on?' : 'Ask anything'} maxLength={1200} error={error}
+    hold={hold} canSubmit={Boolean(text.trim())} placeholder={empty ? 'What are you working on?' : agents.some(a=>a.canAsk) ? `Ask anything, or @${agents.find(a=>a.canAsk).name}` : 'Ask anything'} maxLength={1200} error={error}
     extra={!hold && <>
       {refusal && <PayNotice refusal={refusal} from="draft" retry={() => ask(refusal.message)} />}
       {/* One way to browse at a time: not under the library, nor under the first turn's own cards. */}
@@ -216,6 +239,8 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     prompt={empty ? null : 'What should happen on this slate?'}
     starters={!empty && <Box aria-label="Starter messages" sx={{display:'flex',flexWrap:'wrap',gap:.5,my:1}}>
       {canvasStarters(board.nodes).map(({label},i)=><Button key={label} size="small" onClick={()=>suggest(canvasStarters(liveNodes())[i])}>{label}</Button>)}
+      {/* Your invited agents: "@GitHub " starts a message to one. */}
+      {agents.filter(a=>a.canAsk).map(a=><Button key={'agent-'+a.agentId} size="small" data-mention-agent={a.name} sx={{color:a.color}} onClick={()=>suggest({text:'@'+a.name+' '})}>@{a.name}</Button>)}
       <AddShort onBrowse={()=>browse()} />
     </Box>} />
   if(view) return <ConversationPanel anchor="top" onClose={onClose} composer={composer}>
@@ -232,10 +257,10 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     {history.length>0 && <Box component="ol" aria-label="Kept conversation" sx={{listStyle:'none',p:0,my:1}}>
       {history.map(turn=><Box component="li" key={turn.id}>
         {turn.message!==brief && <ChatTurn who="you" as="div">{turn.message}</ChatTurn>}
-        <ChatTurn who="slatebox" as="div" after={turn.attach?.type==='catalog' && <Suspense fallback={null}><CatalogTurn ids={turn.attach.entries} onAdd={addEntry} onOpen={entry=>browse({entry:entry.id})} onBrowse={()=>browse()} /></Suspense>}>{turn.reply}</ChatTurn>
+        <ChatTurn who={turn.agent ? 'agent' : 'slatebox'} agent={turn.agent ?? null} as="div" after={turn.attach?.type==='catalog' && <Suspense fallback={null}><CatalogTurn ids={turn.attach.entries} onAdd={addEntry} onOpen={entry=>browse({entry:entry.id})} onBrowse={()=>browse()} /></Suspense>}>{turn.reply}</ChatTurn>
       </Box>)}
     </Box>}
-    {busy==='asking' && !draft && <ChatThinking as="div" />}
+    {busy==='asking' && !draft && !asking && <ChatThinking as="div" />}
     {draft && <Box aria-label="Review the preview" aria-live="polite" sx={{my:1}}>
       <ChatTurn who="you" as="div">{draft.message}</ChatTurn>
       <ChatTurn who="slatebox" as="div"><Box sx={{typography:'body2','& ul':{my:.5,pl:2.5}}}>
