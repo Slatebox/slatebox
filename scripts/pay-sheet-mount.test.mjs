@@ -103,18 +103,19 @@ const { Provider } = await import('app:jotai')
 const { MemoryRouter } = await import('app:react-router-dom')
 const { ThemeProvider, createTheme } = await import('app:@mui/material/styles')
 const Host = await import('../web/app/imports/ui/components/billing/pay/PaySheetHost.jsx')
+const { default: PayNotice } = await import('../web/app/imports/ui/components/PayNotice.jsx')
 
 const h = React.createElement
 let openSheet = null
 function Opener() { openSheet = Host.usePaySheet().open; return null }
 
 // One app per case: a fresh store, router and sheet.
-async function mountApp({ path = '/profile?tab=credits', mode = 'light' } = {}) {
+async function mountApp({ path = '/profile?tab=credits', mode = 'light', chat = null } = {}) {
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)
   const render = themeMode => flushSync(() => root.render(
-    h(Provider, null, h(ThemeProvider, { theme: createTheme({ palette: { mode: themeMode } }) }, h(MemoryRouter, { initialEntries: [path] }, h(Host.default, null, h(Opener))))),
+    h(Provider, null, h(ThemeProvider, { theme: createTheme({ palette: { mode: themeMode } }) }, h(MemoryRouter, { initialEntries: [path] }, h(Host.default, null, h(Opener), chat ? chat() : null)))),
   ))
   render(mode)
   await wait(20)
@@ -207,5 +208,32 @@ test('choosing the other interval is a new session: the old Payment Element goes
   assert.deepEqual(world.counts.initSecrets, ['cs_test_1_secret', 'cs_test_2_secret'])
   assert.equal(world.counts.paymentCreated, 2)
   assert.equal(world.counts.paymentDestroyed, 1)
+  app.unmount()
+})
+
+test('a chat turn\'s inline "Get Slatebox Pro" opens the same one sheet: one session, one Payment Element, the chat re-rendering remakes none', async () => {
+  world.reset(); world.summaryMs = 0; phone = false
+  let retried = 0
+  const refusal = { code: 'pro', reason: 'AI on Slatebox comes with Slatebox Pro, $5 a month, or a balance.', details: { pay: { action: 'pro', wallet: null } } }
+  // the refusing chat message itself, as WorkshopConversation and NativeCanvasConversation render it
+  const chat = () => h('div', { 'data-chat-turn': '' }, h(PayNotice, { refusal, from: 'draft', retry: () => { retried += 1 }, inline: true }))
+  const app = await mountApp({ chat })
+  await until(() => document.querySelector('[data-inline-pay] [data-pay-action="pro"]'), 'the inline Pro button')
+  assert.equal(world.counts.checkoutCalls.length, 0, 'nothing is asked of the processor before the click')
+  document.querySelector('[data-inline-pay] [data-pay-action="pro"]').click()
+  await until(paymentReady, 'the Payment Element')
+  // the chat keeps re-rendering (new turns, the summary landing, the account's trackers): the open sheet is not remade
+  app.render('light')
+  await wait(100)
+  rerunTrackers()
+  await wait(150)
+  assert.equal(document.querySelectorAll('[data-pay-stage]').length, 1, 'one pay sheet, the app root\'s')
+  assert.equal(world.counts.checkoutCalls.length, 1, 'one payment session per open')
+  assert.equal(world.counts.checkoutCalls[0].interval, 'month', 'the inline button opens Pro for a month')
+  assert.equal(world.counts.init, 1, 'one checkout per open')
+  assert.equal(world.counts.paymentCreated, 1, 'one Payment Element per open')
+  assert.equal(world.counts.paymentDestroyed, 0)
+  assert.equal(world.counts.changeAppearance, 0)
+  assert.equal(retried, 0, 'the request is not run again before the server has the payment')
   app.unmount()
 })
