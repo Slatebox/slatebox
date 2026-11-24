@@ -18,6 +18,61 @@ const closeGreeting = (shareId) => { try { localStorage.setItem(greetingKey(shar
 // Read out, not shown: one pixel (in px: a bare 1 in sx is 100%), at the corner of what holds it, so it never widens the bar.
 const visuallyHidden = { position: 'absolute', left: 0, top: 0, width: '1px', height: '1px', p: 0, m: '-1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 }
 
+// How the header makes room for the build bar, one step at a time and always in this order (`level` in BuildBar): the
+// branched-from words move into the summary's details (still read out, and on hover); where it stands takes its short
+// words ("Building", "Saved", "Submitted"; the rest read out); "Submit" stands for "Submit to the library" (its name
+// unchanged); the item's name may end in an ellipsis, never narrower than FIT.min; the guest's "Save your work" becomes
+// its icon (its name unchanged); the privacy chip steps aside (the slate menu and Share still say it); the slate's own
+// name may end in an ellipsis, never narrower than FIT.min; then the header's own Huddle, Present and Ask Slatebox, in
+// that order, as their icons (each keeps its name). Only below 1024px is there a step past that: the one Builder button.
+// No step ever shrinks text to nothing: a line is either whole, or cut at a readable width.
+export const FIT = { dropFrom: 1, shortStatus: 2, shortSubmit: 3, truncateName: 4, saveIcon: 5, privacy: 6, slateName: 7, huddleIcon: 8, presentIcon: 9, askIcon: 10, fold: 11, min: 96 }
+
+// The floors that keep text readable whatever flex does: the slate name's box and the bar may shrink only down to their
+// text's own width (whole), or, once `level` allows the ellipsis, to FIT.min of it (or all of a shorter one). Each floor
+// is the box's own parts around its text plus the text's floor, measured with both boxes at their natural size (floors
+// lifted, not shrinking: before paint, so never seen), so a floor neither ratchets itself up nor reads a squeezed box.
+// Lifted entirely (`level` null) when the bar is not in the header row.
+export function setFloors(toolbar, summary, level) {
+  const name = toolbar.querySelector('.sb-board-name')
+  // The bar's element is the same one folded or whole (React keeps it), so its floor is found and lifted in the header.
+  const bar = toolbar.querySelector('[data-build-bar]')
+  const boxes = [name, bar].filter(Boolean)
+  boxes.forEach((el) => el.style.removeProperty('min-width'))
+  if (level === null) return
+  const strong = name?.querySelector('.sb-board-title strong')
+  const lines = summary?.querySelector('[data-build-lines]')
+  const stands = lines?.querySelector('[data-build-line="stands"]')
+  const item = lines?.querySelector('[data-build-line="name"]')
+  const w = (el) => el.getBoundingClientRect().width
+  boxes.forEach((el) => el.style.setProperty('flex-shrink', '0'))
+  const around = { name: strong ? w(name) - w(strong) : 0, bar: lines ? w(bar) - w(lines) : 0 }
+  boxes.forEach((el) => el.style.removeProperty('flex-shrink'))
+  if (strong) name.style.setProperty('min-width', `${Math.ceil(around.name + (level >= FIT.slateName ? Math.min(strong.scrollWidth, FIT.min) : strong.scrollWidth))}px`)
+  if (lines && stands && item) {
+    const keep = Math.max(stands.scrollWidth, level >= FIT.truncateName ? Math.min(item.scrollWidth, FIT.min) : item.scrollWidth)
+    bar.style.setProperty('min-width', `${Math.ceil(around.bar + keep)}px`)
+  }
+}
+
+// Whether the header holds everything at `level`: nothing overflows it, and each line of text is whole, or (once its
+// step allows) cut no narrower than FIT.min.
+export function fits(toolbar, summary, level) {
+  const cut = (el) => Boolean(el && el.scrollWidth > el.clientWidth + 1)
+  const readable = (el, allowed) => !cut(el) || (allowed && el.clientWidth >= FIT.min)
+  // Overflow is read against the header's content box: its end padding would hide the first pixels of an overflow from
+  // scrollWidth, and the last button would sit in it, or past the edge.
+  const style = getComputedStyle(toolbar)
+  const box = toolbar.getBoundingClientRect()
+  const inRow = [...toolbar.children].flatMap((el) => (getComputedStyle(el).display === 'contents' ? [...el.children] : [el]))
+    .filter((el) => !['absolute', 'fixed'].includes(getComputedStyle(el).position))
+  const end = Math.max(...inRow.map((el) => el.getBoundingClientRect().right))
+  if (toolbar.scrollWidth > toolbar.clientWidth || end > box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth) + 0.5) return false
+  if (!readable(toolbar.querySelector('.sb-board-title strong'), level >= FIT.slateName)) return false
+  if (!readable(summary?.querySelector('[data-build-line="stands"]'), false)) return false
+  return readable(summary?.querySelector('[data-build-line="name"]'), level >= FIT.truncateName)
+}
+
 function Dot() {
   return <Box component="span" aria-hidden="true" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main', flex: 'none',
     '@media (prefers-reduced-motion: no-preference)': { animation: 'sbBuildPulse 2.4s ease-in-out infinite' },
@@ -35,9 +90,9 @@ function sheetPlace(phone, narrow, right) {
 /**
  * The build bar on a builder slate (library spec §4.2), in the canvas header after the slate's name, never over
  * the canvas: two lines, "Building" (or where it stands: "Submitted for review") over "<title> · Branched from Retro
- * (Meetings)", then Save and Submit to the library beside the header's own buttons. The slate's name is never cut for it:
- * short of room, "Submit" stands for "Submit to the library", the branched-from words move into the summary's details
- * (a click on the summary), then the status takes its short words. The board is grown by Ask Slatebox (opened in build
+ * (Meetings)", then Save and Submit to the library beside the header's own buttons. Short of room, the header gives way
+ * step by step in the order FIT names, measuring what is actually there (no width or name is assumed): never a line cut
+ * to nothing, never anything pushed out of the header. The board is grown by Ask Slatebox (opened in build
  * mode) and by the rule controls on the board itself; this bar only names it and sends it. A branch's first words are
  * drawn at the top of Ask Slatebox, closable. Below 1000px wide (or below 1024px when even that has no room) the bar is
  * one Builder button that opens a sheet with all of it; from 1024px it is always whole. The Save sheet opens under the
@@ -60,24 +115,26 @@ export default function BuildBar({ slate }) {
   const [toast, setToast] = useState(null)
   const [greeting, setGreeting] = useState(true)
   const opened = useRef(false)
-  // How much of the bar the header has room for, without pushing anything out of it, cutting the slate's name short, or
-  // cutting a word of the bar's own: 0 all of it; 1 "Submit" for "Submit to the library" (its name unchanged); 2 the
-  // branched-from line moves into the summary's details (still read out); 3 where it stands in its short words ("Saved",
-  // "Submitted"; the rest read out); 4 the summary is its dot alone (a click still opens all of it), so Save and Submit
-  // stay whole on any desktop; 5 the one Builder button, only below 1024px. Stepped down while anything is cut, and back
-  // up from 0 whenever the header grows or its other buttons change.
+  // How much of the header the bar has room for, measured in the header itself after every change (never tuned to a
+  // width or a name). Each step gives up one thing more, in a fixed order, until nothing overflows the header and no text
+  // is cut below a readable width (FIT.min px); see FIT. Stepped down while anything does not fit, and back up from 0
+  // whenever the header's width or its other contents change.
   const [level, setLevel] = useState(0)
   const [, setRecheck] = useState(0)
   const toolbar = header?.parentElement ?? null
-  const lastLevel = desktop ? 4 : 5
+  const lastLevel = desktop ? FIT.askIcon : FIT.fold
   useLayoutEffect(() => {
-    if (!toolbar || narrow || level >= lastLevel) return
-    const cut = (el) => Boolean(el && el.scrollWidth > el.clientWidth + 1)
-    // The slate's own name is read in full first: the bar gives way before it is cut.
-    const nameCut = cut(toolbar.querySelector('.sb-board-title strong'))
-    const lineCut = level < 4 && [...(summary.current?.querySelectorAll('[data-build-line]') ?? [])].some(cut)
-    if (toolbar.scrollWidth > toolbar.clientWidth + 1 || nameCut || lineCut) setLevel(level + 1)
+    if (!toolbar) return
+    // What the header itself gives up (CSS in main.css reads these): "Save your work" as its icon, the privacy chip, the
+    // slate name's room beyond a readable width, and Huddle, Present and Ask Slatebox as their icons.
+    const gives = narrow ? [] : [level >= FIT.saveIcon && 'save', level >= FIT.privacy && 'privacy', level >= FIT.slateName && 'name',
+      level >= FIT.huddleIcon && 'huddle', level >= FIT.presentIcon && 'present', level >= FIT.askIcon && 'ask'].filter(Boolean)
+    if (gives.length) toolbar.setAttribute('data-build-fit', gives.join(' ')); else toolbar.removeAttribute('data-build-fit')
+    setFloors(toolbar, summary.current, narrow || level >= FIT.fold ? null : level)
+    if (narrow || level >= lastLevel) return
+    if (!fits(toolbar, summary.current, level)) setLevel(level + 1)
   })
+  useEffect(() => () => { if (toolbar) { toolbar.removeAttribute('data-build-fit'); setFloors(toolbar, null, null) } }, [toolbar])
   useEffect(() => {
     if (!toolbar) return undefined
     let width = toolbar.clientWidth
@@ -92,7 +149,7 @@ export default function BuildBar({ slate }) {
     document.fonts?.ready?.then(() => { if (live) again() })
     return () => { live = false; sized.disconnect(); changed.disconnect() }
   }, [toolbar, header])
-  const folds = narrow || level >= 5
+  const folds = narrow || level >= FIT.fold
   // Ask Slatebox opens in build mode once, as the builder slate opens.
   useEffect(() => {
     if (opened.current || !builder.shareId) return
@@ -125,7 +182,7 @@ export default function BuildBar({ slate }) {
     sx={{ fontSize: 'inherit', lineHeight: 'inherit', color: builder.status === 'submitted' ? 'success.main' : 'inherit', fontWeight: 'inherit' }}>{words.state}</Typography>
   // Where it stands, in the header's first line: "Building" until it is saved or sent, then its status (in short words once
   // the header is short of room; the whole of it is still read out).
-  const said = level >= 3 ? statusShort(builder.status) : words.state
+  const said = level >= FIT.shortStatus ? statusShort(builder.status) : words.state
   const stands = words.state
     ? <Typography component="span" role="status" data-build-status={builder.status}
         sx={{ fontSize: 'inherit', lineHeight: 'inherit', fontWeight: 'inherit', color: builder.status === 'submitted' ? 'success.main' : 'inherit' }}>
@@ -134,30 +191,30 @@ export default function BuildBar({ slate }) {
   const save = <Button variant="outlined" color="inherit" onClick={() => open('save')} disabled={off}>Save</Button>
   const submit = (short) => <Button variant="contained" color="primary" disableElevation onClick={() => open('submit')} disabled={off}
     aria-label={short ? 'Submit to the library' : undefined}>{short ? 'Submit' : 'Submit to the library'}</Button>
-  const dotOnly = level >= 4
   const lineSx = { display: 'block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
 
-  // Two lines inside the header: where it stands, then the item's name (and, with room, where it came from). The summary
+  // Two lines inside the header, pushed to the header's buttons (ml auto; the slate's name does not grow on a builder slate,
+  // so its box measures its own parts), its floor set by setFloors (minWidth 0 here: a flex item's own floor would be the
+  // whole of its text): where it stands, then the item's name (and, with room, where it came from). The summary
   // opens its details under it: the heading, the name, where it came from and the branch's first words.
   const wide = <Box ref={bar} data-build-bar="" role="region" aria-label="Building a smart component"
-    sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1.25, flex: '0 50 auto' }}>
-    {/* On hover, what the summary no longer shows (where it came from); a click opens all of it. */}
-    <Tooltip title={!about && level >= 2 ? [dotOnly && (words.state || words.heading), dotOnly && words.title, aside].filter(Boolean).join(' · ') : ''} placement="bottom" describeChild>
+    sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1.25, flex: '0 50 auto', minWidth: 0, ml: 'auto' }}>
+    {/* On hover, what the summary no longer shows (where it came from, the whole name once it is cut); a click opens all of it. */}
+    <Tooltip title={!about ? [level >= FIT.truncateName && words.title, level >= FIT.dropFrom && aside].filter(Boolean).join(' · ') : ''} placement="bottom" describeChild>
       <ButtonBase ref={summary} data-build-summary="" aria-haspopup="dialog" aria-expanded={about} onClick={() => setAbout(true)}
-        aria-label={dotOnly ? [words.heading, words.state, words.title, aside].filter(Boolean).join('. ') : undefined}
-        sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flex: '0 1 auto', minWidth: dotOnly ? 40 : 0, justifyContent: 'center', textAlign: 'center', px: dotOnly ? 1.5 : 2, py: .75, minHeight: 40, borderRadius: '22px',
+        sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flex: '0 1 auto', minWidth: 0, justifyContent: 'center', textAlign: 'center', px: 2, py: .75, minHeight: 40, borderRadius: '22px',
           bgcolor: 'var(--sb-offset)', border: '1px solid var(--sb-border)', color: 'inherit', '&:hover': { borderColor: 'var(--sb-ink2)' } }}>
         <Dot />
-        <Box sx={dotOnly ? visuallyHidden : { display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', minWidth: 0, lineHeight: 1.3 }}>
+        <Box data-build-lines="" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', minWidth: 0, lineHeight: 1.3 }}>
           <Box component="span" data-build-line="stands" sx={{ ...lineSx, fontWeight: 700, fontSize: 13.5, lineHeight: 1.3 }}>{stands}</Box>
           <Box component="span" data-build-line="name" sx={{ ...lineSx, fontSize: 12.5, lineHeight: 1.3, color: 'var(--sb-ink2)' }}>
             <span data-build-title="">{words.title}</span>
-            {aside && (level < 2 ? <span> · {aside}</span> : <Box component="span" sx={visuallyHidden}> · {aside}</Box>)}</Box>
+            {aside && (level < FIT.dropFrom ? <span> · {aside}</span> : <Box component="span" sx={visuallyHidden}> · {aside}</Box>)}</Box>
         </Box>
       </ButtonBase>
     </Tooltip>
     {save}
-    {submit(level >= 1)}
+    {submit(level >= FIT.shortSubmit)}
   </Box>
 
   const aboutSheet = !folds && <Popover open={about} anchorEl={summary.current} onClose={() => setAbout(false)}
@@ -178,7 +235,7 @@ export default function BuildBar({ slate }) {
 
   // Below 1000px: one button in the header; its sheet holds what the wide bar shows, and Save and Submit. On a phone it is
   // a round button (named Builder), so the slate's own name keeps room to be read.
-  const folded = <Box ref={bar} data-build-bar="" role="region" aria-label="Building a smart component" sx={{ display: 'flex', flex: 'none' }}>
+  const folded = <Box ref={bar} data-build-bar="" role="region" aria-label="Building a smart component" sx={{ display: 'flex', flex: 'none', ml: 'auto' }}>
     {phone
       ? <Button variant="outlined" color="inherit" aria-haspopup="dialog" aria-expanded={details} onClick={() => setDetails(true)}
           sx={{ position: 'relative', minWidth: 0, width: 40, height: 40, p: '0 !important', borderRadius: '50% !important' }}>

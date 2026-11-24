@@ -58,7 +58,7 @@ export default function HuddleUp({ variant = 'header' }) {
         border: 1, borderRadius: 18, cursor: 'pointer', whiteSpace: 'nowrap',
         fontWeight: 600, fontSize: 14, '& .MuiSvgIcon-root': { fontSize: 18 }, borderColor: 'shell.border' }}>
         <Icon aria-hidden="true" />
-        <span>Huddle</span>
+        <span className="sb-huddle-label">Huddle</span>
         <Switch size="small" name="huddleEnabled" checked={Boolean(on)} onChange={toggle} color="secondary"
           slotProps={{ input: { role: 'switch', 'aria-label': 'Huddle' } }} />
       </Box>

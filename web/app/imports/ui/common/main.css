@@ -131,8 +131,22 @@ input[type='range']:active::-moz-range-thumb {
 /* A builder slate's build bar (library/build/BuildBar.jsx) is drawn into this place after the name: its own items join the header row. */
 .sb-board-builder{display:contents}
 /* On a phone the slate's name keeps room to be read beside the round Builder button: tighter gaps and buttons, and no ▾ (the name still opens its menu). */
-/* A desktop under 1180px keeps the bar's Save and Submit whole: its privacy chip steps aside (the slate menu and Share say it) and the name may give way. */
-@media(min-width:1000px) and (max-width:1179.98px){.sb-board-toolbar:has([data-build-bar]) .sb-board-privacy{display:none}.sb-board-toolbar:has([data-build-bar]) .sb-board-name{min-width:0}.sb-board-toolbar [data-build-bar] .MuiButton-root{padding-inline:12px}}
+/* What the header gives up for a builder slate's bar, as the bar measures it (FIT in BuildBar.jsx sets data-build-fit): "Save your work" as its icon
+   (its name unchanged), the privacy chip (the slate menu and Share say it), and the slate name's room beyond a readable width (96px of text; the
+   bar sets the name box's floor itself, setFloors, and the bar takes the free space before it). */
+.sb-board-toolbar[data-build-fit~=save] .sb-save-work{min-width:0;padding-inline:9px}
+.sb-board-toolbar[data-build-fit~=save] .sb-save-work .sb-save-long,.sb-board-toolbar[data-build-fit~=save] .sb-save-work .sb-save-short{display:none}
+.sb-board-toolbar[data-build-fit~=save] .sb-save-work .MuiButton-startIcon{margin:0}
+.sb-board-toolbar[data-build-fit~=privacy] .sb-board-privacy{display:none}
+.sb-board-toolbar:has([data-build-bar]) .sb-board-name{min-width:0;flex-grow:0}
+/* While the slate is renamed, its field takes the room it needs (there is no name to measure). */
+.sb-board-toolbar:has([data-build-bar]) .sb-board-name:has(.sb-board-rename){flex-grow:1;min-width:180px}
+/* Past that, the header's own buttons as their icons, each keeping its name: Huddle, then Present, then Ask Slatebox. */
+.sb-board-toolbar[data-build-fit~=huddle] .sb-huddle-header .sb-huddle-label{display:none}
+.sb-board-toolbar[data-build-fit~=present] .sb-present-main .sb-btn-text,.sb-board-toolbar[data-build-fit~=ask] .sb-ask .sb-btn-text{display:none}
+.sb-board-toolbar[data-build-fit~=present] .sb-present-main,.sb-board-toolbar[data-build-fit~=ask] .sb-ask{min-width:0;padding-inline:9px}
+.sb-board-toolbar[data-build-fit~=present] .sb-present-main .MuiButton-startIcon,.sb-board-toolbar[data-build-fit~=ask] .sb-ask .MuiButton-startIcon{margin:0}
+@media(min-width:1000px) and (max-width:1179.98px){.sb-board-toolbar [data-build-bar] .MuiButton-root{padding-inline:12px}}
 @media(max-width:599.98px){.sb-board-toolbar:has([data-build-bar]){gap:4px}.sb-board-toolbar:has([data-build-bar]) .sb-board-title>svg{display:none}.sb-board-toolbar:has([data-build-bar]) .MuiButton-root{padding-inline:9px;min-width:0}}
 .sb-board-divider{width:1px;height:28px;flex:none;background:var(--sb-border)}
 .sb-board-toolbar .MuiButton-root{flex:none;white-space:nowrap;text-transform:none;font-weight:700;border-radius:18px;min-height:36px}

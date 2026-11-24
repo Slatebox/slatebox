@@ -219,7 +219,7 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
           aria-haspopup={presentItems.length > 1 ? 'menu' : undefined}
           onClick={e => presentItems.length > 1 ? setPresentMenu(e.currentTarget) : startPresentation()}>Present</Button>
       : <ButtonGroup variant="outlined" color="inherit" className="sb-present">
-          <Button startIcon={<PlayArrow />} onClick={startPresentation} disabled={!slate}>Present</Button>
+          <Button className="sb-present-main" startIcon={<PlayArrow />} onClick={startPresentation} disabled={!slate} aria-label="Present"><span className="sb-btn-text">Present</span></Button>
           {presentItems.length > 1 && <Button size="small" aria-label="Presentation options" aria-haspopup="menu"
             aria-expanded={Boolean(presentMenu)} onClick={e => setPresentMenu(e.currentTarget)}><ArrowDropDown /></Button>}
         </ButtonGroup>
@@ -279,7 +279,7 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
 
     {!narrow && slate && huddle !== 'disabled' && <HuddleUp />}
     {!narrow && canAsk && <Button className="sb-ask" data-conversation-toggle color="inherit" variant="outlined" aria-pressed={Boolean(askOpen)}
-      startIcon={<AutoAwesome />} onClick={() => { setAskOpen(toggledConversation({ open: askOpen, arrival: askArrival, now: performance.now() })); setAskArrival(null) }}>Ask Slatebox</Button>}
+      startIcon={<AutoAwesome />} aria-label="Ask Slatebox" onClick={() => { setAskOpen(toggledConversation({ open: askOpen, arrival: askArrival, now: performance.now() })); setAskArrival(null) }}><span className="sb-btn-text">Ask Slatebox</span></Button>}
     {presentButton}
     {owner && <Button className="sb-board-share" variant="contained" color="primary" disableElevation onClick={onShare}>Share</Button>}
     {!narrow && !owner && slate && (privacy.isPublic || privacy.isUnlisted) &&

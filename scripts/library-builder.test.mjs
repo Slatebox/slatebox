@@ -354,6 +354,21 @@ test("short status words start the whole ones; the review panel is docked; the b
   assert.doesNotMatch(panel, /position: 'fixed'/);
   assert.match(panel, /order: -1, flex: '0 0 384px'/);
   const barSource = app("imports/ui/components/library/build/BuildBar.jsx");
-  assert.match(barSource, /const lastLevel = desktop \? 4 : 5/);
+  assert.match(barSource, /const lastLevel = desktop \? FIT\.askIcon : FIT\.fold/);
+  assert.match(barSource, /const folds = narrow \|\| level >= FIT\.fold/);
+  // The header gives way in one fixed order (owner, 2026-11-24): the branched-from words, the status's short words,
+  // Submit's short label, the item name's ellipsis (never under 96px), Save your work as its icon, the privacy chip, and
+  // the slate name's ellipsis (never under 96px), then Huddle, Present and Ask Slatebox as their icons; never a line cut
+  // to nothing.
+  const fit = barSource.match(/export const FIT = \{([^}]*)\}/)?.[1] ?? "";
+  const step = Object.fromEntries(fit.split(",").map((pair) => pair.split(":").map((x) => x.trim())).map(([k, v]) => [k, Number(v)]));
+  const order = ["dropFrom", "shortStatus", "shortSubmit", "truncateName", "saveIcon", "privacy", "slateName", "huddleIcon", "presentIcon", "askIcon", "fold"];
+  assert.deepEqual(order.map((k) => step[k]), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  assert.equal(step.min, 96);
+  assert.doesNotMatch(barSource, /dotOnly/);
+  const css = app("imports/ui/common/main.css");
+  assert.match(css, /\[data-build-fit~=save\] \.sb-save-work \.sb-save-long/);
+  assert.match(css, /\[data-build-fit~=privacy\] \.sb-board-privacy\{display:none\}/);
+  assert.match(app("imports/ui/components/CanvasToolbar.jsx"), /className="sb-save-work"[^\n]*\n\s*aria-label="Save your work"/);
   assert.match(barSource, /const desktop = useMediaQuery\('\(min-width:1024px\)'\)/);
 });

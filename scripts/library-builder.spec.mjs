@@ -53,8 +53,9 @@ async function builderInHeader(page) {
 }
 // At 1440 the header reads in full: the slate's name, the bar's buttons and (`lines`) both lines of the bar (where it
 // stands, the item's name), with Ask Slatebox open or closed; and from 1024px the bar is never the one Builder button.
-// (A long slate name, such as a new builder slate's "Untitled smart component", keeps its room first and may leave the bar
-// its dot alone: a click on it shows all of it. The Retro branch below, like the owner's Impact × effort, reads in full.)
+// (A long slate name, such as a new builder slate's "Untitled smart component", keeps its room first and the bar gives way
+// in its fixed order, never below a readable width: library-builder-fit.spec.mjs sweeps every width and name length. The
+// Retro branch below, like the owner's Impact × effort, reads in full.)
 async function headerReadsInFull(page, { lines = true } = {}) {
   await expect(bar(page).getByRole('button', { name: 'Builder', exact: true }), 'the whole bar on a desktop').toHaveCount(0)
   const cut = await page.evaluate((lines) => [document.querySelector('.sb-board-title strong'), ...document.querySelectorAll(lines ? '[data-build-line], [data-build-bar] button' : '[data-build-bar] button')]
