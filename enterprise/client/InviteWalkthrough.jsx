@@ -9,6 +9,8 @@
 import React, { useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
+import { useTheme } from '@mui/material/styles'
+import useMediaQuery from '@mui/material/useMediaQuery'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
@@ -22,11 +24,99 @@ import Radio from '@mui/material/Radio'
 import RadioGroup from '@mui/material/RadioGroup'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
+import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded'
+import ErrorOutlineRounded from '@mui/icons-material/ErrorOutlineRounded'
+import InfoOutlined from '@mui/icons-material/InfoOutlined'
+import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined'
+import LockOutlined from '@mui/icons-material/LockOutlined'
+import WarningAmberRounded from '@mui/icons-material/WarningAmberRounded'
 import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx'
+import Hexagon from '/imports/ui/components/AgentMark.jsx'
 import { enterpriseState } from '/imports/api/common/edition.mjs'
 import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
 import { GALLERY, cardFor } from '../common/gallery.mjs'
 import { followSignIn, openSignInWindow } from './signin'
+
+// The walkthrough's look, light and dark (the app's palette: greens on warm neutrals, sticky
+// yellow only for the "Try" suggestion). Text on every surface here meets WCAG AA.
+const MARK = '#3f7d58' // the hexagon before an agent has its own colour (chosen when it arrives)
+const surface = (theme) => ({
+  bgcolor: '#fffef8', border: '1px solid #e1e3d6', borderRadius: '14px',
+  boxShadow: '0 1px 2px rgba(32,61,50,0.06), 0 6px 18px rgba(32,61,50,0.06)',
+  ...theme.applyStyles('dark', { bgcolor: '#23362d', borderColor: '#3a5244', boxShadow: '0 1px 2px rgba(0,0,0,0.3), 0 8px 22px rgba(0,0,0,0.28)' }),
+})
+const section = (theme) => ({ ...surface(theme), p: { xs: 1.75, sm: 2 } })
+const heading = (theme) => ({
+  display: 'block', textTransform: 'uppercase', fontSize: 11.5, fontWeight: 750, letterSpacing: '0.09em', lineHeight: 1.6, mb: 1, color: '#3b6a50',
+  ...theme.applyStyles('dark', { color: '#bed7b5' }),
+})
+const success = (theme) => ({
+  bgcolor: '#ebf3e4', border: '1px solid #c8dcbb', borderRadius: '14px', p: { xs: 1.5, sm: 1.75 }, display: 'grid', gap: 0.75,
+  ...theme.applyStyles('dark', { bgcolor: 'rgba(190,215,181,0.10)', borderColor: 'rgba(190,215,181,0.28)' }),
+})
+const checkIcon = (theme) => ({ fontSize: 19, mt: '1px', flexShrink: 0, color: '#2f6b45', ...theme.applyStyles('dark', { color: '#bed7b5' }) })
+const option = (theme, on, disabled) => ({
+  m: 0, width: '100%', alignItems: 'flex-start', gap: 0.5, py: 1, pl: 0.75, pr: 1.5, borderRadius: '12px', border: '1px solid',
+  transition: 'border-color 120ms, background-color 120ms, box-shadow 120ms',
+  borderColor: on ? '#3f7d58' : '#dfe2d4', bgcolor: on ? '#eef5e7' : '#fffef8',
+  boxShadow: on ? 'inset 0 0 0 1px #3f7d58' : 'none',
+  ...(!disabled && { cursor: 'pointer', '&:hover': { borderColor: on ? '#3f7d58' : '#a9bfa6' } }),
+  ...(disabled && { bgcolor: '#f4f3ec', borderStyle: 'dashed' }),
+  '&:has(.Mui-focusVisible)': { outline: '2px solid #254b3b', outlineOffset: 2 },
+  '& .MuiFormControlLabel-label': { pt: '9px', flex: 1, minWidth: 0 },
+  ...theme.applyStyles('dark', {
+    borderColor: on ? '#bed7b5' : '#3f574a', bgcolor: on ? 'rgba(190,215,181,0.12)' : '#1e3027',
+    boxShadow: on ? 'inset 0 0 0 1px #bed7b5' : 'none',
+    ...(!disabled && { '&:hover': { borderColor: on ? '#bed7b5' : '#6b8a76' } }),
+    ...(disabled && { bgcolor: 'rgba(255,255,255,0.03)' }),
+    '&:has(.Mui-focusVisible)': { outline: '2px solid #f2ce8b', outlineOffset: 2 },
+  }),
+})
+const callout = (kind) => (theme) => ({
+  display: 'flex', gap: 1, alignItems: 'flex-start', borderRadius: '12px', p: 1.25, pl: 1.5, fontSize: 14, lineHeight: 1.5,
+  ...{
+    info: { bgcolor: '#eef3ee', borderLeft: '4px solid #5b8a6e', color: '#2c4a3b' },
+    warning: { bgcolor: '#fff4e0', border: '1px solid #f0d29c', color: '#6e4300' },
+    error: { bgcolor: '#fdeceb', border: '1px solid #f3c4c0', color: '#9d1f17' },
+  }[kind],
+  ...theme.applyStyles('dark', {
+    info: { bgcolor: 'rgba(190,215,181,0.07)', borderLeftColor: '#8fb39a', color: '#dfe9da' },
+    warning: { bgcolor: 'rgba(255,183,77,0.12)', borderColor: 'rgba(255,183,77,0.35)', color: '#ffd59a' },
+    error: { bgcolor: 'rgba(255,138,128,0.12)', borderColor: 'rgba(255,138,128,0.35)', color: '#ffb4ab' },
+  }[kind]),
+})
+const calloutIcon = { fontSize: 19, mt: '1px', flexShrink: 0 }
+
+/** A ✓ line of what Slatebox found, with a lock for "sign-in needed". */
+function Found({ children, lock = false, ...rest }) {
+  const Icon = lock ? LockOutlined : CheckCircleRounded
+  return (
+    <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }} {...rest}>
+      <Icon aria-hidden="true" sx={checkIcon} />
+      <Typography variant="body2" component="div" sx={{ lineHeight: 1.5 }}>{children}</Typography>
+    </Box>
+  )
+}
+Found.propTypes = { children: PropTypes.node, lock: PropTypes.bool }
+
+function Callout({ kind = 'info', children, sx, ...rest }) {
+  const Icon = { info: InfoOutlined, warning: WarningAmberRounded, error: ErrorOutlineRounded }[kind]
+  return (
+    <Box sx={[callout(kind), ...(Array.isArray(sx) ? sx : [sx])]} {...rest}>
+      <Icon aria-hidden="true" sx={calloutIcon} />
+      <Box sx={{ minWidth: 0 }}>{children}</Box>
+    </Box>
+  )
+}
+Callout.propTypes = { kind: PropTypes.oneOf(['info', 'warning', 'error']), children: PropTypes.node, sx: PropTypes.oneOfType([PropTypes.shape({}), PropTypes.arrayOf(PropTypes.shape({}))]) }
+
+function Lookalike() {
+  return <Callout kind="warning">This address looks like it stands for another site. Check it before you go on.</Callout>
+}
+function Problem({ text }) {
+  return <Callout kind="error" role="alert">{text}</Callout>
+}
+Problem.propTypes = { text: PropTypes.string.isRequired }
 
 const SEES = [
   { value: 'request', label: 'Only what I ask' },
@@ -58,6 +148,9 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
   const [showAll, setShowAll] = useState(false)
   const [error, setError] = useState('')
   const { open: openPay, prefetch } = usePaySheet()
+  // On a phone the walkthrough is a full-height sheet; its footer stays in reach.
+  const theme = useTheme()
+  const phone = useMediaQuery(theme.breakpoints.down('sm'))
   // Slatebox Pro is Slatebox Cloud's; a licensed self-hosted install has no Pro to mention. The
   // server says which it is (unlocked as Cloud by Cloud's key, or by an on-prem license).
   const cloud = enterpriseState(Meteor.settings).via === 'cloud'
@@ -177,134 +270,233 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
   const plan = found?.signIn
   const signInWith = plan?.provider || plan?.authHost || found?.host
 
+
+  const agentName = step === 'consent' || step === 'inviting' ? name : reconnect?.name || found?.suggestedName
+  const subtitle = found && step !== 'choose' && step !== 'discovering' ? [agentName, found.host].filter(Boolean).join(' · ') : ''
+  const toolLabel = (tool) => tool.title || tool.name.replace(/[_-]+/g, ' ')
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth aria-labelledby="invite-agent-title" data-invite-agent="">
-      <DialogTitle id="invite-agent-title">Invite an agent to “{slateName || 'this slate'}”</DialogTitle>
-      <DialogContent dividers>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth fullScreen={phone} aria-labelledby="invite-agent-title" data-invite-agent=""
+      PaperProps={{ sx: (t) => ({ bgcolor: '#f6f5ed', backgroundImage: 'none', ...(!phone && { borderRadius: '20px' }), ...t.applyStyles('dark', { bgcolor: '#17251f' }) }) }}>
+      <Box sx={(t) => ({
+        display: 'flex', alignItems: 'center', gap: 1.5, px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 2.5 }, pb: 2,
+        background: 'linear-gradient(180deg, #fffef8 0%, #f6f5ed 100%)', borderBottom: '1px solid #e3e5d8',
+        ...t.applyStyles('dark', { background: 'linear-gradient(180deg, #23362d 0%, #17251f 100%)', borderBottomColor: '#33493d' }),
+      })}>
+        <Box aria-hidden="true" sx={(t) => ({
+          width: 44, height: 44, borderRadius: '13px', display: 'grid', placeItems: 'center', flexShrink: 0,
+          bgcolor: '#e6efdf', boxShadow: 'inset 0 0 0 1px #cfdfc4', ...t.applyStyles('dark', { bgcolor: 'rgba(190,215,181,0.12)', boxShadow: 'inset 0 0 0 1px rgba(190,215,181,0.25)' }),
+        })}>
+          <Hexagon color={MARK} size={28} style={{}} />
+        </Box>
+        <Box sx={{ minWidth: 0 }}>
+          <DialogTitle id="invite-agent-title" sx={{ p: 0, fontSize: { xs: 17, sm: 19 }, fontWeight: 750, lineHeight: 1.3, letterSpacing: '-0.01em' }}>
+            Invite an agent to “{slateName || 'this slate'}”
+          </DialogTitle>
+          {subtitle && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, overflowWrap: 'anywhere' }} data-invite-subtitle="">{subtitle}</Typography>}
+        </Box>
+      </Box>
+      <DialogContent sx={{ px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 2.5 }, borderTop: 'none' }}>
         {step === 'choose' && (
-          <>
-            <Typography variant="body2" sx={{ mb: 2 }}>Agents work on this slate with you. Everyone here sees each one as a cursor, and its suggestions as ghost notes to keep or discard.</Typography>
-            <Box component="form" onSubmit={(e) => { e.preventDefault(); discover() }} sx={{ display: 'flex', gap: 1, mb: 2 }}>
+          <Box sx={{ display: 'grid', gap: 2 }}>
+            <Typography variant="body2" sx={{ fontSize: 15, lineHeight: 1.55 }}>Agents work on this slate with you. Everyone here sees each one as a cursor, and its suggestions as ghost notes to keep or discard.</Typography>
+            <Box component="form" onSubmit={(e) => { e.preventDefault(); discover() }} sx={(t) => ({ ...section(t), display: 'flex', gap: 1, alignItems: 'center' })}>
               <TextField size="small" fullWidth label="Paste an MCP address" placeholder="https://example.com/mcp" value={address}
                 onChange={(e) => setAddress(e.target.value)} inputProps={{ 'data-invite-address': '' }} />
-              <Button type="submit" variant="contained" onPointerEnter={prefetch} disabled={!address.trim()}>Next</Button>
+              <Button type="submit" variant="contained" onPointerEnter={prefetch} disabled={!address.trim()} sx={{ px: 2.5, flexShrink: 0 }}>Next</Button>
             </Box>
-            {error && <Typography role="alert" color="error" variant="body2" sx={{ mb: 2 }}>{error}</Typography>}
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 1.5 }}>
+            {error && <Problem text={error} />}
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fill, minmax(200px, 1fr))' }, gap: 1.5 }}>
               {GALLERY.map((item) => (
                 <Box key={item.id} component="button" type="button" data-gallery-card={item.id} onClick={() => { setAddress(item.url); discover(item.url) }} onPointerEnter={prefetch}
-                  sx={{ textAlign: 'left', p: 1.5, border: '1px solid', borderColor: item.featured ? 'primary.main' : 'divider', borderRadius: 2, bgcolor: 'background.paper', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
-                  <Typography variant="subtitle2">⬡ {item.name}</Typography>
-                  <Typography variant="caption" color="text.secondary" component="div">{item.job} · {cardCost(item)}</Typography>
-                  {cloud && <Typography variant="caption" color="text.secondary" component="div">Needs Slatebox Pro or Business</Typography>}
-                  <Typography variant="body2" sx={{ mt: 0.5 }}>{item.lands}</Typography>
+                  sx={(t) => ({
+                    ...surface(t), textAlign: 'left', p: 1.75, cursor: 'pointer', font: 'inherit', color: 'inherit', display: 'flex', flexDirection: 'column', gap: 0.75,
+                    transition: 'transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease',
+                    ...(item.featured && { bgcolor: '#f3f8ee', borderColor: '#b9d2b0' }),
+                    '&:hover': { borderColor: '#7fa78a', boxShadow: '0 2px 4px rgba(32,61,50,0.08), 0 10px 24px rgba(32,61,50,0.10)', transform: 'translateY(-1px)' },
+                    '&:focus-visible': { outline: '2px solid #254b3b', outlineOffset: 2 },
+                    '@media (prefers-reduced-motion: reduce)': { transition: 'none', '&:hover': { transform: 'none' } },
+                    ...t.applyStyles('dark', {
+                      ...(item.featured && { bgcolor: '#26402f', borderColor: '#4f6e59' }),
+                      '&:hover': { borderColor: '#8fb39a', boxShadow: '0 10px 26px rgba(0,0,0,0.35)', transform: 'translateY(-1px)' },
+                      '&:focus-visible': { outline: '2px solid #f2ce8b', outlineOffset: 2 },
+                    }),
+                  })}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                    <Box aria-hidden="true" sx={(t) => ({ width: 34, height: 34, borderRadius: '10px', display: 'grid', placeItems: 'center', flexShrink: 0, bgcolor: '#e6efdf', ...t.applyStyles('dark', { bgcolor: 'rgba(190,215,181,0.12)' }) })}>
+                      <Hexagon color={item.featured ? MARK : '#6f8d78'} size={20} style={{}} />
+                    </Box>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 750, lineHeight: 1.3 }}>{item.name}</Typography>
+                      <Typography variant="caption" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>{item.job} · {cardCost(item)}</Typography>
+                    </Box>
+                  </Box>
+                  <Typography variant="body2" sx={{ lineHeight: 1.45 }}>{item.lands}</Typography>
+                  {cloud && <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 'auto', pt: 0.25 }}>Needs Slatebox Pro or Business</Typography>}
                 </Box>
               ))}
             </Box>
-            <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 2 }}>Any MCP server works: open ones straight away, others after you sign in on their own page or paste a key. Slatebox AI turns what it answers into notes on your slate.{cloud ? ' Inviting agents is part of Slatebox Pro and Slatebox Business.' : ''}</Typography>
-          </>
+            <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0, lineHeight: 1.5 }}>Any MCP server works: open ones straight away, others after you sign in on their own page or paste a key. Slatebox AI turns what it answers into notes on your slate.{cloud ? ' Inviting agents is part of Slatebox Pro and Slatebox Business.' : ''}</Typography>
+          </Box>
         )}
         {step === 'discovering' && (
-          <Box aria-live="polite" sx={{ py: 3 }}>
-            <Typography variant="body1">Connecting to {address}…</Typography>
-            <LinearProgress sx={{ mt: 2 }} />
+          <Box aria-live="polite" sx={(t) => ({ ...section(t), py: 3, px: 3, textAlign: 'center' })}>
+            <Hexagon color={MARK} size={34} style={{}} />
+            <Typography variant="body1" sx={{ mt: 1, fontWeight: 650, overflowWrap: 'anywhere' }}>Connecting to {address}…</Typography>
+            <LinearProgress sx={{ mt: 2, height: 6, borderRadius: 3 }} />
           </Box>
         )}
         {(step === 'signin' || step === 'waiting') && found && plan && (
-          <Box data-invite-signin={plan.method}>
-            <Typography variant="body2">✓ Reached <b>{found.host}</b></Typography>
-            {found.lookalike && <Typography color="warning.main" variant="body2">This address looks like it stands for another site. Check it before you go on.</Typography>}
-            <Typography variant="body2" sx={{ mb: 2 }}>
-              {plan.again ? `✓ ${reconnect?.name || 'This agent'} needs you to sign in to ${found.host} again.` : '✓ Sign-in needed'}
-              {plan.method === 'oauth' && plan.authHost ? ` · opens ${plan.authHost}` : ''}
-            </Typography>
+          <Box data-invite-signin={plan.method} sx={{ display: 'grid', gap: 1.5 }}>
+            <Box sx={success}>
+              <Found>Reached <b>{found.host}</b></Found>
+              <Found lock>
+                {plan.again ? `${reconnect?.name || 'This agent'} needs you to sign in to ${found.host} again.` : 'Sign-in needed'}
+                {plan.method === 'oauth' && plan.authHost ? ` · opens ${plan.authHost}` : ''}
+              </Found>
+            </Box>
+            {found.lookalike && <Lookalike />}
             {step === 'waiting' && (
-              <Box aria-live="polite" sx={{ mb: 2 }}>
+              <Box aria-live="polite" sx={section}>
                 <Typography variant="body2">Finish signing in in the window that opened. Slatebox carries on here by itself.</Typography>
-                <LinearProgress sx={{ mt: 1 }} />
+                <LinearProgress sx={{ mt: 1.5, height: 6, borderRadius: 3 }} />
               </Box>
             )}
-            {step === 'signin' && plan.method === 'oauth' && (
-              <Box sx={{ mb: 2 }}>
-                {plan.needsClientId && (
-                  <TextField size="small" fullWidth label={`Client id from ${found.host}`} value={clientId} onChange={(e) => setClientId(e.target.value)} sx={{ mb: 1 }}
-                    helperText="This server needs a registered app. Paste the client id it gave you." inputProps={{ maxLength: 500, 'data-invite-client-id': '' }} />
+            {step === 'signin' && (plan.method === 'oauth' || plan.keyAllowed) && (
+              <Box sx={(t) => ({ ...section(t), display: 'grid', gap: 1.5 })}>
+                {plan.method === 'oauth' && (
+                  <Box>
+                    {plan.needsClientId && (
+                      <TextField size="small" fullWidth label={`Client id from ${found.host}`} value={clientId} onChange={(e) => setClientId(e.target.value)} sx={{ mb: 1.5 }}
+                        helperText="This server needs a registered app. Paste the client id it gave you." inputProps={{ maxLength: 500, 'data-invite-client-id': '' }} />
+                    )}
+                    <Button variant="contained" data-invite-sign-in="" disabled={plan.needsClientId && !clientId.trim()} onClick={signIn} sx={{ px: 2.5, width: { xs: '100%', sm: 'auto' } }}>Sign in to {signInWith} →</Button>
+                    <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1.25, mb: 0, lineHeight: 1.5 }} data-invite-sign-in-reach="">
+                      A window opens on {plan.authHost || found.host}'s own page. Slatebox never sees your password.
+                      {plan.sendsTo && plan.sendsTo !== plan.authHost ? ` Your ${signInWith} sign-in will be sent to ${plan.sendsTo}, and only there.` : ''}
+                      {plan.reach ? ` ${plan.reach}` : ''}
+                      {' '}What it gives Slatebox is kept encrypted for you alone, never shown to anyone on the slate, and removed when you remove the agent.
+                    </Typography>
+                  </Box>
                 )}
-                <Button variant="contained" data-invite-sign-in="" disabled={plan.needsClientId && !clientId.trim()} onClick={signIn}>Sign in to {signInWith} →</Button>
-                <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1 }} data-invite-sign-in-reach="">
-                  A window opens on {plan.authHost || found.host}'s own page. Slatebox never sees your password.
-                  {plan.sendsTo && plan.sendsTo !== plan.authHost ? ` Your ${signInWith} sign-in will be sent to ${plan.sendsTo}, and only there.` : ''}
-                  {plan.reach ? ` ${plan.reach}` : ''}
-                  {' '}What it gives Slatebox is kept encrypted for you alone, never shown to anyone on the slate, and removed when you remove the agent.
-                </Typography>
-              </Box>
-            )}
-            {step === 'signin' && plan.keyAllowed && (
-              <Box>
-                {plan.method === 'oauth' && !showKey && (
-                  <Button size="small" onClick={() => setShowKey(true)}>{card?.keyHint || 'Or paste a key or token'}</Button>
-                )}
-                {showKey && (
-                  <Box component="form" onSubmit={useKey} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                    <TextField size="small" fullWidth type="password" autoComplete="off" label={`Key or token for ${found.host}`} value={key} onChange={(e) => setKey(e.target.value)}
-                      helperText="Stored encrypted, never shown to anyone on the slate." inputProps={{ maxLength: 4096, 'data-invite-key': '' }} />
-                    <Button type="submit" variant={plan.method === 'key' ? 'contained' : 'outlined'} disabled={!key.trim()} data-invite-use-key="">Use key</Button>
+                {plan.keyAllowed && (
+                  <Box sx={(t) => (plan.method === 'oauth' ? { borderTop: '1px solid #e7e8dd', pt: 1.25, ...t.applyStyles('dark', { borderTopColor: '#3a5244' }) } : {})}>
+                    {plan.method === 'oauth' && !showKey && (
+                      <Button size="small" onClick={() => setShowKey(true)}>{card?.keyHint || 'Or paste a key or token'}</Button>
+                    )}
+                    {showKey && (
+                      <Box component="form" onSubmit={useKey} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                        <TextField size="small" fullWidth type="password" autoComplete="off" label={`Key or token for ${found.host}`} value={key} onChange={(e) => setKey(e.target.value)}
+                          helperText="Stored encrypted, never shown to anyone on the slate." inputProps={{ maxLength: 4096, 'data-invite-key': '' }} />
+                        <Button type="submit" variant={plan.method === 'key' ? 'contained' : 'outlined'} disabled={!key.trim()} data-invite-use-key="" sx={{ flexShrink: 0, px: 2 }}>Use key</Button>
+                      </Box>
+                    )}
                   </Box>
                 )}
               </Box>
             )}
-            {error && <Typography role="alert" color="error" variant="body2" sx={{ mt: 2 }}>{error}</Typography>}
+            {error && <Problem text={error} />}
           </Box>
         )}
         {step === 'reconnected' && found && (
-          <Typography variant="body2" data-invite-reconnected="">✓ Signed in to {found.host}. {reconnect?.name || 'Your agent'} is ready: ask it again.</Typography>
+          <Box sx={success} data-invite-reconnected="">
+            <Found>Signed in to {found.host}. {reconnect?.name || 'Your agent'} is ready: ask it again.</Found>
+          </Box>
         )}
         {(step === 'consent' || step === 'inviting') && found && (
-          <Box data-invite-consent="">
-            <Typography variant="body2">✓ Reached <b>{found.host}</b>{found.serverName ? ` · it calls itself “${found.serverName}” (self-reported)` : ''}</Typography>
-            {found.lookalike && <Typography color="warning.main" variant="body2">This address looks like it stands for another site. Check it before you go on.</Typography>}
-            <Typography variant="body2">{found.signedIn ? `✓ Signed in${found.signedIn.kind === 'key' ? ' with your key' : ''}: it acts as you on ${found.host}, and only you can ask it` : '✓ No sign-in: anyone with this address can use this server'}</Typography>
-            <Typography variant="body2" sx={{ mb: 2 }}>✓ Found {lookups.length} {lookups.length === 1 ? 'way' : 'ways'} to look things up{changes.length ? ` and ${changes.length} that change things elsewhere` : ''}</Typography>
-            <TextField size="small" label="Name on your slate" value={name} onChange={(e) => setName(e.target.value)} inputProps={{ maxLength: 32, 'data-invite-name': '' }}
-              helperText={`Shown as “${name || '…'} · added by you”. Names can't say Slatebox, admin, support or a person's name.`} sx={{ mb: 2 }} />
-            <Typography variant="overline" component="div">Look things up</Typography>
-            {lookups.map((tool) => (
-              <FormControlLabel key={tool.name} control={<Checkbox checked={Boolean(allowed[tool.name])} onChange={(e) => setAllowed({ ...allowed, [tool.name]: e.target.checked })} />}
-                label={`${tool.title || tool.name.replace(/[_-]+/g, ' ')} → ${found.summary.lookups.find((l) => l.name === tool.name)?.lands || 'adds notes'}`} sx={{ display: 'flex' }} />
-            ))}
-            {changes.length > 0 && (
-              <>
-                <Typography variant="overline" component="div" sx={{ mt: 1 }}>Change things outside Slatebox</Typography>
-                {changes.map((tool) => (
-                  <FormControlLabel key={tool.name} disabled control={<Checkbox checked={false} />} label={`${tool.title || tool.name.replace(/[_-]+/g, ' ')}: off. Changes outside Slatebox are not available yet.`} sx={{ display: 'flex' }} />
+          <Box data-invite-consent="" sx={{ display: 'grid', gap: 1.5 }}>
+            <Box sx={success}>
+              <Found>Reached <b>{found.host}</b>{found.serverName ? ` · it calls itself “${found.serverName}” (self-reported)` : ''}</Found>
+              <Found>{found.signedIn ? `Signed in${found.signedIn.kind === 'key' ? ' with your key' : ''}: it acts as you on ${found.host}, and only you can ask it` : 'No sign-in: anyone with this address can use this server'}</Found>
+              <Found>Found {lookups.length} {lookups.length === 1 ? 'way' : 'ways'} to look things up{changes.length ? ` and ${changes.length} that change things elsewhere` : ''}</Found>
+            </Box>
+            {found.lookalike && <Lookalike />}
+            <Box sx={section}>
+              <TextField size="small" fullWidth label="Name on your slate" value={name} onChange={(e) => setName(e.target.value)} inputProps={{ maxLength: 32, 'data-invite-name': '' }}
+                helperText={`Shown as “${name || '…'} · added by you”. Names can't say Slatebox, admin, support or a person's name.`} />
+            </Box>
+            <Box sx={section}>
+              <Typography component="div" sx={heading}>Look things up</Typography>
+              <Box sx={{ display: 'grid', gap: 1 }}>
+                {lookups.map((tool) => (
+                  <FormControlLabel key={tool.name} sx={(t) => option(t, Boolean(allowed[tool.name]))}
+                    control={<Checkbox checked={Boolean(allowed[tool.name])} onChange={(e) => setAllowed({ ...allowed, [tool.name]: e.target.checked })} />}
+                    label={(
+                      <>
+                        <Typography component="span" sx={{ display: 'block', fontWeight: 700, fontSize: 14.5, lineHeight: 1.35 }}>{toolLabel(tool)}</Typography>
+                        <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block', lineHeight: 1.4 }}>→ {found.summary.lookups.find((l) => l.name === tool.name)?.lands || 'adds notes'}</Typography>
+                      </>
+                    )} />
                 ))}
-              </>
-            )}
-            <Button size="small" onClick={() => setShowAll(!showAll)} sx={{ mt: 1 }}>{showAll ? 'Hide' : 'Show'} all tools as the server describes them</Button>
-            {showAll && (
-              <Box component="ul" sx={{ m: 0, pl: 2, maxHeight: 180, overflow: 'auto', fontSize: 13 }}>
-                {found.tools.map((tool) => <li key={tool.name}><b>{tool.name}</b>: {tool.description || '(no description)'}</li>)}
+              </Box>
+              {changes.length > 0 && (
+                <>
+                  <Typography component="div" sx={(t) => ({ ...heading(t), mt: 2 })}>Change things outside Slatebox</Typography>
+                  <Box sx={{ display: 'grid', gap: 1 }}>
+                    {changes.map((tool) => (
+                      <FormControlLabel key={tool.name} disabled control={<Checkbox checked={false} />} sx={(t) => option(t, false, true)}
+                        label={(
+                          <>
+                            <Typography component="span" sx={{ display: 'block', fontWeight: 700, fontSize: 14.5, lineHeight: 1.35 }}>{toolLabel(tool)}</Typography>
+                            <Typography component="span" variant="body2" sx={{ display: 'block', lineHeight: 1.4 }}>Off. Changes outside Slatebox are not available yet.</Typography>
+                          </>
+                        )} />
+                    ))}
+                  </Box>
+                </>
+              )}
+              <Button size="small" onClick={() => setShowAll(!showAll)} sx={{ mt: 1.25, ml: -0.75 }}>{showAll ? 'Hide' : 'Show'} all tools as the server describes them</Button>
+              {showAll && (
+                <Box component="ul" sx={(t) => ({ m: 0, mt: 0.75, py: 1, pr: 1.5, pl: 3, maxHeight: 180, overflow: 'auto', fontSize: 13, lineHeight: 1.5, borderRadius: '10px', bgcolor: '#f4f3ec', border: '1px solid #e3e4d9', '& li + li': { mt: 0.5 }, ...t.applyStyles('dark', { bgcolor: '#1b2b23', borderColor: '#33493d' }) })}>
+                  {found.tools.map((tool) => <li key={tool.name}><b>{tool.name}</b>: {tool.description || '(no description)'}</li>)}
+                </Box>
+              )}
+            </Box>
+            <Box sx={section}>
+              <Typography component="div" sx={heading}>On this slate it may</Typography>
+              <Typography variant="body2" sx={{ lineHeight: 1.5 }}><b>Suggest:</b> its work arrives as ghost notes anyone who can edit may keep or discard.</Typography>
+            </Box>
+            <Box sx={section}>
+              <Typography component="div" sx={heading} id="invite-sees-label">It may see</Typography>
+              <RadioGroup value={sees} onChange={(e) => setSees(e.target.value)} aria-labelledby="invite-sees-label" sx={{ display: 'grid', gap: 1 }}>
+                {SEES.map((option_) => (
+                  <FormControlLabel key={option_.value} value={option_.value} control={<Radio size="small" />} sx={(t) => ({ ...option(t, sees === option_.value), '& .MuiFormControlLabel-label': { pt: '7px', flex: 1, fontSize: 14.5, fontWeight: sees === option_.value ? 700 : 500 } })}
+                    label={option_.label} />
+                ))}
+              </RadioGroup>
+              <Callout kind="info" sx={{ mt: 1.5 }}>
+                <Box component="span" sx={{ display: 'block' }}><b>What leaves Slatebox:</b> {sees === 'request' ? 'only what you type when you ask it.' : sees === 'selection' ? 'what you type, and the text of the notes you select.' : 'what you type, and the text of every note on this slate, including notes by others.'}</Box>
+                <Box component="span" sx={{ display: 'block', mt: 0.5 }}>Never: other slates, people's names or emails, comments, links or share settings.</Box>
+              </Callout>
+            </Box>
+            <Box sx={section}>
+              <Typography component="div" sx={heading}>Who can ask it</Typography>
+              <Typography variant="body2" sx={{ lineHeight: 1.5 }}>Only you. Everyone on the slate sees its cursor and suggestions.</Typography>
+            </Box>
+            {card?.try && (
+              <Box sx={(t) => ({
+                justifySelf: 'start', display: 'inline-flex', alignItems: 'center', gap: 0.75, px: 1.5, py: 0.75, borderRadius: 999, fontSize: 14, lineHeight: 1.4,
+                bgcolor: '#fff4b8', border: '1px solid #e9d671', color: '#4a3d00', boxShadow: '0 1px 2px rgba(110,90,0,0.10)',
+                ...t.applyStyles('dark', { bgcolor: 'rgba(242,206,139,0.14)', borderColor: 'rgba(242,206,139,0.40)', color: '#ffe0a4' }),
+              })}>
+                <LightbulbOutlined aria-hidden="true" sx={{ fontSize: 18 }} />
+                <span>Try: “{card.try}”</span>
               </Box>
             )}
-            <Typography variant="overline" component="div" sx={{ mt: 2 }}>On this slate it may</Typography>
-            <Typography variant="body2">Suggest: its work arrives as ghost notes anyone who can edit may keep or discard.</Typography>
-            <Typography variant="overline" component="div" sx={{ mt: 2 }}>It may see</Typography>
-            <RadioGroup value={sees} onChange={(e) => setSees(e.target.value)}>
-              {SEES.map((option) => <FormControlLabel key={option.value} value={option.value} control={<Radio size="small" />} label={option.label} />)}
-            </RadioGroup>
-            <Typography variant="body2" color="text.secondary">What leaves Slatebox: {sees === 'request' ? 'only what you type when you ask it.' : sees === 'selection' ? 'what you type, and the text of the notes you select.' : 'what you type, and the text of every note on this slate, including notes by others.'} Never: other slates, people's names or emails, comments, links or share settings.</Typography>
-            <Typography variant="overline" component="div" sx={{ mt: 2 }}>Who can ask it</Typography>
-            <Typography variant="body2">Only you. Everyone on the slate sees its cursor and suggestions.</Typography>
-            {card?.try && <Typography variant="body2" sx={{ mt: 2 }}>Try: “{card.try}”</Typography>}
-            {error && <Typography role="alert" color="error" variant="body2" sx={{ mt: 2 }}>{error}</Typography>}
+            {error && <Problem text={error} />}
           </Box>
         )}
       </DialogContent>
-      <DialogActions>
+      <DialogActions sx={(t) => ({
+        px: { xs: 2, sm: 3 }, py: 1.5, pb: { xs: 'max(12px, env(safe-area-inset-bottom))', sm: 1.5 }, gap: 1,
+        bgcolor: '#fffef8', borderTop: '1px solid #e3e5d8', boxShadow: '0 -6px 16px rgba(32,61,50,0.06)',
+        '& > :not(style) ~ :not(style)': { ml: 0 },
+        ...t.applyStyles('dark', { bgcolor: '#1e3027', borderTopColor: '#33493d', boxShadow: '0 -8px 20px rgba(0,0,0,0.3)' }),
+      })}>
         {step === 'consent' || step === 'inviting' ? (
           <>
             <Button onClick={() => { setStep('choose'); setError('') }}>Back</Button>
-            <Button variant="contained" data-invite-go="" disabled={step === 'inviting' || !name.trim() || !chosen.length} onClick={invite}>
+            <Button variant="contained" data-invite-go="" disabled={step === 'inviting' || !name.trim() || !chosen.length} onClick={invite} sx={{ px: 3, py: 1, flex: { xs: 1, sm: 'none' } }}>
               {step === 'inviting' ? 'Inviting…' : `Invite ${name || 'agent'} ⬡`}
             </Button>
           </>
