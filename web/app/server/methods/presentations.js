@@ -8,6 +8,7 @@ import { fetchPublicImage } from '../common/safe-fetch.mjs'
 import { Random } from 'meteor/random'
 import { deleteStoredFile, storeFile, storedFileBase } from '../common/fileStore'
 import { finishSnapshot, ownedSnapshotKey } from '../common/presentationSnapshot.mjs'
+import { currentLogo, presetFor } from '../../imports/api/common/brandSettings.mjs'
 import CONSTANTS from '../../imports/api/common/constants'
 import {
   SlatePresentations,
@@ -155,6 +156,19 @@ Meteor.startup(async () => {
   }
 })
 
+/**
+ * A presentation's bar colors from the team's presets: the slate kind's own, each falling back to the
+ * default preset's (a kind with no bar colors of its own shows the default bar, as its notes do).
+ */
+function barColors(orgSettings, intentionId) {
+  const own = presetFor(orgSettings, intentionId)?.value || {}
+  const fallback = presetFor(orgSettings, 'default')?.value || {}
+  return {
+    presentationMenuBgColorKey: own.presentationMenuBgColorKey || fallback.presentationMenuBgColorKey || null,
+    presentationControlsColorKey: own.presentationControlsColorKey || fallback.presentationControlsColorKey || null,
+  }
+}
+
 method[CONSTANTS.methods.presentations.get] = async ({
   slateShareId,
   asPublished,
@@ -185,34 +199,19 @@ method[CONSTANTS.methods.presentations.get] = async ({
 
       const author = await Meteor.users.findOneAsync(slateDetails.userId, { fields: { orgId: 1 } })
       const orgId = author?.orgId
-      const orgSettings = orgId ? await OrganizationSettings.find(
-        {
-          $and: [
-            { orgId },
-            {
-              $or: [
-                { intentionId },
-                { $and: [{ type: 'logo', 'value.logoType': 'squareLogo' }] },
-              ],
-            },
-          ],
-        },
-        {
-          type: 1,
-          presentationMenuBgColorKey: 1,
-          presentationControlsColorKey: 1,
-        }
-      ).fetchAsync() : []
-      if (orgSettings) {
-        const colorSettings = orgSettings.find(
-          (o) => o.type === 'preset'
-        )?.value
-        const logoSettings = orgSettings.find((o) => o.type === 'logo')?.value
-        presentationMenuBgColorKey = colorSettings?.presentationMenuBgColorKey
-        presentationControlsColorKey =
-          colorSettings?.presentationControlsColorKey
-        logoUrl = logoSettings?.url
-      }
+      // The slate kind's preset (else the default one) for the bar colors, and the square logo in
+      // use: the newest one not removed (brandSettings.mjs, the same pick as the brand kit page).
+      const orgSettings = orgId ? await OrganizationSettings.find({
+        orgId,
+        $or: [
+          { type: 'preset', intentionId: { $in: [intentionId, 'default'] } },
+          { type: 'logo', 'value.logoType': 'squareLogo' },
+        ],
+      }).fetchAsync() : []
+      const bar = barColors(orgSettings, intentionId)
+      presentationMenuBgColorKey = bar.presentationMenuBgColorKey
+      presentationControlsColorKey = bar.presentationControlsColorKey
+      logoUrl = currentLogo(orgSettings, 'squareLogo')?.value?.url || null
     }
 
     // The published presentation of a slate is one made by someone who may edit that slate.
@@ -270,22 +269,14 @@ method[CONSTANTS.methods.presentations.get] = async ({
       slateDetails?.options?.ai?.isConversation?.intentionInitialData
         ?.intentionId || 'default'
 
-    const orgSettings = await OrganizationSettings.findOneAsync(
-      {
-        orgId: user?.orgId,
-        intentionId,
-      },
-      {
-        'value.presentationMenuBgColorKey': 1,
-        'value.presentationControlsColorKey': 1,
-      }
-    )
-
-    if (orgSettings) {
-      presentationMenuBgColorKey = orgSettings.value.presentationMenuBgColorKey
-      presentationControlsColorKey =
-        orgSettings.value.presentationControlsColorKey
-    }
+    const orgSettings = await OrganizationSettings.find({
+      orgId: user.orgId,
+      type: 'preset',
+      intentionId: { $in: [intentionId, 'default'] },
+    }).fetchAsync()
+    const bar = barColors(orgSettings, intentionId)
+    presentationMenuBgColorKey = bar.presentationMenuBgColorKey
+    presentationControlsColorKey = bar.presentationControlsColorKey
   }
 
   return {

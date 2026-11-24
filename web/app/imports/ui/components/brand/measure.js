@@ -1,7 +1,6 @@
-// Text measuring in the page, as the engine measures it (a canvas, the note's own font string), once
-// the font has loaded: measured before, a font's words take the fallback font's width and the note
-// comes out the wrong size.
-import { fitNote, noteFont } from './fitNote.mjs'
+// Text measuring in the page, as the engine measures it (a canvas and a CSS font string), once the font
+// has loaded: measured before, a font's words take the fallback font's width.
+const noteFont = ({ fontSize, fontFamily, fontWeight }) => `${fontWeight === 'bold' ? 'bold ' : ''}${fontSize}px ${fontFamily || 'sans-serif'}`
 
 let canvas = null
 const context = () => {
@@ -26,9 +25,4 @@ export async function fontsReady(families = []) {
   const quoted = [...new Set(families.filter(Boolean))].map((f) => `16px "${String(f).replace(/"/g, '')}"`)
   const timeout = new Promise((resolve) => { setTimeout(resolve, 1500) })
   await Promise.race([Promise.all(quoted.map((f) => document.fonts.load(f).catch(() => null))), timeout])
-}
-
-/** fitNote with the page's measure for the note's font. */
-export function fitInPage({ text, fontSize, fontFamily, fontWeight, ...limits }) {
-  return fitNote({ text, fontSize, measure: measurer({ fontSize, fontFamily, fontWeight }), ...limits })
 }

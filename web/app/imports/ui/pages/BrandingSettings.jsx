@@ -30,9 +30,10 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import AuthManager from '../../api/common/AuthManager'
 import CONSTANTS from '../../api/common/constants'
 import { ChatIntentions, OrganizationSettings } from '../../api/common/models'
+import { currentLogo, logoDocs } from '../../api/common/brandSettings.mjs'
 import {
   LOGO_TYPES, LOGO_RULES, NOT_YET, ROLES, brandUses, cleanPreset, colorsFromLogo, contrastWarnings,
-  effectiveStyle, paletteOf, presetFromColors, presetIsEmpty,
+  LARGE_TEXT_PX, effectiveStyle, paletteOf, presetFromColors, presetIsEmpty,
 } from '../components/brand/brandKit.mjs'
 import { Section, card } from '../components/brand/ui'
 import LogoField from '../components/brand/LogoField'
@@ -97,7 +98,8 @@ export default function BrandingSettings() {
   const live = settings.filter((s) => !s.deleted)
   const palette = useMemo(() => paletteOf(live), [JSON.stringify(live.filter((s) => s.type === 'color'))])
   const typography = useMemo(() => Object.fromEntries(live.filter((s) => s.type === 'typography' && s.value?.name).map((s) => [s.value.name, s.value.value])), [JSON.stringify(live.filter((s) => s.type === 'typography'))])
-  const logos = Object.fromEntries(LOGO_TYPES.map((t) => [t.key, live.find((s) => s.type === 'logo' && s.value?.logoType === t.key && s.value?.url) || null]))
+  // The logo in use is the newest one not removed: the same pick as published presentations make.
+  const logos = Object.fromEntries(LOGO_TYPES.map((t) => [t.key, currentLogo(settings, t.key)]))
   const presetDoc = (intentionId) => settings.find((s) => s.type === 'preset' && s.intentionId === intentionId) || null
 
   // ── The style being edited ─────────────────────────────────────────────────────────────────
@@ -147,11 +149,12 @@ export default function BrandingSettings() {
     try { await latest.current.savePreset(p.intentionId, p.value) } catch { /* said in the save state */ }
   }, [])
 
-  const editPreset = (next, label) => {
-    const intentionId = selected
+  // `from`: the style edited and its value before, when it is not the one open (Apply to slate style).
+  const editPreset = (next, label, from = null) => {
+    const intentionId = from?.intentionId || selected
     // One undo step per burst of edits to one field: the value before the burst.
-    if (!pending.current || pending.current.label !== label) {
-      const before = draft
+    if (from || !pending.current || pending.current.label !== label) {
+      const before = from ? from.before : draft
       pushUndo(label, async () => {
         if (pending.current) { clearTimeout(pending.current.timer); pending.current = null }
         if (intentionId === latest.current.selected) setDraft(before)
@@ -198,26 +201,32 @@ export default function BrandingSettings() {
 
   // ── Pull colors from the logo ─────────────────────────────────────────────────────────────
   const [pull, setPull] = useState({ busy: false, error: '', suggestions: null })
+  const [applyOffer, setApplyOffer] = useState(null) // after colors are added: offer them to the style
   const logoForColors = logos.squareLogo?.value?.url || logos.primaryLogo?.value?.url || null
-  const pullFrom = async (source) => {
+  // `quiet`: after an upload, say nothing unless the logo has colors the kit lacks.
+  const pullFrom = async (source, { quiet = false } = {}) => {
     setPull({ busy: true, error: '', suggestions: null })
     try {
       const hexes = await pullColors(source)
-      setPull({ busy: false, error: '', suggestions: colorsFromLogo(hexes, palette) })
+      const found = colorsFromLogo(hexes, palette)
+      setPull({ busy: false, error: '', suggestions: quiet && !found.length ? null : found })
     } catch {
-      setPull({ busy: false, error: 'Slatebox could not read colors from that logo. Add them by hand instead.', suggestions: null })
+      setPull({ busy: false, error: quiet ? '' : 'Slatebox could not read colors from that logo. Add them by hand instead.', suggestions: null })
     }
   }
 
   // ── Logos ─────────────────────────────────────────────────────────────────────────────────
-  const anyLogoDoc = (key) => settings.find((s) => s.type === 'logo' && s.value?.logoType === key) || null
+  // The newest logo document of the kind (removed or not) is the one edited, so a team with several
+  // from the old page edits the one presentations would show.
+  const anyLogoDoc = (key) => logoDocs(settings, key)[0] || null
   const saveLogo = async (type, { file, url }) => {
     const doc = anyLogoDoc(type.key)
     const before = logos[type.key]?.value || null
     await call(CONSTANTS.methods.organizationSettings.save, { _id: doc?._id || Random.id(), type: 'logo', value: { logoType: type.key, name: file.name, url }, deleted: false, orgId })
     // The file it replaced is the team's no more.
     if (before?.url && before.url !== url) Meteor.callAsync(CONSTANTS.methods.images.removeImage, { url: before.url }).catch(() => null)
-    if (!palette.length && type.key === 'squareLogo') pullFrom(file)
+    // A new square logo offers its colors whenever the kit lacks some of them.
+    if (type.key === 'squareLogo') pullFrom(file, { quiet: true })
   }
   const removeLogo = async (type) => {
     const doc = anyLogoDoc(type.key)
@@ -252,7 +261,10 @@ export default function BrandingSettings() {
   const typePresets = intentions.filter((i) => presetDoc(i._id))
   const uses = brandUses({ squareLogo: logos.squareLogo, primaryLogo: logos.primaryLogo, palette, defaultPreset: selected === 'default' ? draft : presetDoc('default')?.value, typePresets: typePresets.length > 0 })
   const editable = admin === true
-  const [previewOpen, setPreviewOpen] = useState(true)
+  // On a phone the preview starts folded (a "Show preview" bar), so the kit's first control is on the
+  // first screen; on a wider screen it is always open beside the kit.
+  const [previewChoice, setPreviewOpen] = useState(null)
+  const previewOpen = previewChoice ?? !phone
   const selectedName = selected === 'default' ? 'Every slate' : intentions.find((i) => i._id === selected)?.name || 'This kind of slate'
 
   if (!orgId && ready) {
@@ -278,10 +290,25 @@ export default function BrandingSettings() {
       <Section id="colors" title="Colors" intro="Name your colors and give them roles. Styles pick from them.">
         <ColorsSection palette={palette} disabled={!editable}
           onAdd={(c) => addColors([c])} onChange={changeColor} onRemove={removeColor}
+          applyOffer={applyOffer ? {
+            title: applyOffer.title,
+            onApply: async () => {
+              setApplyOffer(null)
+              // "Every slate" is what new slates use: apply there, whichever style was open.
+              const before = selected === 'default' ? draft : (presetDoc('default')?.value || {})
+              if (selected !== 'default') await choose('default')
+              editPreset(presetFromColors(palette, before), 'Use my colors', { intentionId: 'default', before })
+            },
+            onDismiss: () => setApplyOffer(null),
+          } : null}
           pull={{
             available: Boolean(logoForColors), busy: pull.busy, error: pull.error, suggestions: pull.suggestions,
             onPull: () => pullFrom(logoForColors),
-            onAdd: async (list) => { setPull({ busy: false, error: '', suggestions: null }); await addColors(list, 'Add colors from logo') },
+            onAdd: async (list) => {
+              setPull({ busy: false, error: '', suggestions: null })
+              await addColors(list, 'Add colors from logo')
+              if (editable) setApplyOffer({ title: list.length === 1 ? '1 color added from your logo.' : `${list.length} colors added from your logo.` })
+            },
             onDismiss: () => setPull({ busy: false, error: '', suggestions: null }),
           }} />
       </Section>
@@ -310,10 +337,10 @@ export default function BrandingSettings() {
         {warnings.length > 0 && (
           <Box role="note" data-brand-contrast-warnings={warnings.length} sx={(t) => ({ borderRadius: '10px', p: 1.5, bgcolor: '#fbefe9', ...t.applyStyles('dark', { bgcolor: '#3e2a24' }) })}>
             <Typography variant="body2" sx={{ fontWeight: 650 }}>
-              {warnings.length === 1 ? '1 pair is hard to read' : `${warnings.length} pairs are hard to read`} (below WCAG AA, 4.5:1)
+              {warnings.length === 1 ? '1 pair is hard to read' : `${warnings.length} pairs are hard to read`} (below WCAG AA at the size it is drawn: 4.5:1, or 3:1 for text {LARGE_TEXT_PX}px and up)
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {warnings.map((w) => `${w.label} ${w.ratio.toFixed(1)}:1`).join(' · ')}. Choose &quot;Automatic&quot; text, or a darker or lighter color.
+              {warnings.map((w) => `${w.label} ${w.ratio.toFixed(1)}:1 at ${w.size}px`).join(' · ')}. Choose &quot;Automatic&quot; text, or a darker or lighter color.
             </Typography>
           </Box>
         )}
@@ -342,9 +369,9 @@ export default function BrandingSettings() {
           <Typography variant="caption" color="text.secondary">{selectedName}, before it saves.</Typography>
         </Box>
         {phone && (
-          <Button size="small" onClick={() => setPreviewOpen((o) => !o)} aria-expanded={previewOpen} aria-controls="brand-preview-body"
+          <Button size="small" variant={previewOpen ? 'text' : 'outlined'} onClick={() => setPreviewOpen(!previewOpen)} aria-expanded={previewOpen} aria-controls="brand-preview-body"
             endIcon={<ExpandMoreIcon sx={{ transform: previewOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />} data-brand-preview-toggle="">
-            {previewOpen ? 'Hide' : 'Show'}
+            {previewOpen ? 'Hide preview' : 'Show preview'}
           </Button>
         )}
       </Box>

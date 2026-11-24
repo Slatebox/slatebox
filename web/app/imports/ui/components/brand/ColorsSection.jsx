@@ -76,17 +76,19 @@ export function Suggestions({ colors, onAdd, onDismiss }) {
         ))}
       </Box>
       <Box sx={{ display: 'flex', gap: 1 }}>
-        <Button size="small" variant="contained" disableElevation disabled={!count} onClick={() => onAdd(colors.filter((_, i) => picked[i]))} data-brand-suggestions-add="">
-          {count === 1 ? 'Add 1 color' : `Add ${count} colors`}
-        </Button>
-        <Button size="small" onClick={onDismiss}>Not now</Button>
+        {colors.length > 0 && (
+          <Button size="small" variant="contained" disableElevation disabled={!count} onClick={() => onAdd(colors.filter((_, i) => picked[i]))} data-brand-suggestions-add="">
+            {count === 1 ? 'Add 1 color' : `Add ${count} colors`}
+          </Button>
+        )}
+        <Button size="small" onClick={onDismiss} data-brand-suggestions-dismiss="">{colors.length ? 'Not now' : 'OK'}</Button>
       </Box>
     </Box>
   )
 }
 Suggestions.propTypes = { colors: PropTypes.arrayOf(PropTypes.shape({ value: PropTypes.string, name: PropTypes.string, role: PropTypes.string })).isRequired, onAdd: PropTypes.func.isRequired, onDismiss: PropTypes.func.isRequired }
 
-export default function ColorsSection({ palette, onAdd, onChange, onRemove, disabled, pull }) {
+export default function ColorsSection({ palette, onAdd, onChange, onRemove, disabled, pull, applyOffer }) {
   const add = () => {
     const taken = new Set(palette.map((c) => c.value))
     const value = ['#40709a', '#e07a2f', '#2f8f6b', '#6b5bd2', '#d14b6a', '#1f2a26'].find((v) => !taken.has(v)) || '#808080'
@@ -111,6 +113,18 @@ export default function ColorsSection({ palette, onAdd, onChange, onRemove, disa
       ))}
       {pull.suggestions && <Suggestions colors={pull.suggestions} onAdd={pull.onAdd} onDismiss={pull.onDismiss} />}
       {pull.error && <Typography role="alert" variant="body2" color="error">{pull.error}</Typography>}
+      {applyOffer && !disabled && (
+        <Box role="status" data-brand-apply-offer="" sx={(t) => ({ borderRadius: '10px', p: 1.5, display: 'grid', gap: 1, bgcolor: '#eef4ea', ...t.applyStyles('dark', { bgcolor: '#2c4a33' }) })}>
+          <Typography variant="body2" sx={{ fontWeight: 650 }}>{applyOffer.title}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Apply them to your slate style: new notes in your primary color, Ask Slatebox&apos;s notes in your accent, the background in your neutral, and the presentation bar in your primary. You can undo it.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Button size="small" variant="contained" disableElevation onClick={applyOffer.onApply} data-brand-apply-colors="">Apply to slate style</Button>
+            <Button size="small" onClick={applyOffer.onDismiss}>Not now</Button>
+          </Box>
+        </Box>
+      )}
       {!disabled && (
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={add} data-brand-add-color="">Add a color</Button>
@@ -137,4 +151,6 @@ ColorsSection.propTypes = {
     available: PropTypes.bool, busy: PropTypes.bool, error: PropTypes.string,
     suggestions: PropTypes.array, onPull: PropTypes.func, onAdd: PropTypes.func, onDismiss: PropTypes.func,
   }).isRequired,
+  applyOffer: PropTypes.shape({ title: PropTypes.string, onApply: PropTypes.func, onDismiss: PropTypes.func }),
 }
+ColorsSection.defaultProps = { applyOffer: null }

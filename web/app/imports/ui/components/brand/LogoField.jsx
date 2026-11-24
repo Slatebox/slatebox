@@ -5,9 +5,11 @@ import React, { useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import IconButton from '@mui/material/IconButton'
 import LinearProgress from '@mui/material/LinearProgress'
 import Typography from '@mui/material/Typography'
 import UploadIcon from '@mui/icons-material/FileUploadOutlined'
+import DeleteIcon from '@mui/icons-material/DeleteOutline'
 import uploadHeaders from '../../../api/client/uploadHeaders'
 import { LOGO_TYPES_ACCEPTED, logoFileProblem } from './brandKit.mjs'
 
@@ -70,9 +72,16 @@ export default function LogoField({ type, logo, onUploaded, onRemove, disabled }
         <Typography variant="caption" color="text.secondary">{type.use}</Typography>
       </Box>
       {logo?.url ? (
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, position: 'relative' }}>
           <Box sx={tile(false)}><Box component="img" src={logo.url} alt={`${type.name} on light`} sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /></Box>
           <Box sx={tile(true)}><Box component="img" src={logo.url} alt={`${type.name} on dark`} sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /></Box>
+          {!disabled && !confirming && (
+            <IconButton size="small" aria-label={`Remove the ${type.name.toLowerCase()}`} title="Remove" onClick={() => setConfirming(true)} data-logo-remove={type.key}
+              sx={(theme) => ({ position: 'absolute', top: 4, right: 4, bgcolor: 'rgba(255,255,255,.92)', border: '1px solid #e1e3d6', '&:hover': { bgcolor: '#fff' },
+                ...theme.applyStyles('dark', { bgcolor: 'rgba(35,54,45,.92)', borderColor: '#3a5244', '&:hover': { bgcolor: '#23362d' } }) })}>
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          )}
         </Box>
       ) : null}
       <Box
@@ -95,24 +104,20 @@ export default function LogoField({ type, logo, onUploaded, onRemove, disabled }
       >
         <UploadIcon fontSize="small" aria-hidden sx={{ color: 'text.secondary' }} />
         <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
-          {logo?.url ? <>Drop a new file to replace <b>{logo.name || 'it'}</b>, or <u>choose one</u></> : <>Drop a file here, or <u>choose one</u></>}
+          {logo?.url ? <>Drop a new file, or <u>choose one</u>. Replacing can&apos;t be undone.</> : <>Drop a file here, or <u>choose one</u></>}
         </Typography>
       </Box>
       <input ref={input} type="file" hidden accept={LOGO_TYPES_ACCEPTED} onChange={(e) => e.target.files?.[0] && take(e.target.files[0])} data-logo-input={type.key} />
       {progress !== null && <LinearProgress variant="determinate" value={progress} aria-label={`Uploading the ${type.name.toLowerCase()}`} />}
       {error && <Typography role="alert" variant="body2" color="error">{error}</Typography>}
-      {logo?.url && !disabled && (
-        confirming ? (
-          <Box role="alertdialog" aria-label={`Remove the ${type.name.toLowerCase()}?`} sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-            <Typography variant="body2" sx={{ flex: 1, minWidth: 180 }}>
-              Remove it{type.used ? ' from presentations' : ''}? The file is deleted too.
-            </Typography>
-            <Button size="small" onClick={() => setConfirming(false)}>Keep</Button>
-            <Button size="small" color="error" variant="outlined" data-logo-remove-confirm={type.key} onClick={async () => { setConfirming(false); await onRemove() }}>Remove</Button>
-          </Box>
-        ) : (
-          <Box><Button size="small" color="inherit" onClick={() => setConfirming(true)} data-logo-remove={type.key}>Remove</Button></Box>
-        )
+      {logo?.url && !disabled && confirming && (
+        <Box role="alertdialog" aria-label={`Remove the ${type.name.toLowerCase()}?`} sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Typography variant="body2" sx={{ flex: 1, minWidth: 180 }}>
+            Remove it{type.used ? ' from presentations' : ''}? Undo can&apos;t bring a logo back: you would upload it again.
+          </Typography>
+          <Button size="small" onClick={() => setConfirming(false)}>Keep</Button>
+          <Button size="small" color="error" variant="outlined" data-logo-remove-confirm={type.key} onClick={async () => { setConfirming(false); await onRemove() }}>Remove</Button>
+        </Box>
       )}
     </Box>
   )

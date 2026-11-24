@@ -11,7 +11,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore'
 import NavigateNextIcon from '@mui/icons-material/NavigateNext'
 import BrandPreviewSlate, { CHROME } from '../BrandPreviewSlate'
-import { fitSize } from './fitNote.mjs'
+import { fitSize } from './fitTitle.mjs'
 import { fontsReady, measurer } from './measure'
 
 function Caption({ title, children }) {
@@ -25,7 +25,7 @@ function Caption({ title, children }) {
 Caption.propTypes = { title: PropTypes.string.isRequired, children: PropTypes.node }
 Caption.defaultProps = { children: null }
 
-/** A title in a fixed box, at the largest size that fits with every word whole (fitNote.mjs). */
+/** A title in a fixed box, at the largest size that fits with every word whole (fitTitle.mjs). */
 function FittedTitle({ text, font, maxSize }) {
   const box = useRef(null)
   const [room, setRoom] = useState(null)
@@ -110,6 +110,11 @@ export default function BrandPreview({ style, logoUrl, compact }) {
       const svg = box?.querySelector('svg')
       if (!svg) return
       const copy = svg.cloneNode(true)
+      // The copy keeps the preview's frame (the engine's viewBox) and fits all of it into the card.
+      copy.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+      copy.removeAttribute('width')
+      copy.removeAttribute('height')
+      copy.removeAttribute('style')
       copy.removeAttribute('id')
       copy.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'))
       copy.querySelectorAll(CHROME.join(',')).forEach((el) => el.remove())
@@ -120,11 +125,11 @@ export default function BrandPreview({ style, logoUrl, compact }) {
   return (
     <Box sx={{ display: 'grid', gap: 2 }}>
       <Box>
-        <Caption title="A new slate">Notes sized for their words, as on a real slate.</Caption>
-        <BrandPreviewSlate previewId="brand-kit" style={style} height={compact ? 220 : 300} onDrawn={drawn} />
+        <Caption title="A new slate">New notes as Slatebox makes them, in your fonts and sizes. A long word shrinks to fit its note; it is never split.</Caption>
+        <BrandPreviewSlate previewId="brand-kit" style={style} columns={compact ? 1 : 2} onDrawn={drawn} />
       </Box>
       <Box>
-        <Caption title="A published presentation">The square logo and bar colors frame every published presentation.</Caption>
+        <Caption title="A published presentation">The frame around your slides: your square logo in the corner and your bar colors. The slides themselves are your slate.</Caption>
         <PresentationFrame style={style} logoUrl={logoUrl} />
       </Box>
       <Box>

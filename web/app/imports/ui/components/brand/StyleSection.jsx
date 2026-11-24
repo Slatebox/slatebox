@@ -5,6 +5,7 @@ import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Collapse from '@mui/material/Collapse'
 import ButtonBase from '@mui/material/ButtonBase'
 import IconButton from '@mui/material/IconButton'
 import MenuItem from '@mui/material/MenuItem'
@@ -15,9 +16,10 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
 import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import CONSTANTS from '../../../api/common/constants'
 import {
-  BRAND_FONTS, SIZE_CHOICES, MIN_FONT_SIZE, MAX_FONT_SIZE, SLATEBOX_DEFAULTS,
+  BAR_TEXT_PX, BRAND_FONTS, SIZE_CHOICES, MIN_FONT_SIZE, MAX_FONT_SIZE, SLATEBOX_DEFAULTS,
   backgroundKind, backgroundOf, backgroundValue, colorName, fontInfo, fontSize, inkOn, normalHex,
 } from './brandKit.mjs'
 import { ContrastBadge, Dot, Label } from './ui'
@@ -62,13 +64,13 @@ ColorChoice.propTypes = {
 }
 ColorChoice.defaultProps = { value: null, allowAuto: false, disabled: false, testId: undefined }
 
-function FontField({ label, family, size, isSet, onFamily, onSize, sample, disabled, id, unsetHint }) {
+function FontField({ label, family, size, isSet, onFamily, onSize, sample, disabled, id, unsetHint, setHint }) {
   const info = fontInfo(family)
   const options = info.source === 'missing' ? [...BRAND_FONTS, info] : BRAND_FONTS
   const chip = SIZE_CHOICES.find((s) => s.size === size)
   return (
     <Box data-font-field={id} sx={{ display: 'grid', gap: 1 }}>
-      <Label hint={isSet ? null : unsetHint}>{label}</Label>
+      <Label hint={isSet ? setHint : unsetHint}>{label}</Label>
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
         <TextField select size="small" value={info.family} disabled={disabled} onChange={(e) => onFamily(e.target.value)}
           SelectProps={{ inputProps: { 'aria-label': `${label} font` }, renderValue: (v) => <Box component="span" sx={{ fontFamily: `"${v}"` }}>{v}</Box> }} sx={{ minWidth: 200, flex: '1 1 200px' }}>
@@ -104,9 +106,22 @@ FontField.propTypes = {
   label: PropTypes.string.isRequired, family: PropTypes.string.isRequired, size: PropTypes.number.isRequired, isSet: PropTypes.bool.isRequired,
   onFamily: PropTypes.func.isRequired, onSize: PropTypes.func.isRequired, sample: PropTypes.string.isRequired, disabled: PropTypes.bool.isRequired, id: PropTypes.string.isRequired,
   unsetHint: PropTypes.string.isRequired,
+  setHint: PropTypes.string,
 }
+FontField.defaultProps = { setHint: null }
 
-function PairList({ title, hint, pairs, isSet, font, palette, onChange, disabled, id }) {
+/** A small group heading inside the style card. */
+function Group({ title, children, id }) {
+  return (
+    <Box data-style-group={id} sx={{ display: 'grid', gap: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider', '&:first-of-type': { pt: 0, borderTop: 0 } }}>
+      <Typography variant="overline" component="h3" sx={{ lineHeight: 1.2, fontWeight: 750, letterSpacing: '.06em', color: 'text.secondary' }}>{title}</Typography>
+      {children}
+    </Box>
+  )
+}
+Group.propTypes = { title: PropTypes.string.isRequired, children: PropTypes.node.isRequired, id: PropTypes.string.isRequired }
+
+function PairList({ title, hint, pairs, isSet, font, size, palette, onChange, disabled, id }) {
   const set = (i, patch) => onChange(pairs.map((p, j) => (j === i ? { ...p, ...patch } : p)))
   return (
     <Box data-pair-list={id} sx={{ display: 'grid', gap: 1 }}>
@@ -123,7 +138,7 @@ function PairList({ title, hint, pairs, isSet, font, palette, onChange, disabled
             }} />
           <ColorChoice label="Text" value={p.foregroundColor} palette={palette} disabled={disabled} allowAuto testId={`${id}-${i}-text`}
             onChange={(v) => set(i, { foregroundColor: v ? normalHex(v) : inkOn(p.backgroundColor) })} />
-          <ContrastBadge ink={p.foregroundColor} fill={p.backgroundColor} />
+          <ContrastBadge ink={p.foregroundColor} fill={p.backgroundColor} size={size} />
           {isSet && !disabled && (
             <IconButton size="small" aria-label={`Remove ${title.toLowerCase()} ${i + 1}`} onClick={() => onChange(pairs.filter((_, j) => j !== i))}><CloseIcon fontSize="small" /></IconButton>
           )}
@@ -143,11 +158,12 @@ function PairList({ title, hint, pairs, isSet, font, palette, onChange, disabled
 }
 PairList.propTypes = {
   title: PropTypes.string.isRequired, hint: PropTypes.string.isRequired, pairs: PropTypes.arrayOf(PropTypes.shape({ backgroundColor: PropTypes.string, foregroundColor: PropTypes.string })).isRequired,
-  isSet: PropTypes.bool.isRequired, font: PropTypes.string.isRequired, palette: PropTypes.array.isRequired, onChange: PropTypes.func.isRequired, disabled: PropTypes.bool.isRequired, id: PropTypes.string.isRequired,
+  isSet: PropTypes.bool.isRequired, font: PropTypes.string.isRequired, size: PropTypes.number.isRequired, palette: PropTypes.array.isRequired, onChange: PropTypes.func.isRequired, disabled: PropTypes.bool.isRequired, id: PropTypes.string.isRequired,
 }
 
 export default function StyleSection({ preset, style, palette, onChange, disabled }) {
   const [shading, setShading] = useState(false)
+  const [aiNotesOpen, setAiNotesOpen] = useState(false)
   const set = (patch, label) => onChange({ ...preset, ...patch }, label)
   const kind = backgroundKind(preset)
   const bgHex = backgroundOf(preset)
@@ -165,42 +181,61 @@ export default function StyleSection({ preset, style, palette, onChange, disable
       setShading(false)
     }
   }
+  const aiSummary = [style.custom.noteFont || style.custom.noteSize ? `${style.noteFont} ${style.noteSize}px` : null, style.custom.notes ? `${style.notes.length} color pair${style.notes.length === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ') || 'Not set: the AI chooses'
   return (
-    <Box sx={{ display: 'grid', gap: 2.5 }}>
-      <FontField id="heading" label="Heading font" family={style.headingFont} size={style.headingSize} isSet={style.custom.headingFont || style.custom.headingSize}
-        sample="Quarterly roadmap" disabled={disabled} unsetHint={`Not set: new notes use ${SLATEBOX_DEFAULTS.headingFont} at ${SLATEBOX_DEFAULTS.headingSize}px.`}
-        onFamily={(f) => set({ categoryFont: f }, 'Heading font')} onSize={(n) => set({ categoryFontSize: n }, 'Heading size')} />
-      <FontField id="note" label="Note font" family={style.noteFont} size={style.noteSize} isSet={style.custom.noteFont || style.custom.noteSize}
-        sample="Interview twelve customers about onboarding" disabled={disabled} unsetHint="Not set: the AI picks fonts and sizes for the notes under headings."
-        onFamily={(f) => set({ noteFont: f }, 'Note font')} onSize={(n) => set({ noteFontSize: n }, 'Note size')} />
-      <PairList id="headings" title="Heading notes" hint="New notes take the first pair. The AI uses all of them for headings."
-        pairs={style.headings} isSet={style.custom.headings} font={style.headingFont} palette={palette} disabled={disabled}
-        onChange={(next) => set({ categoryStyles: next }, 'Heading colors')} />
-      <PairList id="notes" title="Other notes" hint="The AI uses these for the notes under headings."
-        pairs={style.notes} isSet={style.custom.notes} font={style.noteFont} palette={palette} disabled={disabled}
-        onChange={(next) => set({ noteStyles: next }, 'Note colors')} />
-      <Box sx={{ display: 'grid', gap: 1 }}>
-        <Label hint={kind === 'none' ? 'Not set: slates start white (dark in dark mode).' : 'Every new slate starts on it.'}>Slate background</Label>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-          <ToggleButtonGroup size="small" exclusive value={kind} disabled={disabled || shading} onChange={(_e, v) => v && setBackground(v)} aria-label="Slate background">
-            <ToggleButton value="none">Slatebox&apos;s</ToggleButton>
-            <ToggleButton value="color">One color</ToggleButton>
-            <ToggleButton value="gradient">Soft gradient</ToggleButton>
-          </ToggleButtonGroup>
-          {kind !== 'none' && <ColorChoice label="Background color" value={bgHex} palette={palette} disabled={disabled || shading} onChange={(v) => setBackground(kind, v)} testId="background" />}
-          {shading && <Typography variant="caption" color="text.secondary">Making the gradient…</Typography>}
+    <Box sx={{ display: 'grid', gap: 2 }}>
+      <Group id="new-notes" title="New notes">
+        <FontField id="heading" label="Font and size" family={style.headingFont} size={style.headingSize} isSet={style.custom.headingFont || style.custom.headingSize}
+          sample="Quarterly roadmap" disabled={disabled} unsetHint={`Not set: new notes use ${SLATEBOX_DEFAULTS.headingFont} at ${SLATEBOX_DEFAULTS.headingSize}px.`}
+          setHint="Every new note, and headings on slates made with Ask Slatebox."
+          onFamily={(f) => set({ categoryFont: f }, 'Heading font')} onSize={(n) => set({ categoryFontSize: n }, 'Heading size')} />
+        <PairList id="headings" title="Colors" hint="New notes take the first pair. Ask Slatebox uses all of them for headings."
+          pairs={style.headings} isSet={style.custom.headings} font={style.headingFont} size={style.headingSize} palette={palette} disabled={disabled}
+          onChange={(next) => set({ categoryStyles: next }, 'Heading colors')} />
+      </Group>
+      <Group id="ai-notes" title="Notes under headings (Ask Slatebox only)">
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Typography variant="body2" color="text.secondary" sx={{ flex: 1, minWidth: 180 }} data-ai-notes-summary="">{aiSummary}</Typography>
+          <Button size="small" onClick={() => setAiNotesOpen((o) => !o)} aria-expanded={aiNotesOpen} aria-controls="brand-ai-notes" data-ai-notes-toggle=""
+            endIcon={<ExpandMoreIcon sx={{ transform: aiNotesOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />}>
+            {aiNotesOpen ? 'Hide' : disabled ? 'Show' : 'Edit'}
+          </Button>
         </Box>
-      </Box>
-      <Box sx={{ display: 'grid', gap: 1 }}>
-        <Label hint="The bar under a published presentation, with its buttons and words.">Presentation bar</Label>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-          <ColorChoice label="Bar color" value={style.barColor} palette={palette} disabled={disabled} testId="bar"
-            onChange={(v) => set({ presentationMenuBgColorKey: normalHex(v), ...(style.custom.controls ? {} : { presentationControlsColorKey: inkOn(normalHex(v)) }) }, 'Presentation bar')} />
-          <ColorChoice label="Buttons and words" value={style.controlsColor} palette={palette} disabled={disabled} allowAuto testId="controls"
-            onChange={(v) => set({ presentationControlsColorKey: v ? normalHex(v) : inkOn(style.barColor) }, 'Presentation controls')} />
-          <ContrastBadge ink={style.controlsColor} fill={style.barColor} />
+        <Collapse in={aiNotesOpen} id="brand-ai-notes" unmountOnExit>
+          <Box sx={{ display: 'grid', gap: 2 }}>
+            <FontField id="note" label="Font and size" family={style.noteFont} size={style.noteSize} isSet={style.custom.noteFont || style.custom.noteSize}
+              sample="Interview twelve customers about onboarding" disabled={disabled} unsetHint="Not set: the AI picks fonts and sizes for the notes under headings."
+              onFamily={(f) => set({ noteFont: f }, 'Note font')} onSize={(n) => set({ noteFontSize: n }, 'Note size')} />
+            <PairList id="notes" title="Colors" hint="The AI uses these for the notes under headings."
+              pairs={style.notes} isSet={style.custom.notes} font={style.noteFont} size={style.noteSize} palette={palette} disabled={disabled}
+              onChange={(next) => set({ noteStyles: next }, 'Note colors')} />
+          </Box>
+        </Collapse>
+      </Group>
+      <Group id="slate" title="Slate and presentation">
+        <Box sx={{ display: 'grid', gap: 1 }}>
+          <Label hint={kind === 'none' ? 'Not set: slates start white (dark in dark mode).' : 'Every new slate starts on it.'}>Slate background</Label>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+            <ToggleButtonGroup size="small" exclusive value={kind} disabled={disabled || shading} onChange={(_e, v) => v && setBackground(v)} aria-label="Slate background">
+              <ToggleButton value="none">Slatebox&apos;s</ToggleButton>
+              <ToggleButton value="color">One color</ToggleButton>
+              <ToggleButton value="gradient">Soft gradient</ToggleButton>
+            </ToggleButtonGroup>
+            {kind !== 'none' && <ColorChoice label="Background color" value={bgHex} palette={palette} disabled={disabled || shading} onChange={(v) => setBackground(kind, v)} testId="background" />}
+            {shading && <Typography variant="caption" color="text.secondary">Making the gradient…</Typography>}
+          </Box>
         </Box>
-      </Box>
+        <Box sx={{ display: 'grid', gap: 1 }}>
+          <Label hint="The bar under a published presentation, with its buttons and words.">Presentation bar</Label>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+            <ColorChoice label="Bar color" value={style.barColor} palette={palette} disabled={disabled} testId="bar"
+              onChange={(v) => set({ presentationMenuBgColorKey: normalHex(v), ...(style.custom.controls ? {} : { presentationControlsColorKey: inkOn(normalHex(v)) }) }, 'Presentation bar')} />
+            <ColorChoice label="Buttons and words" value={style.controlsColor} palette={palette} disabled={disabled} allowAuto testId="controls"
+              onChange={(v) => set({ presentationControlsColorKey: v ? normalHex(v) : inkOn(style.barColor) }, 'Presentation controls')} />
+            <ContrastBadge ink={style.controlsColor} fill={style.barColor} size={BAR_TEXT_PX} />
+          </Box>
+        </Box>
+      </Group>
     </Box>
   )
 }

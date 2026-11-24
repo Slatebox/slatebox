@@ -67,7 +67,6 @@
     "@mui/icons-material": "^6.1.4",
     "@mui/lab": "^6.0.0-beta.12",
     "@mui/material": "^6.1.4",
-    "@slatebox/font-picker-react": "^3.7.1",
     "@stripe/react-stripe-js": "7.0.1",
     "@stripe/stripe-js": "10.2.1",
     "@use-gesture/react": "^10.3.1",

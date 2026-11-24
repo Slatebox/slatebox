@@ -18,7 +18,7 @@
 //                     player of a published presentation (components/presentations/BasePresent.jsx)
 //   team export       server/team-export: every item, in the team's export file
 import { contrast, DEFAULT_NOTE } from '../../common/canvasTheme.mjs'
-import { NOTE_FONT, NOTE_SIZE } from '../../common/noteStyle.mjs'
+import { NOTE_FONT, NOTE_SIZE, noteAt } from '../../common/noteStyle.mjs'
 import { SIZES } from '../../../api/common/note-style.mjs'
 
 export const LOGO_TYPES = Object.freeze([
@@ -112,14 +112,24 @@ export function normalHex(value) {
   return null
 }
 
-/** WCAG level of a text color on a fill: AAA, AA, AA large (bold or 24px and up only) or fail. */
-export function contrastCheck(ink, fill) {
+// WCAG 2 "large text": 18pt (24px) and up, or 14pt (18.66px) bold. Large text needs 3:1, other text 4.5:1.
+export const LARGE_TEXT_PX = 24
+// The presentation bar's title and counter (BasePresent.jsx: caption text).
+export const BAR_TEXT_PX = 12
+
+/**
+ * WCAG level of a text color on a fill at a text size in pixels: AAA, AA, AA large (passes only
+ * as large text) or fail. `passes` is judged for that size: 3:1 for text 24px and up, else 4.5:1.
+ */
+export function contrastCheck(ink, fill, size = 0) {
   const ratio = Math.round(contrast(ink, fill) * 100) / 100
+  const large = Number(size) >= LARGE_TEXT_PX
   let level = 'fail'
   if (ratio >= 7) level = 'AAA'
   else if (ratio >= 4.5) level = 'AA'
   else if (ratio >= 3) level = 'AA large'
-  return { ratio, level, passes: ratio >= 4.5 }
+  const needed = large ? 3 : 4.5
+  return { ratio, level, large, needed, passes: ratio >= needed }
 }
 
 /** Black or white, whichever reads better on a fill. */
@@ -127,7 +137,7 @@ export function inkOn(fill) {
   return contrast('#ffffff', fill) >= contrast('#111111', fill) ? '#ffffff' : '#111111'
 }
 
-/** The text color that makes a pair pass AA: the pair's own when it does, else black or white. */
+/** The text color that makes a pair pass AA for any size: the pair's own when it does, else black or white. */
 export function readableInk(ink, fill) {
   return ink && contrastCheck(ink, fill).passes ? ink : inkOn(fill)
 }
@@ -315,12 +325,17 @@ export function presetFromColors(palette, preset = {}) {
   return next
 }
 
-/** The color pairs a style shows text on, each with its contrast check, for the AA warnings. */
+/**
+ * The color pairs a style shows text on that fall below WCAG AA at the size their text is drawn:
+ * heading notes at the heading size, other notes at the note size, the presentation bar at its
+ * small caption text. A heading pair at 3:1 passes when headings are 24px or more.
+ */
 export function contrastWarnings(style) {
   const out = []
-  style.headings.forEach((p, i) => out.push({ key: `heading-${i}`, label: `Heading style ${i + 1}`, ink: p.foregroundColor, fill: p.backgroundColor, ...contrastCheck(p.foregroundColor, p.backgroundColor) }))
-  style.notes.forEach((p, i) => out.push({ key: `note-${i}`, label: `Note style ${i + 1}`, ink: p.foregroundColor, fill: p.backgroundColor, ...contrastCheck(p.foregroundColor, p.backgroundColor) }))
-  out.push({ key: 'bar', label: 'Presentation bar', ink: style.controlsColor, fill: style.barColor, ...contrastCheck(style.controlsColor, style.barColor) })
+  const check = (key, label, ink, fill, size) => out.push({ key, label, ink, fill, size, ...contrastCheck(ink, fill, size) })
+  style.headings.forEach((p, i) => check(`heading-${i}`, `Heading style ${i + 1}`, p.foregroundColor, p.backgroundColor, style.headingSize))
+  style.notes.forEach((p, i) => check(`note-${i}`, `Note style ${i + 1}`, p.foregroundColor, p.backgroundColor, style.noteSize))
+  check('bar', 'Presentation bar', style.controlsColor, style.barColor, BAR_TEXT_PX)
   return out.filter((w) => !w.passes)
 }
 
@@ -391,43 +406,52 @@ export const NOT_YET = Object.freeze([
 
 // ── The preview's sample slate ─────────────────────────────────────────────────────────────────
 // Words chosen to test the fit: a long single word, a short one, and lines that must wrap.
-export const SAMPLE_HEADINGS = Object.freeze(['Quarterly roadmap', 'Customer research', 'Internationalization'])
+export const SAMPLE_HEADINGS = Object.freeze(['Quarterly roadmap', 'Internationalization'])
 export const SAMPLE_NOTES = Object.freeze([
   ['Ship the onboarding checklist', 'Pricing page'],
-  ['Interview twelve customers', 'Accessibility'],
   ['Localization review', 'Right-to-left layouts'],
 ])
 
 /**
- * The sample slate the preview draws, as slate JSON the engine loads: heading notes in the heading
- * styles, notes under them in the note styles, a line from each heading to its notes. Every note is
- * sized for its words by `fit({ text, fontSize, fontFamily })` (fitNote.mjs, with the page's measure),
- * so the engine lays out every word whole, inside its note.
+ * The sample slate the preview draws, as slate JSON the engine loads. Every note is the note a real
+ * slate makes (noteStyle.mjs noteAt, the same call the canvas's Add a note, double-click and tool dock
+ * use): heading notes at the heading font and size, notes under them at the note font and size, the
+ * size noteAt gives, with nothing fitted by hand. The engine then lays out the words as it does on a
+ * real slate: whole words, shrunk to fit when a word is wider than the note, the note growing taller
+ * for more lines.
+ *
+ * `heights` are the heights the engine grew notes to (read back after a first draw), so the stack is
+ * laid out without overlaps; `columns` is how many heading columns to draw (one on a phone: the
+ * long-word column).
  */
-export function sampleSlate(style, fit, { headings = SAMPLE_HEADINGS, notes = SAMPLE_NOTES } = {}) {
-  const GAP_X = 56
-  const GAP_Y = 64
-  const STACK = 22
+export function sampleSlate(style, { heights = {}, columns = SAMPLE_HEADINGS.length } = {}) {
+  const GAP_X = 48
+  const GAP_Y = 56
+  const STACK = 20
+  const picked = SAMPLE_HEADINGS.map((title, col) => ({ title, col, notes: SAMPLE_NOTES[col] || [] })).slice(-Math.max(1, columns))
+  const headingNote = (hs) => ({ backgroundColor: hs.backgroundColor, foregroundColor: hs.foregroundColor, fontFamily: style.headingFont, fontSize: style.headingSize })
+  const plainNote = (ns) => ({ backgroundColor: ns.backgroundColor, foregroundColor: ns.foregroundColor, fontFamily: style.noteFont, fontSize: style.noteSize })
   const nodes = []
   let x = 0
-  headings.forEach((title, col) => {
+  picked.forEach(({ title, col, notes }) => {
     const hs = style.headings[col % style.headings.length]
-    const head = fit({ text: title, fontSize: style.headingSize, fontFamily: style.headingFont, minWidth: 150, maxWidth: 300, minHeight: 60 })
-    const kids = (notes[col] || []).map((text, row) => {
+    const head = noteAt(headingNote(hs), { x: 0, y: 0 })
+    const kids = notes.map((text, row) => {
       const ns = style.notes[(col + row) % style.notes.length]
-      return { text, ns, box: fit({ text, fontSize: style.noteSize, fontFamily: style.noteFont, minWidth: 130, maxWidth: 260, minHeight: 52 }) }
+      return { text, ns, box: noteAt(plainNote(ns), { x: 0, y: 0 }) }
     })
     const colWidth = Math.max(head.width, ...kids.map((k) => k.box.width))
     const headId = `brand-heading-${col}`
+    const tall = (id, box) => Math.max(box.height, Number(heights[id]) || 0)
     const associations = []
-    let y = head.height + GAP_Y
+    let y = tall(headId, head) + GAP_Y
     kids.forEach((k, row) => {
       const id = `brand-note-${col}-${row}`
       nodes.push({
         options: {
-          id, text: k.text, xPos: x + (colWidth - k.box.width) / 2, yPos: y, width: k.box.width, height: k.box.height,
-          backgroundColor: k.ns.backgroundColor, foregroundColor: k.ns.foregroundColor, fontFamily: style.noteFont, fontSize: style.noteSize,
-          shape: 'roundedrectangle', vectorPath: 'roundedrectangle', borderWidth: k.ns.backgroundColor === '#ffffff' ? 1 : 0, borderColor: '#d6dbd2',
+          ...k.box, id, text: k.text, xPos: x + (colWidth - k.box.width) / 2, yPos: y,
+          foregroundColor: k.ns.foregroundColor,
+          vectorPath: 'roundedrectangle', borderWidth: k.ns.backgroundColor === '#ffffff' ? 1 : 0, borderColor: '#d6dbd2',
           allowDrag: false, allowMenu: false, allowContext: false, allowResize: false,
         },
         relationships: { associations: [] },
@@ -436,22 +460,25 @@ export function sampleSlate(style, fit, { headings = SAMPLE_HEADINGS, notes = SA
       const link = { childId: id, lineColor: hs.backgroundColor, lineWidth: 3, showChildArrow: false, lineType: 'bezier' }
       if (row === 0) associations.push({ parentId: headId, ...link })
       else nodes[nodes.length - 2].relationships.associations.push({ parentId: `brand-note-${col}-${row - 1}`, ...link })
-      y += k.box.height + STACK
+      y += tall(id, k.box) + STACK
     })
     nodes.unshift({
       options: {
-        id: headId, text: title, xPos: x + (colWidth - head.width) / 2, yPos: 0, width: head.width, height: head.height,
-        backgroundColor: hs.backgroundColor, foregroundColor: hs.foregroundColor, fontFamily: style.headingFont, fontSize: style.headingSize,
-        shape: 'roundedrectangle', vectorPath: 'roundedrectangle', borderWidth: 0,
+        ...head, id: headId, text: title, xPos: x + (colWidth - head.width) / 2, yPos: 0,
+        foregroundColor: hs.foregroundColor, vectorPath: 'roundedrectangle',
         allowDrag: false, allowMenu: false, allowContext: false, allowResize: false,
       },
       relationships: { associations },
     })
     x += colWidth + GAP_X
   })
+  for (const n of nodes) { delete n.options.x; delete n.options.y }
   const gradient = style.backgroundColors?.length > 1
+  const right = Math.max(...nodes.map((n) => n.options.xPos + n.options.width))
+  const bottom = Math.max(...nodes.map((n) => n.options.yPos + Math.max(n.options.height, Number(heights[n.options.id]) || 0)))
   return {
     shareId: 'brand-preview',
+    size: { width: right, height: bottom },
     options: {
       name: 'Brand preview',
       containerStyle: {

@@ -42,13 +42,21 @@ export function Label({ children, hint }) {
 Label.propTypes = { children: PropTypes.node.isRequired, hint: PropTypes.node }
 Label.defaultProps = { hint: null }
 
-/** A contrast reading for text on a fill: the ratio and AA, AA large or "Hard to read". */
-export function ContrastBadge({ ink, fill, compact }) {
-  const c = contrastCheck(ink, fill)
+/**
+ * A contrast reading for text on a fill at the size the text is drawn: "AA" when it passes for that
+ * size (3:1 is enough for text 24px and up, as WCAG says), else "Hard to read". The same check as the
+ * page's warnings (brandKit.mjs contrastWarnings), so the badge and the warning always agree.
+ */
+export function ContrastBadge({ ink, fill, size, compact }) {
+  const c = contrastCheck(ink, fill, size)
   const good = c.passes
-  const words = good ? `AA ${c.ratio.toFixed(1)}:1` : c.level === 'AA large' ? `Large text only ${c.ratio.toFixed(1)}:1` : `Hard to read ${c.ratio.toFixed(1)}:1`
+  const ratio = `${c.ratio.toFixed(1)}:1`
+  const words = good ? (c.level === 'AA large' ? `AA for large text ${ratio}` : `AA ${ratio}`) : `Hard to read ${ratio}`
+  const tip = good
+    ? (c.level === 'AA large' ? `Meets WCAG AA at ${size}px (3:1 is enough for text 24px and up). Smaller text on these colors would need 4.5:1.` : 'Meets WCAG AA for text of any size.')
+    : `Below WCAG AA (${c.needed}:1 for text at ${size || 'normal'}${size ? 'px' : ' size'}). Pick a darker or lighter text color.`
   return (
-    <Tooltip title={good ? 'Meets WCAG AA for text of any size.' : 'Below WCAG AA (4.5:1) for normal text. Pick a darker or lighter text color.'}>
+    <Tooltip title={tip}>
       <Box component="span" data-contrast={good ? 'pass' : 'fail'} sx={(theme) => ({
         display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 0.75, py: 0.25, borderRadius: '999px', fontSize: 12, fontWeight: 650, whiteSpace: 'nowrap',
         bgcolor: good ? '#e5f2e5' : '#fbe9e4', color: good ? '#235c2a' : '#8a2b17',
@@ -59,8 +67,8 @@ export function ContrastBadge({ ink, fill, compact }) {
     </Tooltip>
   )
 }
-ContrastBadge.propTypes = { ink: PropTypes.string.isRequired, fill: PropTypes.string.isRequired, compact: PropTypes.bool }
-ContrastBadge.defaultProps = { compact: false }
+ContrastBadge.propTypes = { ink: PropTypes.string.isRequired, fill: PropTypes.string.isRequired, size: PropTypes.number, compact: PropTypes.bool }
+ContrastBadge.defaultProps = { size: 0, compact: false }
 
 /** A round color dot. */
 export function Dot({ color, size }) {

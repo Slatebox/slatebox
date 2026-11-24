@@ -40,8 +40,10 @@ export function presetNoteStyle(preset, fonts = {}) {
 /** The options for the engine's addNode: a rounded note of the style, centred on a point, empty. */
 export function noteAt(style, at) {
   const s = style || presetNoteStyle(null)
-  // 160 by 68 at the default size; taller for bigger words.
-  const width = 160
+  // 160 by 68 at the default size; taller for bigger words, and past 36px wider too, so a long word
+  // at a heading size (44px "Internationalization") shrinks less to fit. The engine keeps every word
+  // whole and shrinks the text to fit the note (autofit), never cutting a word into letters.
+  const width = Math.max(160, Math.round(s.fontSize * 4.4))
   const height = Math.max(68, Math.round(s.fontSize * 1.4 + 40))
   return {
     x: Math.round(at.x - width / 2), y: Math.round(at.y - height / 2), width, height, text: '',
