@@ -27,6 +27,24 @@ export const prefetchPaySheet = () => { prefetch ||= import('./PaySheet'); retur
 
 // The retry of the surface that opened the sheet: one at a time, dropped when that surface unmounts.
 const pending = { retry: null, owner: null }
+/**
+ * The person ran the request again by hand ("Run it now" once Pro shows as on): the sheet's own retry is dropped, so a
+ * confirmation that arrives later does not run it a second time (a second agent turn, a second draft).
+ */
+export const dropPendingRetry = () => { pending.retry = null; pending.owner = null }
+
+/**
+ * The person's meter (meter.summary, the allowance atom), read once when nobody on the page has yet: what a chat's
+ * refusal may offer beside the server's own answer is only what this says is theirs (pay-notice.mjs inlinePayActions).
+ */
+export function useLoadedAllowance() {
+  const [summary, setAllowance] = useAtom(allowance)
+  useEffect(() => {
+    if (summary || !Meteor.userId()) return
+    Meteor.callAsync(CONSTANTS.methods.meter.summary).then(next => { if (next) setAllowance(next) }).catch(() => {})
+  }, [])
+  return summary
+}
 
 
 const defaultChoice = (action, summary) => {

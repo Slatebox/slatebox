@@ -28,7 +28,7 @@ import { runM1, runM2, runM4 } from './migrations.mjs'
 import { aiSettings, auxCredential } from '../methods/ai/ai-settings'
 import { dailyClient } from '../methods/huddle-provider.mjs'
 import { TOP_UP_AMOUNTS, cardFeeMode } from '../../imports/api/billing/top-up.mjs'
-import { refusalPay } from './refusal-pay.mjs'
+import { payAlso, refusalPay } from './refusal-pay.mjs'
 import { OWN_KEYS_CLOUD, ownKeysAllowed } from '../../imports/api/common/own-keys.mjs'
 import { isInstanceAdmin } from '../permissions'
 
@@ -149,7 +149,10 @@ async function refusalFlags(user, details = {}) {
 /** The pay sheet's action for a refusal of this person: { action, wallet } (refusal-pay.mjs). */
 export async function payFor(user, code, details = {}) {
   const flags = await refusalFlags(user, details).catch(() => ({}))
-  return refusalPay({ code, details, user, flags })
+  const pay = refusalPay({ code, details, user, flags })
+  // A guest signs in first: nothing is offered beside it.
+  const also = user && !user.isAnonymous ? payAlso(pay, flags) : null
+  return also ? { ...pay, also } : pay
 }
 
 /** A meter refusal as the error a method throws: Meteor.Error(code, message, { pay }). */

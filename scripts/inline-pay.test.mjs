@@ -43,7 +43,7 @@ test('every chat surface shows the meter’s refusal with its ways on inside the
   const workshop = read('imports/ui/components/workshop/WorkshopConversation.jsx')
   assert.match(workshop, /<PayNotice refusal=\{payRefusal\} from="draft" retry=\{\(\) => submit\(payRefusal\.message\)\} inline \/>/)
   // In the refusing message itself (the turn's bubble), not a chip under the starters.
-  assert.match(workshop, /\{last && payRefusal && !hold\s*\n[^\n]*\n\s*\? <PayNotice/)
+  assert.match(workshop, /\{last && turn\.pay && payRefusal && !hold\s*\n[^\n]*\n\s*\? <PayNotice/)
   assert.doesNotMatch(workshop, /extra=\{[\s\S]{0,200}<PayNotice/)
   const native = read('imports/ui/components/NativeCanvasConversation.jsx')
   assert.match(native, /<ChatTurn who="slatebox" as="div"><PayNotice refusal=\{refusal\} from="draft" retry=\{\(\) => ask\(refusal\.message\)\} inline \/><\/ChatTurn>/)
@@ -55,4 +55,45 @@ test('every chat surface shows the meter’s refusal with its ways on inside the
   const notice = read('imports/ui/components/PayNotice.jsx')
   assert.match(notice, /open\(\{ action: item\.action, wallet: item\.wallet, reason, retry, from, choice: item\.choice \}\)/)
   assert.doesNotMatch(notice, /callAsync|confirmPayment|pro\.confirm/)
+})
+
+// Review fixes (2026-11-24).
+test('the server’s answer comes first: a Pro member out of credits is offered a balance, not Pro, before the meter loads', () => {
+  const used = { code: 'ai-month', reason: 'You have used this month’s included amount.', details: { pay: { action: 'topup', wallet: 'me' } } }
+  assert.deepEqual(inlinePayActions(used, { summary: null }).map(item => item.action), ['topup'])
+  assert.equal(inlineRefusalText(used, inlinePayActions(used, { summary: null })), used.reason, 'the server’s own reason is kept')
+  // The server says Pro is theirs to take too (pay.also): both.
+  assert.deepEqual(inlinePayActions({ ...used, details: { pay: { action: 'topup', wallet: 'me', also: 'pro' } } }, { summary: null }).map(item => item.action), ['pro', 'topup'])
+  // A Pro refusal with no meter loaded: a balance only when the server says top-ups are sold.
+  assert.deepEqual(inlinePayActions(pro, { summary: null }).map(item => item.action), ['pro'])
+  assert.deepEqual(inlinePayActions({ ...pro, details: { pay: { action: 'pro', wallet: null, also: 'topup' } } }, { summary: null }).map(item => item.action), ['pro', 'topup'])
+  // A loaded meter is fresher than the hint: Pro on since is never offered again.
+  assert.deepEqual(inlinePayActions({ ...used, details: { pay: { action: 'topup', wallet: 'me', also: 'pro' } } }, { summary: { ...cloud, proState: { active: true } } }).map(item => item.action), ['topup'])
+})
+
+test('the server says what may be offered beside its answer (pay.also), never to a guest', async () => {
+  const { payAlso } = await import('../web/app/server/metering/refusal-pay.mjs')
+  const sold = { proAvailable: true, topUpsAvailable: true, proState: null }
+  assert.equal(payAlso({ action: 'pro', wallet: null }, sold), 'topup')
+  assert.equal(payAlso({ action: 'pro', wallet: null }, { ...sold, topUpsAvailable: false }), null)
+  assert.equal(payAlso({ action: 'topup', wallet: 'me' }, sold), 'pro')
+  assert.equal(payAlso({ action: 'topup', wallet: 'me' }, { ...sold, proState: { active: true } }), null)
+  assert.equal(payAlso({ action: 'topup', wallet: 'team' }, sold), null)
+  assert.equal(payAlso({ action: 'verify', wallet: null }, sold), null)
+  const meteor = readFileSync(new URL('../web/app/server/metering/meteor.js', import.meta.url), 'utf8')
+  assert.match(meteor, /const also = user && !user\.isAnonymous \? payAlso\(pay, flags\) : null/)
+})
+
+test('only the refusing turn carries the buttons, and "Run it now" drops the sheet’s own retry', () => {
+  const workshop = read('imports/ui/components/workshop/WorkshopConversation.jsx')
+  // The refusal marks its own turn; a later turn ("Which board?", "what can it do?") is never replaced by the refusal.
+  assert.match(workshop, /append\(\{ role: 'user', content: message \}, \{ role: 'assistant', content: err\.reason, \.\.\.\(pays && \{ pay: true \}\) \}\)/)
+  assert.match(workshop, /\.\.\.\(pay === true && \{ pay: true \}\)/)
+  const notice = read('imports/ui/components/PayNotice.jsx')
+  assert.match(notice, /dropPendingRetry\(\)\s*\n\s*return retry\?\.\(\)/)
+  const host = read('imports/ui/components/billing/pay/PaySheetHost.jsx')
+  assert.match(host, /export const dropPendingRetry = \(\) => \{ pending\.retry = null; pending\.owner = null \}/)
+  // The meter is read once when nobody has (so the second way on is known to be theirs).
+  assert.match(notice, /const summary = useLoadedAllowance\(\)/)
+  assert.match(host, /if \(summary \|\| !Meteor\.userId\(\)\) return\s*\n\s*Meteor\.callAsync\(CONSTANTS\.methods\.meter\.summary\)/)
 })

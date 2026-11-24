@@ -24,6 +24,16 @@ export function refusalSummary(user, flags = {}) {
 export const refusalPay = ({ code, details = {}, user = null, flags = {} } = {}) =>
   payRoute({ code, details, summary: refusalSummary(user, flags) })
 
+/**
+ * The second way on a chat may offer beside the answer (pay.also, pay-notice.mjs inlinePayActions): a balance beside Pro
+ * where top-ups are sold, Pro beside a balance for someone without Pro where it is on sale. null when there is none.
+ */
+export function payAlso(pay, flags = {}) {
+  if (pay?.action === 'pro' && flags.topUpsAvailable === true) return 'topup'
+  if (pay?.action === 'topup' && pay.wallet === 'me' && flags.proAvailable === true && !flags.proState?.active && !flags.proState?.pastDue) return 'pro'
+  return null
+}
+
 /** A meter refusal carried on an error (its details.pay) → { code, pay }, or null for any other error. */
 export function refusalOf(error) {
   const pay = error?.details?.pay

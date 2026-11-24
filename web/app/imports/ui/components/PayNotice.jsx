@@ -7,7 +7,7 @@ import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import { CREDIT_REFUSALS } from '../../api/common/native-canvas-conversation.mjs'
 import { allowance } from '../jotai/atoms'
-import { prefetchPaySheet, usePaySheet } from './billing/pay/PaySheetHost'
+import { dropPendingRetry, prefetchPaySheet, useLoadedAllowance, usePaySheet } from './billing/pay/PaySheetHost'
 import { inlinePayActions, inlineRefusalText, refusalAction } from './billing/pay/pay-notice.mjs'
 import { ownKeysAllowed } from '../../api/common/own-keys.mjs'
 
@@ -42,10 +42,17 @@ export function usePayAction() {
  */
 function InlinePay({ refusal, from, retry }) {
   const { open } = usePaySheet()
-  const summary = useAtomValue(allowance)
+  // What this person can buy, from their own meter (read once if nobody on the page has yet): a second way on is offered
+  // only when it is known to be theirs; until then the server's own answer is the one button.
+  const summary = useLoadedAllowance()
   const actions = inlinePayActions(refusal, { summary, metered: Meteor.settings.public.metered === true, ownKeys: ownKeysAllowed(Meteor.settings) })
   const reason = refusal.reason ?? ''
-  const run = item => (item.action === 'again' ? retry?.() : open({ action: item.action, wallet: item.wallet, reason, retry, from, choice: item.choice }))
+  const run = item => {
+    if (item.action !== 'again') return open({ action: item.action, wallet: item.wallet, reason, retry, from, choice: item.choice })
+    // Run by hand: the sheet's late confirmation must not run it again.
+    dropPendingRetry()
+    return retry?.()
+  }
   return <Box data-inline-pay="" sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
     <Typography variant="body2" component="span" sx={{ whiteSpace: 'pre-wrap', display: 'block', lineHeight: 1.5 }}>{inlineRefusalText(refusal, actions) || reason}</Typography>
     {actions.length > 0 && <Box role="group" aria-label="Pay" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>

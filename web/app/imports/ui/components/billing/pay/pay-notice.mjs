@@ -61,10 +61,11 @@ export function refusalForViewer(row, userId) {
 export const INLINE_LABELS = Object.freeze({ pro: 'Get Slatebox Pro — $5/month', topup: 'Add a balance', again: 'Run it now' })
 
 /**
- * The buttons a refusal carries inside a chat message: [{ action, wallet, choice, label }], Pro first. A refusal Pro or a
- * balance answers offers both where this server sells them and Pro is not on yet; Pro switched on since is "Run it now";
- * anything else (confirm the email, sign in, the card, a team admin) is its one button, as refusalAction says. [] when it
- * is not about money.
+ * The buttons a refusal carries inside a chat message: [{ action, wallet, choice, label }], Pro first. The server's own
+ * answer (details.pay) is the first way on; a second is offered beside it only when it is known to be this person's: the
+ * server said so (pay.also), or their meter does (summary, once loaded). A Pro member out of credits is never offered Pro,
+ * and a server that sells no top-ups never a balance. Pro switched on since is "Run it now"; anything else (confirm the
+ * email, sign in, the card, a team admin) is its one button, as refusalAction says. [] when it is not about money.
  */
 export function inlinePayActions(refusal, options = {}) {
   const one = refusalAction(refusal, options)
@@ -72,10 +73,15 @@ export function inlinePayActions(refusal, options = {}) {
   if (one.action === 'again') return [{ action: 'again', wallet: null, choice: null, label: INLINE_LABELS.again }]
   if ((one.action !== 'pro' && one.action !== 'topup') || one.wallet === 'team') return [{ ...one, choice: null }]
   const { summary = null } = options
-  const actions = []
-  if (summary?.proAvailable !== false && !summary?.proState?.active) actions.push({ action: 'pro', wallet: null, choice: { interval: 'month' }, label: INLINE_LABELS.pro })
-  if (summary?.topUpsAvailable !== false) actions.push({ action: 'topup', wallet: 'me', choice: null, label: INLINE_LABELS.topup })
-  return actions.length ? actions : [{ ...one, choice: null }]
+  const also = (refusal.pay ?? refusal.details?.pay)?.also
+  const proOn = Boolean(summary?.proState?.active || summary?.proState?.pastDue)
+  // Pro beside a balance: the server or a loaded meter says it is for sale and not theirs yet.
+  const pro = one.action === 'pro' || (!proOn && (summary ? summary.proAvailable !== false : also === 'pro'))
+  const topup = one.action === 'topup' || (summary ? summary.topUpsAvailable !== false : also === 'topup')
+  return [
+    ...(pro ? [{ action: 'pro', wallet: null, choice: { interval: 'month' }, label: INLINE_LABELS.pro }] : []),
+    ...(topup ? [{ action: 'topup', wallet: 'me', choice: null, label: INLINE_LABELS.topup }] : []),
+  ]
 }
 
 /** What the refusing message says when it carries both buttons: short, the buttons say the rest. */

@@ -70,7 +70,9 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
   const full = boards.length >= MAX_BOARDS
   const map = Boolean(model.lanes[0].station)
   const storageKey = (map ? 'slatebox-map-studio:' : 'slatebox-workshop-studio:') + Meteor.userId() + ':' + shareId
-  const keep = turns => turns.slice(map ? -8 : -10).map(({ role, content, catalog, opens, adds, boards: asked, again, choices }) => ({ role, content: content.slice(0, map ? 800 : 1000),
+  const keep = turns => turns.slice(map ? -8 : -10).map(({ role, content, catalog, opens, adds, boards: asked, again, choices, pay }) => ({ role, content: content.slice(0, map ? 800 : 1000),
+    // The meter's refusal: the turn that carries Pro and a balance (only while that refusal is the page's).
+    ...(pay === true && { pay: true }),
     // A look to choose from ("Stronger borders", "Bolder headers", "Both"), each a sentence the chat reads as it is.
     ...(Array.isArray(choices) && { choices: choices.filter(item => typeof item?.label === 'string' && typeof item?.say === 'string').slice(0, 3)
       .map(item => ({ label: item.label.slice(0, 40), say: item.say.slice(0, 200) })) }),
@@ -309,8 +311,10 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
       // no AI on this install): said as a turn of the conversation, with the way on.
       if (['sign-in', 'guest', 'drafting-off'].includes(err.error) || isCreditRefusal(err.error)) {
         setRequest('')
-        append({ role: 'user', content: message }, { role: 'assistant', content: err.reason })
-        setPayRefusal(isCreditRefusal(err.error) || err.details?.pay ? { error: err.error, reason: err.reason, details: err.details, message } : null)
+        const pays = isCreditRefusal(err.error) || err.details?.pay
+        // The refusing turn is marked: only it carries the ways on, never a later turn ("Which board?", "what can it do?").
+        append({ role: 'user', content: message }, { role: 'assistant', content: err.reason, ...(pays && { pay: true }) })
+        setPayRefusal(pays ? { error: err.error, reason: err.reason, details: err.details, message } : null)
       } else setError(err.reason || err.message || 'Could not prepare this change. Try again.')
     } finally { if (turn === asked.current) { running.current = false; if (mounted.current) setBusy(false) } }
   }
@@ -500,7 +504,7 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
                 onClick={() => submit(turn.again, item.id)}>{item.title}</Button>)}
             </Box>}
             {turn.catalog && <Suspense fallback={null}><CatalogCards ids={turn.catalog} onAdd={addEntry} full={full} onOpen={entry => browse({ entry: entry.id })} /></Suspense>}
-          </>}>{last && payRefusal && !hold
+          </>}>{last && turn.pay && payRefusal && !hold
             // The refusal's ways on inside its own message: Pro or a balance, in the same pay sheet; the request runs again once paid.
             ? <PayNotice refusal={payRefusal} from="draft" retry={() => submit(payRefusal.message)} inline />
             : turn.content}</ChatTurn>
