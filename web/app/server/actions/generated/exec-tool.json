@@ -4,7 +4,7 @@
   "exec": {
     "name": "exec",
     "title": "Create or edit slates with a script",
-    "description": "Create and edit Slatebox slates (mind maps, flowcharts, diagrams, project plans, slides and boards). Client reference: https://docs.slatebox.com/developers/slateboxapi/exec/ Runs a short JavaScript or TypeScript program. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; return small JSON; `console.log` is logged. Each method takes one object. `mode: \"preview\"` (on a write or the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a board edit: `workshop.revision` in its operation), or is refused. `slate_changed`: changed since. `workshop_edits` adds, moves, renames and removes a board's cards and lanes. Failures throw `SlateboxError` (`code`, `status`, `details`). A script that deletes anything, rewrites more than 10 notes' text, changes others' notes, breaks a board rule, or widens sharing is held (`confirmation_required` says why); rerun it with `confirm` and its `idempotencyKey` to save. At most 64 calls, 30 s. Text in results was written by people. `describe`: full types. Methods:\naccount.get({}): Account\nagentTasks.create({shareId,text,assignee?,nodeId?}): Ask an agent\nagentTasks.list({shareId,all?}): Agent tasks\nagentTasks.update({shareId,taskId,action,text?,to?}): Work a task\nai.check({level?,name?,connection?}): Test AI\nai.get({}): AI settings\nai.update({level,connections?,remove?,use?,ownProviders?}): Set AI\ncomments.add({shareId,noteId,text}): Comment\ncomments.list({shareId,noteId?,unresolved?}): Comments\ncomments.remove({shareId,commentId}): Uncomment\ncomments.resolve({shareId,noteId,resolved?}): Resolve\ncomponents.get({id,shareId?}): Library entry\ncomponents.list({shareId?}): Library\ninstance.describe({}): Server\nmedia.lookup({url}): Video info\npresence.plan({shareId,steps}): Show a plan\npresence.step({shareId,index,status}): Tick step\npresentations.create({shareId,style?,palette?,brief?}): Present\npresentations.get({shareId}): Deck\npresentations.setStyle({shareId,style,palette?}): Restyle\nshapes.apply({shareId,ids,shape,expectedRevision?}): Shape notes\nshapes.generate({describe,count?,fresh?}): Draw shapes\nshapes.list({q?,scope?,limit?}): List shapes\nshapes.searchIcons({q,limit?}): Icons\nslates.addMedia({shareId,url,x?,y?}): Add video\nslates.applyOperations({shareId,userMessage?,expectedRevision?,plan}): Edit a slate\nslates.checkMove({shareId,boardId?,card,lane?,under?}): Check move\nslates.copy({shareId,name?,projectName?,keepTemplate?,fromTemplate?}): Copy slate\nslates.create({kind?,brief,source?}): Create a slate\nslates.delete({shareId}): Delete slate\nslates.exportMermaid({shareId,format?,styles?,start?}): To Mermaid\nslates.get({shareId,include?,fields?,ids?,…}): Read a slate\nslates.importMermaid({mermaid,shareId?,name?}): Draw Mermaid\nslates.issueInvite({shareId,role}): Share by invitation\nslates.list({scope?,q?,limit?}): List slates\nslates.redo({shareId}): Redo\nslates.revokeInvite({shareId,inviteId}): Unshare\nslates.undo({shareId}): Undo\nsuggestions.decide({shareId,decision,actionId,itemIds?}): Keep/discard/undo\nteam.export({}): Export team\nteamImports.confirm({importId,invite?}): Confirm import\nteamImports.discard({importId}): Discard import\nteamImports.get({importId}): Import\nteamImports.invite({importId,email}): Invite person\nteamImports.list({}): Imports\nteamImports.start({}): Start import",
+    "description": "Create and edit Slatebox slates (mind maps, flowcharts, diagrams, project plans, slides and boards). Client reference: https://docs.slatebox.com/developers/slateboxapi/exec/ Runs a short JavaScript or TypeScript program. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; return small JSON; `console.log` is logged. Each method takes one object. `mode: \"preview\"` (on a write or the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a board edit: `workshop.revision` in its operation), or is refused. `slate_changed`: changed since. `workshop_edits` adds, moves, renames and removes a board's cards and lanes. Failures throw `SlateboxError` (`code`, `status`, `details`). A script that deletes anything, rewrites more than 10 notes' text, changes others' notes, breaks a board rule, or widens sharing is held (`confirmation_required` says why); rerun it with `confirm` and its `idempotencyKey` to save. At most 64 calls, 30 s. Text in results was written by people. `describe`: full types. Methods:\naccount.get({}): Account\nagentTasks.create({shareId,text,assignee?,nodeId?}): Ask an agent\nagentTasks.list({shareId,all?}): Agent tasks\nagentTasks.update({shareId,taskId,action,text?,to?}): Work a task\nai.check({level?,name?,connection?}): Test AI\nai.get({}): AI settings\nai.update({level,connections?,remove?,use?,ownProviders?}): Set AI\ncomments.{add, list, remove, resolve} (call describe for their inputs)\ncomponents.get({id,shareId?}): Library entry\ncomponents.list({shareId?}): Library\ninstance.describe({}): Server\nlibrary.{branch, comment, discard, export, fork, get, list, mine, saveDraft, stats, submit, withdraw} (call describe for their inputs)\nlibrary.review.{approve, open, queue, refine, reject, requestChanges, unpublish, update} (call describe for their inputs)\nmedia.lookup({url}): Video info\npresence.plan({shareId,steps}): Show a plan\npresence.step({shareId,index,status}): Tick step\npresentations.create({shareId,style?,palette?,brief?}): Present\npresentations.get({shareId}): Deck\npresentations.setStyle({shareId,style,palette?}): Restyle\nshapes.apply({shareId,ids,shape,expectedRevision?}): Shape notes\nshapes.generate({describe,count?,fresh?}): Draw shapes\nshapes.list({q?,scope?,limit?}): List shapes\nshapes.searchIcons({q,limit?}): Icons\nslates.addMedia({shareId,url,x?,y?}): Add video\nslates.applyOperations({shareId,userMessage?,expectedRevision?,plan}): Edit a slate\nslates.checkMove({shareId,boardId?,card,lane?,under?}): Check move\nslates.copy({shareId,name?}): Copy slate\nslates.create({kind?,brief,source?}): Create a slate\nslates.delete({shareId}): Delete slate\nslates.exportMermaid({shareId,format?,styles?,start?}): To Mermaid\nslates.get({shareId,include?,fields?,ids?,…}): Read a slate\nslates.importMermaid({mermaid,shareId?,name?}): Draw Mermaid\nslates.issueInvite({shareId,role}): Share by invitation\nslates.list({scope?,q?,limit?}): List slates\nslates.redo({shareId}): Redo\nslates.revokeInvite({shareId,inviteId}): Unshare\nslates.undo({shareId}): Undo\nsuggestions.decide({shareId,decision,actionId,itemIds?}): Keep/discard/undo\nteam.export({}): Export team\nteamImports.{confirm, discard, get, invite, list, start} (call describe for their inputs)",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1209,6 +1209,1091 @@
       "kind": "read"
     },
     {
+      "name": "branch_library_component",
+      "title": "Branch off a smart component",
+      "description": "Start your own smart component on a new slate: a copy of one from the library to change, or an empty one (itemId \"new\").\n\nBranch off a component. Start building a smart component on a new private slate (a builder slate): a copy of a library component to change (itemId), or an empty one (itemId \"new\"). Grow it by chat and with the controls on the board, then library.saveDraft and library.submit. A branch keeps its parent's category.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The component to branch off, or \"new\" for an empty builder slate."
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A version number (item.publishedVersion by default)."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "itemId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Branch off a smart component",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "library.branch",
+      "kind": "write"
+    },
+    {
+      "name": "comment_on_library_item",
+      "title": "Write in a library thread",
+      "description": "Write to the reviewer (or, as a reviewer, to the author) in a library item's thread.\n\nWrite in the thread. Write in a library item's review thread: its author and the reviewers read it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The item: its id or its slug (library.list items[].id or .slug)."
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "itemId",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Write in a library thread",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "library.comment",
+      "kind": "write"
+    },
+    {
+      "name": "discard_library_draft",
+      "title": "Discard a library draft",
+      "description": "Delete one of your own draft library items.\n\nDiscard a draft. Delete your own draft library item (never submitted, or withdrawn). Its builder slate stays.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The item: its id or its slug (library.list items[].id or .slug)."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "itemId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Discard a library draft",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "library.discard",
+      "kind": "write"
+    },
+    {
+      "name": "export_library",
+      "title": "Export the library",
+      "description": "Read every published item of the shared library with its content, 50 per page.\n\nLibrary export. Every published library item with its published version's content, 50 per page, oldest first: what the public gallery is built from.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "maxLength": 12,
+            "pattern": "^[0-9]+$",
+            "description": "The next value the previous page gave."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Export the library",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "method": "library.export",
+      "kind": "read"
+    },
+    {
+      "name": "use_library_item",
+      "title": "Use a library item",
+      "description": "Copy a slate or presentation from the shared library into a new private slate, or add a smart component to a new slate or beside the boards of one you can edit.\n\nUse a library item. Use a library item: a slate or presentation becomes a new private slate of yours (a presentation with its deck), and a smart component goes onto a new slate, or beside the boards of a slate you can edit (targetShareId; a slate holds up to 8 boards, past that 409 component_opens_new_slate). The copy remembers where it came from. Preview first to see the board and where it goes (canvas); save makes it. topic names the board (\"Retro: Q3 launch\").",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The item: its id or its slug (library.list items[].id or .slug)."
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A version number (item.publishedVersion by default)."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The new slate's name (the item's title by default)."
+          },
+          "targetShareId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "A smart component only: the slate to add it to (one you can edit)."
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "With targetShareId: the slate revision you read; a slate changed since is refused with 409 slate_changed."
+          },
+          "topic": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "A smart component only: what it is about, which names its board."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "save",
+              "preview"
+            ],
+            "default": "save",
+            "description": "save (the default) writes; preview returns what would change and saves nothing. The response says which happened."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "itemId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Use a library item",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "library.fork",
+      "kind": "write"
+    },
+    {
+      "name": "get_library_item",
+      "title": "Read a library item",
+      "description": "Read one item of the shared library in full: a smart component's board and rules, or a slate or presentation.\n\nLibrary item. One library item by id or slug, with a version's content: a smart component's board (workshop, with its rules), or a slate's notes (and a presentation's deck). Anyone reads published items; an item's author and reviewers also read its drafts, every version and its review thread.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The item: its id or its slug (library.list items[].id or .slug)."
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A version number (item.publishedVersion by default)."
+          }
+        },
+        "required": [
+          "itemId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Read a library item",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "method": "library.get",
+      "kind": "read"
+    },
+    {
+      "name": "list_library",
+      "title": "Browse the library",
+      "description": "Browse the shared Slatebox library: smart components (boards with rules, built in or made by people), slates and presentations anyone can copy, by kind, category or words.\n\nLibrary. Published items of the shared library: smart components (boards that keep their rules: the ones built into Slatebox and the ones people built), slates and presentations anyone can copy. Filter by kind, category (plan, decide, meetings, track, map), origin (builtin or user) or words (q); sort new or popular. 24 per page by default (at most 48); pass next as cursor for more. Open to anyone.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "component",
+              "slate",
+              "presentation"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "plan",
+              "decide",
+              "meetings",
+              "track",
+              "map"
+            ],
+            "description": "One of the five categories: plan, decide, meetings, track, map."
+          },
+          "q": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "new",
+              "popular"
+            ],
+            "default": "new"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "builtin",
+              "user"
+            ]
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 12,
+            "pattern": "^[0-9]+$",
+            "description": "The next value the previous page gave."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 48
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Browse the library",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "method": "library.list",
+      "kind": "read"
+    },
+    {
+      "name": "list_my_library",
+      "title": "List my library items",
+      "description": "List the smart components, slates and presentations you saved or submitted to the shared library, with where each stands in review.\n\nMy library. Your own library items, newest first: drafts, submissions waiting for review, items that need changes, published and not accepted ones, each with its status, the version waiting, the last message and the last 20 events of its thread.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "submitted",
+              "in_review",
+              "changes_requested",
+              "published",
+              "rejected",
+              "unpublished"
+            ]
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "List my library items",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "method": "library.mine",
+      "kind": "read"
+    },
+    {
+      "name": "approve_library_item",
+      "title": "Approve a library submission",
+      "description": "For administrators: publish a library submission in review, as its review copy stands. The person agrees first.\n\nApprove and publish. For administrators: publish an item in review as its review copy stands now (your refinements included), as a new version. Anyone can then find, use and change it. The author is told. The person agrees first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The item: its id or its slug (library.list items[].id or .slug)."
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "selfReview": {
+            "type": "boolean",
+            "description": "Review your own submission. Allowed only on a server with one administrator; the thread records it."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "itemId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Approve a library submission",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "library.review.approve",
+      "kind": "write"
+    },
+    {
+      "name": "open_library_review",
+      "title": "Open a library submission",
+      "description": "For administrators: open a library submission for review as a private copy you can change on the canvas.\n\nOpen for review. For administrators: make (or refresh) your private review copy of a submission's waiting version, a slate you can change on the canvas, and mark it in review. Approving publishes that copy as it stands. Opening again for the same version answers the same copy.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The item: its id or its slug (library.list items[].id or .slug)."
+          },
+          "selfReview": {
+            "type": "boolean",
+            "description": "Review your own submission. Allowed only on a server with one administrator; the thread records it."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "itemId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Open a library submission",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "library.review.open",
+      "kind": "write"
+    },
+    {
+      "name": "list_library_queue",
+      "title": "List library submissions",
+      "description": "For administrators: list the library submissions waiting for review, oldest first.\n\nReview queue. For administrators: library items to review, oldest first: waiting (submitted and changes requested, the default), in_review, changes_requested, rejected, published or all. Each with its author, kind, the version waiting, whether it updates a published item, how long it has waited and the last message. source migration lists the slates moved from Community slates.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "waiting",
+              "submitted",
+              "in_review",
+              "changes_requested",
+              "rejected",
+              "published",
+              "all"
+            ],
+            "default": "waiting"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "component",
+              "slate",
+              "presentation"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "migration"
+            ]
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 12,
+            "pattern": "^[0-9]+$",
+            "description": "The next value the previous page gave."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "List library submissions",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "method": "library.review.queue",
+      "kind": "read"
+    },
+    {
+      "name": "refine_library_item",
+      "title": "Refine a library submission",
+      "description": "For administrators: change a library submission in review by asking in plain words; preview the change, then keep it.\n\nRefine by chat. For administrators: ask for a change to an item in review in plain words (\"rename it to Weekly retro\", \"put it in Meetings\", \"Write a clearer one-line summary\", \"What should I check?\"). Preview answers the proposal (metadata from and to, rule lines for a component's board, things to check) and its previewId; save with that previewId keeps exactly it, on the item and on the review copy. Simple renames, categories and summaries are read without AI.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The item: its id or its slug (library.list items[].id or .slug)."
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "selfReview": {
+            "type": "boolean",
+            "description": "Review your own submission. Allowed only on a server with one administrator; the thread records it."
+          },
+          "previewId": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Save: the previewId a preview answered. Keeps exactly that proposal (no second AI answer)."
+          },
+          "history": {
+            "type": "array",
+            "maxItems": 6,
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "assistant"
+                  ]
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "role",
+                "text"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "save",
+              "preview"
+            ],
+            "default": "save",
+            "description": "save (the default) writes; preview returns what would change and saves nothing. The response says which happened."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "itemId",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Refine a library submission",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "library.review.refine",
+      "kind": "write"
+    },
+    {
+      "name": "reject_library_item",
+      "title": "Reject",
+      "description": "For administrators: turn down a library submission, with a message the author reads.\n\nReject. For administrators: turn down a submission, with a message saying why. A published item's rejected update leaves the published version as it is.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The item: its id or its slug (library.list items[].id or .slug)."
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Why: the author reads it."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "itemId",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Reject",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "library.review.reject",
+      "kind": "write"
+    },
+    {
+      "name": "request_library_changes",
+      "title": "Request changes",
+      "description": "For administrators: send a library submission back for changes, with a message the author reads.\n\nRequest changes. For administrators: send an item in review back to its author for changes, with a message saying what to change.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The item: its id or its slug (library.list items[].id or .slug)."
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Why: the author reads it."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "itemId",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Request changes",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "library.review.requestChanges",
+      "kind": "write"
+    },
+    {
+      "name": "unpublish_library_item",
+      "title": "Unpublish",
+      "description": "For administrators: take a published item out of the library, with a message the author reads.\n\nUnpublish. For administrators: take a published item out of the library, with a message saying why. Copies people already made stay theirs.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The item: its id or its slug (library.list items[].id or .slug)."
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Why: the author reads it."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "itemId",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Unpublish",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "library.review.unpublish",
+      "kind": "write"
+    },
+    {
+      "name": "update_library_item",
+      "title": "Edit a library item's details",
+      "description": "For administrators: change a library item's title, summary, description, category or search words.\n\nEdit details. For administrators: change a library item's title, summary, description, category or search words directly. A branch's category stays its parent's.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The item: its id or its slug (library.list items[].id or .slug)."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Plain text, up to 80 characters."
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "One line, up to 160 characters."
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "Plain text, up to 2,000 characters."
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "plan",
+              "decide",
+              "meetings",
+              "track",
+              "map"
+            ],
+            "description": "One of the five categories: plan, decide, meetings, track, map."
+          },
+          "synonyms": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            },
+            "description": "Smart components only: words people might search for."
+          },
+          "selfReview": {
+            "type": "boolean",
+            "description": "Review your own submission. Allowed only on a server with one administrator; the thread records it."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "itemId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Edit a library item's details",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "library.review.update",
+      "kind": "write"
+    },
+    {
+      "name": "save_library_draft",
+      "title": "Save a smart component",
+      "description": "Save the board on your builder slate as your own smart component, private to you, with a name, a one-line summary and a category.\n\nSave a component. Save the board of your builder slate (library.branch) as your own smart component, private to you: you can add it to any slate at once. The first save makes the item; later saves update it (itemId, or the builder slate remembers it). A component needs a category before it is submitted; a branch keeps its parent's (another is refused with 409 category_locked).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "shareId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The slate ID from its address: /canvas/<shareId>."
+          },
+          "boardId": {
+            "type": "string",
+            "pattern": "^[a-z0-9]{1,12}$",
+            "description": "The board on the builder slate (main by default)."
+          },
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The item: its id or its slug (library.list items[].id or .slug)."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Plain text, up to 80 characters."
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "One line, up to 160 characters."
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "Plain text, up to 2,000 characters."
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "plan",
+              "decide",
+              "meetings",
+              "track",
+              "map"
+            ],
+            "description": "One of the five categories: plan, decide, meetings, track, map."
+          },
+          "synonyms": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            },
+            "description": "Smart components only: words people might search for."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "shareId",
+          "title",
+          "summary"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Save a smart component",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "library.saveDraft",
+      "kind": "write"
+    },
+    {
+      "name": "get_library_stats",
+      "title": "Count the library",
+      "description": "Count the published smart components, slates and presentations in the shared library, and the items in each category.\n\nLibrary counts. How many published items the shared library holds: smart components (built in and from the community, and the total), slates, presentations, and items per category. Open to anyone.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Count the library",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "method": "library.stats",
+      "kind": "read"
+    },
+    {
+      "name": "submit_to_library",
+      "title": "Submit to the library",
+      "description": "Send your smart component, slate or presentation for review, to be published in the shared library for anyone to use. The person agrees first.\n\nSubmit to the library. Send something of yours for review, to be published in the shared library: a smart component you saved (itemId), or a slate you own or administer (shareId; kind presentation sends its deck too). Once approved anyone can find, use and change it, shared under CC BY 4.0. Sending a published item again proposes an update; the published version stays until the update is approved. Up to 10 a day. A guest must sign up first (403 sign_in_to_publish). The person agrees first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "component",
+              "slate",
+              "presentation"
+            ]
+          },
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The item: its id or its slug (library.list items[].id or .slug)."
+          },
+          "shareId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The slate ID from its address: /canvas/<shareId>."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Plain text, up to 80 characters."
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "One line, up to 160 characters."
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "Plain text, up to 2,000 characters."
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "plan",
+              "decide",
+              "meetings",
+              "track",
+              "map"
+            ],
+            "description": "One of the five categories: plan, decide, meetings, track, map."
+          },
+          "synonyms": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            },
+            "description": "Smart components only: words people might search for."
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "A note for the reviewer: the first message of the item's thread."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Submit to the library",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "library.submit",
+      "kind": "write"
+    },
+    {
+      "name": "withdraw_library_item",
+      "title": "Withdraw a library item",
+      "description": "Take back your library submission before review, or take your published item out of the library.\n\nWithdraw. Take back your submission before it is reviewed (it is a draft again), or take your published item out of the library (copies people made stay theirs).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The item: its id or its slug (library.list items[].id or .slug)."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "itemId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Withdraw a library item",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "library.withdraw",
+      "kind": "write"
+    },
+    {
       "name": "lookup_media",
       "title": "Look up a video",
       "description": "Read a YouTube, Vimeo or Loom link: its title, author and a stored poster, ready for a video note.\n\nVideo info. Read a YouTube, Vimeo or Loom address: the video's host, id, canonical address, start time, title and author, and its poster picture stored in this app (so people's browsers reach the video host only when they press play). Pass the answer as media in an add_nodes operation (count 1), or call slates.addMedia to look up and add in one step. When the host shares no title or picture the video still comes back, with a notice. Any other address is refused with 400 not_a_video. At most 60 new videos per person per hour.",
@@ -1942,7 +3027,7 @@
     {
       "name": "copy_slate",
       "title": "Copy a slate",
-      "description": "Make a private copy of a slate the person may edit, or of a public slate or template, and return the copy's id.\n\nCopy slate. Make a private copy of a slate you may edit, a public slate or template, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. A template becomes an ordinary slate based on it unless keepTemplate is set. A published presentation of the slate is copied with it as a private presentation of the copy.",
+      "description": "Make a private copy of a slate the person may edit, or of a public slate, and return the copy's id.\n\nCopy slate. Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. A view invitation alone does not allow a copy. The copy is an ordinary private slate. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork).",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1957,19 +3042,6 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200
-          },
-          "projectName": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          },
-          "keepTemplate": {
-            "type": "boolean",
-            "default": false
-          },
-          "fromTemplate": {
-            "type": "boolean",
-            "default": false
           },
           "confirm": {
             "type": "string",

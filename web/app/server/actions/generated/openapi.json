@@ -8486,7 +8486,7 @@
       "post": {
         "operationId": "copySlate",
         "summary": "Copy slate",
-        "description": "Make a private copy of a slate you may edit, a public slate or template, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. A template becomes an ordinary slate based on it unless keepTemplate is set. A published presentation of the slate is copied with it as a private presentation of the copy.",
+        "description": "Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. A view invitation alone does not allow a copy. The copy is an ordinary private slate. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork).",
         "x-required-scope": "slates:write",
         "x-slatebox": {
           "action": "slates.copy",
@@ -8553,19 +8553,6 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200
-                  },
-                  "projectName": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200
-                  },
-                  "keepTemplate": {
-                    "type": "boolean",
-                    "default": false
-                  },
-                  "fromTemplate": {
-                    "type": "boolean",
-                    "default": false
                   }
                 },
                 "additionalProperties": false

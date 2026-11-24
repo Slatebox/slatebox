@@ -402,8 +402,521 @@ declare namespace slatebox.instance {
     workshops?: Record<string, unknown>;
     actions?: Array<Record<string, unknown>>;
     account?: Record<string, unknown>;
+    /** With a token or sign-in: the shared library's categories, and whether you review its submissions. */
+    library?: Record<string, unknown>;
     [key: string]: unknown;
   }>;
+}
+
+declare namespace slatebox.library {
+  /** Branch off a component. Start building a smart component on a new private slate (a builder slate): a copy of a library component to change (itemId), or an empty one (itemId "new"). Grow it by chat and with the controls on the board, then library.saveDraft and library.submit. A branch keeps its parent's category. @scope slates:write */
+  function branch(input: {
+    /** The component to branch off, or "new" for an empty builder slate. (1–120 characters) */
+    itemId: string;
+    /** A version number (item.publishedVersion by default). (at least 1) */
+    version?: number;
+  }): Promise<({
+    shareId: string;
+    revision?: number;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.library {
+  /** Write in the thread. Write in a library item's review thread: its author and the reviewers read it. @scope slates:write */
+  function comment(input: {
+    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
+    itemId: string;
+    /** (1–2000 characters) */
+    message: string;
+  }): Promise<({
+    itemId: string;
+    eventId: string;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.library {
+  /** Discard a draft. Delete your own draft library item (never submitted, or withdrawn). Its builder slate stays. @scope slates:write @destructive */
+  function discard(input: {
+    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
+    itemId: string;
+  }): Promise<({
+    itemId: string;
+    discarded: boolean;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.library {
+  /** Library export. Every published library item with its published version's content, 50 per page, oldest first: what the public gallery is built from. @scope slates:read */
+  function export(input: {
+    /** The next value the previous page gave. (at most 12 characters) */
+    cursor?: string;
+  }): Promise<{
+    items: Array<Record<string, unknown>>;
+    next?: string;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.library {
+  /** Use a library item. Use a library item: a slate or presentation becomes a new private slate of yours (a presentation with its deck), and a smart component goes onto a new slate, or beside the boards of a slate you can edit (targetShareId; a slate holds up to 8 boards, past that 409 component_opens_new_slate). The copy remembers where it came from. Preview first to see the board and where it goes (canvas); save makes it. topic names the board ("Retro: Q3 launch"). @scope slates:write @modes save|preview */
+  function fork(input: {
+    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
+    itemId: string;
+    /** A version number (item.publishedVersion by default). (at least 1) */
+    version?: number;
+    /** The new slate's name (the item's title by default). (1–200 characters) */
+    name?: string;
+    /** A smart component only: the slate to add it to (one you can edit). (1–80 characters) */
+    targetShareId?: string;
+    /** With targetShareId: the slate revision you read; a slate changed since is refused with 409 slate_changed. (at least 0) */
+    expectedRevision?: number;
+    /** A smart component only: what it is about, which names its board. (1–100 characters) */
+    topic?: string;
+    /** preview returns what would change and saves nothing. (default "save") */
+    mode?: "save" | "preview";
+  }): Promise<({
+    /** The slate it went to (null in a preview that would make a new slate). */
+    shareId: string | null;
+    revision?: number;
+    boardId?: string;
+    itemId: string;
+    version: number;
+    /** A component preview: { workshop, origin } as the canvas draws it. */
+    canvas?: Record<string, unknown>;
+    name?: string;
+    notes?: number;
+    [key: string]: unknown;
+  }) & { mode: "save" | "preview" }>;
+}
+
+declare namespace slatebox.library {
+  /** Library item. One library item by id or slug, with a version's content: a smart component's board (workshop, with its rules), or a slate's notes (and a presentation's deck). Anyone reads published items; an item's author and reviewers also read its drafts, every version and its review thread. @scope slates:read */
+  function get(input: {
+    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
+    itemId: string;
+    /** A version number (item.publishedVersion by default). (at least 1) */
+    version?: number;
+  }): Promise<{
+    item: {
+      id: string;
+      slug: string;
+      kind: "component" | "slate" | "presentation";
+      origin: "builtin" | "user";
+      title: string;
+      summary: string;
+      /** One of the five categories: plan, decide, meetings, track, map. */
+      category?: "plan" | "decide" | "meetings" | "track" | "map";
+      authorName: string;
+      publishedAt?: string;
+      counts: {
+        copies?: number;
+        adds?: number;
+        branches?: number;
+        [key: string]: unknown;
+      };
+      /** branchedFrom or forkedFrom: { itemId, version, title }. */
+      provenance?: Record<string, unknown>;
+      url: string;
+      preview?: {
+        kind?: "component" | "slate" | "presentation";
+        boardKind?: string;
+        notes?: number;
+        [key: string]: unknown;
+      };
+      description?: string;
+      synonyms?: string[];
+      license?: string;
+      categoryLocked?: boolean;
+      versionCount?: number;
+      publishedVersion?: number;
+      /** How many times it has been published, when more than once (absent: once). */
+      publishedCount?: number;
+      /** Its author and reviewers only. */
+      status?: "draft" | "submitted" | "in_review" | "changes_requested" | "published" | "rejected" | "unpublished";
+      /** The state of the version waiting for review (its author and reviewers only). */
+      reviewStatus?: string;
+      pendingVersion?: number;
+      /** An update to a published item: its proposed details, public once approved. */
+      pendingMeta?: Record<string, unknown>;
+      /** A published item's saved draft details, not yet submitted (its author only). */
+      draftMeta?: Record<string, unknown>;
+      sourceShareId?: string;
+      reviewShareId?: string;
+      lastMessage?: Record<string, unknown>;
+      [key: string]: unknown;
+    };
+    version: {
+      n: number;
+      meta: Record<string, unknown>;
+      /** { kind: component, workshop } | { kind: slate, slate } | { kind: presentation, slate, deck } */
+      content: Record<string, unknown>;
+      createdAt?: string;
+      [key: string]: unknown;
+    };
+    /** Its author and reviewers only: the review thread (every action and message), oldest first. */
+    thread?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.library {
+  /** Library. Published items of the shared library: smart components (boards that keep their rules: the ones built into Slatebox and the ones people built), slates and presentations anyone can copy. Filter by kind, category (plan, decide, meetings, track, map), origin (builtin or user) or words (q); sort new or popular. 24 per page by default (at most 48); pass next as cursor for more. Open to anyone. @scope slates:read */
+  function list(input: {
+    kind?: "component" | "slate" | "presentation";
+    /** One of the five categories: plan, decide, meetings, track, map. */
+    category?: "plan" | "decide" | "meetings" | "track" | "map";
+    /** (1–100 characters) */
+    q?: string;
+    /** (default "new") */
+    sort?: "new" | "popular";
+    origin?: "builtin" | "user";
+    /** The next value the previous page gave. (at most 12 characters) */
+    cursor?: string;
+    /** (1 to 48) */
+    limit?: number;
+  }): Promise<{
+    items: Array<{
+      id: string;
+      slug: string;
+      kind: "component" | "slate" | "presentation";
+      origin: "builtin" | "user";
+      title: string;
+      summary: string;
+      /** One of the five categories: plan, decide, meetings, track, map. */
+      category?: "plan" | "decide" | "meetings" | "track" | "map";
+      authorName: string;
+      publishedAt?: string;
+      counts: {
+        copies?: number;
+        adds?: number;
+        branches?: number;
+        [key: string]: unknown;
+      };
+      /** branchedFrom or forkedFrom: { itemId, version, title }. */
+      provenance?: Record<string, unknown>;
+      url: string;
+      preview?: {
+        kind?: "component" | "slate" | "presentation";
+        boardKind?: string;
+        notes?: number;
+        [key: string]: unknown;
+      };
+      [key: string]: unknown;
+    }>;
+    next?: string;
+    total: number;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.library {
+  /** My library. Your own library items, newest first: drafts, submissions waiting for review, items that need changes, published and not accepted ones, each with its status, the version waiting, the last message and the last 20 events of its thread. @scope slates:read */
+  function mine(input: {
+    status?: "draft" | "submitted" | "in_review" | "changes_requested" | "published" | "rejected" | "unpublished";
+  }): Promise<{
+    items: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.library.review {
+  /** Approve and publish. For administrators: publish an item in review as its review copy stands now (your refinements included), as a new version. Anyone can then find, use and change it. The author is told. The person agrees first. @scope library:review @confirm */
+  function approve(input: {
+    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
+    itemId: string;
+    /** (1–2000 characters) */
+    message?: string;
+    /** Review your own submission. Allowed only on a server with one administrator; the thread records it. */
+    selfReview?: boolean;
+  }): Promise<({
+    itemId: string;
+    status: string;
+    publishedVersion: number;
+    /** How many times it has been published, this time included (1 the first time). */
+    publishedCount?: number;
+    url?: string;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.library.review {
+  /** Open for review. For administrators: make (or refresh) your private review copy of a submission's waiting version, a slate you can change on the canvas, and mark it in review. Approving publishes that copy as it stands. Opening again for the same version answers the same copy. @scope library:review */
+  function open(input: {
+    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
+    itemId: string;
+    /** Review your own submission. Allowed only on a server with one administrator; the thread records it. */
+    selfReview?: boolean;
+  }): Promise<({
+    itemId: string;
+    reviewShareId: string;
+    status?: string;
+    reviewStatus?: string | null;
+    version?: number;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.library.review {
+  /** Review queue. For administrators: library items to review, oldest first: waiting (submitted and changes requested, the default), in_review, changes_requested, rejected, published or all. Each with its author, kind, the version waiting, whether it updates a published item, how long it has waited and the last message. source migration lists the slates moved from Community slates. @scope library:review */
+  function queue(input: {
+    /** (default "waiting") */
+    status?: "waiting" | "submitted" | "in_review" | "changes_requested" | "rejected" | "published" | "all";
+    kind?: "component" | "slate" | "presentation";
+    source?: "migration";
+    /** The next value the previous page gave. (at most 12 characters) */
+    cursor?: string;
+  }): Promise<{
+    items: Array<Record<string, unknown>>;
+    next?: string;
+    total: number;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.library.review {
+  /** Refine by chat. For administrators: ask for a change to an item in review in plain words ("rename it to Weekly retro", "put it in Meetings", "Write a clearer one-line summary", "What should I check?"). Preview answers the proposal (metadata from and to, rule lines for a component's board, things to check) and its previewId; save with that previewId keeps exactly it, on the item and on the review copy. Simple renames, categories and summaries are read without AI. @scope library:review @modes save|preview */
+  function refine(input: {
+    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
+    itemId: string;
+    /** (1–2000 characters) */
+    message: string;
+    /** Review your own submission. Allowed only on a server with one administrator; the thread records it. */
+    selfReview?: boolean;
+    /** Save: the previewId a preview answered. Keeps exactly that proposal (no second AI answer). (at most 64 characters) */
+    previewId?: string;
+    /** (at most 6 items) */
+    history?: Array<{
+      role: "user" | "assistant";
+      /** (at most 2000 characters) */
+      text: string;
+    }>;
+    /** preview returns what would change and saves nothing. (default "save") */
+    mode?: "save" | "preview";
+  }): Promise<({
+    itemId: string;
+    reply: string;
+    proposal?: Record<string, unknown>;
+    diff?: Record<string, unknown>;
+    previewId?: string;
+    kept?: boolean;
+    revision?: number;
+    [key: string]: unknown;
+  }) & { mode: "save" | "preview" }>;
+}
+
+declare namespace slatebox.library.review {
+  /** Reject. For administrators: turn down a submission, with a message saying why. A published item's rejected update leaves the published version as it is. @scope library:review */
+  function reject(input: {
+    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
+    itemId: string;
+    /** Why: the author reads it. (1–2000 characters) */
+    message: string;
+  }): Promise<({
+    itemId: string;
+    slug?: string;
+    status: string;
+    reviewStatus?: string | null;
+    version?: number;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.library.review {
+  /** Request changes. For administrators: send an item in review back to its author for changes, with a message saying what to change. @scope library:review */
+  function requestChanges(input: {
+    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
+    itemId: string;
+    /** Why: the author reads it. (1–2000 characters) */
+    message: string;
+  }): Promise<({
+    itemId: string;
+    slug?: string;
+    status: string;
+    reviewStatus?: string | null;
+    version?: number;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.library.review {
+  /** Unpublish. For administrators: take a published item out of the library, with a message saying why. Copies people already made stay theirs. @scope library:review @destructive */
+  function unpublish(input: {
+    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
+    itemId: string;
+    /** Why: the author reads it. (1–2000 characters) */
+    message: string;
+  }): Promise<({
+    itemId: string;
+    slug?: string;
+    status: string;
+    reviewStatus?: string | null;
+    version?: number;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.library.review {
+  /** Edit details. For administrators: change a library item's title, summary, description, category or search words directly. A branch's category stays its parent's. @scope library:review */
+  function update(input: {
+    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
+    itemId: string;
+    /** Plain text, up to 80 characters. (1–80 characters) */
+    title?: string;
+    /** One line, up to 160 characters. (1–160 characters) */
+    summary?: string;
+    /** Plain text, up to 2,000 characters. (at most 2000 characters) */
+    description?: string;
+    /** One of the five categories: plan, decide, meetings, track, map. */
+    category?: "plan" | "decide" | "meetings" | "track" | "map";
+    /** Smart components only: words people might search for. (at most 12 items) */
+    synonyms?: string[];
+    /** Review your own submission. Allowed only on a server with one administrator; the thread records it. */
+    selfReview?: boolean;
+  }): Promise<({
+    item: {
+      id: string;
+      slug: string;
+      kind: "component" | "slate" | "presentation";
+      origin: "builtin" | "user";
+      title: string;
+      summary: string;
+      /** One of the five categories: plan, decide, meetings, track, map. */
+      category?: "plan" | "decide" | "meetings" | "track" | "map";
+      authorName: string;
+      publishedAt?: string;
+      counts: {
+        copies?: number;
+        adds?: number;
+        branches?: number;
+        [key: string]: unknown;
+      };
+      /** branchedFrom or forkedFrom: { itemId, version, title }. */
+      provenance?: Record<string, unknown>;
+      url: string;
+      preview?: {
+        kind?: "component" | "slate" | "presentation";
+        boardKind?: string;
+        notes?: number;
+        [key: string]: unknown;
+      };
+      description?: string;
+      synonyms?: string[];
+      license?: string;
+      categoryLocked?: boolean;
+      versionCount?: number;
+      publishedVersion?: number;
+      /** How many times it has been published, when more than once (absent: once). */
+      publishedCount?: number;
+      /** Its author and reviewers only. */
+      status?: "draft" | "submitted" | "in_review" | "changes_requested" | "published" | "rejected" | "unpublished";
+      /** The state of the version waiting for review (its author and reviewers only). */
+      reviewStatus?: string;
+      pendingVersion?: number;
+      /** An update to a published item: its proposed details, public once approved. */
+      pendingMeta?: Record<string, unknown>;
+      /** A published item's saved draft details, not yet submitted (its author only). */
+      draftMeta?: Record<string, unknown>;
+      sourceShareId?: string;
+      reviewShareId?: string;
+      lastMessage?: Record<string, unknown>;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.library {
+  /** Save a component. Save the board of your builder slate (library.branch) as your own smart component, private to you: you can add it to any slate at once. The first save makes the item; later saves update it (itemId, or the builder slate remembers it). A component needs a category before it is submitted; a branch keeps its parent's (another is refused with 409 category_locked). @scope slates:write */
+  function saveDraft(input: {
+    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
+    shareId: string;
+    /** The board on the builder slate (main by default). */
+    boardId?: string;
+    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
+    itemId?: string;
+    /** Plain text, up to 80 characters. (1–80 characters) */
+    title: string;
+    /** One line, up to 160 characters. (1–160 characters) */
+    summary: string;
+    /** Plain text, up to 2,000 characters. (at most 2000 characters) */
+    description?: string;
+    /** One of the five categories: plan, decide, meetings, track, map. */
+    category?: "plan" | "decide" | "meetings" | "track" | "map";
+    /** Smart components only: words people might search for. (at most 12 items) */
+    synonyms?: string[];
+  }): Promise<({
+    itemId: string;
+    slug?: string;
+    status: string;
+    reviewStatus?: string | null;
+    version?: number;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.library {
+  /** Library counts. How many published items the shared library holds: smart components (built in and from the community, and the total), slates, presentations, and items per category. Open to anyone. @scope slates:read */
+  function stats(input: Record<string, unknown>): Promise<{
+    components: {
+      builtin?: number;
+      community?: number;
+      total?: number;
+      [key: string]: unknown;
+    };
+    slates: number;
+    presentations: number;
+    categories: Record<string, unknown>;
+    updatedAt?: string;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.library {
+  /** Submit to the library. Send something of yours for review, to be published in the shared library: a smart component you saved (itemId), or a slate you own or administer (shareId; kind presentation sends its deck too). Once approved anyone can find, use and change it, shared under CC BY 4.0. Sending a published item again proposes an update; the published version stays until the update is approved. Up to 10 a day. A guest must sign up first (403 sign_in_to_publish). The person agrees first. @scope slates:share @confirm */
+  function submit(input: {
+    kind: "component" | "slate" | "presentation";
+    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
+    itemId?: string;
+    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
+    shareId?: string;
+    /** Plain text, up to 80 characters. (1–80 characters) */
+    title?: string;
+    /** One line, up to 160 characters. (1–160 characters) */
+    summary?: string;
+    /** Plain text, up to 2,000 characters. (at most 2000 characters) */
+    description?: string;
+    /** One of the five categories: plan, decide, meetings, track, map. */
+    category?: "plan" | "decide" | "meetings" | "track" | "map";
+    /** Smart components only: words people might search for. (at most 12 items) */
+    synonyms?: string[];
+    /** A note for the reviewer: the first message of the item's thread. (1–2000 characters) */
+    note?: string;
+  }): Promise<({
+    itemId: string;
+    slug?: string;
+    status: string;
+    reviewStatus?: string | null;
+    version?: number;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.library {
+  /** Withdraw. Take back your submission before it is reviewed (it is a draft again), or take your published item out of the library (copies people made stay theirs). @scope slates:write */
+  function withdraw(input: {
+    /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
+    itemId: string;
+  }): Promise<({
+    itemId: string;
+    slug?: string;
+    status: string;
+    reviewStatus?: string | null;
+    version?: number;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
 }
 
 declare namespace slatebox.media {
@@ -851,18 +1364,12 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.slates {
-  /** Copy slate. Make a private copy of a slate you may edit, a public slate or template, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. A template becomes an ordinary slate based on it unless keepTemplate is set. A published presentation of the slate is copied with it as a private presentation of the copy. @scope slates:write */
+  /** Copy slate. Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. A view invitation alone does not allow a copy. The copy is an ordinary private slate. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork). @scope slates:write */
   function copy(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
     /** (1–200 characters) */
     name?: string;
-    /** (1–200 characters) */
-    projectName?: string;
-    /** (default false) */
-    keepTemplate?: boolean;
-    /** (default false) */
-    fromTemplate?: boolean;
   }): Promise<({
     shareId: string;
     /** (at least 1) */
@@ -1292,8 +1799,15 @@ interface AddComponentPlan {
   /** (1–1 items) */
   operations: Array<{
     kind: "add_component";
-    /** The library entry to add (components.list ids). */
-    component: "now-next-later" | "pros-cons" | "must-should-could" | "decision-path" | "retro" | "triage" | "team-board" | "launch-plan" | "customer-go-live" | "hiring-plan" | "sort-evidence" | "discovery-tree" | "break-down-problem" | "incident-review" | "impact-effort" | "reorg-sandbox" | "goals-owners" | "sales-pipeline" | "budget";
+    /** The library entry to add (components.list ids). Or name a shared library item with library instead. */
+    component?: "now-next-later" | "pros-cons" | "must-should-could" | "decision-path" | "retro" | "triage" | "team-board" | "launch-plan" | "customer-go-live" | "hiring-plan" | "sort-evidence" | "discovery-tree" | "break-down-problem" | "incident-review" | "impact-effort" | "reorg-sandbox" | "goals-owners" | "sales-pipeline" | "budget";
+    /** A smart component from the shared library (in place of component). */
+    library?: {
+      /** A smart component from library.list (kind component), or one of your own. (1–120 characters) */
+      itemId: string;
+      /** (at least 1) */
+      version?: number;
+    };
     /** What it is about: names the board ("Retro: Q3 launch"). (1–100 characters) */
     topic?: string;
     /** The slate revision you read (slates.get). (at least 0) */
