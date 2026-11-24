@@ -1,6 +1,6 @@
 {
   "name": "slatebox-mcp",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "mcpName": "com.slatebox/slatebox",
   "description": "Slatebox for AI assistants: create and edit mind maps, diagrams, project plans and presentations on a shared canvas.",
   "keywords": [
