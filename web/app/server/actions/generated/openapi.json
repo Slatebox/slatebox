@@ -2336,7 +2336,7 @@
     "/shapes/icons": {
       "get": {
         "operationId": "searchIcons",
-        "summary": "Find icons",
+        "summary": "Icons",
         "description": "Search The Noun Project's icons by words. Each result is one checked outline in a 0..100 box (icons that cannot be one outline are left out) with credit: the text and link The Noun Project asks to show with the icon. An applyOperations update_nodes or add_nodes plan takes {name, d, fillRule} as the shape. Not counted as AI use. Answers 503 icons_not_set_up on a server without a Noun Project key.",
         "x-required-scope": "slates:read",
         "x-slatebox": {

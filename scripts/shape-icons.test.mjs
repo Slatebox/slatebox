@@ -96,6 +96,58 @@ test("icon search: the credit is built from the creator when the API sends none"
   assert.equal(svgToOutline(STROKE_SVG), null);
 });
 
+// Every point of an absolute outline (M/L/H/V/Z only), in order.
+function points(d) {
+  const out = [];
+  let x = 0, y = 0;
+  for (const [, cmd, args] of d.matchAll(/([MLHVZ])([^MLHVZ]*)/gi)) {
+    assert.ok(cmd === cmd.toUpperCase() || cmd === "z", `absolute commands only: ${d}`);
+    const n = (args.match(/-?\d*\.?\d+(?:e-?\d+)?/gi) || []).map(Number);
+    if (cmd === "H") { x = n.at(-1); out.push([x, y]); continue; }
+    if (cmd === "V") { y = n.at(-1); out.push([x, y]); continue; }
+    for (let i = 0; i + 1 < n.length; i += 2) { x = n[i]; y = n[i + 1]; out.push([x, y]); }
+  }
+  return out.map(([px, py]) => [Math.round(px * 100) / 100, Math.round(py * 100) / 100]);
+}
+const svgOf = (body) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-50 -50 200 200">${body}</svg>`;
+
+test("icon search: straight-sided icons keep every point where it is (svgo's relative \"m\" pairs)", () => {
+  // svgo writes these as "m31.7-18.3 8.66 5-5 8.66-8.66-5Z": the pairs after "m" are relative lines.
+  const diamond = svgToOutline(svgOf('<path d="M31.7 -18.3 L40.36 -13.3 L35.36 -4.64 L26.7 -9.64 Z"/>'));
+  assert.deepEqual(points(diamond.d), [[31.7, -18.3], [40.36, -13.3], [35.36, -4.64], [26.7, -9.64]]);
+  const small = svgToOutline(svgOf('<path d="M1.5 2.5 L3.5 4.5 L2 7 Z"/>'));
+  assert.deepEqual(points(small.d), [[1.5, 2.5], [3.5, 4.5], [2, 7]]);
+  // A transform svgo applies lands each point where the transform puts it.
+  const moved = svgToOutline(svgOf('<path transform="translate(10 10)" d="M0 0 L30 10 L10 30 Z"/>'));
+  assert.deepEqual(points(moved.d), [[10, 10], [40, 20], [20, 40]]);
+  // Two squares in a rotated group: the second starts where the rotation puts it, not after the first.
+  const turned = svgToOutline(svgOf('<g transform="rotate(30 50 50)"><path d="M10 10 L40 10 L40 40 L10 40 Z"/><path d="M50 50 L80 50 L80 80 L50 80 Z"/></g>'));
+  const pts = points(turned.d);
+  assert.equal(pts.length, 8);
+  assert.deepEqual(pts[0], [35.36, -4.64]);
+  assert.deepEqual(pts[4], [50, 50]);
+  // And the shape placed on a note from it is the same polygon, normalised.
+  const shape = iconToShape({ id: 7, term: "diamond" }, svgOf('<path d="M31.7 -18.3 L40.36 -13.3 L35.36 -4.64 L26.7 -9.64 Z"/>'));
+  assertNormalised(shape.d);
+  const placed = flattenShape(parseShapePath(shape.d))[0].map(([x, y]) => [Math.round(x), Math.round(y)]);
+  // The diamond's own four corners, scaled into 0..100 (the old "m" read as "M" gave other points).
+  for (const corner of [[37, 0], [100, 37], [63, 100], [0, 63]]) {
+    assert.ok(placed.some(([x, y]) => Math.abs(x - corner[0]) <= 1 && Math.abs(y - corner[1]) <= 1), `corner ${corner} in ${JSON.stringify(placed)}`);
+  }
+});
+
+test("icon search: white cut-outs and stroked lines are left out; paths keep their own fill rule", () => {
+  const cut = svgToOutline(svgOf('<path fill="#000" d="M0 0h40v40H0z"/><path fill="#fff" d="M10 10h20v20H10z"/><path stroke="#000" d="M10 10 L90 90"/>'));
+  assert.deepEqual(points(cut.d), [[0, 0], [40, 0], [40, 40], [0, 40]]);
+  assert.equal(svgToOutline(svgOf('<path style="fill: #FAFAFA" d="M0 0h40v40H0z"/>')), null, "a near-white fill only");
+  assert.equal(svgToOutline(svgOf('<g fill="none" stroke="#000"><path d="M0 0 L50 50"/></g>')), null, "a stroke-only drawing");
+  // One evenodd path beside a plain one: the icon mixes rules, so it is not one outline.
+  assert.equal(svgToOutline(svgOf('<path fill-rule="evenodd" d="M0 0h40v40H0zM10 10h20v20H10z"/><path d="M50 50h10v10H50z"/>')), null);
+  // Inherited from a group, the rule holds for each path in it.
+  const framed = svgToOutline(svgOf('<g fill-rule="evenodd"><path d="M0 0h40v40H0zM10 10h20v20H10z"/><path d="M50 50h10v10H50z"/></g>'));
+  assert.equal(framed.fillRule, "evenodd");
+});
+
 test("icon search: answers are kept for a while, so the same words cost no second API call", async () => {
   const { search, requests, clock } = mockedSearch();
   await search.search(ada, { q: "Songbird" });
@@ -108,6 +160,27 @@ test("icon search: answers are kept for a while, so the same words cost no secon
   clock.t += 7 * 60 * 60 * 1000;
   await search.search(ada, { q: "songbird" });
   assert.equal(requests.length, 3, "after six hours it asks again");
+});
+
+test("icon search: each account may cause a few API calls a minute; cached repeats are free", async () => {
+  const clock = { t: 0 };
+  const requests = [];
+  const search = createIconSearch({
+    configured: true,
+    now: () => clock.t,
+    perAccountPerMinute: 3,
+    requestJson: async (url) => { requests.push(url); return { icons: [] }; },
+    fetchText: async () => null,
+  });
+  for (const q of ["son", "song", "songb"]) await search.search(ada, { q });
+  await search.search(ada, { q: "son" });
+  assert.equal(requests.length, 3, "the repeat came from the cache");
+  await assert.rejects(search.search(ada, { q: "songbi" }), { code: "icons_busy", status: 429 });
+  await search.search({ userId: "bo" }, { q: "songbi" });
+  assert.equal(requests.length, 4, "another account has its own share");
+  clock.t += 61000;
+  await search.search(ada, { q: "songbir" });
+  assert.equal(requests.length, 5, "a minute later the account may search again");
 });
 
 test("icon search: only Noun Project's own icon files are fetched", async () => {

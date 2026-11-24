@@ -693,7 +693,7 @@ declare namespace slatebox.shapes {
 }
 
 declare namespace slatebox.shapes {
-  /** Find icons. Search The Noun Project's icons by words. Each result is one checked outline in a 0..100 box (icons that cannot be one outline are left out) with credit: the text and link The Noun Project asks to show with the icon. An applyOperations update_nodes or add_nodes plan takes {name, d, fillRule} as the shape. Not counted as AI use. Answers 503 icons_not_set_up on a server without a Noun Project key. @scope slates:read @openWorld */
+  /** Icons. Search The Noun Project's icons by words. Each result is one checked outline in a 0..100 box (icons that cannot be one outline are left out) with credit: the text and link The Noun Project asks to show with the icon. An applyOperations update_nodes or add_nodes plan takes {name, d, fillRule} as the shape. Not counted as AI use. Answers 503 icons_not_set_up on a server without a Noun Project key. @scope slates:read @openWorld */
   function searchIcons(input: {
     /** Words for the icon, such as songbird. (1–100 characters) */
     q: string;

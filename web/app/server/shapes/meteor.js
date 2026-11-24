@@ -139,8 +139,9 @@ Meteor.methods({
     const source = input.source === 'imported' ? 'imported' : 'generated'
     return shapeService.library.save(await principalOf(), { ...input, source, credit: source === 'imported' ? input.credit : undefined })
   }),
-  // The Noun Project's icons for some words, each one checked outline. A guest may search too
-  // (keeping a shape needs an account).
+  // The Noun Project's icons for some words, each one checked outline. Any account may search,
+  // a guest's anonymous one included (keeping a shape needs a full account); a caller with no
+  // account at all may not.
   'shapes.searchIcons': call(async (input) => {
     check(input, { q: String, limit: Match.Maybe(Match.Integer), page: Match.Maybe(Match.Integer) })
     const user = await Meteor.userAsync()
@@ -162,5 +163,6 @@ Meteor.methods({
   }),
 })
 
-// A search is one Noun Project API call: 20 a minute for each connection.
+// A search is one Noun Project API call: 20 a minute for each connection (and, in icon-search.mjs,
+// 30 API calls a minute for each account, whichever way it searches).
 DDPRateLimiter.addRule({ type: 'method', name: 'shapes.searchIcons', connectionId: () => true }, 20, 60000)

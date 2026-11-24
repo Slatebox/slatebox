@@ -62,7 +62,9 @@ ShapePreview.propTypes = {
 
 const call = (name, input) => Meteor.callAsync(name, input)
 const COLUMNS = 4
-const SEARCH_DELAY_MS = 350
+// Each search is a paid Noun Project call: wait for three characters and a real pause in typing.
+const SEARCH_DELAY_MS = 500
+const MIN_SEARCH = 3
 const ICONS_PER_SEARCH = 24
 
 // Arrow keys move between the tiles of a grid (four to a row); Home and End go to its ends.
@@ -78,14 +80,21 @@ function moveInGrid(event) {
   tiles[next].focus()
 }
 
+// On phones an icon's credit sits in its tile: "by <creator>" from "<icon> by <creator> from Noun Project".
+const creditLine = (icon) => {
+  const text = icon.credit?.text || ''
+  const by = text.match(/\bby (.+?)(?: from Noun Project)?$/i)?.[1]
+  return by ? `${icon.name} by ${by}` : text || icon.name
+}
+
 const gridSx = { display: 'grid', gridTemplateColumns: `repeat(${COLUMNS}, minmax(0, 1fr))`, gap: 1 }
 
-function Tile({ shape, onPick, fill, stroke, busy, children, named = true, title, tileId, size = 56 }) {
+function Tile({ shape, onPick, fill, stroke, busy, children, named = true, title, caption, tileId, size = 56 }) {
   const tile = (
     <ButtonBase
       onClick={() => onPick(shape)}
       disabled={busy}
-      aria-label={`Use ${shape.name}`}
+      aria-label={caption || title ? `Use ${shape.name}, ${caption || title}` : `Use ${shape.name}`}
       data-grid-tile=""
       data-shape-tile={tileId}
       focusRipple
@@ -106,11 +115,12 @@ function Tile({ shape, onPick, fill, stroke, busy, children, named = true, title
     >
       <ShapePreview shape={shape} fill={fill} stroke={stroke} size={size} />
       {named && <Typography variant="caption" noWrap sx={{ maxWidth: '100%', color: 'text.secondary' }}>{shape.name}</Typography>}
+      {caption && <Typography variant="caption" sx={{ maxWidth: '100%', color: 'text.secondary', fontSize: '0.65rem', lineHeight: 1.2, overflowWrap: 'anywhere' }}>{caption}</Typography>}
     </ButtonBase>
   )
   return (
     <Box sx={{ position: 'relative', minWidth: 0 }}>
-      {title ? <Tooltip title={title} placement="top" enterDelay={500}>{tile}</Tooltip> : tile}
+      {title && !caption ? <Tooltip title={title} placement="top" enterDelay={500}>{tile}</Tooltip> : tile}
       {children}
     </Box>
   )
@@ -125,6 +135,7 @@ Tile.propTypes = {
   children: PropTypes.node,
   named: PropTypes.bool,
   title: PropTypes.string,
+  caption: PropTypes.string,
   tileId: PropTypes.string,
   size: PropTypes.number,
 }
@@ -189,7 +200,7 @@ export default function ShapeMaker({ open, onClose, onApply, target = 'new', fil
   const runSearch = React.useCallback(async (raw) => {
     const q = raw.trim()
     const ticket = ++latest.current
-    if (q.length < 2) {
+    if (q.length < MIN_SEARCH) {
       setSearch({ state: 'idle', q: '', icons: [], credit: null, problem: '' })
       return
     }
@@ -288,8 +299,7 @@ export default function ShapeMaker({ open, onClose, onApply, target = 'new', fil
   const hasWords = words.trim().length > 0
   // Words typed but not searched yet (the search waits for a pause in typing) show as loading.
   const typed = words.trim()
-  const searchState = typed.length < 2 ? 'idle' : typed !== search.q ? 'loading' : search.state
-  const hoverWord = phone ? 'Touch and hold' : 'Hover'
+  const searchState = typed.length < MIN_SEARCH ? 'idle' : typed !== search.q ? 'loading' : search.state
   const focusFirstResult = (event) => {
     if (event.key !== 'ArrowDown') return
     const first = results.current?.querySelector('[data-grid-tile]')
@@ -383,14 +393,14 @@ export default function ShapeMaker({ open, onClose, onApply, target = 'new', fil
               <>
                 <Box sx={gridSx} role="group" aria-label={`Icons for ${search.q}`} onKeyDown={moveInGrid}>
                   {search.icons.map((icon) => (
-                    <Tile key={icon.iconId} tileId={`icon-${icon.iconId}`} shape={icon} onPick={(s) => pick(s, { icon: true })} fill={fill} stroke={stroke} busy={applying} title={icon.credit?.text} />
+                    <Tile key={icon.iconId} tileId={`icon-${icon.iconId}`} shape={icon} onPick={(s) => pick(s, { icon: true })} fill={fill} stroke={stroke} busy={applying} title={icon.credit?.text} caption={phone ? creditLine(icon) : undefined} named={!phone} />
                   ))}
                 </Box>
                 <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1 }}>
                   <Link href={search.credit?.url || 'https://thenounproject.com'} target="_blank" rel="noopener noreferrer" color="inherit">
                     {search.credit?.text || 'Icons from Noun Project'}
                   </Link>
-                  . {hoverWord} an icon for its creator.
+                  {phone ? '.' : '. Hover an icon for its creator.'}
                 </Typography>
               </>
             )}
@@ -424,7 +434,7 @@ export default function ShapeMaker({ open, onClose, onApply, target = 'new', fil
               {drawing.shape && !drawing.busy && (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
                   <Button variant="contained" size="small" onClick={() => pick(drawing.shape)} disabled={applying} sx={{ textTransform: 'none' }}>Use this shape</Button>
-                  <Button size="small" onClick={() => draw(true)} sx={{ textTransform: 'none' }}>Draw again</Button>
+                  <Button size="small" onClick={() => draw(true)} disabled={applying || drawing.busy} sx={{ textTransform: 'none' }}>Draw again</Button>
                 </Box>
               )}
             </Box>

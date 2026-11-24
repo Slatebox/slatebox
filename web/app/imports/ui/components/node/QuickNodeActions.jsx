@@ -15,12 +15,8 @@ import chunk from 'lodash.chunk'
 import Button from '@mui/material/Button'
 import ButtonGroup from '@mui/material/ButtonGroup'
 import Typography from '@mui/material/Typography'
-import { Slatebox } from 'slateboxjs'
-import IconButton from '@mui/material/IconButton'
-import ClearIcon from '@mui/icons-material/Clear'
 import defaultShapes from './defaultShapes'
 import slateProps from '../../propTypes/slateProps'
-import NodeShape from './NodeShape'
 import addNote, { noteBase } from './addNote'
 import { loadBoardsRows } from '../library/libraryBus'
 import ShapeMaker from '../shapes/ShapeMaker'
@@ -36,22 +32,15 @@ export default function QuickNodeActions({
   commentAccessOnly,
   slate,
   onNodeCreated,
-  isMU,
   selectedNotes,
   onShapeNotes,
 }) {
 
-  const sendSlateBgColor = slate?.options?.containerStyle?.backgroundColor
-  const contrastColor = Slatebox.utils.whiteOrBlack(sendSlateBgColor)
   const [actionMenuOpen, setActionMenuOpen] = React.useState(false)
   const [actionMenuPinned, setActionMenuPinned] = React.useState(false)
-  const [actionMenuExpanded, setActionMenuExpanded] = React.useState(false)
   // Custom Shape opens the shape maker: describe a shape, or reuse one from your library.
   const [shapeMakerOpen, setShapeMakerOpen] = React.useState(false)
   const [shapeTargets, setShapeTargets] = React.useState([])
-  const [currentWindowHeight, setWindowHeight] = React.useState(
-    window.innerHeight
-  )
 
   // A new note takes after the slate's last note of its own, never after a note a workshop draws there.
   const ownNotes = (slate?.nodes?.allNodes ?? []).filter(
@@ -81,22 +70,11 @@ export default function QuickNodeActions({
   const createNode = (shape) => addNote(slate, shape)
 
   const addNode = (shape) => {
-    if (shape.key === 'searchCustom' && !shape.icons) {
+    if (shape.key === 'searchCustom') {
       setShapeTargets(selectedNotes?.() ?? [])
       setShapeMakerOpen(true)
       setActionMenuPinned(false)
       setActionMenuOpen(false)
-      return
-    }
-    if (shape.key === 'searchCustom') {
-      setActionMenuExpanded(!actionMenuExpanded)
-      // When expanding, ensure menu stays open
-      if (!actionMenuExpanded) {
-        setActionMenuPinned(true)
-      } else {
-        setActionMenuPinned(false)
-        setActionMenuOpen(false)
-      }
       return
     }
     const node = createNode(shape)
@@ -208,14 +186,6 @@ export default function QuickNodeActions({
     onShapeNotes: PropTypes.func,
   }
 
-  window.onresize = () => {
-    setWindowHeight(window.innerHeight)
-  }
-
-  const onNodeShapeChanged = (pkg) => {
-    createNode({ path: pkg.data.shape, key: 'searchCustom' })
-  }
-
   // A shape picked in the shape maker: a new note in that shape, selected for its text.
   const addCustomShape = (shape) => {
     if (shapeTargets.length && onShapeNotes) {
@@ -309,7 +279,6 @@ export default function QuickNodeActions({
         direction="up"
       >
         {!commentAccessOnly &&
-          !actionMenuExpanded &&
           actionPaths.map((action) => (
             <SpeedDialAction
               key={action.row}
@@ -325,50 +294,6 @@ export default function QuickNodeActions({
               slotProps={{ fab: fabSlotProps }}
             />
           ))}
-        {actionMenuExpanded && actionMenuOpen && (
-          <div
-            style={{
-              height: `${currentWindowHeight - 190}px`,
-              paddingTop: '10px',
-              backgroundColor: sendSlateBgColor || '#000',
-              // backgroundColor: 'aliceblue',
-              position: 'relative',
-            }}
-          >
-            <IconButton
-              onClick={() => {
-                setActionMenuExpanded(false)
-                setActionMenuPinned(false)
-                setActionMenuOpen(false)
-              }}
-              sx={{
-                position: 'absolute',
-                top: -62,
-                left: 8,
-                zIndex: 1,
-                padding: '4px',
-                backgroundColor: 'rgba(0,0,0,0.2)',
-                '&:hover': {
-                  backgroundColor: 'rgba(0,0,0,0.4)',
-                },
-                color: (theme) => dockInk(theme).text.primary,
-              }}
-            >
-              <ClearIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-            <NodeShape
-              node={null}
-              iconDiscoveryMode={true}
-              shapeSearchLimit={21}
-              sendSlateBgColor={sendSlateBgColor}
-              contrastColor={contrastColor}
-              sendNodeBgColor={baseOpts.backgroundColor}
-              height="100%"
-              onChange={onNodeShapeChanged}
-              isMU={isMU}
-            />
-          </div>
-        )}
         <SpeedDialAction
           key="buttons"
           tooltipTitle=""
@@ -381,27 +306,19 @@ export default function QuickNodeActions({
                   disableRipple={true}
                   sx={(theme) => {
                     const ink = dockInk(theme)
-                    const on = actionMenuExpanded && c.key === 'searchCustom'
-                    // On the dark dock: the dark mode's text ink and edge (light words, a 3:1 outline), and its
-                    // amber for the one that is on (Custom Shape while the icon search is open).
+                    // On the dark dock: the dark mode's text ink and edge (light words, a 3:1 outline).
                     return {
                       height: '30px',
-                      color: on ? ink.primary.contrastText : ink.text.primary,
-                      backgroundColor: on ? ink.primary.main : 'transparent',
-                      borderColor: `${on ? ink.primary.main : ink.thematic.borderColor} !important`,
+                      color: ink.text.primary,
+                      backgroundColor: 'transparent',
+                      borderColor: `${ink.thematic.borderColor} !important`,
                       '&:hover': {
-                        backgroundColor: on ? ink.primary.dark : 'rgba(255, 255, 255, 0.08)',
-                        borderColor: `${on ? ink.primary.dark : ink.text.primary} !important`,
+                        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                        borderColor: `${ink.text.primary} !important`,
                       },
                     }
                   }}
-                  variant={
-                    c.text
-                      ? actionMenuExpanded && c.key === 'searchCustom'
-                        ? 'contained'
-                        : 'outlined'
-                      : ''
-                  }
+                  variant={c.text ? 'outlined' : ''}
                   size="small"
                   onClick={() => {
                     addNode(c)
@@ -414,7 +331,7 @@ export default function QuickNodeActions({
           }
         />
         {/* The top row: boards and starters from the library (it opens in Ask Slatebox). */}
-        {!commentAccessOnly && !actionMenuExpanded && (
+        {!commentAccessOnly && (
           <SpeedDialAction
             key="boards"
             tooltipTitle=""
