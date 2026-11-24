@@ -47,8 +47,10 @@ function useDrawnEmpty(liveNodes) {
     const canvas=document.getElementById('slateCanvas')
     if (!canvas || typeof MutationObserver!=='function') return undefined
     let frame=0, drawn=null
+    // Read again whenever the notes drawn change in number: a Keep drawn in place replaces the preview's
+    // notes with the slate's own without the canvas ever being empty in between.
     const check=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{
-      const now=Boolean(canvas.querySelector('g[data-node-id]'))
+      const now=canvas.querySelectorAll('g[data-node-id]').length
       if (now===drawn) return
       drawn=now
       setEmpty(!now || !read.current().some(node=>!node?.options?.isComment))

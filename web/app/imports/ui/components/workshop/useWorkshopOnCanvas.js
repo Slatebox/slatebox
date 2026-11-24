@@ -220,11 +220,12 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
       known.current = { revision: result.revision, model: result.model }
       // The server's record of the trade comes first: the canvas then tells the room of it.
       settleTrades(result)
-      // A step of this person's undo history on the canvas. A note and a card trading places, a card's
-      // line and a card's name are put back by the canvas's own undo, which puts back the drawing and
-      // the board together; putting back the board alone would lose the note.
-      if (result.previous?.workshop && result.model?.workshop && !changes.some(drawingOwnsBoardChange))
-        recordStep(result.previous.workshop, result.model.workshop, boardStepLabel(changes, result.model.workshop))
+      // The step recorded when the change was made (queueChange) is what the server did: the board before
+      // and after these changes. A batch is one step, held by its last change; a note and a card trading
+      // places, a card's line and a card's name are the canvas's own undo (drawingOwnsBoardChange).
+      const transition = result.previous?.workshop && result.model?.workshop && !changes.some(drawingOwnsBoardChange)
+        ? { before: result.previous.workshop, after: result.model.workshop } : null
+      settleSteps(changes, transition)
       // A shaped note that became a card says so, and so does a card that is its shape again. An undo
       // or redo says nothing. When a rule of the board speaks for the same drop, the shape joins it.
       const shapes = changes.map(change => shapeSaid.current.get(change)).filter(Boolean)
@@ -232,9 +233,11 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
       else if (shapes.length) setShapeNotice({ key: Date.now(), text: shapes.join(' ') })
       tell(true)
     } catch (err) {
+      settleSteps(changes, null)
       if (live.current !== board) { tell(false); return }
       // Anything done since was done on a board the server did not take.
       for (const later of queue.current) { answers.current.get(later)?.(false); answers.current.delete(later) }
+      settleSteps(queue.current, null)
       queue.current.length = 0
       tell(false, err.error === 'refused' ? err.details : null)
       const current = err.details
@@ -280,13 +283,17 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     setError('')
     const previous = known.current.model
     const model = { kind: 'workshop', version: 1, workshop: next }
+    // A step of this person's history from the moment they make it: an Undo pressed while it is being
+    // saved waits for the save and takes it back.
+    const settle = undoing ? null : pendingStep('Board change')
     try {
       const committed = await serialRef.current(() => Meteor.callAsync('creativeSlates.save', shareId, revision, model, ...onBoard))
+      settle?.(previous?.workshop ? { before: previous.workshop, after: next } : null)
       if (live.current !== board) return { ok: true }
       known.current = { revision: committed, model }
-      if (!undoing && previous?.workshop) recordStep(previous.workshop, next, 'Board change')
       return { ok: true }
     } catch (err) {
+      settle?.(null)
       if (live.current !== board) return { ok: false, gone: true }
       const said = err.error === 'stale' ? lostRace : err.reason || 'Could not save this change.'
       if (!undoing) setError(said)
@@ -304,15 +311,33 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
       await new Promise(resolve => setTimeout(resolve, 50))
   }
 
-  // A change this person saved on the board, as a step of their undo history on the canvas.
-  function recordStep(before, after, label) {
-    if (!before || !after || same(before, after)) return
-    const step = {
-      label,
-      undo: () => replay(after, before),
-      redo: () => replay(before, after),
+  // A change this person makes on the board, as a step of their undo history on the canvas, recorded as
+  // they make it. What it did is known once the server has saved it (settle with { before, after }, or
+  // null when it was not saved: the step then does nothing and is dropped).
+  function pendingStep(label) {
+    let settle
+    const done = new Promise(resolve => { settle = resolve })
+    const run = async (back) => {
+      const step = await done
+      if (!step || same(step.before, step.after)) return { ok: false, message: null }
+      return back ? replay(step.after, step.before) : replay(step.before, step.after)
     }
-    engineRef.current?.recordHostStep?.(step)
+    engineRef.current?.recordHostStep?.({ label, undo: () => run(true), redo: () => run(false) })
+    return settle
+  }
+  // The steps waiting for changes the server has answered: the last one holds the batch.
+  const steps = useRef(new Map())
+  function settleSteps(changes, transition) {
+    const own = changes.filter(change => steps.current.has(change))
+    own.forEach((change, at) => {
+      steps.current.get(change)(at === own.length - 1 ? transition : null)
+      steps.current.delete(change)
+    })
+  }
+  // A change made on the board goes to the server in its turn, and is a step of this person's history now.
+  function queueChange(change) {
+    if (!drawingOwnsBoardChange(change)) steps.current.set(change, pendingStep(boardStepLabel([change], known.current?.model.workshop)))
+    queue.current.push(change)
   }
 
   // Make the step from `from` to `to` again on the board as it stands now: what someone else changed
@@ -398,7 +423,7 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
             label: change.cardToNote ? known.current?.model.workshop?.cards.find(card => card.id === change.cardId)?.label
               : change.noteToCard ? _next?.cards?.find(card => card.id === change.cardId)?.label : undefined })
           if (said) shapeSaid.current.set(sent, said)
-          queue.current.push(sent)
+          queueChange(sent)
           const answer = new Promise(resolve => answers.current.set(sent, resolve))
           playRef.current()
           return answer
@@ -601,6 +626,7 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
       staged.current = false
       // Changes never sent were not saved. One on its way is answered when the server answers.
       for (const change of queue.current) { answers.current.get(change)?.(false); answers.current.delete(change) }
+      settleSteps(queue.current, null)
       queue.current.length = 0
       turnedDown.current = null
       shown.current = null
@@ -802,7 +828,7 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
         return false
       }
       board.update(next)
-      queue.current.push({ cardId, laneId })
+      queueChange({ cardId, laneId })
       playRef.current()
       return true
     },
@@ -813,7 +839,7 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
       const current = known.current?.model.workshop
       if (!editable || !current || !current.cards.some(card => card.id === cardId)) return Promise.resolve(false)
       if (boardKind) {
-        queue.current.push({ edits: [{ kind: 'remove_card', card: { id: cardId } }], cardId })
+        queueChange({ edits: [{ kind: 'remove_card', card: { id: cardId } }], cardId })
         playRef.current()
         return Promise.resolve(true)
       }
@@ -837,7 +863,7 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
         namedRef.current.onTitle?.(current.title, problem)
         return
       }
-      queue.current.push({ rename: { title: label } })
+      queueChange({ rename: { title: label } })
       playRef.current()
     },
     async join() {

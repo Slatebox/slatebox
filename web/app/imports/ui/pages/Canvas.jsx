@@ -1446,7 +1446,11 @@ export default function Canvas() {
                 // A drawing kept in the chat is drawn here as the server saved it (SlateOperationListener), as one
                 // step this person can undo; the conversation's revision fences this page's autosave from now on.
                 if(Array.isArray(kept?.revisions)) {
-                  if(slate.current && Number.isInteger(kept.nativeConversationRevision)) slate.current.nativeConversationRevision = kept.nativeConversationRevision
+                  if(slate.current && Number.isInteger(kept.nativeConversationRevision)) {
+                    slate.current.nativeConversationRevision = kept.nativeConversationRevision
+                    // The page holds this revision now: it is not "a teammate's" newer drawing.
+                    setNativeBoard(board => board && { ...board, nativeConversationRevision: kept.nativeConversationRevision })
+                  }
                   return
                 }
                 if(kept?.board && (slate.current?.creativeKind==='workshop' || takeBoard(kept))) {
