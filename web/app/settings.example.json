@@ -73,7 +73,7 @@
   },
   "stripePrivateKey": "",
   "stripe": {
-    "//": "Server only. apiBase overrides the Stripe API host (tests); apiVersion pins a dated Stripe API release (empty keeps the built-in one). businessPortalConfiguration: an optional customer portal configuration (bpc_...) for a team's Slatebox Business card and receipts.",
+    "//": "Slatebox Cloud only (Slatebox Pro, Slatebox Business and balances; off unless the Cloud license is present); leave empty for local development and self-hosting. Server only. apiBase overrides the Stripe API host (tests); apiVersion pins a dated Stripe API release (empty keeps the built-in one). businessPortalConfiguration: an optional customer portal configuration (bpc_...) for a team's Slatebox Business card and receipts.",
     "apiBase": "",
     "apiVersion": ""
   },
@@ -85,7 +85,7 @@
     }
   },
   "metering": {
-    "//": "Slatebox Cloud's AI and call meter. Leave off for local development and self-hosting; see server/metering/README.md.",
+    "//": "Slatebox Cloud only: its AI and call meter. A self-hosted Slatebox has no meter; leave it off for local development and self-hosting. See server/metering/README.md.",
     "enabled": false,
     "alertEmail": ""
   },
@@ -103,7 +103,7 @@
     "heapIOKey": "",
     "pixabayAPIKey": "",
     "stripe": {
-      "//": "In-app payments (Stripe Payment Element). Set the publishable key (pk_...) that pairs with stripePrivateKey; without one, payments use the hosted Stripe page. inApp: false turns the in-app sheet off. At startup the app checks the pair and sets inApp itself.",
+      "//": "Slatebox Cloud only. In-app payments (Stripe Payment Element). Set the publishable key (pk_...) that pairs with stripePrivateKey; without one, payments use the hosted Stripe page. inApp: false turns the in-app sheet off. At startup the app checks the pair and sets inApp itself.",
       "publishableKey": "",
       "inApp": true
     },
