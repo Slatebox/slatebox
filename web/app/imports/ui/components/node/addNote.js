@@ -55,8 +55,12 @@ export default function addNote(slate, shape) {
 
   function setDimens(tString) {
     const bcopy = cloneDeep(baseOpts)
-    const tpath = Slatebox.utils._transformPath(path, tString)
-    const pbox = Slatebox.utils.getBBox({ path: tpath })
+    const placed = Slatebox.utils._transformPath(path, tString)
+    const pbox = Slatebox.utils.getBBox({ path: placed })
+    // The engine fits a path's own box to the note, so the outline is stored from its own
+    // origin, never in canvas coordinates (around 10000): a path stored there sent the
+    // sibling's line, its preview, the bird's-eye view and the animations across the canvas.
+    const tpath = Slatebox.utils._transformPath(placed, `T${-pbox.x},${-pbox.y}`)
     const iOpts = {
       text: '',
       xPos: xPos + pbox.width / 2 + 20,
