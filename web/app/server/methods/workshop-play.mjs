@@ -47,7 +47,8 @@ export function readWorkshopChanges(input) {
         // `override`: an edit made anyway (a deal past its stages, a task past its rule, a card under another), once the
         // person confirmed it. The edit itself carries override true; the server marks who and when (playWorkshopChanges).
         const anyway = change.override === true || edits.some(edit => edit.override === true)
-        return { edits, ...(cardId && { cardId }), ...(laneId && { laneId }), ...(named && { rename: named }), ...(anyway && { override: true }) }
+        return { edits, ...(cardId && { cardId }), ...(laneId && { laneId }), ...(named && { rename: named }), ...(anyway && { override: true }),
+          ...(anyway && agreed(change.reason) && { reason: change.reason }) }
       }
       throw new Error('Expected a list of edits.')
     }
@@ -83,13 +84,17 @@ export function readWorkshopChanges(input) {
       }
     } else if (key(change?.cardId) && key(change?.laneId) && (change.override === undefined || change.override === true)) {
       // `override`: a move the rules refuse, made anyway once the person confirmed it ("Move anyway").
-      return { cardId: change.cardId, laneId: change.laneId, ...(change.override && { override: true }) }
+      // `reason`: the rule's sentence the person agreed to; a board that would break another is asked about again.
+      return { cardId: change.cardId, laneId: change.laneId, ...(change.override && { override: true }), ...(change.override && agreed(change.reason) && { reason: change.reason }) }
     }
     throw new Error('Expected a move or a rename.')
   })
 }
 
 const gone = what => `That ${what} is no longer on the workshop.`
+
+/** A rule's sentence a person agreed to ("Move anyway"): plain words, as long as a mark keeps (300). */
+const agreed = value => typeof value === 'string' && value.length > 0 && value.length <= 300 && !/[\u0000-\u001f\u007f]/.test(value)
 
 /**
  * Make `changes` on `workshop`, in order, under the workshop's rules. Returns the workshop that
@@ -134,6 +139,10 @@ export function playWorkshopChanges(workshop, changes, noteIds, trades, actor = 
         const lane = laneId ?? board.cards.find(item => item.id === (cardId ?? change.cardId))?.laneId ?? change.laneId ?? null
         return refuse(at, { reason, laneId: lane, ...(limits && { limits }), ...(overridable && { overridable: true }) })
       }
+      // Made anyway past a rule the person did not see (a teammate's change came first, and the board it is made on now
+      // breaks something else): asked again with the sentence as it is now, never saved under one they did not agree to.
+      const unseen = change.override && typeof change.reason === 'string' && (made.report.overrides ?? []).find(item => item.sentence !== change.reason)
+      if (unseen) return refuse(at, { reason: unseen.sentence, laneId: unseen.laneId, overridable: true })
       board = made.workshop
       continue
     }
@@ -230,6 +239,9 @@ export function playWorkshopChanges(workshop, changes, noteIds, trades, actor = 
     if (!next && change.override) {
       next = workshopOverrideCandidate(board, card.id, lane.id, { by: actor?.by || 'Someone', at: actor?.at ?? new Date().toISOString() })
       if (!next) return refuse(at, { reason: workshopHardLimit(board, card.id, lane.id) ?? 'That move is not available.', laneId: lane.id })
+      // Past a rule the person did not see (the board changed under them): asked again, as above.
+      const sentence = next.cards.find(item => item.id === card.id)?.override?.sentence
+      if (typeof change.reason === 'string' && sentence && sentence !== change.reason) return refuse(at, { reason: sentence, laneId: lane.id, overridable: true })
     }
     if (!next) return refuse(at, { reason: workshopRefusal(board, card.id, lane.id) ?? 'That move is not available.', laneId: lane.id, ...(workshopHardLimit(board, card.id, lane.id) === null && { overridable: true }) })
     heard(board, next)

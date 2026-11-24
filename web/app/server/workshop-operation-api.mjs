@@ -286,6 +286,16 @@ export function overridesBetween(before, after) {
     .map((card) => ({ cardId: card.id, laneId: card.laneId, fromLaneId: card.override.from, sentence: card.override.sentence }))
 }
 
+// Every move a list of edits made anyway, by the edit that made it (the engine's report): a card moved past a rule and
+// then on again in the same list, which no longer carries a mark at the end, is held all the same. Comparing the boards
+// (overridesBetween) is the fallback for an engine that does not report them.
+function overridesOf(before, result) {
+  const reported = result.report?.overrides
+  return Array.isArray(reported)
+    ? reported.map(({ cardId, laneId, fromLaneId, sentence }) => ({ cardId, laneId, fromLaneId, sentence }))
+    : overridesBetween(before, result.workshop)
+}
+
 // The short form of one move_card: the same reducer, the same rule a person's drag meets. With `override`, a move
 // the rules refuse is made anyway (the exec gate holds it for the person first: breaks_board_rule).
 function applyCardMove(board, operation, slate, actor) {
@@ -313,7 +323,7 @@ function applyCardMove(board, operation, slate, actor) {
       }
     )
   }
-  const overrides = overridesBetween(board, result.workshop)
+  const overrides = overridesOf(board, result)
   return { next: result.workshop, report: { movedCards: result.report.movedCards, targets: targetsOf(result.report), ...(overrides.length && { overrides }) } }
 }
 
@@ -423,6 +433,7 @@ function applyEdits(board, operation, slate, actor) {
   const result = applyWorkshopEdits(board, operation.edits, { actor })
   if (result.refused)
     throw refusedEdit(board, slate, operation.expectedRevision, result.refused, operation.edits[result.refused.index])
+  const overrides = overridesOf(board, result)
   const added = new Set(board.cards.map((card) => card.id))
   return {
     next: result.workshop,
@@ -433,7 +444,7 @@ function applyEdits(board, operation, slate, actor) {
       ...removedBetween(board, result.workshop),
       targets: targetsOf(result.report),
       // Moves made anyway (move_card with override): held by the exec gate for the person (breaks_board_rule).
-      ...(overridesBetween(board, result.workshop).length && { overrides: overridesBetween(board, result.workshop) }),
+      ...(overrides.length && { overrides }),
     },
   }
 }

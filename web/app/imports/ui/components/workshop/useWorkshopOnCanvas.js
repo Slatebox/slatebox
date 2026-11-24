@@ -10,6 +10,10 @@ import { shapeNotice as shapeSentence, withShapeNotice } from '../../../api/comm
 import { boardsCounterRecordId } from '../../../api/common/slate-boards.mjs'
 import { ensureBoardChromeStyles } from './boardChromeStyles'
 import { KIT_KINDS } from './boardRender'
+import { moverName } from '../../../api/common/mover-name.mjs'
+
+// The boards whose cards are numbers worked out from where they are: a move made anyway works them out again.
+const NUMBER_BOARDS = new Set(['pipeline', 'budget', 'launch-plan', 'hiring-plan'])
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 const validOrigin = origin => Number.isFinite(origin?.x) && Number.isFinite(origin?.y) ? { x: origin.x, y: origin.y } : undefined
@@ -86,8 +90,10 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
   // A drop (or a "Move to") the rules refuse that the person may make anyway: { ask, answer } while the page asks
   // "Move anyway?" with the rule's sentence (the engine's confirmOverride). One at a time: a new ask cancels the last.
   const [moveAnyway, setMoveAnyway] = useState(null)
+  // `numbers`: whether the board works out numbers from where its cards are (a plan, a pipeline, a budget), for the dialog's words.
   const askMoveAnyway = useCallback(ask => new Promise(resolve => {
-    setMoveAnyway(previous => { previous?.answer(false); return { ask, answer: resolve } })
+    const numbers = NUMBER_BOARDS.has(known.current?.model?.workshop?.kind)
+    setMoveAnyway(previous => { previous?.answer(false); return { ask: { ...ask, numbers }, answer: resolve } })
   }), [])
   // Whether the board draws its cards with rounded corners (the slate's own notes do).
   const roundCards = useRef(false)
@@ -235,6 +241,19 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
       const laneId = current?.laneId ?? changedLane(changes.at(-1), known.current.model.workshop)
       turnedDown.current = laneId ? { laneId, reason: refused ? err.reason : 'That was not saved.' } : null
       setError(refused ? err.reason + ' Your change was not saved.' : err.reason || 'Could not save this change.')
+      // A move made anyway that the board, as it is now, would make past another rule (a teammate's change came
+      // first): asked again with the sentence as it is now; confirmed, sent again with it.
+      const again = refused && current?.overridable ? changes[Number.isSafeInteger(current.at) ? current.at : changes.length - 1] : null
+      const moving = again?.override && again.cardId ? known.current.model.workshop?.cards?.find(item => item.id === again.cardId) : null
+      if (moving) {
+        const lane = known.current.model.workshop.lanes.find(item => item.id === again.laneId)
+        askMoveAnyway({ cardId: moving.id, laneId: again.laneId ?? moving.laneId, card: moving.label, lane: lane?.label ?? '', reason: err.reason,
+          ...(again.edits && { to: 'where you put it' }) }).then(yes => {
+          if (!yes || live.current !== board) return
+          queue.current.push({ ...again, reason: err.reason })
+          playRef.current()
+        })
+      }
       // A name the workshop would not take leaves the toolbar; the saved one comes back.
       if (namedRef.current.namesSlate && changes.some(change => change.rename?.title !== undefined)) {
         namedRef.current.onTitle?.(known.current.model.workshop.title, refused ? err.reason : 'The name was not saved.')
@@ -321,7 +340,7 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
         onFocusDone: () => leaveRef.current?.(),
         // A drop the rules refuse: "Move anyway?" with the rule's sentence; confirmed, the server marks who and when.
         confirmOverride: askMoveAnyway,
-        overrideBy: () => String(Meteor.user()?.profile?.name || Meteor.user()?.username || 'You').split(' ')[0],
+        overrideBy: () => moverName(Meteor.user()),
         onChange(_next, change) {
           // A card that became a note goes to the server with the note, so the board and the
           // drawing are saved in one write.
@@ -721,13 +740,17 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
         board.refuse(laneId, reason)
         // A rule the person may break once they say so: asked, as a drop is; confirmed, played as an override.
         const card = current.cards.find(item => item.id === cardId), lane = current.lanes.find(item => item.id === laneId)
-        if (card && lane && workshopOverrideCandidate(current, cardId, laneId, { by: 'You', at: new Date().toISOString() })) {
-          askMoveAnyway({ cardId, laneId, card: card.label, lane: lane.label, reason }).then(yes => {
+        const probe = card && lane && workshopOverrideCandidate(current, cardId, laneId, { by: 'You', at: new Date().toISOString() })
+        if (probe) {
+          // Asked with the sentence the mark keeps (every rule the move breaks), and sent with it: the server asks again
+          // when the board it saves on would break something else.
+          const agreed = probe.cards.find(item => item.id === cardId)?.override?.sentence || reason
+          askMoveAnyway({ cardId, laneId, card: card.label, lane: lane.label, reason: agreed }).then(yes => {
             if (!yes || live.current !== board) return
-            const forced = workshopOverrideCandidate(board.value, cardId, laneId, { by: String(Meteor.user()?.profile?.name || 'You').split(' ')[0], at: new Date().toISOString() })
+            const forced = workshopOverrideCandidate(board.value, cardId, laneId, { by: moverName(Meteor.user()), at: new Date().toISOString() })
             if (!forced) return
             board.update(forced)
-            queue.current.push({ cardId, laneId, override: true })
+            queue.current.push({ cardId, laneId, override: true, reason: agreed })
             playRef.current()
           })
           return false

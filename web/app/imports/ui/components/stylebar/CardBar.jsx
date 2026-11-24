@@ -58,7 +58,7 @@ export default function CardBar({ bar, mode, onEdit, onMove, onAsk, onRemove, la
           {bar.lanes.map((lane, i) => (
             <button key={lane.id} type="button" className="sb-row" role="radio" aria-checked={lane.here} data-autofocus={i === 0 ? '' : undefined}
               onClick={() => { if (!lane.here) onMove(lane.id); setOpen(false) }}>
-              <span /><span>{lane.label}</span><span className="sb-value">{lane.here ? 'here' : ''}</span><span />
+              <span /><span>{lane.label}</span><span className="sb-value">{lane.here ? 'here' : lane.asks ? 'asks first' : ''}</span><span />
             </button>
           ))}
         </div>

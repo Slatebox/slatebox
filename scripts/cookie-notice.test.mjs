@@ -53,3 +53,9 @@ test('Got it answers on the finger lift as well as a click, and stops the tap re
   assert.match(source, /if \(answered\) return null/, 'answered, it leaves the page (the canvas gets its room back)')
   assert.match(source, /addEventListener\('storage'/, 'answered in another tab, it goes here too')
 })
+
+test('Got it is a finger\'s size to touch: its touch area is at least 44px each way', () => {
+  const main = readFileSync(new URL('../web/app/imports/ui/Main.jsx', import.meta.url), 'utf8')
+  assert.match(main, /'& #rcc-confirm-button::after': \{ content: '""', position: 'absolute'.*width: 'max\(100%, 44px\)', height: 'max\(100%, 44px\)'/)
+  assert.match(main, /'& #rcc-confirm-button': \{ position: 'relative', minWidth: 44 \}/)
+})

@@ -1,7 +1,7 @@
 import React from 'react'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
-import { workshopDestinations, workshopNodeIds } from 'slateboxjs/workshops/model'
+import { workshopDestinations, workshopNodeIds, workshopOverrideCandidate } from 'slateboxjs/workshops/model'
 import { placeBar, barMode, cardBar, forNote } from '../../../api/common/note-style.mjs'
 import NoteBar from './NoteBar'
 import LineBar from './LineBar'
@@ -97,6 +97,7 @@ export default function StyleBar({
     workshop: workshop.visible ?? workshop.model,
     cardId: selectedCard,
     destinations: workshopDestinations,
+    asksFirst: (board, cardId, laneId) => workshopOverrideCandidate(board, cardId, laneId, { by: 'check', at: new Date(0).toISOString() }) !== null,
     editable: workshop.editable,
     canEdit: nodes[0] ? v2?.capabilitiesOf?.(nodes[0])?.canEdit !== false : false,
     author,

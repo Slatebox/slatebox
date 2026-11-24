@@ -635,10 +635,15 @@ export function placeBar({ frame, bar, canvas, anchorTop = null }) {
 
 // ── Workshop cards ──────────────────────────────────────────────────────────────────────────
 /** What a workshop card's bar offers: only what the workshop allows. */
-export function cardBar({ workshop, cardId, destinations, editable, canEdit, author, conversation }) {
+export function cardBar({ workshop, cardId, destinations, asksFirst, editable, canEdit, author, conversation }) {
   const card = workshop?.cards?.find((c) => c.id === cardId)
   if (!card) return { controls: [], lanes: [], moveLabel: '' }
-  const lanes = (destinations(workshop, cardId) || []).map((l) => ({ id: l.id, label: l.label, here: l.id === card.laneId }))
+  // A lane the rules refuse that the card may still be moved to anyway (asksFirst) is listed too, in the board's order,
+  // marked "asks first": choosing it opens "Move anyway?". On a phone this menu is how a card is moved.
+  const open = new Set((destinations(workshop, cardId) || []).map((l) => l.id))
+  const lanes = workshop.lanes
+    .filter((l) => open.has(l.id) || (editable && asksFirst?.(workshop, cardId, l.id)))
+    .map((l) => ({ id: l.id, label: l.label, here: l.id === card.laneId, ...(!open.has(l.id) && { asks: true }) }))
   const current = workshop.lanes.find((l) => l.id === card.laneId)
   const controls = []
   if (editable && canEdit) controls.push('edit')

@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import { moverName } from '../../../api/common/mover-name.mjs'
 import { Meteor } from 'meteor/meteor'
 import { Box, Button, IconButton, Typography } from '@mui/material'
 import Close from '@mui/icons-material/Close'
@@ -101,7 +102,7 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
     })
     return grammar.current
   }
-  const actor = { by: (Meteor.user()?.profile?.name || Meteor.user()?.username || 'Someone').split(' ')[0] }
+  const actor = { by: moverName(Meteor.user()) }
   const running = useRef(false)
   const asked = useRef(0)
   const mounted = useRef(false)
@@ -396,7 +397,7 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
     }
     : preview ? {
       reason: stale ? (map ? 'A teammate changed this map. Discard this preview and ask again.' : 'A teammate changed the workshop. Discard this preview and ask again.')
-        : busy || locked ? 'Saving the preview…' : preview.override ? 'Move it anyway, or cancel, to write again.' : 'Keep or discard the preview to write again.',
+        : busy || locked ? 'Saving the preview…' : preview.override ? 'Choose Move anyway or Cancel, then write again.' : 'Keep or discard the preview to write again.',
       actions: preview.override ? <>
         <Button variant="contained" size="small" data-move-anyway="" disabled={locked || busy || stale} onClick={keepChanges}>Move anyway</Button>
         <Button size="small" disabled={busy} onClick={discard}>Cancel</Button>

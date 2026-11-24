@@ -33,7 +33,7 @@ test("the canvas's edit made anyway: kept as an override, played with the server
   assert.equal(card(played.workshop, "northwind").override.from, "lead");
   // Without override: refused with the rule's sentence, and said to be one the person may agree to.
   const refused = playWorkshopChanges(pipeline, readWorkshopChanges([{ cardId: "northwind", edits: [{ ...edit, override: undefined }] }]), undefined, undefined, null);
-  assert.equal(refused.refused.reason, "Deals move one stage at a time. Northwind is in Lead, so Qualified comes first.");
+  assert.equal(refused.refused.reason, "Deals move one stage at a time. Northwind is in Lead, so Qualified comes first. Proposal already holds 3 of 3 deals.");
   assert.equal(refused.refused.overridable, true);
 });
 
@@ -69,7 +69,7 @@ test("a whole save of a board moved anyway (a kept proposal) is made again by it
   assert.ok(kept.workshop, JSON.stringify(kept.refused));
   const mark = card(kept.workshop, "northwind").override;
   assert.equal(mark.by, "Tim");
-  assert.equal(mark.sentence, "Deals move one stage at a time. Northwind is in Lead, so Qualified comes first.");
+  assert.equal(mark.sentence, "Deals move one stage at a time. Northwind is in Lead, so Qualified comes first. Proposal already holds 3 of 3 deals.");
   assert.notEqual(mark.at, "2020-01-01T00:00:00.000Z");
   const undone = replaceWorkshop(kept.workshop, stored, { undo: { by: "tim", revision: 5, workshop: stored }, revision: 5, current: 5, userId: "tim", actor: { by: "Tim" } });
   assert.equal(undone.undone, true);
@@ -132,7 +132,7 @@ async function heldThenConfirmed(t, workshop, edit, rule) {
 
 test("exec: a pipeline's move_card made anyway waits for a yes, then saves marked with the token's name", async (t) => {
   const after = await heldThenConfirmed(t, samplePipeline(), { kind: "move_card", card: { id: "northwind" }, lane: { id: "proposal" } },
-    "Deals move one stage at a time. Northwind is in Lead, so Qualified comes first.");
+    "Deals move one stage at a time. Northwind is in Lead, so Qualified comes first. Proposal already holds 3 of 3 deals.");
   assert.equal(card(after, "northwind").laneId, "proposal");
 });
 
@@ -154,4 +154,68 @@ test("exec: a budget's line item made anyway through the short form (move_worksh
   assert.deepEqual(held.error.details.reasons[0].rules, ["Design has $30k left. Launch ads costs $150k."]);
   // The reducer agrees with what exec says.
   assert.equal("refused" in applyWorkshopEdits(validateWorkshop(sampleBudget()), [{ kind: "move_card", card: { id: "ads" }, lane: { id: "design" }, override: true }]), false);
+});
+
+// Review of 2026-11-23.
+test("exec: a batch that moves a card anyway and then on again is still held for the person", async (t) => {
+  const { gate, context, input } = await setup(t, samplePipeline());
+  // A won deal stays won: Bluefin to Lead anyway, then to Qualified (an ordinary move, which takes its mark away).
+  const held = await gate.call(context({ execKey: "batch" }), { seq: 1, method: "slates.applyOperations", input: input([
+    { kind: "move_card", card: { id: "bluefin" }, lane: { id: "lead" }, override: true }, { kind: "move_card", card: { id: "bluefin" }, lane: { id: "qualified" } }]) });
+  assert.equal(held.error?.code, "confirmation_required", JSON.stringify(held.error));
+  assert.deepEqual(held.error.details.reasons, [{ rule: "breaks_board_rule", shareId: "board", count: 1, rules: ["A won deal stays won. Move it to Lost if it fell through."] }]);
+});
+
+test("a move made anyway on a board that changed since asks again when it would break a rule the person did not see", () => {
+  const pipeline = validateWorkshop(samplePipeline());
+  const edit = { kind: "move_card", card: { id: "northwind" }, lane: { id: "proposal" }, override: true };
+  // The sentence the page showed travels with the change (the engine's WorkshopChangeEvent.reason).
+  const [change] = readWorkshopChanges([{ cardId: "northwind", laneId: "proposal", override: true, reason: "Deals move one stage at a time. Northwind is in Lead, so Qualified comes first.", edits: [edit] }]);
+  assert.equal(change.reason, "Deals move one stage at a time. Northwind is in Lead, so Qualified comes first.");
+  // Proposal filled up since: the move would also break its limit. Not saved; asked again with every rule.
+  const again = playWorkshopChanges(pipeline, [change], undefined, undefined, { by: "Tim" });
+  assert.equal(again.refused?.overridable, true, JSON.stringify(again));
+  assert.equal(again.refused.reason, "Deals move one stage at a time. Northwind is in Lead, so Qualified comes first. Proposal already holds 3 of 3 deals.");
+  // Agreed to as it is now: saved.
+  const agreed = playWorkshopChanges(pipeline, readWorkshopChanges([{ ...change, reason: again.refused.reason }]), undefined, undefined, { by: "Tim" });
+  assert.equal(card(agreed.workshop, "northwind").override.sentence, again.refused.reason);
+  // The short form (a lane move made anyway) is held to the same.
+  const lane = playWorkshopChanges(pipeline, readWorkshopChanges([{ cardId: "northwind", laneId: "proposal", override: true, reason: "x" }]), undefined, undefined, { by: "Tim" });
+  assert.equal(lane.refused?.overridable, true);
+  // A change with no sentence (an older page) is made as before.
+  assert.ok(playWorkshopChanges(pipeline, readWorkshopChanges([{ cardId: "northwind", laneId: "proposal", override: true }]), undefined, undefined, { by: "Tim" }).workshop);
+});
+
+test("a board from a page, a draft or a file carries no move-anyway marks; a guest is named as one", async () => {
+  const { withoutMoveMarks } = await import("../web/app/imports/api/common/workshop-marks.mjs");
+  const { moverName } = await import("../web/app/imports/api/common/mover-name.mjs");
+  const forged = { ...samplePipeline(), cards: samplePipeline().cards.map((item) => item.id === "northwind" ? { ...item, override: { by: "Alice", at: "2026-01-01T00:00:00Z", sentence: "x", from: "lead" } } : item) };
+  assert.equal(validateWorkshop(withoutMoveMarks(forged)).cards.some((item) => item.override), false);
+  // A board its rules refuse without the forged marks is refused (Proposal holding 4 of 3).
+  const over = { ...samplePipeline(), cards: samplePipeline().cards.map((item) => item.id === "northwind" ? { ...item, laneId: "proposal", override: { by: "Alice", at: "2026-01-01T00:00:00Z", sentence: "x", from: "lead" } } : item) };
+  assert.ok(validateWorkshop(over));
+  assert.throws(() => validateWorkshop(withoutMoveMarks(over)));
+  assert.equal(moverName({ profile: { name: "Sam Lee" } }), "Sam");
+  assert.equal(moverName({ username: "sam" }), "sam");
+  assert.equal(moverName({ isAnonymous: true, username: "anon-1f2e" }), "a guest");
+  assert.equal(moverName({}), "a guest");
+  assert.equal(moverName(null), "a guest");
+});
+
+test("Move to lists the lanes that ask first, in the board's order, to a person who may edit", async () => {
+  const { cardBar } = await import("../web/app/imports/api/common/note-style.mjs");
+  const { workshopDestinations, workshopOverrideCandidate } = await import("slateboxjs/workshops/model");
+  const pipeline = validateWorkshop(samplePipeline());
+  const asksFirst = (board, cardId, laneId) => workshopOverrideCandidate(board, cardId, laneId, { by: "check", at: new Date(0).toISOString() }) !== null;
+  const bar = cardBar({ workshop: pipeline, cardId: "northwind", destinations: workshopDestinations, asksFirst, editable: true, canEdit: true, author: false, conversation: true });
+  const lanes = Object.fromEntries(bar.lanes.map((lane) => [lane.id, lane.asks ? "asks" : lane.here ? "here" : "open"]));
+  assert.equal(lanes.lead, "here");
+  assert.equal(lanes.qualified, "open");
+  assert.equal(lanes.proposal, "asks");
+  assert.equal(lanes.won, "asks");
+  // In the board's order.
+  assert.deepEqual(bar.lanes.map((lane) => lane.id), pipeline.lanes.map((lane) => lane.id).filter((id) => id in lanes));
+  // A reader is offered nothing that asks.
+  const reader = cardBar({ workshop: pipeline, cardId: "northwind", destinations: workshopDestinations, asksFirst, editable: false, canEdit: false, author: false, conversation: true });
+  assert.equal(reader.lanes.some((lane) => lane.asks), false);
 });

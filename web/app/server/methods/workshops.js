@@ -1,6 +1,7 @@
 import { mapObjectSelection } from '../../imports/api/common/map-object-edits.mjs'
 import { Meteor } from 'meteor/meteor'
 import { validateWorkshop, workshopToSlate } from 'slateboxjs/workshops/model'
+import { withoutMoveMarks } from '../../imports/api/common/workshop-marks.mjs'
 import { laneChangeTool, laneInstructions, prepareLaneReply } from './lane-chat.mjs'
 import { laneObjectSelection } from '../../imports/api/common/lane-conversation.mjs'
 import { mapChangeTool, mapChatHistory, prepareMapReply } from './map-chat.mjs'
@@ -241,7 +242,8 @@ Meteor.methods({
     }
     let model
     try {
-      model = validateWorkshop(draft)
+      // A new slate's board carries no move-anyway marks: the server writes those, never a page.
+      model = validateWorkshop(withoutMoveMarks(draft))
     } catch {
       throw new Meteor.Error('invalid-workshop', 'The workshop must be valid before opening the canvas.')
     }

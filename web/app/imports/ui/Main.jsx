@@ -563,6 +563,9 @@ export default function Main() {
             },
             '& .sb-cookie-text': { m: 0, minWidth: 0, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
             '& button': { whiteSpace: 'nowrap', cursor: 'pointer', border: 0, margin: 0, flex: 'none' },
+            // Got it is a finger's size to touch (44px each way) however slim it is drawn: its touch area reaches past it.
+            '& #rcc-confirm-button': { position: 'relative', minWidth: 44 },
+            '& #rcc-confirm-button::after': { content: '""', position: 'absolute', top: '50%', left: '50%', width: 'max(100%, 44px)', height: 'max(100%, 44px)', transform: 'translate(-50%, -50%)' },
             [theme.breakpoints.down('sm')]: { '& #rcc-confirm-button': { padding: '4px 14px !important', borderRadius: '16px !important', fontSize: 13, lineHeight: '24px' } },
           })} />
         )}

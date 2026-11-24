@@ -15,6 +15,7 @@ import { slateSaveCore, fencedSlateSaveCore } from '../slate-save'
 import { playWorkshopChanges, readWorkshopChanges, drawingAfter, tradeKey, tradesAfter } from './workshop-play.mjs'
 import { storeTradePictures, storeWorkshopPictures } from './workshop-pictures.mjs'
 import { recordedUndo, replaceWorkshop } from './workshop-replace.mjs'
+import { moverName } from '../../imports/api/common/mover-name.mjs'
 import { uploadS3Object } from '../common/s3Utils'
 import { MAIN_BOARD, boardIdPattern, boardRecordId, boardSaveWrite, boardRecords, boardsCounter, boardsCounterRecordId, slateAsBoard, slateBoards } from '../../imports/api/common/slate-boards.mjs'
 
@@ -161,8 +162,8 @@ Meteor.methods({
       }
       let replaced
       // Who changes a rule, as the rule's audit line says it (the server stamps it, never the page).
-      const account = await Meteor.users.findOneAsync(this.userId, { fields: { 'profile.name': 1, username: 1 } })
-      const actor = { by: String(account?.profile?.name || account?.username || 'Someone').split(' ')[0].slice(0, 80) }
+      const account = await Meteor.users.findOneAsync(this.userId, { fields: { 'profile.name': 1, username: 1, isAnonymous: 1 } })
+      const actor = { by: moverName(account) }
       try { replaced = replaceWorkshop(before, model.workshop, { undo: slate.creative.undo ?? null, revision, current: slate.creative.revision, userId: this.userId, actor }) }
       catch { throw new Meteor.Error('invalid-model', 'That change could not be saved.') }
       // Made on an older revision: a teammate's change came first (before anything else is said of it).
@@ -217,8 +218,8 @@ Meteor.methods({
       const noteIds = drawn ? (drawn.nodes ?? []).map(node => node?.options?.id).filter(id => typeof id === 'string') : undefined
       let played
       // Who moves a card anyway, as the card says it (the server stamps it, never the page).
-      const account = changes.some(change => change.override) ? await Meteor.users.findOneAsync(this.userId, { fields: { 'profile.name': 1, username: 1 } }) : null
-      const actor = account ? { by: String(account.profile?.name || account.username || 'Someone').split(' ')[0].slice(0, 80) } : null
+      const account = changes.some(change => change.override) ? await Meteor.users.findOneAsync(this.userId, { fields: { 'profile.name': 1, username: 1, isAnonymous: 1 } }) : null
+      const actor = account ? { by: moverName(account) } : null
       try { played = playWorkshopChanges(before.workshop, changes, noteIds, slate.creative.trades, actor) } catch { throw invalid() }
       if (played.refused) {
         throw new Meteor.Error('refused', played.refused.reason, { laneId: played.refused.laneId, revision, model: before, at: played.at, ...(played.taken ? { taken: true } : {}),
