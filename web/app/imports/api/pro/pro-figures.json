@@ -17,7 +17,7 @@
   "business": {
     "monthCentsPerSeat": 600,
     "yearCentsPerSeat": 6000,
-    "billingBuilt": false,
+    "billingBuilt": true,
     "contactLabel": "Talk to us about Business",
     "contactUrl": "https://slatebox.com/contact/?topic=business"
   }

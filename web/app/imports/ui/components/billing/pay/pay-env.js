@@ -18,6 +18,8 @@ export const newAttempt = () => (globalThis.crypto?.randomUUID ? globalThis.cryp
 export function makeSession({ action, wallet, choice, attemptId, ui }) {
   if (action === 'pro') return Meteor.callAsync(CONSTANTS.methods.pro.checkout, { interval: choice?.interval === 'year' ? 'year' : 'month', ui, ...(attemptId && { attemptId }) })
   if (action === 'topup') return Meteor.callAsync(CONSTANTS.methods.wallet.createTopUp, { amountCents: choice?.amountCents, wallet: wallet === 'team' ? 'team' : 'me', ui, ...(attemptId && { attemptId }) })
+  // a team's Slatebox Business: the team is the caller's own (server/methods/business.js)
+  if (action === 'business') return Meteor.callAsync(CONSTANTS.methods.business.checkout, { interval: choice?.interval === 'year' ? 'year' : 'month', ui, ...(attemptId && { attemptId }) })
   if (action === 'card') return Meteor.callAsync(CONSTANTS.methods.pro.cardSession, { ...(attemptId && { attemptId }) })
   return Promise.reject(Object.assign(new Error('nothing to pay'), { error: 'invalid', reason: 'There is nothing to pay for here.' }))
 }

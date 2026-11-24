@@ -10,6 +10,7 @@ import { recordGuestAdmission } from './guest-admission.mjs'
 import { refundBalance } from './wallet'
 import { removeAccountAfterRefund } from '../wallet-stripe.mjs'
 import { endProForRemoval, PRO_END_FAILED } from './pro'
+import { endBusinessForRemoval, BUSINESS_END_FAILED } from './business'
 import CONSTANTS from '../../imports/api/common/constants'
 import {
   GuestViews,
@@ -89,7 +90,10 @@ method[CONSTANTS.methods.organizations.delete] = async () => {
       // ends; if either fails, nothing is removed (a failed refund leaves Pro on).
       await removeAccountAfterRefund({
         refund: async () => { await refundBalance('org:' + user.orgId); await refundBalance('user:' + user._id) },
-        endPro: () => endProForRemoval(user).catch(() => { throw new Meteor.Error('pro-end-failed', PRO_END_FAILED) }),
+        endPro: async () => {
+          await endBusinessForRemoval(user.orgId).catch(() => { throw new Meteor.Error('business-end-failed', BUSINESS_END_FAILED) })
+          return endProForRemoval(user).catch(() => { throw new Meteor.Error('pro-end-failed', PRO_END_FAILED) })
+        },
         remove: async () => true,
       }).catch(error => { throw error instanceof Meteor.Error ? error : new Meteor.Error('refund-failed', error.message) })
       await Slates.removeAsync({

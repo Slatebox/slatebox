@@ -2,6 +2,7 @@ import { Meteor } from 'meteor/meteor'
 import AuthManager from '../../imports/api/common/AuthManager'
 import CONSTANTS from '../../imports/api/common/constants'
 import { Slates, SlateAccess, Comments, Messages } from '../../imports/api/common/models'
+import { membersChanged } from './business'
 
 // A team admin who removes a member also removes the slates that member owns in the team (the
 // browser used to delete them through the collection). Called before the account is removed,
@@ -21,6 +22,9 @@ Meteor.methods({
     await Comments.removeAsync({ slateId: { $in: ids } })
     await Messages.removeAsync({ slateId: { $in: ids } })
     await Slates.removeAsync({ _id: { $in: ids } })
+    // the browser removes the account right after this: a team billed for Slatebox Business then
+    // pays for one member fewer (prorated); the hourly check catches a removal that came later
+    membersChanged(admin.orgId, { delayMs: 30_000 })
     return ids.length
   },
 })

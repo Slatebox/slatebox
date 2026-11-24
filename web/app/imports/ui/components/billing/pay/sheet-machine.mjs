@@ -13,7 +13,7 @@
 export const STAGES = Object.freeze(['closed', 'preparing', 'blocked', 'ready', 'confirming', 'finalizing', 'welcome'])
 
 // Actions that pay through a Checkout session; 'manage' needs none, the rest are not payments.
-export const SESSION_ACTIONS = Object.freeze(['pro', 'topup', 'card'])
+export const SESSION_ACTIONS = Object.freeze(['pro', 'topup', 'card', 'business'])
 const BLOCKED_ACTIONS = new Set(['verify', 'help', 'own-key', 'sign-in', 'none'])
 
 // After a successful confirm the server is asked 1 s apart, then 2 s apart, for 15 s in all.

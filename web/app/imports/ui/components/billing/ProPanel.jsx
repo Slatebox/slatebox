@@ -6,6 +6,7 @@ import Typography from '@mui/material/Typography'
 import Link from '@mui/material/Link'
 import CONSTANTS from '../../../api/common/constants'
 import { BUSINESS } from '../../../api/business/catalog.mjs'
+import { PRICING_URL } from '../../../api/common/contact.mjs'
 import { AccountActions, AccountNote, AccountSection, FinePrint, SPACE } from '../../common/AccountLayout'
 import { prefetchPaySheet, usePaySheet } from './pay/PaySheetHost'
 import { proStatusText } from './billing-date.mjs'
@@ -63,10 +64,10 @@ export default function ProPanel({ summary, onChange }) {
           {pro && <Button variant={holding ? 'contained' : 'outlined'} onPointerEnter={prefetchPaySheet} onClick={manage}>{manageLabel}</Button>}
         </AccountActions>
       )}
-      {/* Slatebox Business: sold by talking to us until its billing is built (business/catalog.mjs) */}
+      {/* Slatebox Business: a team's owner or admin gets it on the team page; amounts on the pricing page */}
       <FinePrint sx={{ mt: SPACE.text }}>
-        For a team: {BUSINESS.name}, $6 per person a month or $60 per person a year, plus tax where applicable, with a shared AI and call pool.{' '}
-        <Link href={BUSINESS.contactUrl} target="_blank" rel="noopener noreferrer">{BUSINESS.contactLabel}</Link>
+        For a team: {BUSINESS.name}, paid per person, with a shared AI and call pool. Get it on your team page.{' '}
+        <Link href={PRICING_URL} target="_blank" rel="noopener noreferrer">See pricing</Link>
       </FinePrint>
     </AccountSection>
   )

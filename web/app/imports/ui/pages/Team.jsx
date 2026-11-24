@@ -11,6 +11,7 @@ import { Alert } from '@mui/material'
 import Typography from '@mui/material/Typography'
 import CreateOrganization from '../components/teams/CreateOrganization'
 import ManageOrganization from '../components/teams/ManageOrganization'
+import BusinessPanel from '../components/teams/BusinessPanel'
 import AuthManager from '../../api/common/AuthManager'
 import CONSTANTS from '../../api/common/constants'
 import { Organizations } from '../../api/common/models'
@@ -164,6 +165,11 @@ export default function Team() {
                   .join('')}
               </Typography>
             </Grid>
+            {org && (
+              <Grid size={12}>
+                <BusinessPanel />
+              </Grid>
+            )}
             <Grid size={12}>
               {!org ? (
                 <CreateOrganization privateBetaAccess />

@@ -42,6 +42,7 @@ export function sheetHeader({ action, from, wallet, balanceCents = 0 } = {}) {
   if (action === 'manage') return { eyebrow: 'Slatebox Pro', title: 'Your Pro' }
   if (action === 'card') return { eyebrow: 'Slatebox Pro', title: 'Update your card' }
   if (action === 'pro') return { eyebrow: 'Slatebox Pro', title: GOALS[from]?.title || 'Get Slatebox Pro' }
+  if (action === 'business') return { eyebrow: 'Slatebox Business', title: 'Get Slatebox Business for your team' }
   return { eyebrow: 'Slatebox', title: 'Before you pay' }
 }
 
@@ -58,7 +59,11 @@ export function welcomeCopy({ kind = 'pro', from = 'profile', firstPro = false, 
   const button = goal?.back || 'Done'
   const out = { title: '', lead: '', button, burst: false, announce: '', included: false, countUp: null }
   if (variant === 'pending') {
-    return { ...out, title: kind === 'topup' ? 'Payment received' : 'Welcome to Slatebox Pro', lead: kind === 'topup' ? 'Payment received. Your balance updates in a moment.' : 'Payment received. Pro switches on in a moment.', button: 'Close', announce: 'Payment received' }
+    const pending = {
+      topup: ['Payment received', 'Payment received. Your balance updates in a moment.'],
+      business: ['Welcome to Slatebox Business', 'Payment received. Business switches on for your team in a moment.'],
+    }[kind] || ['Welcome to Slatebox Pro', 'Payment received. Pro switches on in a moment.']
+    return { ...out, title: pending[0], lead: pending[1], button: 'Close', announce: 'Payment received' }
   }
   if (variant === 'processing') {
     return { ...out, title: 'Payment on its way', lead: "Thank you. Your bank is still processing the payment. We'll tell you when it clears.", button: 'Close', announce: 'Payment is processing' }
@@ -69,6 +74,15 @@ export function welcomeCopy({ kind = 'pro', from = 'profile', firstPro = false, 
   }
   if (kind === 'card') {
     return { ...out, title: 'Your card is updated', lead: pastDueCleared ? 'Thank you. Pro is back on, and your next payment uses this card.' : 'Your next payment uses this card.', button: confirmed ? button : 'Getting things ready…', announce: confirmed ? 'Your card is updated.' : 'Card saved' }
+  }
+  if (kind === 'business') {
+    return {
+      ...out,
+      title: 'Welcome to Slatebox Business',
+      lead: confirmed ? 'Thank you. Business is on for everyone in your team. Manage it on the team page.' : 'Thank you. Your payment went through. Switching Business on for your team…',
+      button: confirmed ? button : 'Getting things ready…',
+      announce: confirmed ? 'Welcome to Slatebox Business. Business is on for your team.' : 'Payment went through',
+    }
   }
   if (kind === 'switch') {
     const yearly = interval === 'year'
@@ -121,3 +135,42 @@ export function claimCopy(claim) {
   }
   return null
 }
+
+// ---------- Slatebox Business (a team's purchase, server/business-billing.mjs) ----------
+// No Business amount is written here: the sheet shows the amounts the server read from Stripe
+// (business.offer), and words that would name one link the pricing page instead.
+
+/** An amount in the smallest unit of a currency, as people read it: whole amounts without cents, in the currency Stripe gave. */
+export function moneyIn(cents, currency = 'usd') {
+  const whole = Number.isInteger(cents) && cents % 100 === 0
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: String(currency || 'usd').toUpperCase(), minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 }).format((cents || 0) / 100)
+  } catch {
+    return money(cents)
+  }
+}
+
+const peopleWord = n => `${n} ${n === 1 ? 'person' : 'people'}`
+
+/** One choice in the Business pane, from a price the server read: { label, sub, line, totalCents }. */
+export function businessChoice(price, members) {
+  if (!price) return null
+  const each = moneyIn(price.unitAmount, price.currency)
+  const per = price.interval === 'year' ? 'a year' : 'a month'
+  const totalCents = price.unitAmount * members
+  return {
+    label: `${each} per person ${per}`,
+    sub: `${moneyIn(totalCents, price.currency)} ${per} for ${peopleWord(members)}`,
+    line: `Slatebox Business, ${price.interval === 'year' ? 'yearly' : 'monthly'} × ${peopleWord(members)}`,
+    totalCents,
+  }
+}
+
+/** What Business brings, in the sheet and on the team page. */
+export const BUSINESS_BRINGS = Object.freeze([
+  Object.freeze({ icon: 'ai', text: 'A shared AI and call pool for the team: each member adds what Slatebox Pro includes' }),
+  Object.freeze({ icon: 'video', text: 'Inviting outside agents onto slates, for every member' }),
+])
+
+/** The fine print under the Business Pay button. */
+export const businessFine = interval => `Charged ${interval === 'year' ? 'yearly' : 'monthly'} for each member of the team. Adding or removing a member changes the next payment, prorated. Stop any time from the team page.`

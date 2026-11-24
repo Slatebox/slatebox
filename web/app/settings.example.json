@@ -73,9 +73,16 @@
   },
   "stripePrivateKey": "",
   "stripe": {
-    "//": "Server only. apiBase overrides the Stripe API host (tests); apiVersion pins a dated Stripe API release (empty keeps the built-in one).",
+    "//": "Server only. apiBase overrides the Stripe API host (tests); apiVersion pins a dated Stripe API release (empty keeps the built-in one). businessPortalConfiguration: an optional customer portal configuration (bpc_...) for a team's Slatebox Business card and receipts.",
     "apiBase": "",
     "apiVersion": ""
+  },
+  "payments": {
+    "business": {
+      "//": "Slatebox Business bought in the app for a team (server/business-billing.mjs). The ids of two recurring, per-unit, licensed Stripe prices the owner makes in Stripe: monthly and yearly, quantity = the team's members. The sheet shows the amount Stripe has for them. With either id empty, Business is not sold in the app and the team page says Talk to us.",
+      "monthly": "",
+      "yearly": ""
+    }
   },
   "metering": {
     "//": "Slatebox Cloud's AI and call meter. Leave off for local development and self-hosting; see server/metering/README.md.",

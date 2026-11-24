@@ -32,7 +32,7 @@ Slatebox isn't just one thing. Atop its visual canvas, you can run remote meetin
 
 ## Is there a cloud hosted version?
 
-Yup! [Slatebox Cloud](https://app.slatebox.com) is free. AI and calls on Slatebox Cloud come with Slatebox Pro ($5 a month or $50 a year, plus tax where applicable); top up at our cost plus 5% when you need more, with or without Pro. For a team, [talk to us about Slatebox Business](https://slatebox.com/contact/?topic=business) ($6 per person a month or $60 a year).
+Yup! [Slatebox Cloud](https://app.slatebox.com) is free. AI and calls on Slatebox Cloud come with Slatebox Pro ($5 a month or $50 a year, plus tax where applicable); top up at our cost plus 5% when you need more, with or without Pro. For a team, a team owner or admin gets Slatebox Business, paid per person, on the team page. [See pricing](https://slatebox.com/plans/).
 
 For an installation on your infrastructure, follow the [self-hosting guide](self-host/README.md).
 

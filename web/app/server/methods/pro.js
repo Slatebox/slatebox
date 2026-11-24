@@ -16,6 +16,7 @@ import { canSetFirstPassword, claimAnswer, claimGuestPurchase, mergeGuestPurchas
 import { asMethodError, inAppOn, stripeClient } from './wallet'
 import { alert, meterOn, meterSettings, setProCardReader } from '../metering/meteor'
 import { BILLING_CONTACT_URL } from '../../imports/api/common/contact.mjs'
+import { handleBusiness } from './business'
 
 // Mongo store for pro-billing.mjs.
 export const billingStore = {
@@ -139,9 +140,12 @@ export const mergePurchase = ({ guestId, targetId }) => mergeGuestPurchase({
   audit: entry => Audit.insertAsync({ ...entry, created: Date.now() }),
 }, { guestId, targetId })
 
-// The webhook's entry: Pro first, top-ups after (stripeHooks.js); card changes are handleSetup below.
+// The webhook's entry: Business first (a team's subscription, methods/business.js), then Pro, then
+// top-ups (stripeHooks.js); card changes are handleSetup below.
 // A paid Pro checkout then names the guest's account (even if the tab was closed mid-payment).
 export async function handleBilling(event) {
+  const business = await handleBusiness(event)
+  if (business.handled) return business
   const out = await handleBillingEvent(event, billingDeps())
   if (out.handled && ['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(event?.type)) {
     await claimPurchase(event.data?.object)

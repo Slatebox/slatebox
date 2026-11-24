@@ -1,6 +1,6 @@
 // Slatebox Pro bought through Stripe: who has Pro, the checkout's terms, and Stripe webhook events
-// turned into state. Pro is the one subscription Slatebox sells through Stripe (Slatebox Business
-// is sold through the contact form until its billing is built). Pure apart from the injected Stripe client and store;
+// turned into state. Pro is the one personal subscription Slatebox sells through Stripe; a team's
+// Slatebox Business is business-billing.mjs, whose handler sees every event first. Pure apart from the injected Stripe client and store;
 // the Meteor glue is server/methods/pro.js.
 //
 // Pro is a switch on the meter's monthly amount (policy.mjs), not money in a wallet: a webhook
@@ -373,7 +373,7 @@ export async function handleBillingEvent(event, deps) {
         await recordAction(deps, type, object, sub)
         return { handled: true }
       }
-      // Pro is the only subscription Slatebox sells through Stripe; anything else is looked at.
+      // Business took its own events before this handler (business-billing.mjs); anything else is looked at.
       await alert(`A subscription for an unknown product: ${subscriptionId}`)
       return { handled: true }
     }

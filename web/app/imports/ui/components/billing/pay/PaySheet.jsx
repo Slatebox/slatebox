@@ -15,6 +15,7 @@ import { sheetHeader, welcomeCopy } from './pay-copy.mjs'
 import { makeSession, newAttempt, payUi } from './pay-env'
 import { SheetHeader, visuallyHidden } from './SheetParts'
 import ProPane from './ProPane'
+import BusinessPane from './BusinessPane'
 import TopUpPane from './TopUpPane'
 import CardPane from './CardPane'
 import ManagePane from './ManagePane'
@@ -174,6 +175,7 @@ export default function PaySheet({ state, dispatch }) {
     let body = null
     if (s.stage === 'blocked') body = <BlockedPane blocked={s.blocked} onClose={close} />
     else if (s.request?.action === 'pro') body = <ProPane state={s} summary={summary} onChoose={choose} pay={pay} guest={guest} />
+    else if (s.request?.action === 'business') body = <BusinessPane state={s} onChoose={choose} pay={pay} />
     else if (s.request?.action === 'topup') body = <TopUpPane state={s} summary={summary} onChoose={choose} pay={pay} />
     else if (s.request?.action === 'card') body = <CardPane state={s} summary={summary} pay={pay} onBack={summary?.proState ? () => openPane('manage') : null} />
     else if (s.request?.action === 'manage') body = <ManagePane state={s} summary={summary} pay={pay} dispatch={dispatch} onOpen={openPane} refresh={refresh} />

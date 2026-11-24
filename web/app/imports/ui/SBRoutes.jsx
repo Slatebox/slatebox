@@ -6,7 +6,7 @@ import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 import { useTracker } from 'meteor/react-meteor-data'
-import { oldProLink } from './components/billing/pay/pay-url.mjs'
+import { businessSheetPath, oldProLink } from './components/billing/pay/pay-url.mjs'
 import MySlates from './pages/MySlates'
 import Canvas from './pages/Canvas'
 import AIPassthrough from './pages/AIPassthrough'
@@ -123,6 +123,13 @@ function CanvasForSlate() {
   return <Canvas key={id} />
 }
 
+// /business?plan=monthly|yearly: the site's "Get Slatebox Business". The team page with the sheet
+// preselected; the team page asks a visitor to sign in or make a team first (pay-url.mjs).
+function GetBusiness() {
+  const [params] = useSearchParams()
+  return <Navigate replace to={businessSheetPath(params)} />
+}
+
 export default function SBRoutes() {
   const [isElevatedUser, setElevatedUser] = useState(false)
 
@@ -151,6 +158,7 @@ export default function SBRoutes() {
       />
       <Route path="/profile" element={<ProfileRoute />} />
       <Route path="/pro" element={<GetPro />} />
+      <Route path="/business" element={<GetBusiness />} />
       <Route
         path="/team/slates"
         element={

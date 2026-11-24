@@ -215,7 +215,7 @@ Meteor.publish(
 )
 
 // A person's own team. Old billing fields stay on the server until the cleanup step removes them.
-const hiddenTeamFields = Object.fromEntries([...PLAN_FIELDS, 'customerId', 'invitationLease'].map(field => [field, 0]))
+const hiddenTeamFields = Object.fromEntries([...PLAN_FIELDS, 'customerId', 'invitationLease', 'business.customerId', 'business.subscriptionId', 'business.itemId', 'business.priceId'].map(field => [field, 0]))
 Meteor.publish(CONSTANTS.publications.organizations, async function () {
   const user = await Meteor.users.findOneAsync({ _id: this.userId })
   // A team import waiting for confirmation (hidden: true) is shown to no one (server/team-export).

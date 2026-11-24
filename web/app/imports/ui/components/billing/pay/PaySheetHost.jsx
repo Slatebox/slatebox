@@ -48,7 +48,7 @@ export function useLoadedAllowance() {
 
 
 const defaultChoice = (action, summary) => {
-  if (action === 'pro') return { interval: 'month' }
+  if (action === 'pro' || action === 'business') return { interval: 'month' }
   if (action === 'topup') return { amountCents: (summary?.topUpAmounts || [1000])[0] }
   return null
 }
@@ -78,6 +78,10 @@ async function askServer(paid) {
     if (result.status === 'refunded') return { refunded: true, amountCents: result.amountCents }
     return { pending: true }
   }
+  if (paid.kind === 'business') {
+    const result = await Meteor.callAsync(CONSTANTS.methods.business.confirm, { sessionId: paid.sessionId })
+    return result.status === 'active' ? { done: true, detail: null } : { pending: true }
+  }
   if (paid.kind === 'card') {
     const result = await Meteor.callAsync(CONSTANTS.methods.pro.cardConfirm, { sessionId: paid.sessionId })
     if (result.status === 'updated') return { done: true, detail: { pastDueCleared: Boolean(result.paidInvoice) } }
@@ -91,7 +95,7 @@ async function askServer(paid) {
   return result.status === 'active' ? { done: true, detail: result.claim ? { claim: result.claim } : null } : { pending: true }
 }
 
-const DONE_TOAST = { pro: 'Slatebox Pro is on.', topup: 'Your balance is topped up.', card: 'Your card is updated.' }
+const DONE_TOAST = { pro: 'Slatebox Pro is on.', topup: 'Your balance is topped up.', card: 'Your card is updated.', business: 'Slatebox Business is on for your team.' }
 
 export default function PaySheetHost({ children }) {
   const [state, setState] = useAtom(paySheetAtom)

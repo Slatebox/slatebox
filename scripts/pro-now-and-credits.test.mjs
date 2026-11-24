@@ -149,10 +149,13 @@ test('Pro credits in plain words, from the same numbers the meter uses', () => {
 
 // ---------- Slatebox Business: per seat, inside Cloud, sold through the contact form ----------
 
-test('Business: $6 a person a month or $60 a year, inside the shared Cloud, sold by talking to us for now', () => {
+test('Business: per person, inside the shared Cloud, bought in the app where its prices are set, else by talking to us', () => {
   assert.equal(BUSINESS.name, 'Slatebox Business')
+  // the figures the central pricing page states (pro-figures); the app itself never shows them
   assert.deepEqual(BUSINESS_PRICES.map(p => [p.interval, p.unitAmountPerSeat]), [['month', 600], ['year', 6000]])
-  assert.equal(BUSINESS.billingBuilt, false, 'no Business checkout until its billing ships')
+  assert.equal(BUSINESS.billingBuilt, true, 'the in-app checkout is built (server/business-billing.mjs)')
+  // no amount in the words the app shows: the pricing page and the sheet (Stripe's amount) say it
+  assert.doesNotMatch(BUSINESS.summary, /\$\d/)
   // the site's contact form with the business topic, the same link the marketing site and the docs use
   assert.equal(BUSINESS_CONTACT_URL, 'https://slatebox.com/contact/?topic=business')
   assert.equal(BUSINESS.contactUrl, BUSINESS_CONTACT_URL)
@@ -168,7 +171,7 @@ test('Business: $6 a person a month or $60 a year, inside the shared Cloud, sold
   assert.equal(BUSINESS.creditsPerMember, 'pro')
 })
 
-test('no Slatebox Private, dedicated-server or size-priced copy is left in the app, and nothing sells Business by checkout', async () => {
+test('no Slatebox Private, dedicated-server or size-priced copy is left in the app', async () => {
   const { readdirSync, readFileSync, statSync, existsSync } = await import('node:fs')
   const { join } = await import('node:path')
   const root = new URL('../', import.meta.url).pathname
