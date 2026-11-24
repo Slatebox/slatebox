@@ -147,7 +147,7 @@ test("the library's actions: every one has an HTTP route and a tool (commands co
     }
   }
   assert.deepEqual(library.filter((action) => action.publicCache).map((action) => [action.id, action.publicCache.maxAge]).sort(),
-    [["library.export", 600], ["library.get", 300], ["library.list", 300], ["library.stats", 300]]);
+    [["library.export", 120], ["library.get", 60], ["library.list", 60], ["library.stats", 300]], "what is taken out leaves shared caches within a minute");
   assert.deepEqual(library.filter((action) => action.confirm).map((action) => action.id).sort(), ["library.review.approve", "library.submit"]);
   assert.deepEqual(library.filter((action) => action.destructive).map((action) => action.id).sort(), ["library.discard", "library.review.unpublish"]);
   // Nothing else in the registry is cached: every other answer stays no-store.
