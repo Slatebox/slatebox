@@ -1,185 +1,57 @@
-/* eslint-disable react/jsx-no-useless-fragment */
-/* eslint-disable no-underscore-dangle */
-import React, { useEffect, useState } from 'react'
+// /team: a person in a team manages it here (ManageOrganization: the header, Slatebox Business and
+// the people); a person without one makes one (CreateOrganization), once they have saved their work
+// and verified their email.
+import React from 'react'
 import { Meteor } from 'meteor/meteor'
 import { useSetAtom } from 'jotai'
-import Container from '@mui/material/Container'
 import { useTracker } from 'meteor/react-meteor-data'
-import Grid from '@mui/material/Grid2'
+import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import { Alert } from '@mui/material'
 import Typography from '@mui/material/Typography'
 import CreateOrganization from '../components/teams/CreateOrganization'
 import ManageOrganization from '../components/teams/ManageOrganization'
-import BusinessPanel from '../components/teams/BusinessPanel'
-import AuthManager from '../../api/common/AuthManager'
-import CONSTANTS from '../../api/common/constants'
 import { Organizations } from '../../api/common/models'
 import { registrationDetails } from '../jotai/atoms'
 
 export default function Team() {
-  // const [org, setOrg] = useState(null)
   const setRegistrationDetails = useSetAtom(registrationDetails)
-
   const org = useTracker(() => Organizations.findOne())
+  const user = useTracker(() => Meteor.user())
+  const orgNameType = user?.isEducationCertified ? 'Classroom' : 'Team'
+  const lower = orgNameType.toLowerCase()
 
-  // const [privateBetaAccess, setPrivateBetaAccess] = React.useState(false)
-  const privateBetaAccess = true
+  const page = (children) => (
+    <Box data-team-route="" sx={{ maxWidth: 1040, mx: 'auto', px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 3 } }}>{children}</Box>
+  )
 
-  // console.log('org is now', org, Meteor.user()?.orgId)
+  if (org) return page(<ManageOrganization />)
 
-  const orgNameType = Meteor.user()?.isEducationCertified ? 'Classroom' : 'Team'
-  const orgPeopleType = Meteor.user()?.isEducationCertified
-    ? 'students'
-    : 'members'
+  const blocked = user && (user.isAnonymous || !user.emails?.[0]?.verified)
+  const registerOrVerify = () => setRegistrationDetails({
+    type: 'registration',
+    registrationOpen: true,
+    registrationMessage: user?.isAnonymous
+      ? `Save your work before creating a ${lower}.`
+      : `Before you can create a ${lower}, you must verify your email`,
+  })
 
-  // useEffect(() => {
-  //   async function allowedInPrivateBeta() {
-  //     const allowed = await Meteor.callAsync(
-  //       CONSTANTS.methods.users.allowedInPrivateBeta
-  //     )
-  //     setPrivateBetaAccess(allowed)
-  //   }
-  //   allowedInPrivateBeta()
-  // }, [])
-
-  const [verb, setVerb] = useState('View')
-  const [abilities, setAbilities] = useState([])
-  const uid = Meteor.userId()
-
-  useEffect(() => {
-    async function checkPermissions() {
-      const canManage = await AuthManager.userHasClaim(uid, [
-        CONSTANTS.claims.canEditUsers._id,
-        CONSTANTS.claims.canAddUsers._id,
-      ])
-      setVerb(canManage ? 'Manage' : 'View')
-
-      let newAbilities = []
-      if (await AuthManager.userHasClaim(uid, CONSTANTS.claims.admin._id)) {
-        newAbilities = newAbilities.concat([
-          'add new ones',
-          'edit their info and change their roles',
-          'remove them',
-        ])
-      } else {
-        if (
-          await AuthManager.userHasClaim(uid, CONSTANTS.claims.canAddUsers._id)
-        ) {
-          newAbilities.push('add new ones')
-        }
-        if (
-          await AuthManager.userHasClaim(uid, CONSTANTS.claims.canEditUsers._id)
-        ) {
-          newAbilities.push('edit their info and change their roles')
-        }
-        if (
-          await AuthManager.userHasClaim(
-            uid,
-            CONSTANTS.claims.canRemoveUsers._id
-          )
-        ) {
-          newAbilities.push('remove them')
-        }
-      }
-      setAbilities(newAbilities)
-    }
-
-    checkPermissions()
-  }, [uid])
-
-  if (!org) {
-    // nothing
-  } else if (abilities.length === 0) {
-    abilities.push(
-      `${verb} existing ${orgNameType.toLowerCase()} ${orgPeopleType} below.`
-    )
-  } else {
-    abilities.unshift(
-      `${verb} existing ${orgNameType.toLowerCase()} ${orgPeopleType}`
-    )
-    if (!abilities.includes(' -- all below.')) {
-      abilities.push(' -- all below.')
-    }
-  }
-
-  const handleRegisterOrVerify = async function () {
-    setRegistrationDetails({
-      type: 'registration',
-      registrationOpen: true,
-      registrationMessage: Meteor.user()?.isAnonymous
-        ? `Save your work before creating a ${orgNameType.toLowerCase()}.`
-        : `Before you can create a ${orgNameType.toLowerCase()}, you must verify your email`,
-    })
-  }
-
-  const handleRegisterOrVerifyClick = () => handleRegisterOrVerify()
-
-  return (
-    <Container component="main" maxWidth="lg">
-      <Grid container spacing={4} alignItems="center" justifyContent="flex-end">
-        <Grid size={12} />
-
-        {!org &&
-        Meteor.user() &&
-        (Meteor.user()?.isAnonymous ||
-          !Meteor.user()?.emails?.[0]?.verified) ? (
-          <>
-            <Grid size={12}>
-              <Alert severity="info">
-                Save your work and verify your email before making a{' '}
-                {orgNameType.toLowerCase()}!
-              </Alert>
-            </Grid>
-            <Grid size={12}>
-              <Button variant="contained" onClick={handleRegisterOrVerifyClick}>
-                {Meteor.user()?.isAnonymous ? (
-                  <>Save My Slatebox</>
-                ) : (
-                  <>Verify Email</>
-                )}
-              </Button>
-            </Grid>
-          </>
-        ) : (
-          <>
-            <Grid size={12}>
-              <Typography variant="h5" color="secondary">
-                {privateBetaAccess && (
-                  <>
-                    {!org ? (
-                      <>Create your {orgNameType.toLowerCase()} below</>
-                    ) : (
-                      <>
-                        {verb} your {orgNameType.toLowerCase()} - Below are the{' '}
-                        {org.name} {orgPeopleType}:
-                      </>
-                    )}
-                  </>
-                )}
-              </Typography>
-              <Typography variant="subtitle1" color="textPrimary">
-                {abilities.slice(0, abilities.length - 1).join(', ')}{' '}
-                {abilities
-                  .slice(abilities.length - 1, abilities.length)
-                  .join('')}
-              </Typography>
-            </Grid>
-            {org && (
-              <Grid size={12}>
-                <BusinessPanel />
-              </Grid>
-            )}
-            <Grid size={12}>
-              {!org ? (
-                <CreateOrganization privateBetaAccess />
-              ) : (
-                <ManageOrganization privateBetaAccess />
-              )}
-            </Grid>
-          </>
-        )}
-      </Grid>
-    </Container>
+  return page(
+    <Box sx={{ display: 'grid', gap: 2 }}>
+      <Box component="header">
+        <Typography variant="h4" component="h1" sx={{ fontWeight: 750, fontSize: { xs: 26, sm: 32 } }}>Create your {lower}</Typography>
+        <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+          Work on slates together, share them with everyone on the {lower}, and manage who can do what.
+        </Typography>
+      </Box>
+      {blocked ? (
+        <Box sx={(theme) => ({ bgcolor: 'shell.surface', border: '1px solid', borderColor: 'shell.border', borderRadius: '14px', p: 2,
+          ...theme.applyStyles('dark', { bgcolor: 'background.paper' }) })}>
+          <Typography variant="body2" sx={{ mb: 1.5 }}>Save your work and verify your email before making a {lower}.</Typography>
+          <Button variant="contained" onClick={registerOrVerify}>{user?.isAnonymous ? 'Save my Slatebox' : 'Verify email'}</Button>
+        </Box>
+      ) : (
+        <CreateOrganization privateBetaAccess />
+      )}
+    </Box>
   )
 }

@@ -5,8 +5,9 @@ import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Link from '@mui/material/Link'
-import Paper from '@mui/material/Paper'
+import Chip from '@mui/material/Chip'
 import Typography from '@mui/material/Typography'
+import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined'
 import CONSTANTS from '../../../api/common/constants'
 import { Organizations } from '../../../api/common/models'
 import { PRICING_URL } from '../../../api/common/contact.mjs'
@@ -15,9 +16,16 @@ import { usePaySheet, prefetchPaySheet } from '../billing/pay/PaySheetHost'
 import { newAttempt, paymentsHere } from '../billing/pay/pay-env'
 import { billingDate } from '../billing/billing-date.mjs'
 
-// Slatebox Business on the team page: get it for the team (owner or admin, where the server sells
+// Slatebox Business on the team page, as a compact card (status, plan, seats, renewal): get it for the team (owner or admin, where the server sells
 // it), see where it stands, stop or keep renewing, and the card and receipts. No amount is written
 // here: the sheet shows Stripe's, and "See pricing" links the pricing page.
+// chip colors with AA contrast on the cream card, light and dark
+const TONE = {
+  on: (theme) => ({ bgcolor: '#dce9ce', color: '#183d28', ...theme.applyStyles('dark', { bgcolor: '#3c5344', color: '#e5f1dc' }) }),
+  warn: (theme) => ({ bgcolor: '#fbecc8', color: '#5c3d00', ...theme.applyStyles('dark', { bgcolor: '#5a4519', color: '#ffe7b3' }) }),
+  off: (theme) => ({ bgcolor: '#e9ebe4', color: '#3b4a40', ...theme.applyStyles('dark', { bgcolor: '#3a4a40', color: '#e3e8df' }) }),
+}
+
 export default function BusinessPanel() {
   const { open } = usePaySheet()
   const [offer, setOffer] = useState(null)
@@ -58,52 +66,74 @@ export default function BusinessPanel() {
     setNote({ severity: 'success', text: renew ? 'Business renews as before.' : 'Business stops at the end of this period. Your team keeps it until then.' })
   })
 
-  let body
+  // what the card says, by state: a status chip, one line of facts, the actions, and the fine print
+  let status
+  let facts
+  let actions = null
+  let fine = null
   if (summary?.source === 'contract') {
-    body = <Typography variant="body2">Your team has {BUSINESS.name} through an agreement with us. {talk} to change it.</Typography>
+    status = { label: 'Active', tone: 'on' }
+    facts = 'Through an agreement with us.'
+    fine = <>{talk} to change it.</>
   } else if (summary?.source === 'stripe' && summary.status !== 'ended') {
     const when = billingDate(summary.endsOn || summary.renewsOn)
-    let line = `Your team has ${BUSINESS.name}`
-    if (summary.members) line += `, for ${summary.members} ${summary.members === 1 ? 'person' : 'people'}`
-    if (summary.pastDue) line += '. The last payment did not go through: update the card to keep it.'
-    else if (summary.endsOn) line += `. It stops on ${when}.`
-    else if (when) line += `. It renews ${summary.interval === 'year' ? 'yearly' : 'monthly'} on ${when}.`
-    else line += '.'
-    body = (
+    const parts = [summary.interval === 'year' ? 'Yearly' : 'Monthly']
+    if (summary.members) parts.push(`${summary.members} ${summary.members === 1 ? 'seat' : 'seats'}`)
+    if (summary.pastDue) parts.push('The last payment did not go through: update the card to keep it.')
+    else if (summary.endsOn) parts.push(`Stops on ${when}`)
+    else if (when) parts.push(`Renews on ${when}`)
+    status = { label: 'Active', tone: 'on' }
+    if (summary.endsOn) status = { label: 'Ending', tone: 'warn' }
+    if (summary.pastDue) status = { label: 'Payment problem', tone: 'warn' }
+    facts = parts.join(' · ')
+    fine = <>You pay for members who have joined: invitations not yet accepted are not counted. {summary.interval === 'year' ? 'A member who joins is charged at once for the rest of the year; one who leaves becomes a credit on the next payment.' : 'A member who joins or leaves changes the next payment, prorated.'} {pricing}</>
+    actions = manager ? (
       <>
-        <Typography variant="body2">{line} You pay for members who have joined: invitations not yet accepted are not counted. {summary.interval === 'year' ? 'A member who joins is charged at once for the rest of the year; one who leaves becomes a credit on the next payment.' : 'A member who joins or leaves changes the next payment, prorated.'} {pricing}</Typography>
-        {manager && (
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.5 }}>
-            <Button variant="outlined" disabled={busy} onClick={portal}>Card and receipts</Button>
-            {summary.cancelAtPeriodEnd
-              ? <Button variant="contained" disableElevation disabled={busy} onClick={() => renewal(true)}>Keep Business</Button>
-              : <Button variant="text" disabled={busy} onClick={() => renewal(false)}>Stop renewing</Button>}
-          </Box>
-        )}
-        {!manager && <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>The team&apos;s owner and admins manage it.</Typography>}
+        <Button variant="outlined" size="small" disabled={busy} onClick={portal}>Card and receipts</Button>
+        {summary.cancelAtPeriodEnd
+          ? <Button variant="contained" size="small" disableElevation disabled={busy} onClick={() => renewal(true)}>Keep Business</Button>
+          : <Button variant="text" size="small" disabled={busy} onClick={() => renewal(false)}>Stop renewing</Button>}
       </>
-    )
+    ) : <Typography variant="body2" sx={{ color: 'text.secondary' }}>The team&apos;s owner and admins manage it.</Typography>
   } else if (onSale && manager) {
-    body = (
+    status = { label: 'Not active', tone: 'off' }
+    facts = 'A shared AI and call pool for the team, and every member can invite outside agents onto slates.'
+    fine = <>{BUSINESS.summary} You pay for the {offer.members} {offer.members === 1 ? 'member who has' : 'members who have'} joined; invitations not yet accepted are not counted until they are. {pricing}</>
+    actions = (
       <>
-        <Typography variant="body2">{BUSINESS.summary} A shared AI and call pool for the team, and every member can invite outside agents onto slates. You pay for the {offer.members} {offer.members === 1 ? 'member who has' : 'members who have'} joined; invitations not yet accepted are not counted until they are. {pricing}</Typography>
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.5 }}>
-          <Button variant="contained" disableElevation onPointerEnter={prefetchPaySheet} onClick={() => open({ action: 'business', choice: { interval: 'month' } })}>Get Business monthly</Button>
-          <Button variant="outlined" onPointerEnter={prefetchPaySheet} onClick={() => open({ action: 'business', choice: { interval: 'year' } })}>Get Business yearly</Button>
-        </Box>
+        <Button variant="contained" size="small" disableElevation onPointerEnter={prefetchPaySheet} onClick={() => open({ action: 'business', choice: { interval: 'month' } })}>Get Business monthly</Button>
+        <Button variant="outlined" size="small" onPointerEnter={prefetchPaySheet} onClick={() => open({ action: 'business', choice: { interval: 'year' } })}>Get Business yearly</Button>
       </>
     )
   } else if (onSale) {
-    body = <Typography variant="body2">{BUSINESS.summary} The team&apos;s owner or an admin can get it for everyone here. {pricing}</Typography>
+    status = { label: 'Not active', tone: 'off' }
+    facts = 'The team\'s owner or an admin can get it for everyone here.'
+    fine = <>{BUSINESS.summary} {pricing}</>
   } else {
-    body = <Typography variant="body2">{BUSINESS.summary} {pricing} · {talk}</Typography>
+    status = { label: 'Not active', tone: 'off' }
+    facts = BUSINESS.summary
+    fine = <>{pricing} · {talk}</>
   }
 
   return (
-    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }} data-business-panel={summary?.source || (onSale ? 'on-sale' : 'talk')}>
-      <Typography variant="h6" component="h2" sx={{ mb: 0.75 }}>{BUSINESS.name}</Typography>
-      {body}
+    <Box component="section" aria-labelledby="business-panel-title" data-business-panel={summary?.source || (onSale ? 'on-sale' : 'talk')}
+      sx={(theme) => ({ bgcolor: 'shell.surface', border: '1px solid', borderColor: 'shell.border', borderRadius: '14px', p: { xs: 1.75, sm: 2 },
+        ...theme.applyStyles('dark', { bgcolor: 'background.paper' }) })}>
+      <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Box aria-hidden sx={{ width: 40, height: 40, borderRadius: '10px', display: 'grid', placeItems: 'center', bgcolor: 'shell.selected', color: 'shell.selectedInk', flex: '0 0 auto' }}>
+          <WorkspacePremiumOutlinedIcon />
+        </Box>
+        <Box sx={{ flex: '1 1 260px', minWidth: 0 }}>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Typography id="business-panel-title" component="h2" sx={{ fontWeight: 700, fontSize: 17 }}>{BUSINESS.name}</Typography>
+            <Chip size="small" label={status.label} sx={TONE[status.tone]} data-business-status={status.tone} />
+          </Box>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>{facts}</Typography>
+        </Box>
+        {actions && <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>{actions}</Box>}
+      </Box>
+      {fine && <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1.25, mb: 0, lineHeight: 1.5 }}>{fine}</Typography>}
       {note && <Alert severity={note.severity} sx={{ mt: 1.5 }}>{note.text}</Alert>}
-    </Paper>
+    </Box>
   )
 }
