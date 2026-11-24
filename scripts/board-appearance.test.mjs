@@ -137,3 +137,70 @@ test('keeping a look on a business board saves: the server makes the whole save 
   const colored = proposeAppearance(plan, 'color ' + plan.lanes[0].label + ' green').workshop
   assert.deepEqual(replaceWorkshop(plan, colored, { revision: 1, current: 1, userId: 'u1' }).workshop.appearance, { colors: { [plan.lanes[0].id]: 'green' } })
 })
+
+// Review fixes (2026-11-24): words about the wording are the agent's, a column named is asked about, colors clear.
+test('a request about the words is not read as a look: it goes on to the agent', () => {
+  for (const said of ['make the notes shorter', 'make the tasks shorter', 'make the labels clearer', 'make the names clearer', 'make the steps clearer',
+    'make the board darker', 'highlight the teams', 'make this clearer', 'clearer', 'bold']) {
+    assert.equal(edits(team(), said), null, said)
+    assert.equal(edits(matrix(), said), null, said)
+  }
+  // The looks themselves still read.
+  assert.deepEqual(edits(team(), 'make the labels bolder'), [{ kind: 'set_appearance', headers: 'strong' }])
+  assert.deepEqual(edits(team(), 'make the cards shorter'), [{ kind: 'set_appearance', density: 'compact' }])
+})
+
+test('"reset the colors" takes every column color away, and "reset the look" does too', () => {
+  const colored = proposeLaneReply(proposeLaneReply(team(), 'color Doing green').workshop, 'color Done blue').workshop
+  const shown = proposeLaneReply({ ...colored, appearance: { ...colored.appearance, borders: 'strong' } }, 'reset the colors')
+  assert.deepEqual(shown.workshop.appearance, { borders: 'strong' })
+  assert.deepEqual(proposeLaneReply(colored, 'clear the colours').workshop.appearance, undefined)
+  assert.deepEqual(proposeLaneReply({ ...colored, appearance: { ...colored.appearance, lines: true } }, 'reset the look').workshop.appearance, undefined)
+  // Nothing to clear is said, with no board to keep.
+  const none = proposeLaneReply(team(), 'reset the colors')
+  assert.equal(none.workshop, undefined)
+  assert.match(none.reply, /already have their own colors/)
+})
+
+test('a column named in a look is asked about, not applied to the whole board; the board named is the board', () => {
+  for (const [said, whole] of [['make the headers of Doing bolder', 'Make the headers bolder'], ['make the borders on Done stronger', 'Make the borders stronger']]) {
+    assert.throws(() => edits(team(), said), error => error.code === 'appearance-choices' && error.choices[0].say === whole && /^Color D/.test(error.choices[1].say), said)
+  }
+  // Another board's name after the parts is not this one: not read as a look here.
+  assert.equal(edits(team(), 'make the columns in Impact × effort more pronounced'), null)
+  assert.deepEqual(edits(matrix(), 'make the columns in impact x effort more pronounced'), [{ kind: 'set_appearance', emphasis: 'strong' }])
+  assert.deepEqual(edits({ ...matrix(), title: 'Q3 bets' }, 'make the columns in impact x effort more pronounced'), [{ kind: 'set_appearance', emphasis: 'strong' }])
+})
+
+test('looks that did nothing or cost an agent turn: bigger cards, every column a color, lines, one column standing out', () => {
+  const same = proposeAppearance(team(), 'make the cards bigger')
+  assert.equal(same.workshop, undefined, 'no preview of a board that does not change')
+  assert.match(same.reply, /no larger size/)
+  const blue = proposeAppearance(team(), 'make the columns blue')
+  assert.deepEqual(blue.workshop.appearance, { colors: { todo: 'blue', doing: 'blue', done: 'blue' } })
+  assert.equal(blue.reply, 'The board now has To do in blue, Doing in blue and Done in blue.')
+  assert.deepEqual(proposeAppearance(matrix(), 'color the columns blue').workshop.appearance.colors, { 'q-do-now': 'blue', 'q-plan': 'blue', 'q-later': 'blue', 'q-skip': 'blue' })
+  assert.throws(() => edits(team(), 'make the column headers blue'), error => error.code === 'appearance-choices' && error.choices[0].say === 'Color the columns blue')
+  assert.deepEqual(edits(team(), 'make the lines thicker'), [{ kind: 'set_appearance', lines: true, borders: 'strong' }])
+  assert.deepEqual(edits(team(), 'highlight Doing'), [{ kind: 'set_appearance', lane: { id: 'doing' }, color: 'yellow' }])
+  assert.deepEqual(edits(matrix(), 'make Do now stand out'), [{ kind: 'set_appearance', lane: { id: 'q-do-now' }, color: 'yellow' }])
+  assert.deepEqual(edits(team(), 'highlight the columns'), [{ kind: 'set_appearance', emphasis: 'strong' }])
+})
+
+test('"the cards in Backlog" goes to the board of the Backlog column, not to a board titled Backlog', async () => {
+  const { pickBoard } = await import('../web/app/imports/api/common/board-pick.mjs')
+  const backlog = validateWorkshop({ version: 1, title: 'Backlog', lanes: [{ id: 'ideas', label: 'Ideas' }, { id: 'later', label: 'Later' }], cards: [] })
+  const sprint = validateWorkshop({ version: 1, title: 'Sprint', lanes: [{ id: 'backlog', label: 'Backlog' }, { id: 'doing', label: 'Doing' }], cards: [] })
+  const boards = [{ boardId: 'main', model: backlog }, { boardId: 'b2', model: sprint }]
+  const picked = pickBoard(boards, 'move the cards in Backlog to Doing')
+  assert.notEqual(picked.board?.boardId, 'main')
+  assert.ok(!picked.message || /in Backlog/.test(picked.message))
+})
+
+test('the library refine agent sees the board’s current look, so it can change it from what it is', async () => {
+  const { refineData } = await import('../web/app/server/library/refine-ai.mjs')
+  const board = proposeLaneReply(matrix(), 'color Do now green').workshop
+  const shown = JSON.parse(refineData({ item: { kind: 'component', title: 'T', summary: 's' }, board, message: 'back to standard' }).data)
+  assert.deepEqual(shown.item.board.appearance, { colors: { 'q-do-now': 'green' } })
+  assert.equal(JSON.parse(refineData({ item: { kind: 'component', title: 'T', summary: 's' }, board: matrix(), message: 'x' }).data).item.board.appearance, undefined)
+})

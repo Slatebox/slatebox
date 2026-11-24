@@ -647,7 +647,7 @@ function propose(input, asked, selection, actor) {
   const message = aboutTheBoard(asked, selection)
   // How the board looks ("make the columns more pronounced", "color Do now green"): every kind of board, no AI call.
   const look = proposeAppearance(original, message, selection)
-  if (look) return { ...look, workshop: validateWorkshop(look.workshop) }
+  if (look) return look.workshop ? { ...look, workshop: validateWorkshop(look.workshop) } : look
   // How the board behaves (its rules), a business board's own fields, and the questions about them.
   const own = boardChat?.proposeBoardChange(original, message, selection, actor)
   if (own) return own.workshop ? { ...own, workshop: validateWorkshop(own.workshop) } : own

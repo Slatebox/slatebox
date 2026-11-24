@@ -121,7 +121,8 @@ export function refineData({ item, board, message }) {
     ...(item.description && { description: item.description }),
     ...(item.category && { category: item.category }),
     synonyms: item.synonyms || [], authorName: item.authorName,
-    ...(board && { board: { kind: board.kind, title: board.title, lanes: board.lanes, cards: board.cards, behaviour: board.behaviour, rules } }),
+    // Its look too (set_appearance), so "back to standard" or "Do now its own color again" starts from what it is.
+    ...(board && { board: { kind: board.kind, title: board.title, lanes: board.lanes, cards: board.cards, behaviour: board.behaviour, rules, ...(board.appearance && { appearance: board.appearance }) } }),
   }
   const fence = '`'.repeat(3)
   return { data: JSON.stringify({ item: shown, message }).replaceAll(fence, "'''") }

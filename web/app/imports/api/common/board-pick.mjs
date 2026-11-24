@@ -33,9 +33,11 @@ export function boardInMessage(boards, message) {
       const said = name.split(' ').map(escape).join('[^a-z0-9]+')
       const start = new RegExp('^(?:on|in|to|for)\\s+(?:the\\s+)?' + said + '(?:\\s+board)?\\s*[,:\\-–—]\\s*', 'i')
       const end = new RegExp('\\s+(?:on|in|to|for)\\s+(?:the\\s+)?' + said + '(?:\\s+board)?\\s*[.!]?$', 'i')
-      // Or after the board's parts it names ("make the columns in Impact × effort more pronounced").
-      const middle = new RegExp('(?<=\\b(?:columns?|lanes?|cards?|quadrants?|squares?|headers?|borders?|stages?))\\s+(?:on|in|of)\\s+(?:the\\s+)?' + said + '(?:\\s+board)?(?=\\s)', 'i')
-      const hit = start.exec(text) ?? end.exec(text) ?? middle.exec(text)
+      // Or after the board's parts it names ("make the columns in Impact × effort more pronounced"), unless another board
+      // has a column of that name ("the cards in Backlog" on a slate with a Backlog board and a Backlog column).
+      const middle = new RegExp('(?<=\\b(?:columns?|lanes?|quadrants?|squares?|headers?|borders?|stages?))\\s+(?:on|in|of)\\s+(?:the\\s+)?' + said + '(?:\\s+board)?(?=\\s)', 'i')
+      const laneElsewhere = boards.some(other => other !== board && (other.model?.lanes ?? []).some(lane => words(lane.label) === name))
+      const hit = start.exec(text) ?? end.exec(text) ?? (laneElsewhere ? null : middle.exec(text))
       if (hit) { found.push({ board, rest: (text.slice(0, hit.index) + ' ' + text.slice(hit.index + hit[0].length)).trim() }); break }
     }
   }
