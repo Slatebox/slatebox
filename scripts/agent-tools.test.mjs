@@ -181,7 +181,7 @@ test("the one option: typed tools are listed unless SLATEBOX_MCP_TYPED_TOOLS is 
 });
 
 test("prompts: mind map, flowchart, project plan and presentation, filled from their arguments", () => {
-  assert.deepEqual(PROMPTS.map((p) => p.name), ["mind_map", "flowchart", "project_plan", "presentation", ...(INSTALLER_PUBLISHED ? ["install_slatebox"] : [])]);
+  assert.deepEqual(PROMPTS.map((p) => p.name), ["mind_map", "flowchart", "project_plan", "presentation", "install_slatebox"]);
   const mind = promptMessages(PROMPTS[0], { topic: "Q1 launch ideas" });
   assert.equal(mind.messages.length, 1);
   assert.equal(mind.messages[0].role, "user");

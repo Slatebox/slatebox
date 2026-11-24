@@ -1,6 +1,6 @@
 {
   "name": "slatebox-mcp",
-  "version": "0.3.3",
+  "version": "0.3.5",
   "mcpName": "com.slatebox/slatebox",
   "description": "Slatebox is an open source visual intelligence platform where you can invite any AI via MCP to collaborate with you and your team.",
   "keywords": [

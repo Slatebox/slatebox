@@ -175,10 +175,11 @@ test('upgrade without a newer image is nothing to change; an unavailable image i
   const same = await cli(['upgrade', '--to', IMAGE, '--json'], { run: docker.run, home })
   assert.equal(same.code, 0, same.stderr)
   assert.equal(same.events.at(-1).nothingToChange, true)
-  // The public image (not published yet, and not on this host): exit 4 with what to do.
+  // The public image cannot be fetched (unreachable here, and not on this host): exit 4 with what to do.
   const missing = await cli(['upgrade', '--to', 'ghcr.io/slatebox/slatebox:latest', '--yes', '--json'], { run: docker.run, home })
   assert.equal(missing.code, 4)
-  assert.match(missing.events.at(-1).message, /not published yet/)
+  assert.match(missing.events.at(-1).message, /needs no login: check that this machine can reach ghcr\.io/)
+  assert.doesNotMatch(missing.events.at(-1).message, /not published/)
 })
 
 test('uninstall keeps the data volume and the key; deleting data needs the name typed back', async () => {

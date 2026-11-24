@@ -13,7 +13,6 @@ import {
   CallToolRequestSchema, GetPromptRequestSchema, ListPromptsRequestSchema, ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { INSTALLER_PUBLISHED } from "../web/app/server/actions/agent-surface.mjs";
 import { listedTools, renderDeclarations, renderExecTool } from "../web/app/server/actions/client-render.mjs";
 import { mountMcp } from "../web/app/server/mcp/endpoint.mjs";
 import { EXEC_LIMITS } from "../web/app/server/exec/limits.mjs";
@@ -257,7 +256,7 @@ test("prompts list and fill; resources give the client docs and a slate as JSON 
   const { world, connect } = await setup(t);
   const client = await connect();
   const { prompts } = await client.listPrompts();
-  assert.deepEqual(prompts.map((p) => p.name), ["mind_map", "flowchart", "project_plan", "presentation", ...(INSTALLER_PUBLISHED ? ["install_slatebox"] : [])]);
+  assert.deepEqual(prompts.map((p) => p.name), ["mind_map", "flowchart", "project_plan", "presentation", "install_slatebox"]);
   const filled = await client.getPrompt({ name: "mind_map", arguments: { topic: "launch ideas" } });
   assert.match(filled.messages[0].content.text, /mind map of launch ideas/);
   await assert.rejects(() => client.getPrompt({ name: "mind_map", arguments: {} }), /needs topic/);

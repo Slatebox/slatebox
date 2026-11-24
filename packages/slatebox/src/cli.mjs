@@ -67,7 +67,7 @@ then --answers, then the environment. Consent never comes from the environment:
   --k8s-context <ctx> --namespace <ns> --route none|ingress|gateway --ingress-class <c>
   --gateway-ref <ns/name> --tls-issuer ClusterIssuer/<name> --storage-class <sc>
   --format compose|manifests|helm --out <dir>          (target export)
-  --image <ref> --image-archive <file.tar>             (until the public image is published)
+  --image <ref> --image-archive <file.tar>             (a local build instead of the public image)
 
   --new-encryption-key    replace a lost SLATEBOX_KEY_ENCRYPTION_KEY over existing data
                           (keys people saved become unreadable; refused without it)
@@ -109,7 +109,7 @@ function parse(argv) {
 // would link two. A sibling checkout or an installed copy is used when there
 // is one; otherwise npx fetches this exact version (a range would install
 // whatever 0.3.x is newest on first use, unasked).
-export const SLATE_PACKAGE = 'slatebox-mcp@0.3.4'
+export const SLATE_PACKAGE = 'slatebox-mcp@0.3.5'
 
 function slateCli() {
   try { return createRequire(import.meta.url).resolve('slatebox-mcp/src/slatebox.js') } catch { /* not installed */ }

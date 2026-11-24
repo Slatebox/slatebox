@@ -262,11 +262,10 @@ export const PROMPTS = [
 ]
 
 // The install_slatebox prompt sends people to `npx slatebox`. It is listed (on the hosted /mcp and,
-// through the regenerated exec-tool.json, in slatebox-mcp) only once the npm package "slatebox" is
-// published: until then an agent would send people to a missing package, or to whoever registers the
-// name first. The installer's publish runbook flips this after `npm publish` and regenerates
-// exec-tool.json (scripts/agent-tools.test.mjs holds the two together with the image pin).
-export const INSTALLER_PUBLISHED = false
+// through the regenerated exec-tool.json, in slatebox-mcp) because the npm package "slatebox" is
+// published with its image pinned by digest. Turning it off again means regenerating exec-tool.json
+// (scripts/agent-tools.test.mjs holds the flag, the generated files and the image pin together).
+export const INSTALLER_PUBLISHED = true
 
 export const INSTALL_PROMPT = {
   name: 'install_slatebox',

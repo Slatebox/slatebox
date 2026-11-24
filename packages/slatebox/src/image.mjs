@@ -4,11 +4,10 @@ import { capabilitiesFromProbe, LEGACY_SETTINGS } from './ai/settings-adapter.mj
 import { EXIT, InstallError } from './errors.mjs'
 
 /**
- * Each release of this package installs one image. Until the image is
- * published on GHCR (an owner-gated step), PINNED_DIGEST is null and the
- * installer uses the tag; give --image or --image-archive to install a local
- * build. When the image is published, the release sets PINNED_DIGEST so that
- * `npx slatebox@x.y.z install` always installs the same bytes.
+ * Each release of this package installs one image: the public multi-arch
+ * index on GHCR, by its digest, so `npx slatebox@x.y.z install` always
+ * installs the same bytes. Give --image or --image-archive to install a local
+ * build instead (self-host/build-image.sh).
  */
 export const DEFAULT_REPOSITORY = 'ghcr.io/slatebox/slatebox'
 export const PINNED_TAG = '0.1.0'
@@ -47,7 +46,7 @@ export function pinImage(wanted, info) {
 function unavailable(wanted, why) {
   return new InstallError(EXIT.PRECONDITION,
     `The image ${wanted} is not available: ${why}\n` +
-    (wanted.startsWith(DEFAULT_REPOSITORY) ? 'The public image is not published yet. Build one (self-host/build-image.sh) and give --image <name> or --image-archive <file.tar>.' : 'Check the name, or log in to its registry with docker login.'),
+    (wanted.startsWith(DEFAULT_REPOSITORY) ? 'The public image needs no login: check that this machine can reach ghcr.io (or that the --to version exists), then try again. To install a local build instead, give --image <name> or --image-archive <file.tar>.' : 'Check the name, or log in to its registry with docker login.'),
     { image: wanted })
 }
 

@@ -8,7 +8,7 @@
 
 Agents create and edit Slatebox slates (mind maps, flowcharts, diagrams, project plans, slides and boards) by running a short script, or by calling one tool per task. This package gives them two ways to do it:
 
-- `slatebox-mcp`, an MCP server. **`exec`** runs a JavaScript or TypeScript script, and **`describe`** explains the typed client the script uses. Beside them it lists one typed tool per client method, such as `create_slate`, `import_mermaid`, `get_slate`, `edit_slate` and `export_mermaid`, four prompts (mind map, flowchart, project plan, presentation) and resources (the client's types and guide, and any slate as JSON or Mermaid).
+- `slatebox-mcp`, an MCP server. **`exec`** runs a JavaScript or TypeScript script, and **`describe`** explains the typed client the script uses. Beside them it lists one typed tool per client method, such as `create_slate`, `import_mermaid`, `get_slate`, `edit_slate` and `export_mermaid`, five prompts (mind map, flowchart, project plan, presentation, install Slatebox) and resources (the client's types and guide, and any slate as JSON or Mermaid).
 - `slatebox`, a command that runs the same scripts from a terminal.
 
 Inside a script, the global `slatebox` is a typed client with one method for each thing your token may do, such as `slatebox.slates.get({ shareId })` and `slatebox.slates.applyOperations({ shareId, plan })`. The client is generated from the Slatebox action registry, so new Slatebox actions appear in it without a new tool.
@@ -34,14 +34,14 @@ If you want a script to run on your Slatebox instead, in its sealed runner with 
 Use Node.js 22.13 or later. Download the archive and checksum from the Slatebox docs. The archive includes the JavaScript source of both commands, the generated client files and the MIT license.
 
 ```sh
-curl -fLO https://docs.slatebox.com/assets/downloads/slatebox-mcp-0.3.3.tgz
-curl -fLO https://docs.slatebox.com/assets/downloads/slatebox-mcp-0.3.3.tgz.sha256
-shasum -a 256 -c slatebox-mcp-0.3.3.tgz.sha256
-npm install --global ./slatebox-mcp-0.3.3.tgz
+curl -fLO https://docs.slatebox.com/assets/downloads/slatebox-mcp-0.3.5.tgz
+curl -fLO https://docs.slatebox.com/assets/downloads/slatebox-mcp-0.3.5.tgz.sha256
+shasum -a 256 -c slatebox-mcp-0.3.5.tgz.sha256
+npm install --global ./slatebox-mcp-0.3.5.tgz
 slatebox help
 ```
 
-On Linux you can also verify the checksum with `sha256sum -c slatebox-mcp-0.3.3.tgz.sha256`. npm installs the public MCP SDK.
+On Linux you can also verify the checksum with `sha256sum -c slatebox-mcp-0.3.5.tgz.sha256`. npm installs the public MCP SDK.
 
 Open **Profile → Developer access** in your Slatebox account and create a token. Supply it in the `SLATEBOX_API_TOKEN` environment variable. Set `SLATEBOX_BASE_URL`, or pass `--base-url`, to your own instance's origin when self-hosting. The default is `https://app.slatebox.com`, Slatebox Cloud, which serves the API at `/api/v1` and the hosted MCP endpoint at `/mcp`.
 

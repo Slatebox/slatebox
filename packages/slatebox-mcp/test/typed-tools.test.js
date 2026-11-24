@@ -104,7 +104,7 @@ test("a refusal and a hold come back as they do for exec; confirm is sent as exe
 
 test("prompts and resources: listed, filled and read (a slate through exec)", async (t) => {
   const { client, requests } = await connected(t, ok);
-  assert.deepEqual((await client.listPrompts()).prompts.map((p) => p.name), ["mind_map", "flowchart", "project_plan", "presentation"]);
+  assert.deepEqual((await client.listPrompts()).prompts.map((p) => p.name), ["mind_map", "flowchart", "project_plan", "presentation", "install_slatebox"]);
   const filled = await client.getPrompt({ name: "project_plan", arguments: { project: "a launch", weeks: "6 weeks" } });
   assert.match(filled.messages[0].content.text, /project plan for a launch, over 6 weeks/);
   await assert.rejects(() => client.getPrompt({ name: "flowchart", arguments: {} }), /needs process/);

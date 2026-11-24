@@ -3,7 +3,7 @@
   "name": "com.slatebox/slatebox",
   "title": "Slatebox",
   "description": "Open-source visual intelligence platform: invite any AI via MCP to work with you and your team.",
-  "version": "0.3.3",
+  "version": "0.3.5",
   "websiteUrl": "https://slatebox.com",
   "repository": {
     "url": "https://github.com/Slatebox/slatebox",
@@ -31,7 +31,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "slatebox-mcp",
-      "version": "0.3.3",
+      "version": "0.3.5",
       "transport": {
         "type": "stdio"
       },

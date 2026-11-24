@@ -130,11 +130,12 @@ installer never makes a new one.
   with your consent get.docker.com; Slatebox itself contacts the certificate
   authority when you give a domain, and the AI endpoints you configure.
 
-## Before the public image exists
+## Which image
 
-Until `ghcr.io/slatebox/slatebox` is published, install a local build with
-`--image <name>` (or `--image-archive slatebox.tar` for a server). Each
-release of this package will pin one image digest.
+Each release of this package installs one public image,
+`ghcr.io/slatebox/slatebox`, by its digest (this release: `0.1.0`). It needs
+no registry login. To install a local build instead, give `--image <name>`
+(or `--image-archive slatebox.tar` for a server).
 
 ## With an agent
 
