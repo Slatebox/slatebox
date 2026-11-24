@@ -107,17 +107,23 @@ test("a person's cursor colour is never near an agent's and reads on white (3:1 
   assert.ok(onWhite(fallback) >= 4.5);
 });
 
-test("the canvas entry carries no agent drawing: the listener loads slateboxjs/presence when an agent arrives", async () => {
+test("the canvas entry carries no agent drawing: the listener loads slateboxjs/presence when an agent arrives, slateboxjs/suggestions when a suggestion waits", async () => {
   const core = await import(appRequire.resolve("slateboxjs"));
   const named = { ...core, ...(core.default || {}) };
   assert.equal(named.createAgentPresence, undefined);
+  assert.equal(named.createAgentSuggestions, undefined);
   assert.equal(typeof named.visibleAgents, "function");
   const drawing = await import(appRequire.resolve("slateboxjs/presence"));
   assert.equal(typeof drawing.createAgentPresence, "function");
+  // The suggestions are their own lazy entry: the pointers' entry does not carry them.
+  assert.equal(drawing.createAgentSuggestions, undefined);
+  const ghosts = await import(appRequire.resolve("slateboxjs/suggestions"));
+  assert.equal(typeof ghosts.createAgentSuggestions, "function");
   const { readFile } = await import("node:fs/promises");
   const listener = await readFile(new URL("../web/app/imports/ui/components/AgentPresenceListener.jsx", import.meta.url), "utf8");
   assert.match(listener, /import\('slateboxjs\/presence'\)/);
-  assert.doesNotMatch(listener, /^import [^\n]*createAgentPresence/m);
+  assert.match(listener, /import\('slateboxjs\/suggestions'\)/);
+  assert.doesNotMatch(listener, /^import [^\n]*createAgent(Presence|Suggestions)/m);
 });
 
 test("a save shows the run: label, initial, colour, targets and the save's message; MCP clients are named", async () => {

@@ -122,26 +122,28 @@ export default function AgentPresenceListener({ slate, canEdit = false }) {
   const canAct = useRef(canEdit)
   canAct.current = canEdit
   const [told, setTold] = useState('')
-  // The drawing (slateboxjs/presence) loads when the first agent arrives or suggests something: a
-  // slate no agent works on never fetches it.
-  const wanted = all.length > 0 || actions.some((action) => pendingCount(action) > 0)
+  // Each drawing loads only when it is needed: the agents' pointers (slateboxjs/presence) when the first agent
+  // arrives, the suggestions (slateboxjs/suggestions: ghosts, frames, Keep and Discard) when the first suggestion
+  // waits. A slate no agent works on fetches neither.
+  const wantPointers = all.length > 0
+  const wantGhosts = actions.some((action) => pendingCount(action) > 0)
   useEffect(() => {
     const shareId = slate?.shareId
     if (!shareId) return undefined
     keepers.set(shareId, slate)
     return () => { if (keepers.get(shareId) === slate) keepers.delete(shareId) }
   }, [slate])
+  // The page holds the v1 facade; the engine's own slate (its svg.js canvas) is slate.v2.
+  const engineOf = (s) => s?.v2 ?? s
+  const said = (error) => setTold(error?.reason || error?.message || 'That did not work. Try again.')
   useEffect(() => {
-    // The page holds the v1 facade; the engine's own slate (its svg.js canvas) is slate.v2.
-    const engine = slate?.v2 ?? slate
-    if (!wanted || typeof engine?.canvas?.group !== 'function') return undefined
+    const engine = engineOf(slate)
+    if (!wantGhosts || typeof engine?.canvas?.group !== 'function') return undefined
     let gone = false
     const shareId = slate.shareId
-    const said = (error) => setTold(error?.reason || error?.message || 'That did not work. Try again.')
-    import('slateboxjs/presence')
-      .then(({ createAgentPresence, createAgentSuggestions }) => {
+    import('slateboxjs/suggestions')
+      .then(({ createAgentSuggestions }) => {
         if (gone) return
-        // Ghosts first, so a pointer can point at a ghost that is already drawn.
         ghosts.current = createAgentSuggestions(engine, {
           canAct: () => canAct.current,
           onKeep: ({ actionId, itemId }) => decide(shareId, { decision: 'keep', actionId, itemIds: [itemId] }).catch(said),
@@ -152,8 +154,24 @@ export default function AgentPresenceListener({ slate, canEdit = false }) {
           toNode: compat.v1NodeToV2,
         })
         ghosts.current.set(latest.current.actions)
+      })
+      .catch((error) => console.warn('Suggestions on this slate could not be drawn.', error))
+    return () => {
+      gone = true
+      ghosts.current?.destroy()
+      ghosts.current = null
+    }
+  }, [slate, wantGhosts])
+  useEffect(() => {
+    const engine = engineOf(slate)
+    if (!wantPointers || typeof engine?.canvas?.group !== 'function') return undefined
+    let gone = false
+    import('slateboxjs/presence')
+      .then(({ createAgentPresence }) => {
+        if (gone) return
         // What Ask Slatebox or the settings cover of the canvas is not view: pointers, tags and the
-        // edge marker of an agent working out of sight stay in what people can see.
+        // edge marker of an agent working out of sight stay in what people can see. A pointer can point
+        // at a ghost (ghost-<id>) as soon as it is drawn, whichever entry loaded first.
         presence.current = createAgentPresence(engine, { insets: () => coveredEdges(engine) })
         presence.current.set(latest.current.all)
       })
@@ -161,11 +179,9 @@ export default function AgentPresenceListener({ slate, canEdit = false }) {
     return () => {
       gone = true
       presence.current?.destroy()
-      ghosts.current?.destroy()
       presence.current = null
-      ghosts.current = null
     }
-  }, [slate, wanted])
+  }, [slate, wantPointers])
   useEffect(() => {
     ghosts.current?.set(actions)
   }, [actions, canEdit])
