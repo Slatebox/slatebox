@@ -662,3 +662,21 @@ test("an OAuth connection lacking a permission is told to reconnect and allow it
   const viaToken = await ask(base);
   assert.match(viaToken.message, /Create a token that has it/);
 });
+
+test("a Meteor method takes an idempotency key: sent again (a reconnect, Try again), the same request runs once and answers the first answer", async () => {
+  let runs = 0;
+  const ask = defineAction({ id: "outside.ask", title: "Ask", description: "Asks an outside agent.", toolset: "t", kind: "write", idempotency: "optional", openWorld: true, changesNoSlate: true, principals: ["person"], mounts: { ddp: true }, input: { type: "object", properties: { request: { type: "string" } }, additionalProperties: false }, output: { type: "object" }, handler: async () => ({ status: 200, body: { answer: ++runs } }) });
+  const plain = defineAction({ id: "outside.plain", title: "Plain", description: "Takes no key.", toolset: "t", kind: "write", openWorld: true, changesNoSlate: true, principals: ["person"], mounts: { ddp: true }, input: { type: "object", properties: {}, additionalProperties: false }, output: { type: "object" }, handler: async () => ({ status: 200, body: { ok: true } }) });
+  const registry = createRegistry({ actions: [ask, plain], scopes: ["slates:read"], idempotency: createIdempotencyStore({ collection: memoryDriverCollection(), now: () => Date.now() }) });
+  let methods;
+  mountDdp(registry, { defineMethods: (defined) => (methods = defined), makeError: (code, reason) => Object.assign(new Error(reason), { error: code }), loadUser: async (id) => ({ _id: id }), scopes: ["slates:read"] });
+  const me = { userId: "ada" };
+  const first = await methods["outside.ask"].call(me, { request: "my commits" }, { idempotencyKey: "ask-c1-turn-1" });
+  const again = await methods["outside.ask"].call(me, { request: "my commits" }, { idempotencyKey: "ask-c1-turn-1" });
+  assert.deepEqual(again, first);
+  assert.equal(runs, 1);
+  await methods["outside.ask"].call(me, { request: "my commits" });
+  assert.equal(runs, 2, "without a key each call runs");
+  // an action that takes no key ignores one sent by a page
+  assert.equal((await methods["outside.plain"].call(me, {}, { idempotencyKey: "x" })).ok, true);
+});

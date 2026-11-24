@@ -312,7 +312,7 @@ function placeNotes(group) {
  * what the asker selected (the whole slate when nothing is).
  * → [{ label, plan: { message, operations }, created: [ids], frame, groups: [{ label, created, frame }] }] (empty when there is nothing)
  */
-export function itemsFromLayout({ groups, slate, aliases = {}, selection = [], serverName, view = null, message = '' }) {
+export function itemsFromLayout({ groups, slate, aliases = {}, selection = [], serverName, view = null, message = '', busy = [] }) {
   if (!groups.length) return []
   const nodes = slate?.nodes || []
   const byId = new Map(nodes.map((node) => [node.options?.id, node]))
@@ -330,10 +330,15 @@ export function itemsFromLayout({ groups, slate, aliases = {}, selection = [], s
   const block = { width: Math.max(...blocks.map((b) => b.size.width)), height: offsetY - NOTE.groupGap }
   const nearGroup = groups.find((group) => group.near && byId.get(aliases[group.near]))
   const near = nearGroup && byId.get(aliases[nearGroup.near])
-  // What is already there, so the answer never lands on a note.
-  const taken = nodes.map((node) => boundsOf([node]))
+  // What is already there, so the answer never lands on a note, nor on an earlier answer still
+  // waiting (busy: the boxes of waiting ghosts, { x, y, width, height }).
+  const waiting = (Array.isArray(busy) ? busy : []).filter((b) => b && [b.x, b.y, b.width, b.height].every(Number.isFinite)).slice(0, 400)
+  const taken = [...nodes.map((node) => boundsOf([node])), ...waiting]
   const spot = !near && view ? freeSpot(view, block, taken) : null
-  const originX = near ? num(near.options.xPos) + num(near.options.width, NOTE.width) + NOTE.groupGap : spot ? spot.x : anchor.x + anchor.width + NOTE.groupGap
+  // No view (or no room in it): right of the notes and of whatever waits, at the anchor's height.
+  const waitingRight = waiting.length ? Math.max(...waiting.map((b) => b.x + b.width)) : -Infinity
+  const fallbackX = Math.max(anchor.x + anchor.width, waitingRight) + NOTE.groupGap
+  const originX = near ? num(near.options.xPos) + num(near.options.width, NOTE.width) + NOTE.groupGap : spot ? spot.x : fallbackX
   const originY = near ? num(near.options.yPos) : spot ? spot.y : anchor.y
   const operations = []
   const lineOps = []

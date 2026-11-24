@@ -49,7 +49,7 @@ import {
 } from './translate.mjs'
 import { excalidrawGroup } from './excalidraw.mjs'
 import {
-  checkRecipe, cutWords, dedupeGroups, extract, isReferenceTool, matchIntent, outputNotes, planLimits, rawData, rawText, RECIPE_LIMITS, requestBudget, requestValues,
+  checkRecipe, cutWords, dedupeGroups, extract, interleave, isReferenceTool, matchIntent, outputNotes, planLimits, rawData, rawText, RECIPE_LIMITS, requestBudget, requestValues,
   stepCalls, stepTool, trimToBudget,
 } from './recipes.mjs'
 
@@ -269,7 +269,9 @@ export function createConnectorService({
     // Already on this slate as this person's agent: the page says so and offers Manage (connect
     // refuses a second copy). Signing in again for it is still a discovery, so this is not a refusal.
     const here = (await connections.find({ slateId: slate._id, ownerId: principal.userId, status: { $ne: 'removed' } })).find((doc) => canonicalAddress(doc.address) === address)
-    const alreadyHere = here ? { connectionId: here._id, agentId: here.agentId || null, name: here.name, text: `${here.name} is already on this slate.` } : null
+    // Paused because its tools changed: inviting again is how its inviter looks at them (connect
+    // updates that agent), so the walkthrough carries on instead of offering Manage.
+    let alreadyHere = here ? { connectionId: here._id, agentId: here.agentId || null, name: here.name, text: `${here.name} is already on this slate.`, ...(here.status === 'paused' && { lookAgain: true, text: `${here.name}'s tools changed. Look at them and invite it again.` }) } : null
     const head = { address, host, lookalike: lookalikeHost(address), card: card ? { id: card.id, name: card.name } : null, ...(alreadyHere && { alreadyHere }) }
     const reached = await discoverAs(principal.userId, address)
     if (reached.needsSignIn) {
@@ -280,6 +282,10 @@ export function createConnectorService({
     const { found } = reached
     const tools = normalizeTools(found.tools)
     if (!tools.length) refuse(422, 'no_tools', `${host} answered, but offers no tools Slatebox can use.`)
+    // Nothing it was allowed is offered any more: the same, look at its tools again.
+    if (alreadyHere && !alreadyHere.lookAgain && !reconcile(here.tools, tools).allowed.length)
+      alreadyHere = { ...alreadyHere, lookAgain: true, text: `${here.name} has nothing left it may look up. Choose again and invite it again.` }
+    if (alreadyHere) head.alreadyHere = alreadyHere
     const signedIn = reached.token ? await vault.describe(principal.userId, address) : null
     // Signed in again: this person's agents on this server that were waiting for it can be asked.
     if (reached.token) for (const doc of await connections.find({ ownerId: principal.userId, address, status: 'needs_sign_in' })) await setStatus(doc, 'active')
@@ -309,7 +315,11 @@ export function createConnectorService({
     const live = await connections.find({ slateId: slate._id, status: { $ne: 'removed' } })
     // One copy of a server per person on a slate: theirs is already here (another person may bring their own).
     const already = live.find((doc) => doc.ownerId === principal.userId && canonicalAddress(doc.address) === address)
-    if (already) refuse(409, 'already_here', `${already.name} is already on this slate.`, { connectionId: already._id, agentId: already.agentId || null, name: already.name })
+    // Paused (its tools changed) or with nothing left it may use: inviting again is consenting again,
+    // to that same agent (its name, colour, suggestions and activity stay); anything else is refused.
+    if (already && already.status !== 'paused' && !(await nothingLeft(principal, already)))
+      refuse(409, 'already_here', `${already.name} is already on this slate.`, { connectionId: already._id, agentId: already.agentId || null, name: already.name })
+    if (already) return consentAgain(principal, already, { address, chosen, contextLevel })
     if (live.length >= AGENT_LIMITS.perSlate) refuse(429, 'agent_limit', `A slate can have ${AGENT_LIMITS.perSlate} invited agents. Remove one first.`)
     if (live.filter((doc) => doc.ownerId === principal.userId).length >= AGENT_LIMITS.perOwnerPerSlate)
       refuse(429, 'agent_limit', `You can invite ${AGENT_LIMITS.perOwnerPerSlate} agents onto one slate. Remove one first.`)
@@ -364,6 +374,37 @@ export function createConnectorService({
     const point = looking ? { x: Math.round(looking.x + looking.width / 2), y: Math.round(looking.y + looking.height / 2) } : null
     await presence.saved(hello, slate, { targets: [], message: `Hi, I'm ${name}. Select notes and ask me.`, ...(point && { point }) }).catch(() => {})
     later(() => presence.end(hello.runId, 'done').catch(() => {}), AGENT_LIMITS.helloMs)
+    return publicConnection(doc, principal.userId)
+  }
+
+  // Whether none of the tools an agent was allowed is offered by its server now.
+  async function nothingLeft(principal, doc) {
+    try {
+      const reached = await discoverAs(principal.userId, doc.address)
+      if (reached.needsSignIn) return false
+      return !reconcile(doc.tools, normalizeTools(reached.found.tools)).allowed.length
+    } catch {
+      return false
+    }
+  }
+
+  // Inviting a paused agent again: the person consents to what the server says now (hashes they saw).
+  async function consentAgain(principal, doc, { address, chosen, contextLevel }) {
+    const reached = await discoverAs(principal.userId, address)
+    if (reached.needsSignIn) refuse(401, 'needs_sign_in', `Sign in to ${doc.host} first.`)
+    const tools = normalizeTools(reached.found.tools)
+    const seen = new Map((Array.isArray(chosen) ? chosen : []).map((entry) => [entry?.name, entry]))
+    const stored = tools.map((tool) => {
+      const choice = seen.get(tool.name)
+      if (choice && choice.hash !== tool.hash) refuse(409, 'tools_changed', `${doc.name}'s tools changed while you were choosing. Look at them again.`)
+      const policy = choice && POLICIES.includes(choice.policy) && tool.group === 'lookup' ? choice.policy : choice ? 'off' : defaultPolicy(tool)
+      return { name: tool.name, title: tool.title, description: tool.description, group: tool.group, hash: tool.hash, policy }
+    })
+    if (!stored.some((tool) => tool.policy === 'allow')) refuse(400, 'no_tools', 'Allow at least one thing it may look up.')
+    const set = { tools: stored, contextLevel, status: 'active', changed: null, updatedAt: new Date(now()) }
+    await connections.update(doc._id, set)
+    Object.assign(doc, set)
+    audit({ kind: 'reconsent', userId: principal.userId, host: doc.host, connectionId: doc._id })
     return publicConnection(doc, principal.userId)
   }
 
@@ -487,10 +528,26 @@ export function createConnectorService({
     return { raw, entry }
   }
 
-  // The person's last few turns with this agent, as the page kept them (inert data in the prompts).
+  // The person's last few turns with this agent (inert data in the prompts): their own words, and
+  // what landed said by this code from counts ("added 2 notes"). The agent's earlier replies are
+  // never sent back: they were written by a model that read an outside server's answers, and the
+  // planner must never see what a server said.
   const cleanHistory = (history) => (Array.isArray(history) ? history : []).slice(-3)
     .filter((turn) => turn && typeof turn.message === 'string')
-    .map((turn) => ({ message: plainText(turn.message, 300), reply: plainText(typeof turn.reply === 'string' ? turn.reply : '', 300) }))
+    .map((turn) => ({ message: plainText(turn.message, 300), reply: addedWords(turn.added) }))
+  const addedWords = (added) => {
+    const notes = Math.max(0, Math.min(99, Number(added?.notes) || 0))
+    const lines = Math.max(0, Math.min(99, Number(added?.lines) || 0))
+    const what = [notes && `${notes} ${notes === 1 ? 'note' : 'notes'}`, lines && `${lines} ${lines === 1 ? 'line' : 'lines'}`].filter(Boolean).join(' and ')
+    return what ? `added ${what}` : ''
+  }
+
+  // The same ask while its answer still waits on the slate (two tabs, Send pressed twice, a retry
+  // after the answer landed): the answer that waits is the answer, nothing new is made.
+  async function waitingAnswer(doc, slate, message) {
+    const waiting = (await suggestions.waiting?.(slate).catch(() => [])) || []
+    return waiting.find((action) => action.agentId === doc.agentId && action.message === message) || null
+  }
 
   async function callNow(principal, { connectionId, request, selection = [], view = null, history = [] }) {
     const doc = await ownConnection(principal, connectionId)
@@ -502,11 +559,14 @@ export function createConnectorService({
     // Paused: refused before anything reaches the outside server or the model. The asker can edit
     // the slate, so they may resume agents themselves.
     if (await suggestions.paused?.(slate)) refuse(423, 'agents_paused', `Agents are paused on this slate. Resume agents to ask ${doc.name}.`)
-    if (doc.status === 'paused') refuse(409, 'tools_changed', `${doc.name}'s tools changed since you invited it. Look at the changes before asking again.`, { changed: (doc.changed || []).map((c) => c.name) })
+    if (doc.status === 'paused') refuse(409, 'tools_changed', `${doc.name}'s tools changed since you invited it. Invite it again from + Invite agent to look at them.`, { changed: (doc.changed || []).map((c) => c.name) })
     const text = plainText(request, AGENT_LIMITS.requestChars)
     if (!text) refuse(400, 'invalid_request', `Ask ${doc.name} something.`)
     const ids = Array.isArray(selection) ? selection.filter((id) => typeof id === 'string').slice(0, 60) : []
     const said = cleanHistory(history)
+    const message = `${plainText(doc.name, 40)}: ${plainText(text, 120)}`
+    const same = await waitingAnswer(doc, slate, message)
+    if (same) return { items: 0, actions: [same.actionId], saved: 0, repeated: true, say: `That answer is still on the slate, waiting: Keep all or Discard all on its frame, then ask again for a new one.`, left: [], added: { notes: 0, lines: 0 } }
     const card = cardFor(doc.address, await gallery())
     const recipe = checkRecipe(card?.recipe)
     const budget = requestBudget(text)
@@ -526,7 +586,7 @@ export function createConnectorService({
           const { changed } = reconcile(doc.tools, listedTools)
           if (changed.length) {
             // The error names the tools only: their new descriptions are the server's words, kept for the inviter's screen.
-            const error = new ConnectorRefused(409, 'tools_changed', `${doc.name}'s tools changed since you invited it. Look at the changes before asking again.`, { changed: changed.map((c) => c.name) })
+            const error = new ConnectorRefused(409, 'tools_changed', `${doc.name}'s tools changed since you invited it. Invite it again from + Invite agent to look at them.`, { changed: changed.map((c) => c.name) })
             error.changes = changed
             throw error
           }
@@ -550,11 +610,11 @@ export function createConnectorService({
         }
         if (doc.status !== 'active') await setStatus(doc, 'active')
         const { allowed } = reconcile(doc.tools, listedTools)
-        if (!allowed.length) refuse(409, 'no_tools', `${doc.name} has nothing it may look up. Invite it again to choose.`)
+        if (!allowed.length) refuse(409, 'no_tools', `${doc.name} has nothing it may look up now. Invite it again from + Invite agent to choose what it may use.`)
         const toolOf = new Map(allowed.map((tool) => [tool.name, tool]))
         // Read-me tools only explain the others: never offered, never laid out.
         const offered = allowed.filter((tool) => !isReferenceTool(tool, recipe))
-        if (!offered.length) refuse(409, 'no_tools', `${doc.name} has nothing it may look up. Invite it again to choose.`)
+        if (!offered.length) refuse(409, 'no_tools', `${doc.name} has nothing it may look up now. Invite it again from + Invite agent to choose what it may use.`)
         const offeredNames = new Set(offered.map((tool) => tool.name))
         const entries = []
         let say = ''
@@ -568,8 +628,9 @@ export function createConnectorService({
           const { system, user } = planPrompt({ serverName: doc.name, tools, packed, previous: entries, text: promptOf, calls: limit, history: said, hint })
           return checkPlan(await model({ feature: 'connectors', tool: planTool(promptOf), system, user, userId: principal.userId, shareId: slate.shareId }), tools, { limit, used })
         }
-        const intent = recipe && matchIntent(recipe, text)
-        const runnable = intent && intent.steps.every((step) => stepTool(step, offeredNames))
+        const intent = recipe && matchIntent(recipe, text, requestValues(text))
+        // A merge step (one more source for a list) may be missing or fail without stopping the recipe.
+        const runnable = intent && intent.steps.every((step) => step.merge || stepTool(step, offeredNames))
         if (runnable) {
           // A known ask: this code runs the steps; values pass from one step to the next by typed
           // extraction only (logins, owner/repo names), never the server's words.
@@ -578,6 +639,7 @@ export function createConnectorService({
           let stopped = false
           for (const step of intent.steps) {
             const tool = stepTool(step, offeredNames)
+            if (!tool) continue
             const schema = toolOf.get(tool)?.inputSchema
             let planned = []
             if (step.args === 'plan') {
@@ -587,12 +649,13 @@ export function createConnectorService({
             } else planned = stepCalls({ ...step, tool }, values).map((call) => ({ ...call, args: fitArgs(schema, call.args) }))
             planned = planned.filter((call) => !checkArguments(schema, call.args))
             if (!planned.length) {
+              if (step.merge) continue
               stopped = true
               break
             }
             const stepEntries = []
             for (const call of planned) {
-              if (calls >= RECIPE_LIMITS.calls) break
+              if (calls >= RECIPE_LIMITS.runCalls) break
               calls++
               const { raw, entry } = await reach(doc, { tool, args: call.args, check, token, toolOf, principal, entries, extra: { run: call.run } })
               entry.data = rawData(raw)
@@ -600,10 +663,11 @@ export function createConnectorService({
               if (step.extract && !entry.result.isError) {
                 for (const [name, list] of Object.entries(extract(entry.data, step.extract, rawText(raw)))) {
                   if (!list.length) continue
-                  values[name] = step.each ? [...new Set([...(values[name] || []), ...list])] : (values[name] === undefined ? list : values[name])
+                  values[name] = step.each ? [...new Set([...(values[name] || []), ...list])] : step.merge ? interleave(values[name], list) : (values[name] === undefined ? list : values[name])
                 }
               }
             }
+            if (step.merge) continue
             finalStep = stepEntries
             if (stepEntries.every((entry) => entry.result.isError)) {
               stopped = true
@@ -616,7 +680,7 @@ export function createConnectorService({
             if (notes.length) recipeGroups = [{ label: intent.output.label || intent.label || doc.name, layout: 'column', notes, lines: [] }]
             else say = `${doc.name} found nothing for that.`
           }
-          if (stopped && !entries.some((entry) => !entry.result.isError)) say = say || `${doc.name} couldn't find what that needs. Try naming the repository (owner/name).`
+          if (stopped && !entries.some((entry) => !entry.result.isError)) say = say || `${doc.name} couldn't find what that needs.${intent.missing ? ' ' + intent.missing : ' Try asking in other words.'}`
         } else {
           // Anything else: the planner, within the limits (one round of two calls unless its recipe says more).
           const used = new Set()
@@ -678,8 +742,9 @@ export function createConnectorService({
       // The whole answer is saved ONCE as the agent: the app files it as one live suggestion (one
       // frame of ghosts on every screen, the cursor moving to them, Keep all / Discard all, one
       // Undo), or saves it at once when a person lets this agent edit directly.
-      const message = `${plainText(doc.name, 40)}: ${plainText(text, 120)}`
-      const items = itemsFromLayout({ groups: result.groups, slate, aliases: packed.aliases, selection: ids, serverName: doc.name, view: viewOf(view), message })
+      // Earlier answers still waiting take their space too, so this one never lands on their ghosts.
+      const busy = ((await suggestions.waiting?.(slate).catch(() => [])) || []).flatMap((action) => action.boxes || [])
+      const items = itemsFromLayout({ groups: result.groups, slate, aliases: packed.aliases, selection: ids, serverName: doc.name, view: viewOf(view), message, busy })
       const actions = []
       let saved = 0
       let dropped = 0
@@ -691,6 +756,8 @@ export function createConnectorService({
       }
       for (const item of items) {
         let answer = null
+        // Tried again only when the slate moved on before the save (slate_changed): any other failure
+        // may have saved already, and a second try would land the answer twice.
         for (let attempt = 0; attempt < 2 && !answer; attempt++) {
           try {
             answer = await place(item)
@@ -698,6 +765,7 @@ export function createConnectorService({
             // People on the slate paused its agents: stop, and say so in their words.
             if (error?.code === 'agents_paused') refuse(423, 'agents_paused', `Agents are paused on this slate. Resume agents to ask ${doc.name}.`)
             answer = null
+            if (error?.code !== 'slate_changed') break
           }
         }
         if (answer?.body?.suggestion?.actionId) actions.push(answer.body.suggestion.actionId)

@@ -4,7 +4,7 @@
 // suggestions exactly as every other agent's edits do; keeping saves into the in-memory slate.
 import { applyPlanToJSON } from 'slateboxjs/operations'
 import { suggestToCanvas } from '../web/app/server/actions/slate-operations.mjs'
-import { createSuggestionStore } from '../web/app/server/agents/suggestions.mjs'
+import { createSuggestionStore, waitingActions } from '../web/app/server/agents/suggestions.mjs'
 import { memoryCollection } from './exec-test-world.mjs'
 
 /**
@@ -67,6 +67,8 @@ export function connectorSuggestions(slate, { presenceCalls = [] } = {}) {
     agentIdOf: async (principal, s) => (await identify(principal, s)).agentId,
     withdraw: (person, s, agentId) => store.discard(person, s, { agentId }),
     paused: async (s) => (await store.controlsOf(s._id)).paused,
+    // As enterprise/server/meteor.js wires it: the slate's answers still waiting, with their ghosts' boxes.
+    waiting: async (s) => waitingActions(await store.list(s._id)),
   }
   return { store, applied, applyOperations, suggestions, identify, saver }
 }

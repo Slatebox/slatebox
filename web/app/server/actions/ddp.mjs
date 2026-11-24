@@ -8,10 +8,13 @@ export function mountDdp(registry, { defineMethods, makeError, loadUser, scopes 
   const methods = {}
   for (const action of registry.list()) {
     if (!action.mounts.ddp) continue
-    methods[action.id] = async function callAction(input) {
+    // A second argument { idempotencyKey } (actions that take one): a method Meteor sends again after
+    // a reconnect, or a Try again, is the same request, answered once (the registry's record).
+    methods[action.id] = async function callAction(input, options) {
       const user = this.userId ? await loadUser(this.userId) : null
+      const idempotencyKey = action.idempotency !== 'none' && typeof options?.idempotencyKey === 'string' ? options.idempotencyKey : undefined
       try {
-        const result = await registry.run(principalFromUser(user, scopes), action.id, input ?? {})
+        const result = await registry.run(principalFromUser(user, scopes), action.id, input ?? {}, { idempotencyKey })
         return result.body
       } catch (error) {
         const failure = toActionError(error, action.failure)

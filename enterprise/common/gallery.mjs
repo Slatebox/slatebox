@@ -21,7 +21,11 @@
 // that offers none of a step's tools falls back to the planner. Administrators edit the recipe in
 // /admin/ai › Gallery (aiAgents); this list is the built-in copy and the fallback.
 
-const COMMIT_NOTE = { list: '[*]', text: '{repo} · {sha7} · {commit.message}', link: 'html_url', maxNotes: 5, label: 'Latest commits' }
+// Commits from every repository asked, newest first across them (not the first repository's only).
+const COMMIT_NOTE = { list: '[*]', text: '{repo} · {sha7} · {commit.message}', link: 'html_url', maxNotes: 5, label: 'Latest commits', newest: 'commit.author.date' }
+const REPO = 'Try naming the repository (owner/name).'
+// The repositories a pull request search names (organization repositories included), from its text.
+const PR_REPOS = 're:"repository_url"\\s*:\\s*"https://api\\.github\\.com/repos/([A-Za-z0-9-]+/[A-Za-z0-9._-]+)"'
 const ITEM_NOTE = (label) => ({ list: 'items[*]', text: '{repo} #{number} · {title}', link: 'html_url', maxNotes: 6, label })
 
 export const GALLERY = Object.freeze([
@@ -51,25 +55,29 @@ export const GALLERY = Object.freeze([
       rounds: 1,
       calls: 3,
       intents: [
-        { key: 'repo-commits', label: 'Latest commits', keywords: ['\\bcommits?\\b.*\\b[A-Za-z0-9-]+/[A-Za-z0-9._-]+', '\\b[A-Za-z0-9-]+/[A-Za-z0-9._-]+\\b.*\\bcommits?\\b'],
+        { key: 'repo-commits', label: 'Latest commits', needs: ['owner', 'repo'], missing: REPO, keywords: ['\\bcommits?\\b.*\\b[A-Za-z0-9-]+/[A-Za-z0-9._-]+', '\\b[A-Za-z0-9-]+/[A-Za-z0-9._-]+\\b.*\\bcommits?\\b'],
           steps: [{ tool: 'list_commits', args: { owner: '{owner}', repo: '{repo}', perPage: 5 } }], output: COMMIT_NOTE },
-        { key: 'org-commits', label: 'My latest commits', keywords: ['\\b(my|i)\\b.*\\bcommits?\\b.*\\b(org|organi[sz]ation)\\b'],
+        { key: 'org-commits', label: 'My latest commits', needs: ['org'], missing: 'Try naming the organization ("in the acme org").', keywords: ['\\b(my|i)\\b.*\\bcommits?\\b.*\\b(org|organi[sz]ation)\\b'],
           steps: [
             { tool: 'get_me', args: {}, extract: { login: 'login' } },
             { tool: 'search_repositories', args: { query: 'org:{org}', sort: 'updated', perPage: 3 }, extract: { repos: 'items[0..2].full_name' } },
             { tool: 'list_commits', each: 'repos', args: { owner: '{owner}', repo: '{repo}', author: '{login}', perPage: 5 } },
           ],
           output: COMMIT_NOTE },
-        { key: 'my-commits', label: 'My latest commits', keywords: ['\\b(my|i|me)\\b.*\\bcommits?\\b', '\\bcommits?\\b.*\\b(i|me) (made|pushed|wrote)\\b', '^\\s*(latest|recent) commits?\\b'],
+        // "My" is the signed-in person (get_me); their repositories are their own most recently
+        // updated ones and the ones their latest pull requests are in (organization repositories
+        // too), taken in turn; their commits in those, newest first across all of them.
+        { key: 'my-commits', label: 'My latest commits', missing: 'Try naming the repository (owner/name).', keywords: ['\\b(my|i|me)\\b.*\\bcommits?\\b', '\\bcommits?\\b.*\\b(i|me) (made|pushed|wrote)\\b', '^\\s*(latest|recent) commits?\\b'],
           steps: [
             { tool: 'get_me', args: {}, extract: { login: 'login' } },
             { tool: 'search_repositories', args: { query: 'user:{login}', sort: 'updated', perPage: 3 }, extract: { repos: 'items[0..2].full_name' } },
+            { tool: 'search_pull_requests', args: { query: 'is:pr involves:{login}', sort: 'updated', perPage: 6 }, extract: { repos: PR_REPOS }, merge: true },
             { tool: 'list_commits', each: 'repos', args: { owner: '{owner}', repo: '{repo}', author: '{login}', perPage: 5 } },
           ],
           output: COMMIT_NOTE },
         { key: 'prs-to-review', label: 'Pull requests to review', keywords: ['\\b(prs?|pull requests?)\\b.*\\breview', '\\breview\\b.*\\b(prs?|pull requests?)\\b'],
           steps: [{ tool: 'search_pull_requests', args: { query: 'is:open is:pr review-requested:@me', perPage: 6 } }], output: ITEM_NOTE('Pull requests to review') },
-        { key: 'prs-touching', label: 'Open pull requests', keywords: ['\\b(prs?|pull requests?)\\b.*\\b(touch|about|mention)'],
+        { key: 'prs-touching', label: 'Open pull requests', needs: ['topic'], keywords: ['\\b(prs?|pull requests?)\\b.*\\b(touch|about|mention)'],
           steps: [{ tool: 'search_pull_requests', args: { query: 'is:open is:pr {topic}', perPage: 6 } }], output: ITEM_NOTE('Open pull requests') },
         { key: 'my-prs', label: 'My open pull requests', keywords: ['\\bmy (open |latest |recent )?(prs?|pull requests?)\\b'],
           steps: [{ tool: 'search_pull_requests', args: { query: 'is:open is:pr author:@me', perPage: 6 } }], output: ITEM_NOTE('My open pull requests') },
@@ -102,9 +110,9 @@ export const GALLERY = Object.freeze([
       rounds: 1,
       calls: 1,
       intents: [
-        { key: 'repo-parts', label: 'Parts of the repository', keywords: ['\\b(parts|structure|modules|overview|sections)\\b.*\\b[A-Za-z0-9-]+/[A-Za-z0-9._-]+'],
+        { key: 'repo-parts', label: 'Parts of the repository', needs: ['fullName'], missing: REPO, keywords: ['\\b(parts|structure|modules|overview|sections)\\b.*\\b[A-Za-z0-9-]+/[A-Za-z0-9._-]+'],
           steps: [{ tool: 'read_wiki_structure', args: { repoName: '{fullName}' } }] },
-        { key: 'repo-question', label: 'Answer', keywords: ['\\b[A-Za-z0-9-]+/[A-Za-z0-9._-]+\\b'],
+        { key: 'repo-question', label: 'Answer', needs: ['fullName'], missing: REPO, keywords: ['\\b[A-Za-z0-9-]+/[A-Za-z0-9._-]+\\b'],
           steps: [{ tool: ['ask_question', 'ask_wiki_question'], args: { repoName: '{fullName}', question: '{request}' } }] },
       ],
     },
@@ -159,6 +167,12 @@ export function canonicalAddress(raw) {
 export const cardFor = (address, cards = GALLERY) => {
   const canonical = canonicalAddress(address)
   return cards.find((card) => canonicalAddress(card.url) === canonical) || null
+}
+
+/** The retired listing an address is (an invited copy still works; its chip says why it is not listed), or null. */
+export const retiredFor = (address) => {
+  const canonical = canonicalAddress(address)
+  return canonical ? RETIRED.find((card) => canonicalAddress(card.url) === canonical) || null : null
 }
 
 /** Which gallery card ids are already on this slate (invited agents, as connectors.list gives them). */

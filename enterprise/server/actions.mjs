@@ -16,7 +16,7 @@ const obj = (properties) => ({ type: 'object', properties })
 const OUT = {
   list: obj({ connections: { type: 'array', items: { type: 'object' } }, pro: { type: 'boolean' }, canInvite: { type: 'boolean' } }),
   gallery: obj({ cards: { type: 'array', items: { type: 'object' } }, canInvite: { type: 'boolean' } }),
-  discover: obj({ address: { type: 'string' }, host: { type: 'string' }, suggestedName: { type: 'string' }, tools: { type: 'array', items: { type: 'object' } }, summary: { type: ['object', 'null'] }, signIn: { type: 'object', description: 'Present when the server needs sign-in first: method (oauth or key), authHost, needsClientId, keyAllowed.' }, alreadyHere: { type: 'object', description: 'Present when you already invited this server onto the slate: its connectionId, agentId and name (inviting it again is refused with already_here).' } }),
+  discover: obj({ address: { type: 'string' }, host: { type: 'string' }, suggestedName: { type: 'string' }, tools: { type: 'array', items: { type: 'object' } }, summary: { type: ['object', 'null'] }, signIn: { type: 'object', description: 'Present when the server needs sign-in first: method (oauth or key), authHost, needsClientId, keyAllowed.' }, alreadyHere: { type: 'object', description: 'Present when you already invited this server onto the slate: its connectionId, agentId and name (inviting it again is refused with already_here, unless lookAgain is true: its tools changed or none is left, so inviting again updates that agent).' } }),
   signIn: obj({ flowId: { type: 'string' }, authHost: { type: 'string' } }),
   signInStatus: obj({ status: { type: 'string', enum: ['pending', 'done', 'failed', 'unknown'] }, code: { type: 'string' }, message: { type: 'string' }, opened: { type: 'boolean' } }),
   key: obj({ ok: { type: 'boolean' }, host: { type: 'string' } }),
@@ -29,6 +29,7 @@ const OUT = {
     saved: { type: 'integer', description: 'Answers saved at once, when a person lets this agent edit directly.' },
     say: { type: 'string' },
     left: { type: 'array', items: { type: 'string' } },
+    repeated: { type: 'boolean', description: 'true: the same ask\'s answer is still waiting on the slate, so it is the answer (actions names it) and nothing new was made.' },
   }),
 }
 
@@ -224,7 +225,8 @@ export function connectorActions(service) {
           selection: { type: 'array', maxItems: 60, items: { type: 'string', minLength: 1, maxLength: 128 }, description: 'Selected note ids, when it may see your selection.' },
           history: {
             type: 'array', maxItems: 3, description: 'Your last turns with this agent, so a follow-up has context. Sent to the model as data.',
-            items: { type: 'object', properties: { message: { type: 'string', maxLength: 1200 }, reply: { type: 'string', maxLength: 1200 } }, required: ['message'], additionalProperties: false },
+            // reply is accepted and never sent on (an agent's reply was written from a server's answer); added: what landed, said from counts.
+            items: { type: 'object', properties: { message: { type: 'string', maxLength: 1200 }, reply: { type: 'string', maxLength: 1200 }, added: { type: 'object', properties: { notes: { type: 'integer', minimum: 0, maximum: 99 }, lines: { type: 'integer', minimum: 0, maximum: 99 } }, additionalProperties: false } }, required: ['message'], additionalProperties: false },
           },
           view: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number', minimum: 40 }, height: { type: 'number', minimum: 40 } }, required: ['x', 'y', 'width', 'height'], additionalProperties: false, description: 'The part of the canvas you can see now, in slate units (the canvas minus open panels): its suggestions land there.' },
         },

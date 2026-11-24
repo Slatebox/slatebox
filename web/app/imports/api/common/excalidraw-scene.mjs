@@ -240,6 +240,37 @@ function splitBuffers(bytes) {
 }
 
 /**
+ * A stream read to its end, stopped (and refused) once it passes `max` bytes: a download with no
+ * length, or a small deflated drawing that inflates without end, never fills memory.
+ * → Uint8Array; throws an Error with code 'too_large'.
+ */
+export async function readCapped(stream, max) {
+  const reader = stream.getReader()
+  const parts = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > max) {
+      await reader.cancel().catch(() => {})
+      throw Object.assign(new Error('That drawing is too large to import.'), { code: 'too_large' })
+    }
+    parts.push(value)
+  }
+  const out = new Uint8Array(size)
+  let at = 0
+  for (const part of parts) {
+    out.set(part, at)
+    at += part.byteLength
+  }
+  return out
+}
+
+/** Inflates deflated bytes in the browser, at most `max` bytes out (DecompressionStream). */
+export const inflateCapped = (bytes, max = SCENE_LIMITS.bytes * 4) => readCapped(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate')), max)
+
+/**
  * The drawing a share link stored, decrypted in the browser: { elements }. bytes: what
  * excalidraw.com stored under the link's id; crypto: window.crypto.subtle; inflate(bytes) →
  * Promise<Uint8Array> (DecompressionStream('deflate')).

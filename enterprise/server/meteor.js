@@ -20,6 +20,7 @@ import { sessionAuthorization } from '/server/exec/conversation.mjs'
 // Imported before the registry is built: it puts the suggestion store on deps (deps.suggestions),
 // so the agent's saves become live suggestions like every other agent's.
 import { suggestions as suggestionStore } from '/server/agents/suggestions-meteor.js'
+import { waitingActions } from '/server/agents/suggestions.mjs'
 import { resolvePresentationSlate } from '/server/methods/creative-slates'
 import req from '/server/methods/ai/req'
 import { resolveAIFeatureConfig } from '/server/methods/ai/feature-config.mjs'
@@ -34,7 +35,7 @@ import { createMcpFetch } from './mcp-fetch.mjs'
 import { callTool, discover } from './mcp-session.mjs'
 import { ConnectorRefused, createConnectorService } from './service.mjs'
 import { connectorSettings } from './connector-settings.mjs'
-import { cardFor } from '../common/gallery.mjs'
+import { cardFor, retiredFor } from '../common/gallery.mjs'
 import { liveGallery } from './gallery-admin.mjs'
 import { createVault } from './credentials.mjs'
 import { createSignIn, probe } from './signin.mjs'
@@ -94,6 +95,9 @@ const suggestionsStore = {
   withdraw: (person, slate, agentId) => suggestionStore.discard(person, slate, { agentId }),
   // People on the slate paused every agent there (agents.control): asking is refused up front.
   paused: async (slate) => (await suggestionStore.controlsOf(slate._id)).paused,
+  // The slate's answers still waiting: the next answer lands beside their ghosts, and the same ask
+  // while its answer waits is that answer.
+  waiting: async (slate) => waitingActions(await suggestionStore.list(slate._id)),
 }
 
 const credentialsStore = {
@@ -241,7 +245,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     // The address stays on the server: each screen gets the gallery card it came from (galleryId), so the
     // gallery can mark an agent "On this slate" and the chip can say what it adds.
     const shown = ({ _id, ownerId, address, galleryId, ...fields }) => ({
-      ...fields, galleryId: galleryId || cardFor(address)?.id || null, mine: Boolean(viewer && ownerId === viewer), removable: Boolean(viewer && (ownerId === viewer || ownsSlate)),
+      ...fields, galleryId: galleryId || cardFor(address)?.id || null, retired: retiredFor(address)?.why || null, mine: Boolean(viewer && ownerId === viewer), removable: Boolean(viewer && (ownerId === viewer || ownsSlate)),
     })
     const handle = await McpConnections.find({ slateId, status: { $ne: 'removed' } }, { fields: { name: 1, inviterName: 1, host: 1, status: 1, ownerId: 1, slateId: 1, contextLevel: 1, colorIndex: 1, agentId: 1, createdAt: 1, address: 1, galleryId: 1 } })
       .observeAsync({

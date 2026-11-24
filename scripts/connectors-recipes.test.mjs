@@ -94,13 +94,16 @@ const GH_RAW = [
 ]
 const GH_TOOLS = normalizeTools(GH_RAW)
 const json = (value) => ({ content: [{ type: 'text', text: JSON.stringify(value) }] })
-const commit = (repo, sha, message) => ({ sha, html_url: `https://github.com/${repo}/commit/${sha}`, commit: { message, author: { name: 'Ana' } }, author: { login: 'ana' } })
+const commit = (repo, sha, message, date = '2026-11-01T10:00:00Z') => ({ sha, html_url: `https://github.com/${repo}/commit/${sha}`, commit: { message, author: { name: 'Ana', date } }, author: { login: 'ana' } })
 function githubServer() {
   const calls = []
   const answer = (name, args) => {
     if (name === 'get_me') return json({ login: 'ana', id: 1, profile_url: 'https://github.com/ana' })
     if (name === 'search_repositories') return json({ total_count: 2, items: [{ full_name: 'ana/shop' }, { full_name: 'ana/blog' }] })
-    if (name === 'list_commits') return json(args.repo === 'shop' ? [commit('ana/shop', 'abc1234aaaa', 'Fix retry on declined cards'), commit('ana/shop', 'bcd2345bbbb', 'Faster checkout')] : [commit('ana/blog', 'cde3456cccc', 'Post: launch notes')])
+    if (name === 'list_commits') return json(args.repo === 'shop' ? [commit('ana/shop', 'abc1234aaaa', 'Fix retry on declined cards', '2026-11-20T09:00:00Z'), commit('ana/shop', 'bcd2345bbbb', 'Faster checkout', '2026-11-18T09:00:00Z')]
+      : args.owner === 'acme' ? [commit('acme/app', 'def4567dddd', 'Org: ship the invite gallery', '2026-11-23T09:00:00Z')] : [commit('ana/blog', 'cde3456cccc', 'Post: launch notes', '2026-10-01T09:00:00Z')])
+    // the person's pull requests are also in an organization's repository (acme/app)
+    if (name === 'search_pull_requests' && /involves:ana/.test(args.query)) return json({ total_count: 2, items: [{ number: 7, title: 'Invite gallery', repository_url: 'https://api.github.com/repos/acme/app' }, { number: 42, title: 'Retry declined cards', repository_url: 'https://api.github.com/repos/ana/shop' }] })
     if (name === 'search_pull_requests') return json({ total_count: 1, items: [{ number: 42, title: 'Retry declined cards', html_url: 'https://github.com/ana/shop/pull/42', repository_url: 'https://api.github.com/repos/ana/shop' }] })
     if (name === 'search_issues') return json({ total_count: 0, items: [] })
     return { isError: true, content: [{ type: 'text', text: 'no' }] }
@@ -158,15 +161,19 @@ function githubWorld({ allow = null } = {}) {
 test('GitHub: "what are my latest commits? make a couple notes" resolves "my" with get_me and lands as ONE suggestion of 2 linked notes, with no planner', async () => {
   const w = githubWorld()
   const asked = await w.service.call(w.ada, { connectionId: 'c1', request: 'what are my latest commits? can you make a couple notes on the slate about those?' })
-  assert.deepEqual(w.gh.calls.map((c) => c.name), ['get_me', 'search_repositories', 'list_commits', 'list_commits'])
+  assert.deepEqual(w.gh.calls.map((c) => c.name), ['get_me', 'search_repositories', 'search_pull_requests', 'list_commits', 'list_commits', 'list_commits'])
   assert.deepEqual(w.gh.calls[1].args, { query: 'user:ana', sort: 'updated', perPage: 3 })
-  assert.deepEqual(w.gh.calls.slice(2).map((c) => c.args), [{ owner: 'ana', repo: 'shop', author: 'ana', perPage: 5 }, { owner: 'ana', repo: 'blog', author: 'ana', perPage: 5 }])
+  // (this fake's search_pull_requests lists no sort argument, so fitArgs leaves it out)
+  assert.deepEqual(w.gh.calls[2].args, { query: 'is:pr involves:ana', perPage: 6 })
+  // their own repositories and the ones their pull requests are in (an organization's too), taken in turn
+  assert.deepEqual(w.gh.calls.slice(3).map((c) => c.args), [{ owner: 'ana', repo: 'shop', author: 'ana', perPage: 5 }, { owner: 'acme', repo: 'app', author: 'ana', perPage: 5 }, { owner: 'ana', repo: 'blog', author: 'ana', perPage: 5 }])
   assert.equal(w.prompts.length, 0, 'no model reads the server\'s words: the recipe ran and laid out its own notes')
   assert.equal(asked.actions.length, 1)
   assert.deepEqual(asked.added, { notes: 2, lines: 0 })
   const [action] = await w.live.store.list('slate1')
   const texts = action.items.filter((i) => i.kind === 'add').map((i) => i.node.options.text)
-  assert.deepEqual(texts, ['ana/shop · abc1234 · Fix retry on declined cards', 'ana/shop · bcd2345 · Faster checkout'])
+  // newest first across every repository, not the first repository's only
+  assert.deepEqual(texts, ['acme/app · def4567 · Org: ship the invite gallery', 'ana/shop · abc1234 · Fix retry on declined cards'])
   assert.match(action.message, /^GitHub: what are my latest commits\? can you make a couple notes/)
 })
 
@@ -195,6 +202,57 @@ test('nothing found: the agent says so in plain words, nothing lands', async () 
   const asked = await w.service.call(w.ada, { connectionId: 'c1', request: 'issues assigned to me' })
   assert.equal(asked.actions.length, 0)
   assert.equal(asked.say, 'GitHub found nothing for that.')
+})
+
+test('GitHub: with no pull request search allowed, "my commits" still runs on the person\'s own repositories', async () => {
+  const w = githubWorld({ allow: ['get_me', 'search_repositories', 'list_commits'] })
+  const asked = await w.service.call(w.ada, { connectionId: 'c1', request: 'my latest commits' })
+  assert.deepEqual(w.gh.calls.map((c) => c.name), ['get_me', 'search_repositories', 'list_commits', 'list_commits'])
+  assert.equal(w.prompts.length, 0)
+  assert.equal(asked.added.notes, 3)
+})
+
+test('"this week/last week" and "and/or" are not repositories; an intent that needs one is passed over', async () => {
+  const w = githubWorld()
+  await w.service.call(w.ada, { connectionId: 'c1', request: 'list my commits this week/last week' })
+  assert.equal(w.gh.calls[0].name, 'get_me', 'my-commits, not repo-commits on week/last')
+  assert.deepEqual(requestValues('pros and/or cons of vercel/next.js'), { owner: 'vercel', repo: 'next.js', fullName: 'vercel/next.js' })
+  assert.deepEqual(requestValues('the 11/24 release and his/her notes'), {})
+  const deepwiki = checkRecipe(GALLERY.find((c) => c.id === 'deepwiki').recipe)
+  assert.equal(matchIntent(deepwiki, 'pros and/or cons of this'), null)
+  assert.equal(matchIntent(deepwiki, 'pros and/or cons of vercel/next.js').key, 'repo-question')
+})
+
+test('a stopped recipe says what that agent needs, in its own words (no GitHub words for others)', async () => {
+  const w = githubWorld()
+  const card = GALLERY.find((c) => c.id === 'github')
+  assert.equal(checkRecipe(card.recipe).intents.find((i) => i.key === 'repo-commits').missing, 'Try naming the repository (owner/name).')
+  const context7 = checkRecipe(GALLERY.find((c) => c.id === 'context7').recipe)
+  assert.equal(context7.intents[0].missing, undefined)
+  // a recipe whose step finds nothing it needs, for an agent with no "missing" words
+  const recipe = checkRecipe({ intents: [{ key: 'x', keywords: ['.'], steps: [{ tool: 'get_me', args: {}, extract: { id: 'nothing' } }, { tool: 'list_commits', args: { owner: '{id}', repo: '{id}' } }] }] })
+  assert.equal(recipe.intents[0].missing, undefined)
+  void w
+})
+
+test('budget: ordinary words with numbers or "a node" are not counts of notes', () => {
+  assert.deepEqual(requestBudget('explain a node.js service layout'), {})
+  assert.deepEqual(requestBudget('summarize the React 18 card component'), {})
+  assert.deepEqual(requestBudget('set up 2 step verification notes'), {})
+  assert.deepEqual(requestBudget('a 3-step process'), { notes: 3 })
+  assert.deepEqual(requestBudget('make 4 cards with 3 arrows'), { notes: 4, lines: 3 })
+  assert.deepEqual(requestBudget('1 note please'), { notes: 1 })
+})
+
+test('administrators\' patterns: only ones that cannot take exponential time run, on capped text', async () => {
+  const { safePattern } = await import('../enterprise/server/recipes.mjs')
+  for (const bad of ['(a+)+', '(a|aa)*', '(x\\d+)*y', '^(\\w+\\s?)*$', '(?=a)', '\\1', 'x'.repeat(201)]) assert.equal(safePattern(bad), false, bad)
+  for (const ok of GALLERY.flatMap((c) => (c.recipe?.intents || []).flatMap((i) => i.keywords))) assert.equal(safePattern(ok), true, ok)
+  const recipe = checkRecipe({ intents: [{ key: 'x', keywords: ['(a+)+$', 'commits'], steps: [{ tool: 't', args: {} }] }] })
+  assert.deepEqual(recipe.intents[0].keywords, ['commits'], 'a catastrophic pattern is dropped at save')
+  const started = Date.now()
+  assert.deepEqual(extract(null, { id: 're:(a+)+$' }, 'a'.repeat(50000) + '!'), { id: [] })
+  assert.ok(Date.now() - started < 200)
 })
 
 // ---- Excalidraw drawings as native notes -------------------------------------------------------
@@ -255,4 +313,20 @@ test('Import from Excalidraw: a layout from the browser is checked, then becomes
   const stored = concat(enc(JSON.stringify({ version: 2, compression: 'pako@1', encryption: 'AES-GCM' })), iv, cipher)
   const { elements } = await decryptShare(stored, k, { subtle, inflate: async (b) => new Uint8Array(inflateSync(b)) })
   assert.equal(sceneToLayout(elements).notes[0].text, 'Hello')
+})
+
+test('share-link import sizes: a download and an inflated drawing are read with a cap, never buffered whole', async () => {
+  const { readCapped } = await import('../web/app/imports/api/common/excalidraw-scene.mjs')
+  const chunks = (n, size) => new ReadableStream({ pull(controller) { if (n-- <= 0) controller.close(); else controller.enqueue(new Uint8Array(size)) } })
+  assert.equal((await readCapped(chunks(4, 1000), 5000)).byteLength, 4000)
+  let pulled = 0
+  const endless = new ReadableStream({ pull(controller) { pulled++; controller.enqueue(new Uint8Array(64 * 1024)) } })
+  await assert.rejects(readCapped(endless, 1024 * 1024), (e) => e.code === 'too_large')
+  assert.ok(pulled < 40, 'stopped once past the cap')
+  // a small deflated bomb: inflating stops at the cap
+  const { deflateSync } = await import('node:zlib')
+  const bomb = deflateSync(Buffer.alloc(64 * 1024 * 1024))
+  assert.ok(bomb.byteLength < 200 * 1024)
+  const inflating = new Blob([bomb]).stream().pipeThrough(new DecompressionStream('deflate'))
+  await assert.rejects(readCapped(inflating, 4 * 1024 * 1024), (e) => e.code === 'too_large')
 })

@@ -4,6 +4,7 @@
 // (imports/api/common/excalidraw-scene.mjs decryptShare). Only that one host, one shape of id, a
 // size cap and a timeout; no cookies, no redirects followed.
 import { Meteor } from 'meteor/meteor'
+import { readCapped } from '/imports/api/common/excalidraw-scene.mjs'
 
 const SHARE_ID = /^[A-Za-z0-9_-]{8,64}$/
 const MAX_BYTES = 4 * 1024 * 1024
@@ -27,8 +28,12 @@ Meteor.methods({
     if (!response.ok) throw new Meteor.Error('unavailable', 'excalidraw.com did not give the drawing. Try again in a minute.')
     const size = Number(response.headers.get('content-length') || 0)
     if (size > MAX_BYTES) throw new Meteor.Error('too_large', 'That drawing is too large to import.')
-    const bytes = new Uint8Array(await response.arrayBuffer())
-    if (bytes.byteLength > MAX_BYTES) throw new Meteor.Error('too_large', 'That drawing is too large to import.')
-    return bytes
+    // Read with the cap as it arrives (an answer with no length is never buffered whole first).
+    try {
+      return response.body ? await readCapped(response.body, MAX_BYTES) : new Uint8Array(0)
+    } catch (error) {
+      if (error?.code === 'too_large') throw new Meteor.Error('too_large', 'That drawing is too large to import.')
+      throw new Meteor.Error('unavailable', 'excalidraw.com did not give the drawing. Try again in a minute.')
+    }
   },
 })
