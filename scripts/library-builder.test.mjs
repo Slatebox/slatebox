@@ -320,3 +320,24 @@ test("submit asks for a name when the account has none, saves it to the profile,
   assert.match(dialog, /askName && <TextField label=\{CREDIT_QUESTION\}/);
   assert.ok(dialog.indexOf("Meteor.callAsync('users.setCreditName', credited.name)") < dialog.indexOf("libraryApi.submit("));
 });
+
+// Owner (2026-11-24): the build bar floated over the canvas and covered a selected note's toolbar. It lives in the
+// canvas header now (after the slate's name, Save and Submit beside the header's buttons), one Builder button and a
+// sheet below 1000px, and a branch's first words at the top of Ask Slatebox; nothing of it is fixed over the canvas.
+test("the build bar is drawn into the canvas header and Ask Slatebox, never fixed over the canvas", () => {
+  const barSource = app("imports/ui/components/library/build/BuildBar.jsx");
+  assert.match(barSource, /createPortal\(folds \? folded : wide, header\)/);
+  assert.match(barSource, /createPortal\(firstTurn, intro\)/);
+  assert.match(barSource, /useAtomValue\(builderHeaderSlot\)/);
+  assert.match(barSource, />Builder<\/Button>/);
+  // The only fixed piece is the Save sheet, opened by hand (sheetPlace); the bar and the first words are not.
+  const component = barSource.slice(barSource.indexOf("export default function BuildBar"));
+  assert.doesNotMatch(component, /position: 'fixed'/);
+  assert.match(component, /<Paper elevation=\{6\} data-build-sheet=\{sheet\}\s+sx=\{sheetPlace\(phone, narrow, sheetRight\)\}>/);
+  const toolbar = app("imports/ui/components/CanvasToolbar.jsx");
+  assert.match(toolbar, /<div ref=\{setBuilderSlot\} className="sb-board-builder" \/>/);
+  assert.ok(toolbar.indexOf("sb-board-builder") > toolbar.indexOf('className="sb-board-name"'), "after the slate's name");
+  assert.ok(toolbar.indexOf("sb-board-builder") < toolbar.indexOf("{presentButton}"), "before the header's buttons");
+  assert.match(app("imports/ui/components/ConversationPanel.jsx"), /ref=\{setIntroSlot\}/);
+  assert.match(app("imports/ui/common/main.css"), /\.sb-board-builder\{display:contents\}/);
+});

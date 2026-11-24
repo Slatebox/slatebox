@@ -20,6 +20,51 @@ test.use({ ...(process.env.SLATEBOX_CHROMIUM && { launchOptions: { executablePat
 
 const panel = page => page.locator('aside[aria-label="Ask Slatebox"]')
 const bar = page => page.locator('[data-build-bar]')
+const header = page => page.locator('.sb-board-toolbar')
+// The build bar lives in the canvas header: all of it from 1000px wide; below that one Builder button, whose sheet
+// holds the item's name, where it stands, and Save and Submit. `builderControls(page)` is where those are found now (the
+// sheet opened first on a narrow screen); `doneWithBuilder` closes that sheet again.
+const details = page => page.locator('[data-build-details]')
+async function builderControls(page) {
+  const folded = bar(page).getByRole('button', { name: 'Builder', exact: true })
+  if (!(await folded.isVisible().catch(() => false))) return bar(page)
+  if (!(await details(page).isVisible().catch(() => false))) await folded.click()
+  await expect(details(page)).toBeVisible()
+  return details(page)
+}
+async function doneWithBuilder(page) {
+  if (await details(page).isVisible().catch(() => false)) {
+    await details(page).getByRole('button', { name: 'Close', exact: true }).click()
+    await expect(details(page)).toBeHidden()
+  }
+}
+const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+// Nothing of the builder is over the canvas: the bar's box lies inside the header's, and a selected note's toolbar
+// (Edit, Move to, Ask Slatebox, delete) is clear of every part of the builder still on screen.
+async function builderInHeader(page) {
+  const head = await header(page).boundingBox(), box = await bar(page).boundingBox()
+  expect(box, 'the build bar is drawn').toBeTruthy()
+  expect(box.x >= head.x - 0.5 && box.y >= head.y - 0.5 && box.x + box.width <= head.x + head.width + 0.5 && box.y + box.height <= head.y + head.height + 0.5,
+    `the build bar ${JSON.stringify(box)} lies inside the header ${JSON.stringify(head)}`).toBe(true)
+  for (const button of await bar(page).getByRole('button').all()) {
+    const b = await button.boundingBox()
+    expect(b.y >= head.y - 0.5 && b.y + b.height <= head.y + head.height + 0.5, 'each builder button sits inside the header').toBe(true)
+  }
+}
+async function noteToolbarClear(page, label) {
+  await page.getByRole('button', { name: 'Got it' }).click({ timeout: 3000 }).catch(() => {})
+  await page.locator(`g[data-node-id][aria-label^="${label}"]`).first().click()
+  const toolbar = page.locator('.sb-style-bar[role="toolbar"]').first()
+  await expect(toolbar).toBeVisible({ timeout: 30000 })
+  const tb = await toolbar.boundingBox()
+  const parts = page.locator('[data-build-bar], [data-build-bar] *, [data-build-greeting], [data-build-sheet], [data-build-details]')
+  for (const part of await parts.all()) {
+    if (!(await part.isVisible().catch(() => false))) continue
+    const b = await part.boundingBox()
+    if (b && b.width && b.height) expect(overlaps(b, tb), `a part of the builder ${JSON.stringify(b)} covers the note's toolbar ${JSON.stringify(tb)}`).toBe(false)
+  }
+  return toolbar
+}
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` }) }
 async function say(page, text) {
   const box = panel(page).getByRole('textbox', { name: 'Message Slatebox' })
@@ -46,7 +91,8 @@ for (const size of [{ name: 'desktop', width: 1440, height: 900 }, { name: 'phon
     // A fresh guest: nothing carried in from another session.
     expect(await page.evaluate(() => window.Meteor?.user()?.isAnonymous ?? true)).toBe(true)
     await expect(bar(page)).toBeVisible({ timeout: 60000 })
-    await expect(bar(page)).toContainText(size.name === 'phone' ? 'Building' : 'Building a smart component')
+    await expect(bar(page)).toContainText(size.name === 'phone' ? 'Builder' : 'Building a smart component')
+    await builderInHeader(page)
     await openPanel(page)
     await expect(panel(page).getByText('What should this board do?')).toBeVisible({ timeout: 30000 })
     await shot(page, `${size.name}-01-first-turn`)
@@ -116,14 +162,17 @@ for (const size of [{ name: 'desktop', width: 1440, height: 900 }, { name: 'phon
     await expect(control(page, 'capacity:lane-3')).toHaveAttribute('aria-label', /Done holds 4\b/, { timeout: 60000 })
 
     // 4. Save as Decide.
-    await bar(page).getByRole('button', { name: 'Save', exact: true }).click()
+    await builderInHeader(page)
+    await (await builderControls(page)).getByRole('button', { name: 'Save', exact: true }).click()
     const sheet = page.locator('[data-build-sheet="save"]')
     await sheet.getByLabel('Name').fill('Doing then done ' + size.name)
     await sheet.getByLabel('What it does, in one line').fill('Three columns; Doing holds a few, Done holds four')
     await sheet.getByRole('button', { name: 'Decide' }).click()
     await shot(page, `${size.name}-06-save-sheet`)
     await sheet.getByRole('button', { name: 'Save', exact: true }).click()
-    await expect(bar(page).locator('[data-build-status="draft"]')).toBeVisible({ timeout: 30000 })
+    await expect(sheet).toBeHidden({ timeout: 30000 })
+    await expect((await builderControls(page)).locator('[data-build-status="draft"]')).toBeVisible({ timeout: 30000 })
+    await doneWithBuilder(page)
 
     // 5. On another slate: Add to this slate › Yours › Add, then Keep.
     await page.goto(ORIGIN + '/new')
@@ -144,18 +193,21 @@ for (const size of [{ name: 'desktop', width: 1440, height: 900 }, { name: 'phon
     await expect(bar(page)).toBeVisible({ timeout: 60000 })
     if (PROMOTE) {
       const id = await page.evaluate(() => window.Meteor.userId())
-      execFileSync(PROMOTE, [id], { stdio: 'inherit' })
+      // With a name on the account (as library-journey's PROMOTE takes it): someone with none is asked how to credit them first.
+      execFileSync(PROMOTE, [id, 'Bea', 'Builder'], { stdio: 'inherit' })
       await page.reload()
       await expect(bar(page)).toBeVisible({ timeout: 60000 })
     }
-    await bar(page).getByRole('button', { name: /Submit/ }).click()
+    await (await builderControls(page)).getByRole('button', { name: /Submit/ }).click()
     const submit = page.locator('[data-build-sheet="submit"]')
     await expect(submit.getByText('Shared under CC BY 4.0')).toBeVisible()
     await submit.getByLabel('Note for the reviewer (optional)').fill('Built in a test run')
     await shot(page, `${size.name}-09-submit-sheet`)
     await submit.getByRole('button', { name: 'Submit for review' }).click()
     if (PROMOTE) {
-      await expect(bar(page)).toContainText('Submitted for review', { timeout: 30000 })
+      await expect(submit).toBeHidden({ timeout: 30000 })
+      await expect(await builderControls(page)).toContainText('Submitted for review', { timeout: 30000 })
+      await doneWithBuilder(page)
     } else {
       await expect(submit.getByRole('alert')).toContainText('Sign up to publish', { timeout: 30000 })
     }
@@ -172,7 +224,14 @@ test('a branch off Retro keeps Meetings, locked; its controls are on the board f
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 120000 })
   await expect(bar(page)).toContainText('Branched from Retro (Meetings)', { timeout: 60000 })
   await expect(page.locator('[data-build-greeting]')).toContainText('This is your copy of Retro.')
+  // Its first words are in Ask Slatebox, not over the board; the bar is in the header.
+  await expect(panel(page).locator('[data-build-greeting]')).toHaveCount(1)
+  await builderInHeader(page)
   await expect(page.locator('g[data-rule-controls]')).toHaveCount(1, { timeout: 60000 })
+  // A selected card's toolbar (Edit, Move to, Ask Slatebox, delete) is clear of every part of the builder.
+  await expect(await noteToolbarClear(page, 'Shipped on time')).toContainText('Move to')
+  await shot(page, 'branch-00-card-toolbar')
+  await page.keyboard.press('Escape')
   await bar(page).getByRole('button', { name: 'Save', exact: true }).click()
   const sheet = page.locator('[data-build-sheet="save"]')
   await expect(sheet.locator('[data-category-locked="meetings"]')).toContainText('Meetings (from Retro)')
@@ -181,5 +240,35 @@ test('a branch off Retro keeps Meetings, locked; its controls are on the board f
   await sheet.getByLabel('What it does, in one line').fill('Went well, change, try, and a vote')
   await sheet.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(bar(page).locator('[data-build-status="draft"]')).toBeVisible({ timeout: 30000 })
+  await context.close()
+})
+
+test('on a phone the build bar is one Builder button in the header; its sheet holds the rest; a card\'s toolbar is clear of it', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+  const page = await context.newPage()
+  const errors = []
+  page.on('pageerror', e => errors.push(e.message))
+  await page.goto(ORIGIN + '/new#build=builtin-retro')
+  await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 120000 })
+  await expect(bar(page).getByRole('button', { name: 'Builder', exact: true })).toBeVisible({ timeout: 60000 })
+  await builderInHeader(page)
+  // The header never overflows at 390.
+  expect(await header(page).evaluate(h => h.scrollWidth <= h.clientWidth + 1), 'the header fits').toBe(true)
+  if (await panel(page).isVisible().catch(() => false)) {
+    await expect(panel(page).locator('[data-build-greeting]')).toContainText('This is your copy of Retro.')
+    await panel(page).getByRole('button', { name: 'Close conversation' }).click()
+  }
+  await noteToolbarClear(page, 'Shipped on time')
+  await shot(page, 'phone-branch-card-toolbar')
+  const sheet = await builderControls(page)
+  await expect(sheet).toContainText('Building a smart component')
+  await expect(sheet).toContainText('Branched from Retro (Meetings)')
+  await expect(sheet).toContainText('This is your copy of Retro.')
+  await expect(sheet.getByRole('button', { name: 'Submit to the library', exact: true })).toBeVisible()
+  await shot(page, 'phone-branch-builder-sheet')
+  await sheet.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(details(page)).toBeHidden()
+  await expect(page.locator('[data-build-sheet="save"]')).toBeVisible()
+  expect(errors).toEqual([])
   await context.close()
 })

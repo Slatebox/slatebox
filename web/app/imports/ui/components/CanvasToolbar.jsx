@@ -39,7 +39,7 @@ import copySlate from '../../api/client/copySlate'
 import { Slates } from '../../api/common/models'
 import { originCredit } from './library/libraryCopy.mjs'
 import confirmService from '../common/confirm'
-import { collaborationUsers, conversationArrival, conversationAvailable, conversationOpen, isPresentOpen, mermaidDialog } from '../jotai/atoms'
+import { builderHeaderSlot, collaborationUsers, conversationArrival, conversationAvailable, conversationOpen, isPresentOpen, mermaidDialog } from '../jotai/atoms'
 import { toggledConversation } from '../../api/common/conversation-toggle.mjs'
 import { presentedBoards } from './presentations/workshopScenes.mjs'
 
@@ -50,7 +50,8 @@ const peerName = p => p.userName
 // opens the slate's own menu. Right: who is here, Huddle, Ask Slatebox, Present ▾ (or Follow
 // presentation while someone else presents) and Share. Far right: notifications (or, for a guest,
 // Save your work) and the account. Below 1000px it is one row — ≡, name, Present, Share, account —
-// and the canvas page puts Ask Slatebox and Huddle in a bar under the canvas.
+// and the canvas page puts Ask Slatebox and Huddle in a bar under the canvas. On a builder slate, the build
+// bar sits after the name (the whole of it from 1000px wide, one Builder button below that).
 export default function CanvasToolbar({ slate, title, privacy, user, manage, busy, huddle, navOpen, onOpenNav, onSettings, onOutput, onHistory, onShare, onRename }) {
   const route = useLocation().pathname.match(/^\/canvas\/([a-zA-Z0-9]{1,40})\/?$/)?.[1]
   const navigate = useNavigate()
@@ -73,6 +74,8 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
   const people = useAtomValue(collaborationUsers)
   const unread = useUnreadNotifications()
   const saveYourWork = useSaveYourWork()
+  // A builder slate puts its status and its Save and Submit here (library/build/BuildBar.jsx), never over the canvas.
+  const setBuilderSlot = useSetAtom(builderHeaderSlot)
 
   const onWorkshop = Boolean(route && slate?.creativeKind === 'workshop')
   // A workshop slate's saved workshop, as the canvas page has subscribed to it. The board records
@@ -257,6 +260,7 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
         sx={{ ml: 1, minWidth: 0, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, color: 'var(--sb-ink2)', textDecoration: 'underline', textUnderlineOffset: '0.15em' }}>
         {credit.text}</Box>}
     </div>
+    <div ref={setBuilderSlot} className="sb-board-builder" />
 
     {!narrow && others > 0 && <ButtonBase className="sb-board-peers" aria-haspopup="dialog" aria-expanded={Boolean(peopleAnchor)}
       aria-label={`People on this slate: you and ${others} other${others > 1 ? 's' : ''}`} onClick={e => setPeopleAnchor(e.currentTarget)}>

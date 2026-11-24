@@ -40,6 +40,16 @@ const DECK = `Release walkthrough ${RUN}`
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` }) }
 const panel = page => page.locator('aside[aria-label="Ask Slatebox"]')
 const bar = page => page.locator('[data-build-bar]')
+// The build bar is in the canvas header, never over the canvas: its box (and each of its buttons) lies inside the header's.
+async function builderInHeader(page) {
+  const head = await page.locator('.sb-board-toolbar').boundingBox(), box = await bar(page).boundingBox()
+  expect(box.x >= head.x - 0.5 && box.y >= head.y - 0.5 && box.x + box.width <= head.x + head.width + 0.5 && box.y + box.height <= head.y + head.height + 0.5,
+    `the build bar ${JSON.stringify(box)} lies inside the header ${JSON.stringify(head)}`).toBe(true)
+  for (const button of await bar(page).getByRole('button').all()) {
+    const b = await button.boundingBox()
+    expect(b.y >= head.y - 0.5 && b.y + b.height <= head.y + head.height + 0.5, 'each builder button sits inside the header').toBe(true)
+  }
+}
 const review = page => page.getByTestId('review-panel')
 const api = (request, path) => request.get(ORIGIN + '/api/v1' + path).then(async r => ({ status: r.status(), headers: r.headers(), body: await r.json().catch(() => null) }))
 const canvasId = page => new URL(page.url()).pathname.split('/')[2]
@@ -121,6 +131,7 @@ test('1. an author builds a smart component from scratch by chat, saves it in Tr
   await noLegacyWelcome(page)
   await page.goto(author.slate)
   await expect(bar(page)).toBeVisible({ timeout: 60000 })
+  await builderInHeader(page)
   await noLegacyWelcome(page)
   await openPanel(page)
   await expect(panel(page).getByText('What should this board do?')).toBeVisible({ timeout: 30000 })
@@ -252,6 +263,8 @@ test('3. another person branches off it (the branch keeps Track, locked) and add
   for (const name of ['Save', 'Submit to the library']) {
     expect(await bar(page).getByRole('button', { name, exact: true }).evaluate(b => b.scrollWidth <= b.clientWidth + 1), name + ' is whole').toBe(true)
   }
+  // All of it in the header, nothing over the canvas.
+  await builderInHeader(page)
   await bar(page).getByRole('button', { name: 'Save', exact: true }).click()
   const sheet = page.locator('[data-build-sheet="save"]')
   await expect(sheet.locator('[data-category-locked="track"]')).toBeVisible()

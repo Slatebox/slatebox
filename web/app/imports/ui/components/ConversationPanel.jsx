@@ -3,7 +3,7 @@ import { Box, Button, IconButton, Paper, TextField, Tooltip, Typography, useMedi
 import CloseIcon from '@mui/icons-material/Close'
 import { newestTop } from '../common/newestTurn.mjs'
 import { useSetAtom } from 'jotai'
-import { conversationArrival } from '../jotai/atoms'
+import { conversationArrival, conversationIntroSlot } from '../jotai/atoms'
 import { arrivalShown } from '../../api/common/conversation-toggle.mjs'
 
 // A short screen: a phone held sideways.
@@ -38,6 +38,8 @@ export default function ConversationPanel({ onClose, children, composer, anchor 
   const grown = useRef(0)
   // In sight: a conversation the slate opened by itself is here now (its button closes it after a moment).
   const setArrival = useSetAtom(conversationArrival)
+  // A builder slate's first words (BuildBar) are drawn here, under the heading, rather than over the canvas.
+  const setIntroSlot = useSetAtom(conversationIntroSlot)
   useLayoutEffect(() => { setArrival(arrival => arrivalShown(arrival, performance.now())) }, [])
   // The newest of the conversation is at its foot, just above the message box: keep it in sight
   // as the conversation grows (and leave alone someone reading further up while nothing is added).
@@ -74,6 +76,7 @@ export default function ConversationPanel({ onClose, children, composer, anchor 
       <Typography component="h2" variant="h6">Ask Slatebox</Typography>
       <Tooltip title="Close"><IconButton aria-label="Close conversation" onClick={close} sx={{mr:-1}}><CloseIcon /></IconButton></Tooltip>
     </Box>
+    <Box ref={setIntroSlot} data-conversation-intro="" sx={{flex:'none',px:2.5,'&:empty':{display:'none'}}} />
     {/* On a short screen the message box and its Keep and Discard come first; the conversation has what is left. */}
     {/* A column, so a short conversation can sit at its foot (an auto top margin, which never hides what overflows). */}
     <Box ref={history} data-conversation-history={anchor} sx={{flex:'1 1 auto',minHeight:0,overflowY:'auto',overscrollBehavior:'contain',px:2.5,

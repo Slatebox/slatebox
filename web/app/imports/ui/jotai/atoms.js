@@ -15,6 +15,11 @@ export const conversationMinimised = atom(false)
 // The conversation a slate opened by itself as it loaded, until a tap or a close: { shownAt }, null
 // until it first shows. Its button opens it, not closes it, until then (conversation-toggle.mjs).
 export const conversationArrival = atom(null)
+// Where a builder slate's status lives (library/build/BuildBar.jsx): a place in the canvas header, after the
+// slate's name, and a place at the top of Ask Slatebox for its first words. Each is the element, set by the
+// header and the panel as they mount (null while they are not there); nothing of the builder floats over the canvas.
+export const builderHeaderSlot = atom(null)
+export const conversationIntroSlot = atom(null)
 const conversationOpenBase = atom(false)
 export const conversationOpen = atom((get) => get(conversationOpenBase), (get, set, next) => {
   set(conversationMinimised, false)
