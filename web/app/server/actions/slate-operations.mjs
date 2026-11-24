@@ -194,7 +194,10 @@ export async function applyToCanvas(principal, input, { deps, mode, now, idempot
         before = current
         result = apply(current)
         const settingKeys = result.materializedPlan.operations.flatMap((operation) => operation.kind === 'update_slate' ? Object.keys(operation.changes || {}) : [])
-        undoable = stepOf ? null : undoRecord(current, result.slate, settingKeys)
+        // An agent's work kept or undone through its suggestions (attribution) is not the caller's
+        // applyOperations edit: suggestions.decide undoes it per agent action, and a person's Keep is a
+        // step of their canvas history (ownStep), never slates.undo's.
+        undoable = stepOf || attribution ? null : undoRecord(current, result.slate, settingKeys)
         return { set: setFor(result) }
       },
     })

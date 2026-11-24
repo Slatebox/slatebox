@@ -8,6 +8,7 @@ import { createIdempotencyStore } from "../web/app/server/actions/idempotency.mj
 import { createSlateReader } from "../web/app/server/slate-read.mjs";
 import { createSlateSaveCore } from "../web/app/server/slate-save-core.mjs";
 import { memoryMongo } from "./memory-mongo.mjs";
+import { applyToCanvas } from "../web/app/server/actions/slate-operations.mjs";
 import { serve } from "./action-test-stores.mjs";
 
 const { applyPlanToJSON } = createRequire(new URL("../web/app/package.json", import.meta.url))("slateboxjs/operations");
@@ -33,8 +34,7 @@ function app(t) {
     }
     return 0;
   };
-  const registry = createAppRegistry({
-    deps: {
+  const deps = {
       saveCore,
       // The owner and the slate's editors may edit it.
       authorizeTokenForSlate: async (token, shareId) => {
@@ -51,7 +51,9 @@ function app(t) {
         insertAsync: (row) => runs.insertOne({ _id: "run-" + runs.docs().length, ...row }),
         updateAsync: (selector, update) => runs.updateOne(selector, update),
       },
-    },
+  };
+  const registry = createAppRegistry({
+    deps,
     idempotency: createIdempotencyStore({ collection: memoryMongo() }),
     now,
   });
@@ -61,7 +63,7 @@ function app(t) {
     const [userId, token = "main"] = raw.split(":");
     return { kind: "agent", tokenId: "token-" + userId + "-" + token, tokenName: "Agent " + token, userId, scopes: ["slates:read", "slates:write"] };
   };
-  return { slates, runs, saveCore, call: serve(t, registry, authenticate) };
+  return { slates, runs, saveCore, deps, now, call: serve(t, registry, authenticate) };
 }
 
 async function seeded(t) {
@@ -177,6 +179,25 @@ test("undo brings back notes and lines an edit removed, and removes notes and li
   assert.equal((await undo(env, "owner")).status, 200);
   const a2 = (await stored(env)).find((n) => n.options.id === "a");
   assert.deepEqual(a2.relationships.associations, []);
+});
+
+test("an agent's work kept or undone through its suggestions is never slates.undo's: it skips to the caller's own applyOperations edit", async (t) => {
+  const env = await seeded(t);
+  await edit(env, "owner", { kind: "update_nodes", target: { ids: ["a"] }, changes: { text: "Alpha by the agent" } });
+  // suggestions.decide saves an agent action's undo (or a person's Keep) with its attribution, as the same caller.
+  const caller = { kind: "agent", tokenId: "token-owner-main", tokenName: "Agent main", userId: "owner", scopes: ["slates:read", "slates:write"] };
+  const slate = await env.slates.findOne({ _id: "s1" });
+  await applyToCanvas(caller, { plan: plan({ kind: "update_nodes", target: { ids: ["b"] }, changes: { text: "Beta, the agent's action undone" } }), userMessage: "", expectedRevision: slate.revision },
+    { deps: env.deps, mode: "save", now: env.now, idempotencyKey: null, resource: slate, attribution: { agentId: "agent-1", label: "Agent main", undo: true } });
+  const attributed = env.runs.docs().at(-1);
+  assert.equal(attributed.undoable, undefined);
+  assert.equal(attributed.agent.agentId, "agent-1");
+  // slates.undo takes back the caller's own edit, and leaves the suggestions' save as it is.
+  const undone = await undo(env, "owner");
+  assert.equal(undone.status, 200, JSON.stringify(undone.body));
+  assert.equal(undone.body.undone, "run-0");
+  assert.equal(await textOf(env, "a"), "Alpha");
+  assert.equal(await textOf(env, "b"), "Beta, the agent's action undone");
 });
 
 test("slates.undo and slates.redo are in the action contract with factual descriptions", async () => {

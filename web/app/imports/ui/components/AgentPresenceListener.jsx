@@ -27,6 +27,7 @@ import { clockOffset, onScreenClock } from '../../api/common/agent-clock.mjs'
 import { activityLine, agentsOnRoster, pendingCount } from '../../api/common/agent-roster.mjs'
 import EnterpriseSlot from '../common/EnterpriseSlot'
 import Hexagon from './AgentMark'
+import { expectOwnRuns } from '../../api/client/ownRuns.mjs'
 
 // Whether this person may edit the slate (Canvas sets it): Keep, Discard, Undo and Pause show only then.
 export const agentControlsAtom = atom(false)
@@ -94,7 +95,16 @@ export function coveredEdges(engine) {
   }
 }
 
-const decide = (shareId, input) => Meteor.callAsync('suggestions.decide', { shareId, ...input })
+// The canvas each open slate draws on (AgentPresenceListener sets it). A Keep is this person's own change: the
+// run it saves is drawn on their canvas as one step of their undo history (ownRuns.mjs, SlateOperationListener
+// draws it with ownStep), and on every other page as someone else's change. Discard saves nothing; an agent
+// action's Undo is that agent's own (per action), drawn as anyone else's change.
+const keepers = new Map()
+const decide = (shareId, input) => {
+  const asked = Meteor.callAsync('suggestions.decide', { shareId, ...input })
+  const slate = input.decision === 'keep' ? keepers.get(shareId) : null
+  return slate ? expectOwnRuns(slate, asked, (out) => (out?.kept?.length ? out.revision : null)) : asked
+}
 
 // Edit directly is offered to the person who brought the agent, and to the slate's owner (the server checks again).
 export const mayDirect = (controls, agentId) => Boolean(controls?.owner || (Array.isArray(controls?.mine) && controls.mine.includes(agentId)))
@@ -114,6 +124,12 @@ export default function AgentPresenceListener({ slate, canEdit = false }) {
   // The drawing (slateboxjs/presence) loads when the first agent arrives or suggests something: a
   // slate no agent works on never fetches it.
   const wanted = all.length > 0 || actions.some((action) => pendingCount(action) > 0)
+  useEffect(() => {
+    const shareId = slate?.shareId
+    if (!shareId) return undefined
+    keepers.set(shareId, slate)
+    return () => { if (keepers.get(shareId) === slate) keepers.delete(shareId) }
+  }, [slate])
   useEffect(() => {
     // The page holds the v1 facade; the engine's own slate (its svg.js canvas) is slate.v2.
     const engine = slate?.v2 ?? slate

@@ -406,6 +406,11 @@ test("the roster: people, then agents as their own group; an agent with suggesti
   assert.match(listener, /decision: 'undo', actionId: action\.actionId/);
   assert.match(listener, /'agents\.control', \{ shareId, paused: !controls\.paused \}/);
   assert.match(listener, /toNode: compat\.v1NodeToV2/);
+  // A person's Keep is a step of their own undo history: the run it saves is expected as this page's own
+  // (drawn with ownStep), only when something was kept; Discard and an agent action's Undo are not.
+  assert.match(listener, /input\.decision === 'keep' \? keepers\.get\(shareId\) : null/);
+  assert.match(listener, /expectOwnRuns\(slate, asked, \(out\) => \(out\?\.kept\?\.length \? out\.revision : null\)\)/);
+  assert.match(listener, /keepers\.set\(shareId, slate\)/);
   const canvas = await readFile(new URL("../web/app/imports/ui/pages/Canvas.jsx", import.meta.url), "utf8");
   assert.match(canvas, /<AgentPresenceListener slate=\{slate\.current\} canEdit=\{!accessLevel\.current\.isReadOnly && !accessLevel\.current\.isCommentOnly\} \/>/);
 });
