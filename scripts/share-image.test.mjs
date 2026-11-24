@@ -36,7 +36,10 @@ test('the canvas page\'s head uses it for a public slate, and the editor\'s page
   assert.match(startup, /presentation\?\.imageUrl \|\|\s*boardImage \|\|\s*'https:\/\/files\.slatebox\.com\/slatebox_small_logo\.svg'/)
   assert.match(startup, /'twitter:card': 'summary_large_image'/)
   const canvas = app('imports/ui/pages/Canvas.jsx')
-  assert.match(canvas, /isPublic && !isPrivate && !isUnlisted &&\s*!publishedTemplate && !isEmbedded && accessLevel\.current\?\.isEditable\) \{\s*sharePreviewLater\(\)/)
+  // Restated: published templates are gone (33f3ad7a, the library replaced them), so the check no
+  // longer names them; the test was stale on prod ee0af3f5. The rule is otherwise the same.
+  assert.match(canvas, /isPublic && !isPrivate && !isUnlisted &&\s*!isEmbedded && accessLevel\.current\?\.isEditable\) \{\s*sharePreviewLater\(\)/)
+  assert.doesNotMatch(canvas, /publishedTemplate/)
   assert.match(canvas, /CONSTANTS\.methods\.utils\.getCloudLink, o\.id, base64, false, false, false, true\)/)
   assert.match(canvas, /const SHARE_PREVIEW_QUIET = 20_000\nconst SHARE_PREVIEW_EVERY = 5 \* 60_000/)
   assert.match(app('server/methods/googleDocs.js'), /if \(forShare === true\) picture\.resize\(\{ width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true \}\)/)
