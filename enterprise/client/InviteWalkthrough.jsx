@@ -32,6 +32,10 @@ const SEES = [
   { value: 'slate', label: 'What I ask, and every note on this slate' },
 ]
 
+// What the outside service asks of you, in plain words: Slatebox Pro is said once, on its own line.
+// "Free" alone next to "Pro" read as a contradiction; the service's own price is not Slatebox's.
+export const cardCost = (item) => (item.signIn ? item.cost : item.cost === 'Free' ? 'No sign-in needed' : `No sign-in needed · ${item.cost}`)
+
 const errorText = (error) => error?.reason || error?.message || 'That did not work. Try again.'
 
 export default function InviteWalkthrough({ open, onClose, shareId, slateName, onInvited, reconnect }) {
@@ -182,7 +186,8 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
                 <Box key={item.id} component="button" type="button" data-gallery-card={item.id} onClick={() => { setAddress(item.url); discover(item.url) }} onPointerEnter={prefetch}
                   sx={{ textAlign: 'left', p: 1.5, border: '1px solid', borderColor: item.featured ? 'primary.main' : 'divider', borderRadius: 2, bgcolor: 'background.paper', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
                   <Typography variant="subtitle2">⬡ {item.name}</Typography>
-                  <Typography variant="caption" color="text.secondary" component="div">{item.job} · {item.signIn ? 'Sign in · ' : ''}{item.cost} · Pro</Typography>
+                  <Typography variant="caption" color="text.secondary" component="div">{item.job} · {cardCost(item)}</Typography>
+                  <Typography variant="caption" color="text.secondary" component="div">Needs Slatebox Pro</Typography>
                   <Typography variant="body2" sx={{ mt: 0.5 }}>{item.lands}</Typography>
                 </Box>
               ))}

@@ -66,6 +66,31 @@ const size = (value) => {
   return Number.isFinite(n) && n > 0 && n <= 10000 ? Math.round(n) : undefined
 }
 
+/**
+ * Whether a poster address is one this app stored (so drawing it reaches no one else, and makes no
+ * request to the app beyond its own picture): the file store's media-posters folder, or the app's
+ * own /sbimages/ copy, by path or under its https address. Anything else (a tracking pixel on
+ * another host, another path on the app) is refused in a plan; Slatebox looks posters up itself.
+ */
+export function posterAllowedFor(settings = {}) {
+  const prefixes = ['/sbimages/media-posters%2F', '/sbimages/media-posters/']
+  const cloud = String(settings.aws?.cloudUrl || '').replace(/\/+$/, '')
+  if (/^https:\/\//.test(cloud)) prefixes.push(`${cloud}/media-posters/`)
+  const base = String(settings.public?.baseUrl || '').replace(/\/+$/, '')
+  if (/^https:\/\//.test(base)) prefixes.push(`${base}/sbimages/media-posters%2F`, `${base}/sbimages/media-posters/`)
+  return (url) => typeof url === 'string' && !/\.\.|%2e%2e/i.test(url) && prefixes.some((prefix) => url.startsWith(prefix))
+}
+
+/** Every poster a plan names (a video note added or changed). */
+export function postersIn(plan) {
+  const out = []
+  for (const op of plan?.operations || []) {
+    if (op?.media?.poster !== undefined) out.push(op.media.poster)
+    if (op?.changes?.media?.poster !== undefined) out.push(op.changes.media.poster)
+  }
+  return out
+}
+
 /** Where a video's poster is kept: one name per video, so storing it again replaces it. */
 export function posterKey(media, contentType) {
   const id = media.provider === 'vimeo' && media.hash ? `${media.id}-${media.hash}` : media.id

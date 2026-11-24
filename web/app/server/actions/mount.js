@@ -45,6 +45,7 @@ import { mountTeamExport, teamTransfer } from '../team-export/meteor'
 import { shapeService } from '../shapes/meteor'
 import { createPresentationFor } from '../methods/presentations'
 import { mediaLookup } from '../media/meteor'
+import { posterAllowedFor } from '../media/media-lookup.mjs'
 
 const IdempotencyRecords = new Mongo.Collection('apiIdempotencyRecords')
 const RateWindows = new Mongo.Collection('apiRateWindows')
@@ -179,6 +180,8 @@ export const deps = {
     },
     // media.lookup and slates.addMedia (server/media): video titles and posters
     media: mediaLookup,
+    // Video posters in a plan must be ones this app stored (slate-operations.mjs).
+    posterAllowed: (url) => posterAllowedFor(Meteor.settings)(url),
 }
 
 export const limiter = createRateLimiter({ collection: RateWindows.rawCollection() })

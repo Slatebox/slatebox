@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { checkUrl, publicLookup, safeFetch, FetchRefused } from "../web/app/server/common/safe-fetch.mjs";
-import { MEDIA_HOSTS, createMediaLookup, createHourlyLimit, posterKey, sniffImage } from "../web/app/server/media/media-lookup.mjs";
+import { MEDIA_HOSTS, createMediaLookup, createHourlyLimit, posterAllowedFor, posterKey, sniffImage } from "../web/app/server/media/media-lookup.mjs";
 import { makeExecWorld } from "./exec-test-world.mjs";
 
 const YT = "dQw4w9WgXcQ";
@@ -247,4 +247,47 @@ test("the canvas hands a pasted video address to the server lookup; still pictur
   }
   // The presenter's stage plays videos inline.
   assert.doesNotMatch(read("imports/ui/components/presentations/livePresenter.mjs"), /mediaPlayback: false/);
+});
+
+test("a video note's poster must be one Slatebox stored: another host's picture or another app path is refused in a plan", async (t) => {
+  const allowed = posterAllowedFor({ aws: { cloudUrl: "https://files.slatebox.test" }, public: { baseUrl: "https://app.slatebox.test" } });
+  assert.equal(allowed(`https://files.slatebox.test/media-posters/youtube/${YT}.jpg`), true);
+  assert.equal(allowed("/sbimages/media-posters%2Fyoutube%2Fabc.jpg"), true);
+  assert.equal(allowed("https://app.slatebox.test/sbimages/media-posters%2Fvimeo%2F1.jpg"), true);
+  for (const bad of ["https://evil.example/pixel.gif", "https://files.slatebox.test/other/x.jpg", "/api/v1/slates", "/sbimages/media-posters/../../logout", "https://files.slatebox.test.evil.example/media-posters/x.jpg", "http://files.slatebox.test/media-posters/x.jpg"])
+    assert.equal(allowed(bad), false, bad);
+  // a self-host with no https address: only the app's own /sbimages/ copy
+  assert.equal(posterAllowedFor({})("https://anything.example/media-posters/x.jpg"), false);
+
+  const world = makeExecWorld();
+  t.after(() => world.close());
+  const host = fakeHost();
+  world.deps.media = createMediaLookup({ fetch: host.fetch, storePoster: host.storePoster });
+  world.deps.posterAllowed = allowed;
+  const principal = await world.principalFor(["slates:read", "slates:write"]);
+  // a looked-up video still adds, with its stored poster
+  const saved = await world.registry.run(principal, "slates.addMedia", { shareId: "demo", url: `https://youtu.be/${YT}` });
+  assert.equal((saved.body ?? saved).ok, true);
+  const edit = (poster) => world.registry.run(principal, "slates.applyOperations", { shareId: "demo", expectedRevision: world.slate("demo").revision ?? 0,
+    plan: { message: "v", operations: [{ kind: "add_nodes", count: 1, media: { url: `https://youtu.be/${YT}`, poster } }] } });
+  await assert.rejects(edit("https://evil.example/pixel.gif"), (error) => error.code === "invalid_operation_plan" && /picture Slatebox stored/.test(error.message));
+  await assert.rejects(edit("/logout"), { code: "invalid_operation_plan" });
+  assert.equal((await edit(`https://files.slatebox.test/media-posters/youtube/${YT}.jpg`)).status, 201);
+});
+
+test("pasted video notes land on free space near the middle of the view, never on each other or on notes", async () => {
+  const { freeSpotNear } = await import("../web/app/imports/api/common/free-spot.mjs");
+  const size = { width: 320, height: 180 };
+  const taken = [{ x: 0, y: 0, width: 200, height: 90 }];
+  const placed = [];
+  for (let i = 0; i < 3; i++) {
+    const spot = freeSpotNear({ x: 100, y: 45 }, size, [...taken, ...placed]);
+    for (const other of [...taken, ...placed]) {
+      const apart = spot.x >= other.x + other.width || spot.x + size.width <= other.x || spot.y >= other.y + other.height || spot.y + size.height <= other.y;
+      assert.ok(apart, JSON.stringify({ spot, other }));
+    }
+    placed.push(spot);
+  }
+  // free already: exactly where asked
+  assert.deepEqual(freeSpotNear({ x: 1000, y: 1000 }, size, taken), { x: 840, y: 910, width: 320, height: 180 });
 });

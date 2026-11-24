@@ -1,3 +1,4 @@
+import { postersIn } from '../media/media-lookup.mjs'
 import { defineAction } from './registry.mjs'
 import { problem } from './errors.mjs'
 import { loadSlate } from './slate-access.mjs'
@@ -107,6 +108,10 @@ export async function showAgent(principal, slate, body, deps) {
 export const EXPECTED_REVISION_REQUIRED =
   'expectedRevision is required: send the revision slates.get returned (GET /api/v1/slates/{shareId}). A workshop or map edit carries it in its plan operation instead.'
 function applyPlanTo(deps, target, plan, userMessage, requireMatches) {
+  // A video note's poster must be a picture this app stored: never another host's address (every
+  // viewer's browser would fetch it) nor another path on the app.
+  if (deps.posterAllowed && postersIn(plan).some((poster) => !deps.posterAllowed(poster)))
+    throw problem(400, 'invalid_operation_plan', 'A video note\'s poster must be a picture Slatebox stored. Leave poster out: media.lookup and slates.addMedia fetch and store it.')
   try {
     // A save refuses an operation that matched nothing (409 no_match); a preview reports it.
     return deps.applySlateOperationPlanToJSON(target, plan, { userMessage, requireMatches })

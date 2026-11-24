@@ -71,6 +71,21 @@ export function useAgentSuggestions(shareId) {
   }, [shareId])
 }
 
+// The canvas's edges a panel covers, in screen pixels: Canvas.jsx keeps the visible canvas area's
+// distance from the window's right and bottom edges in --sb-canvas-right and --sb-canvas-bottom.
+export function coveredEdges(engine) {
+  try {
+    const svg = engine?.canvas?.node?.getBoundingClientRect?.()
+    if (!svg?.width) return null
+    const css = getComputedStyle(document.documentElement)
+    const right = parseFloat(css.getPropertyValue('--sb-canvas-right')) || 0
+    const bottom = parseFloat(css.getPropertyValue('--sb-canvas-bottom')) || 0
+    return { right: Math.max(0, svg.right - (window.innerWidth - right)), bottom: Math.max(0, svg.bottom - (window.innerHeight - bottom)) }
+  } catch {
+    return null
+  }
+}
+
 const decide = (shareId, input) => Meteor.callAsync('suggestions.decide', { shareId, ...input })
 
 // Edit directly is offered to the person who brought the agent, and to the slate's owner (the server checks again).
@@ -109,7 +124,9 @@ export default function AgentPresenceListener({ slate, canEdit = false }) {
           toNode: compat.v1NodeToV2,
         })
         ghosts.current.set(latest.current.actions)
-        presence.current = createAgentPresence(engine)
+        // What Ask Slatebox or the settings cover of the canvas is not view: pointers, tags and the
+        // edge marker of an agent working out of sight stay in what people can see.
+        presence.current = createAgentPresence(engine, { insets: () => coveredEdges(engine) })
         presence.current.set(latest.current.all)
       })
       .catch((error) => console.warn('Agents on this slate could not be drawn.', error))

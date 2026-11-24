@@ -1,4 +1,5 @@
 import executeSlateOperations from './executeSlateOperations'
+import { freeSpotNear, noteBoxes } from '../common/free-spot.mjs'
 
 // The note a video address pasted or dropped on the canvas becomes (the engine's
 // events.onMediaRequested). The server looks the video up (media.lookup: title, author, and a
@@ -32,8 +33,7 @@ export default async function addMediaNote({ slate, request, lookup, notify = ()
       kind: 'add_nodes',
       count: 1,
       media,
-      x: Math.round(request.x - MEDIA_NOTE.width / 2),
-      y: Math.round(request.y - MEDIA_NOTE.height / 2),
+      ...(() => { const spot = freeSpotNear({ x: request.x, y: request.y }, MEDIA_NOTE, noteBoxes(slate)); return { x: spot.x, y: spot.y } })(),
     }],
   }
   const result = await executeSlateOperations({ slate, plan, userMessage: '' })
