@@ -469,7 +469,8 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
           // The rule as it now stands, in one sentence ("Doing holds 2"), never the control's instructions after it.
           const said = String(sentence || '').split(/\.\s/)[0].replace(/\.$/, '').trim()
           ruleSaid.current.set(change, said ? said + '.' : 'The board’s rules changed.')
-          queue.current.push(change)
+          // One step of the person's undo history, as a drag is (the canvas's Undo takes the rule back).
+          queueChange(change)
           const answer = new Promise(resolve => answers.current.set(change, resolve))
           playRef.current()
           return answer.then(saved => saved === true)

@@ -85,9 +85,12 @@ test('labels name the change, and the drawing keeps the steps it puts back itsel
   assert.equal(boardStepLabel([{ rename: { laneId: 'done', label: 'Shipped' } }], shown), 'Rename Done')
   assert.equal(boardStepLabel([{ rename: { title: 'Q3' } }], shown), 'Rename the board')
   assert.equal(boardStepLabel([{ cardId: 'a', laneId: 'doing' }, { cardId: 'b', laneId: 'done' }], shown), 'Board change')
+  // A rule control's change (the shared library's controls on the board) is a step of its own, named as one.
+  assert.equal(boardStepLabel([{ edits: [{ kind: 'set_lane_capacity', laneId: 'doing', capacity: 2 }] }], shown), 'Change the rules')
+  assert.equal(boardStepLabel([{ edits: [{ kind: 'add_rule', rule: {} }, { kind: 'move_card' }] }], shown), 'Board change')
   for (const change of [{ noteToCard: {} }, { cardToNote: {} }, { line: {} }, { rename: { cardId: 'a' } }, { cardId: 'a', via: 'undo' }])
     assert.equal(drawingOwnsBoardChange(change), true)
-  for (const change of [{ cardId: 'a', laneId: 'doing' }, { rename: { laneId: 'done' } }, { edits: [] }])
+  for (const change of [{ cardId: 'a', laneId: 'doing' }, { rename: { laneId: 'done' } }, { edits: [] }, { edits: [{ kind: 'add_rule' }] }])
     assert.equal(drawingOwnsBoardChange(change), false)
 })
 
@@ -109,7 +112,8 @@ test('a move made anyway is one step of its own, named as one, and the words tha
   assert.equal((hook.match(/queue\.current\.push\(/g) || []).length, 1, 'only queueChange queues a change')
   assert.match(hook, /queueChange\(\{ cardId, laneId, override: true, reason: agreed \}\)/)
   assert.match(hook, /queueChange\(\{ \.\.\.again, reason: err\.reason \}\)/)
-  assert.match(hook, /const alone = queue\.current\.findIndex\(change => change\.override\)/)
+  // Restated (shared library): a rule control's change is played alone as well, a step of its own.
+  assert.match(hook, /const alone = queue\.current\.findIndex\(change => change\.override \|\| isRuleChange\(change\)\)/)
   assert.match(hook, /queue\.current\.splice\(0, alone === 0 \? 1 : alone > 0 \? alone : queue\.current\.length\)/)
   // The board's one-step "Undo last change" is gone: the dialog, the board's chat and the card bar name the canvas Undo.
   for (const path of ['workshop/MoveAnywayDialog.jsx', 'workshop/WorkshopConversation.jsx', 'stylebar/CardBar.jsx']) {

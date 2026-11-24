@@ -124,6 +124,9 @@ export const BOARD_STEP_SAID = Object.freeze({
   gone: 'That board is no longer on this slate.',
 })
 
+// The edits a rule control on the board makes (server/methods/workshop-play.mjs CANVAS_RULE_EDITS).
+const RULE_CONTROL_KINDS = ['add_rule', 'set_rule', 'remove_rule', 'set_lane_capacity', 'add_lane']
+
 /** A short name for a board change, for the Undo and Redo controls' tooltips. */
 export function boardStepLabel(changes, workshop) {
   const list = Array.isArray(changes) ? changes : []
@@ -138,6 +141,8 @@ export function boardStepLabel(changes, workshop) {
       const where = typeof change.to === 'string' && change.to ? ' ' + change.to : lane(change.laneId) ? ' to ' + lane(change.laneId) : ''
       return `Move ${card(change.cardId) ?? 'a card'}${where}${change.override ? ' anyway' : ''}`
     }
+    // A rule control's change (library spec §4.3): its rule edits alone.
+    if (Array.isArray(change.edits) && change.edits.length && change.edits.every((edit) => RULE_CONTROL_KINDS.includes(edit?.kind))) return 'Change the rules'
   }
   return 'Board change'
 }

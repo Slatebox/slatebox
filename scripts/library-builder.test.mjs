@@ -197,7 +197,11 @@ test("a change of the rules is never mixed with a move or a rename, so each is o
   assert.throws(() => readWorkshopChanges([{ edits: [...rule.edits, { kind: "move_card", card: { id: "search" }, lane: { id: "doing" } }] }]), new RegExp(RULES_ALONE));
   // Two rule changes in a row are each their own request: the page sends a change of the rules alone.
   const page = app("imports/ui/components/workshop/useWorkshopOnCanvas.js");
-  assert.match(page, /const changes = queue\.current\.splice\(0, first \? 1 :/);
+  // Restated (prod's first-class undo): a rule change is played alone, as a move made anyway is, and is queued as a step
+  // of the person's undo history (queueChange), so the canvas's Undo takes it back.
+  assert.match(page, /const alone = queue\.current\.findIndex\(change => change\.override \|\| isRuleChange\(change\)\)/);
+  assert.match(page, /const changes = queue\.current\.splice\(0, alone === 0 \? 1 :/);
+  assert.match(page, /ruleSaid\.current\.set\(change, [^\n]+\n[^\n]*\n\s*queueChange\(change\)/);
   // Whatever audit line the page sends, the server's is kept.
   const forged = { edits: [{ kind: "add_rule", rule: { kind: "bin", lane: "done" }, set: { by: "Mallory", via: "preset" } }] };
   const made = playWorkshopChanges(board, readWorkshopChanges([forged]), undefined, undefined, { by: "Ada" });
