@@ -381,6 +381,12 @@ test('the build scripts put enterprise/ in every image', () => {
   const dockerAt = selfHostBuild.indexOf('docker build')
   assert.ok(copyAt > 0 && checkAt > copyAt && dockerAt > checkAt, 'self-host copies the committed enterprise/ and checks it before building the image')
   assert.ok(!selfHostBuild.includes('enterprise-stage.mjs" stub'), 'no stub in a self-host image')
+  // The one-container image (self-host/build-image.sh) carries it the same way.
+  const oneImage = read('self-host/build-image.sh')
+  const oneCopy = oneImage.indexOf('archive "$app_sha:enterprise"')
+  const oneCheck = oneImage.indexOf('enterprise-stage.mjs" check-present "$stage/app"')
+  assert.ok(oneCopy > 0 && oneCheck > oneCopy && oneImage.indexOf('docker build') > oneCheck, 'the one-container image copies and checks enterprise/ before building')
+  assert.ok(!oneImage.includes('enterprise-stage.mjs" stub'), 'no stub in the one-container image')
   const cloudBuild = read('scripts/test-port-container.mjs')
   assert.match(cloudBuild, /copyEnterprise\(appContext\)/)
   assert.match(cloudBuild, /checkEnterprisePresent\(buildContext\)/)
@@ -394,6 +400,7 @@ test('settings: self-host by default, no public invite switch, a license key slo
   assert.equal(example.enterprise.license, '')
   assert.equal(example.connectors.off, false)
   assert.match(read('self-host/init.mjs'), /edition: 'self-host'/)
+  assert.match(read('self-host/rootfs/opt/slatebox/lib/configure.mjs'), /edition: 'self-host'/)
 })
 
 test('licenses: MIT except enterprise/', () => {

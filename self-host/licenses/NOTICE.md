@@ -27,7 +27,7 @@ whole is not under a single license, and it is not "MIT" as a whole.**
 | tini, the container's init | MIT | `third-party/tini-LICENSE.txt` |
 | npm packages used by the app and the relay | Each package's own license | In each package's folder under `/opt/slatebox/app/bundle` and `/opt/slatebox/relay/node_modules` |
 | Fonts for rendering slate images (Google Fonts families and Liberation) | SIL Open Font License 1.1 or Apache License 2.0, per family | `third-party/fonts.md` lists each family's copyright and license; `third-party/fonts-OFL-1.1.txt`, `third-party/fonts-Apache-2.0.txt`, `/usr/share/doc/fonts-liberation/copyright` |
-| Interface fonts (Manrope, Readex Pro), served to browsers by the instance | SIL Open Font License 1.1 | `third-party/interface-fonts.md` lists each family's copyright; `third-party/fonts-OFL-1.1.txt` |
+| Interface and note fonts (Manrope, Lora, Courier Prime, Caveat), served to browsers by the app at /fonts/ | SIL Open Font License 1.1 | each font's folder in the app (`/fonts/<family>/OFL.txt`) carries its copyright and license |
 | Ubuntu base system | Each package's own license | `/usr/share/doc/*/copyright` |
 
 ## About MongoDB and the SSPL

@@ -9,15 +9,11 @@ import {
 } from './common.mjs'
 import { appSettings as ssoAppSettings, issuerFor, keycloakEnv, ssoMode } from './sso.mjs'
 import { operatorAI } from './ai-config.mjs'
+import { DATABASE_SETTINGS, PROVIDER_KEY, SETTINGS as KNOWN } from './settings.mjs'
 
-const KNOWN = [
-  'SLATEBOX_URL', 'SLATEBOX_HTTPS', 'SLATEBOX_ACME_CA', 'SLATEBOX_MAIL_URL', 'SLATEBOX_MAIL_FROM',
-  'SLATEBOX_AI_KEY', 'SLATEBOX_AI_URL', 'SLATEBOX_AI_MODEL', 'SLATEBOX_AI_CONFIG', 'SLATEBOX_AI_OWN_PROVIDERS',
-  'SLATEBOX_AI_PRIVATE_ENDPOINTS',
-  'SLATEBOX_SETTINGS', 'SLATEBOX_SSO', 'SLATEBOX_SSO_ONLY', 'SLATEBOX_SSO_ADMIN', 'SLATEBOX_KEY_ENCRYPTION_KEY',
-]
-// Where the image serves the interface fonts (see the Dockerfile).
-const FONTS_PATH = '/_fonts/'
+// Payments and metering run only on Slatebox Cloud, under its signed license: a self-hosted
+// Slatebox is never a paid service, so its settings cannot switch them on.
+const CLOUD_ONLY = ['stripePrivateKey', 'stripe', 'metering', 'wallet']
 
 function setting(name) {
   const value = process.env[name]
@@ -115,6 +111,8 @@ function extraSettings() {
   let extra
   try { extra = JSON.parse(raw) } catch { throw new Plain('SLATEBOX_SETTINGS must be a JSON object') }
   if (!extra || typeof extra !== 'object' || Array.isArray(extra)) throw new Plain('SLATEBOX_SETTINGS must be a JSON object')
+  const cloudOnly = [...CLOUD_ONLY.filter(key => key in extra), ...(extra.public && typeof extra.public === 'object' && 'stripe' in extra.public ? ['public.stripe'] : [])]
+  if (cloudOnly.length) throw new Plain(`SLATEBOX_SETTINGS: ${cloudOnly.join(', ')} ${cloudOnly.length > 1 ? 'are' : 'is'} not a setting of a self-hosted Slatebox (payments and metering run only on Slatebox Cloud)`)
   return extra
 }
 
@@ -125,11 +123,6 @@ function caddyfile({ url, builtInHttps, acmeCa, sso, ssoAdminOpen = true }) {
   // point somewhere else.
   const allowed = [...new Set([url.host, `localhost:${FRONT_PORT}`, `127.0.0.1:${FRONT_PORT}`])]
   const routes = indent => `
-handle_path ${FONTS_PATH}* {
-	root * ${join(HOME, 'share/fonts')}
-	header Cache-Control "public, max-age=604800"
-	file_server
-}
 @relay path ${RELAY_PATH} ${RELAY_PATH}/*
 handle @relay {
 	uri strip_prefix ${RELAY_PATH}
@@ -204,9 +197,9 @@ function wrongAddressPage(url) {
 function main() {
   // Names are matched without regard to case, so that slatebox_url is
   // reported rather than silently ignored.
-  const exact = [...KNOWN, 'MONGO_URL', 'MONGO_OPLOG_URL']
+  const exact = [...KNOWN, ...DATABASE_SETTINGS]
   const unknown = Object.keys(process.env).filter(name =>
-    (name.toUpperCase().startsWith('SLATEBOX_') || exact.includes(name.toUpperCase())) && !exact.includes(name))
+    (name.toUpperCase().startsWith('SLATEBOX_') || exact.includes(name.toUpperCase())) && !exact.includes(name) && !PROVIDER_KEY.test(name))
   if (unknown.length) {
     throw new Plain(`Unknown setting ${unknown.join(', ')}. The settings are: ${exact.join(', ')} (in capitals).`)
   }
@@ -223,6 +216,9 @@ function main() {
 
   // Any mix of AI the operator chooses (ai-config.mjs); nothing bundled, nothing named.
   const ai = operatorAI(setting)
+  // A provider key variable that no provider names is a typo, not a setting.
+  const strayKeys = Object.keys(process.env).filter(name => PROVIDER_KEY.test(name) && !ai.keyVariables.includes(name))
+  if (strayKeys.length) throw new Plain(`${strayKeys.join(', ')}: no provider in SLATEBOX_AI_PROVIDERS names ${strayKeys.length > 1 ? 'these keys' : 'this key'} (keyEnv)`)
 
   const externalMongo = setting('MONGO_URL')
   const externalOplog = setting('MONGO_OPLOG_URL')
@@ -242,8 +238,8 @@ function main() {
   // between the browser, the app and the relay.
   const settings = mergeSettings(extra, {
     public: {
-      env: 'selfhost', baseUrl: url.origin, wsUrl, chatWoot: { enabled: false },
-      fontStylesheet: `${FONTS_PATH}fonts.css`,
+      // A self-hosted install: enterprise code stays locked until an on-prem license unlocks it.
+      env: 'selfhost', edition: 'self-host', baseUrl: url.origin, wsUrl, chatWoot: { enabled: false },
       // Cloud links store images in S3, offered only when SLATEBOX_SETTINGS configures a bucket.
       cloudLinks: Boolean(extra.aws?.imageBucket),
     },

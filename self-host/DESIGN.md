@@ -172,25 +172,28 @@ Every setting is optional.
 | `SLATEBOX_AI_KEY` | DeepInfra key for the built-in AI. With `SLATEBOX_AI_URL`, the bearer token for that endpoint. |
 | `SLATEBOX_AI_URL`, `SLATEBOX_AI_MODEL` | An OpenAI-compatible endpoint and model, written as `settings.ai.connections.server` with `use.default` (every feature), and as `selfHosted.workshopProvider` for apps that predate `settings.ai`. |
 | `SLATEBOX_AI_CONFIG` | JSON: named connections (`openai-compatible` with `url`, or `openai`, `anthropic`, `deepinfra`; `key`, `model`, `tools`, `vision`, `images`, `maxTokens`, `toolChoice`) and `use` (`default`, `chat`, `generation`, `presentation`, `vision`, `images`: a name or `builtin`). Checked by `lib/ai-config.mjs` before anything is written: cloud metadata addresses, credentials in a URL, unknown fields and dangling names stop the start. Becomes `settings.ai`; keys never reach the log. No model is bundled or named. |
+| `SLATEBOX_AI_PROVIDERS`, `SLATEBOX_AI_DEFAULT` | The installer's form (`npx slatebox`): a JSON list of providers (`id`, `kind` `openai-compatible` with `baseUrl`, or `deepinfra`; `model`, `toolChoice`, `keyEnv`) and the one every feature uses (needed with more than one). Each key is in its own variable `SLATEBOX_AI_KEY_<NAME>`, the one `keyEnv` names, so keys stay in the installer's secrets file and out of the list; a key variable no provider names stops the start. Becomes `settings.ai` like `SLATEBOX_AI_CONFIG`. `slatebox settings --json` lists every setting the image accepts, for an installer to read from the image. |
 | `SLATEBOX_AI_OWN_PROVIDERS` | `on` (default) or `off`: `settings.ai.ownProviders`, the one switch that stops people and teams from using their own AI. |
 | `SLATEBOX_AI_PRIVATE_ENDPOINTS` | `on` (default) or `off`: `settings.ai.privateEndpoints`. Off, people's and teams' own endpoints must be public addresses (the app's `endpoint-policy.mjs`); the operator's connections keep the operator rules. Separate from the switch, so a server can allow own cloud keys without letting every account probe the LAN through Test connection. Also accepted as `privateEndpoints` in `SLATEBOX_AI_CONFIG`; the variable wins. |
-| `SLATEBOX_KEY_ENCRYPTION_KEY` | 32 bytes in base64 (standard or URL-safe; anything else stops the start, without printing the value). Written to `app.env` only, never to the app's settings, where `server/metering/vault.mjs` reads it as the master key for people's own AI and call keys (AES-256-GCM). Unset: own keys are not offered. Not generated: the secrets are not in the backup, so a generated key would leave every saved key unreadable after a restore; the operator keeps it with the backups. |
-| `SLATEBOX_SETTINGS` | A JSON object merged into the app's settings, for integrations without a variable of their own (`daily.apiKey` for calls, `aws.*` to keep stored files in an S3 bucket instead of the database). It cannot change the generated address and key wiring. |
+| `SLATEBOX_KEY_ENCRYPTION_KEY` | 32 bytes in base64 (standard or URL-safe; anything else stops the start, without printing the value). Written to `app.env` only, never to the app's settings, where the app's key vault reads it as the master key for people's own AI and call keys (AES-256-GCM). Unset: own keys are not offered. Not generated: the secrets are not in the backup, so a generated key would leave every saved key unreadable after a restore; the operator keeps it with the backups. |
+| `SLATEBOX_SETTINGS` | A JSON object merged into the app's settings, for integrations without a variable of their own (`daily.apiKey` for calls, `aws.*` to keep stored files in an S3 bucket instead of the database, `enterprise.license` for an on-prem license). It cannot change the generated address and key wiring or the edition, and it refuses settings that belong only to Slatebox Cloud's paid service. |
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use an external MongoDB. The bundled `mongod` is not started. |
 | `SLATEBOX_SSO` | `off` (default) or `keycloak`: single sign-on through the bundled Keycloak (below). |
 | `SLATEBOX_SSO_ONLY` | `true` with `SLATEBOX_SSO=keycloak`: no passwords and no guests. |
 | `SLATEBOX_SSO_ADMIN` | `open` (default) or `closed` with `SLATEBOX_SSO=keycloak`: `closed` answers 404 for `/auth/admin` and `/auth/realms/master` on the published port. |
 
 The app's settings are generated at every start: `public.env = selfhost`,
-`baseUrl`, `wsUrl`, `chatWoot.enabled = false`, `fontStylesheet` (the
-interface fonts, served by Caddy from `/opt/slatebox/share/fonts` at
-`/_fonts/`, so a page view sends nothing to Google), `cloudLinks` (true only
+`edition = self-host` (enterprise code stays locked until an on-prem license
+key unlocks it; `SLATEBOX_SETTINGS` cannot change it), `baseUrl`, `wsUrl`,
+`chatWoot.enabled = false`, `cloudLinks` (true only
 when `SLATEBOX_SETTINGS` configures an S3 bucket), `mailFrom`, `slateboxAPI`
 and `selfHosted.workshopAI`. Files the app stores (uploads, AI images,
 presentation images) go to the database's `files` GridFS bucket and are served
 by the app at `/files/`, so a backup carries them; only an `aws.imageBucket`
 in `SLATEBOX_SETTINGS` sends them to S3 instead. With `public.env = selfhost` the app also leaves
-out Heap analytics, plans, AI quotas and billing. The relay gets `API_KEYS` and
+out Heap analytics and every screen that belongs to the hosted service; the
+interface fonts are the app's own, served at `/fonts/`, so a page view sends
+nothing to a font host. The relay gets `API_KEYS` and
 `API_GEN_KEY`; MongoDB has three accounts (root, app, relay).
 
 Setting names are matched in any case, so `slatebox_url` stops the start

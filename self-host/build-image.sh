@@ -24,7 +24,7 @@ relay_sha=$(git -C "$relay" rev-parse --short=12 HEAD)
 # The image is labelled with the app revision, so what it contains must be
 # what that revision holds. Uncommitted changes to the image's own files are
 # refused unless the label is allowed to say so.
-if [[ -n $(git -C "$app" status --porcelain -- self-host web/app LICENSE.md) ]]; then
+if [[ -n $(git -C "$app" status --porcelain -- self-host web/app enterprise LICENSE.md) ]]; then
   if [[ ${ALLOW_DIRTY:-} != 1 ]]; then
     echo 'Commit your changes under self-host/ and web/app/ first, or set ALLOW_DIRTY=1 for a local trial build.' >&2
     exit 1
@@ -69,6 +69,13 @@ git -C "$app" show "$app_sha:LICENSE.md" > "$stage/app-license/LICENSE.md"
 # The app tree carries settings files for the hosted service. None of them may
 # enter an image: each installation generates its own on first start.
 find "$stage/app" -name 'settings*.json' -delete
+# The committed enterprise/ code (enterprise/LICENSE, not MIT) goes in at the app's '/enterprise'
+# path. It stays locked on a self-hosted install until an on-prem license key from Slatebox LLC
+# unlocks it (web/app/server/enterprise-license.mjs); single sign-on with the bundled Keycloak is
+# never locked, and payments and metering are never part of a self-hosted Slatebox.
+mkdir -p "$stage/app/enterprise"
+git -C "$app" archive "$app_sha:enterprise" | tar -x -C "$stage/app/enterprise"
+node "$app/scripts/enterprise-stage.mjs" check-present "$stage/app"
 rm -rf "$stage/app/.vscode" "$stage/app/.circleci"
 printf '%s\n' '**/settings*.json' '**/.env' '**/.env.*' '**/node_modules' '**/.meteor/local' > "$stage/.dockerignore"
 

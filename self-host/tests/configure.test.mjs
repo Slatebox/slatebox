@@ -138,3 +138,36 @@ test('slatebox ai check tests the server connections from inside the container',
   assert.match(out, /default uses server/)
   assert.ok(!out.includes('stub-secret-0001'))
 })
+
+test('SLATEBOX_AI_PROVIDERS as the installer writes it: each key from its own variable, a default, nothing printed', async () => {
+  const key = 'sk-provider-' + randomBytes(8).toString('hex')
+  const run = await configure({
+    SLATEBOX_AI_PROVIDERS: JSON.stringify([
+      { id: 'gateway', kind: 'openai-compatible', baseUrl: 'https://ai.example.com/v1', model: 'model-a', keyEnv: 'SLATEBOX_AI_KEY_GATEWAY' },
+      { id: 'ollama', kind: 'openai-compatible', baseUrl: 'http://host.docker.internal:11434/v1', model: 'local' },
+    ]),
+    SLATEBOX_AI_DEFAULT: 'gateway',
+    SLATEBOX_AI_KEY_GATEWAY: key,
+  })
+  assert.equal(run.code, 0, run.log)
+  const settings = appSettings(run)
+  assert.equal(settings.ai.connections.gateway.apiKey, key)
+  assert.equal(settings.ai.use.default, 'gateway')
+  assert.ok(!run.log.includes(key), 'the key is not in the log')
+  const stray = await configure({ SLATEBOX_AI_KEY_TYPO: key })
+  assert.notEqual(stray.code, 0)
+  assert.match(stray.log, /SLATEBOX_AI_KEY_TYPO: no provider in SLATEBOX_AI_PROVIDERS names this key/)
+  assert.ok(!stray.log.includes(key))
+})
+
+test('a self-hosted install: edition self-host (enterprise locked without a license); SLATEBOX_SETTINGS cannot switch on payments or metering', async () => {
+  const run = await configure({ SLATEBOX_SETTINGS: JSON.stringify({ public: { edition: 'cloud' } }) })
+  assert.equal(run.code, 0, run.log)
+  assert.equal(appSettings(run).public.edition, 'self-host')
+  for (const extra of [{ stripePrivateKey: 'x' }, { metering: { enabled: true } }, { public: { stripe: { publishableKey: 'x' } } }, { wallet: {} }]) {
+    const refused = await configure({ SLATEBOX_SETTINGS: JSON.stringify(extra) })
+    assert.notEqual(refused.code, 0, JSON.stringify(extra))
+    assert.match(refused.log, /not a setting of a self-hosted Slatebox \(payments and metering run only on Slatebox Cloud\)/)
+    assert.equal(refused.secretFiles, 0, 'nothing written')
+  }
+})

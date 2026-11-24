@@ -156,10 +156,8 @@ Roboto+Mono \
 Roboto+Slab"
 COPY self-host/build/fetch-fonts.mjs /build/fetch-fonts.mjs
 RUN node /build/fetch-fonts.mjs /out /fonts.md $GOOGLE_FONTS
-# The interface fonts, served by the instance itself at /_fonts/ so that a page
-# view sends nothing to Google (the app reads public.fontStylesheet).
-RUN node /build/fetch-fonts.mjs --stylesheet=/_fonts/ /web /interface-fonts.md \
-      "Manrope:wght@200..800" "Readex+Pro:wght@160..700"
+# The interface and note fonts are the app's own (web/app/public/fonts, each with its OFL.txt):
+# the app serves them at /fonts/, so a page view sends nothing to a font host.
 
 # --- MongoDB's notices for the libraries its programs embed --------------------
 # The official mongo image leaves its documentation out, so the notices come
@@ -187,7 +185,6 @@ ENV HOME=/run/slatebox
 COPY --from=mongo /usr/bin/mongod /usr/bin/mongodump /usr/bin/mongorestore /usr/local/bin/
 COPY --from=caddy /usr/bin/caddy /usr/local/bin/caddy
 COPY --from=fonts /out/ /usr/share/fonts/googlefonts/
-COPY --from=fonts /web/ /opt/slatebox/share/fonts/
 RUN fc-cache -f
 
 COPY --from=relay /opt/slatebox/relay /opt/slatebox/relay
@@ -197,7 +194,6 @@ COPY --from=server-dependencies /opt/slatebox/app/bundle /opt/slatebox/app/bundl
 
 COPY self-host/licenses/ /opt/slatebox/licenses/
 COPY --from=fonts /fonts.md /opt/slatebox/licenses/third-party/fonts.md
-COPY --from=fonts /interface-fonts.md /opt/slatebox/licenses/third-party/interface-fonts.md
 COPY --from=mongodb-notices / /opt/slatebox/licenses/third-party/
 COPY app-license/LICENSE.md /opt/slatebox/licenses/slatebox-app-LICENSE.md
 COPY engine/LICENSE /opt/slatebox/licenses/slateboxjs-LICENSE.txt

@@ -57,7 +57,7 @@ Every setting is optional and is given with `-e NAME=value`.
 | `SLATEBOX_AI_OWN_PROVIDERS` | `off` keeps everyone on the AI set here. Default `on`: people and teams may connect their own models and keys in Profile, AI. |
 | `SLATEBOX_AI_PRIVATE_ENDPOINTS` | `off` lets people and teams connect only models at public addresses, so they cannot use the server to reach other machines on your network. Default `on`: they may use your LAN or `host.docker.internal`. Your own connections are not affected. |
 | `SLATEBOX_KEY_ENCRYPTION_KEY` | 32 random bytes in base64, made once with `openssl rand -base64 32`. Lets people and teams save their own AI and call keys on this server, encrypted with it. Without it, own keys are not offered. Keep the same value for the life of the server and store it with your backups, which do not contain it: with a different value, saved keys cannot be read and people add them again. It is never written to the log. |
-| `SLATEBOX_SETTINGS` | A JSON object of further app settings, for example `{"daily":{"apiKey":"…"}}` to turn on calls. |
+| `SLATEBOX_SETTINGS` | A JSON object of further app settings, for example `{"daily":{"apiKey":"…"}}` to turn on calls, or `{"enterprise":{"license":"sblic1.…"}}` for an on-prem license (below). |
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use a MongoDB you run elsewhere. The bundled database is then not started. |
 | `SLATEBOX_SSO` | `keycloak` turns on single sign-on with the Keycloak bundled in the image (off by default). People sign in with Entra ID, Okta, Google Workspace, SAML, OpenID Connect or LDAP through it. Keycloak's admin console is at `/auth/admin/` on the same address. |
 | `SLATEBOX_SSO_ONLY` | `true`, with `SLATEBOX_SSO=keycloak`: single sign-on is the only way in, no passwords and no guests. |
@@ -103,6 +103,19 @@ reading and making images:
 - **What a model can do:** `tools`, `vision` and `images` (`true` or `false`) say what it can do, where you know. An unset capability is tried. Making images needs `"images": true`.
 - **Output length:** `maxTokens` caps each answer. The default is 16384.
 
+The installer (`npx slatebox`) writes the same thing as a list, with each key in
+a variable of its own, so keys stay in its secrets file:
+
+```sh
+-e SLATEBOX_AI_PROVIDERS='[
+  { "id": "desk",  "kind": "openai-compatible", "baseUrl": "http://host.docker.internal:11434/v1", "model": "<model>" },
+  { "id": "cloud", "kind": "openai-compatible", "baseUrl": "https://api.openai.com/v1", "model": "<model>", "keyEnv": "SLATEBOX_AI_KEY_CLOUD" }
+]' -e SLATEBOX_AI_DEFAULT=desk -e SLATEBOX_AI_KEY_CLOUD
+```
+
+`SLATEBOX_AI_DEFAULT` names the provider every feature uses; with one provider
+it is that one.
+
 If a model can't do what a feature needs, the feature says so and asks for
 another model. Slatebox never sends the request somewhere else instead. Keys go
 only to the app's settings, never to the log. Slatebox never sends AI requests
@@ -113,6 +126,22 @@ reports whether the endpoint answers and accepts the key, whether it lists the
 model, and whether the model calls tools. People test their own connections in
 Profile, AI. An agent can set and test all of this through the API (`ai`,
 `ai-set`, `ai-check`) with a token that has the `ai:settings` permission.
+
+## Enterprise features (Upgrade on prem)
+
+The image includes Slatebox's enterprise features (inviting outside agents such
+as GitHub, Linear or Excalidraw onto a slate, and the connectors behind them),
+locked. An on-prem license from Slatebox unlocks them on one install, without
+moving to Slatebox Cloud. Single sign-on with the bundled Keycloak needs no
+license and is never locked. To ask for a license, use **Admin tools → Upgrade
+on prem** in the app, or [contact Slatebox](https://slatebox.com/contact/).
+
+Give the key you receive with `-e SLATEBOX_SETTINGS='{"enterprise":{"license":"sblic1.…"}}'`
+and start the container again. The log says `[enterprise] licensed to …` and
+**Admin tools** shows the license and its end date. The key is checked inside
+the app, offline: nothing is sent to Slatebox. A key names its install's host
+name and works only at that address (`SLATEBOX_URL`). Without a valid key the
+features stay locked and the rest of Slatebox works as before.
 
 ## Everyday commands
 

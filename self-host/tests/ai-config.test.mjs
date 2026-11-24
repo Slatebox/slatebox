@@ -12,7 +12,7 @@ test('nothing set: no operator AI, people may add their own', () => {
   const ai = operatorAI(env({}))
   assert.equal(ai.settings, null)
   assert.equal(ai.on, false)
-  assert.match(ai.summary[0], /^AI drafts: off \(set SLATEBOX_AI_URL and SLATEBOX_AI_MODEL, SLATEBOX_AI_CONFIG or SLATEBOX_AI_KEY/)
+  assert.match(ai.summary[0], /^AI drafts: off \(set SLATEBOX_AI_URL and SLATEBOX_AI_MODEL, SLATEBOX_AI_PROVIDERS, SLATEBOX_AI_CONFIG or SLATEBOX_AI_KEY/)
   assert.match(ai.summary[1], /^Own AI: +on, people may connect their own/)
 })
 
@@ -144,8 +144,67 @@ test('other clouds\' metadata addresses, and metadata wrapped in NAT64 or 6to4, 
 test('configure accepts SLATEBOX_AI_PRIVATE_ENDPOINTS, and the docs and slatebox ai name it', async () => {
   const { readFileSync } = await import('node:fs')
   const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
-  assert.match(read('rootfs/opt/slatebox/lib/configure.mjs'), /'SLATEBOX_AI_PRIVATE_ENDPOINTS'/)
+  assert.match(read('rootfs/opt/slatebox/lib/settings.mjs'), /'SLATEBOX_AI_PRIVATE_ENDPOINTS'/)
   assert.match(read('README.md'), /SLATEBOX_AI_PRIVATE_ENDPOINTS/)
   assert.match(read('DESIGN.md'), /SLATEBOX_AI_PRIVATE_ENDPOINTS/)
   assert.match(read('rootfs/opt/slatebox/lib/ai-cli.mjs'), /privateEndpoints/)
+})
+
+// The installer (npx slatebox) writes the providers as a list, each key in its own variable.
+test('SLATEBOX_AI_PROVIDERS: any mix as the installer writes it, keys read from their own variables, a default', () => {
+  const providers = [
+    { id: 'openai', kind: 'openai-compatible', baseUrl: 'https://api.openai.com/v1', model: 'model-a', keyEnv: 'SLATEBOX_AI_KEY_OPENAI', vendor: undefined },
+    { id: 'deepinfra', kind: 'deepinfra', keyEnv: 'SLATEBOX_AI_KEY_DEEPINFRA' },
+    { id: 'ollama', kind: 'openai-compatible', baseUrl: 'http://host.docker.internal:11434/v1', model: 'local-model', toolChoice: 'auto' },
+  ].map(({ vendor, ...p }) => p)
+  const ai = operatorAI(env({
+    SLATEBOX_AI_PROVIDERS: JSON.stringify(providers), SLATEBOX_AI_DEFAULT: 'ollama',
+    SLATEBOX_AI_KEY_OPENAI: 'sk-openai-secret-0001', SLATEBOX_AI_KEY_DEEPINFRA: 'di-secret-0002',
+  }))
+  assert.deepEqual(ai.settings, {
+    connections: {
+      openai: { type: 'openai-compatible', baseUrl: 'https://api.openai.com/v1', model: 'model-a', apiKey: 'sk-openai-secret-0001' },
+      deepinfra: { type: 'deepinfra', apiKey: 'di-secret-0002' },
+      ollama: { type: 'openai-compatible', baseUrl: 'http://host.docker.internal:11434/v1', model: 'local-model', toolChoice: 'auto' },
+    },
+    use: { default: 'ollama' },
+  })
+  assert.deepEqual(ai.keyVariables, ['SLATEBOX_AI_KEY_OPENAI', 'SLATEBOX_AI_KEY_DEEPINFRA'])
+  assert.equal(ai.on, true)
+  const said = ai.summary.join('\n')
+  assert.ok(!said.includes('secret'), 'no key is printed')
+  assert.match(said, /default: ollama/)
+})
+
+test('SLATEBOX_AI_PROVIDERS: one provider is the default; several need SLATEBOX_AI_DEFAULT; mistakes stop the start', () => {
+  const one = [{ id: 'gateway', kind: 'openai-compatible', baseUrl: 'https://ai.example.com/v1', model: 'm' }]
+  assert.deepEqual(operatorAI(env({ SLATEBOX_AI_PROVIDERS: JSON.stringify(one) })).settings.use, { default: 'gateway' })
+  const two = [...one, { id: 'other', kind: 'openai-compatible', baseUrl: 'https://ai2.example.com/v1', model: 'm' }]
+  assert.throws(() => operatorAI(env({ SLATEBOX_AI_PROVIDERS: JSON.stringify(two) })), /set SLATEBOX_AI_DEFAULT/)
+  assert.throws(() => operatorAI(env({ SLATEBOX_AI_PROVIDERS: JSON.stringify(two), SLATEBOX_AI_DEFAULT: 'nope' })), /not one of SLATEBOX_AI_PROVIDERS/)
+  assert.throws(() => operatorAI(env({ SLATEBOX_AI_DEFAULT: 'gateway' })), /only applies together with SLATEBOX_AI_PROVIDERS/)
+  assert.throws(() => operatorAI(env({ SLATEBOX_AI_PROVIDERS: '{}' })), /JSON list/)
+  assert.throws(() => operatorAI(env({ SLATEBOX_AI_PROVIDERS: JSON.stringify([{ ...one[0], keyEnv: 'SLATEBOX_AI_KEY_GATEWAY' }]) })), /SLATEBOX_AI_KEY_GATEWAY is not set/)
+  assert.throws(() => operatorAI(env({ SLATEBOX_AI_PROVIDERS: JSON.stringify([{ ...one[0], keyEnv: 'OPENAI_API_KEY' }]) })), /keyEnv must name a variable SLATEBOX_AI_KEY_/)
+  assert.throws(() => operatorAI(env({ SLATEBOX_AI_PROVIDERS: JSON.stringify([{ ...one[0], key: 'inline' }]) })), /key is not a field/)
+  assert.throws(() => operatorAI(env({ SLATEBOX_AI_PROVIDERS: JSON.stringify([{ ...one[0], baseUrl: 'http://169.254.169.254/v1' }]) })), /cloud metadata address/)
+  assert.throws(() => operatorAI(env({ SLATEBOX_AI_PROVIDERS: JSON.stringify([{ ...one[0], model: undefined }]) })), /needs a model/)
+  assert.throws(() => operatorAI(env({ SLATEBOX_AI_URL: 'https://a.example.com/v1', SLATEBOX_AI_MODEL: 'm', SLATEBOX_AI_PROVIDERS: JSON.stringify([{ ...one[0], id: 'server' }]) })), /already used by SLATEBOX_AI_URL/)
+})
+
+test('the image lists what it accepts for an installer: SLATEBOX_AI_PROVIDERS among the settings, settings among the commands', async () => {
+  const { SETTINGS, COMMANDS, PROVIDER_KEY } = await import('../rootfs/opt/slatebox/lib/settings.mjs')
+  for (const name of ['SLATEBOX_AI_PROVIDERS', 'SLATEBOX_AI_DEFAULT', 'SLATEBOX_AI_CONFIG', 'SLATEBOX_SSO', 'SLATEBOX_KEY_ENCRYPTION_KEY']) assert.ok(SETTINGS.includes(name), name)
+  assert.ok(COMMANDS.includes('settings'))
+  assert.ok(PROVIDER_KEY.test('SLATEBOX_AI_KEY_OPENAI') && !PROVIDER_KEY.test('SLATEBOX_AI_KEY'))
+  // Payments and metering are not settings of a self-hosted Slatebox.
+  assert.ok(!SETTINGS.some((name) => /STRIPE|METER|WALLET|PRICE/.test(name)))
+})
+
+test('the features SLATEBOX_AI_CONFIG may choose are the app\'s own', async () => {
+  const { USE_SURFACES } = await import('../../web/app/server/ai-control/catalogue.mjs')
+  for (const { id } of USE_SURFACES) {
+    const ai = operatorAI(env({ SLATEBOX_AI_CONFIG: JSON.stringify({ connections: { a: { type: 'openai-compatible', url: 'https://ai.example.com/v1', model: 'm' } }, use: { [id]: 'a' } }) }))
+    assert.equal(ai.settings.use[id], 'a', id)
+  }
 })

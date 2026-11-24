@@ -5,6 +5,8 @@
 //   SLATEBOX_AI_URL + SLATEBOX_AI_MODEL (+ SLATEBOX_AI_KEY)  one OpenAI-compatible endpoint for every feature
 //   SLATEBOX_AI_KEY alone                                     a DeepInfra key for the built-in AI
 //   SLATEBOX_AI_CONFIG                                        any mix, as JSON (below)
+//   SLATEBOX_AI_PROVIDERS (+ SLATEBOX_AI_DEFAULT)             any mix as the installer (npx slatebox) writes it:
+//                                                             a JSON list, each key in its own variable (below)
 //   SLATEBOX_AI_OWN_PROVIDERS=on|off                          whether people may connect their own AI (default on)
 //   SLATEBOX_AI_PRIVATE_ENDPOINTS=on|off                      whether people's own AI may use private network
 //                                                             addresses (default on; the operator's are not affected)
@@ -14,10 +16,16 @@
 //   "vision": bool, "images": bool, "maxTokens": n } }, "use": { "default" | "chat" |
 //   "generation" | "presentation" | "vision" | "images": "<name>" | "builtin" },
 //   "ownProviders": "on" | "off", "privateEndpoints": "on" | "off" }
+//
+// SLATEBOX_AI_PROVIDERS = [{ "id": "<name>", "kind": "openai-compatible" | "deepinfra", "baseUrl": "...",
+//   "model": "...", "toolChoice": "auto" | "named", "keyEnv": "SLATEBOX_AI_KEY_<NAME>" }, ...]
+// Each key stays in the variable its keyEnv names (the installer's secrets file), never in the
+// list. SLATEBOX_AI_DEFAULT names the provider every feature uses; with one provider it is that one.
 // It becomes settings.ai, which the app reads (web/app/server/methods/ai/connections.mjs). Keys
 // go only into the app's settings in app.env, never into the log.
 import net from 'node:net'
 import { Plain } from './common.mjs'
+import { PROVIDER_KEY } from './settings.mjs'
 
 const TYPES = {
   'openai-compatible': {},
@@ -25,7 +33,9 @@ const TYPES = {
   anthropic: { baseUrl: 'https://api.anthropic.com/v1', key: true },
   deepinfra: { baseUrl: 'https://api.deepinfra.com/v1/openai', key: true, modelOptional: true },
 }
-const USE = ['default', 'chat', 'generation', 'presentation', 'vision', 'images']
+// The app's features (web/app/server/ai-control/catalogue.mjs USE_SURFACES); the app checks them again at start.
+const USE = ['default', 'chat', 'chat.route', 'generation', 'generation.notes', 'presentation', 'vision', 'images', 'shape',
+  'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors']
 const NAME = /^[a-z0-9][a-z0-9-]{0,39}$/
 const CONNECTION_FIELDS = ['type', 'url', 'key', 'model', 'tools', 'vision', 'images', 'maxTokens', 'toolChoice']
 // Instance metadata services hand out the machine's cloud credentials: no AI request goes there.
@@ -75,8 +85,7 @@ function endpoint(where, value) {
   return url.href.replace(/\/+$/, '')
 }
 
-function connectionFrom(name, raw) {
-  const where = `SLATEBOX_AI_CONFIG connection ${name}`
+function connectionFrom(name, raw, where = `SLATEBOX_AI_CONFIG connection ${name}`) {
   if (!NAME.test(name)) throw new Plain(`SLATEBOX_AI_CONFIG: name each connection with lowercase letters, digits and dashes (not "${name.slice(0, 40)}")`)
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Plain(`${where} must be an object`)
   for (const key of Object.keys(raw)) if (!CONNECTION_FIELDS.includes(key)) throw new Plain(`${where}: ${key.slice(0, 40)} is not a field (${CONNECTION_FIELDS.join(', ')})`)
@@ -110,6 +119,39 @@ function connectionFrom(name, raw) {
     out.toolChoice = raw.toolChoice
   }
   return out
+}
+
+const PROVIDER_FIELDS = ['id', 'kind', 'baseUrl', 'model', 'toolChoice', 'keyEnv']
+const PROVIDER_KINDS = { 'openai-compatible': 'openai-compatible', deepinfra: 'deepinfra' }
+
+// SLATEBOX_AI_PROVIDERS, as connections; keys read from each provider's own variable.
+function providersFrom(raw, setting, ai) {
+  let list
+  try { list = JSON.parse(raw) } catch { throw new Plain('SLATEBOX_AI_PROVIDERS must be a JSON list') }
+  if (!Array.isArray(list) || !list.length || list.length > 20) throw new Plain('SLATEBOX_AI_PROVIDERS must be a JSON list of 1 to 20 providers')
+  const keyVariables = []
+  list.forEach((entry, index) => {
+    const where = `SLATEBOX_AI_PROVIDERS[${index}]`
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Plain(`${where} must be an object`)
+    for (const key of Object.keys(entry)) if (!PROVIDER_FIELDS.includes(key)) throw new Plain(`${where}: ${key.slice(0, 40)} is not a field (${PROVIDER_FIELDS.join(', ')})`)
+    const name = entry.id
+    if (typeof name !== 'string' || !NAME.test(name)) throw new Plain(`${where}: id must be lowercase letters, digits and dashes`)
+    if (ai.connections[name]) throw new Plain(`${where}: the name ${name} is already used${name === 'server' ? ' by SLATEBOX_AI_URL' : ''}; choose another`)
+    const type = PROVIDER_KINDS[entry.kind]
+    if (!type) throw new Plain(`${where}: kind must be openai-compatible or deepinfra`)
+    let key
+    if (entry.keyEnv !== undefined) {
+      if (typeof entry.keyEnv !== 'string' || !PROVIDER_KEY.test(entry.keyEnv)) throw new Plain(`${where}: keyEnv must name a variable SLATEBOX_AI_KEY_<NAME> (capitals, digits, _)`)
+      key = setting(entry.keyEnv)
+      if (!key) throw new Plain(`${where}: ${entry.keyEnv} is not set (it holds this provider's key)`)
+      keyVariables.push(entry.keyEnv)
+    }
+    ai.connections[name] = connectionFrom(name, {
+      type, ...(type === 'deepinfra' ? {} : { url: entry.baseUrl }), ...(entry.model !== undefined && { model: entry.model }),
+      ...(key && { key }), ...(entry.toolChoice !== undefined && { toolChoice: entry.toolChoice }),
+    }, where)
+  })
+  return { names: list.map((entry) => entry.id), keyVariables }
 }
 
 function switchValue(value, where) {
@@ -173,6 +215,23 @@ export function operatorAI(setting) {
     const privateFromConfig = switchValue(config.privateEndpoints, 'SLATEBOX_AI_CONFIG privateEndpoints')
     if (privateFromConfig) ai.privateEndpoints = privateFromConfig
   }
+  const rawProviders = setting('SLATEBOX_AI_PROVIDERS')
+  const chosenDefault = setting('SLATEBOX_AI_DEFAULT')
+  let keyVariables = []
+  if (rawProviders) {
+    const listed = providersFrom(rawProviders, setting, ai)
+    keyVariables = listed.keyVariables
+    if (chosenDefault) {
+      if (!listed.names.includes(chosenDefault)) throw new Plain(`SLATEBOX_AI_DEFAULT: ${chosenDefault.slice(0, 40)} is not one of SLATEBOX_AI_PROVIDERS (${listed.names.join(', ')})`)
+      ai.use.default = chosenDefault
+    } else if (listed.names.length === 1 && !ai.use.default) {
+      ai.use.default = listed.names[0]
+    } else if (!ai.use.default) {
+      throw new Plain(`SLATEBOX_AI_PROVIDERS lists ${listed.names.length} providers: set SLATEBOX_AI_DEFAULT to the one every feature uses (${listed.names.join(', ')})`)
+    }
+  } else if (chosenDefault) {
+    throw new Plain('SLATEBOX_AI_DEFAULT only applies together with SLATEBOX_AI_PROVIDERS')
+  }
   if (own) ai.ownProviders = own
   if (privateEndpoints) ai.privateEndpoints = privateEndpoints
 
@@ -182,7 +241,7 @@ export function operatorAI(setting) {
   const on = Boolean(names.length || deepInfraKey)
   const summary = []
   if (!on) {
-    summary.push('AI drafts: off (set SLATEBOX_AI_URL and SLATEBOX_AI_MODEL, SLATEBOX_AI_CONFIG or SLATEBOX_AI_KEY to turn them on)')
+    summary.push('AI drafts: off (set SLATEBOX_AI_URL and SLATEBOX_AI_MODEL, SLATEBOX_AI_PROVIDERS, SLATEBOX_AI_CONFIG or SLATEBOX_AI_KEY to turn them on)')
   } else {
     const listed = names.map((name) => `${hostOf(ai.connections[name])} (${name}${ai.connections[name].model ? `, ${ai.connections[name].model}` : ''})`)
     const uses = Object.entries(ai.use).map(([feature, name]) => `${feature}: ${name}`)
@@ -192,7 +251,7 @@ export function operatorAI(setting) {
     ? 'Own AI:    off, people use the AI set here (SLATEBOX_AI_OWN_PROVIDERS=off)'
     : 'Own AI:    on, people may connect their own models and keys (SLATEBOX_AI_OWN_PROVIDERS=off turns this off)')
   if (ai.privateEndpoints === 'off' && ai.ownProviders !== 'off') summary.push('           people\'s own AI may use public addresses only (SLATEBOX_AI_PRIVATE_ENDPOINTS=off)')
-  return { settings, deepInfraKey, legacy, on, summary }
+  return { settings, deepInfraKey, legacy, on, summary, keyVariables }
 }
 
 // ---------- slatebox ai check ----------

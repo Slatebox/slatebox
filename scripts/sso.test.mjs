@@ -338,13 +338,14 @@ test('H2: an API token stops working once its account is revoked, disabled or de
     slates: {}, slateAccess: {},
   })
   const req = { headers: { authorization: `Bearer ${raw}` } }
-  assert.equal((await service.authenticateApiRequest(req, 'slates:read'))?._id, 't1')
+  // Restated for prod's token service: it answers { token, account } and leaves scopes to the action registry.
+  assert.equal((await service.authenticateApiRequest(req))?.token._id, 't1')
   user = { _id: 'u1', services: { sso: { revokedAt: new Date() } } }
-  assert.equal(await service.authenticateApiRequest(req, 'slates:read'), null)
+  assert.equal(await service.authenticateApiRequest(req), null)
   user = { _id: 'u1', isDisabled: true }
-  assert.equal(await service.authenticateApiRequest(req, 'slates:read'), null)
+  assert.equal(await service.authenticateApiRequest(req), null)
   user = undefined
-  assert.equal(await service.authenticateApiRequest(req, 'slates:read'), null)
+  assert.equal(await service.authenticateApiRequest(req), null)
 })
 
 test('M1: a sign-in ticket works only in the browser tab that started the sign-in', () => {
