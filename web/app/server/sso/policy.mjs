@@ -75,6 +75,6 @@ export const METHODS_CLOSED_UNDER_SSO_ONLY = [
 /** Pages the server answers without a session: closed under SSO only (the API keeps its tokens). */
 export function closedPathUnderSsoOnly(path) {
   const pathname = String(path || '').split('?')[0]
-  return pathname === '/api/public-presentations' || pathname.startsWith('/embed/')
+  return pathname.startsWith('/embed/')
 }
 export const SSO_ONLY_MESSAGE = SSO_ONLY

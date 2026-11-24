@@ -425,7 +425,8 @@ test('M2: SSO only refuses guests, password reset, and the public pages the serv
     // forgotPassword is accounts-password's own method.
     assert.ok(name === 'forgotPassword' || defined.includes(`'${name}'`), `${name} is a method the app defines`)
   }
-  for (const path of ['/embed/abc', '/api/public-presentations', '/api/public-presentations?limit=4']) {
+  // Restated: prod has no /api/public-presentations any more (no featured feed); the embed page is the one left.
+  for (const path of ['/embed/abc', '/embed/abc?x=1']) {
     assert.equal(policy.closedPathUnderSsoOnly(path), true, path)
   }
   for (const path of ['/api/v1/slates', '/login', '/sso/login', '/', '/embedded']) {
