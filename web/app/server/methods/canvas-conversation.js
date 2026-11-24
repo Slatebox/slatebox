@@ -11,7 +11,7 @@
 import { Meteor } from 'meteor/meteor'
 import { Random } from 'meteor/random'
 import { SlateAccess, Slates } from '../../imports/api/common/models'
-import { draftingRefusal, nativeRequestKind, needsDrafting, unrecordedWorkshopOrigin } from '../../imports/api/common/native-canvas-conversation.mjs'
+import { draftingRefusal, drawsRequestAsNote, nativeRequestKind, needsDrafting, unrecordedWorkshopOrigin } from '../../imports/api/common/native-canvas-conversation.mjs'
 import { noteRequest, noteRequestProblem } from '../../imports/api/common/note-requests.mjs'
 import { lineRequest } from '../../imports/api/common/line-requests.mjs'
 import { renderExecTool } from '../actions/client-render.mjs'
@@ -133,8 +133,9 @@ Meteor.methods({
     if (lines?.problem) throw new Meteor.Error('invalid-turn', lines.problem)
     // Notes asked for by number or name are drawn as they stand. A request that has to be thought
     // up is drafted by AI for anyone signed in (and on an install with AI turned on); anyone else
-    // is told how to get it rather than given a note holding the request.
-    if (!canGenerate && !lines && needsDrafting(message)) {
+    // is told how to get it rather than given a note holding the request: a description of a board
+    // ("A board where ideas go in piles of five", in the builder or Ask Slatebox) as much as a request.
+    if (!canGenerate && !lines && (needsDrafting(message) || drawsRequestAsNote(message))) {
       const user = await Meteor.userAsync()
       const refusal = draftingRefusal({ selfHosted: Meteor.settings.public?.env === 'selfhost', aiOn: Meteor.settings.selfHosted?.workshopAI === true,
         guest: Boolean(user?.isAnonymous), meter: await aiRefusal(user) })

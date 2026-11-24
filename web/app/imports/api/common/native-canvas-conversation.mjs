@@ -36,6 +36,18 @@ export function needsDrafting(message) {
   return /\?$/.test(words) || /^(?:can|could|would|will|please|add|make|create|draw|build|generate|write|give|put|show|help|list|brainstorm|suggest|fill|turn|summari[sz]e|explain|plan|i want|i need|i(?:'|’)?d like|let(?:'|’)?s|what|which|who|why|how|where|when)\b/i.test(words)
 }
 
+// Whether the direct path would draw the request itself as one note: a description of a board or a
+// drawing ("A board where ideas go in piles of five") read as a single step. With no AI to draft it,
+// that note is never what was asked for, so the person is told why it can't be drafted instead.
+// A short label ("Review notes"), typed steps, pasted lines and notes asked for by name are drawn.
+export function drawsRequestAsNote(message) {
+  const words=typeof message==='string' ? message.trim():''
+  if(!words || noteRequest(words) || noteRequestProblem(words)) return false
+  const paths=nativeBriefPaths(words)
+  if(paths.length!==1 || paths[0].length!==1) return false
+  return words.split(/\s+/).length>=4
+}
+
 // What a request that needs drafting is told when this person cannot have it drafted. On Slatebox
 // Cloud it is the meter's own reason (`meter`: sign in, no Slatebox Pro or own AI, today's or
 // this month's included AI used up, a paused budget), with its code; on a self-hosted install it

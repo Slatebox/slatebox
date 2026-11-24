@@ -4,6 +4,7 @@ import {nativeCanvasDraft, mapFromDrawing} from '../web/app/imports/api/common/n
 import {nativeSlateFromBrief} from '../web/app/imports/api/common/native-diagram-brief.mjs'
 import {draftToPlan} from '../web/app/imports/api/common/canvas-draft-plan.mjs'
 import {createRequire} from 'node:module'
+import {readFileSync} from 'node:fs'
 
 // Restated for exec: Keep saves a draft as one canvas plan through slates.applyOperations, so
 // the kept board is what the engine makes of that plan (it was applyNativeCanvasDraft).
@@ -291,4 +292,27 @@ test('a request that needs drafting is answered truthfully for the account and t
   const guest = draftingRefusal({ selfHosted: true, aiOn: true, guest: true })
   assert.equal(guest.error, 'drafting-off')
   assert.equal(guest.reason, 'Drafting from a request is for signed-in members of this install. Sign in to use it.')
+})
+
+// aicontrol fixes (2026-11-24): with no AI to draft it, a board described in the builder or Ask Slatebox
+// is answered with the real refusal (the meter's reason, AI off, not set up), never drawn as a note holding it.
+test('a described board with no AI is refused with the real reason, never drawn as a note of the prompt', async () => {
+  const { drawsRequestAsNote, needsDrafting } = await import('../web/app/imports/api/common/native-canvas-conversation.mjs')
+  for (const message of ['A board where ideas go in piles of five', 'Ideas go in piles; each pile holds up to five.',
+    'Stand-up board with Yesterday, Today and Blocked columns', 'a kanban for the support team where urgent tickets jump the queue']) {
+    assert.equal(needsDrafting(message), false, message)
+    assert.equal(drawsRequestAsNote(message), true, message)
+    // Without the gate the direct path draws exactly that: one note holding the whole request.
+    assert.deepEqual(nativeCanvasDraft({ nodes: [] }, message, req).labels, [message])
+  }
+  // Typed steps, pasted lines, a short label and notes asked for by name are still drawn as they stand.
+  for (const message of ['Intake → Review → Reply', 'Intake -> Review', 'Plan\nBuild\nShip', 'Research then design then build', 'Review notes',
+    'Customer onboarding', 'add two notes', 'Add a note called Call the printer about the venue', 'add 13 notes'])
+    assert.equal(drawsRequestAsNote(message), false, message)
+  // The method asks before drawing anything: the refusal (meter, AI off, not set up) comes first.
+  const method = readFileSync(new URL('../web/app/server/methods/canvas-conversation.js', import.meta.url), 'utf8')
+  const gate = method.indexOf('if (!canGenerate && !lines && (needsDrafting(message) || drawsRequestAsNote(message))) {')
+  assert.ok(gate > 0, 'the no-AI gate covers a described board')
+  assert.ok(gate < method.indexOf('conversation.preview({'), 'refused before the direct path draws')
+  assert.match(method.slice(gate, gate + 600), /throw new Meteor\.Error\(\.\.\.refusalErrorArgs\(refusal\)\)/)
 })
