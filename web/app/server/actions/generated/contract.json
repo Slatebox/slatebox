@@ -5815,6 +5815,109 @@
                               {
                                 "type": "object",
                                 "additionalProperties": false,
+                                "description": "Change how the board looks, on every kind of board; it moves nothing. Give one or more of the looks, or a lane with a color. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest.",
+                                "required": [
+                                  "kind"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "set_appearance"
+                                  },
+                                  "emphasis": {
+                                    "enum": [
+                                      "subtle",
+                                      "normal",
+                                      "strong"
+                                    ],
+                                    "description": "Borders, headers and fills together."
+                                  },
+                                  "borders": {
+                                    "enum": [
+                                      "subtle",
+                                      "normal",
+                                      "strong"
+                                    ],
+                                    "description": "The columns’ outlines."
+                                  },
+                                  "headers": {
+                                    "enum": [
+                                      "subtle",
+                                      "normal",
+                                      "strong"
+                                    ],
+                                    "description": "Column headers: strong is bold with a deeper fill."
+                                  },
+                                  "headerSize": {
+                                    "enum": [
+                                      "normal",
+                                      "large"
+                                    ],
+                                    "description": "Header text size."
+                                  },
+                                  "fill": {
+                                    "enum": [
+                                      "soft",
+                                      "normal",
+                                      "strong"
+                                    ],
+                                    "description": "The columns’ fills: soft is a softer background."
+                                  },
+                                  "lines": {
+                                    "type": "boolean",
+                                    "description": "Grid lines between the columns (a 2 by 2’s quadrant lines)."
+                                  },
+                                  "density": {
+                                    "enum": [
+                                      "normal",
+                                      "compact"
+                                    ],
+                                    "description": "Card size."
+                                  },
+                                  "lane": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200
+                                      },
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "required": [
+                                          "id"
+                                        ],
+                                        "properties": {
+                                          "id": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "description": "With color: the lane (on a 2 by 2, also a quadrant by name)."
+                                  },
+                                  "color": {
+                                    "enum": [
+                                      "red",
+                                      "orange",
+                                      "yellow",
+                                      "green",
+                                      "blue",
+                                      "purple",
+                                      "pink",
+                                      "teal",
+                                      "brown",
+                                      "gray",
+                                      "none"
+                                    ],
+                                    "description": "With lane: its color, or none for its own."
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
                                 "description": "Launch or hiring plan: move the plan’s first day. Every task, the line and a funding round keep their dates; a task that would start before the new first day starts on it. Working days and week snap as the plan’s rules say. Boards: launch-plan, hiring-plan.",
                                 "required": [
                                   "kind",

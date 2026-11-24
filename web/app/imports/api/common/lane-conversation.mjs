@@ -7,6 +7,7 @@ import { N, atMost, count, cuts, finder, listed, named, plainRequest as plain, p
 import { noteRequest, noteRequestProblem } from './note-requests.mjs'
 import { cardColours } from './card-colours.mjs'
 import { moveAnywayProposal } from './move-anyway.mjs'
+import { proposeAppearance } from './board-appearance.mjs'
 // The sentences about a board's rules and its business fields (board-chat.mjs): loaded on demand with
 // the board's rulebook, and plugged in here when they load, so a plain slate never downloads them.
 let boardChat = null
@@ -644,6 +645,9 @@ function propose(input, asked, selection, actor) {
   if (original.lanes.some(l => l.station)) throw Error('This slate holds a map. Describe a path or a step instead.')
   if (typeof asked !== 'string' || !asked.trim() || asked.length > 1000) throw Error('Use up to 1,000 characters.')
   const message = aboutTheBoard(asked, selection)
+  // How the board looks ("make the columns more pronounced", "color Do now green"): every kind of board, no AI call.
+  const look = proposeAppearance(original, message, selection)
+  if (look) return { ...look, workshop: validateWorkshop(look.workshop) }
   // How the board behaves (its rules), a business board's own fields, and the questions about them.
   const own = boardChat?.proposeBoardChange(original, message, selection, actor)
   if (own) return own.workshop ? { ...own, workshop: validateWorkshop(own.workshop) } : own

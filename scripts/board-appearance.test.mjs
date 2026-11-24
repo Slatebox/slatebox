@@ -1,0 +1,116 @@
+// How a board looks, said in a sentence and read with no AI call (board-appearance.mjs): every kind of board, the builder's
+// chat and any board's, one set_appearance edit each (the engine's own reducer), and two or three looks to choose from
+// when a sentence could mean more than one. Owner, 2026-11-24: "this kind of edit should be doable in the smart
+// component that i'm building", after "can you make the columns in impact x effort more pronounced?" was refused.
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { nightTransfer, validateWorkshop } from 'slateboxjs/workshops/model'
+import 'slateboxjs/workshops/behaviour'
+import 'slateboxjs/workshops/rules'
+import { catalogSamples } from 'slateboxjs/workshops/samples'
+import { appearanceEdits, emphasisChoices, proposeAppearance } from '../web/app/imports/api/common/board-appearance.mjs'
+import { proposeLaneReply } from '../web/app/imports/api/common/lane-conversation.mjs'
+import { proposeDirectMapEdit } from '../web/app/imports/api/common/map-direct-edits.mjs'
+import '../web/app/imports/api/common/board-chat.mjs'
+
+const matrix = () => validateWorkshop(catalogSamples['impact-effort']())
+const team = () => validateWorkshop({ version: 1, title: 'Team', lanes: [{ id: 'todo', label: 'To do' }, { id: 'doing', label: 'Doing' }, { id: 'done', label: 'Done' }],
+  cards: [{ id: 'a', label: 'Ship it', laneId: 'todo' }] })
+const edits = (board, message, selection) => appearanceEdits(board, message, selection)
+
+test('the owner’s sentence on Impact × effort changes the board, with no AI call', () => {
+  const board = matrix()
+  const made = proposeLaneReply(board, 'can you make the columns in impact x effort more pronounced?')
+  assert.deepEqual(made.workshop.appearance, { borders: 'strong', headers: 'strong', fill: 'strong' })
+  assert.equal(made.reply, 'The board now has stronger column borders, bolder headers and deeper column colors.')
+  // Nothing else on the board changes: the cards and their scores stay.
+  assert.deepEqual(made.workshop.cards, board.cards)
+})
+
+test('the common phrasings, each one look', () => {
+  const board = team()
+  const cases = {
+    'make the columns more pronounced': { emphasis: 'strong' },
+    'bolder columns': { emphasis: 'strong' },
+    'Stronger lane borders': { borders: 'strong' },
+    'make the column borders thicker': { borders: 'strong' },
+    'Make the headers bigger, please': { headerSize: 'large' },
+    'bigger headers': { headerSize: 'large' },
+    'make the headers bold': { headers: 'strong' },
+    'softer background': { fill: 'soft' },
+    'make the background softer': { fill: 'soft' },
+    'darker column colors': { fill: 'strong' },
+    'show grid lines': { lines: true },
+    'show quadrant lines': { lines: true },
+    'hide the grid lines': { lines: false },
+    'compact cards': { density: 'compact' },
+    'make the cards smaller': { density: 'compact' },
+    'roomier cards': { density: 'normal' },
+    'make the columns subtler': { emphasis: 'subtle' },
+    'reset the look': { emphasis: 'normal', headerSize: 'normal', lines: false, density: 'normal' },
+  }
+  for (const [said, fields] of Object.entries(cases)) assert.deepEqual(edits(board, said), [{ kind: 'set_appearance', ...fields }], said)
+})
+
+test('a column’s color by its name, a 2 by 2’s quadrant by its name, and the column selected', () => {
+  const board = team()
+  assert.deepEqual(edits(board, 'color the Doing column green'), [{ kind: 'set_appearance', lane: { id: board.lanes[1].id }, color: 'green' }])
+  assert.deepEqual(edits(board, 'make Done blue'), [{ kind: 'set_appearance', lane: { id: board.lanes[2].id }, color: 'blue' }])
+  assert.deepEqual(edits(board, 'change the color of To do to grey'), [{ kind: 'set_appearance', lane: { id: board.lanes[0].id }, color: 'gray' }])
+  assert.deepEqual(edits(board, 'color this column red', { kind: 'lane', id: board.lanes[0].id }), [{ kind: 'set_appearance', lane: { id: board.lanes[0].id }, color: 'red' }])
+  const square = matrix()
+  const made = proposeLaneReply(square, 'color the Do now column green')
+  assert.deepEqual(made.workshop.appearance, { colors: { 'q-do-now': 'green' } })
+  assert.equal(made.reply, 'The board now has Do now in green.')
+  assert.deepEqual(proposeLaneReply(made.workshop, 'make Do now its own color').workshop.appearance, undefined)
+})
+
+test('a card’s color stays a card’s: "make Billing green" colors the card, not a column', () => {
+  const board = validateWorkshop({ ...team(), cards: [{ id: 'billing', label: 'Billing', laneId: team().lanes[0].id }] })
+  assert.equal(edits(board, 'make Billing green'), null)
+  const made = proposeLaneReply(board, 'make Billing green')
+  assert.equal(made.workshop.appearance, undefined)
+  assert.ok(made.workshop.cards[0].look?.backgroundColor)
+})
+
+test('a sentence that could mean more than one look offers two or three to choose from, never a refusal', () => {
+  for (const said of ['make it pop', 'make it stand out more', 'more contrast', 'can you make this more pronounced?']) {
+    assert.throws(() => proposeLaneReply(team(), said), error => error.code === 'appearance-choices' && error.choices === emphasisChoices && /stand out/.test(error.message), said)
+  }
+  assert.ok(emphasisChoices.length >= 2 && emphasisChoices.length <= 3)
+  // Each choice is a sentence the chat reads as it is, to the look it names.
+  assert.deepEqual(emphasisChoices.map(choice => edits(team(), choice.say)[0]), [
+    { kind: 'set_appearance', borders: 'strong' }, { kind: 'set_appearance', headers: 'strong' }, { kind: 'set_appearance', emphasis: 'strong' }])
+})
+
+test('every kind of board: a launch plan, a pipeline, a budget, a decision path', () => {
+  for (const id of ['launch-plan', 'pipeline', 'budget', 'hiring-plan', 'sort-evidence']) {
+    const made = proposeAppearance(validateWorkshop(catalogSamples[id]()), 'make the columns more pronounced')
+    assert.deepEqual(made.workshop.appearance, { borders: 'strong', headers: 'strong', fill: 'strong' }, id)
+  }
+  const map = validateWorkshop(nightTransfer)
+  const made = proposeDirectMapEdit(map, 'show grid lines')
+  assert.deepEqual(made.workshop.appearance, { lines: true })
+  assert.deepEqual(proposeDirectMapEdit(map, 'color Last train green').workshop.appearance, { colors: { platform: 'green' } })
+})
+
+test('other sentences are not about the look: they go on to the board’s own sentences', () => {
+  const board = team()
+  for (const said of ['Add a column called Later', 'Move it to Done', 'Let Doing hold 2', 'Rename the board to Sprint', 'what can this do?']) {
+    assert.equal(edits(board, said), null, said)
+  }
+  assert.equal(proposeLaneReply(board, 'Add a column called Later').workshop.appearance, undefined)
+})
+
+test('the look is data on the board: a library version and a fork carry it, and the AI turn’s edits are the same sentences', async () => {
+  const { snapshotWorkshop, snapshotSlate } = await import('../web/app/server/library/snapshot.mjs')
+  const board = proposeLaneReply(matrix(), 'make the columns more pronounced').workshop
+  assert.deepEqual(snapshotWorkshop(board).appearance, board.appearance)
+  assert.deepEqual(validateWorkshop(snapshotWorkshop(board)).appearance, board.appearance, 'a fork reads it back as it was')
+  const slate = snapshotSlate({ _id: 's', shareId: 's', options: { name: 'B' }, nodes: [], creative: { revision: 3, model: { version: 1, kind: 'workshop', workshop: board } } })
+  assert.deepEqual(slate.creative.model.workshop.appearance, board.appearance)
+  // Canvas AI writes its edits as sentences this chat reads (prepareLaneReply): a look it asks for is the same edit.
+  const { prepareLaneReply } = await import('../web/app/server/methods/lane-chat.mjs')
+  const made = prepareLaneReply({ reply: 'Done.', commands: ['Make the headers bigger', 'color Do now green'] }, matrix(), null)
+  assert.deepEqual(made.workshop.appearance, { headerSize: 'large', colors: { 'q-do-now': 'green' } })
+})

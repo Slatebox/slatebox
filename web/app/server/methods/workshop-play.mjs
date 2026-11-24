@@ -35,11 +35,11 @@ const savedLines = value => Array.isArray(value) && value.length <= 96 && value.
 
 /**
  * The edits a rule control on the canvas makes (slateboxjs/workshops/controls RULE_CONTROL_EDITS, library spec §4.3): the
- * add_rule, set_rule and remove_rule chat and exec make, and a column's own limit or a new column. A change of these alone is a
+ * add_rule, set_rule and remove_rule chat and exec make, a column's own limit or a new column, and the board's look (set_appearance). A change of these alone is a
  * change of the rules, taken on every board that has rules (a board of columns, a pipeline, a plan, a nested board), and its
  * audit line says it was set on the canvas.
  */
-export const CANVAS_RULE_EDITS = Object.freeze(['add_rule', 'set_rule', 'remove_rule', 'set_lane_capacity', 'add_lane'])
+export const CANVAS_RULE_EDITS = Object.freeze(['add_rule', 'set_rule', 'remove_rule', 'set_lane_capacity', 'add_lane', 'set_appearance'])
 const RULE_KINDS = new Set(['add_rule', 'set_rule', 'remove_rule'])
 /** Whether a change is a rule control's: edits that are all canvas rule edits, at least one of them a rule or a column's limit. */
 export const isRuleChange = change => Array.isArray(change?.edits) && change.edits.length > 0 &&

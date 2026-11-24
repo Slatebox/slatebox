@@ -28,7 +28,7 @@ const BOARD_KINDS = KIT_KINDS
 
 // The edits a rule control makes (library spec §4.3; slateboxjs/workshops/controls RULE_CONTROL_EDITS): a change of
 // these alone is a change of the rules, saved in a request of its own (the server never takes one mixed with a move).
-const RULE_EDITS = ['add_rule', 'set_rule', 'remove_rule', 'set_lane_capacity', 'add_lane']
+const RULE_EDITS = ['add_rule', 'set_rule', 'remove_rule', 'set_lane_capacity', 'add_lane', 'set_appearance']
 const isRuleChange = change => Array.isArray(change?.edits) && change.edits.length > 0 && change.edits.every(edit => RULE_EDITS.includes(edit?.kind))
 // When a board shows its rule controls: always on a builder slate, while selected or in focus for someone who can edit it.
 const CONTROL_MODES = ['off', 'selected', 'always']

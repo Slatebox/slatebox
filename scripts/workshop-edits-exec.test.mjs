@@ -313,3 +313,27 @@ test("a card removed with its lines counts as one removal, the card", async (t) 
   const held = await gate.call(context(), { seq: 1, method: "slates.applyOperations", input: edits([{ kind: "remove_card", card: "Beta" }]) });
   assert.deepEqual(held.error?.details?.reasons, [{ rule: "removes", shareId: "board", count: 1 }]);
 });
+
+test("the board's look is a typed edit too: set_appearance saves at once, moves nothing, and one undo takes it back", async (t) => {
+  const { gate, context, board, revision, edits } = await setup(t);
+  const before = structuredClone(board());
+  const ctx = context();
+  const out = await gate.call(ctx, { seq: 1, method: "slates.applyOperations", input: edits([
+    { kind: "set_appearance", emphasis: "strong" },
+    { kind: "set_appearance", lane: "Next", color: "green" },
+  ], "Make the columns more pronounced") });
+  assert.equal(out.ok, true, JSON.stringify(out.error));
+  assert.equal(ctx.held, null, "a look is never held for a yes");
+  assert.deepEqual(board().appearance, { borders: "strong", headers: "strong", fill: "strong", colors: { next: "green" } });
+  assert.deepEqual(board().cards, before.cards);
+  assert.deepEqual(out.value.report.edits.map((edit) => edit.said), [
+    "The board now has stronger column borders, bolder headers and deeper column colors.", "The board now has Next in green."]);
+  assert.ok(out.value.workshop.edits.includes("set_appearance"));
+  // An unknown color is the reducer's refusal, and nothing saves.
+  const bad = await gate.call(context(), { seq: 1, method: "slates.applyOperations", input: edits([{ kind: "set_appearance", lane: "Now", color: "chartreuse" }]) });
+  assert.equal(bad.ok, false);
+  assert.equal(revision(), 2);
+  const undone = await gate.call(context(), { seq: 1, method: "slates.applyOperations", input: { shareId: "board", plan: { message: "Undo", operations: [{ kind: "undo_workshop_edit", receiptId: out.value.receiptId, expectedRevision: revision() }] } } });
+  assert.equal(undone.ok, true, JSON.stringify(undone.error));
+  assert.deepEqual(board(), before);
+});

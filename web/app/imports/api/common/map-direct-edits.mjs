@@ -3,6 +3,7 @@ import { addWorkshopBranch, createWorkshopMap, validateWorkshop, workshopCandida
 import { N, atMost, count, cuts, finder, named, plainRequest, pointing, said, things, unquoted, whole } from './plain-words.mjs'
 import { cardColours } from './card-colours.mjs'
 import { moveAnywayProposal } from './move-anyway.mjs'
+import { proposeAppearance } from './board-appearance.mjs'
 
 const fail = message => { throw new Error(message) }
 
@@ -60,6 +61,9 @@ function notUnderstood(model) {
 export function proposeDirectMapEdit(workshop, input, selection) {
   const written = input.trim().replace(/[ \t]+/g, ' ')
   if (!written || input.trim().length > 1000) throw new Error('Use up to 1,000 characters.')
+  // How the map looks ("color Start green", "bolder steps"): the look every board takes (board-appearance.mjs).
+  const look = proposeAppearance(workshop, written, selection)
+  if (look) return look
   const plain = plainRequest(written)
   if (plain === written) return read(workshop, written, selection)
   // A request with “please” is read without it, unless only the words as written make sense (a

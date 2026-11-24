@@ -3481,6 +3481,29 @@ interface WorkshopEditsPlan {
       /** The rule id. (1–64 characters) */
       rule: string;
     } | {
+      kind: "set_appearance";
+      /** Borders, headers and fills together. */
+      emphasis?: "subtle" | "normal" | "strong";
+      /** The columns’ outlines. */
+      borders?: "subtle" | "normal" | "strong";
+      /** Column headers: strong is bold with a deeper fill. */
+      headers?: "subtle" | "normal" | "strong";
+      /** Header text size. */
+      headerSize?: "normal" | "large";
+      /** The columns’ fills: soft is a softer background. */
+      fill?: "soft" | "normal" | "strong";
+      /** Grid lines between the columns (a 2 by 2’s quadrant lines). */
+      lines?: boolean;
+      /** Card size. */
+      density?: "normal" | "compact";
+      /** With color: the lane (on a 2 by 2, also a quadrant by name). */
+      lane?: string | {
+        /** (1–64 characters) */
+        id: string;
+      };
+      /** With lane: its color, or none for its own. */
+      color?: "red" | "orange" | "yellow" | "green" | "blue" | "purple" | "pink" | "teal" | "brown" | "gray" | "none";
+    } | {
       kind: "set_plan_start";
       /** The new first day, as 2026-11-30. (10–10 characters) */
       start: string;
