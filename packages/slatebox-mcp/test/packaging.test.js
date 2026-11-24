@@ -20,7 +20,7 @@ const packScript = await read("../../../scripts/pack-agent-tools.py");
 const registrySchema = await read("./registry-server.schema.json");
 
 const DESCRIPTION =
-  "Slatebox for AI assistants: create and edit mind maps, diagrams, project plans and presentations on a shared canvas.";
+  "Slatebox is an open source visual intelligence platform where you can invite any AI via MCP to collaborate with you and your team.";
 const KEYWORDS = [
   "mcp", "mcp-server", "modelcontextprotocol", "mind-map", "mindmap", "diagram", "flowchart", "whiteboard",
   "project-planning", "gantt", "timeline", "presentation", "mermaid", "collaboration", "open-source", "miro-alternative",
@@ -51,7 +51,7 @@ test("server.json is valid for the MCP Registry and matches the package", () => 
   assert.equal(server.$schema, "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json");
   assert.equal(server.name, manifest.mcpName, "the registry checks mcpName in the npm package against this name");
   assert.equal(server.title, "Slatebox");
-  assert.equal(server.description, "Mind maps, diagrams, project plans and presentations on a free, open-source team canvas.");
+  assert.equal(server.description, "Open-source visual intelligence platform: invite any AI via MCP to work with you and your team.");
   assert.ok(server.description.length <= 100);
   assert.equal(server.version, manifest.version);
   assert.equal(server.websiteUrl, "https://slatebox.com");
@@ -75,7 +75,7 @@ test("server.json is valid for the MCP Registry and matches the package", () => 
 
 test("Miro is named only in the README's opening, beside the not-affiliated line", async () => {
   const opening = readme.split(/^## /m)[0];
-  assert.match(opening, /\*\*Slatebox: the free, open-source team canvas\.\*\*/);
+  assert.match(opening, /\*\*Slatebox is an open source visual intelligence platform where you can invite any AI via MCP to collaborate with you and your team\.\*\*/);
   assert.match(opening, /An open-source alternative to whiteboard tools such as Miro\./);
   assert.match(opening, /Not affiliated with or endorsed by Miro\. Miro is a trademark of its owner\./);
   assert.ok(readme.indexOf("Miro") < readme.indexOf("no sandbox"), "the product opening sits above the no-sandbox warning");
@@ -127,7 +127,7 @@ test("npm pack would publish exactly the public files the release archive holds"
 test("the repository README opens with the positioning line and the not-affiliated line", async () => {
   const root = await read("../../../README.md");
   const opening = root.split(/^## /m).slice(0, 2).join("## ");
-  assert.match(opening, /\*\*Slatebox: the free, open-source team canvas\.\*\*/);
+  assert.match(opening, /\*\*Slatebox is an open source visual intelligence platform where you can invite any AI via MCP to collaborate with you and your team\.\*\*/);
   assert.match(opening, /An open-source alternative to whiteboard tools such as Miro\./);
   assert.match(opening, /Not affiliated with or endorsed by Miro\. Miro is a trademark of its owner\./);
   assert.equal(root.match(/Miro/g).length, opening.match(/Miro/g).length, "Miro appears only in the opening");

@@ -2,7 +2,7 @@
   "name": "slatebox-mcp",
   "version": "0.3.3",
   "mcpName": "com.slatebox/slatebox",
-  "description": "Slatebox for AI assistants: create and edit mind maps, diagrams, project plans and presentations on a shared canvas.",
+  "description": "Slatebox is an open source visual intelligence platform where you can invite any AI via MCP to collaborate with you and your team.",
   "keywords": [
     "mcp",
     "mcp-server",
