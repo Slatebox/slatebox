@@ -194,19 +194,21 @@ test("other /.well-known OAuth and OpenID addresses answer 404 JSON, not the app
   }
 });
 
-test("/mcp without a token answers 401 with resource_metadata and every scope a tool needs; a bad token says invalid_token", async (t) => {
+test("/mcp without a token answers 401 with resource_metadata and asks to read and edit slates only; a bad token says invalid_token", async (t) => {
   const { rawMcp, core, world } = await setup(t);
   const none = await rawMcp();
   assert.equal(none.status, 401);
   const header = none.headers.get("www-authenticate");
   assert.match(header, /^Bearer /);
   assert.ok(header.includes(`resource_metadata="${core.urls.resourceMetadata}"`), header);
-  // Every scope a tool may need, derived from the registry, so a client can ask for all of them
-  // at once instead of meeting a 403 on the first share or settings tool.
+  // Reading and editing only: delete, share, AI-admin and team powers are never asked for up
+  // front (they widen what a stolen or prompt-injected token can do); a tool that needs one answers
+  // 403 insufficient_scope naming it, and the person grants it then.
   const advertised = /scope="([^"]*)"/.exec(header)[1].split(" ");
-  assert.deepEqual(advertised, world.registry.neededScopes());
+  assert.deepEqual(advertised, ["slates:read", "slates:write"]);
   for (const scope of DEFAULT_SCOPES) assert.ok(advertised.includes(scope), scope);
-  assert.ok(advertised.includes("slates:share"), header);
+  for (const wide of ["slates:delete", "slates:share", "ai:admin", "team:export", "team:import"]) assert.ok(!advertised.includes(wide), wide);
+  assert.ok(world.registry.neededScopes().includes("slates:share"), "every scope stays supported");
   assert.doesNotMatch(header, /error=/);
   const bad = await rawMcp({ authorization: "Bearer sbo_nope_nope" });
   assert.equal(bad.status, 401);

@@ -102,9 +102,11 @@ export function createMcpHandler({
     GetPromptRequestSchema, ListResourcesRequestSchema, ListResourceTemplatesRequestSchema, ReadResourceRequestSchema, McpError,
   } = sdk
   const allowedOrigin = appOrigin ? new URL(appOrigin).origin : null
-  // The 401 names every scope a tool needs (from the registry), so a client asks for all of them
-  // at once rather than meeting a 403 on the first share, settings or team tool.
-  const advertised = challengeScopes || registry.neededScopes?.() || ['slates:read', 'slates:write']
+  // The 401 asks for reading and editing slates only: what most tools need. A token never carries
+  // delete, share, AI-admin or team export/import powers it was not asked for on purpose; a tool
+  // that needs one answers 403 insufficient_scope naming it (the step-up), and the person grants
+  // it then. Every scope stays listed in the metadata's scopes_supported.
+  const advertised = challengeScopes || ['slates:read', 'slates:write']
   const listed = listedTools(tools, { typed: typedTools })
   const typedByName = new Map(typedTools ? tools.typed.map((tool) => [tool.name, tool]) : [])
   const withResources = Boolean(ListResourcesRequestSchema && ReadResourceRequestSchema && ListResourceTemplatesRequestSchema)

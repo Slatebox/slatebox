@@ -297,8 +297,10 @@ export function createRegistry({
     const meta = {}
     try {
       const principal = admit(action, caller)
-      if (limiter && (principal.kind === 'agent' || (principal.kind === 'visitor' && principal.address))) {
-        meta.rateLimit = await limiter.take(principal)
+      // Tokens and visitors are always counted; anything that reaches an outside address
+      // (openWorld) is counted per account for every caller, people included.
+      if (limiter && (principal.kind === 'agent' || (principal.kind === 'visitor' && principal.address) || (action.openWorld && principal.userId))) {
+        meta.rateLimit = await limiter.take(principal, { openWorld: action.openWorld })
         if (!meta.rateLimit.allowed)
           throw problem(429, 'rate_limited', 'Too many requests. Wait and retry.', {
             retryAfter: meta.rateLimit.resetSeconds,

@@ -310,11 +310,12 @@ test("no token answers 401 with WWW-Authenticate; a foreign Origin 403; GET 405"
   const post = (headers) => fetch(url, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers }, body: JSON.stringify(init) });
   const anonymous = await post({});
   assert.equal(anonymous.status, 401);
-  // The challenge names every scope a tool needs, from the registry (and, with OAuth mounted, the
-  // resource metadata: mcp-oauth.test.mjs); a presented token that fails is invalid_token.
+  // The challenge asks for reading and editing only (and, with OAuth mounted, names the resource
+  // metadata: mcp-oauth.test.mjs); wider powers are asked for step by step (403 insufficient_scope).
+  // A presented token that fails is invalid_token.
   const needed = world.registry.neededScopes();
   assert.ok(needed.includes("slates:share") && needed.includes("slates:write"), needed.join(" "));
-  assert.equal(anonymous.headers.get("www-authenticate"), `Bearer realm="Slatebox", scope="${needed.join(" ")}"`);
+  assert.equal(anonymous.headers.get("www-authenticate"), 'Bearer realm="Slatebox", scope="slates:read slates:write"');
   const wrong = await post({ authorization: "Bearer sbx_nope_nope" });
   assert.equal(wrong.status, 401);
   assert.match(wrong.headers.get("www-authenticate"), /^Bearer realm="Slatebox", error="invalid_token"/);

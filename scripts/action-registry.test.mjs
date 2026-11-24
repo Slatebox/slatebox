@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { createSlateSaveCore } from "../web/app/server/slate-save-core.mjs";
 import { API_TOKEN_SCOPES, createApiTokenService } from "../web/app/server/api-token-core.mjs";
 import { actions, createAppRegistry } from "../web/app/server/actions/index.mjs";
-import { defineAction } from "../web/app/server/actions/registry.mjs";
+import { createRegistry, defineAction } from "../web/app/server/actions/registry.mjs";
 import { buildOpenApi } from "../web/app/server/actions/openapi.mjs";
 import { buildContract } from "../web/app/server/actions/contract.mjs";
 import { renderClientFiles } from "../web/app/server/actions/client-render.mjs";
@@ -561,6 +561,37 @@ test(
     assert.equal((await db.collection("rate").findOne({ _id: "account:u:0" })).count, 2);
   }
 );
+
+test("the rate limiter counts reaching outside addresses per account, for people too", async () => {
+  const rows = new Map();
+  const collection = { findOneAndUpdate: async ({ _id }, update) => { const row = rows.get(_id) || { _id, count: 0 }; row.count += update.$inc.count; rows.set(_id, row); return { ...row }; }, findOne: async ({ _id }) => rows.get(_id) || null };
+  const db = { collection: () => collection };
+    // Reaching outside addresses (openWorld) is counted per account for people too, at its own lower rate.
+    const open = createRateLimiter({ collection: db.collection("rate-open"), now: () => 0, limits: { perToken: 100, perAccount: 100, perAccountOpenWorld: 2, windowSeconds: 60 } });
+    const ada = { kind: "person", userId: "ada", tokenId: null };
+    assert.equal((await open.take(ada, { openWorld: true })).allowed, true);
+    assert.equal((await open.take(ada, { openWorld: true })).allowed, true);
+    assert.deepEqual(await open.take(ada, { openWorld: true }), { allowed: false, limit: 2, remaining: 0, resetSeconds: 60 });
+    // a token of the same account shares that count, and still counts its own windows when allowed
+    assert.equal((await open.take({ kind: "agent", tokenId: "t", userId: "ada" }, { openWorld: true })).allowed, false);
+    assert.equal((await open.take({ kind: "agent", tokenId: "t2", userId: "ben" }, { openWorld: true })).allowed, true);
+    assert.equal((await db.collection("rate-open").findOne({ _id: "token:t2:0" })).count, 1);
+});
+
+test("the registry meters people too on actions that reach outside addresses", async () => {
+  const taken = [];
+  const limiter = { take: async (principal, options) => { taken.push([principal.kind, Boolean(options?.openWorld)]); return { allowed: taken.length < 3, limit: 2, remaining: 0, resetSeconds: 9 }; } };
+  const reach = defineAction({ id: "outside.reach", title: "Reach", description: "Reaches an outside address.", toolset: "t", kind: "write", openWorld: true, changesNoSlate: true, principals: ["person"], mounts: { ddp: true }, input: { type: "object", properties: {}, additionalProperties: false }, output: { type: "object" }, handler: async () => ({ status: 200, body: { ok: true } }) });
+  const plain = defineAction({ id: "inside.read", title: "Read", description: "Reads.", toolset: "t", kind: "read", principals: ["person"], mounts: { ddp: true }, input: { type: "object", properties: {}, additionalProperties: false }, output: { type: "object" }, handler: async () => ({ status: 200, body: { ok: true } }) });
+  const registry = createRegistry({ actions: [reach, plain], scopes: ["slates:read"], limiter });
+  const ada = { kind: "person", userId: "ada", tokenId: null, scopes: [] };
+  await registry.run(ada, "inside.read", {});
+  assert.deepEqual(taken, [], "a person's ordinary call is not metered");
+  await registry.run(ada, "outside.reach", {});
+  await registry.run(ada, "outside.reach", {});
+  await assert.rejects(registry.run(ada, "outside.reach", {}), { status: 429, code: "rate_limited" });
+  assert.deepEqual(taken, [["person", true], ["person", true], ["person", true]]);
+});
 
 test("the scopes a token may need are derived from the actions: every scope any agent-callable action checks, in the token vocabulary's order", () => {
   const registry = world.build();
