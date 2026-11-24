@@ -67,7 +67,7 @@ test('a builder says how the board looks, with no AI call; Undo takes it back; a
   await panel(page).locator('[data-shape="columns"]').click()
   await expect(panel(page).getByRole('button', { name: 'Keep changes' })).toBeVisible({ timeout: 60000 })
   await panel(page).getByRole('button', { name: 'Keep changes' }).click()
-  await expect(control(page, 'look:emphasis')).toHaveAttribute('aria-label', /They look standard now/, { timeout: 60000 })
+  await expect(control(page, 'look:emphasis')).toHaveAttribute('aria-label', /Look: standard now/, { timeout: 60000 })
   const before = await strokeOf(page, 'column-lane-2')
 
   // 1. Said in chat: read here, no AI call; previewed, kept; the board draws it and its chip says so.
@@ -77,7 +77,7 @@ test('a builder says how the board looks, with no AI call; Undo takes it back; a
   await shot(page, 'appearance-01-preview')
   await panel(page).getByRole('button', { name: 'Keep changes' }).click()
   await expect(panel(page).getByText('Saved to the board.').last()).toBeVisible({ timeout: 30000 })
-  await expect(control(page, 'look:emphasis')).toHaveAttribute('aria-label', /They look strong now/, { timeout: 60000 })
+  await expect(control(page, 'look:emphasis')).toHaveAttribute('aria-label', /Look: strong now/, { timeout: 60000 })
   await expect.poll(() => strokeOf(page, 'column-lane-2'), { timeout: 30000 }).toBeGreaterThan(before)
   expect(aiRequests(), 'no AI request for a look').toBe(asked)
   await shot(page, 'appearance-02-kept')
@@ -86,12 +86,12 @@ test('a builder says how the board looks, with no AI call; Undo takes it back; a
   const undo = page.getByRole('group', { name: 'Undo and redo' }).getByRole('button', { name: 'Undo', exact: true })
   await expect(undo).toBeEnabled({ timeout: 30000 })
   await undo.click()
-  await expect(control(page, 'look:emphasis')).toHaveAttribute('aria-label', /They look standard now/, { timeout: 30000 })
+  await expect(control(page, 'look:emphasis')).toHaveAttribute('aria-label', /Look: standard now/, { timeout: 30000 })
   await expect.poll(() => strokeOf(page, 'column-lane-2'), { timeout: 30000 }).toBe(before)
 
   // The board's own chip makes the same edit, saved at once.
   await control(page, 'look:density').click()
-  await expect(control(page, 'look:density')).toHaveAttribute('aria-label', /They are compact now/, { timeout: 30000 })
+  await expect(control(page, 'look:density')).toHaveAttribute('aria-label', /Cards: compact now/, { timeout: 30000 })
   // A sentence that could mean more than one look: looks to choose from, never a refusal.
   await say(page, 'make it pop')
   await expect(panel(page).locator('[data-look-choice="Stronger borders"]')).toBeVisible({ timeout: 30000 })
