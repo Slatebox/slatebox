@@ -14,7 +14,7 @@
 import { defineAction } from '/server/actions/registry.mjs'
 import { requireAIControlAdmin } from '/server/actions/ai-control-get.mjs'
 import { guardControlWrite } from '/server/actions/ai-providers.mjs'
-import { GALLERY, RETIRED } from '../common/gallery.mjs'
+import { GALLERY, NATIVE_CARDS, RETIRED } from '../common/gallery.mjs'
 import { checkRecipe } from './recipes.mjs'
 import { plainText } from './tools.mjs'
 
@@ -67,7 +67,7 @@ export function checkCardEdit(id, changes = {}, builtin = GALLERY) {
 }
 
 /** The gallery operations over the aiAgents documents (find) and the AI control store (store.write). */
-export function createGalleryOps({ find, store }) {
+export function createGalleryOps({ find, store, configured = null }) {
   const docs = async () => (await find()) || []
   return {
     async live() {
@@ -78,14 +78,20 @@ export function createGalleryOps({ find, store }) {
       return {
         cards: cards.map((card) => ({ ...card, promptId: 'connectors.recipe.' + card.id })),
         retired: RETIRED.map(({ id, name, url, why }) => ({ id, name, url, why })),
+        // Built into Slatebox (Google Drive): on or off and their words, like a card; and, as yes or
+        // no only, whether this server has what each needs.
+        native: liveGallery(await docs(), NATIVE_CARDS, { all: true }).map((card) => ({ ...card, promptId: 'connectors.recipe.' + card.id })),
+        ...(configured && { configuration: await configured() }),
       }
     },
     async save({ actor, id, changes, reason = null }) {
-      const set = checkCardEdit(id, changes)
-      const current = (await docs()).find((doc) => doc._id === docId(id)) || { kind: 'outbound-connector', galleryId: id, order: GALLERY.findIndex((c) => c.id === id) }
+      const native = NATIVE_CARDS.some((c) => c.id === id)
+      const builtin = native ? NATIVE_CARDS : GALLERY
+      const set = checkCardEdit(id, changes, builtin)
+      const current = (await docs()).find((doc) => doc._id === docId(id)) || { kind: 'outbound-connector', galleryId: id, order: builtin.findIndex((c) => c.id === id) }
       const { _id, updatedAt, updatedBy, ...kept } = current
       const written = await store.write({ kind: 'agents', id: docId(id), doc: { ...kept, ...set, kind: 'outbound-connector', galleryId: id }, action: 'ai.agents.gallery.save', actor, reason })
-      return { id, card: liveGallery([written.after], GALLERY, { all: true }).find((c) => c.id === id), generation: written.generation }
+      return { id, card: liveGallery([written.after], builtin, { all: true }).find((c) => c.id === id), generation: written.generation }
     },
     async reorder({ actor, ids }) {
       const known = GALLERY.map((card) => card.id)
@@ -107,8 +113,8 @@ const CARD_OUT = { type: 'object', properties: { id: { type: 'string' }, card: {
 const personOnly = () => 'Only a person changes the agent gallery.'
 
 /** The admin actions, over a getter for the aiAgents reader (set at server start); writes go through deps.aiControlStore. */
-export function galleryActions(finder) {
-  const ops = (deps) => createGalleryOps({ find: finder(), store: deps.aiControlStore })
+export function galleryActions(finder, configured = null) {
+  const ops = (deps) => createGalleryOps({ find: finder(), store: deps.aiControlStore, configured })
   return [
     defineAction({
       id: 'ai.agents.gallery.list',
@@ -121,7 +127,7 @@ export function galleryActions(finder) {
       mounts: { ddp: true, http: { method: 'GET', path: '/ai/control/agents/gallery', operationId: 'listAIAgentGallery' } },
       tool: { name: 'list_ai_agent_gallery', title: 'List the agent gallery', description: 'List the agent gallery\'s cards, their order and recipes. Administrators only.' },
       input: { type: 'object', properties: {}, additionalProperties: false },
-      output: { type: 'object', properties: { cards: { type: 'array', items: { type: 'object' } }, retired: { type: 'array', items: { type: 'object' } } } },
+      output: { type: 'object', properties: { cards: { type: 'array', items: { type: 'object' } }, retired: { type: 'array', items: { type: 'object' } }, native: { type: 'array', items: { type: 'object' } }, configuration: { type: 'object', description: 'Yes or no for each thing a native integration needs on this server (never a value).' } } },
       handler: async (principal, _input, { deps }) => {
         await requireAIControlAdmin(principal, deps, 'read the agent gallery')
         return { status: 200, body: await ops(deps).list() }

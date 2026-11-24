@@ -25,11 +25,16 @@ test('dead methods, routes and their files stay removed (nothing called them)', 
   for (const name of ['slates.archive', 'slates.echo', 'slates.getNonPublic', 'slates.scaleAndTranslate', 'slates.convertTextToPaths',
     'layouts.aiCalculate', 'themes.getPrivate', 'svgImports.aws', 'tts.textToSpeechUrl', 'youtube.urlToAudio', 'utils.createImage',
     'utils.clearBase64Cache', 'utils.getBase64CacheStats', 'stripe.deleteCustomer', 'googleDocs.createFolder', 'images.svgToPaths',
+    // Retired 2026-11-24: the browser held a Google token in a cookie and sent it back. Google is the
+    // enterprise integration now (google.*: the token sealed in the vault, never in a browser).
+    'googleDocs.createAuthUrl', 'googleDocs.getToken', 'googleDocs.export',
     'images.searchGoogleImages', 'users.impersonate', 'users.getUserName', 'humanticApi.fetch', 'tags.remove']) {
     assert.ok(!constants.includes(`'${name}'`), 'constant ' + name)
     for (const file of server) assert.ok(!read(file).includes(`'${name}'`), name + ' in ' + file)
   }
   assert.ok(!read('server/publications.js').includes('publications.collaborators,'), 'the unused collaborators publication')
+  // No Google token in a browser cookie, and no page asks Google for one outside the integration.
+  for (const file of client) assert.ok(!/slatebox_googleDocsToken|googleDocsCookieToken|react-oauth-popup|oauth2\/v1\/tokeninfo/.test(read(file)), file)
 })
 
 test('no guest shares a known password, and sign-up options cannot choose a team or plan', () => {

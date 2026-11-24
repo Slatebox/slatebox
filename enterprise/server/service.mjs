@@ -23,8 +23,18 @@
 //              Discard all on the answer's frame and the agent's chip, Keep and Discard on a ghost
 //              under the pointer, Undo per action),
 //              by anyone who can edit the slate; an agent a person lets edit directly saves at once.
-//   disconnect the inviter removes the agent; its waiting suggestions are discarded, and when no
-//              other slate of theirs uses that server, its sign-in is revoked and forgotten.
+//   disconnect the inviter (or the slate's owner) removes the agent from one slate; its waiting
+//              suggestions are discarded. The integration and its sign-in stay (connect once).
+//
+// Integrations (owner, 2026-11-24: "connect once, invite anywhere"): a person's connected agent
+// servers are kept once (the `integrations` store: one row per person and address, with the tools
+// they consented to), apart from any slate. Connecting from a slate makes the integration too.
+// From the Integrations page a person connects, reviews, disconnects (revoked and removed from every
+// slate) and sets a standing rule: 'ask' (invite it yourself) or 'my_slates' (it joins every slate
+// they own). Inviting an integration onto a slate needs no new sign-in and no new consent. A removal
+// from a slate is remembered: a rule never brings it back there. A slate's owner may limit who
+// brings outside agents onto it (outsideAgents: editors, owner, off). The sign-in lives as long as
+// its integration, not its slates.
 //
 // Rules every entry point enforces (owner decisions 2026-11-23/24): enterprise code unlocked
 // (Slatebox Cloud, or a licensed self-hosted install) and the kill switch off (the loader registers
@@ -32,7 +42,7 @@
 // and call, not only in the browser; a licensed install has no Pro, so `pro` answers true there); only the inviter can call the agent;
 // everyone who can read the slate sees its cursor and ghosts; the person who keeps must be able
 // to edit the slate.
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { sameAgentName } from '/imports/api/common/agent-mention.mjs'
 import { canonicalAddress, cardFor, DEAD_HOSTS, GALLERY, lookalikeHost } from '../common/gallery.mjs'
 import { checkMcpUrl, McpFetchRefused } from './mcp-fetch.mjs'
@@ -53,7 +63,36 @@ import {
   stepCalls, stepTool, trimToBudget,
 } from './recipes.mjs'
 
-export const AGENT_LIMITS = Object.freeze({ perSlate: 8, perOwnerPerSlate: 3, beatMs: 450, requestChars: 1000, nameChars: 32, proEndedDays: 30, orphanHours: 24, concurrentPerUser: 3, helloMs: 8000 })
+export const AGENT_LIMITS = Object.freeze({ perSlate: 8, perOwnerPerSlate: 3, beatMs: 450, requestChars: 1000, nameChars: 32, proEndedDays: 30, orphanHours: 24, concurrentPerUser: 3, helloMs: 8000, integrationsPerOwner: 40 })
+
+/** The standing rules an integration may have: invite it yourself, or it joins every slate you own. */
+export const RULES = Object.freeze(['ask', 'my_slates'])
+/** Who may bring outside agents onto a slate (its owner's choice). */
+export const OUTSIDE_AGENTS = Object.freeze(['editors', 'owner', 'off'])
+
+// A small in-memory store with the same shape as the Meteor ones (tests, and a service built without one).
+export function memoryStore() {
+  const rows = []
+  const matches = (row, query) => Object.entries(query).every(([k, v]) => {
+    if (v && typeof v === 'object' && '$ne' in v) return row[k] !== v.$ne
+    if (v && typeof v === 'object' && '$in' in v) return v.$in.includes(row[k])
+    return row[k] === v
+  })
+  return {
+    rows,
+    insert: async (doc) => {
+      if (rows.some((row) => row._id === doc._id)) throw Object.assign(new Error('duplicate key'), { code: 11000 })
+      rows.push(structuredClone(doc))
+    },
+    findOne: async (query) => rows.find((row) => matches(row, query)) || null,
+    find: async (query) => rows.filter((row) => matches(row, query)),
+    update: async (id, set) => Object.assign(rows.find((row) => row._id === id) || {}, set),
+    remove: async (id) => {
+      const at = rows.findIndex((row) => row._id === id)
+      if (at >= 0) rows.splice(at, 1)
+    },
+  }
+}
 
 export class ConnectorRefused extends Error {
   constructor(status, code, message, details) {
@@ -68,6 +107,33 @@ const refuse = (status, code, message, details) => {
 }
 
 export const PRO_REQUIRED = 'Inviting agents onto your slates is part of Slatebox Pro and Slatebox Business.'
+export const INTEGRATIONS_PRO = 'Integrations are part of Slatebox Pro and Slatebox Business.'
+
+/** What its owner sees of an integration on the Integrations page: never a token. */
+export function publicIntegration(doc, { slates = [], cards = GALLERY, pro = true } = {}) {
+  return {
+    integrationId: doc._id,
+    kind: doc.kind || 'mcp',
+    name: doc.name,
+    host: doc.host,
+    address: doc.address,
+    galleryId: doc.galleryId || cardFor(doc.address, cards)?.id || null,
+    owner: 'personal',
+    status: !pro && doc.status === 'active' ? 'pro_ended' : doc.status,
+    rule: RULES.includes(doc.rule) ? doc.rule : 'ask',
+    defaultContextLevel: doc.defaultContextLevel || 'request',
+    signedIn: Boolean(doc.auth),
+    ...(doc.auth && { auth: { kind: doc.auth.kind } }),
+    scopes: Array.isArray(doc.scopes) ? doc.scopes.slice(0, 24) : [],
+    tools: (doc.tools || []).map(({ name, title, group, policy }) => ({ name, title, group, policy })),
+    ...(doc.changed?.length && { changed: doc.changed.map((c) => c.name) }),
+    colorIndex: doc.colorIndex ?? 1,
+    lastUsedAt: doc.lastUsedAt || null,
+    createdAt: doc.createdAt || null,
+    slateCount: slates.length,
+    slates: slates.slice(0, 20),
+  }
+}
 
 /** The principal an invited agent's work runs as: the inviter's account, named after the agent. */
 export const connectorPrincipal = (connection, runId) => ({
@@ -103,6 +169,9 @@ export function publicConnection(doc, viewerId, cards = GALLERY) {
     name: doc.name,
     colorIndex: doc.colorIndex ?? 1,
     invitedBy: doc.inviterName || '',
+    // How it came here: a person invited it, or its owner's standing rule brought it.
+    joinedBy: doc.joinedBy === 'rule' ? 'rule' : 'invite',
+    integrationId: doc.integrationId || null,
     host: doc.host,
     status: doc.status,
     signedIn: Boolean(doc.auth),
@@ -139,6 +208,9 @@ export function createConnectorService({
   audit = () => {},
   promptOf = promptText, // (id, values) -> the prompt's text (the registry)
   gallery = async () => GALLERY, // the live gallery (aiAgents, edited in /admin/ai), else the built-in cards
+  integrations = memoryStore(), // { insert, findOne, find, update, remove }: each person's connected agent servers, apart from any slate
+  slateSettings = memoryStore(), // { findOne({ _id: slateId }), insert, update }: a slate owner's outsideAgents choice
+  slateList = async () => [], // async (slateIds, viewerId) -> [{ slateId, shareId, name }]: those slates the viewer can still open
 }) {
   // How many outside reaches each person has running now: a few at once, never a flood.
   const running = new Map()
@@ -169,8 +241,25 @@ export function createConnectorService({
     if (!found.canEdit) refuse(403, 'forbidden', 'Only people who can edit this slate can do that.')
     return found.slate
   }
-  async function requirePro(userId) {
-    if (!(await pro(userId))) refuse(402, 'pro_required', PRO_REQUIRED)
+  async function requirePro(userId, words = PRO_REQUIRED) {
+    if (!(await pro(userId))) refuse(402, 'pro_required', words)
+  }
+  // A signed-in person (never a guest), and, when a slate is named, someone who may edit it.
+  async function requirePerson(principal, shareId) {
+    if (shareId !== undefined && shareId !== null) return requireEditor(principal, shareId)
+    if (!principal?.userId || principal.kind === 'guest' || principal.kind === 'visitor')
+      refuse(401, 'sign_in', 'Save your account to connect integrations.')
+    return null
+  }
+  // The slate owner's choice of who may bring outside agents here (editors by default).
+  async function outsideAgentsOf(slate) {
+    const row = await slateSettings.findOne({ _id: slate._id })
+    return OUTSIDE_AGENTS.includes(row?.outsideAgents) ? row.outsideAgents : 'editors'
+  }
+  async function checkOutsideAgents(principal, slate) {
+    const setting = await outsideAgentsOf(slate)
+    if (setting === 'off') refuse(403, 'agents_off', 'This slate\'s owner turned off outside agents here.')
+    if (setting === 'owner' && slate.userId !== principal.userId) refuse(403, 'owner_only', 'Only this slate\'s owner can bring outside agents here.')
   }
   async function requireReader(principal, shareId) {
     const found = principal?.userId ? await accessOf(principal, shareId) : null
@@ -260,15 +349,16 @@ export function createConnectorService({
     return oneAtATime(principal, () => discoverNow(principal, input))
   }
 
+  // shareId: discovering from a slate's walkthrough. Without one: from the Integrations page.
   async function discoverNow(principal, { shareId, address: raw }) {
-    const slate = await requireEditor(principal, shareId)
-    await requirePro(principal.userId)
+    const slate = await requirePerson(principal, shareId)
+    await requirePro(principal.userId, slate ? PRO_REQUIRED : INTEGRATIONS_PRO)
     const { address, host } = checkAddress(raw)
     const cards = await gallery()
     const card = cardFor(address, cards)
     // Already on this slate as this person's agent: the page says so and offers Manage (connect
     // refuses a second copy). Signing in again for it is still a discovery, so this is not a refusal.
-    const here = (await connections.find({ slateId: slate._id, ownerId: principal.userId, status: { $ne: 'removed' } })).find((doc) => canonicalAddress(doc.address) === address)
+    const here = slate ? (await connections.find({ slateId: slate._id, ownerId: principal.userId, status: { $ne: 'removed' } })).find((doc) => canonicalAddress(doc.address) === address) : null
     // Paused because its tools changed: inviting again is how its inviter looks at them (connect
     // updates that agent), so the walkthrough carries on instead of offering Manage.
     let alreadyHere = here ? { connectionId: here._id, agentId: here.agentId || null, name: here.name, text: `${here.name} is already on this slate.`, ...(here.status === 'paused' && { lookAgain: true, text: `${here.name}'s tools changed. Look at them and invite it again.` }) } : null
@@ -288,10 +378,16 @@ export function createConnectorService({
     if (alreadyHere) head.alreadyHere = alreadyHere
     const signedIn = reached.token ? await vault.describe(principal.userId, address) : null
     // Signed in again: this person's agents on this server that were waiting for it can be asked.
-    if (reached.token) for (const doc of await connections.find({ ownerId: principal.userId, address, status: 'needs_sign_in' })) await setStatus(doc, 'active')
+    if (reached.token) {
+      for (const doc of await connections.find({ ownerId: principal.userId, address, status: 'needs_sign_in' })) await setStatus(doc, 'active')
+      for (const row of await integrations.find({ ownerId: principal.userId, address, status: 'needs_sign_in' })) await integrations.update(row._id, { status: 'active', auth: { kind: signedIn.kind, issuer: signedIn.issuer }, scopes: signedIn.scopes || [], updatedAt: new Date(now()) })
+    }
     audit({ kind: 'discover', userId: principal.userId, host, tools: tools.length })
+    // Already one of this person's integrations: the page offers to invite it instead of connecting again.
+    const integration = await integrations.findOne({ ownerId: principal.userId, address })
     return {
       ...head,
+      ...(integration && { integration: { integrationId: integration._id, name: integration.name, status: integration.status } }),
       ...(signedIn && { signedIn: { kind: signedIn.kind } }),
       // Self-reported: shown as the server's claim, never used as the name on the slate.
       serverName: plainText(found.serverInfo?.title || found.serverInfo?.name || '', 60),
@@ -305,9 +401,62 @@ export function createConnectorService({
     return oneAtATime(principal, () => connectNow(principal, input))
   }
 
+  // What the person consented to: each tool the server lists now, with the hash they saw. An
+  // outside change is never switched on; at least one lookup must be allowed.
+  function consented(name, tools, chosen) {
+    const seen = new Map((Array.isArray(chosen) ? chosen : []).map((entry) => [entry?.name, entry]))
+    const stored = tools.map((tool) => {
+      const choice = seen.get(tool.name)
+      if (choice && choice.hash !== tool.hash) refuse(409, 'tools_changed', `${name}'s tools changed while you were choosing. Look at them again.`)
+      const policy = choice && POLICIES.includes(choice.policy) && tool.group === 'lookup' ? choice.policy : choice ? 'off' : defaultPolicy(tool)
+      return { name: tool.name, title: tool.title, description: tool.description, group: tool.group, hash: tool.hash, policy }
+    })
+    if (!stored.some((tool) => tool.policy === 'allow')) refuse(400, 'no_tools', 'Allow at least one thing it may look up.')
+    return stored
+  }
+
+  // The person's integration for this address: made (or brought up to date) whenever they consent,
+  // from a slate or from the Integrations page. One per person and address.
+  async function ensureIntegration(userId, { address, host, name, tools, auth, galleryId, serverName = '' }) {
+    const existing = await integrations.findOne({ ownerId: userId, address })
+    const at = new Date(now())
+    if (existing) {
+      const set = { tools, auth, status: 'active', changed: null, updatedAt: at, ...(auth && { scopes: (await vault?.describe?.(userId, address))?.scopes || existing.scopes || [] }) }
+      await integrations.update(existing._id, set)
+      return Object.assign(existing, set)
+    }
+    if ((await integrations.find({ ownerId: userId })).length >= AGENT_LIMITS.integrationsPerOwner)
+      refuse(429, 'integration_limit', `You can connect ${AGENT_LIMITS.integrationsPerOwner} integrations. Disconnect one first.`)
+    const doc = {
+      _id: newId('i'),
+      ownerType: 'user',
+      ownerId: userId,
+      kind: 'mcp',
+      address,
+      host,
+      galleryId: galleryId || null,
+      name,
+      serverName,
+      tools,
+      auth,
+      scopes: auth ? (await vault?.describe?.(userId, address))?.scopes || [] : [],
+      defaultContextLevel: 'request',
+      rule: 'ask',
+      colorIndex: 1 + (randomBytes(1)[0] % 5),
+      status: 'active',
+      createdAt: at,
+      updatedAt: at,
+      lastUsedAt: null,
+    }
+    await integrations.insert(doc)
+    audit({ kind: 'integration_connect', userId, host, integrationId: doc._id })
+    return doc
+  }
+
   async function connectNow(principal, { shareId, address: raw, name: rawName, tools: chosen = [], contextLevel = 'request', view = null }) {
     const slate = await requireEditor(principal, shareId)
     await requirePro(principal.userId)
+    await checkOutsideAgents(principal, slate)
     const { address, host } = checkAddress(raw)
     if (!CONTEXT_LEVELS.includes(contextLevel)) refuse(400, 'invalid_request', 'Choose what the agent may see.')
     const name = slateName(rawName, sanitizeName)
@@ -331,15 +480,10 @@ export function createConnectorService({
     if (reached.needsSignIn) refuse(401, 'needs_sign_in', `Sign in to ${host} first.`)
     const { found } = reached
     const auth = reached.token ? await vault.describe(principal.userId, address) : null
-    const tools = normalizeTools(found.tools)
-    const seen = new Map((Array.isArray(chosen) ? chosen : []).map((entry) => [entry?.name, entry]))
-    const stored = tools.map((tool) => {
-      const choice = seen.get(tool.name)
-      if (choice && choice.hash !== tool.hash) refuse(409, 'tools_changed', `${name}'s tools changed while you were choosing. Look at them again.`)
-      const policy = choice && POLICIES.includes(choice.policy) && tool.group === 'lookup' ? choice.policy : choice ? 'off' : defaultPolicy(tool)
-      return { name: tool.name, title: tool.title, description: tool.description, group: tool.group, hash: tool.hash, policy }
-    })
-    if (!stored.some((tool) => tool.policy === 'allow')) refuse(400, 'no_tools', 'Allow at least one thing it may look up.')
+    const stored = consented(name, normalizeTools(found.tools), chosen)
+    const galleryId = cardFor(address, await gallery())?.id || null
+    // Connect once: the consent is kept as the person's integration, so any other slate can have it without asking again.
+    const integration = await ensureIntegration(principal.userId, { address, host, name, tools: stored, auth: auth ? { kind: auth.kind, issuer: auth.issuer } : null, galleryId, serverName: plainText(found.serverInfo?.name || '', 60) })
     const doc = {
       _id: newId('c'),
       ownerId: principal.userId,
@@ -349,15 +493,17 @@ export function createConnectorService({
       name,
       address,
       host,
-      galleryId: cardFor(address, await gallery())?.id || null,
+      galleryId,
       serverName: plainText(found.serverInfo?.name || '', 60),
       tools: stored,
       contextLevel,
       mode: 'suggest',
       // The inviter's own sign-in to this server (the vault holds it; the connection never does).
       auth: auth ? { kind: auth.kind, issuer: auth.issuer } : null,
-      // One agent colour on its cursor, chip and ghosts (0 is the Slatebox agent's).
-      colorIndex: 1 + (randomBytes(1)[0] % 5),
+      // One agent colour on its cursor, chip and ghosts (0 is the Slatebox agent's): its integration's, on every slate.
+      colorIndex: integration.colorIndex ?? 1 + (randomBytes(1)[0] % 5),
+      integrationId: integration._id,
+      joinedBy: 'invite',
       agentId: null,
       status: 'active',
       createdAt: new Date(now()),
@@ -392,20 +538,43 @@ export function createConnectorService({
   async function consentAgain(principal, doc, { address, chosen, contextLevel }) {
     const reached = await discoverAs(principal.userId, address)
     if (reached.needsSignIn) refuse(401, 'needs_sign_in', `Sign in to ${doc.host} first.`)
-    const tools = normalizeTools(reached.found.tools)
-    const seen = new Map((Array.isArray(chosen) ? chosen : []).map((entry) => [entry?.name, entry]))
-    const stored = tools.map((tool) => {
-      const choice = seen.get(tool.name)
-      if (choice && choice.hash !== tool.hash) refuse(409, 'tools_changed', `${doc.name}'s tools changed while you were choosing. Look at them again.`)
-      const policy = choice && POLICIES.includes(choice.policy) && tool.group === 'lookup' ? choice.policy : choice ? 'off' : defaultPolicy(tool)
-      return { name: tool.name, title: tool.title, description: tool.description, group: tool.group, hash: tool.hash, policy }
-    })
-    if (!stored.some((tool) => tool.policy === 'allow')) refuse(400, 'no_tools', 'Allow at least one thing it may look up.')
-    const set = { tools: stored, contextLevel, status: 'active', changed: null, updatedAt: new Date(now()) }
+    const stored = consented(doc.name, normalizeTools(reached.found.tools), chosen)
+    const auth = reached.token ? await vault.describe(principal.userId, address) : null
+    // The consent is the integration's: every slate it is on resumes with it.
+    const integration = await ensureIntegration(principal.userId, { address, host: doc.host, name: doc.name, tools: stored, auth: auth ? { kind: auth.kind, issuer: auth.issuer } : null, galleryId: doc.galleryId })
+    await resumeEverywhere(integration, stored)
+    const set = { tools: stored, contextLevel, status: 'active', changed: null, integrationId: integration._id, updatedAt: new Date(now()) }
     await connections.update(doc._id, set)
     Object.assign(doc, set)
     audit({ kind: 'reconsent', userId: principal.userId, host: doc.host, connectionId: doc._id })
     return publicConnection(doc, principal.userId)
+  }
+
+  // An integration's agents on every slate, live (its own, and ones made before integrations existed).
+  async function agentsOf(integration) {
+    const linked = await connections.find({ integrationId: integration._id, status: { $ne: 'removed' } })
+    const loose = (await connections.find({ ownerId: integration.ownerId, status: { $ne: 'removed' } }))
+      .filter((doc) => !doc.integrationId && canonicalAddress(doc.address) === integration.address)
+    return [...linked, ...loose]
+  }
+
+  // A definition that moved since consent pauses the integration and its agents on every slate at once.
+  async function pauseEverywhere(doc, changes) {
+    const at = new Date(now())
+    await connections.update(doc._id, { status: 'paused', changed: changes, updatedAt: at })
+    const integration = doc.integrationId ? await integrations.findOne({ _id: doc.integrationId }) : await integrations.findOne({ ownerId: doc.ownerId, address: canonicalAddress(doc.address) })
+    if (!integration) return
+    await integrations.update(integration._id, { status: 'paused', changed: changes, updatedAt: at })
+    for (const other of await agentsOf(integration)) if (other._id !== doc._id && other.status !== 'paused') await connections.update(other._id, { status: 'paused', changed: changes, updatedAt: at })
+  }
+
+  // One consent again resumes every slate the integration is on, with the tools just consented to.
+  async function resumeEverywhere(integration, tools) {
+    const at = new Date(now())
+    for (const other of await agentsOf(integration)) {
+      const set = { tools, changed: null, integrationId: integration._id, updatedAt: at, ...((other.status === 'paused' || other.status === 'needs_sign_in') && { status: 'active' }) }
+      await connections.update(other._id, set)
+    }
   }
 
   async function list(principal, { shareId }) {
@@ -459,7 +628,8 @@ export function createConnectorService({
 
   async function disconnect(principal, { connectionId }) {
     const doc = await removableConnection(principal, connectionId)
-    await connections.update(doc._id, { status: 'removed', updatedAt: new Date(now()) })
+    // Remembered: a standing rule never brings it back onto this slate.
+    await connections.update(doc._id, { status: 'removed', removedBy: doc.ownerId === principal.userId ? 'person' : 'slate_owner', updatedAt: new Date(now()) })
     // Its suggestions still waiting go with it (discarded by the inviter; kept work stays, undoable).
     const found = await access.forUser(doc.shareId, principal.userId).catch(() => null)
     if (found?.slate) {
@@ -467,14 +637,9 @@ export function createConnectorService({
       await suggestions.withdraw(principal, found.slate, agentId).catch(() => {})
     }
     await presence.end('hello:' + doc._id, 'done').catch(() => {})
-    // Its sign-in goes too (revoked at the server when it offers that), unless another of this
-    // person's slates still has an agent on the same server.
-    let signedOut = false
-    if (vault) {
-      const others = await connections.find({ ownerId: doc.ownerId, address: doc.address, status: { $ne: 'removed' } })
-      if (!others.some((other) => other._id !== doc._id)) signedOut = (await vault.remove(doc.ownerId, doc.address).catch(() => ({ removed: false }))).removed
-    }
-    audit({ kind: 'disconnect', userId: principal.userId, host: doc.host, connectionId: doc._id, signedOut, ...(doc.ownerId !== principal.userId && { byOwner: true }) })
+    // Its integration and sign-in stay: the person connected it once and may invite it anywhere.
+    // Disconnecting the integration (Integrations page) is what revokes the sign-in.
+    audit({ kind: 'disconnect', userId: principal.userId, host: doc.host, connectionId: doc._id, ...(doc.ownerId !== principal.userId && { byOwner: true }) })
     return { ok: true, connectionId: doc._id }
   }
 
@@ -508,10 +673,11 @@ export function createConnectorService({
   async function reach(doc, { tool, args, check, token, toolOf, principal, entries, extra = {} }) {
     let raw
     try {
-      raw = await session.callTool(doc.address, fetch, { name: tool, args, check }, { token })
+      // ownerId and slateId: a native agent (Google Drive) reads only what its owner picked for this slate.
+      raw = await session.callTool(doc.address, fetch, { name: tool, args, check }, { token, ownerId: doc.ownerId, slateId: doc.slateId })
     } catch (error) {
       if (error?.code === 'tools_changed') {
-        await connections.update(doc._id, { status: 'paused', changed: error.changes, updatedAt: new Date(now()) })
+        await pauseEverywhere(doc, error.changes)
         throw error
       }
       const problem = fromProblem(error)
@@ -603,7 +769,7 @@ export function createConnectorService({
           check(found.tools)
         } catch (error) {
           if (error?.code === 'tools_changed') {
-            await connections.update(doc._id, { status: 'paused', changed: error.changes, updatedAt: new Date(now()) })
+            await pauseEverywhere(doc, error.changes)
             throw error
           }
           throw fromSignIn(error)
@@ -776,6 +942,7 @@ export function createConnectorService({
       const notes = result.groups.reduce((sum, group) => sum + group.notes.length, 0)
       const lines = result.groups.reduce((sum, group) => sum + (group.lines || []).length, 0)
       outcome = 'done'
+      if (doc.integrationId) await integrations.update(doc.integrationId, { lastUsedAt: new Date(now()) })
       return { items: actions.length + saved, actions, saved, say: plainText(result.say, 240), left, added: dropped ? { notes: 0, lines: 0 } : { notes, lines } }
     } catch (error) {
       throw fromProblem(error)
@@ -792,8 +959,8 @@ export function createConnectorService({
   }
 
   async function startSignInNow(principal, { shareId, address: raw, clientId = null }) {
-    await requireEditor(principal, shareId)
-    await requirePro(principal.userId)
+    const slate = await requirePerson(principal, shareId)
+    await requirePro(principal.userId, slate ? PRO_REQUIRED : INTEGRATIONS_PRO)
     const { address, host } = checkAddress(raw)
     if (!vault?.available?.() || !signIn || !probe) refuse(422, 'vault_off', 'Agents that need sign-in are not available on this server.')
     let challenge = null
@@ -824,8 +991,8 @@ export function createConnectorService({
   }
 
   async function useKeyNow(principal, { shareId, address: raw, key }) {
-    await requireEditor(principal, shareId)
-    await requirePro(principal.userId)
+    const slate = await requirePerson(principal, shareId)
+    await requirePro(principal.userId, slate ? PRO_REQUIRED : INTEGRATIONS_PRO)
     const { address, host } = checkAddress(raw)
     if (!vault?.available?.()) refuse(422, 'vault_off', 'Agents that need sign-in are not available on this server.')
     const value = typeof key === 'string' ? key.trim().replace(/^Bearer\s+/i, '') : ''
@@ -843,22 +1010,277 @@ export function createConnectorService({
   }
 
   /**
-   * Housekeeping (hourly): sign-ins nobody uses are forgotten (and revoked): those with no agent on
-   * any slate after a day, and those of agents whose inviter's Pro ended 30 days ago.
+   * Housekeeping (hourly): a sign-in lives as long as its integration. Forgotten (and revoked): a
+   * sign-in with no integration after a day (someone signed in and never connected), and one whose
+   * integration's owner lost Pro 30 days ago (the integration then needs sign-in again).
    * credentialRows() -> [{ ownerId, address, createdAt }]
    */
   async function sweep(credentialRows) {
     let removed = 0
     for (const row of await credentialRows()) {
-      const live = await connections.find({ ownerId: row.ownerId, address: row.address, status: { $ne: 'removed' } })
-      const orphan = !live.length && now() - new Date(row.createdAt).getTime() > AGENT_LIMITS.orphanHours * 3600000
-      const lapsed = live.length > 0 && live.every((doc) => doc.status === 'pro_ended' && now() - new Date(doc.updatedAt).getTime() > AGENT_LIMITS.proEndedDays * 86400000)
-      if (orphan || lapsed) {
-        await vault.remove(row.ownerId, row.address).catch(() => {})
-        removed++
-      }
+      const integration = await integrations.findOne({ ownerId: row.ownerId, address: row.address })
+      const orphan = !integration && now() - new Date(row.createdAt).getTime() > AGENT_LIMITS.orphanHours * 3600000
+      const lapsed = Boolean(integration) && integration.status === 'pro_ended' && now() - new Date(integration.proEndedAt || integration.updatedAt).getTime() > AGENT_LIMITS.proEndedDays * 86400000
+      if (!orphan && !lapsed) continue
+      await vault.remove(row.ownerId, row.address).catch(() => {})
+      if (lapsed) await integrations.update(integration._id, { status: 'needs_sign_in', auth: null, scopes: [], updatedAt: new Date(now()) })
+      removed++
     }
     return { removed }
+  }
+
+  // ---------- integrations: connect once, invite anywhere ----------
+
+  async function ownIntegration(principal, integrationId) {
+    const doc = typeof integrationId === 'string' ? await integrations.findOne({ _id: integrationId }) : null
+    // Someone else's integration is "not found": its existence is not theirs to learn.
+    if (!doc || doc.ownerId !== principal?.userId) refuse(404, 'not_found', 'That integration is not connected any more.')
+    return doc
+  }
+
+  // The integration follows its owner's Pro: "Pro ended" while it is off, back when it returns.
+  async function followPro(doc, isPro) {
+    if (!isPro && doc.status === 'active') {
+      const at = new Date(now())
+      doc.status = 'pro_ended'
+      doc.proEndedAt = at
+      await integrations.update(doc._id, { status: 'pro_ended', proEndedAt: at, updatedAt: at })
+    } else if (isPro && doc.status === 'pro_ended') {
+      doc.status = 'active'
+      await integrations.update(doc._id, { status: 'active', proEndedAt: null, updatedAt: new Date(now()) })
+    }
+  }
+
+  /** The Integrations page: each of this person's integrations, the slates it is on, and whether they may connect. */
+  async function integrationsList(principal) {
+    await requirePerson(principal)
+    const isPro = await pro(principal.userId)
+    const cards = await gallery()
+    const rows = await integrations.find({ ownerId: principal.userId })
+    const out = []
+    for (const doc of rows) {
+      await followPro(doc, isPro)
+      const agents = await agentsOf(doc)
+      const slates = await slateList([...new Set(agents.map((a) => a.slateId))], principal.userId).catch(() => [])
+      out.push(publicIntegration(doc, { slates, cards, pro: isPro }))
+    }
+    out.sort((a, b) => String(a.name).localeCompare(String(b.name)))
+    return { integrations: out, pro: isPro, canConnect: isPro, rules: [...RULES] }
+  }
+
+  /**
+   * Connect an MCP server once, from the Integrations page (no slate): after discovery (and its
+   * sign-in), the person consents to its tools by their hashes. Connecting one already connected is
+   * consenting again: every slate it is on resumes with that consent.
+   */
+  async function integrationConnect(principal, input) {
+    return oneAtATime(principal, () => integrationConnectNow(principal, input))
+  }
+
+  async function integrationConnectNow(principal, { address: raw, name: rawName, tools: chosen = [], rule = null }) {
+    await requirePerson(principal)
+    await requirePro(principal.userId, INTEGRATIONS_PRO)
+    const { address, host } = checkAddress(raw)
+    const name = slateName(rawName, sanitizeName)
+    if (!name) refuse(400, 'bad_name', 'Choose another name. Names can\'t say Slatebox, admin, support or a person\'s name.')
+    if (rule !== null && !RULES.includes(rule)) refuse(400, 'invalid_request', 'Choose when it joins: when you invite it, or on every slate you own.')
+    const reached = await discoverAs(principal.userId, address)
+    if (reached.needsSignIn) refuse(401, 'needs_sign_in', `Sign in to ${host} first.`)
+    const stored = consented(name, normalizeTools(reached.found.tools), chosen)
+    const auth = reached.token ? await vault.describe(principal.userId, address) : null
+    const existing = await integrations.findOne({ ownerId: principal.userId, address })
+    const doc = await ensureIntegration(principal.userId, { address, host, name, tools: stored, auth: auth ? { kind: auth.kind, issuer: auth.issuer } : null, galleryId: cardFor(address, await gallery())?.id || null, serverName: plainText(reached.found.serverInfo?.name || '', 60) })
+    const set = { ...(existing && { name }), ...(rule && { rule }) }
+    if (Object.keys(set).length) {
+      await integrations.update(doc._id, set)
+      Object.assign(doc, set)
+    }
+    if (existing) await resumeEverywhere(doc, stored)
+    audit({ kind: existing ? 'integration_reconsent' : 'integration_connected', userId: principal.userId, host, integrationId: doc._id })
+    return publicIntegration(doc, { cards: await gallery() })
+  }
+
+  /** Review an integration's tools as its server lists them now: what changed since consent. */
+  async function integrationReview(principal, { integrationId }) {
+    return oneAtATime(principal, async () => {
+      const doc = await ownIntegration(principal, integrationId)
+      await requirePro(principal.userId, INTEGRATIONS_PRO)
+      if (doc.kind !== 'mcp') refuse(400, 'invalid_request', `${doc.name} has fixed tools: there is nothing to review.`)
+      const reached = await discoverAs(principal.userId, doc.address)
+      if (reached.needsSignIn) {
+        if (doc.status !== 'needs_sign_in') await integrations.update(doc._id, { status: 'needs_sign_in', updatedAt: new Date(now()) })
+        return { integrationId: doc._id, address: doc.address, host: doc.host, needsSignIn: true, tools: [], changed: [] }
+      }
+      const listed = normalizeTools(reached.found.tools)
+      const { changed } = reconcile(doc.tools, listed)
+      const policyOf = new Map((doc.tools || []).map((tool) => [tool.name, tool]))
+      return {
+        integrationId: doc._id,
+        address: doc.address,
+        host: doc.host,
+        name: doc.name,
+        tools: listed.map(({ name, title, description, group, hash, annotations }) => {
+          const before = policyOf.get(name)
+          return { name, title, description, group, hash, annotations, policy: before && before.hash === hash ? before.policy : defaultPolicy({ group }), ...(!before && { added: true }), ...(before && before.hash !== hash && { changed: true }) }
+        }),
+        changed: changed.map((c) => c.name),
+        summary: capabilitySummary(listed),
+      }
+    })
+  }
+
+  /** Its standing rule: 'ask' (you invite it) or 'my_slates' (it joins every slate you own). */
+  async function integrationSetRule(principal, { integrationId, rule }) {
+    const doc = await ownIntegration(principal, integrationId)
+    await requirePro(principal.userId, INTEGRATIONS_PRO)
+    if (!RULES.includes(rule)) refuse(400, 'invalid_request', 'Choose when it joins: when you invite it, or on every slate you own.')
+    await integrations.update(doc._id, { rule, updatedAt: new Date(now()) })
+    doc.rule = rule
+    audit({ kind: 'integration_rule', userId: principal.userId, integrationId: doc._id, rule })
+    return publicIntegration(doc, { cards: await gallery() })
+  }
+
+  /** Disconnect: removed from every slate (waiting suggestions discarded), the sign-in revoked and forgotten. */
+  async function integrationDisconnect(principal, { integrationId }) {
+    const doc = await ownIntegration(principal, integrationId)
+    let removedFrom = 0
+    for (const agent of await agentsOf(doc)) {
+      await connections.update(agent._id, { status: 'removed', removedBy: 'disconnect', updatedAt: new Date(now()) })
+      removedFrom++
+      const found = await access.forUser(agent.shareId, principal.userId).catch(() => null)
+      if (found?.slate) {
+        const agentId = agent.agentId || (await suggestions.agentIdOf(connectorPrincipal(agent, 'remove:' + agent._id), found.slate))
+        await suggestions.withdraw(principal, found.slate, agentId).catch(() => {})
+      }
+      await presence.end('hello:' + agent._id, 'done').catch(() => {})
+    }
+    const signedOut = vault ? (await vault.remove(doc.ownerId, doc.address).catch(() => ({ removed: false }))).removed : false
+    await integrations.remove(doc._id)
+    audit({ kind: 'integration_disconnect', userId: principal.userId, host: doc.host, integrationId: doc._id, removedFrom, signedOut })
+    return { ok: true, integrationId: doc._id, removedFrom, signedOut }
+  }
+
+  // Puts an integration on a slate as a named agent: no sign-in and no consent again (the
+  // integration's carry over). The slate's limits and its owner's choice still apply.
+  async function placeOnSlate(principal, slate, integration, { by, contextLevel = null, name: rawName = null, view = null }) {
+    if (integration.status === 'paused') refuse(409, 'tools_changed', `${integration.name}'s tools changed. Review them on the Integrations page first.`)
+    if (integration.status === 'needs_sign_in') refuse(401, 'needs_sign_in', `${integration.name} needs you to sign in again on the Integrations page.`)
+    const level = contextLevel || integration.defaultContextLevel || 'request'
+    if (!CONTEXT_LEVELS.includes(level)) refuse(400, 'invalid_request', 'Choose what the agent may see.')
+    const name = slateName(rawName || integration.name, sanitizeName)
+    if (!name) refuse(400, 'bad_name', 'Choose another name. Names can\'t say Slatebox, admin, support or a person\'s name.')
+    const live = await connections.find({ slateId: slate._id, status: { $ne: 'removed' } })
+    const already = live.find((doc) => doc.ownerId === principal.userId && (doc.integrationId === integration._id || canonicalAddress(doc.address) === integration.address))
+    if (already) refuse(409, 'already_here', `${already.name} is already on this slate.`, { connectionId: already._id, agentId: already.agentId || null, name: already.name })
+    if (live.length >= AGENT_LIMITS.perSlate) refuse(429, 'agent_limit', `A slate can have ${AGENT_LIMITS.perSlate} invited agents. Remove one first.`)
+    if (live.filter((doc) => doc.ownerId === principal.userId).length >= AGENT_LIMITS.perOwnerPerSlate)
+      refuse(429, 'agent_limit', `You can invite ${AGENT_LIMITS.perOwnerPerSlate} agents onto one slate. Remove one first.`)
+    if (live.some((doc) => sameAgentName(doc.name, name))) refuse(409, 'name_taken', `An agent on this slate is already called ${name}. Choose another name.`)
+    const doc = {
+      // A rule's copy has one id per slate and integration, so two pages applying rules at once make one.
+      _id: by === 'rule' ? 'c' + createHash('sha256').update(`${slate._id}\n${integration._id}\nrule`).digest('hex').slice(0, 20) : newId('c'),
+      ownerId: principal.userId,
+      inviterName: await firstName(principal.userId),
+      slateId: slate._id,
+      shareId: slate.shareId,
+      name,
+      address: integration.address,
+      host: integration.host,
+      galleryId: integration.galleryId || null,
+      serverName: integration.serverName || '',
+      tools: integration.tools,
+      contextLevel: level,
+      mode: 'suggest',
+      auth: integration.auth || null,
+      colorIndex: integration.colorIndex ?? 1,
+      integrationId: integration._id,
+      joinedBy: by,
+      agentId: null,
+      status: 'active',
+      createdAt: new Date(now()),
+      updatedAt: new Date(now()),
+    }
+    const hello = connectorPrincipal(doc, 'hello:' + doc._id)
+    doc.agentId = await suggestions.agentIdOf(hello, slate)
+    try {
+      await connections.insert(doc)
+    } catch (error) {
+      if (error?.code === 11000) refuse(409, 'already_here', `${name} is already on this slate.`)
+      throw error
+    }
+    audit({ kind: by === 'rule' ? 'integration_rule_join' : 'integration_invite', userId: principal.userId, host: doc.host, connectionId: doc._id, integrationId: integration._id })
+    if (by !== 'rule') {
+      const looking = viewOf(view)
+      const point = looking ? { x: Math.round(looking.x + looking.width / 2), y: Math.round(looking.y + looking.height / 2) } : null
+      await presence.saved(hello, slate, { targets: [], message: `Hi, I'm ${name}. Select notes and ask me.`, ...(point && { point }) }).catch(() => {})
+      later(() => presence.end(hello.runId, 'done').catch(() => {}), AGENT_LIMITS.helloMs)
+    }
+    return doc
+  }
+
+  /** Invite one of your integrations onto a slate: no sign-in, no consent again. */
+  async function integrationInvite(principal, { shareId, integrationId, contextLevel = null, name = null, view = null }) {
+    const slate = await requireEditor(principal, shareId)
+    await requirePro(principal.userId)
+    await checkOutsideAgents(principal, slate)
+    const integration = await ownIntegration(principal, integrationId)
+    await followPro(integration, true)
+    const doc = await placeOnSlate(principal, slate, integration, { by: 'invite', contextLevel, name, view })
+    return publicConnection(doc, principal.userId, await gallery())
+  }
+
+  /**
+   * The standing rules for this slate, applied by its owner's page when it opens (idempotent; a
+   * publication never writes). Rules only ever bring your own integrations onto slates you own;
+   * an integration removed from this slate before stays away; limits skip with the reason.
+   */
+  async function applyRules(principal, { shareId }) {
+    const none = { joined: [], skipped: [] }
+    if (!principal?.userId || principal.kind === 'guest' || principal.kind === 'visitor') return none
+    const found = await accessOf(principal, shareId)
+    if (!found?.slate || !found.canRead) refuse(404, 'not_found', 'Slate not found or unavailable.')
+    const slate = found.slate
+    if (!found.canEdit || slate.userId !== principal.userId) return none
+    const ruled = await integrations.find({ ownerId: principal.userId, rule: 'my_slates' })
+    if (!ruled.length) return none
+    const isPro = await pro(principal.userId)
+    for (const row of ruled) await followPro(row, isPro)
+    if (!isPro) return { ...none, pro: false }
+    const rules = ruled.filter((row) => row.status === 'active')
+    if ((await outsideAgentsOf(slate)) === 'off') return { joined: [], skipped: rules.map((row) => ({ integrationId: row._id, name: row.name, code: 'agents_off', why: 'Outside agents are turned off on this slate.' })) }
+    const here = await connections.find({ slateId: slate._id })
+    const joined = []
+    const skipped = []
+    for (const integration of rules) {
+      // On this slate already, or removed from it before (remembered): nothing to do.
+      if (here.some((doc) => doc.integrationId === integration._id)) continue
+      if (here.some((doc) => doc.ownerId === principal.userId && doc.status !== 'removed' && canonicalAddress(doc.address) === integration.address)) continue
+      try {
+        const doc = await placeOnSlate(principal, slate, integration, { by: 'rule' })
+        here.push(doc)
+        joined.push({ integrationId: integration._id, connectionId: doc._id, agentId: doc.agentId, name: doc.name })
+      } catch (error) {
+        if (!(error instanceof ConnectorRefused)) throw error
+        if (error.code === 'already_here') continue
+        skipped.push({ integrationId: integration._id, name: integration.name, code: error.code, why: error.message })
+      }
+    }
+    return { joined, skipped }
+  }
+
+  /** Who may bring outside agents onto this slate: its owner chooses (editors, only the owner, or no one). */
+  async function slateSetting(principal, { shareId, outsideAgents }) {
+    const found = await requireReader(principal, shareId)
+    const owner = Boolean(principal.userId) && found.slate.userId === principal.userId
+    if (outsideAgents !== undefined) {
+      if (!owner) refuse(403, 'owner_only', 'Only this slate\'s owner can choose who brings outside agents here.')
+      if (!OUTSIDE_AGENTS.includes(outsideAgents)) refuse(400, 'invalid_request', 'Choose editors, only you, or no one.')
+      const row = await slateSettings.findOne({ _id: found.slate._id })
+      if (row) await slateSettings.update(found.slate._id, { outsideAgents, updatedAt: new Date(now()) })
+      else await slateSettings.insert({ _id: found.slate._id, outsideAgents, updatedAt: new Date(now()) })
+      audit({ kind: 'slate_outside_agents', userId: principal.userId, slateId: found.slate._id, outsideAgents })
+    }
+    return { outsideAgents: await outsideAgentsOf(found.slate), canChange: owner }
   }
 
   return {
@@ -872,5 +1294,13 @@ export function createConnectorService({
     disconnect,
     call,
     gallery: galleryList,
+    integrationsList,
+    integrationConnect,
+    integrationReview,
+    integrationSetRule,
+    integrationDisconnect,
+    integrationInvite,
+    applyRules,
+    slateSetting,
   }
 }

@@ -1,55 +1,16 @@
 /* eslint-disable no-new */
-/* eslint-disable camelcase */
-// methods.js
+// A slate's picture in the app's image store (a cloud link): utils.getCloudLink. Google Drive and
+// Docs are the Google integration's (enterprise/server/google, Pro or Business), not here.
 import { Meteor } from 'meteor/meteor'
 import { check } from 'meteor/check'
 import { requireEditableSlate } from '../common/slate-access'
 import sharp from 'sharp'
 import { isRasterImage } from '../common/upload-kinds.mjs'
-import { google } from 'googleapis'
-import fetch from 'node-fetch'
 import CONSTANTS from '../../imports/api/common/constants'
 import { APILinks, Slates } from '../../imports/api/common/models'
 import { storeFile, storeImage } from '../common/fileStore'
 
 const method = {}
-
-function createGoogleOauthClient() {
-  const { client_secret, client_id, redirect_uris } = Meteor.settings.googleDocs?.web || {}
-  if (!client_id || !client_secret || !redirect_uris?.[0]) return null
-  return new google.auth.OAuth2(client_id, client_secret, redirect_uris[0])
-}
-
-method[CONSTANTS.methods.googleDocs.createAuthUrl] = async () => {
-  const user = await Meteor.userAsync()
-  if (user) {
-    const SCOPES = ['https://www.googleapis.com/auth/drive.file']
-    const oAuth2Client = createGoogleOauthClient()
-    if (!oAuth2Client) return null
-    const authUrl = oAuth2Client.generateAuthUrl({
-      access_type: 'online',
-      scope: SCOPES,
-    })
-    return authUrl
-  }
-  return null
-}
-
-method[CONSTANTS.methods.googleDocs.getToken] = async (code) => {
-  const user = await Meteor.userAsync()
-  if (user) {
-    const oAuth2Client = createGoogleOauthClient()
-    if (!oAuth2Client) return null
-    try {
-      const token = await oAuth2Client.getToken(code)
-      return token
-    } catch (err) {
-      console.error('Error retrieving access token', err?.message)
-      return null
-    }
-  }
-  return null
-}
 
 // async function deletePriorObjects(bucket, prefix) {
 //   AWS.config.update({
@@ -151,7 +112,6 @@ method[CONSTANTS.methods.utils.getCloudLink] = async (
 
       }
 
-      // upload image to s3 for google docs access
       // An SVG is stored to be downloaded, never shown as a page on the bucket's domain.
       const slateImageUrl = isSvg
         ? await storeFile({ body: Buffer.from(imgBuffer, 'utf8'), key: `${slateId}_${Date.now()}.svg`, contentType: 'image/svg+xml', contentDisposition: 'attachment' })
@@ -188,82 +148,8 @@ method[CONSTANTS.methods.utils.getCloudLink] = async (
       return { slateImageUrl }
     } catch (err) {
       console.log('Err is ', err.message)
-      return Meteor.Error(err)
-    }
-  }
-  return null
-}
-
-method[CONSTANTS.methods.googleDocs.export] = async (
-  token,
-  slateId,
-  pngBase64
-) => {
-  check(slateId, String)
-  check(pngBase64, String)
-  const user = await Meteor.userAsync()
-  if (user) {
-    await requireEditableSlate(user._id, { slateId })
-    try {
-      const embed64 = pngBase64.replace('data:image/png;base64,', '').trim()
-      if (!isRasterImage(Buffer.from(embed64, 'base64'))) throw new Meteor.Error('invalid-image', 'That export is not a PNG image.')
-      // create the png to include in the google doc
-      const imgBuffer = await sharp(Buffer.from(embed64, 'base64'))
-        .toBuffer()
-        .catch((err) => console.log('err is', err))
-
-      // upload image to s3 for google docs access
-      const slateUrl = await storeImage(imgBuffer, slateId)
-      const createUrl = `https://docs.googleapis.com/v1/documents`
-
-      const createOptions = {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token.tokens.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: 'Slatebox',
-        }),
-      }
-
-      const createResult = await (await fetch(createUrl, createOptions)).json()
-      const updateUrl = `https://docs.googleapis.com/v1/documents/${createResult.documentId}:batchUpdate`
-
-      const updateOptions = {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token.tokens.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          requests: [
-            {
-              insertInlineImage: {
-                location: { index: 1 },
-                uri: slateUrl,
-              },
-            },
-          ],
-        }),
-      }
-
-      const updateResult = await await (
-        await fetch(updateUrl, updateOptions)
-      ).json()
-
-      await Slates.updateAsync(
-        { 'options.id': slateId },
-        {
-          $set: {
-            'options.lastSavedGoogleDocUrl': `https://docs.google.com/document/d/${updateResult.documentId}/edit`,
-          },
-        }
-      )
-
-      return updateResult
-    } catch (err) {
-      return Meteor.Error(err)
+      if (err instanceof Meteor.Error) throw err
+      throw new Meteor.Error('cloud-link-failed', 'The cloud link could not be made. Try again.')
     }
   }
   return null

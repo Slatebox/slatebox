@@ -14,6 +14,7 @@ import NotFound from './pages/NotFound'
 import AuthManager from '../api/common/AuthManager'
 import CONSTANTS from '../api/common/constants'
 import CSSUnicorn from './components/ai/Unicorn'
+import { enterpriseState } from '../api/common/edition.mjs'
 
 // Pages a first visit never opens (a slate, the start page and My Slates stay in the first load): each loads
 // when its route is first opened.
@@ -33,6 +34,7 @@ const BrandingSettings = lazy(() => import('./pages/BrandingSettings'))
 const SimulateUrlAction = lazy(() => import('./components/SimulateUrlAction'))
 // The shared library: the public gallery and an item's page (signed out too), your own items, and the review queue.
 const Library = lazy(() => import('./pages/Library'))
+const Integrations = lazy(() => import('./pages/Integrations'))
 const LibraryItem = lazy(() => import('./pages/LibraryItem'))
 const MyLibrary = lazy(() => import('./pages/MyLibrary'))
 const LibraryReview = lazy(() => import('./pages/LibraryReview'))
@@ -108,6 +110,8 @@ function ProfileRoute() {
     return user.isAnonymous ? 'guest' : 'member'
   }, [credits])
   if (account === 'loading') return null
+  // /profile?tab=integrations: the Integrations page, where enterprise code runs (Profile otherwise).
+  if (params.get('tab') === 'integrations' && enterpriseState(Meteor.settings).unlocked) return <Navigate to="/integrations" replace />
   const to = account === 'skip' ? null : oldProLink(params, account)
   if (to) return <Navigate to={to} replace />
   return <PrivateRoute><Profile /></PrivateRoute>
@@ -157,6 +161,7 @@ export default function SBRoutes() {
         }
       />
       <Route path="/profile" element={<ProfileRoute />} />
+      <Route path="/integrations" element={<PrivateRoute><Integrations /></PrivateRoute>} />
       <Route path="/pro" element={<GetPro />} />
       <Route path="/business" element={<GetBusiness />} />
       <Route

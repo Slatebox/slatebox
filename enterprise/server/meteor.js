@@ -39,12 +39,24 @@ import { cardFor, retiredFor } from '../common/gallery.mjs'
 import { liveGallery } from './gallery-admin.mjs'
 import { createVault } from './credentials.mjs'
 import { createSignIn, probe } from './signin.mjs'
+import { migrateIntegrations } from './integrations-migrate.mjs'
+import { itemsFromLayout } from './translate.mjs'
+import { createGoogleService, googleConfiguration, googleSettings, GOOGLE_ADDRESS } from './google/google.mjs'
+import { NATIVE_CARDS } from '../common/gallery.mjs'
+import { storeImage } from '/server/common/fileStore'
 
 export const McpConnections = new Mongo.Collection('mcpConnections')
 // Never published: sealed tokens, sign-in flows and registrations stay on the server.
 const McpCredentials = new Mongo.Collection('mcpCredentials')
 const McpSignins = new Mongo.Collection('mcpSignins')
 const McpClients = new Mongo.Collection('mcpClients')
+// Each person's connected agent servers, apart from any slate (never published: the Integrations
+// page reads them through integrations.list), and each slate owner's outsideAgents choice.
+const Integrations = new Mongo.Collection('integrations')
+const IntegrationSlateSettings = new Mongo.Collection('integrationSlateSettings')
+// Google: each person's last Doc per slate, and the Drive files they picked for a slate (ids and names only).
+const GoogleDocLinks = new Mongo.Collection('googleDocLinks')
+const GoogleSlateFiles = new Mongo.Collection('googleSlateFiles')
 
 const drawable = (slate) => !slate.creative || slate.nativeCanvasDrawing || slate.creative.model?.kind === 'workshop'
 
@@ -140,6 +152,28 @@ const connectionsStore = {
   update: (id, set) => McpConnections.updateAsync({ _id: id }, { $set: set }),
 }
 
+const storeOf = (collection) => ({
+  insert: (doc) => collection.insertAsync(doc),
+  findOne: (query) => collection.findOneAsync(query),
+  find: (query) => collection.find(query, { sort: { createdAt: 1 } }).fetchAsync(),
+  update: (id, set) => collection.updateAsync({ _id: id }, { $set: set }),
+  remove: (id) => collection.removeAsync({ _id: id }),
+})
+const integrationsStore = storeOf(Integrations)
+const slateSettingsStore = storeOf(IntegrationSlateSettings)
+
+// The slates an integration is on, as its owner may still open them: name and address only.
+async function slateList(slateIds, viewerId) {
+  if (!slateIds.length) return []
+  const slates = await Slates.find({ _id: { $in: slateIds.slice(0, 50) } }, { fields: { shareId: 1, 'options.name': 1 } }).fetchAsync()
+  const out = []
+  for (const slate of slates) {
+    const found = await forUser(slate.shareId, viewerId).catch(() => null)
+    if (found?.canRead) out.push({ slateId: slate._id, shareId: slate.shareId, name: String(slate.options?.name || 'Untitled slate').slice(0, 80) })
+  }
+  return out
+}
+
 // Who a request to the sign-in start route is: the Slatebox page sends its login token in a header
 // (never a cookie, so no other site can make a browser send it).
 async function userFor(req) {
@@ -161,11 +195,20 @@ async function gallery() {
   return cards
 }
 
+// Whether the Google card is on (/admin/ai › Gallery), read through the same cache as the gallery.
+async function googleEnabled() {
+  const docs = await findGallery().catch(() => [])
+  return liveGallery(docs, NATIVE_CARDS).some((card) => card.id === 'googledrive')
+}
+
 export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
   const settings = connectorSettings(Meteor.settings, { development: Meteor.isDevelopment })
+  const google = () => googleSettings(Meteor.settings, { development: Meteor.isDevelopment })
   const fetch = createMcpFetch({ devOrigins: settings.devOrigins, userAgent: settings.userAgent })
   // Sign-in's own fetch: the same checks, may GET metadata, follows no redirect, small answers.
-  const signInFetch = createMcpFetch({ devOrigins: settings.devOrigins, userAgent: settings.userAgent, methods: ['GET', 'POST'], maxRedirects: 0, maxBytes: 256 * 1024, timeoutMs: 10000 })
+  const signInFetch = createMcpFetch({ devOrigins: [...settings.devOrigins, ...google().devOrigins], userAgent: settings.userAgent, methods: ['GET', 'POST'], maxRedirects: 0, maxBytes: 256 * 1024, timeoutMs: 10000 })
+  // Google's APIs: the same address checks; uploads are larger, downloads follow Google's own redirects.
+  const googleFetch = createMcpFetch({ devOrigins: google().devOrigins, userAgent: settings.userAgent, methods: ['GET', 'POST', 'PATCH'], maxBytes: 4 * 1024 * 1024, timeoutMs: 30000 })
   // The app's existing master key (never generated here). Without it, sign-in servers are not offered.
   const master = loadMasterKey()
   if (!master) console.warn('[connectors] SLATEBOX_KEY_ENCRYPTION_KEY is not set: agents that need sign-in are not offered')
@@ -173,7 +216,8 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     store: credentialsStore,
     master,
     fetch: signInFetch,
-    secretFor: (registration) => settings.oauthApps[registration.provider]?.clientSecret || null,
+    // Google's sign-in is Slatebox's own OAuth client (settings.googleDocs.web); MCP servers' are settings.connectors.oauthApps.
+    secretFor: (registration) => (registration.provider === 'google' ? google().clientSecret : settings.oauthApps[registration.provider]?.clientSecret || null),
   })
   const signIn = createSignIn({
     flows: flowsStore,
@@ -185,16 +229,46 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     origin: appOrigin,
     devOrigins: settings.devOrigins,
   })
+  const proOf = async (userId) => {
+    if (via !== 'cloud') return true
+    const user = await Meteor.users.findOneAsync(userId, { fields: { pro: 1, orgId: 1 } })
+    if (proActive(user?.pro)) return true
+    const org = user?.orgId ? await Organizations.findOneAsync(user.orgId, { fields: { business: 1 } }) : null
+    return invitesAgents({ pro: false, org })
+  }
+  const agentSave = (principal, input, mode) =>
+    registry.run(principal, 'slates.applyOperations', { ...input, mode }, mode === 'save' ? { idempotencyKey: `${principal.runId}:${input.plan.operations[0]?.ids?.[0] || 'k'}` } : {})
+  const googleService = createGoogleService({
+    vault,
+    integrations: integrationsStore,
+    docLinks: storeOf(GoogleDocLinks),
+    slateFiles: storeOf(GoogleSlateFiles),
+    fetch: googleFetch,
+    config: google,
+    pro: proOf,
+    enabled: googleEnabled,
+    access: { forUser },
+    applyOperations: agentSave,
+    presence,
+    // Docs and Slides fetch a picture from a public address: the app's own image store.
+    publishImage: ({ buffer, slateId }) => storeImage(buffer, slateId),
+    itemsFromLayout,
+    audit: (entry) => console.log('[google]', JSON.stringify({ ...entry, at: new Date().toISOString() })),
+  })
+  // The Drive agent is a native session beside the MCP one: the same service asks both.
+  const session = {
+    discover: (address, f, options) => (address === GOOGLE_ADDRESS ? googleService.driveSession.discover(address, f, options) : discover(address, f, options)),
+    callTool: (address, f, call, options) => (address === GOOGLE_ADDRESS ? googleService.driveSession.callTool(address, f, call, options) : callTool(address, f, call, options)),
+  }
   const service = createConnectorService({
     connections: connectionsStore,
     suggestions: suggestionsStore,
     fetch,
-    session: { discover, callTool },
+    session,
     // The person's own choice for connectors (else their conversation choice), inside one metered request.
     model: model(),
     metered: (fn, { userId }) => runAIAction({ feature: 'connectors', userId, countsAsDraft: true }, fn),
-    applyOperations: (principal, input, mode) =>
-      registry.run(principal, 'slates.applyOperations', { ...input, mode }, mode === 'save' ? { idempotencyKey: `${principal.runId}:${input.plan.operations[0]?.ids?.[0] || 'k'}` } : {}),
+    applyOperations: agentSave,
     access: { forUser, forToken, reload: (shareId) => Slates.findOneAsync({ shareId }, { fields: { revision: 1 } }) },
     // Slatebox Pro, or a seat on a team with an active Slatebox Business membership (owner, 2026-11-24:
     // Business members count as Pro for this), is needed to invite agents on Slatebox Cloud. A licensed
@@ -215,6 +289,9 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     devOrigins: settings.devOrigins,
     audit: (entry) => console.log('[connectors]', JSON.stringify({ ...entry, at: new Date().toISOString() })),
     gallery,
+    integrations: integrationsStore,
+    slateSettings: slateSettingsStore,
+    slateList,
   })
   Meteor.startup(async () => {
     await McpConnections.rawCollection().createIndex({ slateId: 1, status: 1 })
@@ -222,6 +299,15 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     await McpCredentials.rawCollection().createIndex({ ownerId: 1 })
     await McpSignins.rawCollection().createIndex({ stateHash: 1 })
     await McpSignins.rawCollection().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+    await McpConnections.rawCollection().createIndex({ integrationId: 1, status: 1 })
+    await Integrations.rawCollection().createIndex({ ownerId: 1, address: 1 }, { unique: true })
+    await Integrations.rawCollection().createIndex({ ownerId: 1, rule: 1 })
+    // Connect once: each person's agents already on slates become their integrations (idempotent).
+    const moved = await migrateIntegrations({ connections: connectionsStore, integrations: integrationsStore }).catch((error) => {
+      console.warn('[connectors] integrations migration failed', error?.message)
+      return null
+    })
+    if (moved?.created || moved?.linked) console.log('[connectors]', JSON.stringify({ kind: 'integrations_migrated', ...moved }))
   })
   // Hourly: forget (and revoke) sign-ins no agent uses any more.
   const sweep = () => !isUnlocked() ? Promise.resolve() : service.sweep(() => McpCredentials.find({}, { fields: { ownerId: 1, address: 1, createdAt: 1 } }).fetchAsync())
@@ -247,7 +333,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     const shown = ({ _id, ownerId, address, galleryId, ...fields }) => ({
       ...fields, galleryId: galleryId || cardFor(address)?.id || null, retired: retiredFor(address)?.why || null, mine: Boolean(viewer && ownerId === viewer), removable: Boolean(viewer && (ownerId === viewer || ownsSlate)),
     })
-    const handle = await McpConnections.find({ slateId, status: { $ne: 'removed' } }, { fields: { name: 1, inviterName: 1, host: 1, status: 1, ownerId: 1, slateId: 1, contextLevel: 1, colorIndex: 1, agentId: 1, createdAt: 1, address: 1, galleryId: 1 } })
+    const handle = await McpConnections.find({ slateId, status: { $ne: 'removed' } }, { fields: { name: 1, inviterName: 1, host: 1, status: 1, ownerId: 1, slateId: 1, contextLevel: 1, colorIndex: 1, agentId: 1, createdAt: 1, address: 1, galleryId: 1, joinedBy: 1, integrationId: 1 } })
       .observeAsync({
         added: (doc) => this.added('mcpConnections', doc._id, shown(doc)),
         changed: (doc) => this.changed('mcpConnections', doc._id, shown(doc)),
@@ -258,5 +344,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     return undefined
   })
 
-  return { service, signIn, origin: appOrigin, userFor, findGallery }
+  // /admin/ai › Gallery's configuration row: yes or no only.
+  const configured = async () => ({ google: googleConfiguration(google(), { vaultKey: Boolean(master) }) })
+  return { service, google: googleService, signIn, origin: appOrigin, userFor, findGallery, configured }
 }

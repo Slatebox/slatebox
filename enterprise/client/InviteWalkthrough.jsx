@@ -8,9 +8,15 @@
 // With `reconnect` (an agent that needs sign-in again) it stops after the sign-in.
 // `invited`: the agents already on this slate. A gallery card for one of yours says ✓ On this slate
 // and offers Manage (its chip) instead of inviting it again; a pasted address of one says so too.
+// `integrations`: the person's connected integrations, invited onto this slate in one step (no
+// sign-in, no consent again); a server they already connected says so and offers the same.
+// Without a shareId it is "Connect an integration" (the Integrations page): the same steps, ending
+// in integrations.connect, with when it joins slates in place of what it may see on one.
 import React, { useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
+import { Link } from 'react-router-dom'
+import MenuItem from '@mui/material/MenuItem'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import Box from '@mui/material/Box'
@@ -120,6 +126,14 @@ function Problem({ text }) {
 }
 Problem.propTypes = { text: PropTypes.string.isRequired }
 
+// What an integration's state says, where it can't be invited now.
+const STATUS_WORDS = { paused: 'tools changed: review it on the Integrations page', needs_sign_in: 'needs sign-in', pro_ended: 'Pro ended' }
+
+const RULE_CHOICES = [
+  { value: 'ask', label: 'When I invite it to a slate' },
+  { value: 'my_slates', label: 'On every slate I own, by itself' },
+]
+
 const SEES = [
   { value: 'request', label: 'Only what I ask' },
   { value: 'selection', label: 'What I ask, and the notes I select' },
@@ -143,8 +157,14 @@ export function cardState(item, invited = []) {
   return { here }
 }
 
-export default function InviteWalkthrough({ open, onClose, shareId, slateName, onInvited, reconnect, invited = [], onManage = null }) {
+export default function InviteWalkthrough({ open, onClose, shareId = null, slateName, onInvited, reconnect, invited = [], onManage = null, integrations = [], onConnected = null }) {
+  const integrationMode = !shareId
   const [step, setStep] = useState('choose') // choose | discovering | signin | waiting | consent | inviting | reconnected
+  const [rule, setRule] = useState('ask')
+  // A server this person already connected (from discovery): offered to invite in one step.
+  const [connected, setConnected] = useState(null)
+  // The slate owner's choice of who may bring outside agents here (null until it answers).
+  const [setting, setSetting] = useState(null)
   const [clientId, setClientId] = useState('')
   const [key, setKey] = useState('')
   const [showKey, setShowKey] = useState(false)
@@ -175,9 +195,10 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
     if (open && !reconnect) Meteor.callAsync('connectors.gallery', {}).then((answer) => {
       if (live.current) setGallery(Array.isArray(answer?.cards) ? { cards: answer.cards, canInvite: Boolean(answer.canInvite) } : { cards: GALLERY, canInvite: null })
     }).catch(() => { if (live.current) setGallery({ cards: GALLERY, canInvite: null }) })
+    if (open && shareId && !reconnect) Meteor.callAsync('integrations.slateSetting', { shareId }).then((answer) => { if (live.current) setSetting(answer) }).catch(() => {})
     if (!open) {
       pending.current?.cancel()
-      setStep('choose'); setFound(null); setError(''); setAddress(''); setShowAll(false); setKey(''); setClientId(''); setShowKey(false); setAlready(null)
+      setStep('choose'); setFound(null); setError(''); setAddress(''); setShowAll(false); setKey(''); setClientId(''); setShowKey(false); setAlready(null); setConnected(null); setRule('ask')
     } else if (reconnect?.address) {
       setAddress(reconnect.address)
       discover(reconnect.address)
@@ -186,7 +207,25 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
   }, [open])
 
   // The server checks Pro on every call; a refusal opens the in-app sheet, and paying carries on from here.
-  const payThen = (retry) => openPay({ action: 'pro', from: 'agents', reason: 'Invite outside agents onto your slates.', retry })
+  const payThen = (retry) => openPay({ action: 'pro', from: integrationMode ? 'integrations' : 'agents', reason: integrationMode ? 'Connect outside agents once and invite them onto any slate.' : 'Invite outside agents onto your slates.', retry })
+
+  // One of this person's integrations onto this slate: no sign-in, no consent again.
+  async function inviteIntegration(integration) {
+    setError('')
+    setStep('inviting')
+    try {
+      const connection = await Meteor.callAsync('integrations.invite', { shareId, integrationId: integration.integrationId })
+      if (!live.current) return
+      onInvited?.(connection)
+      onClose()
+    } catch (e) {
+      if (!live.current) return
+      setStep('choose')
+      if (e?.error === 'pro_required') return payThen(() => inviteIntegration(integration))
+      if (e?.error === 'already_here') return setAlready({ ...(e.details || {}), text: e.reason })
+      setError(errorText(e))
+    }
+  }
 
   async function discover(raw) {
     const target = (raw ?? address).trim()
@@ -195,8 +234,16 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
     setAlready(null)
     setStep('discovering')
     try {
-      const result = await Meteor.callAsync('connectors.discover', { shareId, address: target })
+      const result = integrationMode
+        ? await Meteor.callAsync('integrations.discover', { address: target })
+        : await Meteor.callAsync('connectors.discover', { shareId, address: target })
       if (!live.current) return
+      // Already connected (on another slate, or from the Integrations page): invite it in one step.
+      if (!integrationMode && result.integration && !result.alreadyHere && !reconnect && !result.signIn) {
+        setStep('choose')
+        setConnected(result.integration)
+        return
+      }
       // Already one of yours here: say so and offer its chip, never a second copy.
       if (result.alreadyHere && !result.alreadyHere.lookAgain && !reconnect) {
         setStep('choose')
@@ -230,7 +277,7 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
     const win = openSignInWindow()
     setStep('waiting')
     try {
-      const started = await Meteor.callAsync('connectors.signIn', { shareId, address: found.address, ...(clientId.trim() && { clientId: clientId.trim() }) })
+      const started = await Meteor.callAsync('connectors.signIn', { ...(shareId && { shareId }), address: found.address, ...(clientId.trim() && { clientId: clientId.trim() }) })
       if (!live.current) return win?.close()
       const follow = followSignIn(win, started)
       pending.current = follow
@@ -256,7 +303,8 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
     setError('')
     setStep('waiting')
     try {
-      await Meteor.callAsync('connectors.useKey', { shareId, address: found.address, key: key.trim() })
+      if (integrationMode) await Meteor.callAsync('integrations.useKey', { address: found.address, key: key.trim() })
+      else await Meteor.callAsync('connectors.useKey', { shareId, address: found.address, key: key.trim() })
       setKey('')
       if (live.current) discover(found.address)
     } catch (e) {
@@ -272,6 +320,13 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
     setStep('inviting')
     try {
       const tools = found.tools.map(({ name: tool, hash }) => ({ name: tool, hash, policy: allowed[tool] ? 'allow' : 'off' }))
+      if (integrationMode) {
+        const integration = await Meteor.callAsync('integrations.connect', { address: found.address, name, tools, rule })
+        if (!live.current) return
+        onConnected?.(integration)
+        onClose()
+        return
+      }
       const connection = await Meteor.callAsync('connectors.connect', { shareId, address: found.address, name, tools, contextLevel: sees })
       if (!live.current) return
       onInvited?.(connection)
@@ -321,7 +376,7 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
         </Box>
         <Box sx={{ minWidth: 0 }}>
           <DialogTitle id="invite-agent-title" sx={{ p: 0, fontSize: { xs: 17, sm: 19 }, fontWeight: 750, lineHeight: 1.3, letterSpacing: '-0.01em' }}>
-            Invite an agent to “{slateName || 'this slate'}”
+            {integrationMode ? 'Connect an integration' : `Invite an agent to “${slateName || 'this slate'}”`}
           </DialogTitle>
           {subtitle && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, overflowWrap: 'anywhere' }} data-invite-subtitle="">{subtitle}</Typography>}
         </Box>
@@ -329,7 +384,49 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
       <DialogContent sx={{ px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 2.5 }, borderTop: 'none' }}>
         {step === 'choose' && (
           <Box sx={{ display: 'grid', gap: 2 }}>
-            <Typography variant="body2" sx={{ fontSize: 15, lineHeight: 1.55 }}>Agents work on this slate with you. Everyone here sees each one as a cursor, and its suggestions as ghost notes to keep or discard.</Typography>
+            <Typography variant="body2" sx={{ fontSize: 15, lineHeight: 1.55 }}>
+              {integrationMode
+                ? 'Connect an agent once. Then invite it onto any slate, or let it join every slate you own, with no new sign-in.'
+                : 'Agents work on this slate with you. Everyone here sees each one as a cursor, and its suggestions as ghost notes to keep or discard.'}
+            </Typography>
+            {!integrationMode && integrations.length > 0 && (
+              <Box sx={(t) => ({ ...section(t), display: 'grid', gap: 1 })} data-invite-integrations="">
+                <Typography component="div" sx={heading}>Your integrations</Typography>
+                {integrations.map((integration) => {
+                  const here = invited.some((c) => c.mine && c.status !== 'removed' && c.integrationId === integration.integrationId)
+                  const blocked = integration.status !== 'active'
+                  return (
+                    <Box key={integration.integrationId} sx={{ display: 'flex', alignItems: 'center', gap: 1 }} data-invite-integration={integration.name}>
+                      <Hexagon color={MARK} size={18} style={{}} />
+                      <Typography variant="body2" sx={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+                        <b>{integration.name}</b> · {integration.host}{blocked ? ` · ${STATUS_WORDS[integration.status] || integration.status}` : ''}
+                      </Typography>
+                      {here
+                        ? <Typography variant="caption" color="text.secondary">✓ On this slate</Typography>
+                        : <Button size="small" variant="outlined" disabled={blocked || step === 'inviting'} data-invite-integration-go="" onClick={() => inviteIntegration(integration)}>Invite to this slate</Button>}
+                    </Box>
+                  )
+                })}
+                <Typography variant="caption" color="text.secondary" component="div">No new sign-in. It sees only what you ask, unless you change that on its chip. <Link to="/integrations">Manage integrations</Link></Typography>
+              </Box>
+            )}
+            {setting?.canChange && (
+              <Box sx={(t) => ({ ...section(t), display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' })} data-invite-outside-agents="">
+                <Typography variant="body2" sx={{ flex: 1, minWidth: 200 }}>Who can bring outside agents onto this slate</Typography>
+                <TextField select size="small" value={setting.outsideAgents} sx={{ minWidth: 180 }} inputProps={{ 'aria-label': 'Who can bring outside agents onto this slate', 'data-invite-outside-agents-select': '' }}
+                  onChange={(e) => Meteor.callAsync('integrations.setSlateSetting', { shareId, outsideAgents: e.target.value }).then((answer) => live.current && setSetting(answer)).catch((err) => setError(errorText(err)))}>
+                  <MenuItem value="editors">Anyone who can edit</MenuItem>
+                  <MenuItem value="owner">Only me</MenuItem>
+                  <MenuItem value="off">No one</MenuItem>
+                </TextField>
+              </Box>
+            )}
+            {connected && (
+              <Box role="status" data-invite-connected={connected.name} sx={(t) => ({ ...section(t), display: 'flex', alignItems: 'center', gap: 1 })}>
+                <Typography variant="body2" sx={{ flex: 1 }}>✓ You already connected {connected.name}. Invite it here with no new sign-in.</Typography>
+                <Button size="small" variant="contained" data-invite-connected-go="" disabled={connected.status !== 'active'} onClick={() => inviteIntegration(connected)}>Invite to this slate</Button>
+              </Box>
+            )}
             <Box component="form" onSubmit={(e) => { e.preventDefault(); discover() }} sx={(t) => ({ ...section(t), display: 'flex', gap: 1, alignItems: 'center' })}>
               <TextField size="small" fullWidth label="Paste an MCP address" placeholder="https://example.com/mcp" value={address}
                 onChange={(e) => setAddress(e.target.value)} inputProps={{ 'data-invite-address': '' }} />
@@ -502,7 +599,21 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
               <Typography component="div" sx={heading}>On this slate it may</Typography>
               <Typography variant="body2" sx={{ lineHeight: 1.5 }}><b>Suggest:</b> its work arrives as ghost notes anyone who can edit may keep or discard.</Typography>
             </Box>
-            <Box sx={section}>
+            {integrationMode && (
+              <Box sx={section} data-invite-rule="">
+                <Typography component="div" sx={heading} id="invite-rule-label">It joins slates</Typography>
+                <RadioGroup value={rule} onChange={(e) => setRule(e.target.value)} aria-labelledby="invite-rule-label" sx={{ display: 'grid', gap: 1 }}>
+                  {RULE_CHOICES.map((choice) => (
+                    <FormControlLabel key={choice.value} value={choice.value} control={<Radio size="small" />} sx={(t) => ({ ...option(t, rule === choice.value), '& .MuiFormControlLabel-label': { pt: '7px', flex: 1, fontSize: 14.5, fontWeight: rule === choice.value ? 700 : 500 } })}
+                      label={choice.label} />
+                  ))}
+                </RadioGroup>
+                <Callout kind="info" sx={{ mt: 1.5 }}>
+                  <Box component="span" sx={{ display: 'block' }}>On each slate it sees only what you ask, unless you change that there. Removing it from one slate keeps it away from that slate.</Box>
+                </Callout>
+              </Box>
+            )}
+            {!integrationMode && <Box sx={section}>
               <Typography component="div" sx={heading} id="invite-sees-label">It may see</Typography>
               <RadioGroup value={sees} onChange={(e) => setSees(e.target.value)} aria-labelledby="invite-sees-label" sx={{ display: 'grid', gap: 1 }}>
                 {SEES.map((option_) => (
@@ -514,10 +625,10 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
                 <Box component="span" sx={{ display: 'block' }}><b>What leaves Slatebox:</b> {sees === 'request' ? 'only what you type when you ask it.' : sees === 'selection' ? 'what you type, and the text of the notes you select.' : 'what you type, and the text of every note on this slate, including notes by others.'}</Box>
                 <Box component="span" sx={{ display: 'block', mt: 0.5 }}>Never: other slates, people's names or emails, comments, links or share settings.</Box>
               </Callout>
-            </Box>
+            </Box>}
             <Box sx={section}>
               <Typography component="div" sx={heading}>Who can ask it</Typography>
-              <Typography variant="body2" sx={{ lineHeight: 1.5 }}>Only you. Everyone on the slate sees its cursor and suggestions.</Typography>
+              <Typography variant="body2" sx={{ lineHeight: 1.5 }}>Only you. Everyone on {integrationMode ? 'a slate it is on' : 'the slate'} sees its cursor and suggestions.</Typography>
             </Box>
             {card?.try && (
               <Box sx={(t) => ({
@@ -543,7 +654,7 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
           <>
             <Button onClick={() => { setStep('choose'); setError('') }}>Back</Button>
             <Button variant="contained" data-invite-go="" disabled={step === 'inviting' || !name.trim() || !chosen.length} onClick={invite} sx={{ px: 3, py: 1, flex: { xs: 1, sm: 'none' } }}>
-              {step === 'inviting' ? 'Inviting…' : `Invite ${name || 'agent'} ⬡`}
+              {step === 'inviting' ? (integrationMode ? 'Connecting…' : 'Inviting…') : `${integrationMode ? 'Connect' : 'Invite'} ${name || 'agent'} ⬡`}
             </Button>
           </>
         ) : step === 'signin' || step === 'waiting' ? (
@@ -562,10 +673,12 @@ export default function InviteWalkthrough({ open, onClose, shareId, slateName, o
 InviteWalkthrough.propTypes = {
   open: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
-  shareId: PropTypes.string.isRequired,
+  shareId: PropTypes.string,
   slateName: PropTypes.string,
   onInvited: PropTypes.func,
   reconnect: PropTypes.shape({ connectionId: PropTypes.string, address: PropTypes.string, name: PropTypes.string }),
   invited: PropTypes.arrayOf(PropTypes.shape({ agentId: PropTypes.string, name: PropTypes.string, galleryId: PropTypes.string, mine: PropTypes.bool, status: PropTypes.string })),
   onManage: PropTypes.func,
+  integrations: PropTypes.arrayOf(PropTypes.shape({ integrationId: PropTypes.string, name: PropTypes.string, host: PropTypes.string, status: PropTypes.string })),
+  onConnected: PropTypes.func,
 }

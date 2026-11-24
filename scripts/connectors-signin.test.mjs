@@ -604,7 +604,10 @@ test('Pro ended: the agent shows it, asking is refused with pro_required, and re
   assert.equal((await world.service.list(world.ada, { shareId: 'share1' })).connections[0].status, 'active')
 })
 
-test('remove: the sign-in is revoked and forgotten when no other slate uses that server, kept while one does', async () => {
+// Owner, 2026-11-24 (integrations: connect once, invite anywhere): removing an agent from a slate no
+// longer signs its inviter out; the sign-in lives as long as the integration, and disconnecting the
+// integration is what revokes and forgets it.
+test('remove: removing agents from slates keeps the sign-in; disconnecting the integration revokes and forgets it', async () => {
   const world = makeWorld()
   await signInThroughService(world)
   const one = await inviteSignedIn(world)
@@ -615,6 +618,12 @@ test('remove: the sign-in is revoked and forgotten when no other slate uses that
   assert.equal(world.credentials.rows.size, 1)
   assert.equal(servers.oauth.revoked.length, revoked)
   await world.service.disconnect(world.ada, { connectionId: two.connectionId })
+  assert.equal(world.credentials.rows.size, 1, 'the last slate agent going does not sign the person out')
+  assert.equal(servers.oauth.revoked.length, revoked)
+  const { integrations } = await world.service.integrationsList(world.ada)
+  assert.equal(integrations.length, 1)
+  const gone = await world.service.integrationDisconnect(world.ada, { integrationId: integrations[0].integrationId })
+  assert.equal(gone.signedOut, true)
   assert.equal(world.credentials.rows.size, 0)
   assert.equal(servers.oauth.revoked.length, revoked + 2)
 })

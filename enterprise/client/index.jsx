@@ -7,6 +7,8 @@
 // context: { edition, via, features, agentInvite }; the invite UI fills its slots unless the
 // server's kill switch took invited agents away (agentInvite false).
 import AgentsOnSlate, { InvitedAgentControls } from './AgentsOnSlate'
+import IntegrationsPage from './IntegrationsPage'
+import { GoogleExport, GoogleImport } from './GoogleIntegration'
 
 export const manifest = Object.freeze({ name: 'slatebox-enterprise', features: ['agents.invite'] })
 
@@ -16,4 +18,10 @@ export function register(api, context) {
   api.fill('canvas.agents', AgentsOnSlate)
   // Inside an invited agent's roster chip: its summary, Ask in chat (Ask Slatebox, replying to it), Sign in again, Renew Pro, Remove.
   api.fill('agents.chip', InvitedAgentControls)
+  // /integrations: everything a person connected once (agents and Google), and the standing rules.
+  api.fill('integrations.page', IntegrationsPage)
+  // Google (Pro or Business): Save to Google Drive and Export to Google Docs in the export panel,
+  // Import from Google Drive in the + menu.
+  api.fill('slate.export.google', GoogleExport)
+  api.fill('addmenu.import', GoogleImport)
 }

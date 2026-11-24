@@ -1,7 +1,6 @@
 const CONSTANTS = {
   ipWhitelist: ['127.0.0.1'],
   guestCollaboratorCookieId: 'slatebox_guestCollaboratorId',
-  googleDocsCookieToken: 'slatebox_googleDocsToken',
   fonts: [
     { val: 'arial', name: 'Arial' },
     { val: 'times-new-roman', name: 'Times New Roman' },
@@ -377,11 +376,6 @@ const CONSTANTS = {
     },
     messages: {
       recreateMessagesForComment: 'messages.recreateMessagesForComment',
-    },
-    googleDocs: {
-      createAuthUrl: 'googleDocs.createAuthUrl',
-      getToken: 'googleDocs.getToken',
-      export: 'googleDocs.export',
     },
     daily: {
       join: 'daily.join',

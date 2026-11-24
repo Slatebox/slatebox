@@ -42,5 +42,5 @@ test('the canvas page\'s head uses it for a public slate, and the editor\'s page
   assert.doesNotMatch(canvas, /publishedTemplate/)
   assert.match(canvas, /CONSTANTS\.methods\.utils\.getCloudLink, o\.id, base64, false, false, false, true\)/)
   assert.match(canvas, /const SHARE_PREVIEW_QUIET = 20_000\nconst SHARE_PREVIEW_EVERY = 5 \* 60_000/)
-  assert.match(app('server/methods/googleDocs.js'), /if \(forShare === true\) picture\.resize\(\{ width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true \}\)/)
+  assert.match(app('server/methods/cloudLinks.js'), /if \(forShare === true\) picture\.resize\(\{ width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true \}\)/)
 })

@@ -23,7 +23,8 @@ import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx
 import { agentColor, openAgentAtom, rosterExtrasAtom } from '/imports/ui/components/AgentPresenceListener.jsx'
 import { askableAgentsAtom, conversationOpen, openChatWithAtom } from '/imports/ui/jotai/atoms'
 import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
-import { GALLERY } from '../common/gallery.mjs'
+import { GALLERY, NATIVE_CARDS } from '../common/gallery.mjs'
+import { DriveFiles } from './GoogleIntegration'
 
 // What a chip says about an agent that can't be asked right now (everyone sees it; its ghosts stay
 // keepable either way).
@@ -42,7 +43,7 @@ const reconnectAtom = atom(null) // { connectionId, address, name }
 export function rosterEntries(connections) {
   return connections
     .filter((c) => c.agentId)
-    .map((c) => ({ agentId: c.agentId, label: c.name, colorIndex: c.colorIndex ?? 1, invitedBy: c.mine ? 'you' : c.inviterName, state: STATE_WORDS[c.status] || null }))
+    .map((c) => ({ agentId: c.agentId, label: c.name, colorIndex: c.colorIndex ?? 1, invitedBy: c.mine ? 'you' : c.inviterName, ...(c.joinedBy === 'rule' && { joinedBy: 'rule' }), state: STATE_WORDS[c.status] || null }))
 }
 
 /** Why an agent can't be asked from this screen now, in the words Ask Slatebox answers "@its name" with. */
@@ -55,7 +56,7 @@ export function cannotAskText(c) {
 }
 
 /** The gallery card an invited agent came from (null for a pasted address). */
-export const cardOf = (c) => (c?.galleryId ? GALLERY.find((card) => card.id === c.galleryId) || null : null)
+export const cardOf = (c) => (c?.galleryId ? [...GALLERY, ...NATIVE_CARDS].find((card) => card.id === c.galleryId) || null : null)
 
 /** The agents Ask Slatebox can reach by "@name": each one's name, colour and how to ask it. */
 export function askableEntries(connections, { readSelection, readView } = {}) {
@@ -117,6 +118,19 @@ export default function AgentsOnSlate({ slate, canEdit, readSelection, readView,
   const openAgent = useSetAtom(openAgentAtom)
   const [reconnect, setReconnect] = useAtom(reconnectAtom)
   const [inviting, setInviting] = useState(false)
+  // This person's integrations, for "Invite to this slate" (asked when the walkthrough opens).
+  const [integrations, setIntegrations] = useState([])
+  useEffect(() => {
+    if (!inviting || !userId || guest) return
+    Meteor.callAsync('integrations.list', {}).then((answer) => setIntegrations(Array.isArray(answer?.integrations) ? answer.integrations : [])).catch((e) => { enterpriseSlots.lockIfRefused(e) })
+  }, [inviting, userId, guest])
+  // Standing rules: the owner's own integrations that join every slate they own arrive when it opens
+  // (idempotent on the server; one removed from this slate before stays away).
+  const ownSlate = Boolean(userId && slate?.userId === userId)
+  useEffect(() => {
+    if (!shareId || !canEdit || !ownSlate || guest) return
+    Meteor.callAsync('integrations.applyRules', { shareId }).catch((e) => { enterpriseSlots.lockIfRefused(e) })
+  }, [shareId, canEdit, ownSlate, guest])
   const entries = JSON.stringify(rosterEntries(connections))
   useEffect(() => {
     setExtras(JSON.parse(entries))
@@ -141,7 +155,8 @@ export default function AgentsOnSlate({ slate, canEdit, readSelection, readView,
       <Button size="small" variant="outlined" data-invite-agent-open="" onClick={() => setInviting(true)} sx={{ bgcolor: 'background.paper' }}>+ Invite agent</Button>
       {/* invited: the agents already on this slate, so the gallery marks them (✓ On this slate) and offers Manage. */}
       <InviteWalkthrough open={inviting} onClose={() => { setInviting(false); setReconnect(null) }} shareId={shareId} slateName={slate?.options?.name} reconnect={reconnect}
-        invited={connections.map((c) => ({ connectionId: c._id, agentId: c.agentId, name: c.name, galleryId: c.galleryId || null, mine: Boolean(c.mine), status: c.status }))}
+        invited={connections.map((c) => ({ connectionId: c._id, agentId: c.agentId, name: c.name, galleryId: c.galleryId || null, mine: Boolean(c.mine), status: c.status, integrationId: c.integrationId || null }))}
+        integrations={integrations}
         onManage={(agentId) => { setInviting(false); if (agentId) openAgent(agentId) }}
         onInvited={(connection) => connection?.agentId && openAgent(connection.agentId)} />
     </Box>
@@ -208,12 +223,14 @@ export function InvitedAgentControls({ agentId, shareId, canEdit = false, paused
             <Button size="small" variant="contained" sx={{ mt: 1 }} data-agent-ask-in-chat="" onClick={askInChat} disabled={paused}>Ask in chat</Button>
           </>
         )}
+        {c.mine && c.galleryId === 'googledrive' && <DriveFiles shareId={shareId} />}
         {c.mine && paused && (
           <Typography variant="caption" component="div" sx={{ mt: 0.5 }} data-agent-ask-paused="">
             Agents are paused on this slate. Resume agents to ask {c.name}.
           </Typography>
         )}
       </Box>
+      {c.joinedBy === 'rule' && <Typography variant="caption" color="text.secondary" component="div" data-agent-joined-by-rule="">{c.mine ? 'Joined by your standing rule (Integrations).' : `Joined by ${c.inviterName || 'its owner'}'s rule.`}</Typography>}
       {!c.mine && <Typography variant="body2" color="text.secondary">Only {c.inviterName || 'the person who invited it'} can ask {c.name}.</Typography>}
       {note && <Typography role="status" variant="body2" sx={{ mt: 1 }}>{note}</Typography>}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>

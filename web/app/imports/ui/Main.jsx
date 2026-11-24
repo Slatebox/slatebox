@@ -32,6 +32,7 @@ import ListItemIcon from '@mui/material/ListItemIcon'
 import ListItemText from '@mui/material/ListItemText'
 import DashboardIcon from '@mui/icons-material/Dashboard'
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'
+import HubOutlinedIcon from '@mui/icons-material/HubOutlined'
 import PaletteIcon from '@mui/icons-material/Palette'
 
 import SettingsIcon from '@mui/icons-material/Settings'
@@ -77,6 +78,7 @@ import MessagesMenu from './components/MessagesMenu'
 import getUserDisplayName from '../api/common/getUserName'
 import LoadHeap from './components/LoadHeap'
 import { rememberSignedIn } from './common/accountCopy.mjs'
+import { enterpriseState } from '../api/common/edition.mjs'
 // logo color: #0F4C75
 const shrunkDrawerWidth = '50px !important'
 
@@ -285,6 +287,13 @@ export default function Main() {
       path: '/library',
       icon: <LibraryBooksIcon />,
       show: true,
+    },
+    {
+      // Outside agents and Google, connected once and invited onto any slate (enterprise code only).
+      title: 'Integrations',
+      path: '/integrations',
+      icon: <HubOutlinedIcon />,
+      show: signedIn && enterpriseState(Meteor.settings).unlocked,
     },
     {
       title: loadedUser?.orgId ? `Manage ${team}` : `Create ${team}`,

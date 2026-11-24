@@ -4,6 +4,7 @@ import ButtonBase from '@mui/material/ButtonBase'
 import Typography from '@mui/material/Typography'
 import { requestLibrary } from './libraryBus'
 import { stripPicks } from './picks'
+import EnterpriseSlot from '../../common/EnterpriseSlot'
 
 // The + menu's "Boards and starters" rows (library final.md §2.2): the desktop dock's and the phone
 // sheet's. A chunk of their own, out of the eager bundle: fetched when the + menu first draws.
@@ -28,6 +29,8 @@ export function BoardsDock({ onDone, dark = false }) {
       <ButtonBase onClick={() => go({})} sx={{ ...look, whiteSpace: 'nowrap', fontSize: 13, px: 1, py: .5, color: accent, fontWeight: 600 }}>See all ›</ButtonBase>
       {/* A person's own Excalidraw drawing, as notes and lines (ImportExcalidraw, in Ask Slatebox). */}
       <ButtonBase onClick={() => go({ import: 'excalidraw' })} data-import-excalidraw-open="" sx={{ ...look, whiteSpace: 'nowrap', fontSize: 13, px: 1, py: .5, color: accent, fontWeight: 600 }}>Import from Excalidraw</ButtonBase>
+      {/* A Google Doc, sheet or file as notes to keep or discard (the Google integration; empty where enterprise code is locked). */}
+      <EnterpriseSlot name="addmenu.import" onDone={onDone} variant="dock" />
     </span>
   )
 }
@@ -49,6 +52,7 @@ export function BoardsRow({ onDone, hasBoard = false }) {
         <button type="button" className="sb-btn" onClick={() => go({})} style={{ flex: '0 0 auto', height: 'auto' }}>See all ›</button>
       </div>
       <button type="button" className="sb-btn" data-import-excalidraw-open="" onClick={() => go({ import: 'excalidraw' })} style={{ marginTop: 6, height: 'auto' }}>Import from Excalidraw</button>
+      <EnterpriseSlot name="addmenu.import" onDone={onDone} variant="row" />
     </div>
   )
 }

@@ -14,6 +14,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- Integrations (Pro and Business; licensed self-hosted installs): connect an outside agent or Google
+  once on the new Integrations page (`/integrations`) and invite it onto any slate with no new sign-in,
+  or let it join every slate you own. A removal from one slate is remembered; the slate's owner
+  chooses who may bring outside agents. Google: Save to Google Drive, Export to Google Docs (and
+  Update this Doc), Import from Google Drive as a suggestion, and Google Drive as an agent that reads
+  the files you pick for a slate, all with the `drive.file` scope only. Actions `integrations.*` and
+  `google.*` (Meteor method, `/api/v1`, exec; MCP tools `list_integrations`, `connect_integration`,
+  `invite_integration_to_slate`, `set_integration_rule`, `disconnect_integration`,
+  `import_google_file`). See docs/integrations.md.
+
 - Agents create presentations: `presentations.create` (`POST /api/v1/slates/{shareId}/presentation`,
   the MCP tool `create_presentation`, `slatebox.presentations.create` in exec and so `slatebox exec`)
   plans a presentation of a slate with the Present button's planner (the AI feature `presentation`,
@@ -103,6 +113,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **Google Docs export is now part of Slatebox Pro and Slatebox Business** (the Google integration).
+  The old export, which kept a Google token in a browser cookie, is retired: connect Google once on
+  the Integrations page and Slatebox keeps the sign-in encrypted on the server. PNG, SVG and Mermaid
+  downloads stay as they are.
+- Removing an invited agent from a slate no longer signs you out of its server: the sign-in lives as
+  long as the integration, and disconnecting the integration revokes it.
 - API and MCP: a workshop read's `livePresentation` is now
   `{ sessionId, step, revision, expiresAt }`, where `step` is an index into the
   presenter's deck (-1 is the whole slate); it no longer has `laneId`. The read

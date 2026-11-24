@@ -14,8 +14,9 @@
 // where agentInvite is true unless the server-side kill switch settings.connectors.off is set, and
 // isUnlocked() says whether the key still holds (checked hourly; actions, methods and routes are
 // already guarded by the app).
-import { connectorActions } from './actions.mjs'
+import { connectorActions, integrationActions } from './actions.mjs'
 import { galleryActions } from './gallery-admin.mjs'
+import { googleActions } from './google/actions.mjs'
 import { signInRoutes } from './routes.mjs'
 
 export const manifest = Object.freeze({ name: 'slatebox-enterprise', features: ['agents.invite'] })
@@ -33,11 +34,18 @@ export function register(api, context) {
   // connectors.list/discover/signIn/signInStatus/useKey/connect/disconnect/call. Keeping and
   // discarding what they suggest is the app's own suggestions.decide.
   api.addActions(connectorActions(running))
+  // Integrations: connect once, invite onto any slate, standing rules (integrations.*).
+  api.addActions(integrationActions(running))
+  // Google, native: connect once, save to Drive, export to Docs and Slides, bring files in (google.*).
+  api.addActions(googleActions(() => {
+    if (!started) throw starting()
+    return started.google
+  }))
   // /admin/ai › Gallery: the invite gallery's cards, order and recipes (aiAgents, audited).
   api.addActions(galleryActions(() => {
     if (!started) throw starting()
     return started.findGallery
-  }))
+  }, async () => (started ? started.configured() : null)))
   // Sign-in's own addresses: the client document, the popup's start and the fixed callback.
   for (const route of signInRoutes({
     signIn: () => {

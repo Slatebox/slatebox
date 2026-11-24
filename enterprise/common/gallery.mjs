@@ -142,6 +142,26 @@ export const GALLERY = Object.freeze([
   { id: 'exa', name: 'Exa', url: 'https://mcp.exa.ai/mcp', job: 'Research', lands: 'Finds sources on your question, each a note with a quote and link.', try: 'How do others retry declined cards?', cost: 'Free tier', recipe: { rounds: 1, calls: 1, intents: [] } },
 ])
 
+// Native integrations: built into Slatebox (no MCP address), connected on the Integrations page and
+// invited onto slates like any agent. Administrators turn one on or off and edit its words in
+// /admin/ai › Gallery (its address never changes). Google Drive reads only the files a person picks
+// for a slate (drive.file scope: enterprise/server/google/google.mjs).
+export const NATIVE_ADDRESSES = Object.freeze({ googledrive: 'google://drive' })
+export const NATIVE_CARDS = Object.freeze([
+  {
+    id: 'googledrive',
+    kind: 'native',
+    name: 'Google Drive',
+    url: NATIVE_ADDRESSES.googledrive,
+    job: 'Your Drive files',
+    lands: 'Reads the Drive files you pick for a slate and adds notes that link back to them.',
+    try: 'Summarize the picked files',
+    signIn: 'google',
+    cost: 'Uses your Google account',
+    recipe: { rounds: 1, calls: 2, intents: [] },
+  },
+])
+
 // Listed once, no longer in the gallery: an invited copy keeps working (any MCP address does), it
 // is just not offered. Shown in /admin/ai › Gallery so an administrator sees why.
 export const RETIRED = Object.freeze([

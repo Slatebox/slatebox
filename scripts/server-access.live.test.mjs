@@ -287,8 +287,10 @@ test('cloud links and Google Docs export need edit rights on the slate', live, a
   // the unlisted and private ones are not.
   const r = await errorOf(stranger.call('utils.getCloudLink', slates.private._id, '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>', true))
   assert.match(r.error?.message || 'accepted: ' + JSON.stringify(r.value), /permission/i, 'stranger set a preview image on the victim slate')
-  const e = await errorOf(stranger.call('googleDocs.export', { tokens: { access_token: 'x' } }, slates.unlisted._id, 'data:image/png;base64,AAAA'))
-  assert.match(e.error?.message || 'accepted: ' + JSON.stringify(e.value), /permission/i, 'stranger exported to the victim slate')
+  // Google Docs export is the Google integration's now (google.exportDoc): a stranger can't read the slate to export it.
+  const e = await errorOf(stranger.call('google.exportDoc', { shareId: slates.unlisted.shareId }))
+  assert.ok(e.error, 'accepted: ' + JSON.stringify(e.value))
+  assert.match(String(e.error?.message), /Slate not found/, 'stranger exported the victim slate')
 })
 
 test('chatIntentions.save cannot overwrite an intention it does not own', live, async () => {

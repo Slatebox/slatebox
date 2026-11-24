@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { Meteor } from 'meteor/meteor'
 import { useTracker } from 'meteor/react-meteor-data'
-import { useSearchParams } from 'react-router-dom'
+import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { Accounts } from 'meteor/accounts-base'
 import { useSetAtom } from 'jotai'
 import { useTheme } from '@mui/material'
@@ -23,6 +23,7 @@ import Alert from '@mui/material/Alert'
 import AlertTitle from '@mui/material/AlertTitle'
 import DeveloperAccess from '../components/profile/DeveloperAccess'
 import AISettings from '../components/profile/AISettings'
+import { enterpriseState } from '../../api/common/edition.mjs'
 
 const BASE_DAILY_URL = Meteor.settings.public.dailyBaseUrl
 // /profile?tab=developer opens the Developer tab (the instance description links there);
@@ -447,6 +448,12 @@ export default function Profile() {
                       </>
                     )}
                   </FinePrint>
+                </AccountSection>
+              )}
+              {enterpriseState(Meteor.settings).unlocked && (
+                <AccountSection title="Integrations">
+                  <Typography variant="body2" sx={{ mb: 1 }}>Connect outside agents and Google once, then invite them onto any slate.</Typography>
+                  <Button component={RouterLink} to="/integrations" variant="outlined" data-profile-integrations="">Manage integrations</Button>
                 </AccountSection>
               )}
             </AccountPanel>

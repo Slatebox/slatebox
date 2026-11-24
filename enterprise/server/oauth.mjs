@@ -443,7 +443,9 @@ export function exchangeCode({ server, client, code, verifier, redirectUri, reso
 
 /** A refresh, with the resource (the caller holds the lease). */
 export function refreshTokens({ server, client, refreshToken, resource, scopes, fetch, accept }) {
-  const params = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken, resource })
+  const params = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken })
+  // An MCP server's sign-in names its resource (RFC 8707); Google's own sign-in has none.
+  if (resource) params.set('resource', resource)
   if (scopes?.length) params.set('scope', scopes.join(' '))
   return tokenRequest({ server, client, params, fetch, accept })
 }

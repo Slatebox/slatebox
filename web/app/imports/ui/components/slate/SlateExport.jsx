@@ -1,20 +1,18 @@
-/* eslint-disable camelcase */
-import React, { useEffect, useRef } from 'react'
+// The slate's export panel: Mermaid, PNG and SVG downloads (and cloud links where the host has an
+// image store). Google Drive and Docs are the Google integration's (enterprise code, Pro or
+// Business): the slate.export.google slot, empty where enterprise code is locked.
+import React from 'react'
 import { Meteor } from 'meteor/meteor'
 import PropTypes from 'prop-types'
 import Grid from '@mui/material/Grid2'
 import Button from '@mui/material/Button/Button'
 import { useAtomValue, useAtom, useSetAtom } from 'jotai'
-import Cookies from 'js-cookie'
-import OauthPopup from 'react-oauth-popup'
 import Tooltip from '@mui/material/Tooltip'
 import IconButton from '@mui/material/IconButton'
-import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import FileCopyIcon from '@mui/icons-material/FileCopy'
 import CONSTANTS from '../../../api/common/constants'
-import promisify from '../../../api/client/promisify'
-import { Messages } from '../../../api/common/models'
 import { currentSlate, globalMessage, mermaidDialog, slateOutputOpen } from '../../jotai/atoms'
+import EnterpriseSlot from '../../common/EnterpriseSlot'
 
 // A cloud link stores the image in the hosted service's S3 bucket. A
 // self-hosted instance offers it only when its operator configured one.
@@ -25,14 +23,6 @@ export default function SlateExport({ onExport }) {
   const [message, setMessage] = useAtom(globalMessage)
   const openMermaid = useSetAtom(mermaidDialog)
   const setSlateOutput = useSetAtom(slateOutputOpen)
-  const [oauthUrl, setUrl] = React.useState(null)
-  const [lastDocUrl, setLastDocUrl] = React.useState(
-    slate?.options?.lastSavedGoogleDocUrl
-  )
-  const [storedToken, setToken] = React.useState(
-    Cookies.get(CONSTANTS.googleDocsCookieToken)
-  )
-
   function msg(msg, line2) {
     setMessage({
       visible: true,
@@ -42,89 +32,6 @@ export default function SlateExport({ onExport }) {
       autoHide: 5000,
     })
   }
-
-  const hasSlate = Boolean(slate)
-  useEffect(() => {
-    if (!hasSlate) {
-      setUrl(null)
-      return
-    }
-    let active = true
-    Meteor.callAsync(CONSTANTS.methods.googleDocs.createAuthUrl)
-      .then(url => { if (active) setUrl(url) })
-      .catch(() => { if (active) setUrl(null) })
-    return () => { active = false }
-  }, [hasSlate])
-
-  async function exportGoogleDoc() {
-    let appToken = Cookies.get(CONSTANTS.googleDocsCookieToken)
-    if (appToken) {
-      appToken = JSON.parse(appToken)
-      const valid = await (
-        await fetch(
-          `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${appToken.tokens.access_token}`
-        )
-      ).json()
-      if (valid.error) {
-        // global message errror
-        Cookies.remove(CONSTANTS.googleDocsCookieToken)
-        setToken(null)
-        setMessage({
-          visible: true,
-          text: `Your Google authentication has expired. Please click the 'Authenticate And Export To Google Docs' button to re-authenticate and export the slate!`,
-          severity: 'error',
-          autoHide: 10000,
-        })
-      } else {
-        msg(`Exporting to Google Docs...`)
-
-        onExport('png', { base64: true }, async (base64) => {
-          const details = await Meteor.callAsync(
-            CONSTANTS.methods.googleDocs.export,
-            appToken,
-            slate.options.id,
-            base64
-          )
-
-          const gDocUrl = `https://docs.google.com/document/d/${details.documentId}/edit`
-
-          setLastDocUrl(gDocUrl)
-
-          // await Messages.insertAsync({
-          //   timestamp: new Date().valueOf(),
-          //   userId: Meteor.userId(),
-          //   title: `Slate Exported To Google Docs`,
-          //   text: `You've exported ${slate.options.name} to Google docs! <a href='https://docs.google.com/document/d/${details.documentId}/edit' target='_blank' style='color:#fff;font-size:14pt;'>Click here to view your slate.</a>`,
-          //   read: false,
-          //   type: CONSTANTS.messageTypes.system,
-          //   priority: 10,
-          // })
-
-          msg(`Export Complete! Google Doc link copied to clipboard.`, gDocUrl)
-
-          navigator.clipboard.writeText(gDocUrl)
-
-          window.open(gDocUrl, '_blank')
-        })
-      }
-    }
-  }
-
-  const onCode = async (code) => {
-    const token = await Meteor.callAsync(
-      CONSTANTS.methods.googleDocs.getToken,
-      code
-    )
-    if (!token) {
-      msg('Google Docs authorization could not be completed.')
-      return
-    }
-    Cookies.set(CONSTANTS.googleDocsCookieToken, JSON.stringify(token))
-    setToken(Cookies.get(CONSTANTS.googleDocsCookieToken))
-    await exportGoogleDoc()
-  }
-
-  const onClose = () => {}
 
   SlateExport.propTypes = {
     onExport: PropTypes.func.isRequired,
@@ -270,50 +177,7 @@ export default function SlateExport({ onExport }) {
           Download SVG
         </Button>
       </Grid>
-      {lastDocUrl && (
-        <Grid size={2}>
-          <Tooltip title="Open last exported Google Doc">
-            <IconButton
-              aria-label="open google doc url"
-              href={lastDocUrl}
-              target="_blank"
-              edge="end"
-            >
-              <OpenInNewIcon />
-            </IconButton>
-          </Tooltip>
-        </Grid>
-      )}
-      {oauthUrl && <Grid size={lastDocUrl ? 10 : 12}>
-        {storedToken ? (
-          <Button
-            variant="outlined"
-            fullWidth
-            color="secondary"
-            onClick={(e) => {
-              exportGoogleDoc()
-            }}
-          >
-            Export To Google Docs
-          </Button>
-        ) : (
-          <OauthPopup
-            title="Save Slate to Google docs"
-            url={oauthUrl}
-            onCode={onCode}
-            onClose={onClose}
-          >
-            <Button
-              variant="outlined"
-              id="btnGoogle"
-              color="secondary"
-              fullWidth
-            >
-              Authenticate And Export To Google Docs
-            </Button>
-          </OauthPopup>
-        )}
-      </Grid>}
+      <EnterpriseSlot name="slate.export.google" onExport={onExport} />
     </Grid>
   )
 }

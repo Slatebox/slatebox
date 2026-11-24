@@ -64,12 +64,16 @@
     "zoneIdForCacheToClear": ""
   },
   "googleDocs": {
-    "//": "OAuth client for Google Docs import (Google Cloud console, web application client).",
+    "//": "The OAuth client for the Google integration (enterprise: Pro or Business on Cloud, licensed installs; docs/integrations.md). A Google Cloud web application client whose consent screen asks only for drive.file; add the app's origin to its Authorized JavaScript origins (the sign-in is Google's popup, so no redirect address is used). Server only.",
     "web": {
       "client_id": "",
       "client_secret": "",
       "redirect_uris": ["http://localhost:3000"]
     }
+  },
+  "google": {
+    "//": "apiBase: one fake Google for every Google API (tests). Honored only on a development server, and only at 127.0.0.1 or localhost.",
+    "apiBase": ""
   },
   "stripePrivateKey": "",
   "stripe": {
@@ -93,6 +97,11 @@
     "//": "Everything under public reaches every browser. Only keys that are meant to be public belong here. edition: \"self-host\" (the default when missing) or \"cloud\" (Slatebox Cloud only, imports/api/common/edition.mjs; it unlocks nothing without Slatebox Cloud's own key in enterprise.license). The server adds public.enterprise itself at start (whether enterprise code is unlocked here); do not set it.",
     "env": "dev",
     "edition": "self-host",
+    "google": {
+      "//": "The Google Picker (Import from Google Drive, Drive files): an API key restricted to this app's address and the Picker API, and the Google Cloud project number. Both are public by nature.",
+      "pickerApiKey": "",
+      "appId": ""
+    },
     "agents": {
       "//editDirectly": "Lets the person who brought an agent (or the slate owner) let it save without suggestions, each change undoable. Off unless true.",
       "editDirectly": false
