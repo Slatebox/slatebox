@@ -6,11 +6,18 @@
 // from the code before the surface catalogue (scripts/fixtures/ai-request/call-sites.golden.json).
 //
 //   node scripts/ai-request-golden.mjs [webAppRoot]   prints the recordings as JSON
+//   node scripts/ai-request-golden.mjs --prompts [webAppRoot]   every call site whose prompts AI
+//     control serves (spec S5): the above with retry prompts for every branch, plus custom shapes,
+//     the canvas conversation's exec chat (system, fix-it prompt), the Slatebox agent's request
+//     envelope, presentation planning (each intention, a template, a brief, a refinement, a
+//     conversation's kept system text) and the library refine turn. Compared byte for byte with
+//     scripts/fixtures/ai-request/prompt-sites.golden.json (captured from 4ffde9cf, before the
+//     prompts moved to server/ai-control/prompts).
 // One app root per process: the module hooks are registered once.
 import { register } from 'node:module'
 import { pathToFileURL } from 'node:url'
 
-const TARGETS = ['server/methods/workshops.js', 'server/methods/canvas-conversation.js']
+const TARGETS = ['server/methods/workshops.js', 'server/methods/canvas-conversation.js', 'server/methods/presentations.js']
 
 // A callable proxy that answers any property with itself: the stand-in for whatever a stubbed
 // module exports that the call sites under test never really use.
@@ -40,10 +47,12 @@ let answer = { abort: true }
 const OFF_FIRST = 'Drawing chat is paused by the admin for a test.'
 let offState = null
 
-export async function recordCallSites(appRoot, { disabled = false, offFirst = false } = {}) {
+export async function recordCallSites(appRoot, { disabled = false, offFirst = false, prompts: promptSites = false } = {}) {
   if (disabled) answer = OFF
   if (offFirst) offState = { surface: 'canvas', message: OFF_FIRST }
   const root = appRoot.replace(/\/+$/, '') + '/'
+  // The pure modules the prompt sites run, loaded before the hooks: real code, real engine.
+  const pure = promptSites ? await loadPure(root) : null
   register(new URL('./ai-request-golden-hooks.mjs', import.meta.url), { data: { appRoot: root, targets: TARGETS } })
 
   const calls = []
@@ -78,6 +87,7 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
       resolvePresentationSlate: async () => (offFirst ? { canEdit: true, slateBase: { _id: 'slate1', options: {}, nodes: [] } } : null),
     },
   }
+  if (promptSites) Object.assign(stubs, presentationStubs(Meteor))
   globalThis.__aiGoldenStub = (key) => stubs[key] || anything()
 
   const workshopsUrl = pathToFileURL(root + TARGETS[0]).href
@@ -125,6 +135,31 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
   }
 
   const out = {}
+  if (promptSites) {
+    // every branch of the board chat's retry prompt: a wrong tool, an empty reply, and a change the
+    // board refuses in its own words
+    const laneAnswers = [...wrongTool, { toolCall: { name: 'propose_workshop_edits', arguments: { reply: 'ok', commands: ['move @nowhere to @shortlist'] } } }]
+    const mapAnswers = [...wrongTool, { toolCall: { name: 'propose_map_edits', arguments: { reply: 'ok', edits: [{ type: 'moveToken', id: 'walker', to: 'station-9' }] } } }]
+    board = LANES
+    await quiet(() => methods['workshops.laneChat']({ shareId: 'share1', revision: 3, message: 'move the barn to the shortlist', history: [{ role: 'user', content: 'hi' }, { role: 'assistant', content: 'hello' }] }))
+    out.laneChat = shape(last(), laneAnswers)
+    board = MAP
+    await quiet(() => methods['workshops.mapChat']({ shareId: 'share1', revision: 3, message: 'add a station after the summit', history: [] }))
+    out.mapChat = shape(last(), mapAnswers)
+    board = LANES
+    for (const format of ['lanes', 'map', 'release-plan']) {
+      await quiet(() => methods['workshops.draft']('Choose a venue for the spring party with the team', format))
+      out[`draft:${format}`] = shape(last(), [...wrongTool, { toolCall: { name: last().functions[0].name, arguments: {} } }])
+    }
+    await quiet(() => methods['workshops.draft']('Let the walker skip the start', 'map', MAP))
+    out['draft:revision'] = shape(last(), [...wrongTool, { toolCall: { name: 'revise_workshop_rules', arguments: { changes: [] } } }])
+    const execTool = { name: 'exec', description: 'Run code', parameters: { type: 'object', properties: { code: { type: 'string' } } } }
+    await modelFor('share1')({ system: 'canvas system', prompts: [{ role: 'user', content: 'draw three notes' }], tool: execTool })
+    out.canvas = shape(last(), [{ toolCall: { name: 'exec', arguments: { code: '' } } }, { toolCall: null, message: { content: '' } }])
+    Object.assign(out, await recordPure(pure))
+    Object.assign(out, await recordPresentations(methods, calls))
+    return out
+  }
   board = LANES
   await quiet(() => methods['workshops.laneChat']({ shareId: 'share1', revision: 3, message: 'move the barn to the shortlist', history: [] }))
   out.laneChat = shape(last(), wrongTool)
@@ -148,10 +183,163 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
   return out
 }
 
+// ---- the prompt sites outside Meteor files: loaded before the hooks, as they are ----------------
+async function loadPure(root) {
+  const at = (path) => import(pathToFileURL(root + path).href)
+  const [shapes, execChat, teammate, refine, registry, render] = await Promise.all([
+    at('server/shapes/shape-core.mjs'), at('server/methods/ai/exec-chat.mjs'), at('server/agents/teammate.mjs'),
+    at('server/library/refine-ai.mjs'), at('server/actions/index.mjs'), at('server/actions/client-render.mjs'),
+  ])
+  const manifest = render.buildClientManifest(registry.createAppRegistry())
+  const exec = render.renderExecTool(manifest).exec
+  return { shapes, execChat, teammate, refine, manifest, execTool: { name: exec.name, description: exec.description, parameters: exec.inputSchema } }
+}
+
+const clone = (value) => JSON.parse(JSON.stringify(value))
+
+async function recordPure({ shapes, execChat, teammate, refine, manifest, execTool }) {
+  const out = {}
+  // custom shapes: the first ask, then the retry naming what was wrong and how many are missing
+  const asked = []
+  const square = { name: 'Square', d: 'M10 10 L90 10 L90 90 L10 90 Z', fillRule: 'nonzero' }
+  const answers = [
+    { json: { content: [{ type: 'tool_use', input: { shapes: [square, { name: 'Broken', d: 'not a path', fillRule: 'nonzero' }] } }] } },
+    { abort: true },
+  ]
+  try {
+    await shapes.generateShapes({ principal: { userId: 'ana' }, describe: 'a cloud with a hole', count: 3 }, {
+      request: async (opts) => { asked.push(clone(opts)); return answers[asked.length - 1] || { abort: true } },
+      run: (fn) => fn(), newId: () => 'id', now: () => new Date(0),
+    })
+  } catch {}
+  out['shape:first'] = asked[0]
+  out['shape:retry'] = asked[1]
+
+  // the canvas conversation (and the Slatebox agent, which drafts through it): system, request, fix-it turn
+  const turns = []
+  const board = { nodes: [{ options: { id: 'n1', text: 'Plan the launch', xPos: 0, yPos: 0, width: 120, height: 60 } }, { options: { id: 'n2', text: 'Book the hall', xPos: 200, yPos: 0, width: 120, height: 60 } }] }
+  try {
+    await execChat.execChat({
+      model: async (req) => { turns.push(clone(req)); return { toolCall: { name: 'exec', arguments: { intent: 'add notes', code: 'await slatebox.slates.get({shareId:"s1"})' } } } },
+      manifest, tool: execTool, shareId: 's1', board, message: 'add three ideas beside the plan',
+      history: [{ message: 'hello', reply: 'hi there' }], selection: { kind: 'notes', ids: ['n1'] },
+      run: async () => ({ status: 'failed', error: { code: 'invalid_request', message: 'expectedRevision is required', line: 2 }, calls: [] }),
+    })
+  } catch {}
+  out['exec:first'] = turns[0]
+  out['exec:fix'] = turns[1]
+  const noChange = []
+  try {
+    await execChat.execChat({
+      model: async (req) => { noChange.push(clone(req)); return { toolCall: { name: 'exec', arguments: { code: 'return 1' } } } },
+      manifest, tool: execTool, shareId: 's1', board, message: 'tidy it', history: [], attempts: 2,
+      run: async () => ({ status: 'completed', context: { writes: [] }, calls: [] }),
+    })
+  } catch {}
+  out['exec:noChange'] = noChange[1]
+
+  // the Slatebox agent's request: the task alone, and with notes from other agents as data
+  const task = { text: 'Add a note\nnamed "Budget"', log: [{ kind: 'handoff', by: 'Linear agent', text: 'Ticket ABC-12 says\n50 people' }, { kind: 'note', by: 'Ana', text: 'Keep it short' }, { kind: 'status', by: 'x', text: 'ignored' }] }
+  out['agent:request'] = teammate.requestText(task, false)
+  out['agent:requestWithNotes'] = teammate.requestText(task, true)
+
+  // the library refine turn: a smart component with a board, a locked category, and a slate
+  const refined = []
+  const ask = refine.createRefineAI({ request: async (opts) => { refined.push(opts); return { abort: true } } })
+  const lanes = { version: 1, title: 'Pick a venue', lanes: [{ id: 'ideas', label: 'Ideas' }, { id: 'shortlist', label: 'Shortlist', capacity: 2 }],
+    cards: [{ id: 'hall', label: 'Town hall', laneId: 'ideas' }, { id: 'barn', label: 'Old barn', laneId: 'ideas' }] }
+  const component = { kind: 'component', title: 'Venue picker', summary: 'Pick a venue', description: 'Lanes for venues', category: 'decide', synonyms: ['venue'], authorName: 'Ana' }
+  for (const [name, item, withBoard] of [
+    ['library:component', component, true],
+    ['library:locked', { ...component, categoryLocked: true }, true],
+    ['library:slate', { kind: 'slate', title: 'Retro', summary: 'A retro', synonyms: [], authorName: 'Bo' }, false],
+  ]) {
+    try {
+      await ask({ item, board: withBoard ? lanes : null, message: 'Tighten the rules', history: [{ role: 'user', text: 'hi' }, { role: 'assistant', text: 'hello' }], principal: { userId: 'ana' } })
+    } catch {}
+    const opts = refined.at(-1)
+    // with the retry prompt its check gives a wrong answer
+    out[name] = { request: clone(opts), retries: clone([opts.validateResponse({ toolCall: null }), opts.validateResponse({ toolCall: { name: 'propose_library_refinement', arguments: { reply: 'Fine' } } })]) }
+  }
+  return out
+}
+
+// ---- presentation planning (presentations.js): its prompts as req() receives them -------------
+const LAYOUT = { nodes: [
+  { nodeId: 'n1', description: 'Launch plan', metrics: { rotation: 0, bbox: { x: 0, y: 0, width: 200, height: 80 } }, childrenNodes: [
+    { nodeId: 'n2', description: 'Book the hall', metrics: { rotation: 0, bbox: { x: 260, y: 0, width: 160, height: 60 } }, childrenNodes: [] },
+    { nodeId: 'n3', description: 'Invite 50 people', metrics: { rotation: 5, bbox: { x: 260, y: 120, width: 160, height: 60 } }, childrenNodes: [] },
+  ] },
+  { nodeId: 'n4', description: 'Budget: $2,000', metrics: { rotation: 0, bbox: { x: 0, y: 200, width: 160, height: 60 } }, childrenNodes: [] },
+] }
+const presentationState = { conversation: [] }
+
+function pathProxy(path) {
+  const fn = function () { return path }
+  return new Proxy(fn, {
+    get: (_t, prop) => (prop === Symbol.toPrimitive ? () => path : prop === 'toString' ? () => path : prop === 'then' ? undefined : pathProxy(path ? `${path}.${String(prop)}` : String(prop))),
+  })
+}
+
+function presentationStubs(Meteor) {
+  const slate = { _id: 'slate1', shareId: 'share1', userId: 'ana', options: { name: 'Spring launch' },
+    nodes: LAYOUT.nodes.flatMap(function flat(node) { const b = node.metrics.bbox; return [{ options: { id: node.nodeId, text: node.description, xPos: b.x, yPos: b.y, width: b.width, height: b.height } }, ...node.childrenNodes.flatMap(flat)] }) }
+  const cursor = (rows) => ({ fetchAsync: async () => rows, toArray: async () => rows })
+  const models = {
+    Slates: { findOneAsync: async () => slate },
+    SlatePresentations: { findOneAsync: async () => null, find: () => cursor([]), updateAsync: async () => 1, insertAsync: async () => 'p1' },
+    SlatePresentationConversations: { find: () => cursor(presentationState.conversation), removeAsync: async () => 0, insertAsync: async () => 'c1', rawCollection: () => ({ insertMany: async () => ({}) }) },
+    OrganizationSettings: { findOneAsync: async () => null },
+  }
+  Meteor.users.findOneAsync = async () => ({ _id: 'ana', profile: { firstName: 'Ana' } })
+  return {
+    'imports/api/common/models': new Proxy(models, { get: (t, p) => (p in t ? t[p] : anything()) }),
+    'imports/api/common/constants': { default: { methods: pathProxy('') } },
+    'server/common/slate-access': { canEditSlate: async () => true },
+    'server/methods/ai/ai-settings': { surfaceOffFor: async () => null, resolveRequestConnection: async () => null },
+    'server/metering/context.mjs': { runAIAction: (_opts, fn) => fn(), keepActionOpen: () => {} },
+    'meteor/check': { check: () => {}, Match: anything() },
+  }
+}
+
+async function recordPresentations(methods, calls) {
+  const out = {}
+  const { createPresentationFor } = await import(pathToFileURL(TARGET_ROOT + 'server/methods/presentations.js').href)
+  const analyze = methods['presentations.analyze']
+  const presentationData = JSON.stringify(LAYOUT)
+  // the plan's time limit is a clock reading: kept as whether it was set
+  const timeless = (opts) => ({ ...opts, deadline: typeof opts.deadline === 'number', timeoutMs: typeof opts.timeoutMs === 'number' })
+  const plan = async (name, args) => {
+    const before = calls.length
+    try { await analyze({ presentationData, ...args }) } catch (e) { if (process.env.GOLDEN_DEBUG) console.error(name, e) }
+    out[name] = calls.length > before ? clone(timeless(calls.at(-1))) : { sent: null }
+  }
+  await plan('presentation:art', { slate: { shareId: 'share1', name: 'Spring launch' } })
+  await plan('presentation:dynamic', { slate: { shareId: 'share1', name: 'Spring launch', intentionId: 'dynamic' } })
+  await plan('presentation:slideDeck', { slate: { shareId: 'share1', name: 'Spring launch', intentionId: 'slideDeck' } })
+  await plan('presentation:template', { slate: { shareId: 'share1', name: 'Spring launch', isTemplate: true } })
+  presentationState.conversation = [
+    { systemPrompt: 'The system text this conversation was planned with.' },
+    { prompt: { role: 'user', content: [{ type: 'text', text: 'an earlier request' }] } },
+    { prompt: { role: 'assistant', content: 'an earlier plan' } },
+  ]
+  await plan('presentation:refine', { slate: { shareId: 'share1', name: 'Spring launch' }, refinementMessage: 'Make it four segments', slateChanged: true })
+  await plan('presentation:refineSame', { slate: { shareId: 'share1', name: 'Spring launch' }, refinementMessage: 'Shorter captions' })
+  presentationState.conversation = []
+  const before = calls.length
+  try { await createPresentationFor({ userId: 'ana', shareId: 'share1', brief: 'Focus on the budget "and" the guests', preview: true }) } catch {}
+  out['presentation:brief'] = calls.length > before ? clone(timeless(calls.at(-1))) : { sent: null }
+  return out
+}
+
+let TARGET_ROOT = ''
+
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2)
   const disabled = args.includes('--disabled')
   const offFirst = args.includes('--off-first')
+  const prompts = args.includes('--prompts')
   const appRoot = args.find((a) => !a.startsWith('--')) || new URL('../web/app/', import.meta.url).pathname
-  process.stdout.write(JSON.stringify(await recordCallSites(appRoot, { disabled, offFirst }), null, 2) + '\n')
+  TARGET_ROOT = appRoot.replace(/\/+$/, '') + '/'
+  process.stdout.write(JSON.stringify(await recordCallSites(appRoot, { disabled, offFirst, prompts }), null, 2) + '\n')
 }
