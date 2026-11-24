@@ -71,3 +71,12 @@ test("running it twice adds nothing; a dry run writes nothing", async () => {
   assert.equal(again.skipped, 3);
   assert.deepEqual([stores.items.docs.length, stores.versions.docs.length, stores.events.docs.length], counts);
 });
+
+test("a template the app seeds itself (owned by no account) is credited to Slatebox, with no author account", async () => {
+  const seed = { _id: "tplprocon001", shareId: "tplprocon001", userId: "system", options: { name: "Pro/Con Analysis", isTemplate: true, templateApproved: true, isPublic: true, description: "Weigh a decision" }, nodes: [note("s", "Advantages")] };
+  const stores = { slates: libraryCollection([seed]), presentations: libraryCollection(), items: libraryCollection(), versions: libraryCollection(), events: libraryCollection() };
+  const report = await run(stores);
+  assert.deepEqual(report.created, { published: 1, submitted: 0 });
+  const [item] = stores.items.docs;
+  assert.deepEqual([item.migratedFrom, item.status, item.authorName, item.authorId], ["template:tplprocon001", "published", "Slatebox", null]);
+});

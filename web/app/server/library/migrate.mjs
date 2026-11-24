@@ -10,6 +10,9 @@ import { previewOf } from './core.mjs'
 // wants them published directly instead.
 export const MIGRATE_COMMUNITY_STATUS = 'submitted'
 const SYSTEM = { kind: 'system', userId: null, name: 'Slatebox' }
+// Owners that are no account: the app's own seeds (server/bootstrap/proConTemplate.json is owned by
+// 'system'). What they own is credited to Slatebox, with no author account.
+const SEED_OWNERS = new Set(['system'])
 
 // Approved public templates (template-policy.mjs publicTemplateSelector), stated here so the
 // migration outlives the template code it replaces.
@@ -67,10 +70,11 @@ export async function migrateCommunity({ slates, presentations, items, versions,
   }
 
   for (const slate of await slates.find(templateSelector()).toArray()) {
-    const authorName = slate.options?.userNameOverride === 'Slatebox' ? 'Slatebox' : await userName(slate.userId)
+    const seeded = SEED_OWNERS.has(slate.userId)
+    const authorName = seeded || slate.options?.userNameOverride === 'Slatebox' ? 'Slatebox' : await userName(slate.userId)
     await make({
       key: 'template:' + slate._id, kind: 'slate', status: 'published', title: slate.options?.name, sourceShareId: slate.shareId,
-      summary: slate.options?.templateMarkdown || slate.options?.description, authorId: slate.userId, authorName,
+      summary: slate.options?.templateMarkdown || slate.options?.description, authorId: seeded ? null : slate.userId, authorName,
       content: { kind: 'slate', slate: snapshotSlate(slate) }, message: `Moved from the template gallery on ${day}.`,
     })
   }
