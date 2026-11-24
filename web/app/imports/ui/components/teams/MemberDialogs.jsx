@@ -1,8 +1,8 @@
 /* eslint-disable no-underscore-dangle */
 // The team page's dialogs for one person: change their email address, remove them (and the slates
 // they own), and Advanced permissions (every stored claim, one switch each). The server calls are
-// the ones the old table made: users.update, users.get, organizations.removeMemberSlates then the
-// account removal, users.changeRoles.
+// the ones the old table made (users.update, users.get, users.changeRoles), and removal is one
+// organizations.removeMember call that checks who may be removed.
 import React, { useEffect, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
@@ -53,7 +53,7 @@ export function ChangeEmailDialog({ member, onClose, say }) {
         <DialogTitle id="team-email-title">Change {displayName(member)}&apos;s email</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            They get a new enrollment email at the new address. The old address stops working for sign-in.
+            We send a new invitation to sign in to the new address. The old address stops working for sign-in.
           </Typography>
           {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
           <TextField autoFocus fullWidth type="email" label="Email address" value={email} onChange={(e) => { setEmail(e.target.value); setError('') }}
@@ -61,7 +61,7 @@ export function ChangeEmailDialog({ member, onClose, say }) {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button type="submit" variant="contained" disabled={busy || !email.trim()}>Change and send email</Button>
+          <Button type="submit" variant="contained" disabled={busy || !email.trim()}>Change email</Button>
         </DialogActions>
       </Box>
     </Dialog>
@@ -89,9 +89,8 @@ export function RemoveMemberDialog({ member, teamName, onClose, say }) {
     setBusy(true)
     setError('')
     try {
-      // their slates first (the server checks this person may), then the account
-      await Meteor.callAsync('organizations.removeMemberSlates', member._id)
-      await Meteor.users.removeAsync({ _id: member._id })
+      // one server call: it checks this person may be removed, then removes their slates and the account
+      await Meteor.callAsync('organizations.removeMember', member._id)
       say(`${name} was removed from ${teamName}.`, 'success')
       onClose()
     } catch (err) {

@@ -3,7 +3,7 @@
 // Slatebox Business as a compact card, and the people as rows (cards on a phone) with a plain-language
 // role, a status and a "more" menu. Every action is the server method the old table called, checked
 // the same way: users.update (names, address), users.changeRoles (roles, advanced permissions),
-// users.invite / users.resendEnrollment, organizations.removeMemberSlates then the account removal.
+// users.invite / users.resendEnrollment, and organizations.removeMember (the slates and the account, one call).
 import React, { useMemo, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
@@ -115,11 +115,12 @@ function MemberRow({ member, me, claimIds, viewer, nouns, onAction, onRole, send
   const fixed = isSelf || member.isOrgOwner
   const mayEdit = !fixed && viewer.canEdit && (viewer.isAdmin || !targetIsAdmin)
   const mayResend = !fixed && viewer.canAdd && status.id === 'invited'
-  const mayRemove = !fixed && viewer.canRemove
+  // an admin is changed or removed only by an admin (the server's rule: server/team-guard.mjs)
+  const mayRemove = !fixed && viewer.canRemove && (viewer.isAdmin || !targetIsAdmin)
   const menu = [
     mayEdit && { key: 'name', label: 'Edit name', icon: <EditOutlinedIcon fontSize="small" />, run: () => setEditingName(true) },
     mayEdit && member.emails?.[0]?.address && { key: 'email', label: 'Change email', icon: <AlternateEmailIcon fontSize="small" />, run: () => onAction('email', member) },
-    !fixed && viewer.canEdit && { key: 'advanced', label: 'Advanced permissions', icon: <TuneIcon fontSize="small" />, run: () => onAction('advanced', member) },
+    mayEdit && { key: 'advanced', label: 'Advanced permissions', icon: <TuneIcon fontSize="small" />, run: () => onAction('advanced', member) },
     mayResend && { key: 'resend', label: 'Resend invite', icon: <SendOutlinedIcon fontSize="small" />, run: () => onAction('resend', member), disabled: sending },
     mayRemove && { key: 'remove', label: `Remove from ${nouns.team.toLowerCase()}`, icon: <PersonRemoveOutlinedIcon fontSize="small" color="error" />, run: () => onAction('remove', member), danger: true },
   ].filter(Boolean)
@@ -144,13 +145,14 @@ function MemberRow({ member, me, claimIds, viewer, nouns, onAction, onRole, send
               {mayEdit && (
                 <Tooltip title="Edit name">
                   <IconButton size="small" aria-label={`Edit the name of ${name}`} onClick={() => setEditingName(true)}
-                    sx={{ opacity: { md: 0 }, '&:focus-visible': { opacity: 1 }, 'li:hover &': { opacity: 1 } }}>
+                    sx={{ opacity: { md: 0.4 }, '&:focus-visible': { opacity: 1 }, 'li:hover &': { opacity: 1 } }}>
                     <EditOutlinedIcon sx={{ fontSize: 16 }} />
                   </IconButton>
                 </Tooltip>
               )}
             </Box>
-            <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+            <Typography variant="body2" color="text.secondary" title={member.emails?.[0]?.address}
+              sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} data-member-email="">
               {member.emails?.[0]?.address || 'No email address yet (brought by a team import)'}
             </Typography>
           </>
@@ -259,9 +261,11 @@ export default function ManageOrganization() {
     return map
   }, [permissions])
   const mine = claimsOf.get(me) || []
+  const meIsOwner = useTracker(() => Meteor.user()?.isOrgOwner === true)
   // the same reading AuthManager.userHasClaim gives on the client: the admin claim counts for every claim
   const viewer = {
-    isAdmin: mine.includes(ADMIN),
+    // the owner is always an admin (as on the server)
+    isAdmin: meIsOwner || mine.includes(ADMIN),
     canEdit: holds(mine, 'canEditUsers'),
     canAdd: holds(mine, 'canAddUsers'),
     canRemove: holds(mine, 'canRemoveUsers'),
@@ -295,19 +299,19 @@ export default function ManageOrganization() {
 
   const [inviting, setInviting] = useState(false)
   const [dialog, setDialog] = useState(null) // { kind: 'email' | 'remove' | 'advanced', member }
-  const [sending, setSending] = useState(false)
+  const [sending, setSending] = useState(null) // the member whose invitation is being sent again
 
   const say = (text, severity = 'info') => setMessage({ visible: true, isSnackBar: true, text, severity, autoHide: 10000 })
 
   async function resend(member) {
-    setSending(true)
+    setSending(member._id)
     try {
       await Meteor.callAsync(CONSTANTS.methods.users.resendEnrollment, { users: [{ _id: member._id }] })
       say(`Invitation sent again to ${member.emails[0].address}.`)
     } catch (error) {
       say(error.reason || 'Could not resend the invitation.', 'error')
     } finally {
-      setSending(false)
+      setSending(null)
     }
   }
 
@@ -391,7 +395,7 @@ export default function ManageOrganization() {
         <Box component="ul" aria-label={`${nouns.team} ${nouns.people}`} sx={{ m: 0, p: 0 }}>
           {shown.map((member) => (
             // eslint-disable-next-line react/jsx-no-bind
-            <MemberRow key={member._id} {...{ member, me, viewer, nouns, onAction, sending }} claimIds={claimsOf.get(member._id) || []} onRole={changeRole} />
+            <MemberRow key={member._id} {...{ member, me, viewer, nouns, onAction }} sending={sending === member._id} claimIds={claimsOf.get(member._id) || []} onRole={changeRole} />
           ))}
         </Box>
         {shown.length === 0 && count > 0 && (
@@ -423,7 +427,7 @@ export default function ManageOrganization() {
         </Box>
       )}
 
-      <Box component="span" sx={visuallyHidden} role="status" aria-live="polite">{sending ? 'Sending the invitation…' : ''}</Box>
+      <Box component="span" sx={visuallyHidden} role="status" aria-live="polite">{sending ? 'Sending the invitation again…' : ''}</Box>
 
       {inviting && (
         <InvitePeopleDialog
@@ -438,7 +442,8 @@ export default function ManageOrganization() {
       {dialog?.kind === 'remove' && <RemoveMemberDialog member={dialog.member} teamName={org?.name || ''} onClose={() => setDialog(null)} say={say} />}
       {dialog?.kind === 'advanced' && (
         <AdvancedPermissionsDialog member={dialog.member} claims={claims.filter((c) => c._id !== SERVER_ADMIN || (claimsOf.get(dialog.member._id) || []).includes(SERVER_ADMIN))}
-          claimIds={claimsOf.get(dialog.member._id) || []} canEdit={viewer.canEdit} onClose={() => setDialog(null)} say={say} />
+          claimIds={claimsOf.get(dialog.member._id) || []}
+          canEdit={viewer.canEdit && (viewer.isAdmin || !(claimsOf.get(dialog.member._id) || []).includes(ADMIN))} onClose={() => setDialog(null)} say={say} />
       )}
     </Box>
   )

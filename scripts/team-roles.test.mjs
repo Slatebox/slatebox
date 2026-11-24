@@ -94,11 +94,11 @@ test('the team page calls the same server methods, and states no Business amount
   const page = read('imports/ui/components/teams/ManageOrganization.jsx') + read('imports/ui/components/teams/MemberDialogs.jsx') +
     read('imports/ui/components/teams/InvitePeopleDialog.jsx')
   for (const call of ['methods.users.update', 'methods.users.changeRoles', 'methods.users.invite', 'methods.users.resendEnrollment',
-    'methods.users.get', "'organizations.removeMemberSlates'", 'Meteor.users.removeAsync']) {
+    'methods.users.get', "'organizations.removeMember'"]) {
     assert.ok(page.includes(call), call)
   }
   assert.doesNotMatch(page, /\$\d/)
   assert.doesNotMatch(page, /Uber Alles|Is Admin/)
-  // the account removal's allow rule reads the member's team (Meteor 3 loads only listed fields)
-  assert.match(read('server/permissions.js'), /Meteor\.users\.allow\(\{\n(?:\s*\/\/.*\n)*\s*fetch: \['orgId'\]/)
+  // no account is removed from the browser: removal is the one server call that checks who is removed
+  assert.doesNotMatch(page, /Meteor\.users\.removeAsync|removeMemberSlates/)
 })

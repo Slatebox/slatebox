@@ -20,6 +20,8 @@ import { resolveSlateRole, slateVisibility } from './slate-role.mjs'
 import { isSharedGuestPassword } from '../common/shared-guest-password.mjs'
 import CONSTANTS from '../../imports/api/common/constants'
 import AuthManager from '../../imports/api/common/AuthManager'
+import { teamPerson } from '../common/team-person'
+import { roleChangeRefusal, clearedByAdmin } from '../team-guard.mjs'
 import { readCreditName } from '../../imports/api/common/library-model.mjs'
 
 import {
@@ -683,10 +685,14 @@ method[CONSTANTS.methods.users.changeRoles] = async function changeRoles(opts) {
   check(opts, Match.ObjectIncluding({ users: [Match.ObjectIncluding({ userId: String, claimIds: [String], action: Match.OneOf('add', 'delete') })] }))
   const user = this.userId && await Meteor.users.findOneAsync(this.userId, { fields: { orgId: 1 } })
   if (!user?.orgId || !await AuthManager.userHasClaim(user._id, [CONSTANTS.claims.canEditUsers._id])) return false
+  const caller = await teamPerson(user._id)
   for (const u of opts.users) {
     if (u.claimIds.includes(CONSTANTS.claims.uberMensch._id)) throw new Meteor.Error('roles-denied', 'That role cannot be given.')
-    const member = await Meteor.users.findOneAsync({ _id: u.userId, orgId: user.orgId }, { fields: { _id: 1 } })
-    if (!member) throw new Meteor.Error('roles-denied', 'That person is not in your team.')
+    const found = await teamPerson(u.userId)
+    const member = found?.orgId === user.orgId ? found : null
+    // never the owner, never yourself, the admin claim only by an admin, never uberMensch (server/team-guard.mjs)
+    const refusal = roleChangeRefusal(caller, member, u)
+    if (refusal) throw new Meteor.Error('roles-denied', refusal)
     const claims = await Claims.find({ _id: { $in: u.claimIds } }).fetchAsync()
     if (claims.length !== u.claimIds.length) {
       throw new Meteor.Error(`You've tried to add or remove role(s) that do not exist: ${JSON.stringify(
@@ -694,7 +700,9 @@ method[CONSTANTS.methods.users.changeRoles] = async function changeRoles(opts) {
     }
     const team = { orgId: user.orgId, userId: member._id }
     if (u.action === 'add') {
-      if (u.claimIds[0] === CONSTANTS.claims.admin._id) await Permissions.removeAsync(team)
+      // the admin claim includes the people claims, so it replaces them; slate claims and the
+      // server administrator claim stay
+      if (u.claimIds[0] === CONSTANTS.claims.admin._id) await Permissions.removeAsync({ ...team, claimId: { $in: clearedByAdmin() } })
       for (const c of claims) {
         const q = { ...team, claimId: c._id }
         if ((await Permissions.find(q).countAsync()) === 0) await Permissions.insertAsync(q)

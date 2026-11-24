@@ -55,20 +55,12 @@ export async function isInstanceAdmin(userOrId) {
   return Boolean(await Permissions.findOneAsync({ userId, claimId: CONSTANTS.claims.uberMensch._id }, { fields: { _id: 1 } }))
 }
 
+// A browser may change its own profile and nothing else of an account. No browser removes an
+// account: a person leaves through users.delete, a member is removed through
+// organizations.removeMember (server/methods/team-member-slates.js), which checks who is removed.
 Meteor.users.allow({
-  // Meteor 3's allow-deny loads only the listed fields for a 'remove' rule (allow-deny 2.x sets the
-  // fetch list for removeAsync/updateAsync keys alone, so a 'remove' rule saw { _id } and the team
-  // check below never matched: removing a member from the team page answered "Access denied").
-  fetch: ['orgId'],
   update(userId, doc, fields) {
     return Boolean(userId && doc._id === userId && fields.every(field => field === 'profile'))
-  },
-  async remove(userId, doc) {
-    if (!userId) return false
-    if (doc._id === userId) return true
-    const owner = await Meteor.users.findOneAsync(userId, { fields: { orgId: 1 } })
-    return Boolean(owner?.orgId && owner.orgId === doc.orgId &&
-      await AuthManager.userHasClaim(userId, [CONSTANTS.claims.canRemoveUsers._id]))
   },
 })
 

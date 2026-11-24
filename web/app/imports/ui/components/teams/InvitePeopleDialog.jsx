@@ -41,7 +41,10 @@ export default function InvitePeopleDialog({ teamName, taken, own, onClose, onSe
   const send = async (event) => {
     event.preventDefault()
     if (sending) return
-    const people = text.trim() ? absorb() : list
+    // addresses still in the box join the list first and nothing is sent: the person checks the
+    // guessed names (and sees any address that could not be read) before sending
+    if (text.trim()) { absorb(); setError(''); return }
+    const people = list
     if (!invitesReady(people)) {
       setError(people.length ? 'Add a first and last name for each person.' : 'Add at least one email address.')
       return
@@ -62,6 +65,9 @@ export default function InvitePeopleDialog({ teamName, taken, own, onClose, onSe
   }
 
   const count = list.length
+  let sendLabel = count > 1 ? `Send ${count} invitations` : 'Send invitation'
+  if (text.trim()) sendLabel = 'Add to the list'
+  if (sending) sendLabel = 'Sending…'
   return (
     <Dialog open onClose={sending ? undefined : onClose} fullWidth maxWidth="sm" fullScreen={fullScreen} aria-labelledby="team-invite-title" data-team-invite-dialog="">
       <Box component="form" onSubmit={send} noValidate sx={{ display: 'flex', flexDirection: 'column', minHeight: fullScreen ? '100%' : undefined }}>
@@ -91,7 +97,7 @@ export default function InvitePeopleDialog({ teamName, taken, own, onClose, onSe
               {list.map((person) => (
                 <Box component="li" key={person.email} sx={{ listStyle: 'none', p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: '10px' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <Typography sx={{ flex: 1, fontWeight: 600, overflowWrap: 'anywhere' }}>{person.email}</Typography>
+                    <Typography title={person.email} sx={{ flex: 1, minWidth: 0, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{person.email}</Typography>
                     <IconButton size="small" aria-label={`Remove ${person.email} from the list`} onClick={() => setList(list.filter((p) => p.email !== person.email))}><CloseIcon fontSize="small" /></IconButton>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1, flexDirection: { xs: 'column', sm: 'row' } }}>
@@ -106,12 +112,15 @@ export default function InvitePeopleDialog({ teamName, taken, own, onClose, onSe
               ))}
             </Box>
           )}
+          {count > 0 && !error && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }} data-team-invite-review="">Check the names, then send.</Typography>
+          )}
           {error && <Typography role="alert" color="error" variant="body2" sx={{ mt: 1.5 }}>{error}</Typography>}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
           <Button onClick={onClose} disabled={sending}>Cancel</Button>
           <Button type="submit" variant="contained" disabled={sending || (!count && !text.trim())} data-team-invite-send="">
-            {sending ? 'Sending…' : count > 1 ? `Send ${count} invitations` : 'Send invitation'}
+            {sendLabel}
           </Button>
         </DialogActions>
       </Box>
