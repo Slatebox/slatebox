@@ -76,7 +76,7 @@ function EmailField({ checkout, disabled, onState }) {
 
 EmailField.propTypes = { checkout: PropTypes.shape({ updateEmail: PropTypes.func }).isRequired, disabled: PropTypes.bool.isRequired, onState: PropTypes.func.isRequired }
 
-function CheckoutBody({ mode, before, lines, payLabel, fine, confirming, error, onPay, onResult, onThrew, onExpired, announce, phone, appearance, askEmail }) {
+function CheckoutBody({ mode, before, lines, payLabel, fine, confirming, error, onPay, onResult, onThrew, onExpired, announce, phone, askEmail }) {
   const state = useCheckoutElements()
   const [wallets, setWallets] = useState(false)
   const [fieldReady, setFieldReady] = useState(false)
@@ -89,8 +89,10 @@ function CheckoutBody({ mode, before, lines, payLabel, fine, confirming, error, 
   // an expired session is made again (the machine allows one silent renewal)
   useEffect(() => { if (expired) onExpired() }, [expired])
 
-  // the theme changed while the sheet is open
-  useEffect(() => { checkout?.changeAppearance?.(appearance) }, [appearance, Boolean(checkout)])
+  // A theme change while the sheet is open reaches the fields through the provider's options
+  // (CheckoutElementsProvider calls changeAppearance when elementsOptions.appearance changes). Never
+  // here as well: that re-styled the brand-new Payment Element, with Link's sign-in starting in it,
+  // on every open (pay-sheet-mount.test.mjs).
 
   // a total that changes (tax once an address is in) is announced, politely
   const lastTotal = useRef(null)
@@ -169,7 +171,6 @@ CheckoutBody.propTypes = {
   onExpired: PropTypes.func.isRequired,
   announce: PropTypes.func.isRequired,
   phone: PropTypes.bool.isRequired,
-  appearance: PropTypes.shape({}).isRequired,
   askEmail: PropTypes.bool,
 }
 CheckoutBody.defaultProps = { before: null, fine: null, error: null, askEmail: false }
@@ -204,7 +205,7 @@ export default function StripeCheckout({ publishableKey, clientSecret, ...rest }
       stripe={stripeFor(publishableKey)}
       options={{ clientSecret, elementsOptions: { appearance, fonts: PAY_FONTS } }}
     >
-      <CheckoutBody {...rest} appearance={appearance} />
+      <CheckoutBody {...rest} />
     </CheckoutElementsProvider>
   )
 }
