@@ -56,7 +56,10 @@ test("tools/list is exec and describe, byte-equal to the generated file, then on
   const listed = await client.listTools();
   assert.deepEqual(listed.tools.map((tool) => tool.name).slice(0, 2), ["exec", "describe"]);
   assert.equal(JSON.stringify(listed.tools.slice(0, 2)), JSON.stringify([generated.exec, generated.describe]));
-  assert.deepEqual(listed.tools.slice(2).map((tool) => tool.name), world.exec.manifest.methods.map((m) => m.tool.name));
+  // Restated (AI control S2): one typed tool per method but the admin toolset's (spec 4: hidden
+  // from everyone's tool list; an administrator reaches them through exec).
+  assert.deepEqual(listed.tools.slice(2).map((tool) => tool.name), world.exec.manifest.methods.filter((m) => m.toolset !== "admin").map((m) => m.tool.name));
+  assert.ok(world.exec.manifest.methods.some((m) => m.toolset === "admin"));
   assert.equal(JSON.stringify(listed.tools), JSON.stringify(listedTools(renderExecTool(world.exec.manifest))));
   for (const tool of listed.tools) for (const hint of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"])
     assert.equal(typeof tool.annotations[hint], "boolean", `${tool.name}.${hint}`);

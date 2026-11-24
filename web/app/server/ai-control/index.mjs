@@ -7,9 +7,13 @@
 import { Meteor } from 'meteor/meteor'
 import { Random } from 'meteor/random'
 import {
-  AIAgents, AIBindingVersions, AIBindings, AIControlAudit, AIControlState, AIModels, AIPromptVersions, AIPrompts, AIProviders, ProviderKeys,
+  AIAudit, AIAgents, AIBindingVersions, AIBindings, AIControlAudit, AIControlState, AIModels, AIPromptVersions, AIPrompts, AIProviders, ProviderKeys,
 } from '../../imports/api/common/models'
-import { aiSettings, isServerAdmin } from '../methods/ai/ai-settings'
+import { aiSettings, isServerAdmin, setAISettingsAudit } from '../methods/ai/ai-settings'
+import { aiCostMicros } from '../metering/prices.mjs'
+import { SURFACES } from './catalogue.mjs'
+import { createAdminOps, surfacesStatus } from './admin.mjs'
+import { resolveBinding } from './resolve.mjs'
 import { operatorConfig } from '../methods/ai/connections.mjs'
 import { createSnapshotHolder, fileDbLayer, parsePromptRef } from './snapshot.mjs'
 import { STATE_ID, createControlStore, ensureAIControlIndexes } from './store.mjs'
@@ -78,10 +82,59 @@ export const aiControl = createAIControl({
 /** Whether a person may read and change AI control: an administrator of this server. */
 export const isAIControlAdmin = isServerAdmin
 
+// ai.update (the AI settings, every level) records its changes in the same audit trail.
+setAISettingsAudit((entry) => aiControlStore.record(entry))
+
+/** The audit trail, usage per surface and reset, for the ai.control.* and ai.audit.* actions. */
+export const aiControlOps = createAdminOps({
+  store: aiControlStore,
+  audit: raw.audit,
+  aiAudit: AIAudit.rawCollection(),
+  aiSettings,
+  costOf: aiCostMicros,
+})
+
+// ai.surfaces.status: for every signed-in page, whether each AI surface is on and the message to
+// show when an administrator turned it off. No models, prompts or connections. It follows the
+// snapshot: a change reaches open pages within one poll.
+const STATUS_POLL_MS = 5000
+Meteor.publish('ai.surfaces.status', async function publishSurfacesStatus() {
+  const userId = this.userId
+  const compute = async () => surfacesStatus({
+    surfaces: SURFACES,
+    snapshot: aiControl.snapshot(),
+    // On and off come from the snapshot alone (the global switch and the server and plan
+    // bindings), so this reads no database; which model answers is never part of it.
+    bind: (surface) => resolveBinding(aiControl.snapshot(), { surface, userId, holders: { ownProviders: false }, settings: Meteor.settings }),
+  })
+  let last = await compute()
+  this.added('aiSurfacesStatus', 'status', last)
+  this.ready()
+  let lastGeneration = aiControl.snapshot().generation
+  const timer = Meteor.setInterval(async () => {
+    const generation = aiControl.snapshot().generation
+    if (generation === lastGeneration) return
+    lastGeneration = generation
+    try {
+      const next = await compute()
+      if (JSON.stringify(next) !== JSON.stringify(last)) {
+        last = next
+        this.changed('aiSurfacesStatus', 'status', next)
+      }
+    } catch (error) {
+      console.warn('ai-control: surfaces status not refreshed:', error.message)
+    }
+  }, STATUS_POLL_MS)
+  this.onStop(() => Meteor.clearInterval(timer))
+})
+
 if (dbLayer === 'off') console.warn('ai-control: the DB layer is switched off in the settings file (ai.control.dbLayer); the settings file and built-in defaults apply')
 
 Meteor.startup(() => {
   ensureAIControlIndexes(raw, { auditDays: Meteor.settings?.ai?.auditDays })
     .catch((error) => console.error('ai-control: could not create indexes:', error.message))
+  // the Overview's calls, failures and spend per surface read the last day of aiAudit
+  AIAudit.rawCollection().createIndex({ created: -1 }, { name: 'created_desc' })
+    .catch((error) => console.error('ai-control: could not create the aiAudit index:', error.message))
   snapshotHolder.start()
 })

@@ -27,6 +27,7 @@ const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
 const LoginLink = lazy(() => import('./pages/LoginLink'))
 const SignUp = lazy(() => import('./pages/SignUp'))
 const AdminTools = lazy(() => import('./pages/AdminTools'))
+const AIControl = lazy(() => import('./pages/admin/ai/AIControl'))
 const TeamSettings = lazy(() => import('./pages/TeamSettings'))
 const BrandingSettings = lazy(() => import('./pages/BrandingSettings'))
 const SimulateUrlAction = lazy(() => import('./components/SimulateUrlAction'))
@@ -198,6 +199,16 @@ export default function SBRoutes() {
           element={
             <PrivateRoute>
               <LibraryReview />
+            </PrivateRoute>
+          }
+        />
+      )}
+      {isElevatedUser && (
+        <Route
+          path="/admin/ai"
+          element={
+            <PrivateRoute>
+              <AIControl />
             </PrivateRoute>
           }
         />

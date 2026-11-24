@@ -1,5 +1,5 @@
 import { defineAction } from './registry.mjs'
-import { connectionInput, level, requireLevelScope, settingsOutput, useInput } from './ai-schemas.mjs'
+import { actorOf, connectionInput, level, requireLevelScope, settingsOutput, useInput } from './ai-schemas.mjs'
 
 // Changing where AI requests go sends people's briefs and slates somewhere new, so exec holds it
 // for confirmation (confirm).
@@ -41,6 +41,6 @@ export default defineAction({
   precheck: (principal, input) => requireLevelScope(principal, input.level),
   handler: (principal, input, { deps }) => {
     requireLevelScope(principal, input.level)
-    return deps.ai.update(principal.userId, input)
+    return deps.ai.update(principal.userId, input, { actor: actorOf(principal) })
   },
 })

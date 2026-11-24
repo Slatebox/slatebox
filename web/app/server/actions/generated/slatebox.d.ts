@@ -150,6 +150,25 @@ declare namespace slatebox.agentTasks {
   }) & { mode: "save" | "preview" }>;
 }
 
+declare namespace slatebox.ai.audit {
+  /** AI control changes. Lists changes to the AI configuration, newest first: AI control changes, ai.update (connections and feature choices at any level) and persona saves (chatIntentions.save). Each row has who (account, person or agent, token, and via ddp, http or exec), the action, what it changed, the reason, before and after (keys only as fingerprints), and whether it was refused. Filter by action (exact, or a prefix ending in a dot such as ai.control.), kind, id, userId, outcome and time; pass next as before for the next page. Administrators only. @scope ai:admin:read */
+  function list(input: {
+    /** (1 to 200) */
+    limit?: number;
+    before?: string;
+    since?: string;
+    action?: string;
+    kind?: string;
+    id?: string;
+    userId?: string;
+    outcome?: "ok" | "refused";
+  }): Promise<{
+    rows?: Array<Record<string, unknown>>;
+    next?: string | null;
+    [key: string]: unknown;
+  }>;
+}
+
 declare namespace slatebox.ai {
   /** Test AI. Tests a saved connection (name) or one not yet saved (connection): whether Slatebox can reach it, whether it accepts the key, which models it lists where it lists them, whether the model answers and whether it calls tools (which conversation, drafts and presentations need). Saves nothing. A saved key is only sent to the address it was saved for. A token needs ai:admin as well for level team or server. On a self-hosted server a model on the host is at host.docker.internal, not localhost. @scope ai:settings @openWorld @idempotent */
   function check(input: {
@@ -186,6 +205,58 @@ declare namespace slatebox.ai {
     chat?: "ok" | "failed";
     tools: "yes" | "no" | "unknown";
     message: string;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.ai.control {
+  /** Effective AI binding. Shows the binding each surface (or one) resolves to for a person (userId; none = someone not signed in), with the source of each field: a published binding, an AI settings choice, the settings file or the built-in default. usage true adds each surface's calls, failed calls and spend over the last 24 hours. Administrators only. @scope ai:admin:read */
+  function effective(input: {
+    surface?: string;
+    userId?: string;
+    plan?: string;
+    usage?: boolean;
+  }): Promise<{
+    generation?: number;
+    surfaces?: unknown[];
+    usage?: Record<string, unknown>;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.ai.control {
+  /** AI control. Returns the AI control snapshot: every surface and what it follows, providers, server connections (never keys), models, published bindings, agents, prompt heads, the global switch, and health (documents skipped because they failed their checks). Administrators only. @scope ai:admin:read */
+  function get(input: Record<string, unknown>): Promise<{
+    generation?: number;
+    dbLayer?: string;
+    surfaces?: unknown[];
+    health?: unknown[];
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.ai.control {
+  /** AI control health. Lists AI control problems: documents skipped because they failed their checks (that surface falls back to the settings file and built-in defaults), and published prompts that fell back to their built-in text. An empty list means nothing is wrong. Administrators only. @scope ai:admin:read */
+  function health(input: Record<string, unknown>): Promise<{
+    generation?: number;
+    dbLayer?: string;
+    health?: unknown[];
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.ai.control {
+  /** Reset AI control. Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does both. Needs a reason, which the audit trail keeps. Administrators only. @scope ai:admin @destructive @confirm @idempotent */
+  function reset(input: {
+    target: "use" | "dbLayer" | "all";
+    /** For target use: only these feature choices. (1–15 items) */
+    keys?: Array<"default" | "chat" | "chat.route" | "generation" | "generation.notes" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors">;
+    /** (1–500 characters) */
+    reason: string;
+  }): Promise<({
+    target?: string;
+    cleared?: string[];
+    dbLayer?: string;
     [key: string]: unknown;
   }) & { mode: "save" }>;
 }

@@ -17,6 +17,7 @@ import {
   IconPacks,
   AIContent,
   Transcripts,
+  Permissions,
 } from '../imports/api/common/models'
 
 // No browser write stores a key minimongo refuses: such a document, once published, stops the
@@ -38,6 +39,20 @@ async function hasPermission(userId, doc) {
 async function isMasterUser() {
   const user = await Meteor.userAsync()
   return user?.isMasterUser
+}
+
+/**
+ * An administrator of this Slatebox server: an account holding the uberMensch claim (on Slatebox
+ * Cloud only the owner holds it; on a self-hosted server, its instance administrators). The one
+ * check for changing the server's AI, AI control, the shared budget and team imports.
+ * isMasterUser (personas and featuring) does not grant any of these.
+ * Takes a user id or a user document. A function declaration, so modules that import it in a
+ * cycle can still call it.
+ */
+export async function isInstanceAdmin(userOrId) {
+  const userId = typeof userOrId === 'string' ? userOrId : userOrId?._id
+  if (!userId) return false
+  return Boolean(await Permissions.findOneAsync({ userId, claimId: CONSTANTS.claims.uberMensch._id }, { fields: { _id: 1 } }))
 }
 
 Meteor.users.allow({

@@ -11,6 +11,7 @@
 // Cloud (hosted) own providers are always off and locked: AI comes with Slatebox Pro credits and
 // top-ups, nothing of a person's or team's is saved, tested or used, and a connection saved before
 // stays stored, unused, until its owner removes it.
+import { createHash } from 'node:crypto'
 import { problem } from '../../actions/errors.mjs'
 import { OWN_KEYS_CLOUD } from '../../../imports/api/common/own-keys.mjs'
 import { NOT_AVAILABLE, last4, open as openKey, seal } from '../../metering/vault.mjs'
@@ -36,12 +37,14 @@ const invalid = (message) => problem(400, 'invalid_request', message)
  *   checkLimit?: { count, windowMs } Test connection calls per person (it reaches outside
  *     addresses on the server's behalf, unmetered),
  *   env? (process.env: where a settings-file connection's apiKeyEnv is read, per request),
+ *   audit?(entry) records a change in the AI control audit trail (ai-control store.record); entry
+ *     { action, actor, target, before, after, reason? }, never with a key in it,
  *   now?()
  * }
  */
 export function createAISettings({
   store, master, settings, hosted, loadUser, isAdmin, isTeamAdmin, check, assertHost = async () => {}, now = Date.now,
-  env = globalThis.process?.env || {}, checkLimit = { count: 20, windowMs: 10 * 60 * 1000 },
+  env = globalThis.process?.env || {}, checkLimit = { count: 20, windowMs: 10 * 60 * 1000 }, audit = null,
 }) {
   const file = () => operatorConfig(settings)
   // the endpoint rules for one level of configuration, with the operator's private-network setting
@@ -276,7 +279,54 @@ export function createAISettings({
     return visible
   }
 
-  async function update(userId, input) {
+  // ---------- the audit trail of changes (spec 1.8) ----------
+  // A level's settings as the audit trail keeps them: names, addresses, models and choices, and for
+  // each key only which key it is (its fingerprint, or its last four characters), never the key.
+  const keyMark = (doc, fresh = {}) => {
+    if (!doc.cipher || !doc.last4) return null
+    return fresh[legacyName(doc)] || `…${doc.last4}`
+  }
+  const auditView = (docs, stored, fresh = {}) => ({
+    connections: docs.filter((doc) => doc.provider !== 'daily').map((doc) => ({
+      name: legacyName(doc), provider: doc.provider, baseUrl: doc.baseUrl ?? null, model: doc.model ?? null, keyFingerprint: keyMark(doc, fresh),
+    })).sort((a, b) => a.name.localeCompare(b.name)),
+    use: { ...(stored?.use || {}) },
+    ...(stored?.ownProviders !== undefined && { ownProviders: stored.ownProviders }),
+  })
+  async function recordChange(entry) {
+    if (!audit) return
+    try {
+      await audit(entry)
+    } catch (error) {
+      // the change is saved; a lost audit row is logged, never a reason to fail the person
+      console.warn(`ai-settings: could not record ${entry.action} in the audit trail: ${error.message}`)
+    }
+  }
+  const actorFor = (userId, actor) => actor || { userId, principal: 'person', via: 'ddp' }
+
+  /**
+   * Clears what an administrator chose in the app for the server's features (some, or all), so the
+   * settings file and the built-in AI apply again (ai.control.reset, target use). Connections stay.
+   * → { cleared: [keys] }
+   */
+  async function resetServerUse(userId, { keys = null, reason, actor } = {}) {
+    const user = await signedIn(userId)
+    if (!(await isAdmin(user._id))) throw problem(403, 'forbidden', 'Only an administrator can change the server\'s AI.')
+    const stored = (await store.getUse(SERVER)) || { use: {} }
+    const use = { ...(stored.use || {}) }
+    const cleared = Object.keys(use).filter((key) => !keys || keys.includes(key))
+    if (!cleared.length) return { cleared }
+    for (const key of cleared) delete use[key]
+    const docs = await store.listConnections(SERVER)
+    await store.setUse(SERVER, { ...stored, use })
+    await recordChange({
+      action: 'ai.control.reset', actor: actorFor(userId, actor), target: { kind: 'aiSettings', id: 'server' }, reason,
+      before: auditView(docs, stored), after: auditView(docs, { ...stored, use }),
+    })
+    return { cleared }
+  }
+
+  async function update(userId, input, { actor = null } = {}) {
     const user = await signedIn(userId)
     const level = input.level
     if (!RULE_LEVEL[level]) throw invalid('level is me, team or server.')
@@ -306,11 +356,18 @@ export function createAISettings({
         else use[key] = ref
       }
     }
+    const beforeDocs = await store.listConnections(owner)
     for (const name of removing) await store.removeConnection(owner, name)
     await writeConnections(owner, prepared)
     const next = { ...stored, use }
     if (input.ownProviders !== undefined) next.ownProviders = input.ownProviders === 'on'
     await store.setUse(owner, next)
+    // which keys this change sent, by fingerprint (never the key)
+    const fresh = Object.fromEntries((input.connections || []).filter((c) => typeof c?.apiKey === 'string' && c.apiKey).map((c) => [c.name, keyFingerprint(c.apiKey)]))
+    await recordChange({
+      action: 'ai.update', actor: actorFor(userId, actor), target: { kind: 'aiSettings', id: level === 'server' ? 'server' : `${level}:${owner.id}` },
+      before: auditView(beforeDocs, stored), after: auditView(await store.listConnections(owner), next, fresh),
+    })
     return view(userId)
   }
 
@@ -417,7 +474,13 @@ export function createAISettings({
     }
   }
 
-  return { view, update, check: checkOne, resolveFor, serverState, choiceHolders }
+  return { view, update, resetServerUse, check: checkOne, resolveFor, serverState, choiceHolders }
 }
 
 export { parseRef }
+
+/** Which key this is, without the key (spec 1.2): sha256: + the first 8 hex of its sha256 + …last 4. */
+export function keyFingerprint(key) {
+  if (typeof key !== 'string' || !key) return null
+  return `sha256:${createHash('sha256').update(key).digest('hex').slice(0, 8)}…${key.slice(-4)}`
+}

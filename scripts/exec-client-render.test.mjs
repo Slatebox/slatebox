@@ -129,10 +129,13 @@ test("the exec description stays within 3,500 characters and sends the rest to d
   assert.ok(tool.exec.description.length <= DESCRIPTION_BUDGET, `${tool.exec.description.length}`);
   // Every method stays named in the description: its own line, or, once every line no longer fits, its
   // namespace's one line (the busiest namespaces first; the canvas methods, slates.*, keep theirs longest).
+  // Restated (AI control S2): the admin toolset's methods are in describe instead (spec 4), never in the description.
+  const listed = manifest.methods.filter((m) => m.toolset !== "admin");
   for (const method of manifest.methods) {
     const namespace = method.name.slice(0, method.name.lastIndexOf("."));
-    const names = manifest.methods.filter((m) => m.name.slice(0, m.name.lastIndexOf(".")) === namespace).map((m) => m.name);
-    assert.ok(tool.exec.description.includes(method.index) || tool.exec.description.includes(compactLine(namespace, names)), method.name);
+    const names = listed.filter((m) => m.name.slice(0, m.name.lastIndexOf(".")) === namespace).map((m) => m.name);
+    if (method.toolset === "admin") assert.ok(!tool.exec.description.includes(method.index) && !names.length, method.name);
+    else assert.ok(tool.exec.description.includes(method.index) || tool.exec.description.includes(compactLine(namespace, names)), method.name);
   }
   for (const method of manifest.methods.filter((m) => m.name.startsWith("slates."))) assert.ok(tool.exec.description.includes(method.index), method.name);
   assert.match(tool.exec.description, /confirmation_required/);

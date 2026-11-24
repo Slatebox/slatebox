@@ -39,6 +39,16 @@ export const connectionInput = {
   additionalProperties: false,
 }
 
+// Who made a change, as the AI control audit trail records it (spec 1.8): the account, whether a
+// person (the app) or an agent (a token) made it, the token, and the way in: ddp (the app), exec
+// (a script; MCP and the CLI run through it), or http (/api/v1).
+export function actorOf(principal) {
+  const agent = principal?.kind === 'agent'
+  let via = agent ? 'http' : 'ddp'
+  if (principal?.runId) via = 'exec'
+  return { userId: principal?.userId ?? null, principal: agent ? 'agent' : 'person', ...(principal?.tokenId && { tokenId: principal.tokenId }), via }
+}
+
 // A token with ai:settings reads, changes and tests its owner's own AI. Changing or testing a
 // team's or the server's AI (which redirects other people's requests) needs ai:admin as well.
 export function requireLevelScope(principal, level) {

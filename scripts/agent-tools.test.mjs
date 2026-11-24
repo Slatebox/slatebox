@@ -22,9 +22,13 @@ const manifest = buildClientManifest(registry);
 const tools = renderExecTool(manifest);
 const ANNOTATIONS = ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"];
 
+// Restated (AI control S2): the admin toolset's methods (spec 4: hidden from everyone's MCP tool
+// list) are client methods with no typed tool; every other client method has exactly one.
+const ADMIN = (method) => method.toolset === "admin";
 test("one typed tool per client method, generated from the contract", () => {
-  const bound = boundActions(registry);
-  assert.equal(tools.typed.length, manifest.methods.length);
+  const bound = boundActions(registry).filter((action) => action.toolset !== "admin");
+  assert.ok(manifest.methods.some(ADMIN));
+  assert.equal(tools.typed.length, manifest.methods.filter((method) => !ADMIN(method)).length);
   assert.equal(tools.typed.length, bound.length);
   assert.deepEqual(tools.typed.map((tool) => tool.method).sort(), bound.map((action) => action.id).sort());
   const contract = buildContract(registry);
@@ -170,7 +174,7 @@ test("the one option: typed tools are listed unless SLATEBOX_MCP_TYPED_TOOLS is 
   for (const value of [undefined, "", "on", "1", "true", true]) assert.equal(typedToolsEnabled(value), true, String(value));
   for (const value of ["off", "OFF", "false", "0", "no", false]) assert.equal(typedToolsEnabled(value), false, String(value));
   assert.deepEqual(listedTools(tools, { typed: false }).map((t) => t.name), ["exec", "describe"]);
-  assert.equal(listedTools(tools).length, 2 + manifest.methods.length);
+  assert.equal(listedTools(tools).length, 2 + manifest.methods.filter((method) => !ADMIN(method)).length);
   // What a host is sent is the MCP fields only.
   for (const tool of listedTools(tools)) for (const key of Object.keys(tool))
     assert.ok(["name", "title", "description", "inputSchema", "outputSchema", "annotations"].includes(key), `${tool.name}.${key}`);

@@ -8,8 +8,25 @@ import { Random } from 'meteor/random'
 import { unsafeKeyPath } from '../common/document-keys.mjs'
 import { ChatIntentions } from '../../imports/api/common/models'
 import CONSTANTS from '../../imports/api/common/constants'
+import { aiControlStore } from '../ai-control/index.mjs'
+import { changedFields } from '../ai-control/admin.mjs'
 
 const method = {}
+
+// Personas carry prompts and tools every AI run of theirs uses, so each save and delete is kept in
+// the AI control audit trail (the fields that changed, before and after). A lost row is logged;
+// the person's save still stands.
+async function recordIntention(action, user, id, before, after) {
+  try {
+    const diff = changedFields(before, after)
+    await aiControlStore.record({
+      action, actor: { userId: user._id, principal: 'person', via: 'ddp' }, target: { kind: 'intention', id },
+      before: diff.before, after: diff.after,
+    })
+  } catch (error) {
+    console.warn(`chatIntentions: could not record ${action} in the audit trail: ${error.message}`)
+  }
+}
 
 // The fields a persona carries (see the seeded ones in server/bootstrap/all.js).
 // The flags that make a persona everyone's default are a master user's to set.
@@ -36,18 +53,20 @@ method[CONSTANTS.methods.chatIntentions.save] = async (intention) => {
     else if (user.orgId) saveIntention.orgId = user.orgId
     saveIntention.userId = user._id
     if (intention._id) {
-      const existing = await ChatIntentions.findOneAsync({ _id: intention._id }, { fields: { userId: 1, orgId: 1, universal: 1, system: 1 } })
+      const existing = await ChatIntentions.findOneAsync({ _id: intention._id })
       const mayChange = existing && (isUserMaster || (!existing.universal && !existing.system && (existing.userId === user._id ||
         (user.orgId && existing.orgId === user.orgId && await AuthManager.userHasClaim(user._id, [CONSTANTS.claims.admin._id])))))
       // A persona someone else owns is saved as the person's own copy.
       if (mayChange) {
         if (existing.userId !== user._id) saveIntention.userId = existing.userId
         await ChatIntentions.updateAsync({ _id: intention._id }, { $set: saveIntention })
+        await recordIntention('chatIntentions.save', user, intention._id, existing, { ...existing, ...saveIntention })
         return intention._id
       }
     }
     saveIntention._id = Random.id()
     await ChatIntentions.insertAsync(saveIntention)
+    await recordIntention('chatIntentions.save', user, saveIntention._id, null, saveIntention)
     return saveIntention._id
   }
   return null
@@ -65,6 +84,7 @@ method[CONSTANTS.methods.chatIntentions.delete] = async (id) => {
         _id: id,
         orgId: user.orgId,
       })
+      await recordIntention('chatIntentions.delete', user, id, intention, null)
       return intention.name
     }
   }

@@ -177,7 +177,10 @@ test('metering, wallet and key methods need a signed-in person; budget methods n
   }
   assert.match(body(meter, "'keys.save'"), /keyOwnerFor\(user, input\.owner, true\)/)
   assert.match(meter, /if \(!user \|\| user\.isAnonymous\) throw new Meteor\.Error\('sign-in'/)
-  assert.match(meter, /Permissions\.findOneAsync\(\{ userId, claimId: CONSTANTS\.claims\.uberMensch\._id \}/)
+  // Restated (AI control S2): the uberMensch check is the one helper, permissions.js isInstanceAdmin.
+  assert.match(meter, /import \{ isInstanceAdmin \} from '\.\.\/permissions'/)
+  assert.match(meter, /function isUberMensch\(userId\) \{\n  return isInstanceAdmin\(userId\)/)
+  assert.match(read('server/permissions.js'), /Permissions\.findOneAsync\(\{ userId, claimId: CONSTANTS\.claims\.uberMensch\._id \}/)
   for (const name of ["'meter.adminSummary'", "'meter.setBudget'"]) {
     assert.match(body(meter, name), /if \(!await isUberMensch\(/, name)
   }

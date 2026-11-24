@@ -14,6 +14,7 @@ import { createConnectionStore } from './connection-store.mjs'
 import { checkConnection } from './connection-check.mjs'
 import { operatorConfig } from './connections.mjs'
 import { selfHosted } from '../../../imports/api/common/own-keys.mjs'
+import { isInstanceAdmin } from '../../permissions'
 
 // Slatebox Cloud (any env but 'selfhost', own-keys.mjs): people and teams bring no AI of their own.
 export const hosted = !selfHosted(Meteor.settings)
@@ -31,8 +32,16 @@ const store = createConnectionStore({ keys: ProviderKeys.rawCollection(), choice
 // connection reads less.
 export const guardedFetch = (rules, options) => (url, init) => connectionFetch(String(url), rules, undefined, options)(url, init)
 
-// An administrator of this server (the uberMensch claim): the one who changes the server's AI.
-export const isServerAdmin = async (userId) => Boolean(userId && await Permissions.findOneAsync({ userId, claimId: CONSTANTS.claims.uberMensch._id }, { fields: { _id: 1 } }))
+// An administrator of this server (the uberMensch claim, permissions.js isInstanceAdmin): the one
+// who changes the server's AI.
+export const isServerAdmin = (userId) => isInstanceAdmin(userId)
+
+// Where changes are recorded: the AI control audit trail, set by ai-control/index.mjs once its
+// store exists (it imports this file, so it hands the store in rather than this file importing it).
+let auditSink = null
+export const setAISettingsAudit = (record) => {
+  auditSink = record
+}
 
 export const aiSettings = createAISettings({
   store,
@@ -46,6 +55,7 @@ export const aiSettings = createAISettings({
   assertHost: (baseUrl, rules) => assertEndpointHost(baseUrl, rules),
   // a settings-file connection's apiKeyEnv is read here for each request
   env: process.env,
+  audit: (entry) => (auditSink ? auditSink(entry) : undefined),
 })
 
 function callerId() {

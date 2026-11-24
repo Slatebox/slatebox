@@ -210,6 +210,11 @@ export const lacksScopeText = (principal, scope, why = '') =>
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+// Whether a principal holds a scope. A read-only scope (name:read, such as ai:admin:read) is also
+// held by whoever holds the scope it narrows (ai:admin): who may change something may read it.
+export const holdsScope = (principal, scope) =>
+  Boolean(principal?.scopes?.includes(scope) || (/^[a-z]+:[a-z]+:read$/.test(scope) && principal?.scopes?.includes(scope.slice(0, -5))))
+
 export function createRegistry({
   actions,
   components = {},
@@ -246,7 +251,7 @@ export function createRegistry({
       throw problem(403, 'forbidden', 'This is not available to your account.')
     }
     // A visitor carries no scopes: what it may read is decided per resource (a public slate).
-    if (action.scope && principal.kind !== 'visitor' && !principal.scopes?.includes(action.scope))
+    if (action.scope && principal.kind !== 'visitor' && !holdsScope(principal, action.scope))
       throw problem(
         403,
         'insufficient_scope',

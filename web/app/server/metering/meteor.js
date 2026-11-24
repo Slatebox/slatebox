@@ -30,6 +30,7 @@ import { dailyClient } from '../methods/huddle-provider.mjs'
 import { TOP_UP_AMOUNTS, cardFeeMode } from '../../imports/api/billing/top-up.mjs'
 import { refusalPay } from './refusal-pay.mjs'
 import { OWN_KEYS_CLOUD, ownKeysAllowed } from '../../imports/api/common/own-keys.mjs'
+import { isInstanceAdmin } from '../permissions'
 
 // Decided once at startup: a Cloud server without metering.enabled stops here (policy.mjs).
 const METERED = meteringEnabled(Meteor.settings)
@@ -107,8 +108,8 @@ async function ownAIScope(user, kind, feature) {
 }
 
 // The platform administrator claim, which belongs to no team.
-async function isUberMensch(userId) {
-  return Boolean(userId && await Permissions.findOneAsync({ userId, claimId: CONSTANTS.claims.uberMensch._id }, { fields: { _id: 1 } }))
+function isUberMensch(userId) {
+  return isInstanceAdmin(userId)
 }
 
 // Slatebox Pro for the admin page: people by status and interval.

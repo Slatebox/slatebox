@@ -608,6 +608,16 @@ return slatebox.library.saveDraft({ shareId, title: "Probe triage", summary: "So
   const refusedReview = await exec(`return slatebox.library.review.reject({ itemId: "retro", message: "No" })`);
   assert.deepEqual([refusedReview.error.status, refusedReview.error.code], [409, "builtin"]);
 
+  // AI control (the admin toolset): client methods every script has, refused by scope for a token
+  // without ai:admin:read or ai:admin, at once and with the scope to ask for; a reset is refused,
+  // never held for a yes first. (Administrators' reads and resets: scripts/ai-control-auth.test.mjs.)
+  for (const call of ["ai.control.get({})", "ai.control.effective({ surface: \"chat\" })", "ai.control.health({})", "ai.audit.list({})"]) {
+    const refusedRead = await exec(`return slatebox.${call}`);
+    assert.deepEqual([refusedRead.error.status, refusedRead.error.code, refusedRead.error.details?.requiredScope], [403, "insufficient_scope", "ai:admin:read"], call);
+  }
+  const refusedReset = await exec(`return slatebox.ai.control.reset({ target: "use", reason: "probe" })`);
+  assert.deepEqual([refusedReset.status, refusedReset.error.status, refusedReset.error.code, refusedReset.error.details?.requiredScope], ["failed", 403, "insufficient_scope", "ai:admin"]);
+
   assert.deepEqual([...called].sort(), [...defaultGenerated().methods.keys()].sort(), "every client method was called");
 });
 

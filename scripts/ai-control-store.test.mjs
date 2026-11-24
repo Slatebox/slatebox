@@ -121,7 +121,9 @@ test('refused changes are recorded; the audit trail has no way to be changed', a
   // a malformed actor is still recorded, not thrown
   const odd = await store.refused({ action: 'ai.x.y', actor: { principal: 'robot' }, error: 'no' })
   assert.equal(odd.actor.principal, 'unknown')
-  assert.deepEqual(Object.keys(store).sort(), ['bump', 'refused', 'state', 'write'])
+  // Restated (S2): record() appends the audit row of a change made outside these collections
+  // (ai.update, persona saves). It inserts only: still no way to change or remove a row.
+  assert.deepEqual(Object.keys(store).sort(), ['bump', 'record', 'refused', 'state', 'write'])
 })
 
 test('the global state keeps its generation moving forward', async () => {

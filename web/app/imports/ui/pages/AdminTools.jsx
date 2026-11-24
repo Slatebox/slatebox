@@ -18,6 +18,7 @@ import FreeBudget from './admin/FreeBudget'
 import TeamImports from './admin/TeamImports'
 import EnterpriseLicense from './admin/EnterpriseLicense'
 import LibraryQueueCard from './admin/LibraryQueueCard'
+import AIControlCard from './admin/ai/AIControlCard'
 
 export default function AdminTools() {
   const [txtSearch, setSearch] = React.useState('')
@@ -116,6 +117,9 @@ export default function AdminTools() {
             </Grid>
             <Grid size={12}>
               <LibraryQueueCard />
+            </Grid>
+            <Grid size={12}>
+              <AIControlCard />
             </Grid>
             <Grid size={12}>
               <TeamImports />

@@ -4,12 +4,14 @@ import { createHash, randomBytes } from 'node:crypto'
 
 // A scope exists only while an action needs it; each package adds the scope with its action.
 // ai:admin: on top of ai:settings, change or test a team's or this server's AI (the person must
-// also be that team's admin or an administrator).
+// also be that team's admin or an administrator), and change AI control (administrators).
+// ai:admin:read: read AI control (what answers each AI feature, its health and its audit trail)
+// without being able to change anything (administrators only). ai:admin holds it too.
 // team:export: download everything the team owns (the person must be a team admin).
 // slates:delete: delete slates the account owns and remove comments (separate from editing).
 // team:import: import a team export as a new team, and confirm or discard it (administrators).
 // library:review: review, refine, publish and unpublish library submissions (administrators).
-export const API_TOKEN_SCOPES = ['slates:read', 'slates:write', 'slates:share', 'slates:delete', 'ai:settings', 'ai:admin', 'team:export', 'team:import', 'library:review']
+export const API_TOKEN_SCOPES = ['slates:read', 'slates:write', 'slates:share', 'slates:delete', 'ai:settings', 'ai:admin', 'ai:admin:read', 'team:export', 'team:import', 'library:review']
 export const ACTIVE_TOKEN_LIMIT = 10
 
 export function hashApiToken(token) {

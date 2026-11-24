@@ -8,6 +8,7 @@
     "slates:delete",
     "ai:settings",
     "ai:admin",
+    "ai:admin:read",
     "team:export",
     "team:import",
     "library:review"
@@ -9665,6 +9666,409 @@
           "destructiveHint": false,
           "idempotentHint": true,
           "openWorldHint": true
+        }
+      }
+    },
+    {
+      "id": "ai.control.get",
+      "title": "AI control",
+      "description": "Returns the AI control snapshot: every surface and what it follows, providers, server connections (never keys), models, published bindings, agents, prompt heads, the global switch, and health (documents skipped because they failed their checks). Administrators only.",
+      "action": "ai.control.get",
+      "toolset": "admin",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "ai:admin:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/ai/control",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": "integer"
+          },
+          "dbLayer": {
+            "type": "string"
+          },
+          "surfaces": {
+            "type": "array"
+          },
+          "health": {
+            "type": "array"
+          }
+        }
+      },
+      "tool": {
+        "name": "get_ai_control",
+        "title": "Read AI control",
+        "description": "Read which AI answers each part of Slatebox on this server, where each choice comes from, and any problems. Administrators only; keys are never returned.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "ai.control.effective",
+      "title": "Effective AI binding",
+      "description": "Shows the binding each surface (or one) resolves to for a person (userId; none = someone not signed in), with the source of each field: a published binding, an AI settings choice, the settings file or the built-in default. usage true adds each surface's calls, failed calls and spend over the last 24 hours. Administrators only.",
+      "action": "ai.control.effective",
+      "toolset": "admin",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "ai:admin:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/ai/control/effective",
+        "pathParams": [],
+        "queryParams": [
+          "surface",
+          "userId",
+          "plan",
+          "usage"
+        ],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "surface": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9.-]{0,47}$"
+          },
+          "userId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          },
+          "plan": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]{1,32}$"
+          },
+          "usage": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": "integer"
+          },
+          "surfaces": {
+            "type": "array"
+          },
+          "usage": {
+            "type": "object"
+          }
+        }
+      },
+      "tool": {
+        "name": "get_ai_control_effective",
+        "title": "Read effective AI bindings",
+        "description": "Read which model, prompts and limits each part of Slatebox uses for one person, and where each comes from. Administrators only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "ai.control.health",
+      "title": "AI control health",
+      "description": "Lists AI control problems: documents skipped because they failed their checks (that surface falls back to the settings file and built-in defaults), and published prompts that fell back to their built-in text. An empty list means nothing is wrong. Administrators only.",
+      "action": "ai.control.health",
+      "toolset": "admin",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "ai:admin:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/ai/control/health",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": "integer"
+          },
+          "dbLayer": {
+            "type": "string"
+          },
+          "health": {
+            "type": "array"
+          }
+        }
+      },
+      "tool": {
+        "name": "get_ai_control_health",
+        "title": "Read AI control problems",
+        "description": "Read the problems with this server's AI set-up: settings that were skipped and prompts that fell back to built-in text. Administrators only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "ai.audit.list",
+      "title": "AI control changes",
+      "description": "Lists changes to the AI configuration, newest first: AI control changes, ai.update (connections and feature choices at any level) and persona saves (chatIntentions.save). Each row has who (account, person or agent, token, and via ddp, http or exec), the action, what it changed, the reason, before and after (keys only as fingerprints), and whether it was refused. Filter by action (exact, or a prefix ending in a dot such as ai.control.), kind, id, userId, outcome and time; pass next as before for the next page. Administrators only.",
+      "action": "ai.audit.list",
+      "toolset": "admin",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "ai:admin:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/ai/control/audit",
+        "pathParams": [],
+        "queryParams": [
+          "limit",
+          "before",
+          "since",
+          "action",
+          "kind",
+          "id",
+          "userId",
+          "outcome"
+        ],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "before": {
+            "type": "string",
+            "pattern": "^[0-9][0-9TZ:.+-]{9,34}(\\|[A-Za-z0-9_-]{1,64})?$"
+          },
+          "since": {
+            "type": "string",
+            "pattern": "^[0-9][0-9TZ:.+-]{9,34}$"
+          },
+          "action": {
+            "type": "string",
+            "pattern": "^[a-z][A-Za-z.]{0,79}$"
+          },
+          "kind": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{1,40}$"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:|@-]{1,200}$"
+          },
+          "userId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "refused"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "tool": {
+        "name": "list_ai_control_changes",
+        "title": "List AI configuration changes",
+        "description": "List who changed this server's AI configuration, when, why, and what changed. Keys appear only as fingerprints. Administrators only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "ai.control.reset",
+      "title": "Reset AI control",
+      "description": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does both. Needs a reason, which the audit trail keeps. Administrators only.",
+      "action": "ai.control.reset",
+      "toolset": "admin",
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": true,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "ai:admin",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/ai/control/reset",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "target",
+          "keys",
+          "reason"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "use",
+              "dbLayer",
+              "all"
+            ]
+          },
+          "keys": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 15,
+            "items": {
+              "type": "string",
+              "enum": [
+                "default",
+                "chat",
+                "chat.route",
+                "generation",
+                "generation.notes",
+                "presentation",
+                "vision",
+                "images",
+                "shape",
+                "workshop",
+                "workshop.draft",
+                "canvas",
+                "agent.slatebox",
+                "library",
+                "connectors"
+              ]
+            },
+            "description": "For target use: only these feature choices."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "target",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string"
+          },
+          "cleared": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dbLayer": {
+            "type": "string"
+          }
+        }
+      },
+      "tool": {
+        "name": "reset_ai_control",
+        "title": "Reset AI control",
+        "description": "Return this server's AI choices to the settings file and built-in defaults, or switch AI control's own settings off. Needs a reason; a person agrees first. Administrators only.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
         }
       }
     },

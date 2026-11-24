@@ -28,6 +28,10 @@ import {
 export const GENERATED_BY =
   'scripts/generate-action-contract.mjs from web/app/server/actions. Do not edit by hand.'
 export const DESCRIPTION_BUDGET = 3500
+// The toolset of actions only an administrator of the server may call (AI control). Its methods
+// are in the client and in describe; they are not typed tools or exec description lines.
+export const ADMIN_TOOLSET = 'admin'
+export const listedForEveryone = (method) => method.toolset !== ADMIN_TOOLSET
 export const DESCRIBE_BUDGET = 40000
 const REF = '#/components/schemas/'
 
@@ -380,6 +384,9 @@ export function buildClientManifest(registry) {
           bodyParams: layout.bodyParams,
         },
         index: indexLine(action, action.id),
+        // An administrator's method (AI control): a client method and in describe, but not a typed
+        // MCP tool and not a line of the exec description, so nobody else's tools change.
+        ...(action.toolset === ADMIN_TOOLSET && { toolset: ADMIN_TOOLSET }),
         types: rendered.types,
         dts: rendered.dts,
       }
@@ -430,7 +437,7 @@ export const compactLine = (namespace, names) =>
 
 export function execDescription(manifest, budget = DESCRIPTION_BUDGET) {
   const head = `${EXEC_LEAD} ${manifest.rules} Methods:`
-  const methods = manifest.methods
+  const methods = manifest.methods.filter(listedForEveryone)
   const compacted = new Set()
   const render = () => {
     const out = []
@@ -500,7 +507,7 @@ export function renderExecTool(manifest) {
       outputSchema: describeOutput,
       annotations: { title: DESCRIBE_TITLE, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    typed: manifest.methods.map((method) => ({ ...method.tool, method: method.name, kind: method.kind })),
+    typed: manifest.methods.filter(listedForEveryone).map((method) => ({ ...method.tool, method: method.name, kind: method.kind })),
     prompts: PROMPTS,
     resources: RESOURCES,
     resourceTemplates: RESOURCE_TEMPLATES,

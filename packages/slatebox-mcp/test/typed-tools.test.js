@@ -43,7 +43,9 @@ const ok = (r) => (r.url.includes("/mermaid") ? [200, { shareId: "demo", mermaid
 test("tools/list: exec, describe, then one typed tool per method, as the hosted endpoint lists them", async (t) => {
   const { client } = await connected(t, ok);
   const { tools } = await client.listTools();
-  assert.equal(tools.length, 2 + generated.manifest.methods.length);
+  // Restated (AI control S2): every method but the admin toolset's (hidden from the tool list, spec 4).
+  assert.equal(tools.length, 2 + generated.manifest.methods.filter((method) => method.toolset !== "admin").length);
+  assert.ok(generated.manifest.methods.some((method) => method.toolset === "admin"));
   assert.deepEqual(tools, JSON.parse(JSON.stringify(listedTools(file))));
   assert.deepEqual(toolDefinitions(generated), listedTools(file));
   assert.equal(client.getInstructions(), file.instructions);

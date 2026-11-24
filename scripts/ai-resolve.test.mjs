@@ -490,7 +490,10 @@ test('req() records the surface, connection and chain place of every call; a bin
 })
 
 // ---------- the read actions ----------
-test('ai.control.get and ai.control.effective: administrators over the Meteor method; nothing new for tokens, exec or MCP', async () => {
+// Restated (S2): the read actions gained the admin toolset, the ai:admin:read scope and their
+// HTTP, exec, MCP and CLI reach; an agent that is an administrator may now read. The exec
+// description and the typed MCP tools are still unchanged (scripts/ai-control-auth.test.mjs).
+test('ai.control.get and ai.control.effective: administrators only, on every surface; the exec description is unchanged', async () => {
   const { createAppRegistry } = await import('../web/app/server/actions/index.mjs')
   const { buildClientManifest, renderExecTool } = await import('../web/app/server/actions/client-render.mjs')
   const { readFileSync } = await import('node:fs')
@@ -506,13 +509,18 @@ test('ai.control.get and ai.control.effective: administrators over the Meteor me
   assert.equal(effective.surfaces[0].binding.followed, 'chat')
   await assert.rejects(registry.run(person('ana'), 'ai.control.get', {}), { status: 403 })
   await assert.rejects(registry.run(person('ana'), 'ai.control.effective', {}), { status: 403 })
-  await assert.rejects(registry.run({ kind: 'agent', userId: 'root', tokenId: 't', tokenName: 'x', scopes: ['ai:admin'] }, 'ai.control.get', {}), { status: 403 })
+  // a token: an administrator's with ai:admin (which holds ai:admin:read) reads; anyone else's is refused
+  const token = (userId, scopes) => ({ kind: 'agent', userId, tokenId: 't', tokenName: 'x', scopes })
+  assert.equal(body(await registry.run(token('root', ['ai:admin']), 'ai.control.get', {})).dbLayer, 'on')
+  await assert.rejects(registry.run(token('ana', ['ai:admin', 'ai:admin:read']), 'ai.control.get', {}), { status: 403 })
+  await assert.rejects(registry.run(token('root', ['ai:settings']), 'ai.control.get', {}), { status: 403, code: 'insufficient_scope' })
   await assert.rejects(registry.run(person('root'), 'ai.control.effective', { surface: 'Bad Surface' }), { status: 400 })
-  // no HTTP route yet: the exec client, the typed MCP tools and the published contract are unchanged
+  // exec client methods, but the exec description and the typed MCP tools are what they were
   const manifest = buildClientManifest(registry)
-  assert.ok(!manifest.methods.some((m) => m.name.startsWith('ai.control')))
+  assert.ok(manifest.methods.some((m) => m.name === 'ai.control.get'))
   const generated = JSON.parse(readFileSync(new URL('../web/app/server/actions/generated/exec-tool.json', import.meta.url), 'utf8'))
   assert.equal(renderExecTool(manifest).exec.description, generated.exec.description)
+  assert.ok(!renderExecTool(manifest).typed.some((t) => t.method.startsWith('ai.control')))
 })
 
 test('a published prompt that does not render falls back to the built-in text once, and health says so', async () => {

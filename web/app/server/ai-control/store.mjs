@@ -146,10 +146,24 @@ export function createControlStore({ collections, newId, now = () => new Date(),
     return auditRow({ action: String(action).slice(0, 80), actor: who, target, before: null, after: null, reason: typeof reason === 'string' ? reason.slice(0, 500) : null, outcome: 'refused', error })
   }
 
+  /**
+   * Records a change made outside the AI control collections (ai.update to the AI settings,
+   * chatIntentions.save to a persona): the audit row only, with keys redacted. The generation does
+   * not move, since nothing in the snapshot changed.
+   * entry: { action ('ai.update'), actor, target { kind, id }, before, after, reason? } → the row
+   */
+  async function record({ action, actor, target, before = null, after = null, reason = null }) {
+    if (typeof action !== 'string' || !/^[a-z][A-Za-z]*(\.[a-z][A-Za-z]*)+$/.test(action)) throw new ControlStoreError('action names the action that made the change (area.verb).')
+    if (!target || typeof target.kind !== 'string' || typeof target.id !== 'string') throw new ControlStoreError('A change names what it changed: target { kind, id }.')
+    const who = checkActor(actor)
+    const why = checkReason(action, reason)
+    return auditRow({ action, actor: who, target: { kind: target.kind, id: target.id }, before, after, reason: why })
+  }
+
   /** The global state document (generation, AI on/off, dbLayer). */
   const state = async () => (await collections.state.findOne({ _id: STATE_ID })) || { _id: STATE_ID, generation: 0, aiEnabled: true, dbLayer: 'on' }
 
-  return { write, refused, state, bump: (actor) => bump(checkActor(actor), null) }
+  return { write, record, refused, state, bump: (actor) => bump(checkActor(actor), null) }
 }
 
 /** The indexes (spec 1.8: a TTL keeps the audit trail for auditDays, 400 by default). */

@@ -64,9 +64,11 @@ test("the client has a method per bound action and none for token management", (
   assert.ok(!("apiTokens" in client) && !("exec" in client));
   for (const name of ["applyOperations", "create", "get", "issueInvite", "revokeInvite"]) assert.equal(typeof client.slates[name], "function", name);
   // Restated (library): a method name may have more than two parts (library.review.queue), so the client is walked to its leaves.
+  // Restated (AI control S2): ai.control.get sits one level deeper too; every leaf is a method and every method a leaf.
   const leaves = (node, prefix) => Object.entries(node).flatMap(([key, value]) => (typeof value === "function" ? [prefix + key] : leaves(value, prefix + key + ".")));
   assert.deepEqual(leaves(client, "").sort(), [...generated.methods.keys()].sort());
   assert.equal(typeof client.library.review.approve, "function");
+  assert.equal(typeof client.ai.control.get, "function");
   assert.ok(Object.isFrozen(client) && Object.isFrozen(client.slates));
 });
 
