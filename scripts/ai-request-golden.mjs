@@ -194,18 +194,20 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
 // ---- the prompt sites outside Meteor files: loaded before the hooks, as they are ----------------
 async function loadPure(root) {
   const at = (path) => import(pathToFileURL(root + path).href)
-  const [shapes, execChat, teammate, refine, registry, render] = await Promise.all([
+  const [shapes, execChat, teammate, refine, registry, render, translate, context, prompts] = await Promise.all([
     at('server/shapes/shape-core.mjs'), at('server/methods/ai/exec-chat.mjs'), at('server/agents/teammate.mjs'),
     at('server/library/refine-ai.mjs'), at('server/actions/index.mjs'), at('server/actions/client-render.mjs'),
+    // invited agents (enterprise/, beside web/): the plan and layout prompts, with the registry's text
+    at('../../enterprise/server/translate.mjs'), at('../../enterprise/server/context.mjs'), at('server/ai-control/prompts/index.mjs'),
   ])
   const manifest = render.buildClientManifest(registry.createAppRegistry())
   const exec = render.renderExecTool(manifest).exec
-  return { shapes, execChat, teammate, refine, manifest, execTool: { name: exec.name, description: exec.description, parameters: exec.inputSchema } }
+  return { shapes, execChat, teammate, refine, manifest, execTool: { name: exec.name, description: exec.description, parameters: exec.inputSchema }, translate, context, promptText: prompts.promptText }
 }
 
 const clone = (value) => JSON.parse(JSON.stringify(value))
 
-async function recordPure({ shapes, execChat, teammate, refine, manifest, execTool }) {
+async function recordPure({ shapes, execChat, teammate, refine, manifest, execTool, translate, context, promptText }) {
   const out = {}
   // custom shapes: the first ask, then the retry naming what was wrong and how many are missing
   const asked = []
@@ -269,6 +271,33 @@ async function recordPure({ shapes, execChat, teammate, refine, manifest, execTo
     // with the retry prompt its check gives a wrong answer
     out[name] = { request: clone(opts), retries: clone([opts.validateResponse({ toolCall: null }), opts.validateResponse({ toolCall: { name: 'propose_library_refinement', arguments: { reply: 'Fine' } } })]) }
   }
+  Object.assign(out, recordConnectors({ translate, context, promptText }))
+  return out
+}
+
+// ---- invited agents (enterprise/server/translate.mjs): the plan and layout turns ---------------
+function recordConnectors({ translate, context, promptText }) {
+  const out = {}
+  const slate = { nodes: [
+    { options: { id: 'n1', text: 'Checkout service', xPos: 0, yPos: 0, width: 200, height: 90 }, relationships: { associations: [{ id: 'l1', parentId: 'n1', childId: 'n2' }] } },
+    { options: { id: 'n2', text: 'Retry declined cards', xPos: 300, yPos: 0, width: 200, height: 90 } },
+  ] }
+  const packed = context.packContext({ slate, level: 'selection', selection: ['n1', 'n2'], request: 'what are my latest commits? make a couple notes', viewerId: 'ana' })
+  const tools = [
+    { name: 'get_me', description: 'Get details of the authenticated GitHub user.', inputSchema: { type: 'object', properties: {} } },
+    { name: 'list_commits', description: 'Get list of commits of a branch in a GitHub repository.', inputSchema: { type: 'object', properties: { owner: { type: 'string' }, repo: { type: 'string' }, author: { type: 'string' }, perPage: { type: 'number' } }, required: ['owner', 'repo'] } },
+  ]
+  const result = (text, links = []) => ({ isError: false, text, links, structured: null, left: [] })
+  const entries = [
+    { tool: 'get_me', args: {}, result: result('{"login":"ana"}') },
+    { tool: 'list_commits', args: { owner: 'ana', repo: 'shop', author: 'ana', perPage: 5 }, result: result('abc1234 Fix retry on declined cards', [{ url: 'https://github.com/ana/shop/commit/abc1234', host: 'github.com', title: 'abc1234' }]) },
+  ]
+  const tool = (t) => clone({ name: t.name, description: t.description, parameters: t.parameters })
+  const planTool = translate.planTool ? translate.planTool(promptText) : translate.PLAN_TOOL
+  const layoutTool = translate.layoutTool ? translate.layoutTool(promptText) : translate.LAYOUT_TOOL
+  out['connectors:plan'] = { ...clone(translate.planPrompt({ serverName: 'GitHub', tools, packed, text: promptText })), tool: tool(planTool) }
+  out['connectors:planNext'] = clone(translate.planPrompt({ serverName: 'GitHub', tools, packed, previous: entries, text: promptText }))
+  out['connectors:layout'] = { ...clone(translate.translatePrompt({ serverName: 'GitHub', packed, entries, text: promptText })), tool: tool(layoutTool) }
   return out
 }
 
