@@ -9086,6 +9086,13 @@
               "type": "object"
             }
           },
+          "surfaces": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Every feature and part a choice may name, with the one it follows while unset."
+          },
           "useKeys": {
             "type": "array",
             "items": {
@@ -9287,7 +9294,23 @@
                 "maxLength": 48,
                 "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
               },
+              "chat.route": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 48,
+                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+              },
               "generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 48,
+                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+              },
+              "generation.notes": {
                 "type": [
                   "string",
                   "null"
@@ -9326,10 +9349,58 @@
                 ],
                 "maxLength": 48,
                 "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+              },
+              "workshop": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 48,
+                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+              },
+              "workshop.draft": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 48,
+                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+              },
+              "canvas": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 48,
+                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+              },
+              "agent.slatebox": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 48,
+                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+              },
+              "library": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 48,
+                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+              },
+              "connectors": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 48,
+                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
               }
             },
             "additionalProperties": false,
-            "description": "Which connection each feature uses. default serves every feature not named."
+            "description": "Which connection each feature uses. An unset feature follows the one it belongs to (workshop follows chat), and default serves every feature not named."
           },
           "ownProviders": {
             "type": "string",
@@ -9352,6 +9423,13 @@
             "items": {
               "type": "object"
             }
+          },
+          "surfaces": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Every feature and part a choice may name, with the one it follows while unset."
           },
           "useKeys": {
             "type": "array",

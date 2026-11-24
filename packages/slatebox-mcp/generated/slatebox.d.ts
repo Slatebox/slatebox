@@ -194,6 +194,8 @@ declare namespace slatebox.ai {
   /** AI settings. The AI connections you, your team and this server have (never their keys), which one each feature uses (chat, generation, presentation, vision, images, shape, and the default), and which connection serves each feature for you now (effective), with what it cannot do. ownProviders false means this server uses only the AI its operator set up. @scope ai:settings */
   function get(input: Record<string, unknown>): Promise<{
     features: Array<Record<string, unknown>>;
+    /** Every feature and part a choice may name, with the one it follows while unset. */
+    surfaces?: Array<Record<string, unknown>>;
     useKeys?: string[];
     ownProviders: boolean;
     keysAvailable?: boolean;
@@ -236,14 +238,18 @@ declare namespace slatebox.ai {
     }>;
     /** (at most 20 items) */
     remove?: string[];
-    /** Which connection each feature uses. default serves every feature not named. */
+    /** Which connection each feature uses. An unset feature follows the one it belongs to (workshop follows chat), and default serves every feature not named. */
     use?: {
       /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
       default?: string | null;
       /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
       chat?: string | null;
       /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      "chat.route"?: string | null;
+      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
       generation?: string | null;
+      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      "generation.notes"?: string | null;
       /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
       presentation?: string | null;
       /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
@@ -252,10 +258,24 @@ declare namespace slatebox.ai {
       images?: string | null;
       /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
       shape?: string | null;
+      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      workshop?: string | null;
+      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      "workshop.draft"?: string | null;
+      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      canvas?: string | null;
+      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      "agent.slatebox"?: string | null;
+      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      library?: string | null;
+      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      connectors?: string | null;
     };
     ownProviders?: "on" | "off";
   }): Promise<({
     features: Array<Record<string, unknown>>;
+    /** Every feature and part a choice may name, with the one it follows while unset. */
+    surfaces?: Array<Record<string, unknown>>;
     useKeys?: string[];
     ownProviders: boolean;
     keysAvailable?: boolean;

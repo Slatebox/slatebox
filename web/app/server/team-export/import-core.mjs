@@ -23,6 +23,8 @@ import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import { unsafeKeyPath } from '../common/document-keys.mjs'
 import { ArchiveError } from './archive.mjs'
+import { encodeUseKeys } from '../methods/ai/connection-store.mjs'
+import { USE_KEYS } from '../methods/ai/connections.mjs'
 import { LIMITS, OPTION_FLAGS, SECTIONS, SLATE_FLAGS, contentHash, eachObject, mapStrings, replaceUrls } from './format.mjs'
 
 export const PENDING_DAYS = 14
@@ -472,9 +474,9 @@ export function createTeamImporter({
         const use = {}
         if (isPlain(d.use))
           for (const [feature, value] of Object.entries(d.use))
-            if (/^[a-z][A-Za-z]{0,39}$/.test(feature) && (value === 'builtin' || (typeof value === 'string' && imported.has(value.replace(/^team:/, '')) && value.startsWith('team:'))))
+            if ((/^[a-z][A-Za-z]{0,39}$/.test(feature) || USE_KEYS.includes(feature)) && (value === 'builtin' || (typeof value === 'string' && imported.has(value.replace(/^team:/, '')) && value.startsWith('team:'))))
               use[feature] = value
-        if (Object.keys(use).length) await db.aiChoices.insertOne({ _id: 'org:' + orgId, use, updated: at, teamImportId: importId })
+        if (Object.keys(use).length) await db.aiChoices.insertOne({ _id: 'org:' + orgId, use: encodeUseKeys(use), updated: at, teamImportId: importId })
         count('ai')
       },
       async tokens(d) {

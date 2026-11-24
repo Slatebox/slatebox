@@ -1,6 +1,7 @@
 // Which provider and model each AI feature uses. The built-in defaults are data
 // (server/config/ai-defaults.json); the operator's settings.ai.features override them.
 import { aiDefaults } from '../../config/index.cjs'
+import { builtinFeatureFor } from '../../ai-control/catalogue.mjs'
 
 // Notes in the file (keys starting with _) are not configuration; the rest is frozen.
 function asConfig(value) {
@@ -25,4 +26,16 @@ export function resolveAIFeatureConfig(feature, settings = {}) {
     delete resolved.fallback
   }
   return resolved
+}
+
+/**
+ * The built-in provider and model for a catalogue surface (ai-control/catalogue.mjs builtinFrom,
+ * inherited through follows): the board, canvas and agent surfaces, library and connectors all
+ * take the drafting model, so a surface without a block of its own never falls through to a model
+ * nobody configured.
+ */
+export function resolveSurfaceFeatureConfig(surfaceId, settings = {}) {
+  const from = builtinFeatureFor(surfaceId)
+  if (!from || !DEFAULT_AI_FEATURES[from]) throw new Error(`ai-control: ${surfaceId} has no built-in model`)
+  return resolveAIFeatureConfig(from, settings)
 }

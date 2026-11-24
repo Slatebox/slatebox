@@ -16,9 +16,10 @@ import { OWN_KEYS_CLOUD } from '../../../imports/api/common/own-keys.mjs'
 import { NOT_AVAILABLE, last4, open as openKey, seal } from '../../metering/vault.mjs'
 import { EndpointRefused, checkEndpointUrl, endpointRules } from './endpoint-policy.mjs'
 import {
-  AI_FEATURES, CONNECTION_TYPES, ConnectionError, USE_KEYS, capabilityGap, checkUse, choiceFeatureFor, connectionLabel,
-  keyFromEnv, normalizeConnection, operatorConfig, parseRef, publicConnection, resolveAIChoice,
+  AI_FEATURES, CONNECTION_TYPES, ConnectionError, USE_KEYS, capabilityGap, checkUse, connectionLabel,
+  featureTitle, keyFromEnv, normalizeConnection, operatorConfig, parseRef, publicConnection, resolveAIChoice, surfaceFor,
 } from './connections.mjs'
+import { USE_SURFACES } from '../../ai-control/catalogue.mjs'
 
 const RULE_LEVEL = { me: 'person', team: 'team', server: 'server' }
 const SERVER = { type: 'server', id: 'server' }
@@ -147,15 +148,22 @@ export function createAISettings({
     const admin = await isAdmin(user._id)
     const teamAdmin = Boolean(user.orgId) && await isTeamAdmin(user)
     const effective = {}
-    for (const feature of AI_FEATURES) {
-      const choice = resolveAIChoice({ feature: feature.id, person, team, server, ownProviders: server.ownProviders })
+    // every surface in this build: the first-row features and their parts (workshop, the agent, ...)
+    for (const s of USE_SURFACES) {
+      if (s.id === 'default' || !s.inBuild) continue
+      const choice = resolveAIChoice({ feature: s.id, person, team, server, ownProviders: server.ownProviders })
       const label = connectionLabel(choice.connection, { withHost: admin || choice.scope !== 'server' })
-      const gap = capabilityGap({ feature: feature.id, connection: choice.connection, label })
-      effective[feature.id] = { ref: choice.ref, scope: choice.scope, own: choice.own, label, ...(gap && { gap: gap.message }) }
+      const gap = capabilityGap({ feature: choice.feature, connection: choice.connection, label })
+      effective[s.id] = { ref: choice.ref, scope: choice.scope, own: choice.own, label, ...(gap && { gap: gap.message }) }
     }
     const shown = (list) => list.map((c) => publicConnection(c))
     return {
       features: AI_FEATURES.map(({ id, title, needs }) => ({ id, title, needs: [...needs] })),
+      // every surface a choice may name, with what it follows while unset ("Follows Conversation and edits")
+      surfaces: USE_SURFACES.filter((s) => s.id !== 'default').map((s) => ({
+        id: s.id, title: s.title, needs: [...s.needs], follows: s.follows, followsTitle: s.follows === 'default' ? null : featureTitle(s.follows),
+        inBuild: s.inBuild,
+      })),
       useKeys: [...USE_KEYS],
       ownProviders: server.ownProviders,
       keysAvailable: Boolean(master),
@@ -355,12 +363,14 @@ export function createAISettings({
    * model choice, else { ref, scope, own, connection (with its key) | null, rules, gap?, error? }.
    */
   async function resolveFor({ userId, feature, request = {} }) {
-    const choiceFeature = choiceFeatureFor(feature)
-    if (!choiceFeature) return null
+    // the request feature's surface (lane-chat -> workshop, agent -> agent.slatebox): its own
+    // choice when one is set, else what it follows, as far as the default
+    const surface = surfaceFor(feature)
+    if (!surface) return null
     const user = userId ? await loadUser(userId) : null
     const server = await serverState()
     const { person, team, meOwner, teamOwner } = await holders(user, server)
-    const choice = resolveAIChoice({ feature: choiceFeature, person, team, server, ownProviders: server.ownProviders })
+    const choice = resolveAIChoice({ feature: surface, person, team, server, ownProviders: server.ownProviders })
     if (!choice.connection) return { ...choice, rules: null }
     let connection = choice.connection
     const owner = choice.scope === 'me' ? meOwner : choice.scope === 'team' ? teamOwner : SERVER
@@ -384,7 +394,7 @@ export function createAISettings({
         error = `${label} cannot be used: ${refused.message}`
       }
     }
-    const gap = capabilityGap({ feature: choiceFeature, connection, request, label })
+    const gap = capabilityGap({ feature: choice.feature, connection, request, label })
     return { ...choice, connection, rules, label, ...(gap && { gap }), ...(error && { error }) }
   }
 

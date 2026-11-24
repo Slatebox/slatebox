@@ -150,7 +150,14 @@ function choicesFor(settings, level) {
   return out
 }
 
+// The parts of a feature that can be chosen on their own (the server's surface catalogue: the
+// router, board and canvas conversations, the Slatebox agent, ...). Unset, each follows the one it
+// belongs to. Parts not in this build are left out.
+const partsOf = (settings) => (settings.surfaces || []).filter((s) => s.inBuild && s.follows && s.follows !== 'default')
+
 function Level({ settings, level, title, holder, editable, onChange, children }) {
+  const parts = partsOf(settings)
+  const [showParts, setShowParts] = useState(() => parts.some((s) => holder?.use?.[s.id]))
   const [dialog, setDialog] = useState(null) // { initial } | null
   const [error, setError] = useState('')
   const [checks, setChecks] = useState({})
@@ -200,6 +207,23 @@ function Level({ settings, level, title, holder, editable, onChange, children })
           </TextField>
         ))}
       </Box>
+      {parts.length > 0 && (
+        <Box>
+          <Button size="small" aria-expanded={showParts} onClick={() => setShowParts(!showParts)}>
+            {showParts ? 'Hide the choices for parts of a feature' : 'Choose for parts of a feature'}
+          </Button>
+        </Box>
+      )}
+      {showParts && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: SPACE.group }}>
+          {parts.map((part) => (
+            <TextField key={part.id} select size="small" fullWidth disabled={!editable && level !== 'me'}
+              label={part.title} value={use[part.id] || ''} onChange={(e) => update({ use: { [part.id]: e.target.value || null } }).catch(() => {})}>
+              {choices.map((o, i) => <MenuItem key={o.value} value={o.value}>{i === 0 ? `Follows ${part.followsTitle}` : o.label}</MenuItem>)}
+            </TextField>
+          ))}
+        </Box>
+      )}
       {(editable || level === 'me') && (
         <AccountActions>
           <Button variant="outlined" onClick={() => setDialog({ initial: null })}>Connect a model</Button>
@@ -245,7 +269,7 @@ export default function AISettings() {
     <AccountPanel>
       <AccountSection title="Which AI each feature uses">
         <Box sx={{ display: 'grid', rowGap: SPACE.hair }}>
-          {settings.features.map((f) => (
+          {[...settings.features, ...partsOf(settings).filter((part) => settings.effective[part.id] && settings.effective[part.id].ref !== settings.effective[part.follows]?.ref)].map((f) => (
             <Typography key={f.id}>
               {f.title}: {settings.effective[f.id].label}{settings.effective[f.id].own ? ' (yours, no charge from Slatebox)' : ''}
               {settings.effective[f.id].gap && <Typography component="span" color="warning.main"> {settings.effective[f.id].gap}</Typography>}

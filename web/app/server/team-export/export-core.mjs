@@ -9,6 +9,7 @@
 import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import { LIMITS, canonicalJson, contentHash, scrubSecrets, uploadKey, urlsIn } from './format.mjs'
+import { decodeUseKeys } from '../methods/ai/connection-store.mjs'
 
 const BATCH = 500
 const chunks = (list, size = BATCH) => {
@@ -190,7 +191,7 @@ export function createTeamExporter({ db, readFile, cloudUrl, limits = LIMITS, no
             ...(typeof doc.model === 'string' && { model: doc.model }),
             hadKey: Boolean(doc.cipher),
           })),
-        use: scrubSecrets(choices?.use || {}),
+        use: scrubSecrets(decodeUseKeys(choices?.use || {})),
       },
     }
 

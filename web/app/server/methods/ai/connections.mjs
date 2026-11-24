@@ -6,44 +6,39 @@
 // person did not choose. Nothing here names a model.
 import { EndpointRefused, checkEndpointUrl, endpointRules } from './endpoint-policy.mjs'
 
-// What the person chooses per feature, and what each needs from a model.
-export const AI_FEATURES = Object.freeze([
-  Object.freeze({ id: 'chat', title: 'Conversation and edits', verb: 'call tools', needs: Object.freeze(['tools']) }),
-  Object.freeze({ id: 'generation', title: 'Drafts and layouts', verb: 'call tools', needs: Object.freeze(['tools']) }),
-  Object.freeze({ id: 'presentation', title: 'Presentation planning', verb: 'call tools', needs: Object.freeze(['tools']) }),
-  Object.freeze({ id: 'vision', title: 'Reading images and diagrams', verb: 'read images', needs: Object.freeze(['vision']) }),
-  Object.freeze({ id: 'images', title: 'Generating images', verb: 'make images', needs: Object.freeze(['images']) }),
-  Object.freeze({ id: 'shape', title: 'Drawing custom shapes', verb: 'call tools', needs: Object.freeze(['tools']) }),
-  Object.freeze({ id: 'library', title: 'Library review and refinement', verb: 'call tools', needs: Object.freeze(['tools']) }),
-])
-const FEATURE_IDS = AI_FEATURES.map((f) => f.id)
-// Choices that only a settings file (or a person's saved choices) name, with no row of their own in
-// the AI settings page: each follows another choice when it is not set. connectors: the model that
-// plans and lays out invited agents' work (Slatebox Cloud), following the conversation's.
-export const FEATURE_FALLBACKS = Object.freeze({ connectors: 'chat' })
-export const USE_KEYS = Object.freeze(['default', ...FEATURE_IDS, ...Object.keys(FEATURE_FALLBACKS)])
+import {
+  BUILTIN_ONLY_FEATURES, SURFACES, USE_SURFACES, followChain, rootSurface, surface as surfaceById, surfaceForRequest,
+} from '../../ai-control/catalogue.mjs'
 
-// The features the server's AI paths name, by the choice that serves them.
-const REQUEST_FEATURES = Object.freeze({
-  welcome: 'chat', workshop: 'chat', 'lane-chat': 'chat', 'map-chat': 'chat',
-  generation: 'generation', layout: 'generation', presentation: 'presentation', vision: 'vision',
-  'image-generation': 'images', images: 'images', chat: 'chat', shape: 'shape', connectors: 'connectors', 'library-refine': 'library',
-})
-// A choice nobody set follows another before the default: library refinement uses the conversation
-// choice unless use.library names one, so an operator who sets nothing changes nothing.
-export const USE_FALLBACK = Object.freeze({ library: 'chat' })
-// Paths that are not a model at all (image search, video calls): the built-in service serves them.
-export const BUILTIN_ONLY_FEATURES = Object.freeze(['image-search', 'call'])
+// What the person chooses per feature, and what each needs from a model: the catalogue's rows
+// that follow the default directly (ai-control/catalogue.mjs). Their parts (workshop follows
+// chat, the Slatebox agent follows the canvas conversation, ...) can be chosen on their own too;
+// unset, they follow.
+const VERB = { tools: 'call tools', vision: 'read images', images: 'make images' }
+export const AI_FEATURES = Object.freeze(SURFACES.filter((s) => s.follows === 'default' || s.ownRow).map((s) => Object.freeze({
+  id: s.id, title: s.title, verb: VERB[s.needs[0]] || 'answer', needs: s.needs,
+})))
+// A feature with a row of its own that follows another choice before the default (library -> chat):
+// an operator who sets nothing for it changes nothing.
+export const USE_FALLBACK = Object.freeze(Object.fromEntries(SURFACES.filter((s) => s.ownRow).map((s) => [s.id, s.follows])))
+// Every surface a choice may name: default, the features above, and their parts.
+export const USE_KEYS = Object.freeze(USE_SURFACES.map((s) => s.id))
+export { BUILTIN_ONLY_FEATURES }
+
 /**
- * The choice that serves a request feature. A router step (<feature>-route, such as the chat edit
- * router welcome-route) belongs to its feature. A feature nobody has listed yet follows the
+ * The surface a request feature belongs to (welcome-route -> chat.route, lane-chat -> workshop,
+ * agent -> agent.slatebox), or null for a path that is not a model choice (image search, calls).
+ */
+export const surfaceFor = (feature) => surfaceForRequest(feature)
+
+/**
+ * The feature on the first row of the AI settings that serves a request feature (lane-chat and
+ * the router welcome-route both -> chat). A feature nobody has listed yet follows the
  * conversation choice: a request is never sent to the built-in AI behind the person's back.
  */
 export function choiceFeatureFor(feature) {
-  if (BUILTIN_ONLY_FEATURES.includes(feature)) return null
-  if (REQUEST_FEATURES[feature]) return REQUEST_FEATURES[feature]
-  if (typeof feature === 'string' && feature.endsWith('-route')) return choiceFeatureFor(feature.slice(0, -'-route'.length))
-  return 'chat'
+  const at = surfaceForRequest(feature)
+  return at ? rootSurface(at) : null
 }
 
 // Whether a request's prompts carry an image part (OpenAI image_url, or Anthropic image with a
@@ -227,15 +222,26 @@ export function keyFromEnv(connection, env = {}) {
 // ---------- resolution ----------
 const find = (holder, name) => holder?.connections?.find((c) => c.name === name) || null
 
+// The keys a holder's use is read by for a surface: the surface, what it follows, up to default
+// (agent.slatebox -> canvas -> chat -> default). A surface outside the tree reads itself, then default.
+function useChain(feature) {
+  const chain = followChain(feature)
+  return chain.includes('default') ? chain : [...chain, 'default']
+}
+
+// The feature a found choice is reported under (the one its messages name): the surface whose own
+// key was set, or, for a choice found under default, the feature on the first row.
+const reportedFeature = (feature, key) => (key === 'default' ? rootSurface(feature) : key)
+
 function fromUse(holder, feature, scopes, people) {
   if (!holder) return null
-  for (const key of [feature, FEATURE_FALLBACKS[feature] ?? USE_FALLBACK[feature], 'default'].filter(Boolean)) {
+  for (const key of useChain(feature)) {
     const parsed = parseRef(holder.use?.[key])
     if (!parsed) continue
-    if (parsed.scope === 'builtin') return { ref: 'builtin', scope: 'builtin', connection: null }
+    if (parsed.scope === 'builtin') return { ref: 'builtin', scope: 'builtin', connection: null, feature: reportedFeature(feature, key) }
     const owner = scopes[parsed.scope]
     const connection = find(owner, parsed.name)
-    if (connection) return { ref: `${parsed.scope}:${parsed.name}`, scope: parsed.scope, connection, own: people.includes(parsed.scope) }
+    if (connection) return { ref: `${parsed.scope}:${parsed.name}`, scope: parsed.scope, connection, own: people.includes(parsed.scope), feature: reportedFeature(feature, key) }
   }
   return null
 }
@@ -243,17 +249,20 @@ function fromUse(holder, feature, scopes, people) {
 // Keys saved before choices existed: a DeepInfra key serves every model feature, an endpoint the
 // conversation features, as they did. Neither makes images: generated images stayed with the
 // built-in image service before choices existed, and still do unless the person chooses otherwise.
-function fromLegacy(holder, feature, scope) {
+function fromLegacy(holder, surfaceId, scope) {
+  const feature = rootSurface(surfaceId)
   if (feature === 'images') return null
   const connection = holder?.connections?.find((c) => c.legacy === 'all' || (c.legacy === 'chat' && feature === 'chat'))
-  return connection ? { ref: `${scope}:${connection.name}`, scope, connection, own: true } : null
+  return connection ? { ref: `${scope}:${connection.name}`, scope, connection, own: true, feature } : null
 }
 
 /**
- * Which connection serves one feature. The person first (their choice for the feature, then their
- * default, then keys saved before choices), then their team the same way, then the operator,
- * then the built-in AI. With ownProviders off only the operator's choices count.
- * → { ref, scope: 'me'|'team'|'server'|'builtin', connection|null, own, feature }
+ * Which connection serves one feature (any surface id). The person first (their choice for the
+ * surface, then for what it follows, up to their default, then keys saved before choices), then
+ * their team the same way, then the operator, then the built-in AI. With ownProviders off only
+ * the operator's choices count.
+ * → { ref, scope: 'me'|'team'|'server'|'builtin', connection|null, own, feature } where feature is
+ *   the surface whose choice applied, or the first-row feature when none of its own was set.
  */
 export function resolveAIChoice({ feature, person = null, team = null, server = { connections: [], use: {} }, ownProviders = true }) {
   const scopes = { me: person, team, server }
@@ -264,12 +273,12 @@ export function resolveAIChoice({ feature, person = null, team = null, server = 
   steps.push(() => fromUse(server, feature, { server }, []))
   for (const step of steps) {
     const found = step()
-    if (found) return { own: false, ...found, feature }
+    if (found) return { own: false, feature: rootSurface(feature), ...found }
   }
-  return { ref: 'builtin', scope: 'builtin', connection: null, own: false, feature }
+  return { ref: 'builtin', scope: 'builtin', connection: null, own: false, feature: rootSurface(feature) }
 }
 
-export const featureTitle = (feature) => AI_FEATURES.find((f) => f.id === feature)?.title || feature
+export const featureTitle = (feature) => surfaceById(feature)?.title || feature
 
 // The model and where it lives. withHost false (a person reading about an operator's connection)
 // leaves the host out: the operator's network is not theirs to see.
@@ -291,9 +300,10 @@ export function connectionLabel(connection, { withHost = true } = {}) {
 export function capabilityGap({ feature, connection, request = {}, label = connectionLabel(connection) }) {
   if (!connection) return null
   const caps = connection.capabilities || {}
+  const needs = surfaceById(feature)?.needs || []
   let need = null
-  if (feature === 'images' && caps.images !== true) need = 'images'
-  else if ((feature === 'vision' || request.images) && caps.vision === false) need = 'vision'
+  if (needs.includes('images') && caps.images !== true) need = 'images'
+  else if ((needs.includes('vision') || request.images) && caps.vision === false) need = 'vision'
   else if (request.tools && caps.tools === false) need = 'tools'
   if (!need) return null
   const verbs = { images: 'make images', vision: 'read images', tools: 'call tools, which this feature needs' }

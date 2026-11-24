@@ -77,13 +77,14 @@ async function resolve(shareId, uid) {
 
 // The model, through the app's provider plumbing: provider choice, a self-hosted model, usage
 // accounting and response validation all stay in req(). The Slatebox agent (server/agents) drafts
-// through it too.
-export function modelFor(shareId) {
+// through it too, under its own request feature (agent: the agent.slatebox surface, which follows
+// the canvas conversation and then chat until an administrator chooses a model for it).
+export function modelFor(shareId, feature = 'canvas') {
   // req chooses the model: the person's, their team's or the operator's connection, or the built-in AI
   const config = resolveAIFeatureConfig('generation', Meteor.settings)
   return async ({ system, prompts, tool }) => {
     const turn = await req({
-      provider: config.provider, engine: config.engine, feature: 'workshop', sdkChat: true, shareId,
+      provider: config.provider, engine: config.engine, feature, sdkChat: true, shareId,
       system, prompts, functions: [tool], function_call: { name: tool.name }, allowPlainText: true,
       maxResponseValidationRetries: 1,
       validateResponse: ({ message, toolCall }) => {

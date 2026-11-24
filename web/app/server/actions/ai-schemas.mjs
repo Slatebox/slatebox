@@ -1,5 +1,6 @@
 import { problem } from './errors.mjs'
 import { lacksScopeText } from './registry.mjs'
+import { USE_SURFACES } from '../ai-control/catalogue.mjs'
 
 // The AI settings as every surface sends and reads them (ai.get, ai.update, ai.check).
 const ref = {
@@ -8,13 +9,13 @@ const ref = {
   description: 'me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear.',
 }
 
+// One property per surface of the catalogue (ai-control/catalogue.mjs): default, the features and
+// their parts (chat.route, workshop, agent.slatebox, ...). An unset part follows its parent.
 export const useInput = {
   type: 'object',
-  properties: {
-    default: ref, chat: ref, generation: ref, presentation: ref, vision: ref, images: ref, shape: ref,
-  },
+  properties: Object.fromEntries(USE_SURFACES.map((s) => [s.id, ref])),
   additionalProperties: false,
-  description: 'Which connection each feature uses. default serves every feature not named.',
+  description: 'Which connection each feature uses. An unset feature follows the one it belongs to (workshop follows chat), and default serves every feature not named.',
 }
 
 export const connectionInput = {
@@ -53,6 +54,7 @@ export const settingsOutput = {
   type: 'object',
   properties: {
     features: { type: 'array', items: { type: 'object' } },
+    surfaces: { type: 'array', items: { type: 'object' }, description: 'Every feature and part a choice may name, with the one it follows while unset.' },
     useKeys: { type: 'array', items: { type: 'string' } },
     ownProviders: { type: 'boolean' },
     keysAvailable: { type: 'boolean' },

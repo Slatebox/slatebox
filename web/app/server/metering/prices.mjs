@@ -1,9 +1,11 @@
 // What AI, calls and image search cost Slatebox, in micro-dollars (1 dollar = 1,000,000).
-// Each row names where the price came from and when it was read. The owner tunes
-// estimates and ceilings here. An operator prices a model this table lacks, or reprices one,
+// Each row names where the price came from and when it was read. Estimates and ceilings per
+// feature come from the surface catalogue (ai-control/catalogue.mjs). An operator prices a model this table lacks, or reprices one,
 // in settings.metering.prices (configurePrices, applied once at start). An unknown model is
 // priced at the dearest known row, so a settings change to a new model can never be counted
 // as cheap.
+
+import { METER_CEILINGS, METER_ESTIMATES } from '../ai-control/catalogue.mjs'
 
 const DEEPINFRA = 'https://deepinfra.com/pricing'
 const ANTHROPIC = 'https://platform.claude.com/docs/en/about-claude/pricing'
@@ -99,17 +101,15 @@ export const FIXED_PRICES = Object.freeze({
   imageGeneration: 30000,
 })
 
-// The pre-check estimate for one request, by feature.
-export const ESTIMATES = Object.freeze({
-  workshop: 5000, 'lane-chat': 3000, 'map-chat': 3000, welcome: 2000, generation: 30000,
-  presentation: 10000, 'image-search': 5000, 'image-generation': 30000, shape: 8000,
-})
+// The pre-check estimate for one request, by meter feature: the surface catalogue's estimates
+// (ai-control/catalogue.mjs) under the features runAIAction meters them as.
+export const ESTIMATES = METER_ESTIMATES
 
-// The most one request may spend, retries and fallbacks included.
+// The most one request may spend, retries and fallbacks included, from the catalogue too.
 // A presentation plan's prompt is capped (presentationRequest.mjs: the most notes and text it
 // sends), so its largest request at the dearest price fits here; its estimate is worked out from
 // the prompt before it is sent. A shape request is a short prompt and at most one retry.
-const CEILINGS = Object.freeze({ generation: 200_000, vision: 200_000, presentation: 200_000, shape: 60_000 })
+const CEILINGS = METER_CEILINGS
 const DEFAULT_CEILING = 50_000
 export function actionCeilingMicros(feature) {
   return CEILINGS[feature] ?? DEFAULT_CEILING

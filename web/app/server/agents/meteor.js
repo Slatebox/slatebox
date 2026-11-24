@@ -80,7 +80,7 @@ export const teammate = createTeammate({
     const board = given || { nodes: [] }
     const prose = !noteRequest(text) && !lineRequest(board, text, null) && aiQualifies({ canGenerate: await canStartAI(user), message: text })
     if (!prose) return fn({ useAI: false, model: null })
-    return runAIAction({ feature: 'workshop', userId }, () => fn({ useAI: true, model: modelFor(null) }))
+    return runAIAction({ feature: 'workshop', userId }, () => fn({ useAI: true, model: modelFor(null, 'agent') }))
   },
   // The answer goes where the task was asked: the note's comment thread.
   async reply({ task, text }) {

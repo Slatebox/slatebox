@@ -640,7 +640,7 @@
       },
       "index": "ai.get({}): AI settings",
       "types": [],
-      "dts": "declare namespace slatebox.ai {\n  /** AI settings. The AI connections you, your team and this server have (never their keys), which one each feature uses (chat, generation, presentation, vision, images, shape, and the default), and which connection serves each feature for you now (effective), with what it cannot do. ownProviders false means this server uses only the AI its operator set up. @scope ai:settings */\n  function get(input: Record<string, unknown>): Promise<{\n    features: Array<Record<string, unknown>>;\n    useKeys?: string[];\n    ownProviders: boolean;\n    keysAvailable?: boolean;\n    hosted?: boolean;\n    mine?: Record<string, unknown> | null;\n    team?: Record<string, unknown> | null;\n    server: Record<string, unknown>;\n    effective: Record<string, unknown>;\n    [key: string]: unknown;\n  }>;\n}",
+      "dts": "declare namespace slatebox.ai {\n  /** AI settings. The AI connections you, your team and this server have (never their keys), which one each feature uses (chat, generation, presentation, vision, images, shape, and the default), and which connection serves each feature for you now (effective), with what it cannot do. ownProviders false means this server uses only the AI its operator set up. @scope ai:settings */\n  function get(input: Record<string, unknown>): Promise<{\n    features: Array<Record<string, unknown>>;\n    /** Every feature and part a choice may name, with the one it follows while unset. */\n    surfaces?: Array<Record<string, unknown>>;\n    useKeys?: string[];\n    ownProviders: boolean;\n    keysAvailable?: boolean;\n    hosted?: boolean;\n    mine?: Record<string, unknown> | null;\n    team?: Record<string, unknown> | null;\n    server: Record<string, unknown>;\n    effective: Record<string, unknown>;\n    [key: string]: unknown;\n  }>;\n}",
       "tool": {
         "name": "get_ai_settings",
         "title": "Read your AI settings",
@@ -689,7 +689,7 @@
       },
       "index": "ai.update({level,connections?,remove?,use?,ownProviders?}): Set AI",
       "types": [],
-      "dts": "declare namespace slatebox.ai {\n  /** Set AI. Adds or changes AI connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins), server this server's (administrators; ownProviders on or off lets people use their own). Mix freely: a choice names me:<name>, team:<name>, server:<name> or builtin. Keys are stored encrypted and never returned, and a run's record keeps its code with the apiKey replaced. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI (levels me and team) is for self-hosted Slatebox: Slatebox Cloud refuses it, as AI there comes with Slatebox Pro credits and top-ups. @scope ai:settings @destructive @confirm @idempotent */\n  function update(input: {\n    /** me (yours), team (team admins) or server (administrators). */\n    level: \"me\" | \"team\" | \"server\";\n    /** (at most 20 items) */\n    connections?: Array<{\n      /** Your name for it, for example desk-model. */\n      name: string;\n      /** openai-compatible covers any host or local server (Ollama, llama.cpp, vLLM, LM Studio and others). */\n      type: \"openai-compatible\" | \"openai\" | \"anthropic\" | \"deepinfra\";\n      /** For openai-compatible: the address up to /v1, for example http://host.docker.internal:11434/v1. (at most 500 characters) */\n      baseUrl?: string;\n      /** The model name the endpoint serves. (at most 200 characters) */\n      model?: string;\n      /** Stored encrypted and never shown again. Leave it out to keep the saved key; send an empty string to remove it. (at most 400 characters) */\n      apiKey?: string;\n      /** What the model can do, where you know it. Unset means try it; making images needs images: true. */\n      capabilities?: {\n        tools?: boolean;\n        vision?: boolean;\n        images?: boolean;\n      };\n      /** (256 to 200000) */\n      maxTokens?: number;\n      /** How the endpoint takes a forced tool call: named (the function by name), required (any tool, for an endpoint with no named form) or auto (the model decides, for an endpoint that refuses the others). */\n      toolChoice?: \"auto\" | \"named\" | \"required\";\n    }>;\n    /** (at most 20 items) */\n    remove?: string[];\n    /** Which connection each feature uses. default serves every feature not named. */\n    use?: {\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      default?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      chat?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      generation?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      presentation?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      vision?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      images?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      shape?: string | null;\n    };\n    ownProviders?: \"on\" | \"off\";\n  }): Promise<({\n    features: Array<Record<string, unknown>>;\n    useKeys?: string[];\n    ownProviders: boolean;\n    keysAvailable?: boolean;\n    hosted?: boolean;\n    mine?: Record<string, unknown> | null;\n    team?: Record<string, unknown> | null;\n    server: Record<string, unknown>;\n    effective: Record<string, unknown>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.ai {\n  /** Set AI. Adds or changes AI connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins), server this server's (administrators; ownProviders on or off lets people use their own). Mix freely: a choice names me:<name>, team:<name>, server:<name> or builtin. Keys are stored encrypted and never returned, and a run's record keeps its code with the apiKey replaced. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI (levels me and team) is for self-hosted Slatebox: Slatebox Cloud refuses it, as AI there comes with Slatebox Pro credits and top-ups. @scope ai:settings @destructive @confirm @idempotent */\n  function update(input: {\n    /** me (yours), team (team admins) or server (administrators). */\n    level: \"me\" | \"team\" | \"server\";\n    /** (at most 20 items) */\n    connections?: Array<{\n      /** Your name for it, for example desk-model. */\n      name: string;\n      /** openai-compatible covers any host or local server (Ollama, llama.cpp, vLLM, LM Studio and others). */\n      type: \"openai-compatible\" | \"openai\" | \"anthropic\" | \"deepinfra\";\n      /** For openai-compatible: the address up to /v1, for example http://host.docker.internal:11434/v1. (at most 500 characters) */\n      baseUrl?: string;\n      /** The model name the endpoint serves. (at most 200 characters) */\n      model?: string;\n      /** Stored encrypted and never shown again. Leave it out to keep the saved key; send an empty string to remove it. (at most 400 characters) */\n      apiKey?: string;\n      /** What the model can do, where you know it. Unset means try it; making images needs images: true. */\n      capabilities?: {\n        tools?: boolean;\n        vision?: boolean;\n        images?: boolean;\n      };\n      /** (256 to 200000) */\n      maxTokens?: number;\n      /** How the endpoint takes a forced tool call: named (the function by name), required (any tool, for an endpoint with no named form) or auto (the model decides, for an endpoint that refuses the others). */\n      toolChoice?: \"auto\" | \"named\" | \"required\";\n    }>;\n    /** (at most 20 items) */\n    remove?: string[];\n    /** Which connection each feature uses. An unset feature follows the one it belongs to (workshop follows chat), and default serves every feature not named. */\n    use?: {\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      default?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      chat?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      \"chat.route\"?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      generation?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      \"generation.notes\"?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      presentation?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      vision?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      images?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      shape?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      workshop?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      \"workshop.draft\"?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      canvas?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      \"agent.slatebox\"?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      library?: string | null;\n      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */\n      connectors?: string | null;\n    };\n    ownProviders?: \"on\" | \"off\";\n  }): Promise<({\n    features: Array<Record<string, unknown>>;\n    /** Every feature and part a choice may name, with the one it follows while unset. */\n    surfaces?: Array<Record<string, unknown>>;\n    useKeys?: string[];\n    ownProviders: boolean;\n    keysAvailable?: boolean;\n    hosted?: boolean;\n    mine?: Record<string, unknown> | null;\n    team?: Record<string, unknown> | null;\n    server: Record<string, unknown>;\n    effective: Record<string, unknown>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "update_ai_settings",
         "title": "Change AI connections and choices",
@@ -808,7 +808,23 @@
                   "maxLength": 48,
                   "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
                 },
+                "chat.route": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 48,
+                  "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                },
                 "generation": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 48,
+                  "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                },
+                "generation.notes": {
                   "type": [
                     "string",
                     "null"
@@ -847,10 +863,58 @@
                   ],
                   "maxLength": 48,
                   "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                },
+                "workshop": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 48,
+                  "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                },
+                "workshop.draft": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 48,
+                  "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                },
+                "canvas": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 48,
+                  "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                },
+                "agent.slatebox": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 48,
+                  "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                },
+                "library": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 48,
+                  "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                },
+                "connectors": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 48,
+                  "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
                 }
               },
               "additionalProperties": false,
-              "description": "Which connection each feature uses. default serves every feature not named."
+              "description": "Which connection each feature uses. An unset feature follows the one it belongs to (workshop follows chat), and default serves every feature not named."
             },
             "ownProviders": {
               "type": "string",

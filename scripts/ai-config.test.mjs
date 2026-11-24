@@ -12,7 +12,8 @@ import { createAISettings } from '../web/app/server/methods/ai/ai-settings-core.
 import { connectionRequest } from '../web/app/server/methods/ai/connection-request.mjs'
 import { localWorkshopRequest } from '../web/app/server/methods/ai/workshop-provider.mjs'
 import { loadMasterKey } from '../web/app/server/metering/vault.mjs'
-import { DEFAULT_AI_FEATURES, resolveAIFeatureConfig } from '../web/app/server/methods/ai/feature-config.mjs'
+import { DEFAULT_AI_FEATURES, resolveAIFeatureConfig, resolveSurfaceFeatureConfig } from '../web/app/server/methods/ai/feature-config.mjs'
+import { SURFACES } from '../web/app/server/ai-control/catalogue.mjs'
 import { AI_PRICES, aiPrice, aiCostMicros, activePrices, configurePrices, mergePrices } from '../web/app/server/metering/prices.mjs'
 
 const app = new URL('../web/app/', import.meta.url)
@@ -234,6 +235,26 @@ test('presentation plans on DeepInfra gemini-3.5-flash with gemini-3.7-flash beh
     }, feature)
   }
   assert.equal(resolveAIFeatureConfig('presentation', { ai: { features: { presentation: { engine: 'x/y' } } } }).engine, 'x/y')
+})
+
+test('every catalogue surface with a model has a built-in one: board, canvas, agent, library and connectors take the drafting model', () => {
+  const drafting = resolveAIFeatureConfig('generation', {})
+  for (const id of ['workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors']) {
+    const config = resolveSurfaceFeatureConfig(id, {})
+    assert.equal(config.provider, drafting.provider, id)
+    assert.equal(config.engine, drafting.engine, id)
+  }
+  // connectors once fell through to a feature block that does not exist (no provider, no model)
+  assert.equal(resolveAIFeatureConfig('connectors', {}).engine, undefined)
+  assert.equal(resolveSurfaceFeatureConfig('chat.route', {}).engine, resolveAIFeatureConfig('welcome', {}).engine)
+  // the operator's settings.ai.features block still overrides the surface's built-in model
+  const settings = { ai: { features: { generation: { provider: 'deepinfra', engine: 'operator/model' } } } }
+  assert.equal(resolveSurfaceFeatureConfig('agent.slatebox', settings).engine, 'operator/model')
+  for (const s of SURFACES) {
+    if (!s.builtinFrom || s.builtinFrom === 'stability') continue
+    assert.ok(resolveSurfaceFeatureConfig(s.id, {}).engine, s.id)
+  }
+  assert.throws(() => resolveSurfaceFeatureConfig('images.search', {}), /no built-in model/)
 })
 
 test('settings.ai.features still overrides; another provider does not inherit a default fallback of a different provider', () => {
