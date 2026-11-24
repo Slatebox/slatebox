@@ -92,3 +92,12 @@ export function keptReply(draft, { addSay = null } = {}) {
   if (draft.mode === 'play') return stop(`Added a playable route${route(labels)}`)
   return drawingReply(draft, labels)
 }
+
+// What a drawing request that brought no change says (canvasConversation.preview): why, and what to
+// try, never a bare "try again". reason: no_change (its program changed nothing here), failed (with
+// the runner's words), else no_answer.
+export function chatUnavailableWords(error) {
+  if (error?.reason === 'no_change') return 'Slatebox found nothing to change on this slate for that. Say what to add or change, for example "add three notes about the launch".'
+  if (error?.reason === 'failed' && error.message) return `Slatebox couldn't make that change: ${String(error.message).replace(/[.\s]+$/, '')}. Try saying it another way.`
+  return 'Slatebox couldn\'t turn that into a change on this slate. If it needs something from outside Slatebox, such as commits, issues or docs, ask an invited agent with @ and its name.'
+}

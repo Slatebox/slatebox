@@ -482,6 +482,23 @@ export function createSuggestionStore({
         }
       }
     }
+    // A kept note brings the waiting lines of the same agent whose both ends are then on the slate
+    // (a line is kept when both its ends are kept; it goes with either end when one is discarded).
+    const onSlate = new Set((slate.nodes || []).map((node) => node?.options?.id).filter(Boolean))
+    const keptAdds = new Set(picked.filter(({ item }) => item.kind === 'add').map(({ item }) => item.nodeId))
+    if (keptAdds.size) {
+      const agents = new Set(picked.map(({ action }) => action.agentId))
+      for (const entry of pendingOf(actions)) {
+        const { action, item } = entry
+        if (item.kind !== 'link' || ids.has(item.id) || !agents.has(action.agentId)) continue
+        const ends = [item.association.parentId ?? item.parentId, item.association.childId]
+        if (!ends.some((end) => keptAdds.has(end))) continue
+        if (ends.every((end) => keptAdds.has(end) || onSlate.has(end))) {
+          picked.push(entry)
+          ids.add(item.id)
+        }
+      }
+    }
     // A person approves on the slate: no agent keeps suggestions, its own or another agent's
     // (otherwise one token, or a prompt-injected client, could save another agent's work unreviewed).
     if (principal.kind === 'agent')

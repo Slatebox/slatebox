@@ -46,15 +46,48 @@ test('@Slatebox stays Slatebox, even if an agent were named so', () => {
 
 test('an agent\'s turn says what it did in plain words, and keeps only a safe name and colour', async () => {
   const { agentChatReply, agentOfTurn } = await import('../web/app/imports/api/common/agent-mention.mjs')
-  assert.equal(agentChatReply('GitHub', { items: 2, actions: ['a', 'b'], saved: 0, say: 'Found 2 open issues', left: [] }),
-    'Found 2 open issues. 2 suggestions are on the slate: keep or discard each where it sits.')
-  assert.equal(agentChatReply('GitHub', { items: 1, actions: ['a'], saved: 0, say: '' }), 'One suggestion is on the slate: keep or discard it where it sits.')
+  // one ask is one suggestion: its notes and lines, kept or discarded on its frame
+  assert.equal(agentChatReply('GitHub', { items: 1, actions: ['a'], saved: 0, say: 'Found 2 open issues', left: [], added: { notes: 2, lines: 0 } }),
+    'Found 2 open issues. Added 2 notes as one suggestion: Keep all or Discard all on its frame, or point at a note to keep it alone.')
+  assert.equal(agentChatReply('Excalidraw', { items: 1, actions: ['a'], added: { notes: 3, lines: 2 } }),
+    'Added 3 notes and 2 lines as one suggestion: Keep all or Discard all on its frame, or point at a note to keep it alone.')
+  assert.equal(agentChatReply('GitHub', { items: 1, actions: ['a'], saved: 0, say: '' }), 'One suggestion is on the slate: Keep all or Discard all on its frame.')
   assert.equal(agentChatReply('Linear', { items: 3, actions: [], saved: 3, say: 'Done.' }), 'Done. Added 3 changes to the slate.')
   assert.equal(agentChatReply('Linear', { items: 0, actions: [], saved: 0, say: '' }), 'Linear had nothing to suggest for that.')
-  assert.equal(agentChatReply('Linear', { items: 0, say: 'No issues match.', left: ['1 group could not be placed. Ask again to try it.'] }),
-    'No issues match. 1 group could not be placed. Ask again to try it.')
+  assert.equal(agentChatReply('Linear', { items: 0, say: 'No issues match.', left: ['Kept the 3 notes you asked for; 2 more notes left out.'] }),
+    'No issues match. Kept the 3 notes you asked for; 2 more notes left out.')
   assert.deepEqual(agentOfTurn({ name: ' GitHub ', color: '#0f766e', ask: () => {} }), { name: 'GitHub', color: '#0f766e' })
   assert.deepEqual(agentOfTurn({ name: 'X', color: 'url(javascript:alert(1))' }), { name: 'X', color: '#6d28d9' })
   assert.equal(agentOfTurn({ name: '' }), null)
   assert.equal(agentOfTurn(null), null)
+})
+
+test('a failed ask says why and what to do next, never a bare error', async () => {
+  const { agentErrorReply } = await import('../web/app/imports/api/common/agent-mention.mjs')
+  assert.deepEqual(agentErrorReply('GitHub', { error: 'needs_sign_in', reason: 'x' }), { text: 'GitHub needs you to sign in again before it can look anything up.', next: 'signIn' })
+  assert.equal(agentErrorReply('GitHub', { error: 'pro_required' }).next, 'pay')
+  assert.equal(agentErrorReply('GitHub', { error: 'agents_paused' }).text, 'Agents are paused on this slate. Resume agents on the roster under the canvas, then ask GitHub again.')
+  assert.equal(agentErrorReply('GitHub', { error: 'upstream', reason: 'Bad credentials.' }).text, 'GitHub couldn\'t do that: Bad credentials. Try asking in other words.')
+  assert.equal(agentErrorReply('GitHub', { error: 'x', reason: 'Internal server error' }).text, 'GitHub couldn\'t do that. Try asking in other words.')
+})
+
+test('a question only an agent can answer, sent to Slatebox, names that agent; drawings and other asks stay with Slatebox', async () => {
+  const { agentHint } = await import('../web/app/imports/api/common/agent-mention.mjs')
+  const github = { name: 'GitHub', canAsk: true, galleryId: 'github' }
+  const theirs = { name: 'Linear', canAsk: false, galleryId: 'linear' }
+  assert.equal(agentHint('what are my latest commits? can you make a couple notes on the slate about those?', [github]), github)
+  assert.equal(agentHint('which PRs are waiting for me', [{ name: 'GH', canAsk: true, galleryId: 'github' }]).name, 'GH')
+  assert.equal(agentHint('show me open issues', [{ name: 'my github', canAsk: true }]).name, 'my github', 'by name when the card is not known')
+  assert.equal(agentHint('draw a diagram of our PR review process', [github]), null)
+  assert.equal(agentHint('add three ideas for the launch', [github]), null)
+  assert.equal(agentHint('@GitHub my commits', [github]), null, 'an @ already names who to ask')
+  assert.equal(agentHint('what is in the current cycle', [theirs]), null, 'only agents this person may ask')
+})
+
+test('a drawing request that brought no change says why, never "try again" alone', async () => {
+  const { chatUnavailableWords } = await import('../web/app/imports/api/common/chat-words.mjs')
+  assert.match(chatUnavailableWords({ reason: 'no_answer' }), /ask an invited agent with @/)
+  assert.match(chatUnavailableWords({ reason: 'no_change' }), /^Slatebox found nothing to change/)
+  assert.equal(chatUnavailableWords({ reason: 'failed', message: 'No note is called Budget.' }), 'Slatebox couldn\'t make that change: No note is called Budget. Try saying it another way.')
+  assert.doesNotMatch(chatUnavailableWords({}), /Revise the request/)
 })

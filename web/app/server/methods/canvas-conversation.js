@@ -32,6 +32,8 @@ import { aiRefusal } from '../metering/meteor'
 import { refusalErrorArgs } from '../metering/refusal-pay.mjs'
 import { validSelection } from '../../imports/api/common/chat-selection.mjs'
 import { promptText } from '../ai-control/prompts/index.mjs'
+import { chatUnavailableWords } from '../../imports/api/common/chat-words.mjs'
+import { checkImportLayout, layoutOperations } from '../../imports/api/common/excalidraw-scene.mjs'
 
 // In the app, a person opens a slate by its address, which may be an invitation key; the
 // session's own rule decides access (the same rule the conversation has always used).
@@ -106,7 +108,7 @@ export function modelFor(shareId, feature = 'canvas') {
 const fail = (error) => {
   if (error instanceof Meteor.Error) return error
   if (error instanceof TurnRefused) return new Meteor.Error(error.code, error.message)
-  if (error instanceof ChatUnavailable) return new Meteor.Error('draft-unavailable', error.said ? error.message : 'The agent could not produce a valid change. Revise the request and try again.')
+  if (error instanceof ChatUnavailable) return new Meteor.Error('draft-unavailable', error.said ? error.message : chatUnavailableWords(error))
   if (['slate_changed', 'no_match', 'id_taken'].includes(error?.code)) return changed()
   if (error?.code === 'rate_limited' || error?.code === 'exec_busy') return new Meteor.Error('busy', 'Another change is being prepared. Try again shortly.')
   if (error?.status && error.status < 500 && error.message) return new Meteor.Error('invalid-turn', error.message)
@@ -167,6 +169,37 @@ Meteor.methods({
         workshopOrigin: unrecordedWorkshopOrigin(board) }
       const { writes: _writes, execId: _execId, ...shown } = result
       return shown
+    } catch (error) {
+      throw fail(error)
+    }
+  },
+
+  // Import from Excalidraw: a drawing the browser read (a .excalidraw file, or a share link it
+  // decrypted) as a checked layout, previewed beside the slate's notes like any drawing change in
+  // Ask Slatebox. Nothing is saved until Keep (one change, one undo step); no model, no meter.
+  async 'canvasConversation.importPreview'(shareId, layout, name = '') {
+    let checked
+    try {
+      checked = checkImportLayout(layout)
+    } catch (error) {
+      throw new Meteor.Error('invalid-turn', error.message)
+    }
+    const board = await resolve(shareId, this.userId), base = digest(board), id = Random.id()
+    const principal = sessionPrincipal(this.userId, this.connection.id)
+    // To the right of what is on the slate, top-aligned with it.
+    const boxes = (board.nodes || []).map((node) => node?.options).filter((o) => o && Number.isFinite(Number(o.xPos)))
+    const origin = boxes.length
+      ? { x: Math.max(...boxes.map((o) => Number(o.xPos) + (Number(o.width) || 200))) + 120, y: Math.min(...boxes.map((o) => Number(o.yPos) || 0)) }
+      : { x: 80, y: 80 }
+    const title = typeof name === 'string' ? name.replace(/[^\p{L}\p{N} ._-]/gu, '').trim().slice(0, 60) : ''
+    const message = `Import ${title ? '“' + title + '”' : 'a drawing'} from Excalidraw`
+    const { operations } = layoutOperations(checked, { origin, newId: () => 'ex' + Random.id(12) })
+    try {
+      const result = await conversation.preview({ principal, shareId, board, message, history: [], useAI: false, id, model: null, plan: { message, operations } })
+      if (digest(await resolve(shareId, this.userId)) !== base) throw changed()
+      this.connection.slateboxCanvasPreview = { id, uid: this.userId, boardId: board._id, base, writes: result.writes, execId: result.execId, message, until: Date.now() + 600000, workshopOrigin: null }
+      const { writes: _writes, execId: _execId, ...shown } = result
+      return { ...shown, imported: { notes: checked.notes.length, lines: checked.lines.length } }
     } catch (error) {
       throw fail(error)
     }

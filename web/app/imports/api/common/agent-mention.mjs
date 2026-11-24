@@ -53,18 +53,71 @@ export function mentionedAgent(text, agents) {
 /** Whether two agent names are the same for @name (case and spaces ignored). */
 export const sameAgentName = (a, b) => fold(a) === fold(b)
 
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
+
 /** What an invited agent's turn in Ask Slatebox says about what it did (connectors.call's answer). */
 export function agentChatReply(name, result = {}) {
   const said = typeof result.say === 'string' ? result.say.trim() : ''
   const waiting = Array.isArray(result.actions) ? result.actions.length : 0
   const saved = Number(result.saved) || 0
+  const notes = Number(result.added?.notes) || 0
+  const lines = Number(result.added?.lines) || 0
+  const what = [notes && plural(notes, 'note', 'notes'), lines && plural(lines, 'line', 'lines')].filter(Boolean).join(' and ')
   const parts = []
   if (said) parts.push(/[.!?]$/.test(said) ? said : said + '.')
-  if (waiting) parts.push(`${waiting === 1 ? 'One suggestion is' : `${waiting} suggestions are`} on the slate: keep or discard ${waiting === 1 ? 'it' : 'each'} where it sits.`)
-  if (saved) parts.push(`Added ${saved === 1 ? 'one change' : `${saved} changes`} to the slate.`)
+  if (waiting) parts.push(what
+    ? `Added ${what} as one suggestion: Keep all or Discard all on its frame, or point at a note to keep it alone.`
+    : `${waiting === 1 ? 'One suggestion is' : `${waiting} suggestions are`} on the slate: Keep all or Discard all on its frame.`)
+  if (saved) parts.push(what ? `Added ${what} to the slate.` : `Added ${saved === 1 ? 'one change' : `${saved} changes`} to the slate.`)
   if (!waiting && !saved && !said) parts.push(`${name} had nothing to suggest for that.`)
   for (const line of Array.isArray(result.left) ? result.left : []) if (typeof line === 'string' && line.trim()) parts.push(line.trim())
   return parts.join(' ')
+}
+
+/** What a turn says when an agent's ask failed: plain words and what to do next (never a bare error). → { text, next } */
+export function agentErrorReply(name, error = {}) {
+  const code = error?.error || error?.code || ''
+  const reason = typeof (error?.reason ?? error?.message) === 'string' ? String(error.reason ?? error.message).trim() : ''
+  switch (code) {
+    case 'needs_sign_in': return { text: `${name} needs you to sign in again before it can look anything up.`, next: 'signIn' }
+    case 'tools_changed': return { text: `${name}'s tools changed since you invited it. Look at the changes on its chip under the canvas, then ask again.`, next: 'chip' }
+    case 'agents_paused': return { text: `Agents are paused on this slate. Resume agents on the roster under the canvas, then ask ${name} again.`, next: 'chip' }
+    case 'pro_required': return { text: `Asking ${name} is part of Slatebox Pro and Slatebox Business.`, next: 'pay' }
+    case 'busy': return { text: `${name} is still working on your last ask. Wait for it to finish, then ask again.`, next: null }
+    case 'not_found': return { text: `${name} is not on this slate any more. Invite it again with + Invite agent.`, next: null }
+    case 'inviter_only': return { text: reason || `Only the person who invited ${name} can ask it.`, next: null }
+    case 'no_tools': return { text: reason || `${name} has nothing it may look up. Invite it again to choose what it may use.`, next: null }
+    case 'ai_unavailable': return { text: `Slatebox couldn't plan the lookups for ${name} just now${reason ? `: ${reason.replace(/[.\s]+$/, '')}` : ''}. Try again in a minute.`, next: 'retry' }
+    default: {
+      const said = reason && !/^(internal server error|undefined|\[object)/i.test(reason) ? reason.replace(/[.\s]+$/, '') : ''
+      return { text: said ? `${name} couldn't do that: ${said}. Try asking in other words.` : `${name} couldn't do that. Try asking in other words.`, next: 'retry' }
+    }
+  }
+}
+
+// Words that need an outside agent's data, by gallery card: Slatebox's own AI cannot read them.
+const NEEDS = {
+  github: /\b(commits?|pull requests?|PRs?|issues?|repos?|repositor(?:y|ies)|branch(?:es)?|github)\b/i,
+  linear: /\b(cycles?|tickets?|linear|sprint)\b/i,
+  huggingface: /\b(hugging ?face|datasets?|models? on hugging)\b/i,
+}
+const ASKS_FOR_DATA = /\b(my|our|latest|recent|open|assigned|pending|waiting|what are|which|list|show me|find)\b/i
+const DRAWS = /^\s*(draw|sketch|diagram|map out|make a (diagram|flow|chart|mind ?map)|add a (diagram|flow))/i
+
+/**
+ * An invited agent the message plainly needs (Slatebox cannot read GitHub), when it names none:
+ * "what are my latest commits?" with GitHub on the slate → that agent. Null when nothing fits.
+ * agents: askable entries with galleryId (or a name that says which).
+ */
+export function agentHint(message, agents = []) {
+  const text = String(message || '')
+  if (!text.trim() || /(^|[\s(])@\w/.test(text) || DRAWS.test(text) || !ASKS_FOR_DATA.test(text)) return null
+  for (const agent of Array.isArray(agents) ? agents : []) {
+    if (!agent?.canAsk) continue
+    const id = agent.galleryId || Object.keys(NEEDS).find((key) => fold(agent.name || '').includes(key)) || null
+    if (id && NEEDS[id]?.test(text)) return agent
+  }
+  return null
 }
 
 // An agent's name and colour as a saved Ask Slatebox turn keeps them (this device's history).

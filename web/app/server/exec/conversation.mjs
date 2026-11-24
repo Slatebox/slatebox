@@ -148,7 +148,8 @@ export function createCanvasConversation({ registry, gate, service, manifest, to
     return warnings
   }
 
-  async function preview({ principal, shareId, board, message, history = [], useAI, id, model, selection = null }) {
+  // plan: a plan made without words (Import from Excalidraw), previewed as it stands on the direct path.
+  async function preview({ principal, shareId, board, message, history = [], useAI, id, model, selection = null, plan: given = null }) {
     let writes
     let execId
     let provider = 'direct'
@@ -177,10 +178,10 @@ export function createCanvasConversation({ registry, gate, service, manifest, to
       canvas = canvasOfWrites(board, writes, shareId)
     } else {
       // A plain request about lines is its own plan; anything else is drawn from the words.
-      const lines = lineRequest(board, message, selection)
+      const lines = given ? null : lineRequest(board, message, selection)
       if (lines?.problem) throw new TurnRefused('invalid-turn', lines.problem)
       let draft = null
-      if (!lines) {
+      if (!lines && !given) {
         try {
           draft = nativeCanvasDraft(board, message, id)
         } catch (error) {
@@ -188,7 +189,7 @@ export function createCanvasConversation({ registry, gate, service, manifest, to
         }
         if (draft.mode !== 'draw') throw new TurnRefused('invalid-turn', 'Ask for a drawing change here.')
       }
-      const { plan } = lines ?? draftToPlan(draft)
+      const { plan } = given ? { plan: given } : lines ?? draftToPlan(draft)
       // The edit names the revision the preview was made on, as every edit does.
       const input = { shareId, plan, userMessage: message, expectedRevision: board.revision ?? 0 }
       const result = await registry.run(principal, 'slates.applyOperations', { ...input, mode: 'preview' })

@@ -188,6 +188,30 @@ test("Keep all keeps every waiting suggestion of one agent in one save; a line b
   assert.deepEqual(agents.map((x) => x.waiting), [0]);
 });
 
+test("a line is kept when both its ends are: keeping the notes one by one brings the line with the second; discarding either end takes it", async (t) => {
+  const w = world();
+  t.after(() => w.close());
+  const agent = await w.principalFor(["slates:read", "slates:write"]);
+  const made = await edit(w, agent, [add("A", { ids: ["na"] }), add("B", { ids: ["nb"] }), add("C", { ids: ["nc"] }),
+    { kind: "connect_nodes", from: { ids: ["na"] }, to: { ids: ["nb"] } }, { kind: "connect_nodes", from: { ids: ["nb"] }, to: { ids: ["nc"] } }]);
+  const action = made.body.suggestion;
+  const item = (nodeId) => action.items.find((i) => i.kind === "add" && i.nodeId === nodeId).id;
+  // the first end alone: no line yet
+  const first = await decide(w, person(), { decision: "keep", actionId: action.actionId, itemIds: [item("na")] });
+  assert.equal(first.body.kept.length, 1);
+  // the second end: its note, and the line between the two, in one save
+  const before = w.slate("demo").revision;
+  const second = await decide(w, person(), { decision: "keep", actionId: action.actionId, itemIds: [item("nb")] });
+  assert.equal(second.body.kept.length, 2);
+  assert.equal(w.slate("demo").revision, before + 1, "one save, so one undo step");
+  assert.ok(w.slate("demo").nodes.find((n) => n.options.id === "na").relationships.associations.some((l) => l.childId === "nb"));
+  // discarding the third note takes the line to it
+  const gone = await decide(w, person(), { decision: "discard", actionId: action.actionId, itemIds: [item("nc")] });
+  assert.equal(gone.body.discarded.length, 2);
+  const after = (await list(w)).actions.find((a) => a.actionId === action.actionId);
+  assert.equal(after.items.filter((i) => i.state === "pending").length, 0);
+});
+
 test("undo is per agent action: it never undoes another agent's work, and leaves what a person changed since", async (t) => {
   const w = world();
   t.after(() => w.close());

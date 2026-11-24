@@ -50,7 +50,15 @@ export const writesTo = (result, shareId) =>
       return { n: index + 1, method: write.method, input, body: write.body }
     })
 
-export class ChatUnavailable extends Error {}
+// Why no change came back, so the person is told something they can act on:
+//   no_answer  the model answered nothing usable;  no_change  its program changed nothing here;
+//   failed     its program failed (message: the runner's words, e.g. a note it named is not there).
+export class ChatUnavailable extends Error {
+  constructor(message, reason = 'no_answer') {
+    super(message)
+    this.reason = reason
+  }
+}
 
 // model({system, prompts, tool}) -> {toolCall: {name, arguments} | null, text?, abort?}
 // run(intent, code) -> the exec output of a preview run limited to shareId
@@ -65,7 +73,7 @@ export async function execChat({ model, manifest, tool, shareId, board, message,
     if (!turn.toolCall) {
       const text = typeof turn.text === 'string' ? turn.text.trim() : ''
       if (text && text.length <= 1200) return { reply: text }
-      throw new ChatUnavailable('The model could not prepare a change.')
+      throw new ChatUnavailable('The model could not prepare a change.', 'no_answer')
     }
     const args = turn.toolCall.arguments || {}
     const code = typeof args.code === 'string' ? args.code : ''
@@ -82,5 +90,6 @@ export async function execChat({ model, manifest, tool, shareId, board, message,
       { role: 'user', content: promptText('exec.chat.fix', { why, shareId: String(shareId) }) },
     ]
   }
-  throw new ChatUnavailable(last?.error?.message || 'The model could not prepare a change.')
+  if (last?.status === 'completed') throw new ChatUnavailable('It made no change to this slate.', 'no_change')
+  throw new ChatUnavailable(last?.error?.message || 'The model could not prepare a change.', last?.error?.message ? 'failed' : 'no_answer')
 }
