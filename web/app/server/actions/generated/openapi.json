@@ -2137,6 +2137,11 @@
                     "type": "string",
                     "maxLength": 200,
                     "description": "A short note kept with the version."
+                  },
+                  "basedOn": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "The version the text was edited from (0: the built-in text). A draft edited from a suggestion stays marked as one when it is published."
                   }
                 },
                 "required": [
@@ -2508,10 +2513,10 @@
       }
     },
     "/ai/control/prompts/{id}/render": {
-      "get": {
+      "post": {
         "operationId": "renderAIPrompt",
         "summary": "Render AI prompt",
-        "description": "Renders a prompt version (or text sent with the call) into the request a built-in sample sends, and reports its lint findings. No model is called. Administrators only.",
+        "description": "Renders a prompt version (or text sent with the call) into the request a built-in sample sends, and reports its lint findings. No model is called and nothing is saved. Administrators only.",
         "x-required-scope": "ai:admin:read",
         "x-slatebox": {
           "action": "ai.prompts.render",
@@ -2524,7 +2529,11 @@
           "principals": [
             "person",
             "agent"
-          ]
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
         },
         "parameters": [
           {
@@ -2580,56 +2589,71 @@
             }
           },
           {
-            "in": "query",
-            "name": "version",
+            "in": "header",
+            "name": "Idempotency-Key",
             "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "A saved version; 0 is the built-in text."
-            }
-          },
-          {
-            "in": "query",
-            "name": "body",
-            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
             "schema": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 32768,
-              "description": "The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not."
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
             }
           },
           {
-            "in": "query",
-            "name": "wrap",
+            "in": "header",
+            "name": "Slatebox-Confirm",
             "required": false,
-            "schema": {
-              "type": "object",
-              "additionalProperties": {
-                "type": "string",
-                "enum": [
-                  "none",
-                  "data"
-                ]
-              },
-              "description": "Per value: data encloses it in a <data> block so it reads as data, not instructions."
-            }
-          },
-          {
-            "in": "query",
-            "name": "sample",
-            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
             "schema": {
               "type": "string",
-              "maxLength": 40,
-              "description": "A built-in sample (ai.prompts.get lists them). Default: the first."
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
             }
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "A saved version; 0 is the built-in text."
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32768,
+                    "description": "The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not."
+                  },
+                  "wrap": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "data"
+                      ]
+                    },
+                    "description": "Per value: data encloses it in a <data> block so it reads as data, not instructions."
+                  },
+                  "sample": {
+                    "type": "string",
+                    "maxLength": 40,
+                    "description": "A built-in sample (ai.prompts.get lists them). Default: the first."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "Done.",
+            "description": "A preview, or the answer to a repeated request with the same key.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2888,7 +2912,7 @@
       "post": {
         "operationId": "resetAIControl",
         "summary": "Reset AI control",
-        "description": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); prompt returns one prompt (promptId) to its built-in text, prompts every prompt (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only.",
+        "description": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); prompt returns one prompt (promptId) to its built-in text and drops a binding's pin of a version of it, prompts every prompt (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only.",
         "x-required-scope": "ai:admin",
         "x-slatebox": {
           "action": "ai.control.reset",
@@ -3082,6 +3106,12 @@
                       }
                     },
                     "prompts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "unpinned": {
                       "type": "array",
                       "items": {
                         "type": "string"

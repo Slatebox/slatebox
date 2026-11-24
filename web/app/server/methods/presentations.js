@@ -33,6 +33,7 @@ import {
 import { carryImages, composeDeck, normalizeDirection, pendingImages } from '../../imports/ui/components/presentations/presentationCompose.mjs'
 import { cleanStyleRef } from '../../imports/ui/components/presentations/presentationStyles.mjs'
 import { storedSlateLayout } from './presentationLayout.mjs'
+import { promptsKey } from '../ai-control/prompts/index.mjs'
 
 // The largest slate copy a published deck keeps for its live player (characters of JSON).
 const MAX_SLATE_JSON = 5_000_000
@@ -494,7 +495,7 @@ method[CONSTANTS.methods.presentations.load] = async ({
 async function keptDeck(args, user, layout) {
   if (args?.refinementMessage) return null
   const current = await findDeck(args, user)
-  return needsPlan(current, layout) ? null : loadPresentation(args)
+  return needsPlan(current, layout, { prompts: promptsKey('presentation') }) ? null : loadPresentation(args)
 }
 
 const userNameOf = (user) => {
@@ -634,6 +635,8 @@ async function analyzePresentation(args, user, stored, layout, counted, { brief 
   const presentationData = JSON.stringify(layout)
   const now = new Date()
   const layoutKey = keyed ? planKey(layout) : null
+  // the planning prompts' versions it was made with: a publish or rollback plans the slate again
+  const promptsKeyNow = keyed ? promptsKey('presentation') : null
   if (!persist) {
     return { presentationId: null, version: null, name, description, viewpoints, direction, style, automatic,
       ...(automatic && { reason: planned.reason }), ...(planned.trivial && { trivial: true }) }
@@ -648,7 +651,7 @@ async function analyzePresentation(args, user, stored, layout, counted, { brief 
     presentationId = replace._id
     version = replace.version
     await SlatePresentations.updateAsync({ _id: replace._id }, {
-      $set: { timestamp: Date.now(), presentationData, name, description, viewpoints, direction, style, automatic: true, planVersion: PLAN_VERSION, layoutKey, updated: now, imagesDay: today(), imagesFound },
+      $set: { timestamp: Date.now(), presentationData, name, description, viewpoints, direction, style, automatic: true, planVersion: PLAN_VERSION, layoutKey, promptsKey: promptsKeyNow, updated: now, imagesDay: today(), imagesFound },
     })
   } else {
     version = (latestDeck?.version || 0) + 1
@@ -675,6 +678,7 @@ async function analyzePresentation(args, user, stored, layout, counted, { brief 
       planVersion: PLAN_VERSION,
       // The slate this plan was made for: Present on the same slate opens it at once (needsPlan).
       layoutKey,
+      promptsKey: promptsKeyNow,
       userId: user._id,
       orgId: user.orgId,
       author: userNameOf(user),

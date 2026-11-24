@@ -80,7 +80,8 @@ export default function Prompts() {
                       </TableCell>
                       <TableCell><Typography variant="body2">{KIND_LABELS[p.kind] || p.kind}</Typography></TableCell>
                       <TableCell>
-                        {p.live.version ? <Typography variant="body2">{sourceText(p.live)}</Typography> : <Chip size="small" label="Built in" />}
+                        {p.live.version || p.live.fallbackFrom ? <Typography variant="body2">{sourceText(p.live)}</Typography> : <Chip size="small" label="Built in" />}
+                        {p.pinned && p.pinned.version !== p.published && <Typography variant="caption" color="warning.main" display="block">Pinned by the {p.pinned.binding.split('|')[0]} binding; version {p.published || 0} is published</Typography>}
                       </TableCell>
                       <TableCell>
                         {p.draft && <Chip size="small" color={p.draft.origin === 'ai-proposal' ? 'warning' : 'default'} label={p.draft.origin === 'ai-proposal' ? `Suggestion ${p.draft.version}` : `Draft ${p.draft.version}`} />}

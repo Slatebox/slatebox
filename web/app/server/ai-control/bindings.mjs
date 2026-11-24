@@ -12,6 +12,7 @@ import { surface as surfaceById, SURFACES } from './catalogue.mjs'
 import { CODE_PARAMS } from './resolve.mjs'
 import { FAILURE_CLASSES, MAX_CHAIN, bindingProblem, parsePromptRef, scopeKey } from './snapshot.mjs'
 import { ModelError } from './models.mjs'
+import { CODE_SLOTS } from './prompts/index.mjs'
 
 export const BINDING_SCOPES = Object.freeze(['server'])
 export const TOOL_MODES = Object.freeze(['forced', 'auto', 'none'])
@@ -132,7 +133,11 @@ export function normalizeBinding(input, { snapshot, connections = [], codePrompt
     const prompts = {}
     for (const [slot, ref] of Object.entries(input.prompts)) {
       if (!/^[a-z][a-zA-Z0-9]{0,31}$/.test(slot)) fail(`prompt slot ${slot} is a short name, for example system.`)
-      if (!parsePromptRef(ref)) fail(`prompt slot ${slot} names a prompt id, or id@version to pin one.`)
+      const pin = parsePromptRef(ref)
+      if (!pin) fail(`prompt slot ${slot} names a prompt id, or id@version to pin one.`)
+      const owner = CODE_SLOTS[at.id]?.[slot]
+      if (!owner) fail(`${at.title} has no prompt slot ${slot}.${CODE_SLOTS[at.id] ? ` Its slots: ${Object.keys(CODE_SLOTS[at.id]).join(', ')}.` : ''}`)
+      if (pin.id !== owner) fail(`prompt slot ${slot} takes ${owner} (or ${owner}@<version> to pin one), not ${pin.id}.`)
       prompts[slot] = ref
     }
     if (Object.keys(prompts).length) doc.prompts = prompts
@@ -358,7 +363,37 @@ export function createBindingOps({ store, bindings, versions, snapshot, connecti
     return done
   }
 
-  return { saveDraft, publish, rollback, remove, list, heads, versionsOf, syncServerUse, normalize: async (input, checkRefs = true) => normalizeBinding(input, await ctx(checkRefs)) }
+  /**
+   * ai.control.reset target prompt / prompts: a server binding that pins a version of a prompt
+   * (`shape.system@2`) would keep sending it after the prompt is returned to its built-in text, so
+   * the pin goes too: the binding is published again without that slot (a new version, audited) and
+   * the slot follows the prompt's published label again. ids: the prompts, or null for every one.
+   * Only the slot changes, so nothing else is checked again. → [binding ids]
+   */
+  async function unpinPrompts({ actor, ids = null, reason, action = 'ai.control.reset' }) {
+    const done = []
+    for (const head of await heads()) {
+      const slots = Object.entries(head.prompts || {}).filter(([, ref]) => {
+        const pin = parsePromptRef(ref)
+        return pin?.version && (!ids || ids.includes(pin.id))
+      }).map(([slot]) => slot)
+      if (!slots.length) continue
+      const doc = { ...pickFields(head), surface: head.surface, scope: { level: 'server' }, enabled: head.enabled ?? true }
+      const kept = Object.fromEntries(Object.entries(head.prompts).filter(([slot]) => !slots.includes(slot)))
+      if (Object.keys(kept).length) doc.prompts = kept
+      else delete doc.prompts
+      if (isEmptyBinding(doc)) {
+        await remove({ actor, surface: head.surface, reason, action })
+      } else {
+        const { version } = await writeVersion({ bindingId: head._id, doc, status: 'published', note: `Unpinned ${slots.join(', ')} (prompt reset)`, actor, action, reason })
+        await publishVersion({ bindingId: head._id, version, doc, actor, reason, action })
+      }
+      done.push(head._id)
+    }
+    return done
+  }
+
+  return { saveDraft, publish, rollback, remove, list, heads, versionsOf, syncServerUse, unpinPrompts, normalize: async (input, checkRefs = true) => normalizeBinding(input, await ctx(checkRefs)) }
 }
 
 function checkNote(note) {

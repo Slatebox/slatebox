@@ -16,6 +16,7 @@ import { generateShapes } from '../web/app/server/shapes/shape-core.mjs'
 import { refinePrompt } from '../web/app/server/library/refine-ai.mjs'
 import { presentationPrompts } from '../web/app/server/methods/presentationRequest.mjs'
 import { SURFACES } from '../web/app/server/ai-control/catalogue.mjs'
+import { capsPlaceholders } from '../web/app/server/ai-control/lint.mjs'
 
 const here = (path) => new URL(path, import.meta.url)
 const recorder = here('./ai-request-golden.mjs').pathname
@@ -44,7 +45,7 @@ test('the registry: S5 surfaces, unique slots, declared variables, no all-caps p
     assert.equal(CODE_SLOTS[prompt.surface][prompt.slot], prompt.id)
     assert.deepEqual(CODE_PROMPTS[prompt.id], { body: prompt.body, variables: prompt.variables })
     // no all-caps placeholder tokens in the text itself (AGENTS.md); code-made values are variables
-    assert.doesNotMatch(prompt.body, /\b[A-Z]{3,}(?: [A-Z]{3,})+\b/, prompt.id)
+    assert.deepEqual(capsPlaceholders(prompt.body), [], prompt.id)
   }
 })
 
@@ -102,6 +103,21 @@ test('a published version that does not render falls back to the built-in text, 
   assert.equal(reported.length, 1)
   assert.equal(reported[0].id, 'library.refine.retry')
   assert.equal(reported[0].version, 4)
+  // a hot path does not flood health: the same version is reported once, and named as the problem
+  for (let i = 0; i < 60; i += 1) assert.equal(promptText('library.refine.retry'), prompts.code('library.refine.retry'))
+  assert.equal(reported.length, 1)
+  assert.deepEqual({ version: prompts.problem('library.refine.retry').version, message: prompts.problem('library.refine.retry').message }, { version: 4, message: reported[0].error.message })
+  assert.equal(prompts.problem('library.refine.system'), null)
+  // another broken version is reported again; a version that renders clears the problem
+  const broken5 = { ...broken, _id: 'library.refine.retry@5', version: 5 }
+  const next = snapshotWith({ heads: [{ _id: 'library.refine.retry', surface: 'library', kind: 'retry', labels: { published: 5 } }], versions: [broken5] })
+  prompts.setSource((id) => promptFor(next, prompts.byId[id], CODE_PROMPTS), { onFallback: (entry) => reported.push(entry) })
+  promptText('library.refine.retry')
+  promptText('library.refine.retry')
+  assert.deepEqual(reported.map((r) => r.version), [4, 5])
+  const fixed = snapshotWith({ heads: [{ _id: 'library.refine.retry', surface: 'library', kind: 'retry', labels: { published: null } }] })
+  prompts.setSource((id) => promptFor(fixed, prompts.byId[id], CODE_PROMPTS))
+  assert.equal(prompts.problem('library.refine.retry'), null)
 })
 
 test('the call sites render through the registry with the values they used to splice in', () => {

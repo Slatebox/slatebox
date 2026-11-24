@@ -20,6 +20,10 @@ import { createAdminOps } from '../web/app/server/ai-control/admin.mjs'
 import { fixtureFor, FIXTURES } from '../web/app/server/ai-control/fixtures/index.mjs'
 import { evalsFor, EVALS } from '../web/app/server/ai-control/evals/index.mjs'
 import { generateShapes } from '../web/app/server/shapes/shape-core.mjs'
+import { createBindingOps } from '../web/app/server/ai-control/bindings.mjs'
+import { resolveBinding } from '../web/app/server/ai-control/resolve.mjs'
+import { CODE_SLOTS, promptsKey } from '../web/app/server/ai-control/prompts/index.mjs'
+import { needsPlan, PLAN_VERSION } from '../web/app/imports/ui/components/presentations/presentationPlan.mjs'
 
 // ---------- in-memory world ----------
 const get = (doc, path) => path.split('.').reduce((value, key) => (value == null ? undefined : value[key]), doc)
@@ -72,7 +76,7 @@ function stubModel() {
 }
 
 function world({ testsPerHour = 30 } = {}) {
-  const collections = { prompts: memoryCollection(), promptVersions: memoryCollection(), state: memoryCollection(), audit: memoryCollection() }
+  const collections = { prompts: memoryCollection(), promptVersions: memoryCollection(), bindings: memoryCollection(), bindingVersions: memoryCollection(), state: memoryCollection(), audit: memoryCollection() }
   let snapshot = null
   const health = []
   const control = createAIControl({ holder: { ready: async () => snapshot, current: () => snapshot, refresh: async () => snapshot }, choiceHolders: async () => ({}) })
@@ -80,6 +84,7 @@ function world({ testsPerHour = 30 } = {}) {
     snapshot = buildSnapshot({
       state: collections.state.docs.get('global') || { generation: 0 },
       prompts: structuredClone([...collections.prompts.docs.values()]), promptVersions: structuredClone([...collections.promptVersions.docs.values()]),
+      bindings: structuredClone([...collections.bindings.docs.values()]),
     }, { codePromptIds: PROMPT_IDS })
     prompts.setSource((id) => promptFor(snapshot, prompts.byId[id], CODE_PROMPTS), {
       onFallback: ({ id, version, error }) => { health.push({ id, version }); control.noteHealth({ kind: 'prompt', id, problem: `Version ${version} could not be rendered (${error.message}); the built-in text was used.` }) },
@@ -92,9 +97,10 @@ function world({ testsPerHour = 30 } = {}) {
   const ops = createPromptOps({
     store, prompts: collections.prompts, versions: collections.promptVersions, registry: prompts, live: promptText,
     fixtureFor, evalsFor, request: model.request, costOf: ({ usage }) => ({ costMicros: usage.inputTokens + usage.outputTokens }),
-    snapshot: () => snapshot, testLimit: createWriteLimit({ count: testsPerHour, windowMs: 60 * 60 * 1000 }),
+    snapshot: () => snapshot, health: () => control.health(), testLimit: createWriteLimit({ count: testsPerHour, windowMs: 60 * 60 * 1000 }),
   })
-  return { collections, ops, model, store, health, control, snapshot: () => snapshot }
+  const bindings = createBindingOps({ store, bindings: collections.bindings, versions: collections.bindingVersions, snapshot: () => snapshot, connections: async () => [], codePromptIds: () => PROMPT_IDS })
+  return { collections, ops, bindings, model, store, health, control, snapshot: () => snapshot }
 }
 
 const person = { userId: 'root', principal: 'person', via: 'ddp' }
@@ -290,4 +296,207 @@ test('the editor\'s helpers: a side-by-side diff with changed words marked, an a
   assert.equal(view.sourceText({ version: 0, source: 'code' }), 'Built in')
   assert.equal(view.sourceText({ version: 3, source: 'pinned' }), 'Version 3, pinned by a binding')
   assert.equal(view.statusText({ version: 2, status: 'draft', origin: 'ai-proposal' }, { published: 1 }), 'Suggestion')
+})
+
+// ---------- review fixes (S5/S6 review) ----------
+const refusedRows = (w, action) => [...w.collections.audit.docs.values()].filter((row) => row.action === action && row.outcome === 'refused')
+
+test('rollback never puts a draft or an agent\'s suggestion live, and re-runs the eval gate on a version that was live', async () => {
+  const w = world()
+  const v1 = (await w.ops.saveDraft({ actor: person, id: 'shape.system', body: withSentence })).version
+  await w.ops.publish({ actor: person, id: 'shape.system', version: v1, reason: 'one' })
+  // an agent's suggestion, and a person's draft: neither was ever published
+  const suggestion = (await w.ops.saveDraft({ actor: agent, id: 'shape.system', body: 'Draw {{count}} outlines, simply.' })).version
+  const draft = (await w.ops.saveDraft({ actor: person, id: 'shape.system', body: 'Draw {{count}} outlines, plainly.' })).version
+  for (const toVersion of [suggestion, draft]) {
+    const sentBefore = w.model.sent.length
+    await assert.rejects(w.ops.rollback({ actor: person, id: 'shape.system', toVersion, reason: 'x' }), (e) => e.status === 409 && e.details.neverPublished && /never published/.test(e.message))
+    assert.equal(w.model.sent.length, sentBefore, 'no eval ran')
+  }
+  assert.equal((await w.collections.prompts.findOne({ _id: 'shape.system' })).labels.published, v1)
+  assert.equal(refusedRows(w, 'ai.prompts.rollback').length, 2, 'each refusal is audited')
+  // a version that was live: the eval cases run again, a failure blocks, override serves it and is recorded
+  await w.ops.rollback({ actor: person, id: 'shape.system', toVersion: 0, reason: 'built in' })
+  w.model.set('bad')
+  await assert.rejects(w.ops.rollback({ actor: person, id: 'shape.system', toVersion: v1, reason: 'back' }), (e) => e.status === 409 && e.details.evalRun.failed === 3 && e.details.builtinInstead)
+  assert.equal((await w.collections.prompts.findOne({ _id: 'shape.system' })).labels.published, null)
+  assert.match(refusedRows(w, 'ai.prompts.rollback').at(-1).error, /3 eval case\(s\) failed/)
+  const forced = await w.ops.rollback({ actor: person, id: 'shape.system', toVersion: v1, reason: 'the stub is wrong', override: true })
+  assert.equal(forced.evalRun.overridden, true)
+  w.model.set('good')
+  const row = rows(w, 'ai.prompts.rollback').filter((r) => r.outcome === 'ok').at(-1)
+  assert.deepEqual(row.evalRun, { passed: 0, failed: 3, overridden: true })
+  assert.ok(promptText('shape.system', { count: 2 }).endsWith(ADDED))
+})
+
+test('a published suggestion keeps who suggested it, also when a person edited it first ("Edit from this")', async () => {
+  const w = world()
+  const suggestion = (await w.ops.saveDraft({ actor: agent, id: 'shape.system', body: withSentence })).version
+  const edited = await w.ops.saveDraft({ actor: person, id: 'shape.system', body: `${withSentence} Keep lines even.`, basedOn: suggestion })
+  assert.equal(edited.origin, 'admin')
+  const got = await w.ops.get({ id: 'shape.system' })
+  assert.deepEqual(got.versions.find((v) => v.version === edited.version).basedOn, { version: suggestion, suggestion: { createdBy: 'root', tokenId: 'tok1' } })
+  await w.ops.publish({ actor: person, id: 'shape.system', version: edited.version, reason: 'agent idea, tidied' })
+  const row = rows(w, 'ai.prompts.publish').at(-1)
+  assert.deepEqual({ proposedBy: row.evalRun.proposedBy, proposedByToken: row.evalRun.proposedByToken }, { proposedBy: 'root', proposedByToken: 'tok1' })
+  // edited again, it still came from the suggestion; a draft from the built-in text carries none
+  const again = await w.ops.saveDraft({ actor: person, id: 'shape.system', body: withSentence, basedOn: edited.version })
+  assert.deepEqual((await w.ops.get({ id: 'shape.system' })).versions.find((v) => v.version === again.version).basedOn, { version: edited.version, suggestion: { createdBy: 'root', tokenId: 'tok1' } })
+  const own = await w.ops.saveDraft({ actor: person, id: 'shape.system', body: withSentence, basedOn: 0 })
+  assert.deepEqual((await w.ops.get({ id: 'shape.system' })).versions.find((v) => v.version === own.version).basedOn, { version: 0 })
+  await assert.rejects(w.ops.saveDraft({ actor: person, id: 'shape.system', body: withSentence, basedOn: 99 }), /no version 99/)
+  // the editor's publish dialog flags it as a suggestion either way
+  const view = await import('../web/app/imports/ui/pages/admin/ai/prompts-view.mjs')
+  assert.match(view.liveText({ version: 3 }, 'Shape instructions'), /^Version 3 of Shape instructions is live/)
+})
+
+test('a binding pin: publish and rollback name it, and ai.control.reset target prompt / prompts drops it', async () => {
+  const w = world()
+  const v1 = (await w.ops.saveDraft({ actor: person, id: 'shape.system', body: 'Draw {{count}} outlines, simply.' })).version
+  await w.ops.publish({ actor: person, id: 'shape.system', version: v1, reason: 'one' })
+  await w.bindings.publish({ actor: person, surface: 'shape', input: { surface: 'shape', prompts: { system: 'shape.system@1' } }, reason: 'pin it' })
+  const v2 = (await w.ops.saveDraft({ actor: person, id: 'shape.system', body: withSentence })).version
+  const out = await w.ops.publish({ actor: person, id: 'shape.system', version: v2, reason: 'two' })
+  assert.deepEqual(out.pinned, { binding: 'shape|server', version: 1 })
+  assert.equal(promptText('shape.system', { count: 2 }), 'Draw 2 outlines, simply.', 'the pin is still what is sent')
+  const view = await import('../web/app/imports/ui/pages/admin/ai/prompts-view.mjs')
+  assert.match(view.liveText(out, 'Shape instructions'), /is published, but the shape binding pins version 1, so that is still sent/)
+  const listed = (await w.ops.list()).surfaces.find((s) => s.surface === 'shape').prompts.find((p) => p.id === 'shape.system')
+  assert.deepEqual({ published: listed.published, live: listed.live, pinned: listed.pinned }, { published: 2, live: { version: 1, source: 'pinned' }, pinned: { binding: 'shape|server', version: 1 } })
+  assert.deepEqual((await w.ops.get({ id: 'shape.system' })).pinned, { binding: 'shape|server', version: 1 })
+
+  // break-glass: the prompts reset leaves no pinned version sending
+  const admin = createAdminOps({ store: w.store, audit: w.collections.audit, prompts: w.ops, bindings: w.bindings })
+  const reset = await admin.reset({ userId: 'root', actor: person, target: 'prompt', promptId: 'shape.system', reason: 'incident' })
+  assert.deepEqual({ prompts: reset.prompts, unpinned: reset.unpinned }, { prompts: ['shape.system'], unpinned: ['shape|server'] })
+  assert.equal(promptText('shape.system', { count: 2 }), prompts.code('shape.system', { count: 2 }))
+  assert.equal(w.collections.bindings.docs.get('shape|server'), undefined, 'a binding left with nothing is removed')
+  assert.ok(rows(w, 'ai.control.reset').some((r) => r.target.kind === 'binding' && r.reason === 'incident'))
+
+  // a binding that sets more keeps the rest; target prompts drops every pin
+  await w.ops.publish({ actor: person, id: 'shape.system', version: v1, reason: 'again' })
+  await w.bindings.publish({ actor: person, surface: 'shape', input: { surface: 'shape', params: { temperature: 0.3 }, prompts: { system: 'shape.system@1' } }, reason: 'pin with params' })
+  const all = await admin.reset({ userId: 'root', actor: person, target: 'prompts', reason: 'incident 2' })
+  assert.deepEqual(all.unpinned, ['shape|server'])
+  const head = w.collections.bindings.docs.get('shape|server')
+  assert.deepEqual({ prompts: head.prompts, params: head.params }, { prompts: undefined, params: { temperature: 0.3 } })
+  assert.equal(promptText('shape.system', { count: 2 }), prompts.code('shape.system', { count: 2 }))
+})
+
+test('a binding pins only the slot\'s own prompt; the effective view shows what the call site sends', async () => {
+  const w = world()
+  await w.ops.saveDraft({ actor: person, id: 'exec.chat.retry', body: CODE_PROMPTS['exec.chat.retry'].body + ' Be brief.' })
+  await assert.rejects(w.bindings.publish({ actor: person, surface: 'library', input: { surface: 'library', prompts: { retry: 'exec.chat.retry@1' } }, reason: 'x' }), /prompt slot retry takes library\.refine\.retry/)
+  await assert.rejects(w.bindings.saveDraft({ actor: person, input: { surface: 'library', prompts: { nope: 'library.refine.retry' } } }), /has no prompt slot nope/)
+  // a stored binding that pins another prompt's id is skipped by the snapshot, named in health
+  const snap = buildSnapshot({ bindings: [{ _id: 'library|server', surface: 'library', scope: { level: 'server' }, status: 'published', prompts: { retry: 'exec.chat.retry' } }] }, { codePromptIds: PROMPT_IDS })
+  assert.match(snap.health.find((h) => h.id === 'library|server').problem, /prompt slot retry takes library\.refine\.retry/)
+  // workshop.draft follows workshop, and both have a retry slot: workshop's pin is not workshop.draft's
+  const v = { _id: 'workshop.chat.retry@1', promptId: 'workshop.chat.retry', version: 1, body: 'Try again.', variables: {}, status: 'published' }
+  const followed = buildSnapshot({
+    prompts: [{ _id: 'workshop.chat.retry', surface: 'workshop', kind: 'retry', labels: { published: 1 } }], promptVersions: [v],
+    bindings: [{ _id: 'workshop|server', surface: 'workshop', scope: { level: 'server' }, status: 'published', prompts: { retry: 'workshop.chat.retry@1' } }],
+  }, { codePromptIds: PROMPT_IDS })
+  const draft = resolveBinding(followed, { surface: 'workshop.draft', codePrompts: CODE_PROMPTS, codeSlots: CODE_SLOTS })
+  assert.deepEqual({ id: draft.prompts.retry.id, version: draft.prompts.retry.version }, { id: 'workshop.draft.retry', version: 0 })
+  assert.equal(promptFor(followed, prompts.byId['workshop.draft.retry'], CODE_PROMPTS), null, 'and the call site sends the built-in text')
+  const own = resolveBinding(followed, { surface: 'workshop', codePrompts: CODE_PROMPTS, codeSlots: CODE_SLOTS })
+  assert.deepEqual({ id: own.prompts.retry.id, version: own.prompts.retry.version }, { id: 'workshop.chat.retry', version: 1 })
+})
+
+test('every test run is audited: one that failed at the provider, one over the hourly limit, one the lint refused', async () => {
+  const w = world({ testsPerHour: 2 })
+  const failing = w.model.request
+  let calls = 0
+  const broken = createPromptOps({
+    store: w.store, prompts: w.collections.prompts, versions: w.collections.promptVersions, registry: prompts, live: promptText, fixtureFor, evalsFor,
+    request: async (opts, at) => { calls += 1; if (calls === 1) throw Object.assign(new Error('Provider answered 502'), { status: 502 }); return failing(opts, at) },
+    snapshot: w.snapshot, testLimit: createWriteLimit({ count: 2, windowMs: 60 * 60 * 1000 }),
+  })
+  await assert.rejects(broken.test({ actor: person, id: 'shape.system', body: withSentence, sample: 'arrow' }), /502/)
+  const [failed] = rows(w, 'ai.prompts.test')
+  assert.equal(failed.outcome, 'ok')
+  assert.match(failed.after.failed, /Provider answered 502/)
+  assert.equal(failed.after.surface, 'shape')
+  await broken.test({ actor: person, id: 'shape.system', version: 0 })
+  await assert.rejects(broken.test({ actor: person, id: 'shape.system', version: 0 }), (e) => e.status === 429)
+  assert.equal(refusedRows(w, 'ai.prompts.test').length, 1, 'the run over the limit is recorded as refused')
+  // a text with a key or a placeholder is never sent to a model, and the refusal is recorded
+  const sent = w.model.sent.length
+  await assert.rejects(w.ops.test({ actor: person, id: 'shape.system', body: `${withSentence} Use sk-abcdefghijklmnopqrstuvwx.` }), (e) => e.status === 409 && /not sent to a model until its lint problems are fixed.*looks like a key/.test(e.message))
+  await assert.rejects(w.ops.test({ actor: person, id: 'shape.system', body: `${withSentence} The topic is TOPIC.` }), /All-caps/)
+  assert.equal(w.model.sent.length, sent)
+  assert.equal(refusedRows(w, 'ai.prompts.test').length, 3)
+  // a publish the lint refuses is recorded too
+  const caps = await w.ops.saveDraft({ actor: person, id: 'shape.system', body: `${withSentence} Draw YOUR_TOPIC.` })
+  await assert.rejects(w.ops.publish({ actor: person, id: 'shape.system', version: caps.version, reason: 'go' }), /cannot be published: All-caps/)
+  assert.match(refusedRows(w, 'ai.prompts.publish').at(-1).error, /^lint: All-caps/)
+})
+
+test('the Prompts tab says the built-in text is sent when the published version does not render', async () => {
+  const w = world()
+  await w.store.write({ kind: 'promptVersions', id: 'shape.system@1', doc: { promptId: 'shape.system', version: 1, body: 'Draw {{count}} in {{colour}}.', variables: { count: { type: 'integer', required: true }, colour: { type: 'string', required: true } }, status: 'published' }, action: 'ai.prompts.saveDraft', actor: person, create: true })
+  await w.store.write({ kind: 'prompts', id: 'shape.system', doc: { surface: 'shape', kind: 'system', labels: { published: 1, previous: null } }, action: 'ai.prompts.publish', actor: person, reason: 'broken' })
+  for (let i = 0; i < 60; i += 1) promptText('shape.system', { count: 3 })
+  assert.equal(w.health.length, 1, 'reported once, not on every call')
+  const listed = (await w.ops.list()).surfaces.find((s) => s.surface === 'shape').prompts.find((p) => p.id === 'shape.system')
+  assert.deepEqual(listed.live, { version: 0, source: 'code', fallbackFrom: 1 })
+  assert.match(listed.problem, /Version 1 does not render .*colour.*built-in text is sent/)
+  const got = await w.ops.get({ id: 'shape.system' })
+  assert.equal(got.live.body, CODE_PROMPTS['shape.system'].body)
+  assert.equal(got.live.fallbackFrom, 1)
+  const view = await import('../web/app/imports/ui/pages/admin/ai/prompts-view.mjs')
+  assert.equal(view.sourceText(listed.live), 'Built in (version 1 does not render)')
+})
+
+test('a publish or rollback reaches repeated descriptions and kept plans: the cache keys carry the prompt versions', async () => {
+  const w = world()
+  const cache = new Map()
+  const sent = []
+  let n = 0
+  const draw = () => generateShapes({ principal: { userId: 'ana' }, describe: 'a cloud', count: 1 }, {
+    request: async (opts) => { sent.push(opts.system); return { json: { content: [{ type: 'tool_use', name: 'propose_shapes', input: { shapes: [SQUARE] } }] } } },
+    run: (fn) => fn(), newId: () => `r${++n}`, now: () => new Date(0),
+    cache: { get: async (key) => cache.get(key), put: async (doc) => cache.set(doc.key, doc) },
+  })
+  const first = await draw()
+  assert.equal(first.cached, false)
+  assert.equal((await draw()).cached, true, 'the same description, the same text: the kept answer')
+  assert.equal(promptsKey('shape'), '')
+  const v1 = (await w.ops.saveDraft({ actor: person, id: 'shape.system', body: withSentence })).version
+  await w.ops.publish({ actor: person, id: 'shape.system', version: v1, reason: 'rounder' })
+  assert.equal(promptsKey('shape'), 'shape.system@v1')
+  const before = sent.length
+  const again = await draw()
+  assert.equal(again.cached, false, 'the new text draws again')
+  assert.ok(sent.at(-1).endsWith(ADDED))
+  assert.ok(sent.length > before)
+  await w.ops.rollback({ actor: person, id: 'shape.system', toVersion: 0, reason: 'back' })
+  assert.equal(promptsKey('shape'), '')
+  assert.equal((await draw()).cached, true, 'back on the built-in text: the answer it gave is kept under its old key')
+
+  // keys made with the built-in text are the ones the cache already holds
+  const { createHash } = await import('node:crypto')
+  const { cacheKey } = await import('../web/app/server/shapes/shape-core.mjs')
+  const old = createHash('sha256').update(JSON.stringify(['a cloud', 1, 'm', 'user:ana'])).digest('hex')
+  assert.equal(cacheKey({ describe: 'a cloud', count: 1, model: 'm', scope: 'user:ana', prompts: '' }), old)
+  assert.notEqual(cacheKey({ describe: 'a cloud', count: 1, model: 'm', scope: 'user:ana', prompts: 'shape.system@v1' }), old)
+
+  // a kept presentation plan is planned again when the planning prompts changed
+  const deck = { viewpoints: [{}], planVersion: PLAN_VERSION }
+  assert.equal(needsPlan(deck, null, { prompts: '' }), false, 'made with the built-in text, still built in')
+  assert.equal(needsPlan(deck, null, { prompts: 'presentation.system@v2' }), true)
+  assert.equal(needsPlan({ ...deck, promptsKey: 'presentation.system@v2' }, null, { prompts: 'presentation.system@v2' }), false)
+  assert.equal(needsPlan({ ...deck, isPublished: true }, null, { prompts: 'presentation.system@v2' }), false, 'a published deck is kept')
+})
+
+test('render takes its text in the body (a POST that changes nothing), so a 32 KB draft renders over HTTP', async () => {
+  const { aiPromptsRender, aiPromptsRollback } = await import('../web/app/server/actions/ai-prompts.mjs')
+  assert.equal(aiPromptsRender.mounts.http.method, 'POST')
+  assert.equal(aiPromptsRender.readOnly, true)
+  assert.equal(aiPromptsRender.scope, 'ai:admin:read')
+  assert.equal(aiPromptsRender.input.properties.body.maxLength, 32 * 1024)
+  // rollback carries override (its eval gate) and stays a person's, in the app only
+  assert.equal(aiPromptsRollback.input.properties.override.type, 'boolean')
+  assert.deepEqual([aiPromptsRollback.principals, aiPromptsRollback.mounts.http ?? null], [["person"], null])
 })

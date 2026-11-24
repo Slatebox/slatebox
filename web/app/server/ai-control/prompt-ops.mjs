@@ -5,7 +5,13 @@
 //     changes nothing live. Version 0 is the built-in text and is never stored.
 //   - Publishing moves the head's published label (aiPrompts labels { published, previous }) after the
 //     lint (never overridable) and the surface's eval cases (overridable with a reason, recorded).
-//   - Rollback moves the label to an earlier version, or to the built-in text (0).
+//   - Rollback moves the label to an earlier version that was published before (checked as a
+//     publish is: the lint, then the eval cases, overridable with a reason), or to the built-in
+//     text (0). A draft or a suggestion is never put live by a rollback: it is published.
+//   - A server binding may pin a version of a prompt for its slot (`shape.system@2`); that pin is
+//     what is sent until the binding changes, so get, list, publish and rollback name it.
+//   - Every attempt is in the audit trail: a test run that failed, one over the hourly limit, and a
+//     publish or rollback the lint or the checks refused.
 //   - An agent may save drafts (marked as suggestions) and run tests; only a person publishes or
 //     rolls back (the actions are person-only).
 // A version's variables are the built-in version's, those its text uses: the call site gives only
@@ -31,11 +37,35 @@ const fail = (message, status = 400, details) => { throw new ModelError(message,
  *   live(id, values)  the text a call site gets now (prompts/index.mjs promptText)
  *   fixtureFor(surface), evalsFor(surface)
  *   request(opts, { surface, actor }) → req()'s answer, metered to the administrator (admin.test)
- *   costOf?({ model, usage }), snapshot?() for health, testLimit?: { take(userId) }, now?()
+ *   costOf?({ model, usage }), snapshot?() (bindings that pin a version), health?() (the snapshot's
+ *   and this pod's: a published version that did not render), testLimit?: { take(userId) }, now?()
  * }
  */
-export function createPromptOps({ store, prompts, versions, registry, live, fixtureFor, evalsFor, request, costOf = null, snapshot = () => ({ health: [] }), testLimit = null, now = () => new Date() }) {
+export function createPromptOps({ store, prompts, versions, registry, live, fixtureFor, evalsFor, request, costOf = null, snapshot = () => ({ health: [] }), health = () => snapshot()?.health || [], testLimit = null, now = () => new Date() }) {
   const known = (id) => registry.byId[id] || fail(`There is no prompt ${id}.`, 404)
+  const refuse = (action, actor, id, reason, error) => store.refused({ action, actor, target: { kind: 'prompt', id }, reason, error, trusted: true }).catch(() => {})
+
+  /** The server binding that pins a version of this prompt for its slot: { binding, version } | null. */
+  function pinOf(prompt) {
+    const snap = snapshot()
+    if (!snap || snap.dbLayer === 'off') return null
+    const ref = snap.bindings?.[`${prompt.surface}|server`]?.prompts?.[prompt.slot]
+    const match = typeof ref === 'string' ? /^(.+)@(\d+)$/.exec(ref) : null
+    return match && match[1] === prompt.id ? { binding: `${prompt.surface}|server`, version: Number(match[2]) } : null
+  }
+
+  /**
+   * What a call site is sent now: the registry's choice, unless that version did not render on
+   * this pod (then the built-in text, and why). → { version, source, body, variables, fallbackFrom?, problem? }
+   */
+  function servedNow(prompt) {
+    const served = registry.resolved(prompt.id)
+    const failed = registry.problem?.(prompt.id)
+    if (failed && served.version > 0) {
+      return { version: 0, source: 'code', body: prompt.body, variables: prompt.variables, fallbackFrom: served.version, problem: `Version ${served.version} does not render (${failed.message}); the built-in text is sent instead.` }
+    }
+    return served
+  }
 
   async function versionsOf(id) {
     return (await versions.find({ promptId: id }).toArray()).sort((a, b) => b.version - a.version)
@@ -77,19 +107,21 @@ export function createPromptOps({ store, prompts, versions, registry, live, fixt
     for (const row of await versions.find({ status: 'draft' }).toArray()) {
       if (!drafts[row.promptId] || row.version > drafts[row.promptId].version) drafts[row.promptId] = row
     }
-    const health = snapshot()?.health || []
+    const problems = health() || []
     const groups = new Map()
     for (const prompt of registry.list) {
       const stored = heads[prompt.id]
       const published = stored?.labels?.published ?? null
       const draft = drafts[prompt.id] && drafts[prompt.id].version > (published ?? 0) ? drafts[prompt.id] : null
-      const served = registry.resolved(prompt.id)
-      const skipped = health.find((h) => h.kind === 'prompt' && h.id === prompt.id)
+      const served = servedNow(prompt)
+      const pin = pinOf(prompt)
+      const skipped = served.problem ? { problem: served.problem } : [...problems].reverse().find((h) => h.kind === 'prompt' && h.id === prompt.id)
       if (!groups.has(prompt.surface)) groups.set(prompt.surface, { surface: prompt.surface, title: surfaceById(prompt.surface)?.title || prompt.surface, prompts: [] })
       groups.get(prompt.surface).prompts.push({
         id: prompt.id, kind: prompt.kind, slot: prompt.slot, title: prompt.title,
         published: published ?? 0, previous: stored?.labels?.previous ?? null,
-        live: { version: served.version, source: served.source },
+        live: { version: served.version, source: served.source, ...(served.fallbackFrom && { fallbackFrom: served.fallbackFrom }) },
+        ...(pin && { pinned: pin }),
         draft: draft ? { version: draft.version, origin: draft.origin || 'admin', createdBy: draft.createdBy ?? null, createdAt: draft.createdAt ?? null } : null,
         ...(skipped && { problem: skipped.problem }),
       })
@@ -101,18 +133,20 @@ export function createPromptOps({ store, prompts, versions, registry, live, fixt
   async function get({ id }) {
     const prompt = known(id)
     const [stored, rows] = await Promise.all([head(id), versionsOf(id)])
-    const served = registry.resolved(id)
+    const served = servedNow(prompt)
+    const pin = pinOf(prompt)
     const fixture = fixtureFor(prompt.surface)
     return {
       id, surface: prompt.surface, surfaceTitle: surfaceById(prompt.surface)?.title || prompt.surface,
       kind: prompt.kind, slot: prompt.slot, title: prompt.title,
       labels: { published: stored?.labels?.published ?? null, previous: stored?.labels?.previous ?? null },
       code: { version: 0, body: prompt.body, variables: prompt.variables },
-      live: { version: served.version, source: served.source, body: served.body, variables: served.variables ?? {} },
+      live: { version: served.version, source: served.source, body: served.body, variables: served.variables ?? {}, ...(served.fallbackFrom && { fallbackFrom: served.fallbackFrom, problem: served.problem }) },
+      ...(pin && { pinned: pin }),
       versions: rows.slice(0, 50).map((row) => ({
         version: row.version, status: row.status, body: row.body, variables: row.variables || {}, note: row.note ?? null,
         origin: row.origin || 'admin', createdBy: row.createdBy ?? null, createdByPrincipal: row.createdByPrincipal ?? null,
-        createdAt: row.createdAt ?? null, evalRun: row.evalRun ?? null,
+        createdAt: row.createdAt ?? null, evalRun: row.evalRun ?? null, ...(row.basedOn && { basedOn: row.basedOn }),
       })),
       samples: (fixture?.samples || []).map((s) => ({ id: s.id, title: s.title })),
       testSurfaces: [prompt.surface, ...BINDABLE_SURFACES.filter((s) => s !== prompt.surface)],
@@ -121,7 +155,7 @@ export function createPromptOps({ store, prompts, versions, registry, live, fixt
   }
 
   /** Saves a draft version: nothing live changes. An agent's draft is a suggestion. → { id, version, status, origin, lint } */
-  async function saveDraft({ actor, id, body, wrap = null, note = null }) {
+  async function saveDraft({ actor, id, body, wrap = null, note = null, basedOn = null }) {
     const prompt = known(id)
     if (typeof body !== 'string' || !body.trim()) fail('The text is empty.')
     if (body.length > MAX_BODY) fail(`The text is at most ${MAX_BODY} characters.`)
@@ -130,6 +164,12 @@ export function createPromptOps({ store, prompts, versions, registry, live, fixt
       if (!prompt.variables[name]) fail(`{{${name}}} is not a value this prompt is given.`)
       if (!['none', 'data'].includes(value)) fail('wrap is none or data.')
     }
+    if (basedOn !== null && (!Number.isInteger(basedOn) || basedOn < 0)) fail('basedOn is the version the text was edited from (0 for the built-in text).')
+    // a draft edited from an agent's suggestion keeps where it came from, so its publish still
+    // shows the suggestion's warnings and the audit names who suggested it
+    const base = basedOn ? await versions.findOne({ _id: `${id}@${basedOn}` }) : null
+    if (basedOn && !base) fail(`There is no version ${basedOn} of ${id}.`, 404)
+    const suggested = base && (base.origin === 'ai-proposal' ? { createdBy: base.createdBy ?? null, tokenId: base.tokenId ?? null } : base.basedOn?.suggestion) || null
     const variables = variablesFor(prompt, body, wrap)
     if (!(await head(id))) {
       await store.write({ kind: 'prompts', id, doc: { surface: prompt.surface, kind: prompt.kind, title: prompt.title, labels: { published: null, previous: null }, status: 'active' }, action: 'ai.prompts.saveDraft', actor, target: { kind: 'prompt', id } })
@@ -140,6 +180,7 @@ export function createPromptOps({ store, prompts, versions, registry, live, fixt
       const version = (rows[0]?.version ?? 0) + 1
       const doc = {
         promptId: id, version, body, variables, note: note?.trim() || null, origin, status: 'draft', evalRun: null,
+        ...(basedOn !== null && { basedOn: { version: basedOn, ...(suggested && { suggestion: suggested }) } }),
         createdBy: actor.userId ?? null, createdByPrincipal: actor.principal, ...(actor.tokenId && { tokenId: actor.tokenId }), createdAt: now(),
       }
       try {
@@ -193,14 +234,29 @@ export function createPromptOps({ store, prompts, versions, registry, live, fixt
   async function test({ actor, id, version = null, body = null, wrap = null, sample = null, surface = null }) {
     const prompt = known(id)
     if (surface && !BINDABLE_SURFACES.includes(surface)) fail(`${surface} is not a part of Slatebox that can be bound.`)
-    testLimit?.take(actor.userId)
+    try {
+      testLimit?.take(actor.userId)
+    } catch (error) {
+      await refuse('ai.prompts.test', actor, id, null, error.message)
+      throw error
+    }
     const candidate = await candidateOf(prompt, { version, body, wrap })
+    // text that could not be published is not sent to a model either (a key, words asking for
+    // keys or naming AI control actions, a placeholder): the lint runs first
+    const lint = lintOf(prompt, candidate)
+    if (lint.blocking.length) {
+      await refuse('ai.prompts.test', actor, id, null, `lint: ${lint.blocking[0]}`)
+      fail(`This text is not sent to a model until its lint problems are fixed: ${lint.blocking.join(' ')}`, 409, { lint })
+    }
     let run
     try {
       run = await runPromptTest({ prompt, candidate, fixture: fixtureFor(prompt.surface), sampleId: sample, surface, live, costOf, now: () => now().getTime(),
         request: (opts, at) => request(opts, { ...at, actor }) })
     } catch (error) {
-      throw asTestProblem(error)
+      const said = asTestProblem(error)
+      // a run that failed may still have reached the provider (and been charged): it is recorded
+      await store.record({ action: 'ai.prompts.test', actor, target: { kind: 'prompt', id }, after: { version: candidate.version, sample, surface: surface || prompt.surface, failed: String(said?.message || 'failed').slice(0, 300) } }).catch(() => {})
+      throw said
     }
     await store.record({ action: 'ai.prompts.test', actor, target: { kind: 'prompt', id }, after: { version: candidate.version, sample: run.sample, surface: run.surface, model: run.model, parses: run.parses.ok, latencyMs: run.latencyMs, costMicros: run.costMicros } })
     return { id, version: candidate.version, ...run }
@@ -237,29 +293,56 @@ export function createPromptOps({ store, prompts, versions, registry, live, fixt
     if (!Number.isInteger(version) || version < 1) fail('Publish a saved version (1 or more). To use the built-in text, roll back to version 0.')
     const candidate = await candidateOf(prompt, { version })
     const lint = lintOf(prompt, candidate)
-    if (lint.blocking.length) fail(`Version ${version} cannot be published: ${lint.blocking.join(' ')}`, 409, { lint })
+    if (lint.blocking.length) {
+      await refuse('ai.prompts.publish', actor, id, reason, `lint: ${lint.blocking[0]}`)
+      fail(`Version ${version} cannot be published: ${lint.blocking.join(' ')}`, 409, { lint })
+    }
     const run = await evaluate(prompt, candidate, actor)
     const evalRun = { at: run.at, passed: run.passed, failed: run.failed, skipped: run.skipped, costMicros: run.costMicros, overridden: Boolean(run.failed && override), cases: run.cases }
     if (run.failed && !override) {
-      await store.refused({ action: 'ai.prompts.publish', actor, target: { kind: 'prompt', id }, reason, error: `${run.failed} eval case(s) failed`, trusted: true }).catch(() => {})
+      await refuse('ai.prompts.publish', actor, id, reason, `${run.failed} eval case(s) failed`)
       fail(`${run.failed} of ${run.cases.length} checks failed, so version ${version} was not published. Fix the text, or publish anyway with a reason.`, 409, { evalRun })
     }
-    const summary = { passed: evalRun.passed, failed: evalRun.failed, overridden: evalRun.overridden, ...(candidate.origin === 'ai-proposal' && { proposedBy: candidate.row?.createdBy ?? null, proposedByToken: candidate.row?.tokenId ?? null }) }
-    const out = await setLabel({ actor, id, to: version, reason, action: 'ai.prompts.publish', evalRun: summary })
-    return { ...out, evalRun }
+    const out = await setLabel({ actor, id, to: version, reason, action: 'ai.prompts.publish', evalRun: summaryOf(evalRun, candidate) })
+    return { ...out, evalRun, ...(pinOf(prompt) && { pinned: pinOf(prompt) }) }
   }
 
-  /** Moves the published label back: to an earlier version (checked as a publish is) or to the built-in text (0). */
-  async function rollback({ actor, id, toVersion, reason }) {
+  // what the audit row keeps of an eval run, and who suggested the text when an agent did
+  function summaryOf(evalRun, candidate) {
+    const suggestion = candidate.origin === 'ai-proposal' ? { createdBy: candidate.row?.createdBy ?? null, tokenId: candidate.row?.tokenId ?? null } : candidate.row?.basedOn?.suggestion
+    return { passed: evalRun.passed, failed: evalRun.failed, overridden: evalRun.overridden, ...(suggestion && { proposedBy: suggestion.createdBy ?? null, proposedByToken: suggestion.tokenId ?? null }) }
+  }
+
+  /**
+   * Moves the published label back: to an earlier version that was live before, checked as a
+   * publish is (the lint, then the eval cases; a failed case blocks unless override, recorded), or
+   * to the built-in text (0), which needs no check. → { id, version, previous, generation, evalRun? }
+   */
+  async function rollback({ actor, id, toVersion, reason, override = false }) {
     const prompt = known(id)
     if (!reason || !String(reason).trim()) fail('Say why: a rollback needs a reason.')
     if (!Number.isInteger(toVersion) || toVersion < 0) fail('toVersion is a version number, or 0 for the built-in text.')
-    if (toVersion > 0) {
-      const candidate = await candidateOf(prompt, { version: toVersion })
-      const lint = lintOf(prompt, candidate)
-      if (lint.blocking.length) fail(`Version ${toVersion} cannot be published again: ${lint.blocking.join(' ')} Roll back to the built-in text (0) instead.`, 409, { lint, builtinInstead: true })
+    if (toVersion === 0) return { ...(await setLabel({ actor, id, to: 0, reason, action: 'ai.prompts.rollback' })), ...(pinOf(prompt) && { pinned: pinOf(prompt) }) }
+    const candidate = await candidateOf(prompt, { version: toVersion })
+    // only a version that was live before: a draft or an agent's suggestion is published, with its checks
+    if (!['published', 'superseded'].includes(candidate.row?.status)) {
+      const why = `Version ${toVersion} was never published, so it cannot be served again. Publish it instead: its checks run first.`
+      await refuse('ai.prompts.rollback', actor, id, reason, why)
+      fail(why, 409, { neverPublished: true })
     }
-    return setLabel({ actor, id, to: toVersion, reason, action: 'ai.prompts.rollback' })
+    const lint = lintOf(prompt, candidate)
+    if (lint.blocking.length) {
+      await refuse('ai.prompts.rollback', actor, id, reason, `lint: ${lint.blocking[0]}`)
+      fail(`Version ${toVersion} cannot be published again: ${lint.blocking.join(' ')} Roll back to the built-in text (0) instead.`, 409, { lint, builtinInstead: true })
+    }
+    const run = await evaluate(prompt, candidate, actor)
+    const evalRun = { at: run.at, passed: run.passed, failed: run.failed, skipped: run.skipped, costMicros: run.costMicros, overridden: Boolean(run.failed && override), cases: run.cases }
+    if (run.failed && !override) {
+      await refuse('ai.prompts.rollback', actor, id, reason, `${run.failed} eval case(s) failed`)
+      fail(`${run.failed} of ${run.cases.length} checks failed, so version ${toVersion} is not served again. Roll back to the built-in text (0), or serve it anyway with a reason.`, 409, { evalRun, builtinInstead: true })
+    }
+    const out = await setLabel({ actor, id, to: toVersion, reason, action: 'ai.prompts.rollback', evalRun: summaryOf(evalRun, candidate) })
+    return { ...out, evalRun, ...(pinOf(prompt) && { pinned: pinOf(prompt) }) }
   }
 
   /** ai.control.reset: one prompt (id) or every prompt back to its built-in text. → { reset: [ids] } */

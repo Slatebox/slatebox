@@ -15,6 +15,7 @@ export const KIND_LABELS = Object.freeze({
 
 /** Where the served text comes from, in words. live: { version, source } */
 export function sourceText(live) {
+  if (live?.fallbackFrom) return `Built in (version ${live.fallbackFrom} does not render)`
   if (!live || !live.version) return 'Built in'
   if (live.source === 'pinned') return `Version ${live.version}, pinned by a binding`
   return `Version ${live.version}`
@@ -132,6 +133,15 @@ export function namesIn(body = '') {
 /** The names a text uses that its part of Slatebox does not give (underlined red in the editor). */
 export function undeclaredNames(body, codeVariables = {}) {
   return namesIn(body).filter((name) => !Object.hasOwn(codeVariables, name))
+}
+
+/** What a publish or rollback says happened, naming a binding's pin that keeps another version live. */
+export function liveText(out, title) {
+  const what = out.version ? `Version ${out.version} of ${title}` : `The built-in text of ${title}`
+  if (out.pinned && out.pinned.version !== out.version) {
+    return `${what} is published, but the ${out.pinned.binding.split('|')[0]} binding pins version ${out.pinned.version}, so that is still sent. Change the binding's prompt to "Always use the published version" to use it.`
+  }
+  return `${what} is live. Every server uses it within seconds.`
 }
 
 /** A version's status in words. */

@@ -316,10 +316,13 @@ export function resolveBinding(snapshot, args = {}) {
     }
   }
 
-  // prompts: slots from the surface's code defaults, overlaid by bindings (server or plan)
+  // prompts: slots from the surface's code defaults, overlaid by the surface's own bindings (server
+  // or plan). A followed surface's slots are its own prompts, never this surface's: promptFor, what
+  // a call site sends, reads only the surface's own binding, and so does this view.
   const slots = { ...(codeSlots[id] || {}) }
   const slotLayer = Object.fromEntries(Object.keys(slots).map((slot) => [slot, 'code']))
-  for (const { docs } of [...docsBySurface].reverse()) {
+  for (const { sid, docs } of [...docsBySurface].reverse()) {
+    if (sid !== id) continue
     for (const { doc, layer } of [...docs].reverse()) {
       if (isInner(layer) || !doc.prompts) continue
       for (const [slot, ref] of Object.entries(doc.prompts)) {

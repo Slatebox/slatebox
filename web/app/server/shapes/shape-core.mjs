@@ -5,7 +5,7 @@
 // model's answer is only ever data, never markup. Nothing here names a model or provider.
 import { createHash } from 'node:crypto'
 import { prepareShape } from 'slateboxjs/shapes'
-import { codePromptText, promptText } from '../ai-control/prompts/index.mjs'
+import { codePromptText, promptText, promptsKey } from '../ai-control/prompts/index.mjs'
 
 export const SHAPE_FEATURE = 'shape'
 export const MAX_DESCRIBE = 200
@@ -192,8 +192,11 @@ export function acceptCandidates(raw, kept = []) {
   return { shapes: shapes.slice(kept.length), problems }
 }
 
-export function cacheKey({ describe, count, model, scope }) {
-  return createHash('sha256').update(JSON.stringify([describe.toLowerCase(), count, model || '', scope || ''])).digest('hex')
+// prompts: the shape prompts' versions that are not built in (prompts/index.mjs promptsKey); a key
+// made with the built-in text is the one it always was.
+export function cacheKey({ describe, count, model, scope, prompts = '' }) {
+  const parts = [describe.toLowerCase(), count, model || '', scope || '']
+  return createHash('sha256').update(JSON.stringify(prompts ? [...parts, prompts] : parts)).digest('hex')
 }
 
 export class ShapeProblem extends Error {
@@ -222,7 +225,8 @@ export async function generateShapes({ principal, describe, count = DEFAULT_COUN
   const wanted = Math.max(1, Math.min(MAX_COUNT, Number.isInteger(count) ? count : DEFAULT_COUNT))
   const scope = principal.teamId ? `team:${principal.teamId}` : `user:${principal.userId}`
   const model = typeof deps.model === 'function' ? await deps.model(principal) : deps.model ?? null
-  const key = cacheKey({ describe: text, count: wanted, model, scope })
+  // a published or rolled back shape prompt draws again rather than reuse what the old text drew
+  const key = cacheKey({ describe: text, count: wanted, model, scope, prompts: promptsKey('shape') })
   const now = deps.now ? deps.now() : new Date()
 
   if (!fresh && deps.cache) {

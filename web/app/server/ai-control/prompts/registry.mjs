@@ -8,8 +8,9 @@
 // is used: index.mjs gives no source, or a snapshot with no documents.
 //
 // A published version that does not render (a value of the wrong type, a required one missing)
-// is never shown to anyone: the code text is rendered instead, once, and the fallback is reported
-// (spec 2.3). Version 0 renders the exact bytes the code sent before the prompts moved here
+// is never shown to anyone: the code text is rendered instead and the fallback is reported (spec
+// 2.3), once per version on this pod, so a hot path does not flood health; problem(id) says so
+// while that version is the one served, so the Prompts tab names the built-in text as served. Version 0 renders the exact bytes the code sent before the prompts moved here
 // (scripts/ai-prompts-golden.test.mjs).
 //
 // Pure: no Meteor, no database. index.mjs (Meteor) plugs in the snapshot as the source.
@@ -49,7 +50,7 @@ export function definePrompts(rows) {
 /**
  * The registry over every surface's prompts. → {
  *   list, byId, ids(), codeSlots ({ [surface]: { slot: id } }), codePrompts ({ [id]: { body, variables } }),
- *   setSource(fn, { onFallback }), text(id, values), code(id, values), resolved(id)
+ *   setSource(fn, { onFallback }), text(id, values), code(id, values), resolved(id), problem(id)
  * }
  * source(id) → { id, version, body, variables, source } | null: the text to use instead of the code
  * (a pinned or published version), or null for the code text.
@@ -68,6 +69,8 @@ export function createPromptRegistry(groups) {
   const codePrompts = Object.freeze(Object.fromEntries(list.map((p) => [p.id, Object.freeze({ body: p.body, variables: p.variables })])))
   let source = null
   let onFallback = null
+  // id → { version, message, at }: a published version that did not render on this pod
+  const failures = new Map()
 
   const known = (id) => {
     const prompt = byId[id]
@@ -105,10 +108,23 @@ export function createPromptRegistry(groups) {
         return renderTemplate(use.body, values, use.variables ?? null)
       } catch (error) {
         if (!(error instanceof PromptVarsError || error instanceof TemplateError)) throw error
-        try { onFallback?.({ id, version: use.version, error }) } catch {}
+        if (failures.get(id)?.version !== use.version) {
+          failures.set(id, { version: use.version, message: error.message, at: new Date() })
+          try { onFallback?.({ id, version: use.version, error }) } catch {}
+        }
       }
     }
     return code(id, values)
+  }
+
+  /**
+   * Why a prompt is served from the built-in text although a version is published or pinned: that
+   * version did not render here. → { version, message, at } | null (null once another is served)
+   */
+  const problem = (id) => {
+    const failed = failures.get(id)
+    if (!failed) return null
+    return resolved(id).version === failed.version ? failed : null
   }
 
   return {
@@ -119,10 +135,12 @@ export function createPromptRegistry(groups) {
     codePrompts,
     setSource(fn, options = {}) {
       source = typeof fn === 'function' ? fn : null
+      failures.clear()
       onFallback = typeof options.onFallback === 'function' ? options.onFallback : null
     },
     text,
     code,
     resolved,
+    problem,
   }
 }

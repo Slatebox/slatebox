@@ -376,7 +376,7 @@ declare namespace slatebox.ai.control {
 }
 
 declare namespace slatebox.ai.control {
-  /** Reset AI control. Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); prompt returns one prompt (promptId) to its built-in text, prompts every prompt (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only. @scope ai:admin @destructive @confirm @idempotent */
+  /** Reset AI control. Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); prompt returns one prompt (promptId) to its built-in text and drops a binding's pin of a version of it, prompts every prompt (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only. @scope ai:admin @destructive @confirm @idempotent */
   function reset(input: {
     target: "use" | "binding" | "bindings" | "prompt" | "prompts" | "dbLayer" | "all";
     /** For target binding: the part of Slatebox. */
@@ -392,6 +392,7 @@ declare namespace slatebox.ai.control {
     cleared?: string[];
     removed?: string[];
     prompts?: string[];
+    unpinned?: string[];
     dbLayer?: string;
     [key: string]: unknown;
   }) & { mode: "save" }>;
@@ -494,7 +495,7 @@ declare namespace slatebox.ai.prompts {
 }
 
 declare namespace slatebox.ai.prompts {
-  /** Render AI prompt. Renders a prompt version (or text sent with the call) into the request a built-in sample sends, and reports its lint findings. No model is called. Administrators only. @scope ai:admin:read */
+  /** Render AI prompt. Renders a prompt version (or text sent with the call) into the request a built-in sample sends, and reports its lint findings. No model is called and nothing is saved. Administrators only. @scope ai:admin:read @idempotent */
   function render(input: {
     /** The prompt, for example shape.system. */
     id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement";
@@ -506,12 +507,12 @@ declare namespace slatebox.ai.prompts {
     wrap?: Record<string, "none" | "data">;
     /** A built-in sample (ai.prompts.get lists them). Default: the first. (at most 40 characters) */
     sample?: string;
-  }): Promise<{
+  }): Promise<({
     sample?: string | null;
     rendered?: Record<string, unknown> | null;
     lint?: Record<string, unknown>;
     [key: string]: unknown;
-  }>;
+  }) & { mode: "save" }>;
 }
 
 declare namespace slatebox.ai.prompts {
@@ -525,6 +526,8 @@ declare namespace slatebox.ai.prompts {
     wrap?: Record<string, "none" | "data">;
     /** A short note kept with the version. (at most 200 characters) */
     note?: string;
+    /** The version the text was edited from (0: the built-in text). A draft edited from a suggestion stays marked as one when it is published. (at least 0) */
+    basedOn?: number;
   }): Promise<({
     id?: string;
     version?: number;

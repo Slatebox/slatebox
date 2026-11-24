@@ -116,10 +116,13 @@ export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null
    *   binding  removes the published server binding of one surface (surface): it follows what it
    *            follows again, then the settings file and built-in AI; its versions stay;
    *   bindings removes every published server binding;
+   *   prompt   returns one prompt (promptId) to its built-in text, and drops a server binding's pin
+   *            of a version of it; prompts does so for every prompt (versions stay);
    *   dbLayer  switches the DB layer off at runtime (aiControlState.dbLayer 'off'): every AI
    *            control document is ignored until it is switched on again;
    *   all      every one of the above.
-   * A reason is required. → { target, cleared: [keys], removed: [binding ids], dbLayer: 'on' | 'off' }
+   * A reason is required. → { target, cleared: [keys], removed: [binding ids], prompts: [ids],
+   *   unpinned?: [binding ids] (prompt, prompts, all), dbLayer: 'on' | 'off' }
    */
   async function reset({ userId, actor, target, keys = null, surface = null, promptId = null, reason }) {
     if (!RESET_TARGETS.includes(target)) throw new Error(`target is ${RESET_TARGETS.join(', ')}`)
@@ -138,10 +141,13 @@ export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null
       }
     }
     // prompts back to their built-in text (version 0); their versions stay
+    // and a server binding's pin of one of them goes too, or it would keep sending the pinned version
     let promptsReset = []
+    let unpinned = null
     if (target === 'prompt' || target === 'prompts' || target === 'all') {
       if (!prompts) throw new Error('ai-control admin: needs the prompt store to reset prompts')
       ;({ reset: promptsReset } = await prompts.reset({ actor, id: target === 'prompt' ? promptId : null, reason }))
+      unpinned = target === 'all' || !bindings?.unpinPrompts ? [] : await bindings.unpinPrompts({ actor, ids: target === 'prompt' ? [promptId] : null, reason })
     }
     let { dbLayer } = await store.state()
     if (target === 'dbLayer' || target === 'all') {
@@ -150,7 +156,7 @@ export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null
       await store.write({ kind: 'state', id: STATE_ID, doc: { aiEnabled: true, ...rest, dbLayer: 'off' }, action: 'ai.control.reset', actor, reason, target: { kind: 'state', id: 'dbLayer' } })
       dbLayer = 'off'
     }
-    return { target, cleared, removed, prompts: promptsReset, dbLayer: dbLayer === 'off' ? 'off' : 'on' }
+    return { target, cleared, removed, prompts: promptsReset, ...(unpinned && { unpinned }), dbLayer: dbLayer === 'off' ? 'off' : 'on' }
   }
 
   /**

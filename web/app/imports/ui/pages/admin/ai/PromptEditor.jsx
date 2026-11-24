@@ -24,7 +24,7 @@ import Typography from '@mui/material/Typography'
 import { ReasonDialog } from './BindingEditor'
 import PromptDiff from './PromptDiff'
 import PromptTest from './PromptTest'
-import { KIND_LABELS, sourceText, statusText, undeclaredNames } from './prompts-view.mjs'
+import { KIND_LABELS, liveText, sourceText, statusText, undeclaredNames } from './prompts-view.mjs'
 
 // Admin › AI control › Prompts › one prompt: edit its text as a draft (nothing live changes), see the
 // lint as you type, compare it with what is live or any version (the built-in text is version 0),
@@ -34,6 +34,7 @@ import { KIND_LABELS, sourceText, statusText, undeclaredNames } from './prompts-
 // Only a person publishes or rolls back (ai.prompts.publish / rollback).
 const mono = { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.8rem', lineHeight: 1.5 }
 const failure = (err, fallback) => err?.reason || err?.message || fallback
+const wrapOf = (variables) => Object.fromEntries(Object.entries(variables || {}).filter(([, d]) => d.wrap === 'data').map(([n]) => [n, 'data']))
 const when = (at) => (at ? new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '')
 
 // A text area with line numbers beside it (prompts are long; the lint and the diff name lines).
@@ -127,19 +128,23 @@ function EvalResults({ evalRun }) {
   )
 }
 
-function PublishDialog({ prompt, row, onClose, onDone }) {
+// Publish a draft, or serve a version that was live before again (rollback): both run the lint and
+// the part's checks first, and a failed check blocks unless you go ahead anyway with a reason.
+function PublishDialog({ prompt, row, rollback = false, onClose, onDone }) {
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [evalRun, setEvalRun] = useState(null)
   const [anyway, setAnyway] = useState(false)
-  const suggestion = row.origin === 'ai-proposal'
+  const suggestion = row.origin === 'ai-proposal' || Boolean(row.basedOn?.suggestion)
   const go = async () => {
     setBusy(true)
     setError('')
     try {
-      const out = await Meteor.callAsync('ai.prompts.publish', { id: prompt.id, version: row.version, reason: reason.trim(), ...(anyway && { override: true }) })
-      onDone(`Version ${out.version} of ${prompt.title} is live. Every server uses it within seconds.`)
+      const out = rollback
+        ? await Meteor.callAsync('ai.prompts.rollback', { id: prompt.id, toVersion: row.version, reason: reason.trim(), ...(anyway && { override: true }) })
+        : await Meteor.callAsync('ai.prompts.publish', { id: prompt.id, version: row.version, reason: reason.trim(), ...(anyway && { override: true }) })
+      onDone(liveText(out, prompt.title))
     } catch (err) {
       setError(failure(err, 'It was not published.'))
       setEvalRun(err?.details?.evalRun || null)
@@ -149,21 +154,24 @@ function PublishDialog({ prompt, row, onClose, onDone }) {
   }
   return (
     <Dialog open onClose={onClose} maxWidth="lg" fullWidth aria-labelledby="prompt-publish-title">
-      <DialogTitle id="prompt-publish-title">Publish version {row.version} of {prompt.title}</DialogTitle>
+      <DialogTitle id="prompt-publish-title">{rollback ? `Serve version ${row.version} of ${prompt.title} again` : `Publish version ${row.version} of ${prompt.title}`}</DialogTitle>
       <DialogContent>
+        {prompt.pinned && prompt.pinned.version !== row.version && (
+          <Alert severity="warning" sx={{ mb: 2 }}>The {prompt.pinned.binding.split('|')[0]} binding pins version {prompt.pinned.version} of this prompt, so that version is sent until the binding's prompt is set to "Always use the published version".</Alert>
+        )}
         <Typography variant="body2" mb={1}>What changes against the text served now ({sourceText(prompt.live).toLowerCase()}):</Typography>
         <PromptDiff before={prompt.live.body} after={row.body} beforeLabel={`Now: ${sourceText(prompt.live)}`} afterLabel={`Version ${row.version}`} suggestion={suggestion} />
-        <Typography variant="body2" mt={2}>Publishing first runs the lint, then {prompt.evalCases.length} checks with this part's samples on its binding's model (charged to you).</Typography>
+        <Typography variant="body2" mt={2}>{rollback ? 'Serving it again' : 'Publishing'} first runs the lint, then {prompt.evalCases.length} checks with this part's samples on its binding's model (charged to you).</Typography>
         <TextField label="Why (kept in the change history)" value={reason} onChange={(e) => setReason(e.target.value)} fullWidth multiline minRows={2} inputProps={{ maxLength: 500 }} sx={{ mt: 2 }} />
         {error && <Alert severity="warning" sx={{ mt: 2 }}>{error}</Alert>}
         <EvalResults evalRun={evalRun} />
         {evalRun?.failed > 0 && (
-          <FormControlLabel sx={{ mt: 1 }} control={<Checkbox checked={anyway} onChange={(e) => setAnyway(e.target.checked)} />} label="Publish anyway (the change history records that the checks failed, and why)" />
+          <FormControlLabel sx={{ mt: 1 }} control={<Checkbox checked={anyway} onChange={(e) => setAnyway(e.target.checked)} />} label={`${rollback ? 'Serve it anyway' : 'Publish anyway'} (the change history records that the checks failed, and why)`} />
         )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" disabled={busy || !reason.trim()} onClick={go}>{busy ? 'Running checks…' : anyway ? 'Publish anyway' : 'Run checks and publish'}</Button>
+        <Button variant="contained" disabled={busy || !reason.trim()} onClick={go}>{busy ? 'Running checks…' : rollback ? (anyway ? 'Serve it anyway' : 'Run checks and serve it again') : anyway ? 'Publish anyway' : 'Run checks and publish'}</Button>
       </DialogActions>
     </Dialog>
   )
@@ -174,6 +182,7 @@ export default function PromptEditor({ id, titles, onClose, onChanged }) {
   const [error, setError] = useState('')
   const [body, setBody] = useState('')
   const [wrap, setWrap] = useState({})
+  const [basedOn, setBasedOn] = useState(null)
   const [note, setNote] = useState('')
   const [lint, setLint] = useState(null)
   const [renderError, setRenderError] = useState('')
@@ -182,6 +191,7 @@ export default function PromptEditor({ id, titles, onClose, onChanged }) {
   const [saved, setSaved] = useState('')
   const [publishing, setPublishing] = useState(null)
   const [rolling, setRolling] = useState(null)
+  const [serving, setServing] = useState(null)
 
   const load = async (keepText = false) => {
     try {
@@ -189,7 +199,8 @@ export default function PromptEditor({ id, titles, onClose, onChanged }) {
       setPrompt(got)
       if (!keepText) {
         setBody(got.live.body)
-        setWrap(Object.fromEntries(Object.entries(got.live.variables || {}).filter(([, d]) => d.wrap === 'data').map(([n]) => [n, 'data'])))
+        setWrap(wrapOf(got.live.variables))
+        setBasedOn(got.live.version)
       }
       setError('')
     } catch (err) {
@@ -224,7 +235,7 @@ export default function PromptEditor({ id, titles, onClose, onChanged }) {
 
   const save = async () => {
     try {
-      const out = await Meteor.callAsync('ai.prompts.saveDraft', { id, body, ...(Object.keys(wrap).length && { wrap }), ...(note.trim() && { note: note.trim() }) })
+      const out = await Meteor.callAsync('ai.prompts.saveDraft', { id, body, ...(Object.keys(wrap).length && { wrap }), ...(note.trim() && { note: note.trim() }), ...(Number.isInteger(basedOn) && { basedOn }) })
       setSaved(`Version ${out.version} saved as a draft. Nothing live changed.${out.lint.blocking.length ? ' Fix the lint problems before publishing it.' : ''}`)
       setNote('')
       await load(true)
@@ -243,6 +254,7 @@ export default function PromptEditor({ id, titles, onClose, onChanged }) {
         </Typography>
       </DialogTitle>
       <DialogContent dividers>
+        {prompt.live.problem && <Alert severity="error" sx={{ mb: 2 }}>{prompt.live.problem}</Alert>}
         {saved && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSaved('')}>{saved}</Alert>}
         <Tabs value={tab} onChange={(_e, next) => setTab(next)} sx={{ mb: 2 }} aria-label="Prompt sections">
           <Tab value="edit" label="Edit" />
@@ -260,7 +272,7 @@ export default function PromptEditor({ id, titles, onClose, onChanged }) {
             </Box>
             <Stack direction="row" spacing={1} alignItems="center">
               <TextField size="small" label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} inputProps={{ maxLength: 200 }} sx={{ flex: 1 }} />
-              <Button onClick={() => { setBody(prompt.live.body); setWrap({}) }} disabled={!changed}>Undo my changes</Button>
+              <Button onClick={() => { setBody(prompt.live.body); setWrap(wrapOf(prompt.live.variables)); setBasedOn(prompt.live.version) }} disabled={!changed}>Undo my changes</Button>
               <Button variant="contained" onClick={save} disabled={!body.trim()}>Save draft</Button>
             </Stack>
           </Stack>
@@ -299,9 +311,9 @@ export default function PromptEditor({ id, titles, onClose, onChanged }) {
                     </TableCell>
                     <TableCell>{v.evalRun ? `${v.evalRun.passed} passed, ${v.evalRun.failed} failed${v.evalRun.overridden ? ' (published anyway)' : ''}` : '—'}</TableCell>
                     <TableCell align="right">
-                      <Button size="small" onClick={() => { setBody(v.body); setWrap(Object.fromEntries(Object.entries(v.variables || {}).filter(([, d]) => d.wrap === 'data').map(([n]) => [n, 'data']))); setTab('edit') }}>Edit from this</Button>
+                      <Button size="small" onClick={() => { setBody(v.body); setWrap(wrapOf(v.variables)); setBasedOn(v.version); setTab('edit') }}>Edit from this</Button>
                       {v.status === 'draft' && <Button size="small" variant="outlined" onClick={() => setPublishing(v)}>Publish…</Button>}
-                      {!live && v.status !== 'draft' && <Button size="small" onClick={() => setRolling(v.version)}>Serve this again…</Button>}
+                      {!live && v.status !== 'draft' && <Button size="small" onClick={() => setServing(v)}>Serve this again…</Button>}
                     </TableCell>
                   </TableRow>
                 )
@@ -312,7 +324,7 @@ export default function PromptEditor({ id, titles, onClose, onChanged }) {
                 <TableCell><Typography variant="body2">Slatebox</Typography></TableCell>
                 <TableCell>—</TableCell>
                 <TableCell align="right">
-                  <Button size="small" onClick={() => { setBody(prompt.code.body); setWrap({}); setTab('edit') }}>Edit from this</Button>
+                  <Button size="small" onClick={() => { setBody(prompt.code.body); setWrap({}); setBasedOn(0); setTab('edit') }}>Edit from this</Button>
                   {prompt.labels.published && <Button size="small" color="error" onClick={() => setRolling(0)}>Return to the built-in text…</Button>}
                 </TableCell>
               </TableRow>
@@ -331,16 +343,25 @@ export default function PromptEditor({ id, titles, onClose, onChanged }) {
           onDone={async (text) => { setPublishing(null); setSaved(text); await load(); onChanged?.() }}
         />
       )}
+      {serving && (
+        <PublishDialog
+          prompt={prompt}
+          row={serving}
+          rollback
+          onClose={() => setServing(null)}
+          onDone={async (text) => { setServing(null); setSaved(text); await load(); onChanged?.() }}
+        />
+      )}
       <ReasonDialog
         open={rolling !== null}
-        title={rolling === 0 ? `Return ${prompt.title} to the built-in text` : `Serve version ${rolling} of ${prompt.title} again`}
-        action={rolling === 0 ? 'Return to the built-in text' : 'Serve it again'}
-        body={<Typography variant="body2">{rolling === 0 ? 'Every server uses the text Slatebox ships with within seconds. Saved versions stay.' : `Version ${rolling} is checked as a publish is, then every server uses it within seconds.`}</Typography>}
+        title={`Return ${prompt.title} to the built-in text`}
+        action="Return to the built-in text"
+        body={<Typography variant="body2">Every server uses the text Slatebox ships with within seconds{prompt.pinned ? `, except where the ${prompt.pinned.binding.split('|')[0]} binding pins version ${prompt.pinned.version}` : ''}. Saved versions stay.</Typography>}
         onClose={() => setRolling(null)}
         onConfirm={async (reason) => {
-          const out = await Meteor.callAsync('ai.prompts.rollback', { id, toVersion: rolling, reason })
+          const out = await Meteor.callAsync('ai.prompts.rollback', { id, toVersion: 0, reason })
           setRolling(null)
-          setSaved(out.version ? `Version ${out.version} is live again.` : 'The built-in text is live again.')
+          setSaved(liveText(out, prompt.title))
           await load()
           onChanged?.()
         }}

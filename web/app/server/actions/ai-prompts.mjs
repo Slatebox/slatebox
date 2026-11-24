@@ -74,7 +74,7 @@ export const aiPromptsSaveDraft = defineAction({
   successStatus: 200,
   input: {
     type: 'object',
-    properties: { id: ID, body: BODY, wrap: WRAP, note: { type: 'string', maxLength: 200, description: 'A short note kept with the version.' } },
+    properties: { id: ID, body: BODY, wrap: WRAP, note: { type: 'string', maxLength: 200, description: 'A short note kept with the version.' }, basedOn: { type: 'integer', minimum: 0, description: 'The version the text was edited from (0: the built-in text). A draft edited from a suggestion stays marked as one when it is published.' } },
     required: ['id', 'body'],
     additionalProperties: false,
   },
@@ -82,7 +82,7 @@ export const aiPromptsSaveDraft = defineAction({
   handler: async (principal, input, { deps }) => {
     const actor = await guardControlWrite(principal, deps, { action: 'ai.prompts.saveDraft', target: { kind: 'prompt', id: input.id }, doing: 'change AI prompts' })
     try {
-      return await deps.aiPrompts.saveDraft({ actor, id: input.id, body: input.body, wrap: input.wrap ?? null, note: input.note ?? null })
+      return await deps.aiPrompts.saveDraft({ actor, id: input.id, body: input.body, wrap: input.wrap ?? null, note: input.note ?? null, basedOn: input.basedOn ?? null })
     } catch (error) {
       throw asProblem(error)
     }
@@ -92,12 +92,19 @@ export const aiPromptsSaveDraft = defineAction({
 export const aiPromptsRender = defineAction({
   id: 'ai.prompts.render',
   title: 'Render AI prompt',
-  description: 'Renders a prompt version (or text sent with the call) into the request a built-in sample sends, and reports its lint findings. No model is called. Administrators only.',
+  description: 'Renders a prompt version (or text sent with the call) into the request a built-in sample sends, and reports its lint findings. No model is called and nothing is saved. Administrators only.',
   toolset: 'admin',
-  kind: 'read',
+  // it changes nothing (readOnly), but the text it renders can be 32 KB, too long for a query
+  // string, so it is a POST
+  kind: 'write',
+  readOnly: true,
+  idempotent: true,
+  idempotency: 'optional',
+  replay: 'rerun',
+  successStatus: 200,
   scope: 'ai:admin:read',
   principals: ['person', 'agent'],
-  mounts: { ddp: true, http: { method: 'GET', path: '/ai/control/prompts/{id}/render', operationId: 'renderAIPrompt' } },
+  mounts: { ddp: true, http: { method: 'POST', path: '/ai/control/prompts/{id}/render', operationId: 'renderAIPrompt' } },
   tool: { name: 'render_ai_prompt', title: 'Render an AI prompt', description: 'Show the request a prompt version makes with a sample, and its lint findings. No model is called. Administrators only.' },
   input: { type: 'object', properties: { id: ID, version: VERSION, body: BODY, wrap: WRAP, sample: SAMPLE }, required: ['id'], additionalProperties: false },
   output: { type: 'object', properties: { sample: { type: ['string', 'null'] }, rendered: { type: ['object', 'null'] }, lint: { type: 'object' } } },
@@ -146,7 +153,7 @@ export const aiPromptsTest = defineAction({
 export const aiPromptsPublish = defineAction({
   id: 'ai.prompts.publish',
   title: 'Publish AI prompt',
-  description: 'Publishes a saved version of a prompt: its lint must pass, then the part\'s eval cases run on its binding\'s primary model. A failed case blocks the publish unless override is true, which the change history records. Every server serves it within seconds. Needs a reason. A person only. Administrators only.',
+  description: 'Publishes a saved version of a prompt: its lint must pass, then the part\'s eval cases run on its binding\'s primary model. A failed case blocks the publish unless override is true, which the change history records. Every server serves it within seconds, unless a binding pins another version (pinned names it). Needs a reason. A person only. Administrators only.',
   toolset: 'admin',
   kind: 'write',
   scope: 'ai:admin',
@@ -162,7 +169,7 @@ export const aiPromptsPublish = defineAction({
     required: ['id', 'version', 'reason'],
     additionalProperties: false,
   },
-  output: { type: 'object', properties: { id: { type: 'string' }, version: { type: 'integer' }, previous: { type: 'integer' }, generation: { type: ['integer', 'null'] }, evalRun: { type: 'object' } } },
+  output: { type: 'object', properties: { id: { type: 'string' }, version: { type: 'integer' }, previous: { type: 'integer' }, generation: { type: ['integer', 'null'] }, evalRun: { type: 'object' }, pinned: { type: 'object' } } },
   handler: async (principal, input, { deps }) => {
     const actor = await guardControlWrite(principal, deps, { action: 'ai.prompts.publish', target: { kind: 'prompt', id: input.id }, doing: 'publish AI prompts', reason: input.reason })
     try {
@@ -176,7 +183,7 @@ export const aiPromptsPublish = defineAction({
 export const aiPromptsRollback = defineAction({
   id: 'ai.prompts.rollback',
   title: 'Roll back AI prompt',
-  description: 'Serves an earlier version of a prompt again, or its built-in text (toVersion 0). An earlier version is checked as a publish is. Needs a reason. A person only. Administrators only.',
+  description: 'Serves a version of a prompt that was live before again, or its built-in text (toVersion 0). An earlier version is checked as a publish is: its lint, then the part\'s eval cases; a failed case blocks unless override is true, which the change history records. A draft or suggestion is published, not rolled back to. Needs a reason. A person only. Administrators only.',
   toolset: 'admin',
   kind: 'write',
   scope: 'ai:admin',
@@ -187,15 +194,15 @@ export const aiPromptsRollback = defineAction({
   successStatus: 200,
   input: {
     type: 'object',
-    properties: { id: ID, toVersion: VERSION, reason: REASON },
+    properties: { id: ID, toVersion: VERSION, reason: REASON, override: { type: 'boolean', description: 'Serve it again although eval cases failed (recorded with the reason).' } },
     required: ['id', 'toVersion', 'reason'],
     additionalProperties: false,
   },
-  output: { type: 'object', properties: { id: { type: 'string' }, version: { type: 'integer' }, previous: { type: 'integer' }, generation: { type: ['integer', 'null'] } } },
+  output: { type: 'object', properties: { id: { type: 'string' }, version: { type: 'integer' }, previous: { type: 'integer' }, generation: { type: ['integer', 'null'] }, evalRun: { type: 'object' }, pinned: { type: 'object' } } },
   handler: async (principal, input, { deps }) => {
     const actor = await guardControlWrite(principal, deps, { action: 'ai.prompts.rollback', target: { kind: 'prompt', id: input.id }, doing: 'roll back AI prompts', reason: input.reason })
     try {
-      return await deps.aiPrompts.rollback({ actor, id: input.id, toVersion: input.toVersion, reason: input.reason })
+      return await deps.aiPrompts.rollback({ actor, id: input.id, toVersion: input.toVersion, reason: input.reason, override: Boolean(input.override) })
     } catch (error) {
       throw asProblem(error)
     }

@@ -13,7 +13,7 @@ export default defineAction({
   id: 'ai.control.reset',
   title: 'Reset AI control',
   description:
-    'Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part\'s published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); prompt returns one prompt (promptId) to its built-in text, prompts every prompt (their versions stay); dbLayer switches AI control\'s own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only.',
+    'Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part\'s published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); prompt returns one prompt (promptId) to its built-in text and drops a binding\'s pin of a version of it, prompts every prompt (their versions stay); dbLayer switches AI control\'s own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only.',
   toolset: 'admin',
   kind: 'write',
   scope: 'ai:admin',
@@ -38,7 +38,7 @@ export default defineAction({
     required: ['target', 'reason'],
     additionalProperties: false,
   },
-  output: { type: 'object', properties: { target: { type: 'string' }, cleared: { type: 'array', items: { type: 'string' } }, removed: { type: 'array', items: { type: 'string' } }, prompts: { type: 'array', items: { type: 'string' } }, dbLayer: { type: 'string' } } },
+  output: { type: 'object', properties: { target: { type: 'string' }, cleared: { type: 'array', items: { type: 'string' } }, removed: { type: 'array', items: { type: 'string' } }, prompts: { type: 'array', items: { type: 'string' } }, unpinned: { type: 'array', items: { type: 'string' } }, dbLayer: { type: 'string' } } },
   handler: async (principal, input, { deps }) => {
     const actor = actorOf(principal)
     try {

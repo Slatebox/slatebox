@@ -18,6 +18,19 @@ export const codePromptText = (id, values) => prompts.code(id, values)
 /** The version a call would use now, as `id@v<n>` (for the audit trail and frozen copies). */
 export const promptRef = (id) => `${id}@v${prompts.resolved(id).version}`
 
+/**
+ * The versions of a surface's prompts that are not the built-in text, as one short string ('' while
+ * every one is built in). A result kept for reuse (a shape's candidates, a presentation's plan)
+ * adds it to its key, so a publish or rollback is not hidden behind an answer the old text gave,
+ * and keys made with the built-in text stay as they were.
+ */
+export const promptsKey = (surface) => prompts.list
+  .filter((p) => p.surface === surface)
+  .map((p) => [p.id, prompts.resolved(p.id).version])
+  .filter(([, version]) => version > 0)
+  .map(([id, version]) => `${id}@v${version}`)
+  .join(',')
+
 export const CODE_PROMPTS = prompts.codePrompts
 export const CODE_SLOTS = prompts.codeSlots
 export const PROMPT_IDS = Object.freeze(prompts.ids())

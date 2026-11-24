@@ -119,7 +119,7 @@ export const aiBindings = createBindingOps({
 // published server binding pins, else the published version, else the built-in text (spec 2.1).
 // The snapshot holds them, so no request waits on the database; with the DB layer off the snapshot
 // has no documents and every prompt is the built-in text. A published version that does not render
-// falls back to the built-in text and is named in health.
+// falls back to the built-in text and is named in health, once per version on this pod.
 promptRegistry.setSource((id) => promptFor(snapshotHolder.current(), promptRegistry.byId[id], CODE_PROMPTS), {
   onFallback: ({ id, version, error }) => aiControl.noteHealth({
     kind: 'prompt', id,
@@ -179,6 +179,8 @@ export const aiPrompts = createPromptOps({
   evalsFor,
   costOf: aiCostMicros,
   snapshot: () => snapshotHolder.current(),
+  // the snapshot's health and this pod's (a published version that did not render here)
+  health: () => aiControl.health(),
   testLimit: createWriteLimit({ count: 30, windowMs: 60 * 60 * 1000 }),
   // the catalogue's admin.test estimate (it meters no feature of its own, so the meter's tables stay as they are)
   request: (opts, { surface, actor }) => runAIAction({ feature: 'admin.test', estimateMicros: surfaceById('admin.test').estimate, userId: actor.userId }, () => req({

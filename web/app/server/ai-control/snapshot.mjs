@@ -12,6 +12,7 @@
 // Pure apart from the injected readers and timers: index.mjs gives it the Meteor collections.
 import { SURFACES, surface as surfaceById } from './catalogue.mjs'
 import { checkVariables, parseTemplate } from './render.mjs'
+import { CODE_SLOTS } from './prompts/index.mjs'
 import { BUILTIN_PROVIDERS, PROTOCOLS, ProviderError, normalizeProvider } from './providers.mjs'
 
 export { PROTOCOLS }
@@ -154,7 +155,7 @@ export { bindingProblem }
 /** The most entries a model chain holds: the primary and up to four fallbacks. */
 export const MAX_CHAIN = 5
 
-function bindingProblem(doc, { models, prompts, promptVersions, codePromptIds, connectionRefs = new Set(), connections = {} }) {
+function bindingProblem(doc, { models, prompts, promptVersions, codePromptIds, codeSlots = CODE_SLOTS, connectionRefs = new Set(), connections = {} }) {
   const at = surfaceById(doc.surface)
   if (!at || !at.useKey) return `${doc.surface} is not a surface that can be bound`
   const key = scopeKey(doc.scope)
@@ -203,6 +204,10 @@ function bindingProblem(doc, { models, prompts, promptVersions, codePromptIds, c
       const known = prompts[pin.id] || codePromptIds.has(pin.id)
       if (!known) return `prompt ${pin.id} does not exist`
       if (pin.version && !promptVersions[`${pin.id}@${pin.version}`]) return `prompt ${pin.id}@${pin.version} does not exist`
+      // a slot takes the surface's own prompt for it (a version of it, or its published one): the
+      // values a call site gives are that prompt's, so another prompt's text never goes in its place
+      const owner = codeSlots?.[doc.surface]?.[slot]
+      if (owner !== pin.id) return owner ? `prompt slot ${slot} takes ${owner} (or a version of it), not ${pin.id}` : `${doc.surface} has no prompt slot ${slot}`
     }
   }
   if (doc.tools !== undefined && doc.tools !== null) {

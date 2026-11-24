@@ -5,7 +5,7 @@
 // passes it.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { MAX_BODY, TOOL_DESCRIPTION_MAX, lintPrompt } from '../web/app/server/ai-control/lint.mjs'
+import { MAX_BODY, TOOL_DESCRIPTION_MAX, capsPlaceholders, lintPrompt } from '../web/app/server/ai-control/lint.mjs'
 import { prompts } from '../web/app/server/ai-control/prompts/index.mjs'
 
 const code = prompts.byId['shape.system']
@@ -25,6 +25,16 @@ test('all-caps placeholder tokens block; names such as JSON or SVG do not', () =
   assert.match(lint(`${sentence} About YOUR TOPIC HERE.`).blocking.join(' '), /YOUR TOPIC HERE/)
   assert.deepEqual(lint(`${sentence} Answer with JSON SVG paths.`).blocking, [])
   assert.deepEqual(lint(`${sentence} Keep it SHORT.`).blocking, [], 'one word in capitals is emphasis, not a placeholder')
+  assert.deepEqual(lint(`${sentence} Do NOT add more, and DON'T explain. UTF-8 and HTTP are names.`).blocking, [])
+})
+
+test('one-word, joined and bracketed placeholders block too (the forms AGENTS.md names)', () => {
+  for (const text of ['Draw YOUR_TOPIC now.', 'The topic is TOPIC.', 'Use REPLACE_BY_TEMPLATE_BOUNDARY here.', 'Fill [INSERT-TOPIC-HERE].', 'About <TOPIC>.']) {
+    const { blocking } = lint(`${sentence} ${text}`)
+    assert.match(blocking.join(' '), /All-caps placeholder words/, text)
+  }
+  assert.deepEqual(capsPlaceholders('The topic is TOPIC. Draw YOUR_TOPIC for SHAPE NAME HERE. JSON-LD.'), ['TOPIC', 'YOUR_TOPIC', 'SHAPE', 'NAME', 'HERE', 'JSON-LD'])
+  assert.deepEqual(capsPlaceholders('{{TOPIC}} is a value, not text. JSON, SVG, ID, AI, MIT.'), [])
 })
 
 test('values: only those the code gives, of its type; a required one stays; a single brace is a mistake', () => {

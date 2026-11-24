@@ -9958,7 +9958,7 @@
     {
       "id": "ai.control.reset",
       "title": "Reset AI control",
-      "description": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); prompt returns one prompt (promptId) to its built-in text, prompts every prompt (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only.",
+      "description": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); prompt returns one prompt (promptId) to its built-in text and drops a binding's pin of a version of it, prompts every prompt (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only.",
       "action": "ai.control.reset",
       "toolset": "admin",
       "readOnly": false,
@@ -10128,6 +10128,12 @@
             }
           },
           "prompts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unpinned": {
             "type": "array",
             "items": {
               "type": "string"
@@ -11373,7 +11379,8 @@
           "id",
           "body",
           "wrap",
-          "note"
+          "note",
+          "basedOn"
         ],
         "idempotencyKey": "optional"
       },
@@ -11448,6 +11455,11 @@
             "type": "string",
             "maxLength": 200,
             "description": "A short note kept with the version."
+          },
+          "basedOn": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The version the text was edited from (0: the built-in text). A draft edited from a suggestion stays marked as one when it is published."
           }
         },
         "required": [
@@ -11491,7 +11503,7 @@
     {
       "id": "ai.prompts.render",
       "title": "Render AI prompt",
-      "description": "Renders a prompt version (or text sent with the call) into the request a built-in sample sends, and reports its lint findings. No model is called. Administrators only.",
+      "description": "Renders a prompt version (or text sent with the call) into the request a built-in sample sends, and reports its lint findings. No model is called and nothing is saved. Administrators only.",
       "action": "ai.prompts.render",
       "toolset": "admin",
       "readOnly": true,
@@ -11503,21 +11515,25 @@
         "person",
         "agent"
       ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
       "scope": "ai:admin:read",
       "http": {
-        "method": "GET",
+        "method": "POST",
         "path": "/api/v1/ai/control/prompts/{id}/render",
         "pathParams": [
           "id"
         ],
-        "queryParams": [
+        "queryParams": [],
+        "bodyParams": [
           "version",
           "body",
           "wrap",
           "sample"
         ],
-        "bodyParams": [],
-        "idempotencyKey": "none"
+        "idempotencyKey": "optional"
       },
       "input": {
         "type": "object",
