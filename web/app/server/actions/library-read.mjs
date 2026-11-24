@@ -38,7 +38,7 @@ export const libraryExport = defineAction({
   scope: 'slates:read',
   principals: ['agent', 'visitor'],
   mounts: { http: { method: 'GET', path: '/library/export', operationId: 'exportLibrary' } },
-  publicCache: { maxAge: 600 },
+  publicCache: { maxAge: 120 },
   input: object({ cursor: cursorInput }),
   output: { type: 'object', properties: { items: { type: 'array', items: { type: 'object' } }, next: { type: 'string' } }, required: ['items'] },
   tool: { name: 'export_library', title: 'Export the library', description: 'Read every published item of the shared library with its content, 50 per page.' },
@@ -71,7 +71,8 @@ export const libraryList = defineAction({
   scope: 'slates:read',
   principals: everyone,
   mounts: { ddp: true, http: { method: 'GET', path: '/library', operationId: 'listLibrary' } },
-  publicCache: { maxAge: 300 },
+  // What is taken out of the library leaves shared caches within a minute.
+  publicCache: { maxAge: 60 },
   input: object({
     kind: kindInput,
     category: categoryInput,
@@ -96,7 +97,8 @@ export const libraryGet = defineAction({
   scope: 'slates:read',
   principals: everyone,
   mounts: { ddp: true, http: { method: 'GET', path: '/library/{itemId}', operationId: 'getLibraryItem' } },
-  publicCache: { maxAge: 300 },
+  // What is taken out of the library leaves shared caches within a minute.
+  publicCache: { maxAge: 60 },
   input: object({ itemId: itemRef, version: versionInput }, ['itemId']),
   output: {
     type: 'object',

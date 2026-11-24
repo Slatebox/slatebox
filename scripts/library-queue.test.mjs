@@ -115,7 +115,7 @@ test("approve publishes what is on the review canvas, and the public API shows i
   assert.deepEqual(world.slate("demo").nodes[0].options, before);
   const list = await call("/api/v1/library?kind=slate");
   assert.deepEqual([list.status, list.body.total, list.body.items[0].title, list.body.items[0].authorName], [200, 1, "Kickoff notes", "Ada"]);
-  assert.equal(list.headers.get("cache-control"), "public, max-age=60, s-maxage=300");
+  assert.equal(list.headers.get("cache-control"), "public, max-age=60, s-maxage=60", "what is taken out leaves shared caches within a minute");
   const got = await call("/api/v1/library/" + list.body.items[0].slug);
   const note = got.body.version.content.slate.nodes.find((node) => node.options.id === moved.options.id);
   assert.deepEqual([note.options.xPos, note.options.yPos], [777, 333]);
