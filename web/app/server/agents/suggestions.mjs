@@ -238,6 +238,22 @@ export function publicAction(doc) {
 }
 
 /**
+ * The actions with something still waiting, as an invited agent's next answer needs them: whose
+ * they are, the words they were asked with, and the boxes of their waiting new notes (so the next
+ * answer lands beside them, never on them). → [{ actionId, agentId, message, boxes: [{ x, y, width, height }] }]
+ */
+export function waitingActions(actions = []) {
+  return actions.filter((action) => action.items?.some((item) => item.state === 'pending')).map((action) => ({
+    actionId: action._id,
+    agentId: action.agentId,
+    message: action.message || null,
+    boxes: action.items.filter((item) => item.state === 'pending' && item.kind === 'add' && item.node?.options).map(({ node: { options: o } }) => ({
+      x: Number(o.xPos ?? o.x) || 0, y: Number(o.yPos ?? o.y) || 0, width: Number(o.width) || 200, height: Number(o.height) || 80,
+    })),
+  }))
+}
+
+/**
  * The suggestion store. collection: actions (MongoDB driver). controls: one row per slate
  * ({ paused, modes: { agentId: 'direct' } }). identify(principal, slate): the agent's name on the
  * slate (presence.identify). applyPlan(principal, slate, plan, message, attribution): saves engine
@@ -337,7 +353,7 @@ export function createSuggestionStore({
     if (pendingOf(actions).length + items.length > SUGGESTION_LIMITS.pendingPerSlate)
       throw problem(429, 'suggestions_waiting', 'This slate has too many suggestions waiting. Ask someone on it to keep or discard some first.')
     for (const action of touched.values())
-      await collection.updateOne({ _id: action._id }, { $set: { items: action.items, updatedAt: at() } })
+      await collection.updateOne({ _id: action._id }, { $set: { items: action.items, updatedAt: at() }, $inc: { rev: 1 } })
     if (!items.length) return { action: null, items: [], changedEarlier: touched.size > 0 }
     const doc = {
       _id: newId(),
@@ -529,12 +545,55 @@ export function createSuggestionStore({
       revision = saved.revision
       for (const { item } of landing) Object.assign(item, { state: 'kept', decidedAt: at(), decidedBy: by.name, revision })
     }
-    await saveActions(new Set([...landing, ...refused].map(({ action }) => action)))
+    // What is on the slate after this save: a waiting line whose end is on neither it nor a waiting
+    // new note can never land, so it is refused (instead of waiting, unseen, for ever).
+    const after = new Set(onSlate)
+    for (const { item } of landing) if (item.kind === 'add') after.add(item.nodeId)
+    for (const { item } of landing) if (item.kind === 'remove') after.delete(item.nodeId)
+    // (new notes still waiting in this agent's other answers count: a line may join one)
+    for (const { item } of pendingOf(actions)) if (item.kind === 'add' && item.state === 'pending') after.add(item.nodeId)
+    // Written over what is stored now (another person may have discarded meanwhile): what this Keep
+    // saved is kept whatever the stored state, since it is on the slate.
+    const decided = new Map([...landing, ...refused].map(({ item }) => [item.id, item]))
+    await settle(new Set([...landing, ...refused].map(({ action }) => action)), (item) => {
+      const mine = decided.get(item.id)
+      if (mine?.state === 'kept') return { ...item, ...pickDecision(mine) }
+      if (mine && item.state === 'pending') return { ...item, ...pickDecision(mine) }
+      return item
+    }, after)
     return { kept: landing.map(({ action, item }) => ({ actionId: action._id, itemId: item.id })), refused: refused.map(({ action, item }) => ({ actionId: action._id, itemId: item.id, reason: item.reason })), revision }
   }
 
-  async function saveActions(actions) {
-    for (const action of actions) await collection.updateOne({ _id: action._id }, { $set: { items: action.items, updatedAt: at() } })
+  const pickDecision = (item) => Object.fromEntries(['state', 'reason', 'decidedAt', 'decidedBy', 'revision', 'undo', 'undoneBy'].filter((key) => item[key] !== undefined).map((key) => [key, item[key]]))
+
+  /**
+   * Writes decisions on actions without losing another person's: each action is written only if
+   * nobody wrote it since it was read (its rev); otherwise it is read again and the decision made on
+   * what is there now. decide(item) → the item as it should be. With `onSlate` (note ids on the
+   * slate after this change), a waiting line whose end is neither there nor a waiting new note can
+   * never land and is refused.
+   */
+  async function settle(actions, decide, onSlate = null) {
+    for (const action of actions) {
+      let current = action
+      for (let attempt = 0; attempt < 8 && current; attempt++) {
+        let items = current.items.map((item) => decide(item))
+        if (onSlate) {
+          const waitingAdds = new Set(items.filter((item) => item.state === 'pending' && item.kind === 'add').map((item) => item.nodeId))
+          items = items.map((item) => {
+            if (item.state !== 'pending' || item.kind !== 'link') return item
+            const ends = [item.association?.parentId ?? item.parentId, item.association?.childId]
+            return ends.every((end) => onSlate.has(end) || waitingAdds.has(end)) ? item : { ...item, state: 'refused', reason: 'A note at its end is gone.', decidedAt: at() }
+          })
+        }
+        const result = await collection.updateOne({ _id: current._id, rev: current.rev ?? null }, { $set: { items, updatedAt: at(), rev: (current.rev ?? 0) + 1 } })
+        if (result?.matchedCount !== 0) {
+          action.items = items
+          break
+        }
+        current = await collection.findOne({ _id: action._id })
+      }
+    }
   }
 
   /** Discard waiting items: nothing is saved; their ghosts go. A line to a discarded new note goes too. */
@@ -549,9 +608,17 @@ export function createSuggestionStore({
         ids.add(entry.item.id)
       }
     const by = await decider(principal)
-    for (const { item } of picked) Object.assign(item, { state: 'discarded', decidedAt: at(), decidedBy: by.name })
-    await saveActions(new Set(picked.map(({ action }) => action)))
-    return { discarded: picked.map(({ action, item }) => ({ actionId: action._id, itemId: item.id })) }
+    // Only what still waits when written is discarded (a Keep at the same moment wins its notes).
+    const done = new Set() // decided again on each attempt: only what the written attempt discarded
+    const onSlate = new Set((slate.nodes || []).map((node) => node?.options?.id).filter(Boolean))
+    for (const { item } of pendingOf(actions)) if (item.kind === 'add' && !ids.has(item.id)) onSlate.add(item.nodeId)
+    await settle(new Set(picked.map(({ action }) => action)), (item) => {
+      done.delete(item.id)
+      if (!ids.has(item.id) || item.state !== 'pending') return item
+      done.add(item.id)
+      return { ...item, state: 'discarded', decidedAt: at(), decidedBy: by.name }
+    }, onSlate)
+    return { discarded: picked.filter(({ item }) => done.has(item.id)).map(({ action, item }) => ({ actionId: action._id, itemId: item.id })) }
   }
 
   /**
@@ -607,8 +674,10 @@ export function createSuggestionStore({
       })
       revision = saved.revision
       const by = await decider(principal)
+      const back = new Set(undone.map((item) => item.id))
       for (const item of undone) Object.assign(item, { state: 'undone', undoneBy: by.name, revision })
-      await collection.updateOne({ _id: action._id }, { $set: { items: action.items, updatedAt: at(), undoneAt: at(), undoneBy: by.name } })
+      await settle([action], (item) => (back.has(item.id) ? { ...item, state: 'undone', undoneBy: by.name, revision } : item))
+      await collection.updateOne({ _id: action._id }, { $set: { undoneAt: at(), undoneBy: by.name } })
     }
     return { actionId, undone: undone.map((item) => item.id), left, revision }
   }

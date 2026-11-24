@@ -594,3 +594,43 @@ test("a held slates.undo names the edit it takes back: a newer edit makes the ag
   assert.equal(redone.body.redone, "run-1");
   assert.ok(ids(w).includes(newest));
 });
+
+test("Keep all and a Discard at the same moment never undo each other: a stale write is read again; a line whose end is gone is refused, not left waiting", async () => {
+  const collection = memoryCollection();
+  // The first write waits at a gate: the discard has read the action and writes only after the Keep is done.
+  let open;
+  const gate = new Promise((resolve) => { open = resolve; });
+  let gated = 0;
+  const realUpdate = collection.updateOne.bind(collection);
+  collection.updateOne = async (selector, update) => { if (gated++ === 0) await gate; return realUpdate(selector, update); };
+  let n = 0;
+  const store = createSuggestionStore({ collection, controls: memoryCollection(), identify: async () => ({ agentId: "ag" }), applyPlan: async () => ({ revision: 2 }), findName: async (id) => ({ ada: "Ada", ben: "Ben" })[id], newId: () => `s${++n}` });
+  const note = (id) => ({ options: { id, text: id, xPos: 0, yPos: 0, width: 100, height: 60 }, relationships: { associations: [] } });
+  await collection.insertOne({ _id: "act", slateId: "slate", agentId: "ag", label: "GitHub", createdAt: new Date(), items: [
+    { id: "a", kind: "add", state: "pending", nodeId: "na", node: note("na") },
+    { id: "b", kind: "add", state: "pending", nodeId: "nb", node: note("nb") },
+    { id: "ab", kind: "link", state: "pending", parentId: "na", association: { id: "lab", parentId: "na", childId: "nb" } },
+  ] });
+  const slate = { _id: "slate", shareId: "demo", revision: 1, nodes: [] };
+  const ben = store.discard(person("ben"), slate, { actionId: "act", itemIds: ["b"] });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  gated = 1; // the Keep writes straight through
+  const kept = await store.keep(person("ada"), slate, { actionId: "act" }, async () => ({ revision: 2 }));
+  assert.deepEqual(kept.kept.map((k) => k.itemId).sort(), ["a", "ab", "b"]);
+  open();
+  const discarded = await ben;
+  assert.deepEqual(discarded.discarded, [], "Ben's discard came after the notes were kept: nothing to discard");
+  const [after] = await collection.find({ _id: "act" }).toArray();
+  assert.deepEqual(after.items.map((i) => [i.id, i.state]), [["a", "kept"], ["b", "kept"], ["ab", "kept"]], "nothing kept shows as waiting again");
+
+  // A line between a note on the slate and one a person deleted since: Discard all reaches it, and a
+  // Keep of the rest refuses it (it can never land) instead of leaving it waiting unseen.
+  await collection.insertOne({ _id: "lines", slateId: "slate", agentId: "ag", label: "GitHub", createdAt: new Date(), items: [
+    { id: "c", kind: "add", state: "pending", nodeId: "nc", node: note("nc") },
+    { id: "cx", kind: "link", state: "pending", parentId: "nc", association: { id: "lcx", parentId: "nc", childId: "deleted" } },
+  ] });
+  const out = await store.keep(person("ada"), { ...slate, nodes: [note("na")] }, { actionId: "lines", itemIds: ["c"] }, async () => ({ revision: 3 }));
+  assert.deepEqual(out.kept.map((k) => k.itemId), ["c"]);
+  const [lines] = await collection.find({ _id: "lines" }).toArray();
+  assert.deepEqual(lines.items.map((i) => [i.id, i.state, i.reason ?? null]), [["c", "kept", null], ["cx", "refused", "A note at its end is gone."]]);
+});
