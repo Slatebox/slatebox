@@ -10,7 +10,7 @@ import { COPY, DEFAULT_METERING, allowanceSummary, monthKey, dayKey, route } fro
 import { creditsForPool, inPool, poolMonthKey, teamPool } from '../web/app/server/metering/pool.mjs'
 import { guardsPass, holdFree, releaseHold } from '../web/app/server/metering/holds.mjs'
 import { recordUsage } from '../web/app/server/metering/record.mjs'
-import { startCall } from '../web/app/server/metering/calls.mjs'
+import { CALL_LIMITS, startCall, tick } from '../web/app/server/metering/calls.mjs'
 import { invitesAgents } from '../web/app/imports/api/business/membership.mjs'
 
 const NOW = Date.UTC(2026, 10, 19, 12)
@@ -150,4 +150,20 @@ test('inviting outside agents: Business counts as Pro, and the Cloud gate asks i
   assert.equal(invitesAgents({ pro: false, org: org({ status: 'active', until: NOW - 1 }) }, NOW), false)
   const gate = readFileSync(new URL('../enterprise/server/meteor.js', import.meta.url), 'utf8')
   assert.match(gate, /return invitesAgents\(\{ pro: false, org \}\)/)
+})
+
+test('a call on the pool is never cut off because the pool ran out (terms A3); other calls still are', () => {
+  const pool = { id: 't1', members: 2 }
+  const base = startCall({ callId: 'c2', shareId: 's1', starterId: 'u1', decision: { ok: true, route: 'free', kind: 'voice', payer: { type: 'user', id: 'u1' }, pro: true, pool }, now: NOW })
+  const at = NOW + 9 * 60_000
+  const call = { ...base, participants: ['u1', 'u2'], lastCount: 2 }
+  const out = tick({ call, presence: { count: 2 }, now: at, minutesLeft: { voice: 0, video: 0 }, level: 0 })
+  assert.equal(out.decision, 'extend')
+  assert.equal(out.warning, null)
+  assert.ok(out.charge.participantMinutes > 0, 'its minutes are still charged to the team month')
+  // the same call without the pool ends on its allowance, as before
+  const { pool: _p, ...plain } = call
+  assert.notEqual(tick({ call: plain, presence: { count: 2 }, now: at, minutesLeft: { voice: 0, video: 0 }, level: 0 }).decision, 'extend')
+  // and the usual limits still hold for a pool call
+  assert.equal(tick({ call, presence: { count: 2 }, now: NOW + CALL_LIMITS.maxHours * 3_600_000, minutesLeft: { voice: 0, video: 0 }, level: 0 }).decision, 'end')
 })
