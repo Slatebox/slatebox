@@ -154,8 +154,11 @@ test('#9 the filter searches from an icon in the field, and the title does not w
 
 test('#13 the cookie notice is one slim line on a phone and the canvas keeps room for exactly that', () => {
   const main = ui('Main.jsx')
-  assert.match(main, /Cookies keep you signed in\./)
-  assert.match(main, /buttonText="Got it"/, 'the accept button keeps its name (Accept cookies to assistive tech)')
+  // The notice is its own component (components/CookieNotice.jsx); Main lays it out.
+  const notice = ui('components/CookieNotice.jsx')
+  assert.match(main, /<CookieNotice sx=/)
+  assert.match(notice, /Cookies keep you signed in\./)
+  assert.match(notice, />\s*Got it\s*<\/button>/, 'the accept button keeps its name')
   assert.match(main, /\[theme\.breakpoints\.down\('sm'\)\]: \{[^}]*height: 40/)
   assert.match(main, /whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'/)
   const css = ui('common/main.css')

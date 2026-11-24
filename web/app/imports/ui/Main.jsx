@@ -39,7 +39,7 @@ import GroupIcon from '@mui/icons-material/Group'
 import ViewComfy from '@mui/icons-material/ViewComfy'
 import Tooltip from '@mui/material/Tooltip'
 import useMediaQuery from '@mui/material/useMediaQuery'
-import CookieConsent from 'react-cookie-consent'
+import CookieNotice from './components/CookieNotice'
 import ChatWootConfig from './components/ChatWootConfig'
 import CanvasToolbar from './components/CanvasToolbar'
 import ConnectionStatus from './components/ConnectionStatus'
@@ -549,8 +549,8 @@ export default function Main() {
           // The cookie notice: a small card in the corner, and on a phone one slim line along the
           // foot that the canvas pages leave room for (main.css --sb-cookie-strip), so it never
           // lies over + Add, the bar or the message box.
-          <Box sx={theme => ({
-            '& .sb-cookie': {
+          <CookieNotice sx={theme => ({
+            '&.sb-cookie': {
               position: 'fixed', right: 'max(12px, env(safe-area-inset-right))',
               bottom: 'max(12px, env(safe-area-inset-bottom)) !important',
               zIndex: theme.zIndex.drawer + 2, display: 'flex', alignItems: 'center', gap: 1.5,
@@ -562,14 +562,9 @@ export default function Main() {
               [theme.breakpoints.down('sm')]: { left: 'max(8px, env(safe-area-inset-left))', right: 'max(8px, env(safe-area-inset-right))', bottom: 'max(8px, env(safe-area-inset-bottom)) !important', width: 'auto', maxWidth: 'none', height: 40, p: '0 4px 0 14px', gap: 1, borderRadius: 20, boxShadow: '0 2px 10px #182b201f' },
             },
             '& .sb-cookie-text': { m: 0, minWidth: 0, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
-            '& .sb-cookie button': { whiteSpace: 'nowrap', cursor: 'pointer', border: 0, margin: 0, flex: 'none' },
-            [theme.breakpoints.down('sm')]: { '& .sb-cookie #rcc-confirm-button': { padding: '4px 14px !important', borderRadius: '16px !important', fontSize: 13, lineHeight: '24px' } },
-          })}>
-            <CookieConsent disableStyles disableButtonStyles location="none"
-              containerClasses="CookieConsent sb-cookie" contentClasses="sb-cookie-text" buttonText="Got it">
-              Cookies keep you signed in.
-            </CookieConsent>
-          </Box>
+            '& button': { whiteSpace: 'nowrap', cursor: 'pointer', border: 0, margin: 0, flex: 'none' },
+            [theme.breakpoints.down('sm')]: { '& #rcc-confirm-button': { padding: '4px 14px !important', borderRadius: '16px !important', fontSize: 13, lineHeight: '24px' } },
+          })} />
         )}
       </ThemeProvider>
     </Box>
