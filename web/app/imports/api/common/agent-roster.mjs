@@ -12,8 +12,12 @@ const time = (value) => {
   return Number.isFinite(t) ? t : 0
 }
 
-/** One entry per agent: its name and colour, its live record (if any), its actions and how many wait. */
-export function agentsOnRoster(records = [], actions = [], now = Date.now()) {
+/**
+ * One entry per agent: its name and colour, its live record (if any), its actions and how many wait.
+ * extras: agents that stay on the roster while they are on the slate, working or not (Slatebox
+ * Cloud's invited agents: { agentId, label, colorIndex, invitedBy, state }), so each has one chip.
+ */
+export function agentsOnRoster(records = [], actions = [], now = Date.now(), extras = []) {
   const agents = new Map()
   const entry = (key, from) => {
     if (!agents.has(key))
@@ -23,6 +27,12 @@ export function agentsOnRoster(records = [], actions = [], now = Date.now()) {
         record: null, actions: [], waiting: 0, live: false,
       })
     return agents.get(key)
+  }
+  for (const extra of extras || []) {
+    if (!extra?.agentId) continue
+    const agent = entry(extra.agentId, { origin: 'invited', ...extra })
+    agent.state = extra.state ?? null
+    agent.invited = true
   }
   for (const record of records) {
     const agent = entry(record.agentId || record.agentKey, record)

@@ -12,7 +12,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import { useTracker } from 'meteor/react-meteor-data'
-import { atom, useAtomValue, useSetAtom } from 'jotai'
+import { atom, useAtom, useAtomValue, useSetAtom } from 'jotai'
 import Chip from '@mui/material/Chip'
 import Popover from '@mui/material/Popover'
 import Typography from '@mui/material/Typography'
@@ -25,9 +25,15 @@ import { visibleAgents, agentStepText, agentChecklist, agentName, agentOrigin, A
 import { AgentPresence, AgentSuggestions } from '../../api/common/models'
 import { clockOffset, onScreenClock } from '../../api/common/agent-clock.mjs'
 import { activityLine, agentsOnRoster, pendingCount } from '../../api/common/agent-roster.mjs'
+import EnterpriseSlot from '../common/EnterpriseSlot'
 
 // Whether this person may edit the slate (Canvas sets it): Keep, Discard, Undo and Pause show only then.
 export const agentControlsAtom = atom(false)
+// Agents that stay on the roster while they are on the slate, working or not: Slatebox Cloud's
+// invited agents (enterprise/ fills it; empty on self-host). Each is one chip, like every agent.
+export const rosterExtrasAtom = atom([])
+// Open one agent's chip (its agentId), e.g. right after it was invited.
+export const openAgentAtom = atom(null)
 
 // The records of this slate, newest per agent, as the engine would show them now. Re-read every
 // second while any is shown, so a silent or ended run leaves on time: the server's time, carried
@@ -153,7 +159,18 @@ export function AgentChips({ records, shareId = null }) {
   const [open, setOpen] = useState(null) // { key, anchor }
   const [told, setTold] = useState('')
   const [busy, setBusy] = useState(false)
-  const agents = useMemo(() => agentsOnRoster(records, actions, Date.now()), [records, actions])
+  const extras = useAtomValue(rosterExtrasAtom)
+  const [wantOpen, setWantOpen] = useAtom(openAgentAtom)
+  const agents = useMemo(() => agentsOnRoster(records, actions, Date.now(), extras), [records, actions, extras])
+  // Asked to open one agent's chip: once its chip is drawn, open it there.
+  useEffect(() => {
+    if (!wantOpen) return
+    const agent = agents.find((a) => a.agentId === wantOpen)
+    const chip = agent && document.querySelector(`[data-agent-chip][data-agent-id="${CSS.escape(wantOpen)}"]`)
+    if (!chip) return
+    setOpen({ key: agent.key, anchor: chip })
+    setWantOpen(null)
+  }, [wantOpen, agents, setWantOpen])
   if (!agents.length) return null
   const openAgent = open && agents.find((agent) => agent.key === open.key)
   const run = async (work) => {
@@ -177,7 +194,7 @@ export function AgentChips({ records, shareId = null }) {
         const step = agent.record ? agentStepText(agent.record) : null
         const waiting = agent.waiting ? `${agent.waiting} waiting` : ''
         const name = agentName(agent)
-        const extra = [step, waiting].filter(Boolean).join(' · ')
+        const extra = [step, agent.state, waiting].filter(Boolean).join(' · ')
         return (
           <Chip
             key={'agent-' + agent.key}
@@ -207,7 +224,7 @@ export function AgentChips({ records, shareId = null }) {
         transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
       >
         {openAgent && (
-          <Box sx={{ p: 2, width: 340 }} aria-label={openAgent.label + ' details'} data-agent-panel="">
+          <Box sx={{ p: 2, width: 340, maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box' }} aria-label={openAgent.label + ' details'} data-agent-panel="">
             <Typography variant="subtitle2">{openAgent.label}</Typography>
             {agentOrigin(openAgent) && <Typography variant="caption" sx={{ color: 'text.secondary' }}>{agentOrigin(openAgent)}</Typography>}
             {openAgent.record && (agentChecklist(openAgent.record).length ? (
@@ -220,9 +237,13 @@ export function AgentChips({ records, shareId = null }) {
             ) : (
               <Typography variant="body2" sx={{ mt: 1 }}>{agentStepText(openAgent.record) || 'Working on this slate'}</Typography>
             ))}
+            {/* Slatebox Cloud: an invited agent's own controls (ask it, sign in again, remove it). Empty on self-host. */}
+            {openAgent.invited && (
+              <EnterpriseSlot name="agents.chip" agentId={openAgent.agentId} shareId={shareId} canEdit={canEdit} paused={Boolean(controls.paused)} waiting={openAgent.waiting} />
+            )}
             {openAgent.waiting > 0 && (
-              <Box sx={{ mt: 1.5, display: 'flex', gap: 1, alignItems: 'center' }}>
-                <Typography variant="body2" sx={{ flex: 1 }}>{openAgent.waiting} suggestion{openAgent.waiting === 1 ? '' : 's'} on the slate</Typography>
+              <Box sx={{ mt: 1.5, display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+                <Typography variant="body2" sx={{ flex: '1 1 140px' }}>{openAgent.waiting} suggestion{openAgent.waiting === 1 ? '' : 's'} on the slate</Typography>
                 {canEdit && (
                   <>
                     <Button size="small" variant="contained" disabled={busy} data-keep-all="" onClick={() => decideAll(openAgent, 'keep')}>Keep all</Button>

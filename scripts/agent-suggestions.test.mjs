@@ -455,3 +455,17 @@ test("an agent undoes only its own work; who brought an agent is known from its 
   assert.equal(await store.maySetDirect({ _id: "s", userId: "owner" }, "fresh", "third"), false);
   assert.equal(await store.maySetDirect({ _id: "s", userId: "owner" }, "fresh", "owner"), true, "the slate's owner may");
 });
+
+test("one chip per agent: an invited agent stays on the roster while it is on the slate, working or not, and its live record joins the same chip", async () => {
+  const { agentsOnRoster } = await import("../web/app/imports/api/common/agent-roster.mjs");
+  const now = Date.parse("2026-11-23T12:00:00Z");
+  const extras = [{ agentId: "inv1", label: "Test Diagrams", colorIndex: 3, invitedBy: "Ada", state: null }, { agentId: "inv2", label: "Issues", colorIndex: 2, invitedBy: "you", state: "needs sign-in" }];
+  // idle: both on the roster, as invited agents
+  const idle = agentsOnRoster([], [], now, extras);
+  assert.deepEqual(idle.map((a) => [a.agentId, a.invited, a.origin, a.state, a.live]), [["inv1", true, "invited", null, false], ["inv2", true, "invited", "needs sign-in", false]]);
+  // working: its pointer record joins the same entry (one chip), never a second one
+  const working = agentsOnRoster([{ agentKey: "inv1", agentId: "inv1", label: "Test Diagrams", colorIndex: 3, origin: "invited" }], [], now, extras);
+  assert.equal(working.filter((a) => a.agentId === "inv1").length, 1);
+  assert.equal(working[0].live, true);
+  assert.equal(working[0].invited, true);
+});

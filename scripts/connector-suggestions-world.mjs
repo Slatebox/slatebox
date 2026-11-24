@@ -66,6 +66,7 @@ export function connectorSuggestions(slate, { presenceCalls = [] } = {}) {
   const suggestions = {
     agentIdOf: async (principal, s) => (await identify(principal, s)).agentId,
     withdraw: (person, s, agentId) => store.discard(person, s, { agentId }),
+    paused: async (s) => (await store.controlsOf(s._id)).paused,
   }
   return { store, applied, applyOperations, suggestions, identify, saver }
 }

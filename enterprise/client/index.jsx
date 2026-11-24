@@ -6,12 +6,14 @@
 // (<EnterpriseSlot name="..."/>) through api.fill(name, Component).
 // context: { edition: 'cloud', agentInvite }; the invite UI fills its slots only when
 // agentInvite is true (settings.public.agents.invite).
-import AgentsOnSlate from './AgentsOnSlate'
+import AgentsOnSlate, { InvitedAgentControls } from './AgentsOnSlate'
 
 export const manifest = Object.freeze({ name: 'slatebox-enterprise', features: ['agents.invite'] })
 
 export function register(api, context) {
   if (!context?.agentInvite) return
-  // The slate's invited agents: chips, the ask box, "+ Invite agent", and their ghosts on the canvas.
+  // The slate's invited agents: each one chip on the app's roster, "+ Invite agent" and the walkthrough.
   api.fill('canvas.agents', AgentsOnSlate)
+  // Inside an invited agent's roster chip: the ask box (the inviter's only), Sign in again, Renew Pro, Remove.
+  api.fill('agents.chip', InvitedAgentControls)
 }

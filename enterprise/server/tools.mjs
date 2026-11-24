@@ -107,8 +107,17 @@ export function reconcile(approved, listed) {
 }
 
 /** The tools as the planning model reads them: clamped, and framed as the server's words. */
+/**
+ * JSON with no angle brackets: nothing inside a data block (a server's text, a person's note) can
+ * close the block (</results>, </slate-context>) and pass for words outside it. Still valid JSON.
+ */
+export const inertJson = (value) => JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')
+
+/** Angle brackets out of plain text that sits inside a block's tags. */
+export const inertText = (text) => String(text ?? '').replace(/</g, '‹').replace(/>/g, '›')
+
 export function toolsEnvelope(serverName, tools) {
-  const lines = tools.map((tool) => JSON.stringify({
+  const lines = tools.map((tool) => inertJson({
     name: tool.name,
     description: plainText(tool.description, DESCRIPTION_CHARS),
     inputSchema: tool.inputSchema,

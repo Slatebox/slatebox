@@ -7,7 +7,7 @@ import Chip from '@mui/material/Chip'
 import { HuddleCalls } from '../../api/common/models'
 import { Avatar } from './AccountMenu'
 import { slateHuddleType, huddleEnabled, collaborationUsers } from '../jotai/atoms'
-import { AgentChips, useAgentPresence, useAgentSuggestions } from './AgentPresenceListener'
+import { AgentChips, rosterExtrasAtom, useAgentPresence, useAgentSuggestions } from './AgentPresenceListener'
 import { agentsOnRoster } from '../../api/common/agent-roster.mjs'
 
 // Daily (calls, about 340 KB) loads the first time this person starts or joins a huddle, never with the page.
@@ -44,7 +44,8 @@ function Presence({ localCollaborator, slate }) {
   const agents = useAgentPresence(slate?.shareId).shown
   // An agent with suggestions waiting (or a recent action to undo) is on the roster too.
   const { actions } = useAgentSuggestions(slate?.shareId)
-  const onRoster = agentsOnRoster(agents, actions).length
+  const extras = useAtomValue(rosterExtrasAtom)
+  const onRoster = agentsOnRoster(agents, actions, Date.now(), extras).length
   if (!(currentCollaborators.length > 0 || onRoster > 0)) return null
   return (
     <Grid container spacing={1} component="section" aria-label="Huddle"

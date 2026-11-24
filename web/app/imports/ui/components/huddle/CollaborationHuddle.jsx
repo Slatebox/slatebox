@@ -39,7 +39,7 @@ import {
 } from '../../jotai/atoms'
 
 import HuddleProperties from '../HuddleProperties'
-import { AgentChips, useAgentPresence, useAgentSuggestions } from '../AgentPresenceListener'
+import { AgentChips, rosterExtrasAtom, useAgentPresence, useAgentSuggestions } from '../AgentPresenceListener'
 import { agentsOnRoster } from '../../../api/common/agent-roster.mjs'
 
 
@@ -80,7 +80,8 @@ export default function CollaborationHuddle({
   // Agents saving to this slate: their own chips, never Huddle participants.
   const agents = useAgentPresence(slate?.shareId).shown
   const { actions: agentActions } = useAgentSuggestions(slate?.shareId)
-  const agentsShown = agentsOnRoster(agents, agentActions).length
+  const rosterExtras = useAtomValue(rosterExtrasAtom)
+  const agentsShown = agentsOnRoster(agents, agentActions, Date.now(), rosterExtras).length
   const callObject = useDaily() // Meteor.callObject // useDaily() //useAtom(callObj)
 
   const [isListening, setListening] = useAtom(listeningForTranscriptionMessages)

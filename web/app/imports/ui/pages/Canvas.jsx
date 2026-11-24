@@ -127,6 +127,25 @@ const MermaidDialog = React.lazy(() => import('../components/slate/MermaidDialog
 const SHARE_PREVIEW_QUIET = 20_000
 const SHARE_PREVIEW_EVERY = 5 * 60_000
 
+/**
+ * The part of the canvas a person can see now, in slate units: the canvas element's box (which
+ * ends where Ask Slatebox or the settings begin) mapped through the engine's own screen-to-canvas
+ * point. Null before the canvas is drawn. Agents place what they suggest inside it.
+ */
+export function visibleCanvasArea(slate, area) {
+  const engine = slate?.v2 ?? slate
+  const box = area?.getBoundingClientRect?.()
+  if (!box?.width || !box?.height || typeof engine?.canvas?.point !== 'function') return null
+  try {
+    const a = engine.canvas.point(box.left, box.top)
+    const b = engine.canvas.point(box.right, box.bottom)
+    const view = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) }
+    return [view.x, view.y, view.width, view.height].every(Number.isFinite) && view.width >= 40 && view.height >= 40 ? view : null
+  } catch {
+    return null
+  }
+}
+
 export default function Canvas() {
   const history = useNavigate()
   const { id, asEmbed } = useParams()
@@ -1560,7 +1579,8 @@ export default function Canvas() {
       {/* Outside agents invited onto this slate (Slatebox Cloud only): their ghosts and chips. Empty on self-host. */}
       {slate.current && !asEmbed && (
         <EnterpriseSlot name="canvas.agents" slate={slate.current} canEdit={!accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly}
-          readSelection={() => selectedOwnNotes().map((n) => n.options?.id).filter(Boolean)} />
+          readSelection={() => selectedOwnNotes().map((n) => n.options?.id).filter(Boolean)}
+          readView={() => visibleCanvasArea(slate.current, canvasArea.current)} chatOpen={Boolean(sheetOpen)} />
       )}
       {/* {currentAIContext?.aid &&
         slate.current &&

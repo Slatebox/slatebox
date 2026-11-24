@@ -39,7 +39,7 @@ import {
   checkLayout, checkPlan, excalidrawElements, excalidrawGroup, itemsFromLayout, LAYOUT_TOOL, linksIn, PLAN_LIMITS, PLAN_TOOL, planPrompt, translatePrompt,
 } from './translate.mjs'
 
-export const AGENT_LIMITS = Object.freeze({ perSlate: 8, perOwnerPerSlate: 3, beatMs: 450, requestChars: 1000, nameChars: 32, proEndedDays: 30, orphanHours: 24 })
+export const AGENT_LIMITS = Object.freeze({ perSlate: 8, perOwnerPerSlate: 3, beatMs: 450, requestChars: 1000, nameChars: 32, proEndedDays: 30, orphanHours: 24, concurrentPerUser: 3, helloMs: 8000 })
 
 export class ConnectorRefused extends Error {
   constructor(status, code, message, details) {
@@ -100,13 +100,13 @@ export function publicConnection(doc, viewerId) {
 
 export function createConnectorService({
   connections, // { insert(doc), findOne(query), find(query) -> array, update(id, set), remove(id) }
-  suggestions, // { agentIdOf(principal, slate), withdraw(person, slate, agentId) }: the app's suggestion store (server/agents/suggestions.mjs)
+  suggestions, // { agentIdOf(principal, slate), withdraw(person, slate, agentId), paused(slate) }: the app's suggestion store (server/agents/suggestions.mjs)
   fetch, // mcpFetch
   session, // { discover(address, fetch), callTool(address, fetch, { name, args, check }) }
   model, // async ({ feature, tool, system, user, userId, shareId }) -> the tool call's arguments (object), inside the metered request
   metered = (fn) => fn(), // (fn, { userId, shareId }) runs fn inside one metered AI request (runAIAction)
   applyOperations, // async (principal, { shareId, plan, expectedRevision }, mode) -> { status, body }: an agent's save is a suggestion (202, outcome suggested)
-  access, // { forUser(shareId, userId) -> { slate, canRead, canEdit } | null, reload(shareId) -> slate }
+  access, // { forUser(shareId, userId) -> { slate, canRead, canEdit } | null, forToken(principal, shareId) -> same | null, reload(shareId) -> slate }
   pro, // async (userId) -> boolean
   firstName, // async (userId) -> string
   sanitizeName, // agent-label.mjs sanitizeClientName
@@ -117,12 +117,34 @@ export function createConnectorService({
   devOrigins = [],
   now = Date.now,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  later = (fn, ms) => setTimeout(fn, ms),
   audit = () => {},
 }) {
+  // How many outside reaches each person has running now: a few at once, never a flood.
+  const running = new Map()
+  async function oneAtATime(principal, fn) {
+    const key = principal?.userId || ''
+    const n = running.get(key) || 0
+    if (n >= AGENT_LIMITS.concurrentPerUser) refuse(429, 'busy', 'Slatebox is still reaching outside servers for you. Wait for those to finish, then try again.')
+    running.set(key, n + 1)
+    try {
+      return await fn()
+    } finally {
+      const left = (running.get(key) || 1) - 1
+      if (left > 0) running.set(key, left)
+      else running.delete(key)
+    }
+  }
+
+  // A token (API, exec, MCP) by the token rule: its account's own rights on the slate, never an
+  // unlisted link's (a bearer token carries no invitation). A signed-in page by its session's rule.
+  const accessOf = (principal, shareId) =>
+    (principal.kind === 'agent' && !principal.connector && access.forToken ? access.forToken(principal, shareId) : access.forUser(shareId, principal.userId))
+
   async function requireEditor(principal, shareId) {
     if (!principal?.userId || principal.kind === 'guest' || principal.kind === 'visitor')
       refuse(401, 'sign_in', 'Save your account to invite agents.')
-    const found = await access.forUser(shareId, principal.userId)
+    const found = await accessOf(principal, shareId)
     if (!found?.slate || !found.canRead) refuse(404, 'not_found', 'Slate not found or unavailable.')
     if (!found.canEdit) refuse(403, 'forbidden', 'Only people who can edit this slate can do that.')
     return found.slate
@@ -131,7 +153,7 @@ export function createConnectorService({
     if (!(await pro(userId))) refuse(402, 'pro_required', PRO_REQUIRED)
   }
   async function requireReader(principal, shareId) {
-    const found = principal?.userId ? await access.forUser(shareId, principal.userId) : null
+    const found = principal?.userId ? await accessOf(principal, shareId) : null
     if (!found?.slate || !found.canRead) refuse(404, 'not_found', 'Slate not found or unavailable.')
     return found
   }
@@ -214,7 +236,11 @@ export function createConnectorService({
     }
   }
 
-  async function discover(principal, { shareId, address: raw }) {
+  async function discover(principal, input) {
+    return oneAtATime(principal, () => discoverNow(principal, input))
+  }
+
+  async function discoverNow(principal, { shareId, address: raw }) {
     await requireEditor(principal, shareId)
     await requirePro(principal.userId)
     const { address, host } = checkAddress(raw)
@@ -244,7 +270,11 @@ export function createConnectorService({
     }
   }
 
-  async function connect(principal, { shareId, address: raw, name: rawName, tools: chosen = [], contextLevel = 'request' }) {
+  async function connect(principal, input) {
+    return oneAtATime(principal, () => connectNow(principal, input))
+  }
+
+  async function connectNow(principal, { shareId, address: raw, name: rawName, tools: chosen = [], contextLevel = 'request', view = null }) {
     const slate = await requireEditor(principal, shareId)
     await requirePro(principal.userId)
     const { address, host } = checkAddress(raw)
@@ -296,8 +326,12 @@ export function createConnectorService({
     doc.agentId = await suggestions.agentIdOf(hello, slate)
     await connections.insert(doc)
     audit({ kind: 'connect', userId: principal.userId, host, connectionId: doc._id })
-    // It arrives: its cursor says hello once, to everyone on the slate.
-    await presence.saved(hello, slate, { targets: [], message: `Hi, I'm ${name}. Select notes and ask me.` }).catch(() => {})
+    // It arrives: its cursor says hello once, to everyone on the slate, where the inviter is looking,
+    // then goes after its normal time (and at once when its first run starts: one pointer per agent).
+    const looking = viewOf(view)
+    const point = looking ? { x: Math.round(looking.x + looking.width / 2), y: Math.round(looking.y + looking.height / 2) } : null
+    await presence.saved(hello, slate, { targets: [], message: `Hi, I'm ${name}. Select notes and ask me.`, ...(point && { point }) }).catch(() => {})
+    later(() => presence.end(hello.runId, 'done').catch(() => {}), AGENT_LIMITS.helloMs)
     return publicConnection(doc, principal.userId)
   }
 
@@ -328,8 +362,18 @@ export function createConnectorService({
     return doc
   }
 
+  // The inviter removes their agent; so may the slate's owner (it is their slate), with its waiting suggestions.
+  async function removableConnection(principal, connectionId) {
+    const doc = typeof connectionId === 'string' ? await connections.findOne({ _id: connectionId }) : null
+    if (!doc || doc.status === 'removed') refuse(404, 'not_found', 'That agent is not on this slate any more.')
+    if (doc.ownerId === principal.userId) return doc
+    const found = principal?.userId ? await accessOf(principal, doc.shareId).catch(() => null) : null
+    if (found?.slate?.userId && found.slate.userId === principal.userId) return doc
+    refuse(403, 'inviter_only', `Only ${doc.inviterName || 'the person who invited it'} or the slate's owner can remove ${doc.name}.`)
+  }
+
   async function disconnect(principal, { connectionId }) {
-    const doc = await ownConnection(principal, connectionId)
+    const doc = await removableConnection(principal, connectionId)
     await connections.update(doc._id, { status: 'removed', updatedAt: new Date(now()) })
     // Its suggestions still waiting go with it (discarded by the inviter; kept work stays, undoable).
     const found = await access.forUser(doc.shareId, principal.userId).catch(() => null)
@@ -337,6 +381,7 @@ export function createConnectorService({
       const agentId = doc.agentId || (await suggestions.agentIdOf(connectorPrincipal(doc, 'remove:' + doc._id), found.slate))
       await suggestions.withdraw(principal, found.slate, agentId).catch(() => {})
     }
+    await presence.end('hello:' + doc._id, 'done').catch(() => {})
     // Its sign-in goes too (revoked at the server when it offers that), unless another of this
     // person's slates still has an agent on the same server.
     let signedOut = false
@@ -344,8 +389,16 @@ export function createConnectorService({
       const others = await connections.find({ ownerId: doc.ownerId, address: doc.address, status: { $ne: 'removed' } })
       if (!others.some((other) => other._id !== doc._id)) signedOut = (await vault.remove(doc.ownerId, doc.address).catch(() => ({ removed: false }))).removed
     }
-    audit({ kind: 'disconnect', userId: principal.userId, host: doc.host, connectionId: doc._id, signedOut })
+    audit({ kind: 'disconnect', userId: principal.userId, host: doc.host, connectionId: doc._id, signedOut, ...(doc.ownerId !== principal.userId && { byOwner: true }) })
     return { ok: true, connectionId: doc._id }
+  }
+
+  // The asker's visible part of the canvas (slate units), when the page sent it: suggestions land there.
+  function viewOf(view) {
+    if (!view || typeof view !== 'object') return null
+    const v = { x: Number(view.x), y: Number(view.y), width: Number(view.width), height: Number(view.height) }
+    if (![v.x, v.y, v.width, v.height].every(Number.isFinite) || v.width < 40 || v.height < 40 || v.width > 1e6 || v.height > 1e6 || Math.abs(v.x) > 1e7 || Math.abs(v.y) > 1e7) return null
+    return v
   }
 
   // The deterministic layout when the model gives nothing usable: the text, line by line, and the sources.
@@ -362,13 +415,20 @@ export function createConnectorService({
     return notes.length ? [{ label: 'What it found', layout: 'grid', notes, lines: [] }] : []
   }
 
-  async function call(principal, { connectionId, request, selection = [] }) {
+  async function call(principal, input) {
+    return oneAtATime(principal, () => callNow(principal, input))
+  }
+
+  async function callNow(principal, { connectionId, request, selection = [], view = null }) {
     const doc = await ownConnection(principal, connectionId)
     const slate = await requireEditor(principal, doc.shareId)
     if (!(await pro(principal.userId))) {
       await setStatus(doc, 'pro_ended')
       refuse(402, 'pro_required', PRO_REQUIRED)
     }
+    // Paused: refused before anything reaches the outside server or the model. The asker can edit
+    // the slate, so they may resume agents themselves.
+    if (await suggestions.paused?.(slate)) refuse(423, 'agents_paused', `Agents are paused on this slate. Resume agents to ask ${doc.name}.`)
     if (doc.status === 'paused') refuse(409, 'tools_changed', `${doc.name}'s tools changed since you invited it. Look at the changes before asking again.`, { changed: (doc.changed || []).map((c) => c.name) })
     const text = plainText(request, AGENT_LIMITS.requestChars)
     if (!text) refuse(400, 'invalid_request', `Ask ${doc.name} something.`)
@@ -376,6 +436,8 @@ export function createConnectorService({
     const runId = newId('r')
     const agent = connectorPrincipal(doc, runId)
     let outcome = 'stopped'
+    // Its greeting pointer goes: the run's pointer is the agent's one pointer from here on.
+    await presence.end('hello:' + doc._id, 'done').catch(() => {})
     try {
       await presence.plan(agent, slate, [`Ask ${doc.name}`, 'Read what it found', 'Place suggestions']).catch(() => {})
       const packed = packContext({ slate, level: doc.contextLevel, selection: ids, request: text, viewerId: principal.userId })
@@ -473,24 +535,36 @@ export function createConnectorService({
       // Each group is saved as the agent as soon as it is ready: the app files it as a live
       // suggestion (ghosts on every screen, the cursor moving to them), or saves it at once when a
       // person lets this agent edit directly. One action per group, so each is one Undo.
-      const items = itemsFromLayout({ groups: result.groups, slate, aliases: packed.aliases, selection: ids, serverName: doc.name })
+      const items = itemsFromLayout({ groups: result.groups, slate, aliases: packed.aliases, selection: ids, serverName: doc.name, view: viewOf(view) })
       const actions = []
       let saved = 0
+      let dropped = 0
+      // One save of a group; a person editing meanwhile moves the revision, so a refused save is
+      // tried once more against the fresh slate before it is counted as not placed.
+      const place = async (item) => {
+        const current = await access.reload(slate.shareId)
+        return applyOperations(agent, { shareId: slate.shareId, plan: item.plan, expectedRevision: current?.revision ?? slate.revision ?? 0 }, 'save')
+      }
       for (const item of items) {
-        let answer
-        try {
-          const current = await access.reload(slate.shareId)
-          answer = await applyOperations(agent, { shareId: slate.shareId, plan: item.plan, expectedRevision: current?.revision ?? slate.revision ?? 0 }, 'save')
-        } catch (error) {
-          // People on the slate paused its agents: stop, and say so in their words.
-          if (error?.code === 'agents_paused') refuse(423, 'agents_paused', error.message)
-          continue
+        let answer = null
+        for (let attempt = 0; attempt < 2 && !answer; attempt++) {
+          try {
+            answer = await place(item)
+          } catch (error) {
+            // People on the slate paused its agents: stop, and say so in their words.
+            if (error?.code === 'agents_paused') refuse(423, 'agents_paused', `Agents are paused on this slate. Resume agents to ask ${doc.name}.`)
+            answer = null
+          }
         }
         if (answer?.body?.suggestion?.actionId) actions.push(answer.body.suggestion.actionId)
         else if (answer?.body?.outcome === 'saved') saved++
-        else continue
+        else {
+          dropped++
+          continue
+        }
         await sleep(AGENT_LIMITS.beatMs)
       }
+      if (dropped) left.push(`${dropped} ${dropped === 1 ? 'group' : 'groups'} could not be placed. Ask again to try ${dropped === 1 ? 'it' : 'them'}.`)
       outcome = 'done'
       return { items: actions.length + saved, actions, saved, say: plainText(result.say, 240), left }
     } catch (error) {
@@ -503,7 +577,11 @@ export function createConnectorService({
   // ---------- signing in ----------
 
   /** A popup sign-in for this person and server. → { flowId, authHost } (the signed-in page claims it at the start route) */
-  async function startSignIn(principal, { shareId, address: raw, clientId = null }) {
+  async function startSignIn(principal, input) {
+    return oneAtATime(principal, () => startSignInNow(principal, input))
+  }
+
+  async function startSignInNow(principal, { shareId, address: raw, clientId = null }) {
     await requireEditor(principal, shareId)
     await requirePro(principal.userId)
     const { address, host } = checkAddress(raw)
@@ -531,7 +609,11 @@ export function createConnectorService({
   }
 
   /** A pasted key or token, for servers that take one: checked against the server, then sealed. */
-  async function useKey(principal, { shareId, address: raw, key }) {
+  async function useKey(principal, input) {
+    return oneAtATime(principal, () => useKeyNow(principal, input))
+  }
+
+  async function useKeyNow(principal, { shareId, address: raw, key }) {
     await requireEditor(principal, shareId)
     await requirePro(principal.userId)
     const { address, host } = checkAddress(raw)

@@ -52,6 +52,15 @@ async function forUser(shareId, userId) {
   return { slate: opened.slateBase, canRead: Boolean(opened.accessLevel), canEdit: Boolean(userId && opened.canEdit) && drawable(opened.slateBase) }
 }
 
+// What a token may do on a slate, by the token rule (api-token-core authorizeTokenForSlate): its
+// account's own rights, never an unlisted link's.
+async function forToken(principal, shareId) {
+  if (typeof shareId !== 'string') return null
+  const [read, write] = await Promise.all([deps.authorizeTokenForSlate(principal, shareId, false), deps.authorizeTokenForSlate(principal, shareId, true)])
+  if (!read?.slate) return null
+  return { slate: read.slate, canRead: Boolean(read.authorized), canEdit: Boolean(write.authorized) && drawable(read.slate) }
+}
+
 // The agent's writes run through the app's own registry, with the inviter's session rights.
 const registry = createAppRegistry({
   deps: { ...deps, authorizeTokenForSlate: async (token, shareId, write = false) => sessionAuthorization(await resolvePresentationSlate(shareId, token.userId), token.userId, write) },
@@ -79,6 +88,8 @@ function model() {
 const suggestionsStore = {
   agentIdOf: async (principal, slate) => (await presence.identify(principal, slate)).agentId,
   withdraw: (person, slate, agentId) => suggestionStore.discard(person, slate, { agentId }),
+  // People on the slate paused every agent there (agents.control): asking is refused up front.
+  paused: async (slate) => (await suggestionStore.controlsOf(slate._id)).paused,
 }
 
 const credentialsStore = {
@@ -166,7 +177,7 @@ export function startConnectors() {
     metered: (fn, { userId }) => runAIAction({ feature: 'connectors', userId, countsAsDraft: true }, fn),
     applyOperations: (principal, input, mode) =>
       registry.run(principal, 'slates.applyOperations', { ...input, mode }, mode === 'save' ? { idempotencyKey: `${principal.runId}:${input.plan.operations[0]?.ids?.[0] || 'k'}` } : {}),
-    access: { forUser, reload: (shareId) => Slates.findOneAsync({ shareId }, { fields: { revision: 1 } }) },
+    access: { forUser, forToken, reload: (shareId) => Slates.findOneAsync({ shareId }, { fields: { revision: 1 } }) },
     pro: async (userId) => {
       const user = await Meteor.users.findOneAsync(userId, { fields: { pro: 1 } })
       return proActive(user?.pro)
@@ -201,7 +212,20 @@ export function startConnectors() {
     const found = await forUser(shareId, this.userId)
     if (!found?.canRead) return this.ready()
     const slateId = found.slate._id
-    return McpConnections.find({ slateId, status: { $ne: 'removed' } }, { fields: { name: 1, inviterName: 1, host: 1, status: 1, ownerId: 1, slateId: 1, contextLevel: 1, colorIndex: 1, agentId: 1, createdAt: 1 } })
+    // No account ids leave the server: each screen gets `mine` (it invited this agent) and
+    // `removable` (it may remove it: the inviter, or the slate's owner) instead of the inviter's id.
+    const viewer = this.userId
+    const ownsSlate = Boolean(viewer && found.slate.userId === viewer)
+    const shown = ({ _id, ownerId, ...fields }) => ({ ...fields, mine: Boolean(viewer && ownerId === viewer), removable: Boolean(viewer && (ownerId === viewer || ownsSlate)) })
+    const handle = await McpConnections.find({ slateId, status: { $ne: 'removed' } }, { fields: { name: 1, inviterName: 1, host: 1, status: 1, ownerId: 1, slateId: 1, contextLevel: 1, colorIndex: 1, agentId: 1, createdAt: 1 } })
+      .observeAsync({
+        added: (doc) => this.added('mcpConnections', doc._id, shown(doc)),
+        changed: (doc) => this.changed('mcpConnections', doc._id, shown(doc)),
+        removed: (doc) => this.removed('mcpConnections', doc._id),
+      })
+    this.onStop(() => handle.stop())
+    this.ready()
+    return undefined
   })
 
   return { service, signIn, origin: appOrigin, userFor }
