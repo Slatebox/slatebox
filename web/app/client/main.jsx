@@ -96,6 +96,7 @@ function AppWrapper() {
       </Snackbar>
       <Router>
         <SsoGate />
+        <Suspense fallback={null}>
         <Routes>
           <Route path="/workshops" element={<Workshops />} />
           <Route path="/present/:slateShareId" element={<Present />} />
@@ -104,6 +105,7 @@ function AppWrapper() {
           <Route path="/new/:creativeKind" element={<NewCreativeSlate />} />
           <Route path="/new" element={<CreationEntry />} />
           <Route path="/login/:email?" element={<Login />} />
+          <Route path="/oauth/consent" element={<OAuthConsent />} />
           <Route path="/sso/done" element={<SsoDone />} />
           <Route path="/*" element={<App />} />
         </Routes>
