@@ -40,16 +40,19 @@ test('the app draws a board through the engine\'s one renderer (slateboxjs/board
   // out as a desktop canvas shows it, every built-in drawn with its kit, and the kits fetched with import().
   assert.match(render, /from 'slateboxjs\/boards\/still'/)
   assert.doesNotMatch(render, /attachWorkshop/)
-  assert.doesNotMatch(render, /slateboxjs\/workshops\/model/)
+  // The renderer takes the engine's modules from the app (createStillRenderer); the model only as a loader, never a
+  // static import the app could draw with itself.
+  assert.match(render, /createStillRenderer\(/)
+  assert.doesNotMatch(render, /^\s*import [^(]*['"]slateboxjs\/workshops\/model['"]/m)
   for (const name of ['drawBoard', 'drawSlateBoards']) assert.match(render, new RegExp(`export function ${name}\\(`))
   // A library picture (the gallery's cards and item page) is the same renderer: renderStill.
-  assert.match(render, /renderStill\(host, slate/)
+  assert.match(render, /renderer\.renderStill\(host, slate/)
 })
 
 test('the kits and the rulebook stay out of a first visit: the renderer\'s imports are its own chunks', () => {
   assert.doesNotMatch(render, /^\s*import [^(]*['"]slateboxjs\/(boards|boards\/nest|workshops\/behaviour)['"]/m)
-  // The canvas class a library picture draws on is fetched with import() too.
-  assert.ok(render.includes("import('slateboxjs')"))
+  // Each is handed to the renderer as a loader, fetched with import() on first need; the canvas class too.
+  for (const name of ['slateboxjs/boards', 'slateboxjs/boards/nest', 'slateboxjs/workshops/behaviour', 'slateboxjs']) assert.ok(render.includes(`import('${name}')`), name)
 })
 
 test('the gallery draws its pictures with the one renderer', () => {
