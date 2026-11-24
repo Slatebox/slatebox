@@ -466,7 +466,9 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
         onRuleEdit(edits, sentence) {
           if (!edits?.length || !edits.every(edit => RULE_EDITS.includes(edit?.kind))) return false
           const change = { edits }
-          ruleSaid.current.set(change, String(sentence || 'The board’s rules changed.'))
+          // The rule as it now stands, in one sentence ("Doing holds 2"), never the control's instructions after it.
+          const said = String(sentence || '').split(/\.\s/)[0].replace(/\.$/, '').trim()
+          ruleSaid.current.set(change, said ? said + '.' : 'The board’s rules changed.')
           queue.current.push(change)
           const answer = new Promise(resolve => answers.current.set(change, resolve))
           playRef.current()

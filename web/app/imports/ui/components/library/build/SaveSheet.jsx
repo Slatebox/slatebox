@@ -54,7 +54,7 @@ export default function SaveSheet({ submitting, defaults, locked, parentTitle, b
         slotProps={{ htmlInput: { maxLength: 2000 } }} />
       <Typography variant="body2" sx={{ color: 'text.secondary' }}>{LIBRARY_LICENSE_LINE}</Typography>
     </>}
-    {error && <Typography variant="body2" color="error" role="alert">{error.reason}
+    {error && <Typography variant="body2" color="error" role="alert">{String(error.reason ?? '').replace(/\s*\(\/signup\)/, '')}
       {error.code === 'sign_in_to_publish' && <> <Link href="/signup">Sign up</Link></>}</Typography>}
     {submitting && guest && !error && <Typography variant="body2" role="note">Sign up to publish: your slates come with you. <Link href="/signup">Sign up</Link></Typography>}
     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
