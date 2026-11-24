@@ -1,7 +1,8 @@
 // The extraction contract (spec 5.2, slice S5): moving the prompts of custom shapes, board chat and
 // drafting, the canvas conversation, the Slatebox agent, presentation planning and library refine
 // into server/ai-control/prompts changed no byte the model is sent. The golden was captured from
-// 4ffde9cf, before the move, with `node scripts/ai-request-golden.mjs --prompts <that tree>/web/app`.
+// 4ffde9cf, before the move, with `node scripts/ai-request-golden.mjs --prompts <that tree>/web/app`; its two library
+// sites were captured again when the engine’s edit table gained set_appearance (the refine tool offers every edit).
 // Every prompt in the registry is asked for by one of those recordings, so every one is proven; and
 // a published version, or a version a binding pins, really reaches the request, while the DB layer
 // switched off serves the built-in text.
