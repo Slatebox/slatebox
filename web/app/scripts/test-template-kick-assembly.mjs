@@ -37,6 +37,7 @@ const Meteor = globalThis.__HSTUBS.Meteor
 const Slatebox = globalThis.__HSTUBS.Slatebox
 const difference = (a, b) => a.filter((x) => !b.includes(x))
 const prepAISlate = globalThis.__HSTUBS.prepAISlate
+const pathAtOrigin = (p) => p
 `
 
 const transformed = src
@@ -45,6 +46,7 @@ const transformed = src
   .replace("import { Slatebox } from 'slateboxjs'", '')
   .replace("import difference from 'lodash.difference'", '')
   .replace("import prepAISlate from './prepAISlate'", '')
+  .replace("import pathAtOrigin from '../../ui/components/node/pathAtOrigin'", '')
   .replace(
     "import CONSTANTS from './constants'",
     `import CONSTANTS from '${path.join(appRoot, 'imports/api/common/constants.js')}'`
@@ -64,7 +66,8 @@ const bad = importLines.filter(
     l.includes('meteor/') ||
     l.includes('slateboxjs') ||
     l.includes('lodash.difference') ||
-    l.includes("'./prepAISlate'")
+    l.includes("'./prepAISlate'") ||
+    l.includes('pathAtOrigin')
 )
 if (bad.length) {
   console.error('transform left unstubbed imports:')

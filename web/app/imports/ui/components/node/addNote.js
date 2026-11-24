@@ -4,6 +4,7 @@ import cloneDeep from 'lodash.clonedeep'
 import { Slatebox } from 'slateboxjs'
 import defaultShapes from './defaultShapes'
 import { dockNoteStyle, stickyNoteLook } from '../../common/noteStyle.mjs'
+import pathAtOrigin from './pathAtOrigin'
 
 /**
  * The style a new note starts from: the slate's last note of its own or, on a slate without one,
@@ -11,6 +12,25 @@ import { dockNoteStyle, stickyNoteLook } from '../../common/noteStyle.mjs'
  */
 export function noteBase(ownNotes, noteStyle) {
   return cloneDeep(ownNotes[ownNotes.length - 1]?.options) || dockNoteStyle(noteStyle)
+}
+
+/**
+ * The middle of what the person sees, in canvas coordinates. The canvas viewBox already is the
+ * visible area at the current zoom and pan, so nothing is divided by the zoom (that sent a note
+ * added at 50% to twice its canvas coordinates, far off screen). Falls back to the middle of the
+ * slate's notes.
+ */
+export function visibleCenter(slate) {
+  try {
+    const vb = slate?.v2?.canvas?.viewbox?.()
+    if (vb && [vb.x, vb.y, vb.width, vb.height].every(Number.isFinite) && vb.width > 0 && vb.height > 0) {
+      return { x: vb.x + vb.width / 2, y: vb.y + vb.height / 2 }
+    }
+  } catch (e) {
+    /* the notes' middle below */
+  }
+  const orient = slate?.getOrientation?.() ?? { left: 10000, top: 10000, width: 0, height: 0 }
+  return { x: orient.left + orient.width / 2, y: orient.top + orient.height / 2 }
 }
 
 /**
@@ -34,21 +54,15 @@ export default function addNote(slate, shape) {
 
   let xPos = 0
   let yPos = 0
+  // Where the new note's centre goes on a slate that already has notes: the middle of the view.
+  let center = null
   if (ownNotes.length === 0 && !slate?.nodes?.allNodes.length) {
     xPos = 10000
     yPos = 10000
   } else {
-    const orient = slate?.getOrientation()
-    // height: 427
-    // left: 5406.5
-    // orientation: "landscape"
-    // top: 4963
-    // width: 455
-    xPos = orient.left + orient.width / 2
-    yPos = orient.top + orient.height / 2
-    const z = slate?.options.viewPort.zoom.r
-    xPos += xPos / z - xPos
-    yPos += yPos / z - yPos
+    center = visibleCenter(slate)
+    xPos = center.x
+    yPos = center.y
   }
 
   let nodeOpts = {}
@@ -57,10 +71,8 @@ export default function addNote(slate, shape) {
     const bcopy = cloneDeep(baseOpts)
     const placed = Slatebox.utils._transformPath(path, tString)
     const pbox = Slatebox.utils.getBBox({ path: placed })
-    // The engine fits a path's own box to the note, so the outline is stored from its own
-    // origin, never in canvas coordinates (around 10000): a path stored there sent the
-    // sibling's line, its preview, the bird's-eye view and the animations across the canvas.
-    const tpath = Slatebox.utils._transformPath(placed, `T${-pbox.x},${-pbox.y}`)
+    // Stored from its own origin, never in canvas coordinates (pathAtOrigin.js).
+    const tpath = pathAtOrigin(placed)
     const iOpts = {
       text: '',
       xPos: xPos + pbox.width / 2 + 20,
@@ -152,6 +164,12 @@ export default function addNote(slate, shape) {
       nodeOpts.borderWidth = 3
     }
     nodeOpts = setDimens(`T${xPos},${yPos}s6,6`)
+  }
+
+  // Centred in the view, in the options collaborators receive too (not only moved there locally).
+  if (center && Number.isFinite(nodeOpts.width) && Number.isFinite(nodeOpts.height)) {
+    nodeOpts.xPos = center.x - nodeOpts.width / 2
+    nodeOpts.yPos = center.y - nodeOpts.height / 2
   }
 
   // ensure shapeHint is set

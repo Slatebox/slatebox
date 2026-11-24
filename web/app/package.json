@@ -23,7 +23,8 @@
     "eval:deepinfra-welcome": "node scripts/eval-deepinfra-welcome.mjs",
     "eval:deepinfra-slate-route": "node scripts/eval-deepinfra-slate-route.mjs",
     "eval:deepinfra-generation": "node scripts/eval-deepinfra-generation.mjs",
-    "test:template-kick-assembly": "node scripts/test-template-kick-assembly.mjs"
+    "test:template-kick-assembly": "node scripts/test-template-kick-assembly.mjs",
+    "test:quick-add-placement": "node scripts/test-quick-add-placement.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.106",

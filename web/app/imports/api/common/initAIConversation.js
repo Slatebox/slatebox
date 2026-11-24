@@ -8,6 +8,7 @@ import difference from 'lodash.difference'
 import prepAISlate from './prepAISlate'
 import CONSTANTS from './constants'
 import defaultShapes from '../../ui/components/node/defaultShapes'
+import pathAtOrigin from '../../ui/components/node/pathAtOrigin'
 import parseTemplateIntoCategories from './parseTemplateIntoCategories'
 // import {
 //   ChatIntentions,
@@ -324,9 +325,8 @@ export default async function initAIConversation({
               yPos,
               width: 200,
               height: 70,
-              vectorPath: Slatebox.utils._transformPath(
-                rect.path,
-                `T${xPos},${yPos} s1,1`
+              vectorPath: pathAtOrigin(
+                Slatebox.utils._transformPath(rect.path, `T${xPos},${yPos} s1,1`)
               ),
               shapeHint: rect.hint,
               backgroundColor: '#fff',

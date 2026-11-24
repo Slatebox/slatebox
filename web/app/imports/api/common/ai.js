@@ -11,6 +11,7 @@ import { Slatebox } from 'slateboxjs'
 import { Random } from 'meteor/random'
 import CONSTANTS from './constants'
 import defaultShapes from '../../ui/components/node/defaultShapes'
+import pathAtOrigin from '../../ui/components/node/pathAtOrigin'
 import utils from './utils'
 
 const groupColors = {}
@@ -225,9 +226,9 @@ async function createAIConversationNode(
     nodeWidth = textDimens.width // Math.max(textDimens.width, vectDimens.width)
   }
 
-  const vectorPath = Slatebox.utils._transformPath(
-    usePath,
-    `T${xPos},${yPos} s${widthScalar},${heightScalar}}`
+  // Stored from its own origin, never in canvas coordinates (pathAtOrigin.js).
+  const vectorPath = pathAtOrigin(
+    Slatebox.utils._transformPath(usePath, `T${xPos},${yPos} s${widthScalar},${heightScalar}`)
   )
   /* isCategory
       ? Slatebox.utils._transformPath(usePath, `T${xPos},${yPos} s${widthScalar},${heightScalar}}`)
@@ -397,9 +398,8 @@ async function createAIConversationNode(
         yPos,
         width: smallNodeWidth,
         height: smallNodeHeight,
-        vectorPath: Slatebox.utils._transformPath(
-          nounPath,
-          `T${xPos + offsetX},${yPos} s.4,.4`
+        vectorPath: pathAtOrigin(
+          Slatebox.utils._transformPath(nounPath, `T${xPos + offsetX},${yPos} s.4,.4`)
         ),
         shapeHint: 'custom',
         backgroundColor: bgColor,
