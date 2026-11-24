@@ -102,7 +102,8 @@ test('?pay= opens a pane; ?pro= / ?topup= / ?card= return into finalizing', () =
   // the literal template (a hosted page that was never paid) and junk are ignored
   assert.equal(payRequestFromQuery(q('pro={CHECKOUT_SESSION_ID}')), null)
   assert.equal(payRequestFromQuery(q('topup=../../x')), null)
-  assert.deepEqual([...PAY_PARAMS].sort(), ['card', 'pay', 'plan', 'pro', 'topup', 'wallet'])
+  // ?business= is a team's Slatebox Business returning (scripts/business-billing.test.mjs)
+  assert.deepEqual([...PAY_PARAMS].sort(), ['business', 'card', 'pay', 'plan', 'pro', 'topup', 'wallet'])
   // the site's plan picks the interval (/pro?plan=yearly → ?pay=pro&plan=yearly); junk plans fall back to the default
   assert.deepEqual(payRequestFromQuery(q('pay=pro&plan=yearly')), { open: { action: 'pro', wallet: null, from: 'site', choice: { interval: 'year' } } })
   assert.deepEqual(payRequestFromQuery(q('pay=pro&plan=monthly')), { open: { action: 'pro', wallet: null, from: 'site', choice: { interval: 'month' } } })

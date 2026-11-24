@@ -345,6 +345,14 @@ const CONSTANTS = {
       actionSecret: 'pro.actionSecret',
       invoices: 'pro.invoices',
     },
+    // Slatebox Business bought in the app for a team (server/methods/business.js)
+    business: {
+      offer: 'business.offer',
+      checkout: 'business.checkout',
+      confirm: 'business.confirm',
+      renewal: 'business.renewal',
+      portal: 'business.portal',
+    },
     meter: {
       summary: 'meter.summary',
       adminSummary: 'meter.adminSummary',

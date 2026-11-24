@@ -16,8 +16,9 @@ import {
 import { actions } from '../actions/index.mjs'
 import { RATE_LIMITS } from '../actions/rate-limit.mjs'
 import { createAccounts } from './account-summary.mjs'
-import { canStartAI, includedThisMonth, proSummaryFor } from '../metering/meteor'
+import { canStartAI, includedThisMonth, meterOn, proSummaryFor } from '../metering/meteor'
 import { createInstanceDescriber } from './describe.mjs'
+import { cloudOn } from '../cloud-lock-meteor'
 import { resolveInstanceIdentity } from './identity.mjs'
 import { packageVersion } from './package-version.mjs'
 
@@ -48,6 +49,8 @@ export const accounts = createAccounts({
   includedThisMonth,
   proSummary: (user) => proSummaryFor(user),
   canGenerate,
+  // the meter's own answer: on only on Slatebox Cloud by its Cloud key, whatever metering.enabled says
+  meterOn,
 })
 
 // Meteor's own require answers module ids, not files: ask Node, from the server bundle's npm
@@ -89,6 +92,7 @@ export const describer = createInstanceDescriber({
   mailAvailable: verificationMailAvailable,
   accounts,
   env: process.env,
+  cloud: cloudOn,
   execLimits: execLimits(),
 })
 

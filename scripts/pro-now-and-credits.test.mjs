@@ -149,10 +149,17 @@ test('Pro credits in plain words, from the same numbers the meter uses', () => {
 
 // ---------- Slatebox Business: per seat, inside Cloud, sold through the contact form ----------
 
-test('Business: $6 a person a month or $60 a year, inside the shared Cloud, sold by talking to us for now', () => {
+test('Business: per person, inside the shared Cloud, bought in the app where its prices are set, else by talking to us', () => {
   assert.equal(BUSINESS.name, 'Slatebox Business')
-  assert.deepEqual(BUSINESS_PRICES.map(p => [p.interval, p.unitAmountPerSeat]), [['month', 600], ['year', 6000]])
-  assert.equal(BUSINESS.billingBuilt, false, 'no Business checkout until its billing ships')
+  // the figures the central pricing page states (pro-figures); the app itself never shows them
+  // Restated (owner decision 2026-11-24): $8 per member a month, $80 a year (two months free, as Pro)
+  assert.deepEqual(BUSINESS_PRICES.map(p => [p.interval, p.unitAmountPerSeat]), [['month', 800], ['year', 8000]])
+  assert.equal(BUSINESS_PRICES[1].unitAmountPerSeat, BUSINESS_PRICES[0].unitAmountPerSeat * 10, 'yearly is ten months, like Pro')
+  // Restated: whether Business is sold in the app is a settings fact (both Stripe prices named, on
+  // Cloud), never a code flag: the catalogue has no billingBuilt (pro-figures businessCheckout)
+  assert.equal(BUSINESS.billingBuilt, undefined)
+  // no amount in the words the app shows: the pricing page and the sheet (Stripe's amount) say it
+  assert.doesNotMatch(BUSINESS.summary, /\$\d/)
   // the site's contact form with the business topic, the same link the marketing site and the docs use
   assert.equal(BUSINESS_CONTACT_URL, 'https://slatebox.com/contact/?topic=business')
   assert.equal(BUSINESS.contactUrl, BUSINESS_CONTACT_URL)
@@ -161,14 +168,17 @@ test('Business: $6 a person a month or $60 a year, inside the shared Cloud, sold
   assert.equal(BUSINESS.contactLabel, 'Talk to us about Business')
   // what it is, and what it is not
   assert.match(BUSINESS.summary, /fully managed/)
-  assert.match(BUSINESS.summary, /per person/)
+  // Restated (round-2 review nit 12): Business is priced per member everywhere (site, docs, terms)
+  assert.match(BUSINESS.summary, /per member/)
+  assert.doesNotMatch(BUSINESS.summary, /per person/)
+  assert.doesNotMatch(readFileSync(new URL('../web/app/imports/ui/components/billing/ProPanel.jsx', import.meta.url), 'utf8'), /paid per person/)
   assert.doesNotMatch(JSON.stringify(BUSINESS), /dedicated|server of its own|\bSmall\b|\bMedium\b|6,000|by size|no seat/i)
   assert.equal(BUSINESS.sizes, undefined)
   // each member's share of the team's pool is Pro's credits
   assert.equal(BUSINESS.creditsPerMember, 'pro')
 })
 
-test('no Slatebox Private, dedicated-server or size-priced copy is left in the app, and nothing sells Business by checkout', async () => {
+test('no Slatebox Private, dedicated-server or size-priced copy is left in the app', async () => {
   const { readdirSync, readFileSync, statSync, existsSync } = await import('node:fs')
   const { join } = await import('node:path')
   const root = new URL('../', import.meta.url).pathname
@@ -254,7 +264,15 @@ test('the share applies only where Pro is needed: self-host and missing dates ke
 test('pro-figures.json is what the meter and the catalogues give (run node scripts/pro-figures.mjs --write after a change)', () => {
   assert.equal(readFileSync(FIGURES_FILE, 'utf8'), figuresJson())
   const f = figures()
-  assert.deepEqual([f.pro.monthCents, f.pro.yearCents, f.business.monthCentsPerSeat, f.business.yearCentsPerSeat], [500, 5000, 600, 6000])
+  // Restated (owner decision 2026-11-24): Business is $8 / $80 per member
+  assert.deepEqual([f.pro.monthCents, f.pro.yearCents, f.business.monthCentsPerSeat, f.business.yearCentsPerSeat], [500, 5000, 800, 8000])
+  // businessCheckout (and its older name billingBuilt) is false until settings name both prices
+  assert.equal(f.business.businessCheckout, false)
+  assert.equal(f.business.billingBuilt, false)
+  const cloud = { payments: { business: { monthly: 'price_biz_m', yearly: 'price_biz_y' } } }
+  assert.equal(figures(undefined, { settings: cloud }).business.businessCheckout, true)
+  assert.equal(figures(undefined, { settings: cloud }).business.billingBuilt, true)
+  assert.equal(figures(undefined, { settings: { payments: { business: { monthly: 'price_biz_m' } } } }).business.businessCheckout, false)
   assert.deepEqual([f.pro.credits.draftsPerMonth, f.pro.credits.draftsPerDay, f.pro.credits.voiceHours, f.pro.credits.videoHours], [180, 30, 5.5, 1])
   assert.equal(f.business.contactUrl, BUSINESS_CONTACT_URL)
 })

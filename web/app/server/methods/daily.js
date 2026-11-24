@@ -133,8 +133,9 @@ async function join({ shareId, mode } = {}) {
     // said on any route, and the client offers a top-up (voiceFallback)
     starterNotice = call.notice
   } else if (starter && started && call.route === 'free') {
-    const usage = await usageFor(user._id, now)
-    const settings = settingsForUser(user, await meterSettings(), now)
+    // a call on a Business team's pool tells the team's hours left (metering/pool.mjs)
+    const usage = await usageFor(user._id, now, call.pool ?? null)
+    const settings = settingsForUser(user, await meterSettings(), now, call.pool ?? null)
     starterNotice = CALL_COPY.starterNotice(hours(settings.free.voiceMinutesPerMonth - usage.voiceMinutesMonth), call.pro === true)
   }
   return { url: call.roomUrl, token, callId: call._id, mode: call.mode, starter, starterNotice, voiceFallback: Boolean(starter && started && call.notice), canTranscribe }

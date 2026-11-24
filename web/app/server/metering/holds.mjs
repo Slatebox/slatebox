@@ -56,9 +56,10 @@ async function applyAll(io, steps, now) {
  * heldMicros the budget's cap reads, and spent as proMicros (record.mjs).
  * → { ok: true, route: 'free', holdMicros, leftMicros, draft, keys, pro? } | { ok: false, code }
  */
-export async function holdFree(io, { payerId, kind, countsAsDraft, draftsPerDay, draftsCode = 'ai-today', address = null, estimateMicros, ceilingMicros, settings, now, enforceGlobal = true }) {
+export async function holdFree(io, { payerId, kind, countsAsDraft, draftsPerDay, draftsCode = 'ai-today', address = null, estimateMicros, ceilingMicros, settings, now, enforceGlobal = true, monthCounter = null }) {
   const { free, budget } = settings
-  const keys = { day: `user:${payerId}:${dayKey(now)}`, month: `user:${payerId}:${monthKey(now)}`, global: `global:${monthKey(now)}` }
+  // monthCounter: a Business team's month counter (pool.mjs poolMonthKey), drawn on by all its members
+  const keys = { day: `user:${payerId}:${dayKey(now)}`, month: monthCounter || `user:${payerId}:${monthKey(now)}`, global: `global:${monthKey(now)}` }
   const draft = kind === 'ai' && countsAsDraft !== false ? 1 : 0
   if (draft && address?.id) keys.address = `address:${address.id}:${dayKey(now)}`
   const globalCap = Math.floor(budget.monthlyMicros * budget.pauseAiAt / 100)

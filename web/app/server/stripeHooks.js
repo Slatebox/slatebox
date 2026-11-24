@@ -4,11 +4,15 @@ import { stripeClient, walletIo } from './methods/wallet'
 import { handleBilling, handleSetup } from './methods/pro'
 import app from './expressApp'
 import { StripeEvents } from '../imports/api/common/models'
+import { cloudOn } from './cloud-lock-meteor'
 
 // Slatebox Pro subscriptions, then top-up payments, refunds and disputes, then card changes (setup sessions). The inbound
 // body supplies only the event id: the event is read back from this installation's Stripe account
 // before anything is used, and Pro's state is read fresh from Stripe (pro-billing.mjs).
 app.post('/stripehooks', async (req, res) => {
+  // payments run only on Slatebox Cloud by its Cloud key (cloud-lock.mjs): elsewhere there is no
+  // payment endpoint, so a self-hosted server never records a Stripe event, whatever its settings
+  if (!cloudOn()) return res.status(404).json({ ok: false, error: 'cloud_only' })
   const id = req.body?.id
   if (typeof id !== 'string' || !/^evt_[A-Za-z0-9]+$/.test(id)) {
     return res.status(400).json({ ok: false })

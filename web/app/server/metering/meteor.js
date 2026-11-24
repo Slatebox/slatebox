@@ -9,7 +9,7 @@ import { DDP } from 'meteor/ddp-client'
 import fetch from 'node-fetch'
 import CONSTANTS from '../../imports/api/common/constants'
 import {
-  AIAudit, Audit, HuddleCalls, MeterEvents, MeterTotals, Messages, Permissions, ProviderKeys, SystemSettings, WalletLedger, Wallets,
+  AIAudit, Audit, HuddleCalls, MeterEvents, MeterTotals, Messages, Organizations, Permissions, ProviderKeys, SystemSettings, WalletLedger, Wallets,
 } from '../../imports/api/common/models'
 import { currentAIAction, installMeter } from './context.mjs'
 import { COPY, HOLDS, allowanceSummary, budgetLevel, creditsForShare, dayKey, fullUseMicros, meteringEnabled, monthKey, proNeeded, proSwitchValue, refundableCents, resolveMetering, route } from './policy.mjs'
@@ -31,9 +31,14 @@ import { TOP_UP_AMOUNTS, cardFeeMode } from '../../imports/api/billing/top-up.mj
 import { payAlso, refusalPay } from './refusal-pay.mjs'
 import { OWN_KEYS_CLOUD, ownKeysAllowed } from '../../imports/api/common/own-keys.mjs'
 import { isInstanceAdmin } from '../permissions'
+import { cloudOn, paymentsOn } from '../cloud-lock-meteor'
+import { creditsForPool, inPool, poolMonthKey, teamPool } from './pool.mjs'
+import { MEMBER_FIELDS, billableMembers } from '../business-billing.mjs'
 
-// Decided once at startup: a Cloud server without metering.enabled stops here (policy.mjs).
-const METERED = meteringEnabled(Meteor.settings)
+// Decided once at startup: a Cloud server without metering.enabled stops here (policy.mjs), and
+// the meter runs only on Slatebox Cloud by its signed Cloud key (cloud-lock.mjs): a self-hosted
+// server has none, whatever metering.enabled says.
+const METERED = meteringEnabled(Meteor.settings, { cloud: cloudOn() })
 // Own AI and call keys are a self-hosted feature (own-keys.mjs): on Slatebox Cloud none is saved,
 // shown or used, and a key saved before stays stored but unused.
 const OWN_KEYS = ownKeysAllowed(Meteor.settings)
@@ -65,10 +70,13 @@ export async function meterSettings() {
 const forgetSettings = () => { cached = null }
 
 // ---------- reads ----------
-export async function usageFor(userId, now) {
-  const rows = await MeterTotals.find({ _id: { $in: [`user:${userId}:${monthKey(now)}`, `user:${userId}:${dayKey(now)}`] } }).fetchAsync()
-  const month = rows.find(r => r._id.endsWith(monthKey(now))) || {}
-  const day = rows.find(r => r._id.endsWith(dayKey(now))) || {}
+// pool: a Business team's pool (pool.mjs): the month is the team's counter, the day stays the person's.
+export async function usageFor(userId, now, pool = null) {
+  const monthId = pool?.id ? poolMonthKey(pool.id, now) : `user:${userId}:${monthKey(now)}`
+  const dayId = `user:${userId}:${dayKey(now)}`
+  const rows = await MeterTotals.find({ _id: { $in: [monthId, dayId] } }).fetchAsync()
+  const month = rows.find(r => r._id === monthId) || {}
+  const day = rows.find(r => r._id === dayId) || {}
   // amounts set aside by requests still running count as used
   return {
     aiActionsToday: day.aiActions || 0, freeMicrosToday: (day.freeMicros || 0) + (day.heldMicros || 0),
@@ -135,7 +143,8 @@ async function isTeamAdmin(user) {
 // What pay-route reads about this person, from the same facts meter.summary uses. teamAdmin is read
 // only when a team balance was the payer.
 async function refusalFlags(user, details = {}) {
-  const sold = Boolean(Meteor.settings.stripePrivateKey)
+  // payments run only on Slatebox Cloud by its Cloud key, with a Stripe key (cloud-lock.mjs)
+  const sold = paymentsOn()
   const settings = await meterSettings()
   return {
     proState: user && !user.isAnonymous ? proSummary(user.pro, Date.now()) : null,
@@ -163,7 +172,7 @@ export async function refusalError(user, code, message, details = {}) {
 
 // included: the month's amount is theirs (Slatebox Pro where Pro is needed, everyone where it is
 // not: self-host); pro: live Pro, so the shared budget's stages do not apply (policy.mjs route).
-const personOf = (user, settings, now = Date.now()) => user ? {
+const personOf = (user, settings, now = Date.now(), pool = null) => inPool(user ? {
   id: user._id, anonymous: Boolean(user.isAnonymous), emailVerified: Boolean(user.emails?.[0]?.verified),
   freeStopped: user.freeStopped === true,
   included: proIncluded(user.pro, now, settings),
@@ -171,17 +180,41 @@ const personOf = (user, settings, now = Date.now()) => user ? {
   proPastDue: proPastDue(user.pro),
   // the month Pro starts in (or ends in, once it will not renew) gives only its share of credits
   creditShare: proCreditShare(user.pro, now, settings),
-} : null
-/** The meter's settings with this person's allowances for this month (their creditShare). */
-export const settingsForUser = (user, settings, now = Date.now()) => creditsForShare(settings, user ? proCreditShare(user.pro, now, settings) : 1)
+} : null, pool)
+/** The meter's settings with this person's allowances for this month (their creditShare, or their team's pool). */
+export const settingsForUser = (user, settings, now = Date.now(), pool = null) => (pool
+  ? creditsForPool(settings, pool)
+  : creditsForShare(settings, user ? proCreditShare(user.pro, now, settings) : 1))
 export const userFields = { fields: { isAnonymous: 1, emails: 1, orgId: 1, profile: 1, freeStopped: 1, pro: 1 } }
+
+// Slatebox Business's shared pool (pool.mjs): the team and how many members it pays for, read
+// per request (one document); the joined members of a staff-written contract are counted at most
+// once a minute per team.
+const memberCounts = new Map()
+async function joinedMembers(orgId, now) {
+  const hit = memberCounts.get(orgId)
+  if (hit && hit.until > now) return hit.count
+  const users = await Meteor.users.rawCollection().find({ orgId }, { projection: MEMBER_FIELDS }).toArray()
+  const count = billableMembers(users)
+  memberCounts.set(orgId, { count, until: now + 60_000 })
+  return count
+}
+/** The Business pool this person draws on this month, or null (pool.mjs teamPool). */
+export async function poolFor(user, now = Date.now()) {
+  if (!user || user.isAnonymous || !user.orgId) return null
+  const org = await Organizations.findOneAsync({ _id: user.orgId }, { fields: { business: 1 } })
+  if (!teamPool({ user, org, members: 1, now })) return null
+  const paid = Number.isInteger(org.business.members) && org.business.members > 0
+  return teamPool({ user, org, members: paid ? 1 : await joinedMembers(org._id, now), now })
+}
 
 // Everything route() needs for one person and one kind of use.
 export async function routeFor({ user, kind, feature, estimateMicros, minutes, running, countsAsDraft, now = Date.now() }) {
   const settings = await meterSettings()
   const aiScope = await ownAIScope(user, kind, feature)
+  const pool = await poolFor(user, now)
   const [usage, global, personalKeys, teamKeys, personal, team] = await Promise.all([
-    user ? usageFor(user._id, now) : {},
+    user ? usageFor(user._id, now, pool) : {},
     globalTotals(now),
     user ? keyAvailability('user', user._id, aiScope) : {},
     user?.orgId ? keyAvailability('org', user.orgId, aiScope) : {},
@@ -189,8 +222,8 @@ export async function routeFor({ user, kind, feature, estimateMicros, minutes, r
     user?.orgId ? walletState('org:' + user.orgId, now, settings) : null,
   ])
   const decision = route({
-    kind, person: personOf(user, settings, now), teamId: user?.orgId || null, keys: { personal: personalKeys, team: teamKeys },
-    usage, wallets: { personal, team }, global, estimateMicros, minutes, running, countsAsDraft, feature, settings, now,
+    kind, person: personOf(user, settings, now, pool), teamId: user?.orgId || null, keys: { personal: personalKeys, team: teamKeys },
+    usage, wallets: { personal, team }, global, estimateMicros, minutes, running, countsAsDraft, feature, settings: pool ? creditsForPool(settings, pool) : settings, now,
   })
   return { decision, settings, usage, global, wallets: { personal, team } }
 }
@@ -276,7 +309,7 @@ export async function recordCallMinutes(call, charge, now) {
   const out = await recordUsage(usageIo, {
     ref: charge.ref, payer: call.payer, actorId: call.starterId, kind: charge.kind, route: call.route, feature: 'call',
     model: null, units: charge.participantMinutes, costMicros: callCostMicros(charge.kind, charge.participantMinutes), now, settings,
-    pro: call.pro === true,
+    pro: call.pro === true, pool: call.pool ?? null,
   })
   if (call.route === 'free' && call.pro !== true) checkAlerts(now).catch(error => console.error('meter alert check failed', error.message))
   return out
@@ -398,10 +431,11 @@ export async function includedThisMonth(user) {
   if (!user || user.isAnonymous || !meterOn()) return null
   const now = Date.now()
   const settings = await meterSettings()
-  const [usage, global] = await Promise.all([usageFor(user._id, now), globalTotals(now)])
+  const pool = await poolFor(user, now)
+  const [usage, global] = await Promise.all([usageFor(user._id, now, pool), globalTotals(now)])
   const personal = await walletState('user:' + user._id, now, settings)
   const team = user.orgId ? await walletState('org:' + user.orgId, now, settings) : null
-  const { keys: _keys, ...included } = allowanceSummary({ person: personOf(user, settings, now), usage, wallets: { personal, team }, global, settings, now, teamId: user.orgId })
+  const { keys: _keys, ...included } = allowanceSummary({ person: personOf(user, settings, now, pool), usage, wallets: { personal, team }, global, settings: pool ? creditsForPool(settings, pool) : settings, now, teamId: user.orgId })
   return included
 }
 
@@ -505,27 +539,28 @@ Meteor.methods({
     if (!meterOn()) return { metered: false }
     const now = Date.now()
     const settings = await meterSettings()
-    const [usage, global] = await Promise.all([usageFor(user._id, now), globalTotals(now)])
+    const pool = await poolFor(user, now)
+    const [usage, global] = await Promise.all([usageFor(user._id, now, pool), globalTotals(now)])
     const personal = await walletState('user:' + user._id, now, settings)
     const team = user.orgId ? await walletState('org:' + user.orgId, now, settings) : null
     const keys = OWN_KEYS && master ? await listKeys('user', user._id) : []
     const label = family => keys.find(k => family === 'daily' ? k.provider === 'daily' : k.provider !== 'daily')?.label ?? null
     return {
       metered: true,
-      ...allowanceSummary({ person: personOf(user, settings, now), usage, wallets: { personal, team }, global, settings, now, teamId: user.orgId, keys: { ai: label('ai'), daily: label('daily') } }),
+      ...allowanceSummary({ person: personOf(user, settings, now, pool), usage, wallets: { personal, team }, global, settings: pool ? creditsForPool(settings, pool) : settings, now, teamId: user.orgId, keys: { ai: label('ai'), daily: label('daily') } }),
       firstTopUp: !personal.firstTopUpAt,
       refundableCents: refundableCents(personal),
       ...(team && { teamFirstTopUp: !team.firstTopUpAt, teamAdmin: await isTeamAdmin(user), teamRefundableCents: refundableCents(team) }),
       frozen: Boolean(personal.frozen),
       // own keys are a self-hosted feature: never offered on Slatebox Cloud (own-keys.mjs)
       ownKeysAvailable: OWN_KEYS && Boolean(master),
-      topUpsAvailable: Boolean(Meteor.settings.stripePrivateKey),
+      topUpsAvailable: paymentsOn(),
       marginPercent: settings.marginPercent,
       emailVerified: Boolean(user.emails?.[0]?.verified),
       // Slatebox Pro: what the person holds, and whether it can be bought here
       proState: proSummary(user.pro, now),
       // on sale where Pro is needed (pro-billing.mjs proOnSale: 'now' on Cloud), where payments are configured
-      proAvailable: Boolean(Meteor.settings.stripePrivateKey) && proOnSale(settings),
+      proAvailable: paymentsOn() && proOnSale(settings),
       // the subscription looks out of date (a missed webhook): the profile asks pro.refresh
       proStale: Boolean(user.pro?.subscriptionId && ['active', 'trialing'].includes(user.pro.status) && now > (user.pro.currentPeriodEnd || 0)),
       // the pay sheet (design §3.2): whether it takes payments here (public.stripe.inApp, computed at
@@ -679,7 +714,9 @@ async function minutesLeftForCall(call, now, settings) {
     })
   }
   const user = await Meteor.users.findOneAsync(call.payer.id, userFields)
-  return minutesLeftFor({ route: 'free', usage: await usageFor(call.payer.id, now), person: personOf(user, settings, now), settings: settingsForUser(user, settings, now), now })
+  // a call started on a Business team's pool keeps drawing on it (pool.mjs)
+  const pool = call.pool ?? null
+  return minutesLeftFor({ route: 'free', usage: await usageFor(call.payer.id, now, pool), person: personOf(user, settings, now, pool), settings: settingsForUser(user, settings, now, pool), now })
 }
 
 export async function tickCall(call, now = Date.now()) {

@@ -40,6 +40,7 @@ import {
 } from '../../imports/api/common/models'
 import utils from '../../imports/api/common/utils'
 import { accounts, enrollmentMailAvailable, verificationMailAvailable } from '../instance/meteor'
+import { membersChanged } from './business'
 
 
 async function sendVerification(userId) {
@@ -595,7 +596,7 @@ async function inviteTeam(opts = {}, resend) {
   }
   const fields = { orgId: 1, emails: 1, isAnonymous: 1, 'services.password.bcrypt': 1, 'services.password.argon2': 1, teamEnrollmentSentAt: 1 }
   try {
-    return await deliverTeamInvitations({
+    const delivered = await deliverTeamInvitations({
       org, invites: opts.invites, memberIds: resend ? opts.users?.map(u => u?._id) || [] : undefined,
       io: {
         error: (code, message) => new Meteor.Error(code, message),
@@ -613,6 +614,11 @@ async function inviteTeam(opts = {}, resend) {
         markSent: (teamId, id) => Meteor.users.updateAsync({ _id: id, orgId: teamId }, { $set: { teamEnrollmentSentAt: new Date() } }),
       },
     })
+    // a team billed for Slatebox Business pays for a member once they accept (business-billing.mjs
+    // acceptedMember; their sign-in updates the count): an invitation alone changes nothing, so
+    // this only catches a count that had drifted
+    if (!resend) membersChanged(orgId, { recordedFirst: true })
+    return delivered
   } finally {
     await Organizations.updateAsync({ _id: orgId, 'invitationLease.id': lock }, { $unset: { invitationLease: 1 } })
   }

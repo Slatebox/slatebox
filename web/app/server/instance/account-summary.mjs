@@ -35,12 +35,16 @@ export function createAccounts({
   includedThisMonth = async () => null,
   // This person's Slatebox Pro (pro-billing.mjs proSummary), or null.
   proSummary = () => null,
+  // Whether the meter runs here: the meter's own answer (metering/meteor.js meterOn), which is true
+  // only on Slatebox Cloud by its Cloud key (cloud-lock.mjs). A self-hosted server whose settings
+  // say metering.enabled has no meter, so no credits, pay or top-up links. Tests may leave it out.
+  meterOn = () => settings.metering?.enabled === true,
 }) {
   const selfHosted = settings.public?.env === 'selfhost'
-  const metered = settings.metering?.enabled === true
   const link = (path) => origin.replace(/\/$/, '') + path
 
   async function summary(principal) {
+    const metered = meterOn() === true
     const user = await findUser(principal.userId)
     if (!user || user.isAnonymous) return null
     const org = user.orgId ? await findOrganization(user.orgId) : null

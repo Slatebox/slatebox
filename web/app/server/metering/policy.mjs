@@ -1,7 +1,11 @@
 // Who pays for an AI request or a call, and what each person has left.
 // Pure: every input is passed in, nothing is read or written here.
+import { proPriceWords } from '../../imports/api/pro/prices.mjs'
 import { CALL_PRICES, ESTIMATES } from './prices.mjs'
 import { BILLING_CONTACT_URL } from '../../imports/api/common/contact.mjs'
+
+// Pro's monthly price in words, from the one place it is written (pro/prices.mjs)
+const PRO_MONTH = proPriceWords('month').label
 
 // Slatebox Cloud's switch to Slatebox Pro (settings.free.proRequiredFrom): 'now' (Cloud, from
 // 2026-11-22), 'never' (the default, and every self-hosted meter: self-host has no Pro) or a
@@ -119,14 +123,17 @@ export const COPY = Object.freeze({
   presentationsToday: "You have used today's free presentation plans. Sign in with a confirmed email for more, or try again tomorrow.",
   stagePaused: 'Free AI and free calls are paused until the 1st. Your balance still works.',
   // Slatebox Pro (Cloud, once settings.free.proRequiredFrom has passed)
-  getPro: 'AI on Slatebox comes with Slatebox Pro, $5 a month, or a balance. Get Pro or top up in your profile.',
-  getProCalls: "Starting a call comes with Slatebox Pro, $5 a month, or a balance. Anyone can join a call that's already running.",
+  getPro: `AI on Slatebox comes with Slatebox Pro, ${PRO_MONTH}, or a balance. Get Pro or top up in your profile.`,
+  getProCalls: `Starting a call comes with Slatebox Pro, ${PRO_MONTH}, or a balance. Anyone can join a call that's already running.`,
   getProImages: 'Image search and image generation come with Slatebox Pro or a balance. Get Pro or top up in your profile.',
   proPastDue: "Your Pro payment didn't go through, so your credits are paused. Update your card in your profile. Your balance still works.",
   proAiToday: "You have used today's Pro credits for AI. Top up in your profile.",
   proAiMonth: "You have used this month's Pro credits for AI. Top up in your profile.",
   proCallsToday: "You have used today's Pro credits for starting calls. Top up in your profile.",
   proCallsMonth: "You have used this month's Pro credits for calls. Top up in your profile.",
+  // a Slatebox Business team's shared pool (pool.mjs): the month is the team's
+  poolAiMonth: "Your team has used this month's Slatebox Business AI. Top up in your profile.",
+  poolCallsMonth: "Your team has used this month's Slatebox Business calls. Top up in your profile.",
   proStopped: `Included AI and calls are off for this account. Your balance still works. Write to us at ${BILLING_CONTACT_URL}.`,
   balanceTooLow: 'Your balance is too low for this request.',
   balanceVoiceOnly: 'Your balance covers voice but not video, so this call is voice. Top up for video.',
@@ -145,8 +152,8 @@ export const OWN_KEY_COPY = Object.freeze({
   videoToVoice: 'Your free video for this month is used up, so this call is voice. Add a Daily key or top up for video.',
   freeStopped: `Free use is off for this account. Your own key and your balance still work. Write to us at ${BILLING_CONTACT_URL}.`,
   stagePaused: 'Free AI and free calls are paused until the 1st. Your own keys and your balance still work.',
-  getPro: 'AI on Slatebox\'s own models comes with Slatebox Pro, $5 a month. Get Pro in your profile, or connect your own AI, which is free.',
-  getProCalls: "Starting a call comes with Slatebox Pro, $5 a month, or add your own Daily key for free. Anyone can join a call that's already running.",
+  getPro: `AI on Slatebox's own models comes with Slatebox Pro, ${PRO_MONTH}. Get Pro in your profile, or connect your own AI, which is free.`,
+  getProCalls: `Starting a call comes with Slatebox Pro, ${PRO_MONTH}, or add your own Daily key for free. Anyone can join a call that's already running.`,
   proPastDue: "Your Pro payment didn't go through, so your credits are paused. Update your card in your profile. Your own keys and your balance still work.",
   proAiToday: "You have used today's Pro credits for AI. Add your own AI or top up in your profile.",
   proAiMonth: "You have used this month's Pro credits for AI. Add your own AI or top up in your profile.",
@@ -211,12 +218,16 @@ export function resolveMetering({ stored = {}, deploy = {}, ownKeys = false } = 
   }
 }
 
-// Cloud settings turn the meter on. A self-hosted server has no meter unless its operator sets one.
+// Cloud settings turn the meter on, and only on Slatebox Cloud: `cloud` is whether this server is
+// Cloud by its signed Cloud key (server/cloud-lock.mjs), false unless the caller says so. Anywhere
+// else there is no meter, whatever metering.enabled says (owner decision, 2026-11-24): a
+// self-hosted server cannot switch on a paid meter of its own.
 // It fails closed: only public.env 'selfhost' or 'dev' may leave metering.enabled out (and run
-// with no meter). Production refuses to start without the meter, and any other env, including a
+// with no meter). Production refuses to start without the meter; any env but 'selfhost' and 'dev'
+// that turns the meter on refuses to start without its Cloud key; and any other env, including a
 // missing or misspelled one, must say true or false, so a settings mistake never means "no limits".
 const UNMETERED_ENVS = new Set(['selfhost', 'dev'])
-export function meteringEnabled(settings = {}) {
+export function meteringEnabled(settings = {}, { cloud = false } = {}) {
   const env = settings.public?.env
   const enabled = settings.metering?.enabled
   if (env === 'prod' && enabled !== true) {
@@ -225,7 +236,16 @@ export function meteringEnabled(settings = {}) {
   if (!UNMETERED_ENVS.has(env) && typeof enabled !== 'boolean') {
     throw new Error(`Set metering.enabled to true or false in the server settings (public.env is ${env === undefined ? 'missing' : JSON.stringify(env)}; only "selfhost" and "dev" may leave it out).`)
   }
-  return enabled === true
+  if (enabled !== true) return false
+  if (cloud !== true) {
+    // A self-hosted server ('selfhost') or a laptop ('dev') that asks for the meter simply has none.
+    // Any other env that asks for it (prod, test, a Cloud deploy) is meant to be Slatebox Cloud:
+    // run unmetered there and AI and calls would be unlimited on Slatebox's providers, so a missing,
+    // expired or wrong-host Cloud key stops the start instead.
+    if (!UNMETERED_ENVS.has(env)) throw new Error(`This server asks for the meter (metering.enabled) but has no accepted Slatebox Cloud key for its host (settings.enterprise.license, kind cloud), so it does not start: the meter runs only on Slatebox Cloud (public.env is ${env === undefined ? 'missing' : JSON.stringify(env)}).`)
+    return false
+  }
+  return true
 }
 
 // What an own key pays for. Image search and image generation always use Slatebox's own
@@ -332,9 +352,12 @@ const MESSAGES = { cloud: messagesOf(COPY), own: messagesOf(WITH_OWN_KEYS) }
 const PRO_MESSAGES = { cloud: proMessagesOf(COPY), own: proMessagesOf(WITH_OWN_KEYS) }
 const wordsFor = settings => (settings?.ownKeys === true ? 'own' : 'cloud')
 // The refusal for a code; `who.pro` (a decision or a person on Pro credits) words it as Pro;
-// `settings.ownKeys` (a self-hosted meter) words it with own keys.
+// `settings.ownKeys` (a self-hosted meter) words it with own keys; `who.pool` words a team pool's month.
+const POOL_MESSAGES = Object.freeze({ 'ai-month': 'poolAiMonth', 'calls-month': 'poolCallsMonth', 'video-stage': 'poolCallsMonth' })
 export const messageFor = (code, who = null, settings = null) => {
   const words = wordsFor(settings)
+  // a Business pool's month is the team's (pool.mjs); its day caps are the person's, in Pro's words
+  if (who?.pool && POOL_MESSAGES[code]) return copyFor(settings)[POOL_MESSAGES[code]] || COPY[POOL_MESSAGES[code]]
   return (who?.pro && PRO_MESSAGES[words][code]) || MESSAGES[words][code] || copyFor(settings).aiToday
 }
 
@@ -374,7 +397,9 @@ function guestRoute(input, person) {
 /**
  * route({ kind: 'ai'|'imageSearch'|'imageGeneration'|'voice'|'video', person, teamId, keys, usage, wallets, global,
  *         estimateMicros, minutes, running, countsAsDraft, feature, settings, now })
- * person: { id, anonymous, emailVerified, freeStopped, included?, pro?, proPastDue?, creditShare? }
+ * person: { id, anonymous, emailVerified, freeStopped, included?, pro?, proPastDue?, creditShare?, pool? }
+ *   pool: a Slatebox Business team's shared pool ({ id, members }, pool.mjs); settings and the month's
+ *   usage given are then the team's (meteor.js routeFor), and an ok free decision carries it.
  *   included: whether the monthly amount is theirs (Slatebox Pro, or anyone before
  *   settings.free.proRequiredFrom; left out means included). pro: on Slatebox Pro, so the shared
  *   budget's stages do not apply. proPastDue: Pro whose last payment failed. creditShare: the
@@ -436,7 +461,8 @@ export function route(input) {
     return paid?.ok ? paid : plan
   }
   const free = freeCheck(args)
-  if (!free) return { ok: true, route: 'free', payer: { type: 'user', id: person.id }, kind, level, ...(pro && { pro: true }), ...(share !== null && { creditShare: share }) }
+  // a Business pool member (pool.mjs): the hold and the record use the team's month counter
+  if (!free) return { ok: true, route: 'free', payer: { type: 'user', id: person.id }, kind, level, ...(pro && { pro: true }), ...(share !== null && { creditShare: share }), ...(person.pool && { pool: person.pool }) }
   const paid = balanceRoute(args)
   if (paid?.ok) return paid
 
@@ -446,7 +472,7 @@ export function route(input) {
     return voice
   }
   const code = paid === 'frozen' && free !== 'unverified' && free !== 'free-stopped' ? 'frozen' : free
-  return refuse(code, messageFor(code, { pro }, settings))
+  return refuse(code, messageFor(code, { pro, pool: person.pool }, settings))
 }
 
 const hoursOfFour = minutes => Math.max(0, Math.floor(minutes / 4 / 60 * 2) / 2)
@@ -513,6 +539,8 @@ export function allowanceSummary({ person, usage = {}, wallets = {}, global = {}
     included,
     pro,
     needsPro: proNeeded(settings, now) && !pro,
+    // a Business team's shared pool (pool.mjs): the month's amounts above are the team's
+    ...(person?.pool && { teamPool: { members: person.pool.members } }),
     proRequiredFrom: settings.free.proRequiredFrom ?? PRO_SWITCH.never,
     credits: proCreditsInWords(wholeMonth),
   }

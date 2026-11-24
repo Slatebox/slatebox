@@ -1,5 +1,6 @@
 import { Meteor } from 'meteor/meteor'
-// the in-app pay sheet's public settings, checked before any browser loads (pay-settings.mjs)
+// the in-app pay sheet's public settings, checked before any browser loads (pay-settings.mjs), and
+// the Cloud lock: payments and the meter run only on Slatebox Cloud by its signed key (cloud-lock.mjs)
 import './pay-settings-startup'
 // The launch plan's, pipeline's and budget's rules, plugged into the workshop model's one gate
 // before any method reads a board (the browser loads the same modules with the board kits).
@@ -43,6 +44,7 @@ import './methods/chatWoot'
 import './methods/comments'
 import './methods/messages'
 import './methods/wallet'
+import './methods/business'
 import './methods/googleDocs'
 import './methods/daily'
 import './methods/iconPacks'

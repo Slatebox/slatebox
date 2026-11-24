@@ -85,6 +85,8 @@ export function startCall({ callId, shareId, starterId, decision, now }) {
     ...((decision.route === 'free' || decision.route === 'balance') && { metered: true }),
     // started on Pro credits: the shared budget's stages never pause it (meteor.js tickCall)
     ...(decision.route === 'free' && decision.pro === true && { pro: true }),
+    // started on a Business team's pool: its minutes count on the team's month (pool.mjs)
+    ...(decision.route === 'free' && decision.pool && { pool: decision.pool }),
     ...(decision.keyOwner && { keyOwner: decision.keyOwner }),
     roomName: callRoomName(shareId, callId), state: 'open',
     startedAt: now, roomExpAt: now + CALL_LIMITS.windowMinutes * MIN, lastTickAt: now, tickIndex: 0,

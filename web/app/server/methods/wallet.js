@@ -14,10 +14,14 @@ import { cardFeeMode } from '../../imports/api/billing/top-up.mjs'
 import { guardFilter } from '../metering/holds.mjs'
 import { alert, meterOn, meterSettings } from '../metering/meteor'
 import { BILLING_CONTACT_URL } from '../../imports/api/common/contact.mjs'
+import { requireCloudLicense } from '../cloud-lock-meteor'
 
 // Every Stripe call goes through this client, pinned to one API version (pay-settings.mjs
-// STRIPE_API_VERSION, or settings.stripe.apiVersion), the same one the browser's SDK uses.
+// STRIPE_API_VERSION, or settings.stripe.apiVersion), the same one the browser's SDK uses. Only on
+// Slatebox Cloud by its Cloud key (cloud-lock.mjs): anywhere else it refuses with 'cloud_only', so
+// no Stripe key in a self-hosted server's settings ever takes a payment.
 export function stripeClient() {
+  requireCloudLicense()
   const key = Meteor.settings.stripePrivateKey
   assertUsableStripeKey(key, Meteor.settings.public.env)
   return new Stripe(key, stripeClientOptions(Meteor.settings))
@@ -119,6 +123,7 @@ async function walletFor(which, write) {
 }
 
 function requireMeter() {
+  requireCloudLicense()
   if (!meterOn()) throw new Meteor.Error('unavailable', 'This server has no balances.')
 }
 
@@ -184,6 +189,7 @@ const LABELS = { topup: 'Top-up', 'topup-refused': 'Top-up over the limit, refun
 Meteor.methods({
   async [CONSTANTS.methods.wallet.quote]({ amountCents } = {}) {
     check(amountCents, Match.Integer)
+    requireCloudLicense()
     const settings = await meterSettings()
     return topUpQuote(amountCents, settings.marginPercent, cardFeeMode(settings.topUp))
   },
@@ -251,6 +257,7 @@ Meteor.methods({
 
   async [CONSTANTS.methods.wallet.charges]({ wallet = 'me' } = {}) {
     check(wallet, Match.OneOf('me', 'team'))
+    requireCloudLicense()
     const { walletId } = await walletFor(wallet, false)
     const entries = await WalletLedger.find({ walletId }, { sort: { created: -1 }, limit: 50, fields: { type: 1, amountMicros: 1, note: 1, created: 1 } }).fetchAsync()
     return entries.map(e => ({

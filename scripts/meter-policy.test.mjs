@@ -31,11 +31,15 @@ test('defaults: Pro credits sized to $3.75 of provider cost a month, so yearly P
 })
 
 test('metering is on only when settings say so, and off on self-host by default', () => {
-  assert.equal(meteringEnabled({ metering: { enabled: true }, public: { env: 'prod' } }), true)
+  // Restated (owner decision 2026-11-24): the meter runs only on Slatebox Cloud by its Cloud key
+  // (cloud-lock.mjs); `cloud` is that answer, false unless the caller says so
+  assert.equal(meteringEnabled({ metering: { enabled: true }, public: { env: 'prod' } }, { cloud: true }), true)
+  assert.throws(() => meteringEnabled({ metering: { enabled: true }, public: { env: 'prod' } }), /Slatebox Cloud key/)
   // the Cloud fails closed: production without the meter does not start (pricing-fixes-ai C2)
   assert.throws(() => meteringEnabled({ public: { env: 'prod' } }), /metering\.enabled/)
   assert.equal(meteringEnabled({ public: { env: 'selfhost' } }), false)
-  assert.equal(meteringEnabled({ metering: { enabled: true }, public: { env: 'selfhost' } }), true)
+  // Restated: a self-hosted server has no meter, even when its settings switch one on
+  assert.equal(meteringEnabled({ metering: { enabled: true }, public: { env: 'selfhost' } }), false)
 })
 
 test('route order is own key, then free, then balance, then a refusal', () => {

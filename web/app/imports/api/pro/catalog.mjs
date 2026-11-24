@@ -9,6 +9,8 @@
 // For a team, Slatebox Business (business/catalog.mjs) adds a shared pool per person.
 import { DEFAULT_METERING, proCreditsInWords } from '../../../server/metering/policy.mjs'
 
+import { PRO_PRICES } from './prices.mjs'
+
 export { proCreditsInWords }
 
 export const PRO_PRODUCT = Object.freeze({
@@ -24,13 +26,10 @@ export const PRO_PRODUCT = Object.freeze({
   catalogVersion: '1',
 })
 
-export const PRO_LOOKUP_KEYS = Object.freeze({ month: 'pro_monthly_usd_500', year: 'pro_yearly_usd_5000' })
-
-export const PRO_PRICES = Object.freeze([
-  Object.freeze({ lookupKey: PRO_LOOKUP_KEYS.month, nickname: 'Slatebox Pro, monthly', unitAmount: 500, interval: 'month', intervalCount: 1 }),
-  // two months free against twelve monthly payments
-  Object.freeze({ lookupKey: PRO_LOOKUP_KEYS.year, nickname: 'Slatebox Pro, yearly', unitAmount: 5000, interval: 'year', intervalCount: 1 }),
-])
+// The prices themselves, and the words the app says them in, live in prices.mjs (no imports, so the
+// meter's copy in policy.mjs can say them too); the server refuses to sell a Stripe price that
+// differs (pro-billing.mjs checkProPrice), so what the app says is what Stripe charges.
+export { PRO_LOOKUP_KEYS, PRO_PRICES, proPriceWords, proPricesInWords } from './prices.mjs'
 
 export const intervalOfLookupKey = lookupKey => PRO_PRICES.find(p => p.lookupKey === lookupKey)?.interval ?? null
 

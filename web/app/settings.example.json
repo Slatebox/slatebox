@@ -73,12 +73,19 @@
   },
   "stripePrivateKey": "",
   "stripe": {
-    "//": "Server only. apiBase overrides the Stripe API host (tests); apiVersion pins a dated Stripe API release (empty keeps the built-in one).",
+    "//": "Slatebox Cloud only (Slatebox Pro, Slatebox Business and balances; off unless the Cloud license is present); leave empty for local development and self-hosting. Server only. apiBase overrides the Stripe API host (tests); apiVersion pins a dated Stripe API release (empty keeps the built-in one). businessPortalConfiguration: an optional customer portal configuration (bpc_...) for a team's Slatebox Business card and receipts.",
     "apiBase": "",
     "apiVersion": ""
   },
+  "payments": {
+    "business": {
+      "//": "Slatebox Business bought in the app for a team (server/business-billing.mjs). The ids of two recurring, per-unit, licensed Stripe prices the owner makes in Stripe: monthly and yearly, quantity = the team's members who have joined (invitations not yet accepted are not billed). The sheet shows the amount Stripe has for them. Slatebox Cloud only (its Cloud key, server/cloud-lock.mjs). With either id empty, Business is not sold in the app and the team page says Talk to us.",
+      "monthly": "",
+      "yearly": ""
+    }
+  },
   "metering": {
-    "//": "Slatebox Cloud's AI and call meter. Leave off for local development and self-hosting; see server/metering/README.md.",
+    "//": "Slatebox Cloud only: its AI and call meter. It runs only where public.edition is cloud and enterprise.license holds Slatebox Cloud's own key (server/cloud-lock.mjs): anywhere else there is no meter, whatever this says. Leave it off for local development and self-hosting. See server/metering/README.md.",
     "enabled": false,
     "alertEmail": ""
   },
@@ -96,7 +103,7 @@
     "heapIOKey": "",
     "pixabayAPIKey": "",
     "stripe": {
-      "//": "In-app payments (Stripe Payment Element). Set the publishable key (pk_...) that pairs with stripePrivateKey; without one, payments use the hosted Stripe page. inApp: false turns the in-app sheet off. At startup the app checks the pair and sets inApp itself.",
+      "//": "Slatebox Cloud only. In-app payments (Stripe Payment Element). Set the publishable key (pk_...) that pairs with stripePrivateKey; without one, payments use the hosted Stripe page. inApp: false turns the in-app sheet off. At startup the app checks the pair and sets inApp itself.",
       "publishableKey": "",
       "inApp": true
     },
