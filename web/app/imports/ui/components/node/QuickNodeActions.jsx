@@ -190,7 +190,8 @@ export default function QuickNodeActions({
                   addNode(shape)
                 }}
               >
-                <path strokeWidth="1px" stroke="#efefef" d={shape.path} />
+                <path strokeWidth="1px" stroke={shape.iconFill ? '#8a7a2a' : '#efefef'} d={shape.path}
+                  {...(shape.iconFill && { fill: shape.iconFill, style: { filter: 'drop-shadow(0 1px 1px rgba(0,0,0,.45))' } })} />
               </SvgIcon>
             </Tooltip>
           </Grid>

@@ -6,6 +6,7 @@
 // (a "14pt" string is drawn on one line, past the note's edge), and the branding page's preview
 // draws a preset's size in pixels too.
 import { DEFAULT_NOTE, contrast } from './canvasTheme.mjs'
+import { DEFAULT_SWATCHES, DARK_TEXT } from '../../api/common/note-style.mjs'
 
 export const NOTE_FONT = 'Manrope'
 // The style bar's M, so a first note's size is one of its chips.
@@ -59,5 +60,35 @@ export function dockNoteStyle(style) {
     fontSize: s.fontSize,
     lineColor: '#333',
     lineWidth: 3,
+  }
+}
+
+/**
+ * The sticky note the tool dock's "Sticky Note" makes: the default note's shape and size (a rounded
+ * 160 wide note, as tall as noteAt makes it for the slate's font size), in sticky yellow (the palette's
+ * Lemon) with dark text, no border and the "Sticky note" effect (the post-it shadow) already on. The
+ * same colours whatever the slate's last note was.
+ */
+export const STICKY_NOTE = Object.freeze({
+  backgroundColor: DEFAULT_SWATCHES.find((s) => s.name === 'Lemon').colour,
+  foregroundColor: DARK_TEXT,
+})
+
+/** The sticky note's own options (the rest, its font and place, come from the caller). */
+export function stickyNoteLook(style) {
+  const { width, height } = noteAt(style, { x: 0, y: 0 })
+  return {
+    width,
+    height,
+    shape: 'roundedrectangle',
+    vectorPath: 'roundedrectangle',
+    shapeHint: 'roundedrectangle',
+    backgroundColor: STICKY_NOTE.backgroundColor,
+    foregroundColor: STICKY_NOTE.foregroundColor,
+    // The engine's own name for the text colour (a copied note can carry it, and it wins).
+    fontColor: STICKY_NOTE.foregroundColor,
+    borderWidth: 0,
+    borderOpacity: 0,
+    filters: { vect: 'postItNote' },
   }
 }

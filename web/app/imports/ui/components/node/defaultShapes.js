@@ -95,7 +95,9 @@ const defaultShapes = [
   {
     key: 'stickyNote',
     name: 'Sticky Note',
-    path: 'M1 1l18 0.1l-0.1 17.8s-15.5 0.4-17.6-1c-0.4-2.1-0.3-16.9-0.3-16.9z',
+    // The note it makes: a landscape rounded note in sticky yellow with a shadow.
+    path: 'M5 7h14a3 3 0 0 1 3 3v4a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-4a3 3 0 0 1 3-3z',
+    iconFill: '#fdeea6',
   },
 ]
 

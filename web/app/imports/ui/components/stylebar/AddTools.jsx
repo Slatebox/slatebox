@@ -61,7 +61,9 @@ export default function AddTools({ slate, onAdded, commentOnly = false, canComme
               <div className="sb-shapes" role="group" aria-label="Shapes" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
                 {defaultShapes.filter((s) => s.key !== 'line').map((s) => (
                   <button key={s.key} type="button" className="sb-btn" aria-label={s.name} title={s.name} onClick={() => add(shape(s.key))}>
-                    <svg viewBox="0 0 24 24" aria-hidden><path d={s.path} fill="currentColor" fillOpacity="0.18" stroke="currentColor" strokeWidth="1.4" /></svg>
+                    <svg viewBox="0 0 24 24" aria-hidden>{s.iconFill
+                      ? <path d={s.path} fill={s.iconFill} stroke="#8a7a2a" strokeWidth="1" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,.35))' }} />
+                      : <path d={s.path} fill="currentColor" fillOpacity="0.18" stroke="currentColor" strokeWidth="1.4" />}</svg>
                   </button>
                 ))}
               </div>

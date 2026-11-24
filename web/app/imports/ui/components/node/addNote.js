@@ -3,7 +3,7 @@
 import cloneDeep from 'lodash.clonedeep'
 import { Slatebox } from 'slateboxjs'
 import defaultShapes from './defaultShapes'
-import { dockNoteStyle } from '../../common/noteStyle.mjs'
+import { dockNoteStyle, stickyNoteLook } from '../../common/noteStyle.mjs'
 
 /**
  * The style a new note starts from: the slate's last note of its own or, on a slate without one,
@@ -139,11 +139,9 @@ export default function addNote(slate, shape) {
     nodeOpts.fontSize = 20
     nodeOpts.fontFamily = 'Bangers'
   } else if (shape.key === 'stickyNote') {
+    // The default note's rounded shape and size, in sticky yellow, no border, the post-it shadow on.
     nodeOpts = setDimens(`T${xPos},${yPos}s6,6`)
-    nodeOpts.borderOpacity = 0
-    nodeOpts.filters = {
-      vect: 'postItNote',
-    }
+    Object.assign(nodeOpts, stickyNoteLook(slate?.noteStyle))
   } else {
     if (shape.key === 'line') {
       nodeOpts.borderWidth = 3
@@ -154,7 +152,7 @@ export default function addNote(slate, shape) {
   // ensure shapeHint is set
   if (shape.key === 'searchCustom' || shape.key === 'customShape') {
     nodeOpts.shapeHint = 'custom'
-  } else if (!['comment', 'addText'].includes(shape.key)) {
+  } else if (!['comment', 'addText', 'stickyNote'].includes(shape.key)) {
     nodeOpts.shapeHint = shape.key
   }
 
