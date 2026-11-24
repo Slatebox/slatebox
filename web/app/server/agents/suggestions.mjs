@@ -61,12 +61,22 @@ const linesTouching = (nodes, nodeId) => [...linesById(nodes).values()].filter((
 // canvas's replay of it agree. NODE_KEYS read the stored note; the rest are written as a change.
 
 const PLACED_KEYS = new Set(['text', 'shape', 'x', 'y', 'width', 'height'])
+// The fields add_nodes takes for a video note (slateboxjs/operations readMediaValue).
+const MEDIA_KEYS = ['url', 'provider', 'id', 'hash', 'start', 'title', 'author', 'poster', 'posterWidth', 'posterHeight']
 
 /** The operations that put this stored note on a slate, as it is (with its own id). */
 export function addNoteOps(node) {
   const note = readNote(node)
   const add = { kind: 'add_nodes', count: 1, ids: [note.id], text: note.text ?? '' }
   for (const key of ['shape', 'x', 'y', 'width', 'height']) if (note[key] !== null && note[key] !== undefined) add[key] = note[key]
+  // A video note is added as its video (add_nodes media), which draws its poster and play button.
+  const media = node?.options?.media
+  if (media && typeof media === 'object' && typeof media.url === 'string') {
+    add.media = Object.fromEntries(Object.entries(media).filter(([key, value]) => MEDIA_KEYS.includes(key) && value !== null && value !== undefined))
+    // its caption is the video's title and its shape the player's frame: add_nodes takes neither
+    delete add.text
+    delete add.shape
+  }
   const changes = {}
   for (const key of Object.keys(NODE_KEYS)) {
     if (PLACED_KEYS.has(key)) continue

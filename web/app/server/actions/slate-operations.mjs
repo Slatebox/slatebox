@@ -342,7 +342,7 @@ export default defineAction({
 // to keep), unless a person let that agent edit directly; then it saves, filed as one undoable
 // action. The Slatebox agent works on tasks a person assigned and approved, and saves; a person's
 // own edits and every preview are unchanged.
-async function canvasEdit(principal, input, ctx) {
+export async function canvasEdit(principal, input, ctx) {
   const { deps, mode, resource: slate } = ctx
   const store = deps.suggestions
   if (!store || principal.kind !== 'agent' || principal.builtin === 'slatebox' || mode !== 'save' || !deps.presence?.identify)

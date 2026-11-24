@@ -396,3 +396,26 @@ test("the roster: people, then agents as their own group; an agent with suggesti
   const canvas = await readFile(new URL("../web/app/imports/ui/pages/Canvas.jsx", import.meta.url), "utf8");
   assert.match(canvas, /<AgentPresenceListener slate=\{slate\.current\} canEdit=\{!accessLevel\.current\.isReadOnly && !accessLevel\.current\.isCommentOnly\} \/>/);
 });
+
+test("an agent's video note is a live suggestion like any canvas edit; a person's is saved", async (t) => {
+  const w = world();
+  t.after(() => w.close());
+  w.deps.media = async (url) => ({ found: true, media: { provider: "youtube", id: "dQw4w9WgXcQ", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", title: "A talk" } });
+  const agent = await w.principalFor(["slates:read", "slates:write"]);
+  const before = structuredClone(w.slate("demo").nodes);
+  const out = await w.registry.run(agent, "slates.addMedia", { shareId: "demo", url: "https://youtu.be/dQw4w9WgXcQ" });
+  assert.equal(out.status, 202);
+  assert.equal(out.body.outcome, "suggested");
+  assert.deepEqual(w.slate("demo").nodes, before, "nothing is saved");
+  const [item] = out.body.suggestion.items;
+  assert.equal(item.kind, "add");
+  assert.equal(item.node.options.media.id, "dQw4w9WgXcQ");
+  assert.equal(out.body.nodeId, item.nodeId);
+  // Kept by a person: the video note is on the slate.
+  const kept = await decide(w, person(), { decision: "keep", actionId: out.body.suggestion.actionId });
+  assert.equal(kept.body.kept.length, 1);
+  assert.ok(w.slate("demo").nodes.some((node) => node.options.media?.id === "dQw4w9WgXcQ"));
+  // A person's own video note saves at once.
+  const mine = await w.registry.run(person(), "slates.addMedia", { shareId: "demo", url: "https://youtu.be/dQw4w9WgXcQ" });
+  assert.equal(mine.status, 201);
+});

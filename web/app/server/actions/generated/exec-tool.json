@@ -1721,7 +1721,7 @@
     {
       "name": "add_media_note",
       "title": "Add a video note",
-      "description": "Add a YouTube, Vimeo or Loom video to a slate as a note that shows its poster and plays in place when pressed.\n\nAdd video. Add a video note to a slate from a YouTube, Vimeo or Loom address: the poster (stored in this app), a play button, and the title and host. It plays where it sits when someone presses play, never on its own, and plays inline in presentations. x and y place its top-left corner (320 by 180); without them it goes beside the slate's notes. One save, like slates.applyOperations; mode \"preview\" stores nothing.",
+      "description": "Add a YouTube, Vimeo or Loom video to a slate as a note that shows its poster and plays in place when pressed.\n\nAdd video. Add a video note to a slate from a YouTube, Vimeo or Loom address: the poster (stored in this app), a play button, and the title and host. It plays where it sits when someone presses play, never on its own, and plays inline in presentations. x and y place its top-left corner (320 by 180); without them it goes beside the slate's notes. One save, like slates.applyOperations; mode \"preview\" stores nothing. Added by an agent, the note is a live suggestion (202, outcome \"suggested\") for people on the slate to keep or discard, unless a person lets that agent edit directly.",
       "inputSchema": {
         "type": "object",
         "properties": {

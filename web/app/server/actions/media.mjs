@@ -3,13 +3,15 @@
 // its title and a poster stored in the app's own image store (server/media/media-lookup.mjs);
 // the canvas uses it when someone pastes or drops a video address, then adds the note itself.
 // slates.addMedia does both in one call and saves the note through slates.applyOperations' canvas
-// path (applyToCanvas), so revisions, permissions, presence and the save core are the same as
-// any other edit, and every open canvas draws it.
+// path (canvasEdit), so revisions, permissions, presence and the save core are the same as any
+// other edit, and every open canvas draws it. Like every agent's canvas edit, an agent's video note
+// is a live suggestion (202, outcome suggested) until a person keeps it, unless a person lets that
+// agent edit directly.
 import { defineAction } from './registry.mjs'
 import { problem } from './errors.mjs'
 import { loadSlate } from './slate-access.mjs'
 import { shareIdInput } from './slate-schemas.mjs'
-import { applyToCanvas, showAgent } from './slate-operations.mjs'
+import { canvasEdit, showAgent } from './slate-operations.mjs'
 
 const urlInput = { type: 'string', minLength: 1, maxLength: 2000, description: 'The video\'s address: a YouTube, Vimeo or Loom link.' }
 
@@ -88,7 +90,7 @@ export const slatesAddMedia = defineAction({
   id: 'slates.addMedia',
   title: 'Add video',
   description:
-    'Add a video note to a slate from a YouTube, Vimeo or Loom address: the poster (stored in this app), a play button, and the title and host. It plays where it sits when someone presses play, never on its own, and plays inline in presentations. x and y place its top-left corner (320 by 180); without them it goes beside the slate\'s notes. One save, like slates.applyOperations; mode "preview" stores nothing.',
+    'Add a video note to a slate from a YouTube, Vimeo or Loom address: the poster (stored in this app), a play button, and the title and host. It plays where it sits when someone presses play, never on its own, and plays inline in presentations. x and y place its top-left corner (320 by 180); without them it goes beside the slate\'s notes. One save, like slates.applyOperations; mode "preview" stores nothing. Added by an agent, the note is a live suggestion (202, outcome "suggested") for people on the slate to keep or discard, unless a person lets that agent edit directly.',
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:write',
@@ -119,6 +121,8 @@ export const slatesAddMedia = defineAction({
       revision: { type: 'integer' },
       message: { type: 'string' },
       nodeId: { type: 'string', description: 'The video note\'s id.' },
+      outcome: { type: 'string', enum: ['saved', 'suggested'], description: 'suggested: added by an agent, the note is shown live on the slate for a person to keep or discard; nothing is saved yet.' },
+      suggestion: { type: 'object', description: 'outcome suggested: the suggestion (actionId, items) as list_suggestions gives it.' },
       media: mediaOut,
       notice: { type: 'string' },
       report: { type: 'object' },
@@ -138,7 +142,7 @@ export const slatesAddMedia = defineAction({
     const { media } = found
     const name = media.title ? `"${media.title.slice(0, 80)}"` : 'a video'
     const operation = { kind: 'add_nodes', count: 1, media, ...(input.x !== undefined && { x: input.x, y: input.y }) }
-    const result = await applyToCanvas(principal, {
+    const result = await canvasEdit(principal, {
       shareId: input.shareId,
       plan: { message: `Added ${name}.`, operations: [operation] },
       userMessage: `Add video: ${input.url}`.slice(0, 200),
@@ -156,8 +160,10 @@ export const slatesAddMedia = defineAction({
         shareId: body.shareId,
         revision: body.revision,
         message: body.message,
-        nodeId: body.report?.created?.[0],
+        nodeId: body.report?.created?.[0] ?? body.suggestion?.items?.find((item) => item.kind === 'add')?.nodeId,
         media,
+        ...(body.outcome && { outcome: body.outcome }),
+        ...(body.suggestion && { suggestion: body.suggestion }),
         ...(found.notice && { notice: found.notice }),
         report: body.report,
       },

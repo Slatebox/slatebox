@@ -681,7 +681,7 @@ declare namespace slatebox.shapes {
 }
 
 declare namespace slatebox.slates {
-  /** Add video. Add a video note to a slate from a YouTube, Vimeo or Loom address: the poster (stored in this app), a play button, and the title and host. It plays where it sits when someone presses play, never on its own, and plays inline in presentations. x and y place its top-left corner (320 by 180); without them it goes beside the slate's notes. One save, like slates.applyOperations; mode "preview" stores nothing. @scope slates:write @modes save|preview */
+  /** Add video. Add a video note to a slate from a YouTube, Vimeo or Loom address: the poster (stored in this app), a play button, and the title and host. It plays where it sits when someone presses play, never on its own, and plays inline in presentations. x and y place its top-left corner (320 by 180); without them it goes beside the slate's notes. One save, like slates.applyOperations; mode "preview" stores nothing. Added by an agent, the note is a live suggestion (202, outcome "suggested") for people on the slate to keep or discard, unless a person lets that agent edit directly. @scope slates:write @modes save|preview */
   function addMedia(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
@@ -701,6 +701,10 @@ declare namespace slatebox.slates {
     message: string;
     /** The video note's id. */
     nodeId?: string;
+    /** suggested: added by an agent, the note is shown live on the slate for a person to keep or discard; nothing is saved yet. */
+    outcome?: "saved" | "suggested";
+    /** outcome suggested: the suggestion (actionId, items) as list_suggestions gives it. */
+    suggestion?: Record<string, unknown>;
     /** A video a media note plays: the address, the host, and the title and poster when the host shared them. */
     media: {
       provider: "youtube" | "vimeo" | "loom";
