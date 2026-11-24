@@ -14,6 +14,9 @@ settings*
 # fresh checkout builds an image that cannot configure itself (self-host/tests/tracked.test.mjs)
 !/self-host/rootfs/opt/slatebox/lib/settings.mjs
 !.vscode/settings.json
+# The installer's settings modules are code, not Meteor settings (no keys in them).
+!/packages/slatebox/src/ai/settings-adapter.mjs
+!/packages/slatebox/src/render/settings.mjs
 
 # Slatebox Cloud's legal documents are added to the hosted build from private
 # storage at ship time; they are not part of the public repository.

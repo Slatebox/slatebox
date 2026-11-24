@@ -1,0 +1,24 @@
+# Written by the slatebox installer for the install "slatebox".
+# Change it with `npx slatebox install --name slatebox ...` (or `slatebox ai ...`) rather than by hand:
+# the installer keeps its answers in install.yaml and writes this file again.
+name: slatebox
+services:
+  slatebox:
+    image: ghcr.io/slatebox/slatebox@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    container_name: slatebox
+    restart: unless-stopped
+    pull_policy: never
+    ports:
+    - 80:80
+    - 443:443
+    volumes:
+    - data:/data
+    env_file:
+    - slatebox.env
+    - secrets.env
+    labels:
+      com.slatebox.install: slatebox
+      app.kubernetes.io/managed-by: slatebox-installer
+volumes:
+  data:
+    name: slatebox-data

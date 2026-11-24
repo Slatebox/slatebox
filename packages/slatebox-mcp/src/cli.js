@@ -18,6 +18,11 @@ import { typedToolsEnabled } from "./typed-tools.js";
 
 export const DEFAULT_HTTP_PORT = 3917;
 
+/** What every tool answers when the server started without a token. */
+function tokenRequired() {
+  return Object.assign(new Error("No Slatebox token: set SLATEBOX_API_TOKEN to a personal access token from your Slatebox and restart this server. The prompts work without one."), { code: "sign_in_required", status: 401 });
+}
+
 async function main() {
   let values;
   try {
@@ -33,9 +38,18 @@ async function main() {
     throw new UsageError("--typed-tools (or SLATEBOX_MCP_TYPED_TOOLS) is on or off.");
   const typedTools = typedToolsEnabled(typedOption);
   const token = process.env.SLATEBOX_API_TOKEN;
-  if (!token) throw new UsageError("Set SLATEBOX_API_TOKEN to a personal access token.");
   const baseUrl = apiOrigin(values["base-url"] || process.env.SLATEBOX_BASE_URL || DEFAULT_ORIGIN);
   const generated = defaultGenerated();
+  if (!token) {
+    // No Slatebox yet: the prompts and the client docs still work;
+    // every tool answers that it needs a token. The HTTP server always needs one: it is the bearer.
+    if (values.http) throw new UsageError("Set SLATEBOX_API_TOKEN to a personal access token.");
+    if (values.port !== undefined || values.host !== undefined) throw new UsageError("--port and --host go with --http.");
+    process.stderr.write("SLATEBOX_API_TOKEN is not set: the prompts and the client docs work; the tools need a personal access token.\n");
+    const exec = async () => { throw tokenRequired(); };
+    await createSlateboxMcpServer({ exec, generated, typedTools }).connect(new StdioServerTransport());
+    return;
+  }
   const client = createClient({ baseUrl, token, generated });
   const exec = createExec({ baseUrl, token, generated });
   const instance = client.instance?.describe ? () => client.instance.describe({}) : undefined;

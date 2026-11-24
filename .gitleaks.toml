@@ -43,3 +43,10 @@ condition = "AND"
 paths = ['''(^|/)web/app/server/common/shared-guest-password\.mjs$''']
 regexTarget = "secret"
 regexes = ['''^9dbf8057012e99a692df37f984b92232c1aeee59ba9576be9f440d2ae0bef774$''']
+
+[[allowlists]]
+description = "Installer test fixtures: made-up keys built from the digits 0123456789 (e.g. 'sk-test-0123456789', 'ghp_0123456789abcdef…', 'sk_live_51HxAbCdEf0123456789', 'tok_0123456789AbCd…') that check a key is refused or never printed, and the SSH public key file name 'id_ed25519.pub'. None is a credential."
+condition = "AND"
+paths = ['''(^|/)packages/slatebox/test/.+\.test\.mjs$''']
+regexTarget = "secret"
+regexes = ['''0123456789''', '''^id_ed25519\.pub$''']
