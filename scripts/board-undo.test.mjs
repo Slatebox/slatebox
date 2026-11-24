@@ -2,7 +2,7 @@
 // changed goes back, and what someone else changed since stays (web/app/imports/api/common/board-undo.mjs).
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { BOARD_STEP_SAID, boardStepLabel, drawingOwnsBoardChange, rebaseBoardStep } from '../web/app/imports/api/common/board-undo.mjs'
+import { BOARD_STEP_SAID, boardStepLabel, drawingOwnsBoardChange, rebaseBoardStep, settleBoardSide } from '../web/app/imports/api/common/board-undo.mjs'
 
 const board = (cards, extra = {}) => ({
   title: 'Sprint',
@@ -115,4 +115,23 @@ test('a move made anyway is one step of its own, named as one, and the words tha
     assert.match(source, /undoWordsHere\(\)/, path)
     assert.doesNotMatch(source, /Undo last change/, path)
   }
+})
+
+test('a step made again ends where the server stored it: the next undo takes back a move made anyway that the server marked anew', () => {
+  const before = board([{ id: 'a', label: 'Login', laneId: 'todo' }, { id: 'b', label: 'Docs', laneId: 'done' }])
+  const after = board([{ id: 'a', label: 'Login', laneId: 'doing', override: { by: 'You', at: '2026-11-24T08:00:00Z', sentence: 'Doing is full.' } }, { id: 'b', label: 'Docs', laneId: 'done' }])
+  // Redo saved it; the server stamped the mark itself, and a teammate has since renamed Docs.
+  const saved = board([{ id: 'a', label: 'Login', laneId: 'doing', override: { by: 'Ada', at: '2026-11-24T08:05:00Z', sentence: 'Doing is full.' } }, { id: 'b', label: 'Docs 2', laneId: 'done' }])
+  const settled = settleBoardSide({ from: before, to: after, saved })
+  // Only what the step changes takes the server's form: Login with the server's mark; Docs stays as the step has it.
+  assert.deepEqual(settled.cards, [saved.cards[0], after.cards[1]])
+  // Undo from the settled side: Login goes back, unmarked, and the teammate's rename stays; nothing is in conflict.
+  const undone = rebaseBoardStep({ from: settled, to: before, current: saved })
+  assert.equal(undone.conflicts, 0)
+  assert.deepEqual(undone.board.cards, [{ id: 'a', label: 'Login', laneId: 'todo' }, { id: 'b', label: 'Docs 2', laneId: 'done' }])
+  // From the side the page sent, the old mark would be in conflict with the server's.
+  assert.equal(rebaseBoardStep({ from: after, to: before, current: saved }).conflicts, 1)
+  // A part the step takes away stays away, even if the server's copy still has it.
+  const keptMark = board([{ ...before.cards[0], override: after.cards[0].override }, before.cards[1]])
+  assert.deepEqual(settleBoardSide({ from: after, to: before, saved: keptMark }).cards, before.cards)
 })

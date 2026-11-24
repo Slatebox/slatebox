@@ -8,7 +8,7 @@ import createAnonymousUser from '../../../api/client/createAnonymousUser'
 import { workshopStyle, lanesPerRow } from '../../../api/common/workshop-look.mjs'
 import { shapeNotice as shapeSentence, withShapeNotice } from '../../../api/common/shape-notice.mjs'
 import { boardsCounterRecordId } from '../../../api/common/slate-boards.mjs'
-import { BOARD_STEP_SAID, boardStepLabel, drawingOwnsBoardChange, rebaseBoardStep } from '../../../api/common/board-undo.mjs'
+import { BOARD_STEP_SAID, boardStepLabel, drawingOwnsBoardChange, rebaseBoardStep, settleBoardSide } from '../../../api/common/board-undo.mjs'
 import { ensureBoardChromeStyles } from './boardChromeStyles'
 import { KIT_KINDS } from './boardRender'
 import { moverName } from '../../../api/common/mover-name.mjs'
@@ -291,10 +291,11 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     const settle = undoing ? null : pendingStep('Board change')
     try {
       const committed = await serialRef.current(() => Meteor.callAsync('creativeSlates.save', shareId, revision, model, ...onBoard))
-      settle?.(previous?.workshop ? { before: previous.workshop, after: next } : null)
-      if (live.current !== board) return { ok: true }
+      // The step ends at the board as the server stored it (it stamps a move made anyway itself).
+      settle?.(previous?.workshop ? storedAt(committed, next).then(after => ({ before: previous.workshop, after })) : null)
+      if (live.current !== board) return { ok: true, revision: committed }
       known.current = { revision: committed, model }
-      return { ok: true }
+      return { ok: true, revision: committed }
     } catch (err) {
       settle?.(null)
       if (live.current !== board) return { ok: false, gone: true }
@@ -323,7 +324,15 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     const run = async (back) => {
       const step = await done
       if (!step || same(step.before, step.after)) return { ok: false, message: null }
-      return back ? replay(step.after, step.before) : replay(step.before, step.after)
+      const result = back ? await replay(step.after, step.before) : await replay(step.before, step.after)
+      // What the undo or redo saved is what the step's side is from now on, as the server stored it: the next
+      // redo or undo of the step starts from there (a move made anyway made again carries the server's new mark).
+      if (result.ok && result.revision) {
+        const saved = await storedAt(result.revision, result.board)
+        if (back) step.before = settleBoardSide({ from: step.after, to: step.before, saved })
+        else step.after = settleBoardSide({ from: step.before, to: step.after, saved })
+      }
+      return { ok: result.ok, message: result.message }
     }
     engineRef.current?.recordHostStep?.({ label, undo: () => run(true), redo: () => run(false) })
     return settle
@@ -343,6 +352,18 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     queue.current.push(change)
   }
 
+  // The board as the server stored it at `revision`, once its publication brings it here (`fallback`, the board
+  // the page sent, when it does not come, or someone saved again first).
+  async function storedAt(revision, fallback) {
+    for (let waited = 0; waited < 4000; waited += 50) {
+      const latest = server.current
+      if (latest?.revision === revision && latest.model?.workshop) return latest.model.workshop
+      if (latest?.revision > revision) break
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+    return fallback
+  }
+
   // Make the step from `from` to `to` again on the board as it stands now: what someone else changed
   // since stays as they left it (rebaseBoardStep). Answers what the engine tells the person.
   async function replay(from, to) {
@@ -355,7 +376,7 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
       let next
       try { next = validateWorkshop(board) } catch { return { ok: false, message: BOARD_STEP_SAID.overwritten } }
       const result = await commit(next, { revision: known.current.revision, undoing: true })
-      if (result.ok) return { ok: true, message: conflicts ? BOARD_STEP_SAID.partly : null }
+      if (result.ok) return { ok: true, message: conflicts ? BOARD_STEP_SAID.partly : null, revision: result.revision, board: next }
       if (result.gone) return { ok: false, message: BOARD_STEP_SAID.gone }
       // Someone saved the board meanwhile: try once more on the board they left.
       if (result.stale && attempt === 0) { await new Promise(resolve => setTimeout(resolve, 400)); continue }

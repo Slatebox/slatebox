@@ -78,6 +78,40 @@ function mergeKeyed(base, target, current, conflicts) {
   return sequence.map((id) => merged.get(id))
 }
 
+/**
+ * One side of a step (`to`, reached from `from`) as the server stored it (`saved`): each part the step changes is
+ * taken as the server keeps it, the rest stays as the step has it. The server stamps some of what a step makes
+ * itself (who moved a card anyway, and when), so the next undo or redo of the step starts from what is stored, not
+ * from what the page sent. A part the step takes away stays away; a part the step makes keeps the server's form.
+ */
+export function settleBoardSide({ from, to, saved }) {
+  return settle(from, to, saved)
+}
+
+function settle(base, target, saved) {
+  if (same(base, target) || target === ABSENT || saved === ABSENT) return target
+  if (keyed(target) && Array.isArray(saved)) {
+    const b = new Map((Array.isArray(base) ? base : []).filter(isObject).map((item) => [item.id, item]))
+    const s = new Map(saved.filter(isObject).map((item) => [item.id, item]))
+    return target.map((item) => settle(b.get(item.id), item, s.get(item.id)))
+  }
+  if (isObject(target) && isObject(saved)) {
+    const from = isObject(base) ? base : {}
+    const out = {}
+    for (const key of new Set([...Object.keys(target), ...Object.keys(saved)])) {
+      if (!(key in target)) {
+        // Taken away by the step: it stays away. Never in the step at all: what the server added (a stamp).
+        if (!(key in from)) out[key] = saved[key]
+        continue
+      }
+      const value = settle(from[key], target[key], saved[key])
+      if (value !== ABSENT) out[key] = value
+    }
+    return out
+  }
+  return saved
+}
+
 /** What the person is told when their board step could not be undone or redone, or only in part. */
 export const BOARD_STEP_SAID = Object.freeze({
   overwritten: 'Someone else changed that on the board since, so there was nothing of yours to take back there.',
