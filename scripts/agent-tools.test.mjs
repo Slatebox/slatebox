@@ -75,7 +75,7 @@ test("every tool carries a title and all four annotations as booleans, true to i
       openWorldHint: action.openWorld,
     }, tool.name);
   }
-  assert.deepEqual(tools.exec.annotations, { title: tools.exec.title, readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+  assert.deepEqual(tools.exec.annotations, { title: tools.exec.title, readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
   assert.deepEqual(tools.describe.annotations, { title: tools.describe.title, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
   const byName = Object.fromEntries(tools.typed.map((tool) => [tool.name, tool]));
   assert.equal(byName.get_slate.annotations.readOnlyHint, true);

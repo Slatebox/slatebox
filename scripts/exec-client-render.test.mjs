@@ -138,7 +138,7 @@ test("the exec description stays within 3,500 characters and sends the rest to d
   assert.deepEqual(Object.keys(tool), ["instructions", "instructionsExecOnly", "exec", "describe", "typed", "prompts", "resources", "resourceTemplates"]);
   assert.deepEqual(tool.exec.inputSchema.required, ["intent", "code"]);
   assert.deepEqual(Object.keys(tool.exec.inputSchema.properties), ["intent", "code", "mode", "confirm", "idempotencyKey"]);
-  assert.deepEqual(tool.exec.annotations, { title: tool.exec.title, readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+  assert.deepEqual(tool.exec.annotations, { title: tool.exec.title, readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
   assert.equal(tool.describe.annotations.readOnlyHint, true);
   assert.ok(tool.instructions.length <= 1000);
   assert.ok(tool.instructionsExecOnly.length <= 1000);

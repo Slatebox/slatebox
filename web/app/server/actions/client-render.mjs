@@ -450,7 +450,9 @@ export function renderExecTool(manifest) {
       description: execDescription(manifest),
       inputSchema: execToolInput,
       outputSchema: execOutput,
-      annotations: { title: EXEC_TITLE, readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+      // Open world: a script reaches whatever the token may (it can issue a slate's invitation link, or reach an AI
+      // connection the way check_ai_connection does), so it is never a closed tool.
+      annotations: { title: EXEC_TITLE, readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     describe: {
       name: 'describe',

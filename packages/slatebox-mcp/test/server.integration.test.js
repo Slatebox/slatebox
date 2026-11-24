@@ -56,7 +56,7 @@ test("tools/list starts with exec and describe, byte-equal to the generated defi
     assert.deepEqual(tool, expected);
   }
   const exec = tools[0];
-  assert.deepEqual(exec.annotations, { title: exec.title, readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+  assert.deepEqual(exec.annotations, { title: exec.title, readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
   assert.ok(exec.description.length <= 3500, String(exec.description.length));
   assert.equal(tools[1].annotations.readOnlyHint, true);
   assert.equal(client.getInstructions(), file.instructions);

@@ -47,6 +47,18 @@ test("every tool the hosted /mcp lists has annotations.title and the four hints"
   assertTitled(listedTools(generated.tools), "hosted");
 });
 
+// exec reaches whatever its token may: it can issue a slate's invitation link (as create_slate_invite, open world)
+// and reach an AI connection (as check_ai_connection, open world). So exec is open world too, on every server.
+test("exec is open world, as the open-world tools it can do the work of", async () => {
+  const typed = Object.fromEntries(generated.tools.typed.map((tool) => [tool.name, tool]));
+  assert.equal(typed.create_slate_invite.annotations.openWorldHint, true);
+  assert.equal(typed.check_ai_connection.annotations.openWorldHint, true);
+  for (const tools of [await listedByLocalServer({ typedTools: false }), listedTools(generated.tools)]) {
+    const exec = tools.find((tool) => tool.name === "exec");
+    assert.deepEqual(exec.annotations, { title: exec.title, readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
+  }
+});
+
 // Sentences addressed to the assistant: how to treat results, what to tell or show the person,
 // which tool to call when. A description that says what a tool does never needs these.
 const DENYLIST = [
