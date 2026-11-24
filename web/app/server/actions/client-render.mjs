@@ -520,6 +520,15 @@ export const listedTemplates = (tools) => tools.resourceTemplates.map(servedTemp
 
 // describe, the same on every surface: the hosted endpoint and the local package both answer
 // from client.json with this function's rules (the package carries its own copy of it).
+// The start of a summary, what the describe index shows so the index of every method stays within the budget: its
+// first sentence, and the next one too when the first is short (under 60 characters).
+const SENTENCES = /[^]*?[.!?](?=\s+[A-Z("“]|$)/g
+export function firstSentence(text) {
+  const whole = String(text ?? '')
+  const [first = whole, second = ''] = whole.match(SENTENCES) ?? []
+  return (first.length < 60 ? first + second : first).trim()
+}
+
 export function describeClient(manifest, input = {}, { instance } = {}) {
   const { query, methods: names } = input || {}
   let chosen = manifest.methods
@@ -545,7 +554,8 @@ export function describeClient(manifest, input = {}, { instance } = {}) {
     methods: chosen.map((method) => ({
       name: method.name,
       title: method.title,
-      summary: method.summary,
+      // The index (no methods, no query) gives each method's first sentence; a query or methods give the whole summary.
+      summary: detailed ? method.summary : firstSentence(method.summary),
       kind: method.kind,
       flags: [
         method.readOnly ? 'read' : 'write',

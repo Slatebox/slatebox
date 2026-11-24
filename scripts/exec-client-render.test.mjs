@@ -10,7 +10,7 @@ import { createRegistry, defineAction } from "../web/app/server/actions/registry
 import { API_TOKEN_SCOPES } from "../web/app/server/api-token-core.mjs";
 import { boundActions, NEVER_BOUND } from "../web/app/server/actions/exec-binding.mjs";
 import {
-  buildClientManifest, compactLine, describeClient, DESCRIPTION_BUDGET, execDescription, renderClientFiles,
+  buildClientManifest, compactLine, describeClient, firstSentence, DESCRIPTION_BUDGET, execDescription, renderClientFiles,
   renderDeclarations, renderExecTool, renderPrelude, wrapScript,
 } from "../web/app/server/actions/client-render.mjs";
 
@@ -168,6 +168,19 @@ test("describe: the index by default, declarations on request, a query finds at 
   assert.ok(found.methods.every((m) => /invit/i.test(m.name + m.title + m.summary)));
   for (const out of [all, one, found]) assert.ok(JSON.stringify(out).length <= 40000);
   assert.deepEqual(describeClient(manifest, {}, { instance: { contract: "1.0" } }).instance, { contract: "1.0" });
+});
+
+test("describe's index gives each method the start of its summary; a query or methods give all of it", () => {
+  const index = describeClient(manifest).methods;
+  const full = (name) => manifest.methods.find((m) => m.name === name).summary;
+  for (const method of index) assert.ok(full(method.name).startsWith(method.summary), method.name);
+  const copy = index.find((m) => m.name === "slates.copy");
+  assert.ok(copy.summary.length < full("slates.copy").length);
+  assert.equal(describeClient(manifest, { methods: ["slates.copy"] }).methods[0].summary, full("slates.copy"));
+  assert.equal(describeClient(manifest, { query: "copy" }).methods.find((m) => m.name === "slates.copy").summary, full("slates.copy"));
+  // A first sentence under 60 characters takes the next one with it.
+  assert.equal(firstSentence("Short one. And the next one says more. A third."), "Short one. And the next one says more.");
+  assert.equal(firstSentence("No full stop at all"), "No full stop at all");
 });
 
 test("the guest prelude is one line, so the caller's code starts on line 2", () => {
