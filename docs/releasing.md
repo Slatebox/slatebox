@@ -14,7 +14,10 @@ version with every `slatebox` release. The installer runs one exact `slatebox-mc
 `slatebox-mcp` release also moves the `slatebox-mcp` pin in `packages/slatebox/package.json` (and
 its lock entry). The installer's own version does not move with it: `npx slatebox mcp` serves the
 new MCP server only once `slatebox` is released as well, so release the two together
-(`--release slatebox-mcp:<bump> --release slatebox:patch`, the MCP server first). The canvas
+(`--release slatebox-mcp:<bump> --release slatebox:patch`). The ship always runs the MCP server's
+release first, whatever order the flags are typed in, so the `slatebox` tag points at a commit that
+already pins the new `slatebox-mcp` (tags can't be moved afterwards), and the installer's notes
+get a generated line, "Runs slatebox-mcp X.Y.Z". The canvas
 engine, SlateboxJS, is versioned in its own repository.
 
 ## What a version number means
@@ -51,6 +54,18 @@ The next app release is **2.0.0**:
 
 Cut it with an explicit version: `ship --release app:2.0.0`. After that, plain bumps apply.
 
+**Order for the first release.** `release.mjs` reads the commit range from the artifact's previous
+tag, and the ship has no way to pass `--since`. So the earlier versions must be tagged first:
+
+1. Ship the branch that adds the release tooling (`cliff.toml`, `scripts/release.mjs`, the
+   changelogs, `.github/workflows/release.yml`) without `--release`.
+2. Run the owner's tag backfill, `backfill-release-tags.sh --apply`, against `community/main`
+   (see [Earlier versions](#earlier-versions)).
+3. Then `ship --release app:2.0.0` (and any npm package releases).
+
+A `--release` before the backfill stops with "No earlier v* tag is reachable from HEAD" before
+anything is built; nothing is left behind.
+
 ## Commits become the changelog
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) (see
@@ -58,8 +73,9 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.
 [git-cliff](https://git-cliff.org), configured by [cliff.toml](../cliff.toml), turns them into
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) sections: `feat` is Added, `fix` is Fixed,
 `perf`/`refactor`/`polish` is Changed, removals are Removed, `fix(security)` is Security; `docs`,
-`test`, `chore`, `ci`, `build` and `style` are left out. Each artifact only sees commits that touch
-its paths: the npm packages their `packages/...` folder, the app everything else.
+`test`, `chore`, `ci`, `build` and `style` are left out, and so is any commit scoped `release`
+(the release tooling). Each artifact only sees commits that touch its paths: the npm packages
+their `packages/...` folder, the app everything else except the release tooling.
 
 Hand-written notes under `## [Unreleased]` in a changelog are kept: at release time they become the
 release's **Highlights**, above the generated list. Use them for what a commit list cannot say well.

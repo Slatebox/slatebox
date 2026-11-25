@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  artifactForTag, compareSemver, curatedUnreleased, extractSection, generatedBody, nextVersion,
+  addGeneratedLine, runsLines, artifactForTag, compareSemver, curatedUnreleased, extractSection, generatedBody, nextVersion,
   sectionBody, tagPattern, ARTIFACTS, writeSection,
 } from './release.mjs'
 
@@ -89,4 +89,24 @@ test('a slatebox-mcp release moves the installer\'s exact pin; a slatebox releas
   assert.ok(!mcp.bumpPatch, 'the installer keeps its own version line')
   const [create] = ARTIFACTS.slatebox.companions
   assert.deepEqual([create.file, create.pin, create.bumpPatch], ['packages/create-slatebox/package.json', ['dependencies', 'slatebox'], true])
+})
+
+test('the release tooling is not part of the app\'s notes', () => {
+  for (const p of ['cliff.toml', 'scripts/release.mjs', 'scripts/release.test.mjs']) assert.ok(ARTIFACTS.app.excludePaths.includes(p), p)
+})
+
+test('a moved slatebox-mcp pin is a line in the installer\'s notes', () => {
+  const runs = ARTIFACTS.slatebox.runs
+  assert.deepEqual(runs.map((r) => [r.name, r.file, r.pin]), [['slatebox-mcp', 'packages/slatebox/package.json', ['dependencies', 'slatebox-mcp']]])
+  const lines = runsLines(runs, () => ({ before: '0.4.1', now: '0.4.2' }))
+  assert.deepEqual(lines, ['- Runs slatebox-mcp [0.4.2](https://github.com/Slatebox/slatebox/releases/tag/slatebox-mcp%400.4.2) (was 0.4.1).'])
+  assert.deepEqual(runsLines(runs, () => ({ before: '0.4.2', now: '0.4.2' })), [])
+  // No other changes: the line replaces "No user-facing changes".
+  const alone = addGeneratedLine('', 'Changed', lines[0])
+  assert.equal(alone, `### Changed\n\n${lines[0]}`)
+  assert.doesNotMatch(sectionBody('', alone), /No user-facing changes/)
+  // Joins an existing Changed group, or takes its place in Keep a Changelog order.
+  assert.equal(addGeneratedLine('### Changed\n\n- a', 'Changed', '- b'), '### Changed\n\n- b\n- a')
+  assert.equal(addGeneratedLine('### Added\n\n- a\n\n### Fixed\n\n- f', 'Changed', '- b'), '### Added\n\n- a\n\n### Changed\n\n- b\n\n### Fixed\n\n- f')
+  assert.equal(addGeneratedLine('### Added\n\n- a', 'Changed', '- b'), '### Added\n\n- a\n\n### Changed\n\n- b')
 })

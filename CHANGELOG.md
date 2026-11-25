@@ -20,35 +20,6 @@ shipped early. The next release is 2.0.0, which is above both lines.
 
 ## [Unreleased]
 
-### Changed
-
-- The slate is the presentation. A slate wears a style (`options.style`, one property that replaces the
-  old themes): "Wear this style" in Present's style picker, or in Slate settings → Slate style, puts the
-  style's background, its notes' outlines, fills and fonts, its lines and its art (title cards, kickers,
-  numbers, quotes, captions, bolts, bursts, ribbons, stars, grids) on the canvas as real notes you can
-  edit, as one step that Undo takes back. Present is a camera over the slate as saved: it frames, flies,
-  dims and reveals notes, and draws nothing of its own (no painted background, caption overlay, step
-  dots, phone layout or web-font link). The six presentations Slatebox built are published wearing
-  their styles (a new version of each library item), so Make it yours opens a canvas that looks like
-  the site's poster. The styles' faces (Anton, Space Grotesk, Fraunces, Inter, IBM Plex Mono, Abril
-  Fatface, PT Sans) are served by the app itself under the OFL.
-- A presentation saved before styles were worn plays the slate as it is drawn; choose a style in
-  Present to wear it.
-
-### Fixed
-
-- A copy of a library presentation keeps its look: Present plays the copied deck instead of planning
-  the slate again in another style.
-- A slate made from a brief of steps is named after its first note, not after a whole row of steps.
-
-### Removed
-
-- Themes: the Themes panel, the theme library (`/themes`), theme generator slates, the "Create with
-  theme?" AI preference, theme approval and the `themeId` creation link parameter. A slate that was
-  built on a theme can be deleted like any other. Slates and people that still carry theme fields
-  open and draw as before, with their own colors; restyle a slate through chat or a presentation
-  style.
-
 ### Added
 
 - Six presentations built by Slatebox in the library (Launch day war room, The 41-minute checkout
@@ -154,6 +125,18 @@ shipped early. The next release is 2.0.0, which is above both lines.
 
 ### Changed
 
+- The slate is the presentation. A slate wears a style (`options.style`, one property that replaces the
+  old themes): "Wear this style" in Present's style picker, or in Slate settings → Slate style, puts the
+  style's background, its notes' outlines, fills and fonts, its lines and its art (title cards, kickers,
+  numbers, quotes, captions, bolts, bursts, ribbons, stars, grids) on the canvas as real notes you can
+  edit, as one step that Undo takes back. Present is a camera over the slate as saved: it frames, flies,
+  dims and reveals notes, and draws nothing of its own (no painted background, caption overlay, step
+  dots, phone layout or web-font link). The six presentations Slatebox built are published wearing
+  their styles (a new version of each library item), so Make it yours opens a canvas that looks like
+  the site's poster. The styles' faces (Anton, Space Grotesk, Fraunces, Inter, IBM Plex Mono, Abril
+  Fatface, PT Sans) are served by the app itself under the OFL.
+- A presentation saved before styles were worn plays the slate as it is drawn; choose a style in
+  Present to wear it.
 - **Google Docs export now goes through the Google integration.** The old export, which kept a
   Google token in a browser cookie, is retired: connect Google once on the Integrations page and Slatebox keeps the sign-in encrypted on the server. PNG, SVG and Mermaid
   downloads stay as they are.
@@ -165,8 +148,27 @@ shipped early. The next release is 2.0.0, which is above both lines.
   no longer has `publication`: a workshop slate is published like any slate.
   `set_presentation_order` is unchanged.
 
+### Removed
+
+- Themes: the Themes panel, the theme library (`/themes`), theme generator slates, the "Create with
+  theme?" AI preference, theme approval and the `themeId` creation link parameter. A slate that was
+  built on a theme can be deleted like any other. Slates and people that still carry theme fields
+  open and draw as before, with their own colors; restyle a slate through chat or a presentation
+  style.
+- Themes: the Themes panel, the theme library (`/themes`), theme generator slates, the "Create with
+  theme?" AI preference, theme approval and the `themeId` creation link parameter. A slate that was
+  built on a theme can be deleted like any other. Slates and people that still carry theme fields
+  open and draw as before, with their own colors; restyle a slate through chat or a presentation
+  style.
+
 ### Fixed
 
+- A copy of a library presentation keeps its look: Present plays the copied deck instead of planning
+  the slate again in another style.
+- A slate made from a brief of steps is named after its first note, not after a whole row of steps.
+- A copy of a library presentation keeps its look: Present plays the copied deck instead of planning
+  the slate again in another style.
+- A slate made from a brief of steps is named after its first note, not after a whole row of steps.
 - A run another page or an agent saved, drawn on this canvas, became this person's undo step (their undo
   took the agent's work away for everyone).
 
@@ -211,6 +213,7 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.2.0` (index `sha256:78a96e5
 
 ### Added
 
+- **integrations:** connect once, invite anywhere; Google as a native integration ([dae536ac](https://github.com/Slatebox/slatebox/commit/dae536ac96beaca6ff956b9be642fdf837822ae6))
 - **suggestions:** a host's gate on suggestions.decide; retext a waiting note; undo can skip items ([cb27daea](https://github.com/Slatebox/slatebox/commit/cb27daea4f7dac95fd4dce906a1616309ad73871))
 - **agents:** agents read and write: changes elsewhere land as action cards a person approves ([509d6d00](https://github.com/Slatebox/slatebox/commit/509d6d00d6211b5837093f77529276cd573aab10))
 - **brand-kit:** one style for every slate; no per-kind presets ([12ce5bbf](https://github.com/Slatebox/slatebox/commit/12ce5bbf5f6a626a5c1ca829c508ade854c6bb66))
@@ -432,6 +435,10 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 - **agents:** the same ask while its answer waits is said once in Ask Slatebox ([19dc1706](https://github.com/Slatebox/slatebox/commit/19dc1706cffd0fd1bcb65352fc7688cf88eb9589))
 - **agents:** load the suggestions' drawing (slateboxjs/suggestions) only when a suggestion waits ([177d57e9](https://github.com/Slatebox/slatebox/commit/177d57e929a7a295b890e0baa8be011b64d20c42))
 - **agents:** a pointer whose agent's suggestion waits says "Waiting for you", never "Done" ([a695484d](https://github.com/Slatebox/slatebox/commit/a695484da7f1ff59b78f01f4f56d4b0271db48a6))
+
+### Security
+
+- **security:** actions that reach outside addresses (discovering, signing in to, inviting and asking outside agents, video lookups) are rate-limited per account whoever calls them, a signed-in page included; the MCP 401 challenge asks to read and edit only ([91725513](https://github.com/Slatebox/slatebox/commit/917255132bc3a9f50c40ac4436184f5c63bde86e))
 
 ## [1.3.21] - 2026-07-16
 

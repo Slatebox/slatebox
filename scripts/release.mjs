@@ -35,8 +35,11 @@ export const ARTIFACTS = {
     versionFiles: [{ file: 'package.json', keys: [['version']] }],
     lockKeys: [['version'], ['packages', '', 'version']],
     // The app is everything except the separately versioned npm packages. The root
-    // package-lock.json only moves with those packages' versions and dependencies.
-    excludePaths: ['packages/slatebox/**', 'packages/slatebox-mcp/**', 'packages/create-slatebox/**', 'package-lock.json'],
+    // package-lock.json only moves with those packages' versions and dependencies. The
+    // release tooling itself is not part of what people run (cliff.toml also skips any
+    // commit scoped `release`).
+    excludePaths: ['packages/slatebox/**', 'packages/slatebox-mcp/**', 'packages/create-slatebox/**', 'package-lock.json',
+      'cliff.toml', 'scripts/release.mjs', 'scripts/release.test.mjs', 'docs/releasing.md'],
     includePaths: [],
     latest: true,
   },
@@ -53,6 +56,10 @@ export const ARTIFACTS = {
     // own patch version goes up (it is not published to npm yet).
     companions: [{ file: 'packages/create-slatebox/package.json', pin: ['dependencies', 'slatebox'], bumpPatch: true,
       lockPath: 'packages/create-slatebox' }],
+    // The installer runs one exact slatebox-mcp. That pin moves in the slatebox-mcp release's
+    // chore(release) commit, which git-cliff skips, so the notes get a line for it instead.
+    runs: [{ name: 'slatebox-mcp', file: 'packages/slatebox/package.json', pin: ['dependencies', 'slatebox-mcp'],
+      tagPrefix: 'slatebox-mcp@' }],
     latest: false,
   },
   'slatebox-mcp': {
@@ -70,7 +77,9 @@ export const ARTIFACTS = {
     // The installer runs one exact slatebox-mcp (packages/slatebox/test/publish-pin.test.mjs), so its
     // pin and lock entry move with every slatebox-mcp release. The installer's own version does
     // not: `npx slatebox mcp` serves the new MCP server once slatebox is released too
-    // (`--release slatebox-mcp:<bump> --release slatebox:patch` in one ship; docs/releasing.md).
+    // (`--release slatebox-mcp:<bump> --release slatebox:patch` in one ship; the ship runs
+    // slatebox-mcp first whatever the order typed, so the slatebox tag carries the new pin;
+    // docs/releasing.md).
     companions: [{ file: 'packages/slatebox/package.json', pin: ['dependencies', 'slatebox-mcp'], lockPath: 'packages/slatebox' }],
     latest: false,
   },
@@ -144,6 +153,34 @@ export function curatedUnreleased(changelog) {
 /** Drop git-cliff's own "## [x] - date" heading; keep the groups. */
 export function generatedBody(cliffOutput) {
   return cliffOutput.replace(/^\s*## \[[^\]]*\][^\n]*\n/, '').trim()
+}
+
+const GROUP_ORDER = ['Added', 'Changed', 'Deprecated', 'Removed', 'Fixed', 'Security']
+
+/** Add one line to a generated group ("### Changed"), making the group in Keep a Changelog order if needed. */
+export function addGeneratedLine(generated, group, line) {
+  const groups = generated.trim() ? generated.trim().split(/\n(?=### )/) : []
+  const i = groups.findIndex((g) => g.startsWith(`### ${group}\n`))
+  if (i !== -1) {
+    groups[i] = groups[i].replace(/^(### [^\n]*\n\n)/, `$1${line}\n`)
+  } else {
+    const rank = (g) => { const r = GROUP_ORDER.indexOf(g.slice(4).split('\n')[0].trim()); return r === -1 ? GROUP_ORDER.length : r }
+    const at = groups.findIndex((g) => rank(g) > GROUP_ORDER.indexOf(group))
+    groups.splice(at === -1 ? groups.length : at, 0, `### ${group}\n\n${line}`)
+  }
+  return groups.map((g) => g.trim()).join('\n\n')
+}
+
+/** Lines for pinned artifacts whose pin moved since `from` ("Runs slatebox-mcp 0.4.2"). */
+export function runsLines(runs, pinAt) {
+  const lines = []
+  for (const r of runs || []) {
+    const { before, now } = pinAt(r)
+    if (!now || before === now) continue
+    const link = `${REPO_URL}/releases/tag/${encodeURIComponent(r.tagPrefix + now)}`
+    lines.push(`- Runs ${r.name} [${now}](${link})${before ? ` (was ${before})` : ''}.`)
+  }
+  return lines
 }
 
 export function sectionBody(curated, generated) {
@@ -284,7 +321,13 @@ function release(name, spec, opts) {
   if (!from) throw new Error(`No earlier ${artifact.tagPrefix}* tag is reachable from HEAD; pass --since <ref> (or run the tag backfill first)`)
   const range = `${from}..HEAD`
 
-  const generated = generatedBody(runCliff(artifact, tag, range))
+  let generated = generatedBody(runCliff(artifact, tag, range))
+  const pinAt = (r) => {
+    const shown = spawnSync('git', ['show', `${from}:${r.file}`], { encoding: 'utf8' })
+    const before = shown.status === 0 ? getIn(JSON.parse(shown.stdout), r.pin) : undefined
+    return { before, now: getIn(readJson(r.file), r.pin) }
+  }
+  for (const line of runsLines(artifact.runs, pinAt)) generated = addGeneratedLine(generated, 'Changed', line)
   const changelogPath = artifact.changelog
   const before = existsSync(changelogPath) ? readFileSync(changelogPath, 'utf8') : '# Changelog\n\n## [Unreleased]\n'
   const body = sectionBody(curatedUnreleased(before), generated)

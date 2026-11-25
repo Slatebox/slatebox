@@ -7,7 +7,7 @@
 <div align="center">
 
 **Slatebox is the free, open-source visual intelligence platform for your team and agents.**<br>
-People and agents on one live canvas: diagrams, mind maps, smart boards, plans and presentations. MIT licensed, except outside-agent connections in `enterprise/`. An open-source alternative to whiteboard tools such as Miro.
+People and agents on one live canvas: diagrams, mind maps, smart boards, plans and presentations. MIT licensed, except the `enterprise/` directory (see [License](#license)). An open-source alternative to whiteboard tools such as Miro.
 
 <sub>*Not affiliated with or endorsed by Miro. Miro is a trademark of its owner.*</sub>
 
@@ -38,7 +38,7 @@ npx slatebox install
 ```
 
 - **It checks the machine first.** As soon as you pick where Slatebox runs, it checks what that needs (Docker running, the processor, disk space; SSH and Docker on a server; kubectl on a cluster) and names anything missing before it asks anything else.
-- **One container, plain Docker.** The app, the live collaboration relay and MongoDB in one image, run with `docker run` (no Docker Compose). Keycloak for single sign-on is included and stays off until you turn it on.
+- **One container, plain Docker.** The app, the live collaboration relay and MongoDB in one image, run with plain `docker run`; Docker Compose isn't needed. Keycloak for single sign-on is included and stays off until you turn it on.
 - **Your address, your choice.** A free `https://<name>.slatebox.team` address (no DNS, ports or certificates), your own domain with automatic HTTPS, or this computer only. It can also install on a Linux server over SSH or on Kubernetes.
 - **A plan before anything changes.** The installer shows everything it will write, run and create, and waits for your yes. `npx slatebox --dry-run` prints the plan and changes nothing. When it's done, it prints a one-time link to create the first admin.
 - **Easy to look after.** Daily backups are on by default. Use `slatebox status`, `slatebox backup`, `slatebox upgrade` (backs up first, rolls back on failure) and `slatebox uninstall` (keeps your data unless you say otherwise). Bring any agent model you like, or none.
@@ -48,7 +48,7 @@ npx slatebox install
   <br><sub>Real output of <code>slatebox@0.2.3</code>: the start of <code>install --help</code>, then <code>plan --local --ai none --yes</code>.</sub>
 </p>
 
-You need Docker (Docker Desktop, OrbStack, Colima, Docker Engine or Podman), plus Node.js 22.13 or newer for `npx`. Would you rather use Docker directly, or want the hardware notes? See the [self-hosting guide](self-host/README.md), the [installer's README](packages/slatebox/README.md) and the [operator docs](https://docs.slatebox.com/installation/install-with-docker/).
+You need Docker (Docker Desktop, OrbStack, Colima, Docker Engine, or Podman with Docker compatibility), plus Node.js 22.13 or newer for `npx`. Would you rather use Docker directly, or want the hardware notes? See the [self-hosting guide](self-host/README.md), the [installer's README](packages/slatebox/README.md) and the [operator docs](https://docs.slatebox.com/installation/install-with-docker/).
 
 <p align="center">
   <img src=".github/assets/readme/hero.png" width="880" alt="A launch slate with a flowchart, a latency chart pinned by Sentry, a pull request card from GitHub, Linear issue tags, Keep and Discard on agent suggestions, and named cursors for people and agents.">

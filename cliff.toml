@@ -11,7 +11,10 @@
 # Preview the next app section by hand:
 #   npx git-cliff@2 --unreleased --tag-pattern '^v[0-9]' \
 #     --exclude-path 'packages/slatebox/**' --exclude-path 'packages/slatebox-mcp/**' \
-#     --exclude-path 'packages/create-slatebox/**'
+#     --exclude-path 'packages/create-slatebox/**' --exclude-path 'package-lock.json' \
+#     --exclude-path 'cliff.toml' --exclude-path 'scripts/release.mjs' \
+#     --exclude-path 'scripts/release.test.mjs' --exclude-path 'docs/releasing.md'
+# (or `npm run changelog:preview`, which uses scripts/release.mjs's own list).
 #
 # Groups follow Keep a Changelog (https://keepachangelog.com/en/1.1.0/). The HTML
 # comments only order the groups; `striptags` removes them from the output.
@@ -56,6 +59,8 @@ commit_preprocessors = [
 ]
 commit_parsers = [
   { message = '^chore\(release\)', skip = true },
+  # Release tooling (scripts/release.mjs, this file) is for maintainers, not a change people run.
+  { message = '^[a-z]+\(release\)!?:', skip = true },
   { message = '^release', skip = true },
   { message = '^changelog', skip = true },
   { message = '^Merge ', skip = true },
@@ -63,6 +68,10 @@ commit_parsers = [
   # notes are also the self-host image's notes, and a self-hosted Slatebox has no
   # payments. Commits scoped to billing areas are skipped, and so is any subject that
   # names a plan or a payment term (first line only: `.` never crosses a newline).
+  # These can also drop a real change whose subject happens to use one of these words
+  # (a feature naming the plan it is in, a rate limit called a meter). Say that change
+  # under [Unreleased] in plain words without them, so it reaches the notes as a
+  # highlight; earlier sections had two such entries added by hand (dae536ac, 91725513).
   { message = '^[a-z]+\([^)]*\b(pro|pay|payments?|business|meter|metering|stripe|billing|checkout|wallet)\b[^)]*\)!?:', skip = true },
   { message = '^.*\b(Pro|Business)(\b[^/]|$)', skip = true },
   { message = '(?i)^.*\b(payments?|stripe|subscriptions?|balances?|top-ups?|billing|metering|meter|seats?)\b', skip = true },
