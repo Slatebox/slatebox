@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict'
 import { createServer as createHttpServer } from 'node:http'
 import { after, afterEach, test } from 'node:test'
-import { adopt, cleanup, docker, freePort, healthy, inspect, logs, mailSink, name, network, ok, start, waitFor } from './lib.mjs'
+import { adopt, cleanup, docker, freePort, ready, inspect, logs, mailSink, name, network, ok, start, waitFor } from './lib.mjs'
 import { closeChrome, createSlate, notes, person, savedNotes, writeNote } from './slate.mjs'
 
 // Each test removes what it started, so only a few containers ever run at once.
@@ -34,7 +34,7 @@ async function registered(page, address, email) {
 
 test('without mail settings, sign-up still works and says that no mail is sent', async () => {
   const box = await start()
-  await healthy(box.id)
+  await ready(box)
   assert.match(await logs(box.id), /Mail: +off/)
   const guest = await person()
   try {
@@ -93,7 +93,7 @@ test('SLATEBOX_MAIL_URL sends verification mail with links to the configured add
       env: { SLATEBOX_MAIL_URL: `smtp://host.docker.internal:${sink.port}`, SLATEBOX_MAIL_FROM: 'Our Boards <boards@example.test>' },
       args: hostAccess,
     })
-    await healthy(box.id)
+    await ready(box)
     assert.match(await logs(box.id), /Mail: +on, from Our Boards <boards@example\.test>/)
     const guest = await person()
     try {
@@ -117,7 +117,7 @@ test('SLATEBOX_MAIL_URL sends verification mail with links to the configured add
 
 test('without an AI key, drafting says who can turn it on', async () => {
   const box = await start()
-  await healthy(box.id)
+  await ready(box)
   assert.match(await logs(box.id), /AI drafts: +off/)
   const guest = await person()
   try {
@@ -166,7 +166,7 @@ test('SLATEBOX_AI_URL sends drafts to your own endpoint with your model and key'
       env: { SLATEBOX_AI_URL: `http://host.docker.internal:${port}/v1`, SLATEBOX_AI_MODEL: 'slatebox-local', SLATEBOX_AI_KEY: 'test-endpoint-token' },
       args: hostAccess,
     })
-    await healthy(box.id)
+    await ready(box)
     assert.match(await logs(box.id), new RegExp(`AI drafts: +on, using host\\.docker\\.internal:${port}`))
     assert.ok(!(await logs(box.id)).includes('test-endpoint-token'), 'the key is not logged')
     const guest = await person()
@@ -191,7 +191,7 @@ test('SLATEBOX_AI_URL sends drafts to your own endpoint with your model and key'
 test('SLATEBOX_AI_KEY alone turns drafting on with the default provider', async () => {
   // The provider itself is not called here; this proves the switch and that the key reaches only the app.
   const box = await start({ env: { SLATEBOX_AI_KEY: 'test-provider-key' } })
-  await healthy(box.id)
+  await ready(box)
   assert.match(await logs(box.id), /AI drafts: +on, using DeepInfra/)
   assert.ok(!(await logs(box.id)).includes('test-provider-key'))
   const environment = await ok(['exec', box.id, 'sh', '-c', `for p in /proc/[0-9]*; do if tr '\\0' ' ' < $p/cmdline | grep -qE 'node (.* )?main[.]js $'; then tr '\\0' '\\n' < $p/environ | grep -c '^API_KEY_DEEP_INFRA=test-provider-key$'; fi; done`])
@@ -216,7 +216,7 @@ test('without a Daily key, a call says that calls are unavailable; SLATEBOX_SETT
     }
   }
   const off = await start()
-  await healthy(off.id)
+  await ready(off)
   assert.deepEqual(await join(off.url), {
     error: 'huddle-unconfigured', reason: 'Calls are unavailable. Ask your administrator to configure the Daily provider for this instance.',
   })
@@ -229,7 +229,7 @@ test('without a Daily key, a call says that calls are unavailable; SLATEBOX_SETT
     env: { SLATEBOX_SETTINGS: JSON.stringify({ daily: { apiKey: 'test-daily-key' }, public: { baseUrl: 'http://elsewhere.invalid' } }) },
     args: ['--add-host', 'api.daily.co:127.0.0.1'],
   })
-  await healthy(on.id)
+  await ready(on)
   const page = await (await fetch(on.url + '/')).text()
   const runtime = JSON.parse(decodeURIComponent(page.match(/__meteor_runtime_config__ = JSON\.parse\(decodeURIComponent\("([^"]+)"\)\)/)[1]))
   assert.ok(!JSON.stringify(runtime).includes('test-daily-key'), 'the key is not sent to browsers')
@@ -253,7 +253,7 @@ test('MONGO_URL uses an external database and leaves the bundled one off', async
 
     const url = `mongodb://${database}:27017/slatebox?replicaSet=ext0`
     const box = await start({ env: { MONGO_URL: url, MONGO_OPLOG_URL: `mongodb://${database}:27017/local?replicaSet=ext0` }, args: ['--network', net] })
-    await healthy(box.id)
+    await ready(box)
     assert.match(await logs(box.id), /Database: +external \(MONGO_URL\)/)
     const processes = await ok(['exec', box.id, 'sh', '-c', `for p in /proc/[0-9]*; do tr '\\0' ' ' < $p/cmdline; echo; done`])
     assert.doesNotMatch(processes, /mongod/, 'the bundled database is not running')
@@ -287,7 +287,7 @@ test('SLATEBOX_HTTPS=off: an https address behind your own proxy, on the one ups
   const port = await freePort()
   const address = `https://${host}:${port}`
   const box = await start({ env: { SLATEBOX_URL: address, SLATEBOX_HTTPS: 'off' }, args: ['--network', net], publish: [] })
-  await healthy(box.id)
+  await ready(box)
   assert.match(await logs(box.id), /HTTPS: +handled by your proxy/)
   // The operator's proxy: terminates TLS with its own certificate and forwards to the single upstream.
   const proxy = name('edge')
@@ -350,7 +350,7 @@ test('an https address turns on built-in HTTPS with an automatically issued cert
     args: ['--network', net, '--network-alias', host, '-v', `${join(work, 'ca.pem')}:/run/acme-ca.pem:ro`],
     publish: [`${port}:443`],
   })
-  await healthy(box.id)
+  await ready(box)
   assert.match(await logs(box.id), new RegExp(`HTTPS: +built in, certificates for ${host}`))
 
   // From inside the network, as a visitor resolving the public name would:

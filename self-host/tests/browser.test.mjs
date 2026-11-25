@@ -1,7 +1,7 @@
 // A newcomer's first minutes, in real browsers, through the one published port.
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
-import { cleanup, freePort, healthy, start, waitFor } from './lib.mjs'
+import { cleanup, freePort, ready, start, waitFor } from './lib.mjs'
 import { closeChrome, createSlate, editLink, notes, openSlate, person, savedNotes, writeNote } from './slate.mjs'
 
 let box
@@ -10,7 +10,7 @@ before(async () => {
   // A published port other than 7070, named in SLATEBOX_URL.
   const port = await freePort()
   box = await start({ port })
-  await healthy(box.id)
+  await ready(box)
 })
 
 after(async () => {

@@ -4,11 +4,11 @@
 // sign-in events, "SSO only", a restart, and SSO staying off by default.
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
-import { cleanup, docker, freePort, healthy, logs, ok, remove, start, waitFor } from './lib.mjs'
+import { cleanup, docker, freePort, healthy, ready, logs, ok, remove, setupLink, start, waitFor } from './lib.mjs'
 import { closeChrome, createSlate, notes, person, writeNote } from './slate.mjs'
 
 const REALM = 'slatebox'
-let box, adminPassword
+let box, adminPassword, strictBox
 
 const exec = (id, ...args) => ok(['exec', id, 'slatebox', ...args])
 
@@ -101,7 +101,7 @@ const signedInUser = page => page.evaluate(() => {
 
 before(async () => {
   box = await start({ env: { SLATEBOX_SSO: 'keycloak' } })
-  await healthy(box.id)
+  await ready(box)
   adminPassword = await exec(box.id, 'sso', 'admin-password')
 })
 
@@ -412,11 +412,63 @@ test('a new address keeps SCIM working; with SLATEBOX_SSO_ADMIN=closed the admin
   }
 })
 
-test('SSO only: no guest, no password, every page leads to "Sign in with SSO"', async () => {
+test('SSO only: the first sign-in through the setup link makes the server administrator', async () => {
   const strict = await start({ env: { SLATEBOX_SSO: 'keycloak', SLATEBOX_SSO_ONLY: 'true' } })
   await healthy(strict.id)
+  strictBox = strict
   const call = await admin(strict, await exec(strict.id, 'sso', 'admin-password'))
   await makeUser(call, { username: 'dee', email: 'dee@example.test', password: 'dee keycloak password 1' })
+  await makeUser(call, { username: 'eli', email: 'eli@example.test', password: 'eli keycloak password 1' })
+  // Before setup nobody gets in, not even through single sign-on.
+  const early = await person()
+  try {
+    await early.page.goto(strict.url)
+    await early.page.getByRole('heading', { name: 'This Slatebox isn\'t set up yet' }).waitFor()
+    await early.page.goto(`${strict.url}/login`)
+    await early.page.getByRole('heading', { name: 'This Slatebox isn\'t set up yet' }).waitFor()
+  } finally {
+    await early.close()
+  }
+  const dee = await person()
+  try {
+    // The setup link's page offers only single sign-on (no password) and asks for the team's name.
+    await dee.page.goto(await setupLink(strict))
+    assert.equal(await dee.page.locator('input[name="password"]').count(), 0, 'no password under SSO only')
+    await dee.page.locator('input[name="team"]').fill('Dee team')
+    await dee.page.getByRole('button', { name: 'Continue with single sign-on' }).click()
+    await dee.page.waitForURL(url => url.pathname === '/login', { timeout: 60_000 })
+    await dee.page.locator('#ssoSignIn').click()
+    await dee.page.waitForURL(/\/auth\/realms\/slatebox\/protocol\/openid-connect\/auth/, { timeout: 60_000 })
+    await dee.page.locator('#username').fill('dee')
+    await dee.page.locator('#password').fill('dee keycloak password 1')
+    await dee.page.locator('#kc-login').click()
+    const user = await waitFor(() => signedInUser(dee.page), { timeout: 60, what: 'the first SSO session' })
+    assert.equal(user.email, 'dee@example.test')
+    const roles = JSON.parse(await database(strict.id, `
+      const user = await db.collection('users').findOne({ 'emails.address': 'dee@example.test' })
+      const org = await db.collection('organizations').findOne({ _id: user.orgId })
+      return { admin: await db.collection('permissions').countDocuments({ userId: user._id, claimId: 'uberMensch' }), owner: user.isOrgOwner === true, team: org?.name,
+        setup: await db.collection('systemSettings').findOne({ _id: 'selfHostSetup' }, { projection: { _id: 0, via: 1, hash: { $ifNull: ['$tokenHash', null] } } }) }`))
+    assert.deepEqual(roles, { admin: 1, owner: true, team: 'Dee team', setup: { via: 'sso', hash: null } })
+  } finally {
+    await dee.close()
+  }
+  // The second person through single sign-on is an ordinary account.
+  const eli = await person()
+  try {
+    await ssoSignIn(eli.page, strict.url, 'eli', 'eli keycloak password 1')
+    assert.equal((await waitFor(() => signedInUser(eli.page), { timeout: 60, what: 'the second SSO session' })).email, 'eli@example.test')
+    assert.equal(await database(strict.id, `
+      const user = await db.collection('users').findOne({ 'emails.address': 'eli@example.test' })
+      return db.collection('permissions').countDocuments({ userId: user._id, claimId: 'uberMensch' })`), '0')
+  } finally {
+    await eli.close()
+  }
+})
+
+test('SSO only: no guest, no password, every page leads to "Sign in with SSO"', async () => {
+  const strict = strictBox
+  assert.ok(strict, 'set up by the test before')
   const dee = await person()
   try {
     await dee.page.goto(strict.url)
@@ -472,7 +524,7 @@ test('SSO only: no guest, no password, every page leads to "Sign in with SSO"', 
 
 test('without SLATEBOX_SSO, Keycloak is not started and the sign-in page has no SSO button', async () => {
   const plain = await start()
-  await healthy(plain.id)
+  await ready(plain)
   const processes = await ok(['exec', plain.id, 'sh', '-c', 'cat /proc/[0-9]*/cmdline | tr "\\0" " "'])
   assert.doesNotMatch(processes, /java|keycloak/i)
   assert.doesNotMatch(await ok(['exec', plain.id, 'cat', '/data/secrets/secrets.json']), /keycloak|sso/i)

@@ -2,7 +2,7 @@
 // the installation itself, in its own database, and comes back from a backup.
 import assert from 'node:assert/strict'
 import { after, afterEach, test } from 'node:test'
-import { cleanup, docker, freePort, healthy, logs, name, remove, removeVolume, start, volume } from './lib.mjs'
+import { cleanup, docker, freePort, healthy, ready, logs, name, remove, removeVolume, start, volume } from './lib.mjs'
 import { closeChrome, createSlate, person } from './slate.mjs'
 
 afterEach(cleanup)
@@ -26,7 +26,7 @@ test('an upload is stored by the installation, served back, read by the server, 
   const port = await freePort()
   const id = name('uploads')
   const first = await start({ port, containerName: id })
-  await healthy(first.id)
+  await ready(first)
   const author = await person()
   try {
     await createSlate(author.page, first.url)

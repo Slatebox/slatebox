@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { after, afterEach, test } from 'node:test'
 import { gunzipSync } from 'node:zlib'
-import { cleanup, docker, freePort, healthy, logs, name, ok, remove, removeVolume, secrets, start, volume } from './lib.mjs'
+import { cleanup, docker, freePort, healthy, ready, logs, name, ok, remove, removeVolume, secrets, start, volume } from './lib.mjs'
 import { closeChrome, expectSlate, seedSlate } from './slate.mjs'
 
 // Each test removes what it started, so only a few containers ever run at once.
@@ -16,7 +16,7 @@ test('a backup taken while running restores into a brand-new installation', asyn
   const port = await freePort()
   const id = name('backup')
   const first = await start({ port, containerName: id })
-  await healthy(first.id)
+  await ready(first)
   const slate = await seedSlate(first.url, 'Kept in the backup')
 
   const taken = await backup(first.id)
@@ -52,7 +52,7 @@ test('a backup taken while running restores into a brand-new installation', asyn
 
 test('a restore replaces what is there, and the result is exactly the backup', async () => {
   const box = await start()
-  await healthy(box.id)
+  await ready(box)
   const kept = await seedSlate(box.url, 'In the backup')
   const taken = await backup(box.id)
   assert.equal(taken.code, 0, taken.stderr)
@@ -74,7 +74,7 @@ test('a restore replaces what is there, and the result is exactly the backup', a
 
 test('a restore refuses a file that is not a complete backup and changes nothing', async () => {
   const box = await start()
-  await healthy(box.id)
+  await ready(box)
   const slate = await seedSlate(box.url, 'Untouched by a bad restore')
   const taken = await backup(box.id)
 

@@ -14,7 +14,7 @@ export const SETTINGS = Object.freeze([
 export const DATABASE_SETTINGS = Object.freeze(['MONGO_URL', 'MONGO_OPLOG_URL'])
 // One key variable per provider in SLATEBOX_AI_PROVIDERS (its keyEnv), never listed by name.
 export const PROVIDER_KEY = /^SLATEBOX_AI_KEY_[A-Z0-9_]{1,40}$/
-export const COMMANDS = Object.freeze(['backup', 'restore', 'password-link', 'health', 'version', 'sso', 'ai', 'settings', 'tunnel'])
+export const COMMANDS = Object.freeze(['backup', 'restore', 'password-link', 'setup-link', 'health', 'version', 'sso', 'ai', 'settings', 'tunnel'])
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (process.argv[2] !== '--json') {

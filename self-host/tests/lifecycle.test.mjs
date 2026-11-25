@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
 import {
-  IMAGE, adopt, cleanup, docker, freePort, healthy, inspect, logs, name, ok, remove, removeVolume, secrets, start, volume, waitFor,
+  IMAGE, adopt, cleanup, docker, freePort, healthy, ready, inspect, logs, name, ok, remove, removeVolume, secrets, setUp, start, volume, waitFor,
 } from './lib.mjs'
 import { closeChrome, expectSlate, seedSlate } from './slate.mjs'
 
@@ -47,6 +47,16 @@ test('first start: one command, one port, healthy when a slate can be opened', a
   const log = await logs(box.id)
   assert.match(log, new RegExp(`\\[slatebox\\] Ready\\. Open ${box.url}`))
   assert.match(log, /Secrets: +created for this new installation/)
+
+  // Nobody can sign up before the first admin: the address says it isn't set up yet, with no app
+  // and no sign-up form, until the one-time setup link is used.
+  const waiting = await get(box.url + '/')
+  assert.equal(waiting.status, 200)
+  const notYet = await waiting.text()
+  assert.match(notYet, /This Slatebox isn't set up yet/)
+  assert.doesNotMatch(notYet, /__meteor_runtime_config__|<form/)
+  assert.match(log, /\[setup\] waiting for the first administrator/)
+  await setUp(box)
 
   // The app, with its database behind it, and the relay answer on the same port.
   const page = await get(box.url + '/')
@@ -157,7 +167,7 @@ test('upgrade: a new container from another image on the same volume', async () 
   const port = await freePort()
   const id = name('upgrade')
   const old = await start({ data, port, containerName: id })
-  await healthy(old.id)
+  await ready(old)
   const kept = await seedSlate(old.url, 'Survives an upgrade')
   const before = await secrets(old.id)
 

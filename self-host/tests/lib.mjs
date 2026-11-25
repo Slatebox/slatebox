@@ -114,6 +114,44 @@ export async function healthy(id, { timeout = 900 } = {}) {
   }
 }
 
+/** A new one-time setup link from the container (`slatebox setup-link`), as the operator gets it. */
+export async function setupLink(box) {
+  const result = await docker(['exec', box.id, 'slatebox', 'setup-link'])
+  if (result.code !== 0) throw new Error(`slatebox setup-link exited ${result.code}: ${result.stderr}`)
+  return result.stdout.trim()
+}
+
+export const FIRST_ADMIN = Object.freeze({ firstName: 'Ada', lastName: 'Admin', email: 'first-admin@example.test', password: 'first admin password 42', team: 'Test team' })
+
+/**
+ * Set a new installation up the way its first admin does: open the setup link and send its form.
+ * Nobody can sign up before this (not even a guest), so every test that uses the app calls it once
+ * per data volume. The form is posted to the app on its loopback port inside the container, so it
+ * works at any SLATEBOX_URL, including host names this machine cannot resolve.
+ */
+export async function setUp(box, admin = FIRST_ADMIN) {
+  const { pathname } = new URL(await setupLink(box))
+  const result = await docker(['exec', '-i', box.id, 'node', '--input-type=module', '-'], {
+    input: `
+      const response = await fetch('http://127.0.0.1:3000' + ${JSON.stringify(pathname)}, {
+        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(${JSON.stringify(admin)}),
+      })
+      const page = await response.text()
+      if (response.status !== 200 || !page.includes('Slatebox is set up')) { console.error(response.status, page.slice(0, 400)); process.exit(1) }
+    `,
+  })
+  if (result.code !== 0) throw new Error(`the setup form was refused: ${result.stderr}`)
+  return admin
+}
+
+/** Healthy, then set up: what a test that opens the app needs first. */
+export async function ready(box, options) {
+  const seconds = await healthy(box.id, options)
+  await setUp(box)
+  return seconds
+}
+
 export async function waitFor(check, { timeout = 120, every = 500, what = 'condition' } = {}) {
   const started = Date.now()
   for (;;) {

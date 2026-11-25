@@ -3,6 +3,7 @@
 #
 #   docker exec slatebox slatebox backup > slatebox-backup.gz
 #   docker exec -i slatebox slatebox restore < slatebox-backup.gz
+#   docker exec slatebox slatebox setup-link [--json | --check]
 #   docker exec slatebox slatebox password-link person@example.com
 #   docker exec slatebox slatebox health
 #   docker exec slatebox slatebox version
@@ -121,8 +122,10 @@ restore() {
   note 'Restore complete. Slatebox is ready.'
 }
 
-password_link() {
+with_app_env() { # with_app_env SCRIPT ARGS...: run a lib script with the app's database connection
   [[ -f $RUN/app.env && -f $RUN/state.env ]] || die 'Slatebox is still starting. Try again in a moment.'
+  local script=$1
+  shift
   (
     set -a
     # shellcheck disable=SC1091
@@ -130,13 +133,20 @@ password_link() {
     # shellcheck disable=SC1091
     . "$RUN/state.env"
     set +a
-    exec node "$LIB/password-link.mjs" "$@"
+    exec node "$LIB/$script" "$@"
   )
 }
+
+password_link() { with_app_env password-link.mjs "$@"; }
+
+# The one-time link that creates the first account (the server administrator). Nobody can sign up
+# before that. A new link replaces the last one; exit 3 when the server is already set up.
+setup_link() { with_app_env setup-link.mjs "$@"; }
 
 case ${1:-} in
   backup) backup ;;
   password-link) shift; password_link "$@" ;;
+  setup-link) shift; setup_link "$@" ;;
   restore) restore ;;
   health) shift; exec node "$LIB/health.mjs" "$@" ;;
   # The team-address tunnel: connected, connecting, or refused.
@@ -165,6 +175,7 @@ case ${1:-} in
 Usage, from the Docker host:
   docker exec slatebox slatebox backup > slatebox-backup.gz
   docker exec -i slatebox slatebox restore < slatebox-backup.gz
+  docker exec slatebox slatebox setup-link [--json | --check]
   docker exec slatebox slatebox password-link person@example.com
   docker exec slatebox slatebox health
   docker exec slatebox slatebox version

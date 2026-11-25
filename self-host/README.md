@@ -12,9 +12,20 @@ version 0.2.0, that address serves 0.1.0, which runs everything here except a
 team address (`SLATEBOX_TUNNEL_TOKEN`); for that, build the image from this
 repository with `self-host/build-image.sh`.
 
-Open <http://localhost:7070>. A start usually takes well under a minute; until
-then the page says that Slatebox is starting and opens by itself when it is
-ready. `docker ps` shows the container as `healthy` once a slate can be opened.
+A start usually takes well under a minute; `docker ps` shows the container as
+`healthy` once a slate can be opened. Then make the one-time setup link:
+
+```sh
+docker exec slatebox slatebox setup-link
+```
+
+Nobody can sign up until the first admin exists. Open the link it prints to
+create that account: the server administrator and the owner of the first team.
+The link works once and expires in 24 hours; running the command again prints a
+new one and ends the last. Until then <http://localhost:7070> says "This
+Slatebox isn't set up yet". After that, people sign up and are invited as usual.
+With `SLATEBOX_SSO=keycloak`, the link's page also offers single sign-on: the
+first account to sign in through it becomes the administrator.
 
 Everything Slatebox stores is in the `slatebox-data` volume: your slates and
 accounts, and the secrets generated for this installation on its first start.
@@ -158,6 +169,7 @@ features stay locked and the rest of Slatebox works as before.
 docker logs slatebox                                           # what is happening
 docker exec slatebox slatebox backup > slatebox-backup.gz      # back up while running
 docker exec -i slatebox slatebox restore < slatebox-backup.gz  # restore a backup
+docker exec slatebox slatebox setup-link                       # before the first admin exists: the one-time setup link
 docker exec slatebox slatebox password-link person@example.com # a one-time link to set a new password
 docker exec slatebox slatebox sso                              # with SLATEBOX_SSO=keycloak: admin console, issuer, SCIM
 docker exec slatebox slatebox sso admin-password               # Keycloak's first admin password (never in the log)

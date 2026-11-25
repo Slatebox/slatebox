@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
 import { after, test } from 'node:test'
-import { cleanup, freePort, healthy, logs, mailSink, start, waitFor } from './lib.mjs'
+import { cleanup, freePort, ready, logs, mailSink, start, waitFor } from './lib.mjs'
 import { closeChrome, createSlate, editLink, notes, openSlate, person, savedNotes, writeNote } from './slate.mjs'
 
 after(async () => {
@@ -90,7 +90,7 @@ test('a session of edits, chat, a workshop and account mail leaves no content or
       args: ['--add-host', 'host.docker.internal:host-gateway',
         ...['api.deepinfra.com', 'api.openai.com', 'api.anthropic.com'].flatMap(host => ['--add-host', `${host}:127.0.0.1`])],
     })
-    await healthy(box.id)
+    await ready(box)
     const ada = await person()
     const ben = await person()
     try {
