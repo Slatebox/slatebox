@@ -24,6 +24,7 @@ import { applyDocker, backupDocker, defaultLocalPort, execNode, LOG_SERVICES, lo
 import { exportFiles } from './targets/export.mjs'
 import { applyK8s, backupK8s, execNodeK8s, readSecretK8s, restoreK8s, setupLinkK8s, statusK8s, uninstallK8s } from './targets/k8s.mjs'
 import { setupLines } from './setup-link.mjs'
+import { exportTeamFile, importTeamFile, moveTeam } from './move.mjs'
 import { parse as parseYaml } from './yaml.mjs'
 
 const PKG = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
@@ -42,6 +43,9 @@ export const COMMANDS = Object.freeze([
   { name: 'backup', usage: 'backup [--to <dir>]', summary: 'a complete backup now' },
   { name: 'restore', usage: 'restore <file.gz>', summary: 'replace everything with a backup' },
   { name: 'ai', usage: 'ai list | add "<spec>" | remove <id> | use <id> | off | test [id]', summary: 'agent providers for this install' },
+  { name: 'migrate', usage: 'migrate --to cloud | --from cloud [--invite] [--keep-archive]', summary: 'move your team between your own Slatebox and Slatebox Cloud' },
+  { name: 'import', usage: 'import --from cloud | <file> [--to cloud|<url>]', summary: 'bring a team in (from Slatebox Cloud, or a team export file)' },
+  { name: 'export', usage: 'export [--from cloud|<url>] [--out <file>]', summary: 'a team export file of everything your team owns' },
   { name: 'secrets', usage: 'secrets path | reveal <NAME>', summary: 'where secrets are kept; reveal prints one to a terminal' },
   { name: 'installs', usage: 'installs', summary: 'the installs this computer made' },
   { name: 'plan', usage: 'plan [install flags]', summary: 'print the plan only; changes nothing' },
@@ -99,6 +103,12 @@ then --answers, then the environment. Consent never comes from the environment:
   --new-encryption-key    replace a lost SLATEBOX_KEY_ENCRYPTION_KEY over existing data
                           (keys people saved become unreadable; refused without it)
 
+Moving a team (slatebox migrate --to cloud | --from cloud, import, export): your own server's
+address is --from/--to <url>, SLATEBOX_BASE_URL, or the install made here (--name); its access
+token is SLATEBOX_API_TOKEN (asked for at a terminal). Slatebox Cloud signs you in with a code in
+your browser, or takes SLATEBOX_CLOUD_TOKEN. Nothing is visible on the other side until you
+confirm; --invite emails the other people; --replace-waiting discards a move already waiting.
+
 Team addresses: the sign-in is a code you approve in your browser (Slatebox Cloud), every time
 a name is claimed, moved or reconnected. SLATEBOX_CLOUD_URL or --cloud-url points at another
 Slatebox Cloud. The install credential stays in
@@ -129,6 +139,8 @@ function parse(argv) {
     to: { type: 'string' }, 'force-stdout': { type: 'boolean' }, 'new-encryption-key': { type: 'boolean' },
     'cloud-url': { type: 'string' }, 'keep-address': { type: 'boolean' }, follow: { type: 'boolean', short: 'f' },
     service: { type: 'string' }, since: { type: 'string' },
+    from: { type: 'string' }, out: { type: 'string' }, invite: { type: 'boolean' }, 'keep-archive': { type: 'boolean' },
+    passphrase: { type: 'string' }, 'replace-waiting': { type: 'boolean' },
   }
   for (const [flag, type] of Object.entries(ANSWER_FLAGS)) {
     options[flag] = type === 'multiple' ? { type: 'string', multiple: true } : { type }
@@ -382,6 +394,19 @@ function closing(ctx, done) {
   return lines
 }
 
+// install --from cloud: the server is new and has no admin yet, so the team comes over once the
+// person has made the first account (the setup link above) and an access token there.
+function fromCloudLines(done) {
+  if (done.target === 'export') return []
+  return [
+    '', 'To bring your team over from Slatebox Cloud:',
+    '  1. Open the setup link above and create your account.',
+    `  2. In ${done.address}, open Profile → Developer and make an access token with "Move a team here".`,
+    `  3. Run:  SLATEBOX_API_TOKEN=<that token> npx slatebox import --from cloud${done.name === 'slatebox' ? '' : ` --name ${done.name}`}`,
+    '     (you sign in to Slatebox Cloud in your browser; nothing is copied until you confirm)',
+  ]
+}
+
 async function showSecretOnce(ctx, record, name) {
   if (ctx.json || !(ctx.stdout.isTTY || ctx.flags['force-stdout'])) {
     throw new InstallError(EXIT.USAGE, 'Secrets are printed only to a terminal, never with --json or into a pipe (add --force-stdout if you really mean to).')
@@ -397,6 +422,17 @@ async function dispatch(ctx, positionals, flags) {
     case 'agent-prompt':
       ctx.stdout.write(AGENT_PROMPT)
       return 0
+    case 'migrate': {
+      if (!flags.to && !flags.from) throw new InstallError(EXIT.USAGE, 'Say which way: slatebox migrate --to cloud (your own server to Slatebox Cloud) or slatebox migrate --from cloud (Slatebox Cloud to your own server).')
+      return moveTeam(ctx, { from: flags.from, to: flags.to })
+    }
+    case 'import': {
+      if (sub) return importTeamFile(ctx, { file: sub, to: flags.to })
+      if (!flags.from) throw new InstallError(EXIT.USAGE, 'Import from where? slatebox import --from cloud, or slatebox import <file.sbxteam>.')
+      return moveTeam(ctx, { from: flags.from, to: flags.to })
+    }
+    case 'export':
+      return exportTeamFile(ctx, { from: flags.from, out: flags.out })
     case 'installs': {
       const records = listRecords(ctx.home)
       ctx.out.event({ event: 'done', installs: records.map(record => ({ name: record.name, target: record.target, address: record.address?.url, state: record.state })) })
@@ -414,7 +450,7 @@ async function dispatch(ctx, positionals, flags) {
         if (!ctx.json) ctx.out.say(`Nothing was changed. To apply: slatebox install ${flags.answers ? `--answers ${flags.answers} ` : ''}... (the same answers)${ctx.interactive ? '' : ' --yes'}`)
         return 0
       }
-      finish(ctx, done, closing(ctx, done))
+      finish(ctx, done, [...closing(ctx, done), ...(flags.from === 'cloud' ? fromCloudLines(done) : [])])
       if (flags['show-secrets'] && done.keyGenerated) await showSecretOnce(ctx, ctx.record, 'SLATEBOX_KEY_ENCRYPTION_KEY')
       return 0
     }

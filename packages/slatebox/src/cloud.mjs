@@ -126,7 +126,7 @@ export function cloudClient(ctx, base) {
   return {
     base,
     // --- sign-in (RFC 8628)
-    deviceAuthorize: label => call('POST', '/oauth/device_authorization', { form: { client_id: CLI_CLIENT_ID, scope: TEAM_SCOPE, device_label: label } }),
+    deviceAuthorize: (label, scope = TEAM_SCOPE) => call('POST', '/oauth/device_authorization', { form: { client_id: CLI_CLIENT_ID, scope, device_label: label } }),
     deviceToken: deviceCode => call('POST', '/oauth/token', { form: { grant_type: DEVICE_GRANT, device_code: deviceCode, client_id: CLI_CLIENT_ID } }),
     // --- the signed-in person's team addresses
     availability: (name, bearer) => call('GET', api(`/availability?name=${enc(name)}`), { bearer }),
@@ -163,14 +163,15 @@ export function openBrowser(url, platform = process.platform) {
 }
 
 /**
- * Sign in to Slatebox Cloud for the team-addresses scope only. Returns an access token that lives
+ * Sign in to Slatebox Cloud for one scope (team-addresses by default; a move asks for
+ * team:export and team:move). Returns an access token that lives
  * 15 minutes and is kept in memory. There is no token shortcut: Slatebox Cloud gives the
  * team-addresses scope only to this sign-in, never to a personal access token, so a person
  * approves every claim, rename and credential in a browser.
  */
-export async function signIn(ctx, cloud, { purpose = 'claim a team address' } = {}) {
+export async function signIn(ctx, cloud, { purpose = 'claim a team address', scope = TEAM_SCOPE } = {}) {
   const label = ctx.deviceLabel || deviceLabel()
-  const grant = await cloud.deviceAuthorize(label).catch(error => { throw signInFailed(error, cloud) })
+  const grant = await cloud.deviceAuthorize(label, scope).catch(error => { throw signInFailed(error, cloud) })
   if (!grant?.device_code || !grant?.user_code || !grant?.verification_uri) throw new InstallError(EXIT.PRECONDITION, `Slatebox Cloud (${new URL(cloud.base).host}) did not start a sign-in.`)
   ctx.redactor.add(grant.device_code)
   // Only a link on the Cloud's own origin is opened or printed.

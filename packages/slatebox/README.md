@@ -139,6 +139,35 @@ computer, `/opt/slatebox/secrets.env` (root, 0600) on a server, or the Secret
 it the AI keys people saved cannot be read after a restore. Re-running the
 installer never makes a new one.
 
+## Move your team to Slatebox Cloud, or back
+
+```sh
+npx slatebox migrate --to cloud       # your own server's team → Slatebox Cloud
+npx slatebox import --from cloud      # your Slatebox Cloud team → your own server
+npx slatebox install --from cloud     # a new server, then the steps to bring your Cloud team over
+npx slatebox export --out acme.sbxteam --passphrase prompt    # a team export file
+npx slatebox import acme.sbxteam --to cloud --passphrase prompt
+```
+
+The command exports everything your team owns from one side (you need to be a team admin
+there), and moves it to the other side, where you own your team or are in no team yet. It
+moves slates and boards, smart components, versions, comments, presentations, files, the
+brand kit, and library items (as drafts). People arrive as placeholders. They get an email
+to join only if you say so (`--invite`, or answer yes when asked). Passwords, keys, access
+tokens and connected agents never move.
+
+You see the report before anything is visible on the other side, and nothing goes live until
+you confirm. The team stays where it was until you remove it there.
+
+- **Your own server:** its address is `--from`/`--to <url>`, `SLATEBOX_BASE_URL`, or the install
+  this computer made (`--name`). Its access token is `SLATEBOX_API_TOKEN` (make one in Profile →
+  Developer with "Export everything my team owns" and "Move a team here"). At a terminal you are
+  asked for it, with hidden input.
+- **Slatebox Cloud:** you sign in with a code in your browser, or set `SLATEBOX_CLOUD_TOKEN`.
+- **The archive** is encrypted with a passphrase made for this move. It waits in
+  `~/.slatebox/moves/` (mode 0600) only until the move is live, or longer with `--keep-archive`.
+- `--replace-waiting` discards a move that is already waiting on the other side.
+
 ## Safety
 
 - A plan is always shown first. On a server or a cluster nothing changes
