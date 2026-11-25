@@ -16,7 +16,7 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { ReasonDialog } from './ReasonDialog'
-import { checkResultText, keyAddedText, keyFormDefaults, keyStatusText, lastTestText, lastUsedText, parseHeaders, priceText, providerFormDefaults, providerSubtitle } from './catalog-view.mjs'
+import { addablePresets, checkResultText, keyAddedText, keyFormDefaults, keyStatusText, lastTestText, lastUsedText, parseHeaders, priceText, providerFormDefaults, providerSubtitle } from './catalog-view.mjs'
 
 // Admin › AI control › Providers and keys: every model provider this server talks to (Meta (Muse),
 // DeepInfra, …), its keys, and the services beside the models. Keys live only in the backend,
@@ -57,7 +57,7 @@ function AddProvider({ open, presets, onClose, onDone }) {
         const key = await Meteor.callAsync('ai.keys.add', { provider: added.provider.id, apiKey: form.apiKey })
         tested = await Meteor.callAsync('ai.keys.test', { id: key.id }).catch(() => null)
       }
-      onDone(`Added ${added.provider.label}${form.apiKey ? ` with its key${tested ? `: ${checkResultText(tested)}` : ''}` : '. Add its key to use it'}.`)
+      onDone(`Added ${added.provider.label}${form.apiKey ? ` with its key${tested ? `: ${checkResultText(tested).replace(/\.$/, '')}` : ''}` : '. Add its key to use it'}.`)
     } catch (err) {
       setError(failure(err, 'The provider was not added.'))
     } finally {
@@ -70,7 +70,7 @@ function AddProvider({ open, presets, onClose, onDone }) {
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           <TextField select label="Provider" value={form.preset} onChange={choose}>
-            {presets.map((p) => <MenuItem key={p.id} value={p.id}>{p.label}</MenuItem>)}
+            {presets.map((p) => <MenuItem key={p.id} value={p.id} disabled={p.added}>{p.label}{p.added ? ' (added: change it on its card)' : ''}</MenuItem>)}
           </TextField>
           <TextField label="Name shown" value={form.label} onChange={set('label')} />
           {other && <TextField label="Id" value={form.id} onChange={set('id')} helperText="Lowercase letters, digits and dashes, for example our-models." />}
@@ -317,7 +317,7 @@ export default function Providers() {
       <Typography variant="h6" component="h2" sx={{ mt: 4, mb: 1 }}>Services beside the models</Typography>
       <Typography variant="body2" color="text.secondary" mb={1}>Generated pictures, picture search, icons and call transcription.</Typography>
       <Stack spacing={2}>{services.map(card)}</Stack>
-      <AddProvider open={adding} presets={snap.presets || []} onClose={() => setAdding(false)} onDone={done} />
+      <AddProvider open={adding} presets={addablePresets(snap.presets || [], snap.providers)} onClose={() => setAdding(false)} onDone={done} />
       <KeyDialog open={keying} onClose={() => setKeying(null)} onDone={done} />
       <ReasonDialog
         open={Boolean(confirming)}

@@ -104,8 +104,19 @@ export const capsText = (caps = {}) => ['tools', 'vision', 'images', 'json', 're
  * The Add a provider form as it opens: every field its first render reads is set (a form that
  * started empty and was filled after the first render blanked the page). presets: ai.control.get's.
  */
+/**
+ * The Add a provider list: every preset, a named one this server already has (and has not
+ * archived) marked added, so it is changed on its card instead. Other (any address) can be added
+ * again and again. → presets, each with added: boolean
+ */
+export function addablePresets(presets = [], providers = []) {
+  const taken = new Set(providers.filter((p) => p.status !== 'archived').map((p) => p.id))
+  return presets.map((p) => ({ ...p, added: p.baseUrlLocked !== false && taken.has(p.id) }))
+}
+
 export function providerFormDefaults(presets = [], presetId = 'meta') {
-  const preset = presets.find((p) => p.id === presetId) || presets[0] || { id: presetId, label: '', baseUrl: '', models: [] }
+  const open = presets.filter((p) => !p.added)
+  const preset = open.find((p) => p.id === presetId) || open[0] || presets[0] || { id: presetId, label: '', baseUrl: '', models: [] }
   return {
     preset: preset.id, label: preset.label || '', id: preset.id === 'other' ? '' : preset.id, baseUrl: preset.baseUrlLocked === false ? '' : preset.baseUrl || '',
     apiKey: '', models: (preset.models || []).slice(0, 1).map((m) => m.model), headers: '',

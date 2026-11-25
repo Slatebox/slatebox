@@ -28,7 +28,7 @@ import { createAIControl } from '../web/app/server/ai-control/facade.mjs'
 import { resolveModel } from '../web/app/server/ai-control/resolve.mjs'
 import { createAdminOps, createStatusHub, surfacesStatus } from '../web/app/server/ai-control/admin.mjs'
 import { execFileSync } from 'node:child_process'
-import { keyFormDefaults, modelFormDefaults, providerFormDefaults } from '../web/app/imports/ui/pages/admin/ai/catalog-view.mjs'
+import { addablePresets, keyFormDefaults, modelFormDefaults, providerFormDefaults } from '../web/app/imports/ui/pages/admin/ai/catalog-view.mjs'
 import { createAISettings, keyFingerprint } from '../web/app/server/methods/ai/ai-settings-core.mjs'
 import { loadMasterKey } from '../web/app/server/metering/vault.mjs'
 import { createGate } from '../web/app/server/exec/gate.mjs'
@@ -601,6 +601,30 @@ test('the Add a provider and key dialogs open filled: every field their first re
   assert.equal(providerFormDefaults(presets, 'other').id, '')
   const key = keyFormDefaults()
   for (const field of fieldsOf('KeyDialog')) assert.ok(field in key, `KeyDialog reads form.${field}`)
+})
+
+test('Add a provider marks a named provider the server already has as added and opens on one it can add; Other is always open', () => {
+  const presets = [
+    { id: 'meta', label: 'Meta (Muse)', baseUrl: 'https://api.meta.ai/v1', baseUrlLocked: true, models: [{ model: 'muse-ember-1.0', label: 'Muse Ember' }] },
+    { id: 'deepinfra', label: 'DeepInfra', baseUrl: 'https://api.deepinfra.com/v1/openai', baseUrlLocked: true, models: [{ model: 'Qwen/Qwen3-235B-A22B-Instruct-2507', label: 'Qwen3 235B' }] },
+    { id: 'groq', label: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', baseUrlLocked: true, models: [] },
+    { id: 'other', label: 'Other (OpenAI-compatible)', baseUrl: null, baseUrlLocked: false, models: [] },
+  ]
+  const providers = [{ id: 'meta', status: 'active' }, { id: 'deepinfra', status: 'active' }, { id: 'groq', status: 'archived' }, { id: 'other', status: 'active' }]
+  const listed = addablePresets(presets, providers)
+  assert.deepEqual(listed.map((p) => [p.id, p.added]), [['meta', true], ['deepinfra', true], ['groq', false], ['other', false]], 'an archived provider can come back; Other is never taken')
+  assert.equal(providerFormDefaults(listed).preset, 'groq', 'the dialog opens on a provider that can be added, not on Meta already added')
+  assert.equal(providerFormDefaults(listed, 'deepinfra').preset, 'groq', 'an added preset is never the form\'s choice')
+  assert.equal(providerFormDefaults(addablePresets(presets, [])).preset, 'meta', 'a new server opens on Meta (Muse)')
+  const source = readFileSync(new URL('../web/app/imports/ui/pages/admin/ai/Providers.jsx', import.meta.url), 'utf8')
+  assert.match(source, /disabled=\{p\.added\}/, 'an added preset cannot be picked')
+  assert.match(source, /presets=\{addablePresets\(snap\.presets \|\| \[\], snap\.providers\)\}/)
+})
+
+test('Bindings: each part\'s one picker fits a phone (no fixed minimum width below sm)', () => {
+  const source = readFileSync(new URL('../web/app/imports/ui/pages/admin/ai/Bindings.jsx', import.meta.url), 'utf8')
+  assert.ok(!/minWidth: (300|380)\b/.test(source), 'no fixed 300/380 px minimum on a phone')
+  assert.match(source, /minWidth: \{ xs: 0, sm: 380 \}/)
 })
 
 test('the Add a model dialog is controlled from its first render: every field and Select it reads is set before it opens (no uncontrolled-to-controlled warning)', () => {

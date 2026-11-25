@@ -62,13 +62,13 @@ export default function Bindings() {
     const sub = r.follows && r.follows !== 'default'
     return (
       <Box key={r.surface} data-testid={`binding-${r.surface}`} display="flex" alignItems="center" gap={2} flexWrap="wrap" sx={{ py: 1, pl: sub ? 3 : 0 }}>
-        <Box sx={{ minWidth: 300, flex: '1 1 300px' }}>
+        <Box sx={{ minWidth: { xs: '100%', sm: 300 }, flex: '1 1 300px' }}>
           <Typography variant="body2" fontWeight={isDefault ? 600 : 400}>{isDefault ? 'Everything not set' : r.title}</Typography>
           <Typography variant="caption" color="text.secondary">
             {r.resolved?.enabled === false ? 'Turned off' : `Answers with ${routeText(r.resolved?.route)}`}
           </Typography>
         </Box>
-        <TextField select size="small" value={draft[r.surface] ?? 'default'} onChange={(e) => setDraft({ ...draft, [r.surface]: e.target.value })} sx={{ minWidth: 380, flex: '1 1 380px' }}
+        <TextField select size="small" value={draft[r.surface] ?? 'default'} onChange={(e) => setDraft({ ...draft, [r.surface]: e.target.value })} sx={{ minWidth: { xs: 0, sm: 380 }, width: { xs: '100%', sm: 'auto' }, flex: { xs: '1 1 100%', sm: '1 1 380px' } }}
           SelectProps={{ MenuProps: { PaperProps: { style: { maxHeight: 480 } } } }} inputProps={{ 'aria-label': `Model for ${r.title}` }}>
           <MenuItem value="default">{defaultChoiceText(r, listed.surfaces, snap.defaultRoute)}</MenuItem>
           {groups.flatMap((g) => [
