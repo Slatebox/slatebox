@@ -23,7 +23,7 @@
 // Pure apart from the injected collections, stores and log.
 import { followChain } from '../ai-control/catalogue.mjs'
 import { BINDABLE_SURFACES } from '../ai-control/bindings.mjs'
-import { buildSnapshot, modelId } from '../ai-control/snapshot.mjs'
+import { buildSnapshot, capabilityGap, modelId } from '../ai-control/snapshot.mjs'
 import { resolveModel } from '../ai-control/resolve.mjs'
 import { BUILTIN_DEFAULT, PROVIDER_PRESETS, presetForUrl, providerFromPreset } from '../ai-control/provider-presets.mjs'
 import { BUILTIN_PROVIDERS, normalizeProvider } from '../ai-control/providers.mjs'
@@ -36,6 +36,9 @@ const REASON = 'Moved into AI control (ai-control-002)'
 
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const text = (value) => (typeof value === 'string' && value.trim() ? value.trim() : null)
+// The capability flags a settings-file or server connection set (tools, vision, images), as a model row keeps them.
+const CAPABILITY_FLAGS = ['tools', 'vision', 'images']
+const flagsOf = (caps) => (isObject(caps) ? Object.fromEntries(CAPABILITY_FLAGS.filter((k) => typeof caps[k] === 'boolean').map((k) => [k, caps[k]])) : {})
 const hostOf = (url) => {
   try {
     return new URL(url).host.toLowerCase()
@@ -106,6 +109,8 @@ export async function importSettingsKeys({ settings, env = {}, keys, catalog, lo
       if (!entry.aux) await catalog.ensureProvider({ actor: SYSTEM_ACTOR, preset: entry.preset, id: entry.provider, baseUrl: entry.baseUrl ?? null, reason: REASON, trusted: true })
       const same = await keys.findByFingerprint(entry.provider, fingerprint)
       if (same?.status === 'revoked') {
+        // never answers again, not even from memory
+        keys.forgetFromSettings(entry.provider)
         report.revoked.push(item)
         log.warn?.(`ai-control-002: ${where} still holds a ${entry.provider} key (${fingerprint}) that was revoked in Admin → AI control. It is not used; remove it from ${where.startsWith('the ') ? 'the environment' : 'the settings file'}.`)
         health({ kind: 'keys-settings', id: entry.provider, problem: `${where} still holds a key you revoked (${fingerprint}). It is not used; remove it there.` })
@@ -125,8 +130,9 @@ export async function importSettingsKeys({ settings, env = {}, keys, catalog, lo
       try {
         await keys.add({ actor: SYSTEM_ACTOR, provider: entry.provider, apiKey: entry.value, source: entry.source, action: 'ai.keys.import', label: `From ${entry.path}`.slice(0, 80) })
       } catch (error) {
-        // another server moved it a moment ago (the unique index): it is in the backend
-        if (error?.status === 409) {
+        // another server moved it a moment ago (the unique index): it is in the backend. Any other
+        // refusal (an older index the key collides with) means it is not, and it is kept from memory.
+        if (error?.status === 409 && await keys.findByFingerprint(entry.provider, fingerprint)) {
           report.kept.push(item)
           continue
         }
@@ -197,13 +203,13 @@ export function oldRoutes({ settings = {}, env = {}, serverUse = {}, serverConne
       const p = providerForConnection(name, raw)
       if (!p) return null
       const keyed = Boolean(text(raw.apiKey) || (raw.apiKeyEnv && text(env[raw.apiKeyEnv])))
-      return { kind: 'connection', provider: p.id, preset: p.preset, baseUrl: p.baseUrl || PROVIDER_PRESETS[p.preset].baseUrl, model: modelOverride || text(raw.model), keyed, connection: name }
+      return { kind: 'connection', provider: p.id, preset: p.preset, baseUrl: p.baseUrl || PROVIDER_PRESETS[p.preset].baseUrl, model: modelOverride || text(raw.model), keyed, connection: name, capabilities: flagsOf(raw.capabilities) }
     }
     const doc = serverConnections.find((c) => c.name === name)
     if (!doc) return null
     const p = providerForConnection(name, { type: doc.provider, baseUrl: doc.baseUrl })
     if (!p) return null
-    return { kind: 'connection', provider: p.id, preset: p.preset, baseUrl: p.baseUrl || PROVIDER_PRESETS[p.preset].baseUrl, model: modelOverride || doc.model || null, keyed: Boolean(doc.hasKey), connection: name }
+    return { kind: 'connection', provider: p.id, preset: p.preset, baseUrl: p.baseUrl || PROVIDER_PRESETS[p.preset].baseUrl, model: modelOverride || doc.model || null, keyed: Boolean(doc.hasKey), connection: name, capabilities: flagsOf(doc.capabilities) }
   }
   const builtinRoute = (surfaceId) => {
     const from = builtinFromOf(surfaceId)
@@ -253,6 +259,13 @@ export function oldRoutes({ settings = {}, env = {}, serverUse = {}, serverConne
     }
     out[id] = route ?? null
   }
+  // what "everything not set" answered with: the server's own default binding or choice of a
+  // connection (a self-hosted server set up with one model for everything), else nothing
+  const defaultDoc = oldBindings['default|server']
+  if (defaultDoc?.enabled !== false && Array.isArray(defaultDoc?.chain) && defaultDoc.chain.length) out.default = entryRoute(defaultDoc.chain[0], 'default')
+  else if (use.default && use.default !== 'builtin') out.default = connectionRoute(String(use.default).replace(/^server:/, ''))
+  else out.default = null
+  if (out.default?.kind !== 'connection') out.default = null
   return out
 }
 
@@ -278,14 +291,18 @@ export function planCatalogue(routes) {
     const id = modelId(route.provider, route.model)
     if (!models[id]) {
       const suggestion = PROVIDER_PRESETS[route.preset]?.models.find((m) => m.model === route.model)
-      models[id] = { _id: id, provider: route.provider, model: route.model, label: suggestion?.label ?? null, capabilities: { ...(suggestion?.capabilities || { tools: true }) }, maxOutput: null, prices: suggestion?.prices ? { ...suggestion.prices } : null, status: 'enabled' }
+      models[id] = { _id: id, provider: route.provider, model: route.model, label: suggestion?.label ?? null, capabilities: { ...(suggestion?.capabilities || { tools: true }), ...(route.capabilities || {}) }, maxOutput: null, prices: suggestion?.prices ? { ...suggestion.prices } : null, status: 'enabled' }
     }
     return id
   }
-  // the default: Meta Muse Ember, the owner's choice
+  // the default: Meta Muse Ember, the owner's choice, unless the server answered everything not set
+  // with a model of its own (a self-hosted server's one model for everything), which stays its default
   const ember = { provider: BUILTIN_DEFAULT.preset, preset: BUILTIN_DEFAULT.preset, baseUrl: PROVIDER_PRESETS.meta.baseUrl, model: BUILTIN_DEFAULT.model }
   addProvider(ember)
-  bindings.default = { _id: 'default', surface: 'default', use: 'model', model: addModel(ember) }
+  const emberId = addModel(ember)
+  const own = routes.default?.kind === 'connection' && routes.default.keyed && routes.default.model ? routes.default : null
+  if (own) addProvider(own)
+  bindings.default = { _id: 'default', surface: 'default', use: 'model', model: own ? addModel(own) : emberId }
   const expected = {}
   const snapshotOf = () => buildSnapshot({ providers: Object.values(providers), models: Object.values(models), bindings: Object.values(bindings) })
   for (const id of BINDABLE_SURFACES) {
@@ -300,6 +317,9 @@ export function planCatalogue(routes) {
     // generated pictures with nothing set use the built-in image service, as before
     if (route.kind === 'stability') continue
     if (!route.keyed || !route.model) continue
+    // a model that cannot do what the part needs (a chat model chosen for everything, asked to draw
+    // pictures) never answered it: the part keeps what it does with nothing set
+    if (capabilityGap(id, { capabilities: { ...(PROVIDER_PRESETS[route.preset]?.models.find((m) => m.model === route.model)?.capabilities || { tools: true }), ...(route.capabilities || {}) } })) continue
     expected[id] = route
     const now = resolveModel(snapshotOf(), { surface: id }).route
     if (sameRoute(now, route)) continue

@@ -2,7 +2,9 @@
 // server's key-encryption key (metering/vault.mjs, SLATEBOX_KEY_ENCRYPTION_KEY, never changed
 // here). A key is active (the one requests use), standby (saved, waiting to be switched to) or
 // revoked (its cipher wiped; the document stays as history: which key, who, when). At most one key
-// per provider is active (a unique index, metering/migrations.mjs M5).
+// per provider is active (a unique index, metering/migrations.mjs M5). Deleting a revoked key hides
+// its record from the list but keeps its fingerprint, so the key can never be added or imported
+// again.
 //
 // Keys live only here: no settings file, no environment variable. A key is never returned by
 // anything in this module: an administrator sees its fingerprint (sha256:12345678…WXYZ), when it
@@ -118,26 +120,27 @@ export function createKeyStore({
   async function list({ provider = null } = {}) {
     const docs = await keys.find({ ...KEY_FILTER, ...(provider && { provider }) }, { projection: { cipher: 0 } }).toArray()
     const order = { active: 0, standby: 1, revoked: 2 }
-    return docs
+    // a deleted revoked key stays only as its fingerprint (remove)
+    return docs.filter((doc) => !doc.removedAt)
       .sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3) || new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
       .map(publicKey)
   }
 
   // Switches a provider to one key: the key that was active is revoked (its cipher wiped). The old
-  // key steps aside to standby first, so the one-active index never sees two; if the switch fails,
-  // it is put back.
+  // key steps aside to standby first, marked retiring, so the one-active index never sees two and a
+  // request in between still gets a key (keyFor); if the switch fails, it is put back.
   async function switchTo(doc, actor) {
     const previous = await activeOf(doc.provider)
     if (previous?._id === doc._id) return { previous: null }
     const at = now()
-    if (previous) await keys.updateOne({ _id: previous._id }, { $set: { status: 'standby' } })
+    if (previous) await keys.updateOne({ _id: previous._id }, { $set: { status: 'standby', retiring: true } })
     try {
       await keys.updateOne({ _id: doc._id }, { $set: { status: 'active', activatedAt: at } })
     } catch (error) {
-      if (previous) await keys.updateOne({ _id: previous._id }, { $set: { status: 'active' } }).catch(() => {})
+      if (previous) await keys.updateOne({ _id: previous._id }, { $set: { status: 'active' }, $unset: { retiring: '' } }).catch(() => {})
       throw error
     }
-    if (previous) await keys.updateOne({ _id: previous._id }, { $set: { status: 'revoked', revokedAt: at, revokedBy: actor?.userId ?? null }, $unset: { cipher: '' } })
+    if (previous) await keys.updateOne({ _id: previous._id }, { $set: { status: 'revoked', revokedAt: at, revokedBy: actor?.userId ?? null }, $unset: { cipher: '', retiring: '' } })
     return { previous }
   }
 
@@ -171,6 +174,8 @@ export function createKeyStore({
       if (error?.code === 11000) throw new KeyError('This key is already saved.', 409)
       throw error
     }
+    // the backend's key wins: a key kept from the settings file for this boot answers no more
+    fallback.delete(provider)
     let replaced = null
     if (active && activate) ({ previous: replaced } = await switchTo(doc, actor))
     const saved = await docOf(doc._id)
@@ -231,6 +236,7 @@ export function createKeyStore({
     if (doc.status === 'revoked' || !doc.cipher) throw new KeyError('A revoked key cannot be used again. Add a new key.', 409)
     if (doc.status === 'active') return { key: publicKey(doc), revoked: null }
     const { previous } = await switchTo(doc, actor)
+    fallback.delete(doc.provider)
     const saved = await docOf(id)
     await record({
       action: 'ai.keys.activate', actor, target: { kind: 'key', id: doc.provider }, reason,
@@ -257,21 +263,27 @@ export function createKeyStore({
   /** Revokes a key: nothing is sent with it again, its cipher is wiped, the record stays. */
   async function revoke({ actor, id, reason }) {
     const doc = await docOf(id)
-    if (!doc) throw new KeyError('There is no such key.', 404)
+    if (!doc || doc.removedAt) throw new KeyError('There is no such key.', 404)
+    // an administrator acted on this provider: a key kept from the settings file for this boot answers no more
+    fallback.delete(doc.provider)
     if (doc.status === 'revoked') return { key: publicKey(doc), wasActive: false }
     const at = now()
-    await keys.updateOne({ _id: id }, { $set: { status: 'revoked', revokedAt: at, revokedBy: actor?.userId ?? null }, $unset: { cipher: '' } })
+    await keys.updateOne({ _id: id }, { $set: { status: 'revoked', revokedAt: at, revokedBy: actor?.userId ?? null }, $unset: { cipher: '', retiring: '' } })
     const saved = await docOf(id)
     await record({ action: 'ai.keys.revoke', actor, target: { kind: 'key', id: doc.provider }, reason, before: publicKey(doc), after: publicKey(saved) })
     return { key: publicKey(saved), wasActive: doc.status === 'active' }
   }
 
-  /** Deletes a standby or revoked key's record. An active key is revoked first. */
+  /**
+   * Deletes a standby or revoked key. An active key is revoked first. A revoked key's record is
+   * hidden, not erased: its fingerprint stays, so the key is never added or imported again.
+   */
   async function remove({ actor, id, reason }) {
     const doc = await docOf(id)
-    if (!doc) throw new KeyError('There is no such key.', 404)
+    if (!doc || doc.removedAt) throw new KeyError('There is no such key.', 404)
     if (doc.status === 'active') throw new KeyError('Revoke the active key first, or switch to another key.', 409)
-    await keys.deleteOne({ _id: id })
+    if (doc.status === 'revoked') await keys.updateOne({ _id: id }, { $set: { removedAt: now(), removedBy: actor?.userId ?? null } })
+    else await keys.deleteOne({ _id: id })
     await record({ action: 'ai.keys.remove', actor, target: { kind: 'key', id: doc.provider }, reason, before: publicKey(doc), after: null })
     return { removed: id }
   }
@@ -294,14 +306,14 @@ export function createKeyStore({
 
   /**
    * The provider's active key for one request, opened now (so a switch takes effect without a
-   * restart). → { apiKey, model?, keyId } or { error } (a sentence for the person). A key a
-   * settings file still holds that could not be moved here this boot is used only while the
-   * provider has no active key.
+   * restart). → { apiKey, model?, keyId } or { error } (a sentence for the person). In the moment
+   * of a switch the key being replaced answers (switchTo). A key a settings file still holds that
+   * could not be moved here this boot is used only while the provider has no active key.
    */
   async function keyFor(provider, { use = true } = {}) {
     let doc
     try {
-      doc = await activeOf(provider)
+      doc = (await activeOf(provider)) || (await keys.findOne({ ...KEY_FILTER, provider, status: 'standby', retiring: true }))
     } catch (error) {
       // the database is down: a key the settings file still held keeps answering this boot
       const kept = fallback.get(provider)

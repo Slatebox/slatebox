@@ -26,7 +26,7 @@ export const AI_PRICES = Object.freeze([
   { model: 'anthropic/claude-sonnet-4-6', inPerMillion: 3, outPerMillion: 15, source: DEEPINFRA, read: READ },
   { model: 'claude-sonnet-4-6', inPerMillion: 3, outPerMillion: 15, source: ANTHROPIC, read: READ },
   { model: 'gpt-4o-mini', inPerMillion: 0.15, outPerMillion: 0.6, source: OPENAI, read: READ },
-  // The presentation default and its fallback (server/config/ai-defaults.json).
+  // DeepInfra's Gemini Flash models (shapes on Slatebox Cloud).
   { model: 'google/gemini-3.5-flash', inPerMillion: 1.5, outPerMillion: 9, source: DEEPINFRA, read: READ_2 },
   { model: 'google/gemini-3.7-flash', inPerMillion: 0.75, outPerMillion: 3.75, source: DEEPINFRA, read: READ_2 },
   // Gemini API direct, for an operator's connection. Gemini 3.8 Flash is $0.75 / $3.75 until

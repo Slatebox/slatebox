@@ -207,3 +207,40 @@ test('a key\'s last use is noted for a request that is sent, never for an availa
   await new Promise((resolve) => setImmediate(resolve))
   assert.ok(w.keys.rows.find((row) => row._id === saved.id).lastUsedAt, 'a request that is sent is')
 })
+
+test('a request in the middle of a switch still gets a key: the key being replaced answers until the new one is active', async () => {
+  const w = await withMeta()
+  await w.keyStore.add({ actor: w.actor, provider: 'meta', apiKey: KEY_A })
+  const second = await w.keyStore.add({ actor: w.actor, provider: 'meta', apiKey: KEY_B })
+  const seen = []
+  const updateOne = w.keys.updateOne.bind(w.keys)
+  w.keys.updateOne = async (filter, update, options) => {
+    const out = await updateOne(filter, update, options)
+    // after every write of the switch, a request asks for the key
+    seen.push(await w.keyStore.keyFor('meta'))
+    return out
+  }
+  await w.keyStore.activate({ actor: w.actor, id: second.id })
+  w.keys.updateOne = updateOne
+  assert.ok(seen.length >= 2)
+  for (const key of seen) assert.ok(!key.error, `a request mid-switch failed: ${key.error}`)
+  assert.ok(seen.every((key) => [KEY_A, KEY_B].includes(key.apiKey)))
+  assert.equal((await w.keyStore.keyFor('meta')).apiKey, KEY_B)
+  assert.equal(w.keys.rows.filter((row) => row.retiring).length, 0, 'nothing is left marked as being replaced')
+})
+
+test('a person\'s own DeepInfra key saved before choices existed (no model) still answers: with the part\'s model when the server uses DeepInfra for it, else DeepInfra\'s first model', async () => {
+  const w = await withMeta()
+  await w.catalog.addProvider({ actor: w.actor, input: { preset: 'deepinfra' }, models: ['google/gemini-3.5-flash'] })
+  await w.bindings.set({ actor: w.actor, changes: [{ surface: 'shape', use: 'model', model: 'deepinfra:google/gemini-3.5-flash' }] })
+  const OWN = 'test-own-deepinfra-8888888888888888hhhh'
+  await w.keys.insertOne({ _id: 'own1', ownerType: 'user', ownerId: 'ana', provider: 'deepinfra', cipher: seal({ master: fakeMaster(), owner: { ownerType: 'user', ownerId: 'ana', provider: 'deepinfra' }, plaintext: OWN }), last4: OWN.slice(-4) })
+  const chat = await w.aiSettings.resolveFor({ userId: 'ana', feature: 'chat' })
+  assert.equal(chat.own, true)
+  assert.ok(!chat.error, chat.error)
+  assert.equal(chat.connection.apiKey, OWN)
+  assert.equal(chat.connection.model, 'Qwen/Qwen3-235B-A22B-Instruct-2507', 'the server answers chat with Meta, so DeepInfra\'s first model')
+  const shape = await w.aiSettings.resolveFor({ userId: 'ana', feature: 'shape', request: { tools: true } })
+  assert.ok(!shape.error, shape.error)
+  assert.equal(shape.connection.model, 'google/gemini-3.5-flash', 'the server answers shapes on DeepInfra: the same model')
+})

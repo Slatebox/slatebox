@@ -130,3 +130,26 @@ test('older documents are converted: a model chain binding, a connection-named m
   assert.deepEqual(dropped, ['aiBindingVersions'])
   assert.ok(w.raw.audit.rows.some((row) => row.action === 'ai.bindings.history'))
 })
+
+test('a self-hosted server set up with one model for everything (SLATEBOX_AI_URL, use.default) gets that model as its default, not a binding per part', async () => {
+  const LOCAL = 'test-local-7777777777777777gggg'
+  const settings = {
+    public: { env: 'selfhost' },
+    ai: { connections: { server: { type: 'openai-compatible', baseUrl: 'https://llm.example.com/v1', model: 'llama-3.3-70b', apiKey: LOCAL } }, use: { default: 'server' } },
+  }
+  const { w, out } = await migrated(settings, {})
+  assert.equal(out.done, true)
+  const snap = w.snapshot()
+  assert.equal(snap.bindings.default.model, 'server:llama-3.3-70b')
+  assert.deepEqual(Object.keys(snap.bindings), ['default'], 'no binding per part')
+  for (const surface of BINDABLE_SURFACES.filter((s) => s !== 'default' && s !== 'images')) {
+    assert.equal(resolveModel(snap, { surface }).route.model, 'llama-3.3-70b', surface)
+  }
+  // a chat model cannot draw: generated pictures keep the built-in image service (before, they failed
+  // with "cannot make images"; the self-check no longer blocks the whole move on that)
+  assert.equal(resolveModel(snap, { surface: 'images' }).source, 'stability')
+  assert.equal(snap.health.length, 0)
+  const chat = await w.aiSettings.resolveFor({ userId: 'ana', feature: 'chat' })
+  assert.equal(chat.connection.apiKey, LOCAL)
+  assert.equal(chat.connection.baseUrl, 'https://llm.example.com/v1')
+})

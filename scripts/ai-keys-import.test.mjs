@@ -170,3 +170,47 @@ test('after the import no runtime path reads a key from the settings file or the
     .map((path) => path.slice(root.length))
   assert.deepEqual(offenders, [], 'only ai-control-002 reads a key from the settings file')
 })
+
+test('a revoked key that an administrator then deletes is still never brought back by the next boot\'s import', async () => {
+  const w = await aiControlWorld({ settings: prodSettings() })
+  await run(w)
+  const meta = await w.keyStore.activeOf('meta')
+  await w.keyStore.revoke({ actor: w.actor, id: meta.id, reason: 'leaked' })
+  await w.keyStore.remove({ actor: w.actor, id: meta.id, reason: 'tidy up' })
+  assert.ok(!(await w.keyStore.list({ provider: 'meta' })).some((k) => k.id === meta.id), 'the deleted key is gone from the list')
+  const { report } = await run(w)
+  assert.deepEqual(report.revoked.map((r) => r.provider), ['meta'])
+  assert.equal(await w.keyStore.activeOf('meta'), null)
+  assert.match((await w.keyStore.keyFor('meta')).error, /has no active key/)
+  await assert.rejects(w.keyStore.add({ actor: w.actor, provider: 'meta', apiKey: META }), /revoked and cannot be used again/)
+})
+
+test('a key kept from the settings file for this boot stops answering once an administrator acts on that provider in the backend', async () => {
+  // the import could not store the key this boot (the database refused), so it answers from memory
+  const w = await aiControlWorld({ settings: prodSettings() })
+  const add = w.keyStore.add
+  w.keyStore.add = async () => { throw new Error('the database refused') }
+  await run(w)
+  w.keyStore.add = add
+  assert.equal((await w.keyStore.keyFor('meta')).apiKey, META, 'served from memory')
+  // the administrator adds the same key by hand, then revokes it: nothing answers with it any more
+  const saved = await w.keyStore.add({ actor: w.actor, provider: 'meta', apiKey: META })
+  await w.keyStore.revoke({ actor: w.actor, id: saved.id, reason: 'leaked' })
+  assert.match((await w.keyStore.keyFor('meta')).error, /has no active key/)
+  assert.ok(!w.keyStore.fromSettings().includes('meta'))
+})
+
+test('a key the database refuses as a duplicate that is not actually stored (an older index) answers from memory, never lost', async () => {
+  const w = await aiControlWorld({ settings: prodSettings() })
+  const add = w.keyStore.add
+  w.keyStore.add = async (args) => {
+    if (args.provider === 'meta') { const error = new Error('This key is already saved.'); error.status = 409; throw error }
+    return add(args)
+  }
+  const { report, health } = await run(w)
+  w.keyStore.add = add
+  assert.deepEqual(report.failed.map((f) => f.provider), ['meta'])
+  assert.ok(!report.kept.some((k) => k.provider === 'meta'))
+  assert.equal((await w.keyStore.keyFor('meta')).apiKey, META, 'served from memory')
+  assert.ok(health.some((h) => h.kind === 'keys-import' && h.id === 'meta'))
+})

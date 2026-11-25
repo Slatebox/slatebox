@@ -52,7 +52,6 @@ export function connectionRequest(connection) {
     return {
       provider: 'anthropic', endpoint: `${base}/messages`, model: connection.model, apiKey: connection.apiKey,
       toolChoice: connection.toolChoice || 'named', maxTokens: connection.maxTokens || 8192,
-      ...(connection.previousApiKey && { previousApiKey: connection.previousApiKey }),
     }
   }
   // an administrator's provider: its key style and extra headers (the built-in types send a bearer key as always)
@@ -66,6 +65,5 @@ export function connectionRequest(connection) {
     maxTokens: connection.maxTokens || DEFAULT_MAX_TOKENS,
     ...(Object.keys(headers).length && { headers }),
     ...(Object.keys(query).length && { queryParams: query }),
-    ...(connection.previousApiKey && { previousApiKey: connection.previousApiKey }),
   }
 }

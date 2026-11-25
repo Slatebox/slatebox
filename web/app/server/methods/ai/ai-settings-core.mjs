@@ -20,6 +20,7 @@ import {
 import { USE_SURFACES } from '../../ai-control/catalogue.mjs'
 import { BUILTIN_PROVIDERS } from '../../ai-control/providers.mjs'
 import { keyFingerprint } from '../../ai-control/keys.mjs'
+import { PROVIDER_PRESETS } from '../../ai-control/provider-presets.mjs'
 
 export { keyFingerprint }
 
@@ -410,9 +411,16 @@ export function createAISettings({
   // ---------- the request path ----------
   // An own connection a choice names, with its key, the endpoint rules of its level, the label a
   // person may read, and why it cannot be used.
-  async function loadOwn({ connection: named, owner, scope, feature, request }) {
+  async function loadOwn({ connection: named, owner, scope, feature, request, control = null }) {
     const docs = await connectionsOf(owner, true)
-    const connection = docs.find((c) => c.name === named.name) || named
+    let connection = docs.find((c) => c.name === named.name) || named
+    // an own DeepInfra key saved with no model (before choices existed, it served every feature):
+    // the model the server answers this part with when that is on DeepInfra, else DeepInfra's first
+    if (connection.type === 'deepinfra' && !connection.model) {
+      const route = control?.route
+      const model = route && !route.error && route.preset === 'deepinfra' ? route.model : PROVIDER_PRESETS.deepinfra.models[0].model
+      connection = { ...connection, model }
+    }
     const rules = rulesFor(RULE_LEVEL[scope])
     const label = connectionLabel(connection)
     let error = null
@@ -481,7 +489,7 @@ export function createAISettings({
       const choice = resolveAIChoice({ feature: surface, person, team, ownProviders: server.ownProviders })
       if (choice.connection) {
         const owner = choice.scope === 'me' ? meOwner : teamOwner
-        return { ...choice, surface, ...(await loadOwn({ connection: choice.connection, owner, scope: choice.scope, feature: choice.feature, request })) }
+        return { ...choice, surface, ...(await loadOwn({ connection: choice.connection, owner, scope: choice.scope, feature: choice.feature, request, control })) }
       }
       return { ...(await serverRoute({ control, user, feature: choice.feature, request, forRequest })), surface }
     }
