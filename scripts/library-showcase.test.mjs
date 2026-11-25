@@ -122,6 +122,76 @@ test("a changed summary or slate is a new published version; counts and earlier 
   assert.equal((await seedShowcase({ ...w, presentations: edited })).unchanged.length, 6);
 });
 
+// On the plain canvas no line crosses a note: each row is a chain (a heading, then its notes in order). A heading linked
+// to every note in its row drew lines through the nearer notes, which read as their text crossed out. The engine draws a
+// straight line along the segment between the two notes' centers (cut at their edges), so that segment must miss every
+// other note's box.
+const boxOf = (node) => ({ x: node.options.xPos, y: node.options.yPos, w: node.options.width, h: node.options.height });
+function segmentHitsBox([x1, y1], [x2, y2], b) {
+  const dx = x2 - x1, dy = y2 - y1;
+  let t0 = 0, t1 = 1;
+  for (const [p, q] of [[-dx, x1 - b.x], [dx, b.x + b.w - x1], [-dy, y1 - b.y], [dy, b.y + b.h - y1]]) {
+    if (p === 0) { if (q <= 0) return false; continue; }
+    const t = q / p;
+    if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; } else { if (t < t0) return false; if (t < t1) t1 = t; }
+  }
+  return t1 - t0 > 1e-9;
+}
+function crossings(slate) {
+  const byId = new Map(slate.nodes.map((node) => [node.options.id, node]));
+  const mid = (node) => { const b = boxOf(node); return [b.x + b.w / 2, b.y + b.h / 2]; };
+  const found = [];
+  for (const node of slate.nodes) for (const link of node.relationships?.associations || []) {
+    const from = byId.get(link.parentId), to = byId.get(link.childId);
+    assert.ok(from && to, link.id);
+    assert.equal(link.lineType, "straight", link.id + ": a straight line");
+    for (const other of slate.nodes) if (other !== from && other !== to && segmentHitsBox(mid(from), mid(to), boxOf(other))) found.push(link.id + " crosses " + other.options.id);
+  }
+  return found;
+}
+
+test("on the plain canvas no line of the six crosses a note (and the check sees one that does)", () => {
+  const n = (id, x) => ({ options: { id, xPos: x, yPos: 0, width: 100, height: 60 }, relationships: { associations: [] } });
+  const row = [n("head", 0), n("one", 150), n("two", 300)];
+  row[0].relationships.associations.push({ id: "head-two", parentId: "head", childId: "two", lineType: "straight" });
+  assert.deepEqual(crossings({ nodes: row }), ["head-two crosses one"]);
+  for (const entry of showcasePresentations) assert.deepEqual(crossings(entry.slate), [], entry.slug);
+});
+
+test("a re-laid slate in the bundle updates the six already seeded in place: one item each, a new version, no duplicates", async () => {
+  const w = world();
+  // What an earlier app seeded: each heading linked to every note in its row.
+  const earlier = showcasePresentations.map((entry) => {
+    const nodes = structuredClone(entry.slate.nodes);
+    const byId = new Map(nodes.map((node) => [node.options.id, node]));
+    // Re-point each row's chain at its heading (a heading is a note the root links to).
+    const root = nodes[0];
+    for (const branchLink of root.relationships.associations) {
+      const branch = byId.get(branchLink.childId);
+      const leaves = [];
+      for (let link = branch.relationships.associations[0]; link; ) { const leaf = byId.get(link.childId); leaves.push(leaf); link = leaf.relationships.associations[0]; }
+      for (const leaf of leaves) leaf.relationships.associations = [];
+      branch.relationships.associations = leaves.map((leaf) => ({ ...branchLink, id: branch.options.id + "-" + leaf.options.id, parentId: branch.options.id, childId: leaf.options.id }));
+    }
+    return { ...entry, slate: { ...entry.slate, nodes } };
+  });
+  assert.ok(earlier.some((entry) => crossings(entry.slate).length), "the earlier slates crossed notes");
+  await seedShowcase({ ...w, presentations: earlier });
+  const report = await seedShowcase(w);
+  assert.deepEqual(report.updated, SLUGS.map((slug) => SHOWCASE_PREFIX + slug));
+  assert.deepEqual([report.created.length, report.skipped.length, report.unpublished.length], [0, 0, 0]);
+  assert.equal(w.items.docs.length, 6);
+  assert.equal(new Set(w.items.docs.map((doc) => doc.slug)).size, 6, "no duplicate slugs");
+  for (const entry of showcasePresentations) {
+    const item = await w.items.findOne({ _id: SHOWCASE_PREFIX + entry.slug });
+    assert.deepEqual([item.publishedVersion, item.versionCount], [2, 2], entry.slug);
+    const published = await w.versions.findOne({ itemId: item._id, n: 2 });
+    assert.deepEqual(published.content.slate.nodes, entry.slate.nodes, entry.slug + ": the bundled slate is the published one");
+    assert.deepEqual(crossings(published.content.slate), [], entry.slug);
+  }
+  assert.equal((await seedShowcase(w)).unchanged.length, 6, "then unchanged");
+});
+
 test("a presentation gone from the list is unpublished with an event, never deleted, and comes back when it returns", async () => {
   const w = world();
   await seedShowcase(w);

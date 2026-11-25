@@ -75,7 +75,7 @@ export const showcasePresentations = [
      "options": {
       "id": "countdown",
       "text": "The countdown",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 0,
       "width": 250,
       "height": 110,
@@ -98,24 +98,6 @@ export const showcasePresentations = [
         "id": "countdown-golive",
         "parentId": "countdown",
         "childId": "golive"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "countdown-announce",
-        "parentId": "countdown",
-        "childId": "announce"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "countdown-firstcall",
-        "parentId": "countdown",
-        "childId": "firstcall"
        }
       ]
      }
@@ -124,7 +106,7 @@ export const showcasePresentations = [
      "options": {
       "id": "golive",
       "text": "09:00\nGo live",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 5,
       "width": 260,
       "height": 100,
@@ -138,14 +120,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "golive-announce",
+        "parentId": "golive",
+        "childId": "announce"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "announce",
       "text": "09:15\nPost the announcement",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 5,
       "width": 260,
       "height": 100,
@@ -159,14 +151,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "announce-firstcall",
+        "parentId": "announce",
+        "childId": "firstcall"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "firstcall",
       "text": "10:00\nFirst customer call",
-      "xPos": 1300,
+      "xPos": 1440,
       "yPos": 5,
       "width": 260,
       "height": 100,
@@ -187,7 +189,7 @@ export const showcasePresentations = [
      "options": {
       "id": "signals",
       "text": "The signals",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 150,
       "width": 250,
       "height": 110,
@@ -210,24 +212,6 @@ export const showcasePresentations = [
         "id": "signals-signups",
         "parentId": "signals",
         "childId": "signups"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "signals-errors",
-        "parentId": "signals",
-        "childId": "errors"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "signals-replies",
-        "parentId": "signals",
-        "childId": "replies"
        }
       ]
      }
@@ -236,7 +220,7 @@ export const showcasePresentations = [
      "options": {
       "id": "signups",
       "text": "4,812 sign-ups\nin 24 hours",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 155,
       "width": 260,
       "height": 100,
@@ -250,14 +234,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "signups-errors",
+        "parentId": "signups",
+        "childId": "errors"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "errors",
       "text": "Error rate\n0.4%",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 155,
       "width": 260,
       "height": 100,
@@ -271,14 +265,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "errors-replies",
+        "parentId": "errors",
+        "childId": "replies"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "replies",
       "text": "Support replies\nunder 2 hours",
-      "xPos": 1300,
+      "xPos": 1440,
       "yPos": 155,
       "width": 260,
       "height": 100,
@@ -299,7 +303,7 @@ export const showcasePresentations = [
      "options": {
       "id": "owners",
       "text": "Who owns what",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 300,
       "width": 250,
       "height": 110,
@@ -322,24 +326,6 @@ export const showcasePresentations = [
         "id": "owners-release",
         "parentId": "owners",
         "childId": "release"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "owners-oncall",
-        "parentId": "owners",
-        "childId": "oncall"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "owners-support",
-        "parentId": "owners",
-        "childId": "support"
        }
       ]
      }
@@ -348,7 +334,7 @@ export const showcasePresentations = [
      "options": {
       "id": "release",
       "text": "Mara:\nthe release",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 305,
       "width": 260,
       "height": 100,
@@ -362,14 +348,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "release-oncall",
+        "parentId": "release",
+        "childId": "oncall"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "oncall",
       "text": "Dev:\non call",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 305,
       "width": 260,
       "height": 100,
@@ -383,14 +379,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "oncall-support",
+        "parentId": "oncall",
+        "childId": "support"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "support",
       "text": "Ines:\nsupport",
-      "xPos": 1300,
+      "xPos": 1440,
       "yPos": 305,
       "width": 260,
       "height": 100,
@@ -411,7 +417,7 @@ export const showcasePresentations = [
      "options": {
       "id": "risks",
       "text": "What could break",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 450,
       "width": 250,
       "height": 110,
@@ -434,15 +440,6 @@ export const showcasePresentations = [
         "id": "risks-load",
         "parentId": "risks",
         "childId": "load"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "risks-imports",
-        "parentId": "risks",
-        "childId": "imports"
        }
       ]
      }
@@ -451,7 +448,7 @@ export const showcasePresentations = [
      "options": {
       "id": "load",
       "text": "Checkout\nunder load",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 455,
       "width": 260,
       "height": 100,
@@ -465,14 +462,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "load-imports",
+        "parentId": "load",
+        "childId": "imports"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "imports",
       "text": "Large file\nimports",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 455,
       "width": 260,
       "height": 100,
@@ -647,7 +654,7 @@ export const showcasePresentations = [
      "options": {
       "id": "timeline",
       "text": "The timeline",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 0,
       "width": 250,
       "height": 110,
@@ -670,33 +677,6 @@ export const showcasePresentations = [
         "id": "timeline-deploy",
         "parentId": "timeline",
         "childId": "deploy"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "timeline-spike",
-        "parentId": "timeline",
-        "childId": "spike"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "timeline-rollback",
-        "parentId": "timeline",
-        "childId": "rollback"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "timeline-recovered",
-        "parentId": "timeline",
-        "childId": "recovered"
        }
       ]
      }
@@ -705,7 +685,7 @@ export const showcasePresentations = [
      "options": {
       "id": "deploy",
       "text": "14:02\nDeploy 418 goes out",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 5,
       "width": 260,
       "height": 100,
@@ -719,14 +699,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "deploy-spike",
+        "parentId": "deploy",
+        "childId": "spike"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "spike",
       "text": "14:09\nPayment errors spike",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 5,
       "width": 260,
       "height": 100,
@@ -740,14 +730,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "spike-rollback",
+        "parentId": "spike",
+        "childId": "rollback"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "rollback",
       "text": "14:31\nRollback starts",
-      "xPos": 1300,
+      "xPos": 1440,
       "yPos": 5,
       "width": 260,
       "height": 100,
@@ -761,14 +761,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "rollback-recovered",
+        "parentId": "rollback",
+        "childId": "recovered"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "recovered",
       "text": "14:43\nCheckout recovers",
-      "xPos": 1590,
+      "xPos": 1760,
       "yPos": 5,
       "width": 260,
       "height": 100,
@@ -789,7 +799,7 @@ export const showcasePresentations = [
      "options": {
       "id": "cause",
       "text": "Why it broke",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 150,
       "width": 250,
       "height": 110,
@@ -812,15 +822,6 @@ export const showcasePresentations = [
         "id": "cause-retry",
         "parentId": "cause",
         "childId": "retry"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "cause-noalert",
-        "parentId": "cause",
-        "childId": "noalert"
        }
       ]
      }
@@ -829,7 +830,7 @@ export const showcasePresentations = [
      "options": {
       "id": "retry",
       "text": "A retry loop\ndoubled the load",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 155,
       "width": 260,
       "height": 100,
@@ -843,14 +844,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "retry-noalert",
+        "parentId": "retry",
+        "childId": "noalert"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "noalert",
       "text": "No alert on\npayment errors",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 155,
       "width": 260,
       "height": 100,
@@ -871,7 +882,7 @@ export const showcasePresentations = [
      "options": {
       "id": "held",
       "text": "What held",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 300,
       "width": 250,
       "height": 110,
@@ -894,15 +905,6 @@ export const showcasePresentations = [
         "id": "held-carts",
         "parentId": "held",
         "childId": "carts"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "held-status",
-        "parentId": "held",
-        "childId": "status"
        }
       ]
      }
@@ -911,7 +913,7 @@ export const showcasePresentations = [
      "options": {
       "id": "carts",
       "text": "Every cart\nwas saved",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 305,
       "width": 260,
       "height": 100,
@@ -925,14 +927,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "carts-status",
+        "parentId": "carts",
+        "childId": "status"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "status",
       "text": "Status page\nupdated in 6 minutes",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 305,
       "width": 260,
       "height": 100,
@@ -953,7 +965,7 @@ export const showcasePresentations = [
      "options": {
       "id": "changes",
       "text": "What changes",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 450,
       "width": 250,
       "height": 110,
@@ -976,24 +988,6 @@ export const showcasePresentations = [
         "id": "changes-alert",
         "parentId": "changes",
         "childId": "alert"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "changes-canary",
-        "parentId": "changes",
-        "childId": "canary"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "changes-minutes",
-        "parentId": "changes",
-        "childId": "minutes"
        }
       ]
      }
@@ -1002,7 +996,7 @@ export const showcasePresentations = [
      "options": {
       "id": "alert",
       "text": "Alert on\npayment errors",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 455,
       "width": 260,
       "height": 100,
@@ -1016,14 +1010,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "alert-canary",
+        "parentId": "alert",
+        "childId": "canary"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "canary",
       "text": "A canary for\nevery deploy",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 455,
       "width": 260,
       "height": 100,
@@ -1037,14 +1041,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "canary-minutes",
+        "parentId": "canary",
+        "childId": "minutes"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "minutes",
       "text": "41 minutes,\nnever again",
-      "xPos": 1300,
+      "xPos": 1440,
       "yPos": 455,
       "width": 260,
       "height": 100,
@@ -1223,7 +1237,7 @@ export const showcasePresentations = [
      "options": {
       "id": "growth",
       "text": "Growth",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 0,
       "width": 250,
       "height": 110,
@@ -1246,15 +1260,6 @@ export const showcasePresentations = [
         "id": "growth-mrr",
         "parentId": "growth",
         "childId": "mrr"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "growth-teams",
-        "parentId": "growth",
-        "childId": "teams"
        }
       ]
      }
@@ -1263,7 +1268,7 @@ export const showcasePresentations = [
      "options": {
       "id": "mrr",
       "text": "Revenue $84k a month,\nup 18%",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 5,
       "width": 260,
       "height": 100,
@@ -1277,14 +1282,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "mrr-teams",
+        "parentId": "mrr",
+        "childId": "teams"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "teams",
       "text": "312 paying teams",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 5,
       "width": 260,
       "height": 100,
@@ -1305,7 +1320,7 @@ export const showcasePresentations = [
      "options": {
       "id": "runway",
       "text": "Runway",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 150,
       "width": 250,
       "height": 110,
@@ -1328,15 +1343,6 @@ export const showcasePresentations = [
         "id": "runway-months",
         "parentId": "runway",
         "childId": "months"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "runway-burn",
-        "parentId": "runway",
-        "childId": "burn"
        }
       ]
      }
@@ -1345,7 +1351,7 @@ export const showcasePresentations = [
      "options": {
       "id": "months",
       "text": "19 months\nof runway",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 155,
       "width": 260,
       "height": 100,
@@ -1359,14 +1365,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "months-burn",
+        "parentId": "months",
+        "childId": "burn"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "burn",
       "text": "Burn $96k\na month",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 155,
       "width": 260,
       "height": 100,
@@ -1387,7 +1403,7 @@ export const showcasePresentations = [
      "options": {
       "id": "team",
       "text": "Team",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 300,
       "width": 250,
       "height": 110,
@@ -1410,15 +1426,6 @@ export const showcasePresentations = [
         "id": "team-hires",
         "parentId": "team",
         "childId": "hires"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "team-support",
-        "parentId": "team",
-        "childId": "support"
        }
       ]
      }
@@ -1427,7 +1434,7 @@ export const showcasePresentations = [
      "options": {
       "id": "hires",
       "text": "Two engineers\nhired",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 305,
       "width": 260,
       "height": 100,
@@ -1441,14 +1448,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "hires-support",
+        "parentId": "hires",
+        "childId": "support"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "support",
       "text": "Head of support\nstarts in October",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 305,
       "width": 260,
       "height": 100,
@@ -1469,7 +1486,7 @@ export const showcasePresentations = [
      "options": {
       "id": "voice",
       "text": "From a pilot team",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 450,
       "width": 250,
       "height": 110,
@@ -1500,7 +1517,7 @@ export const showcasePresentations = [
      "options": {
       "id": "quote",
       "text": "“Three docs retired in a week.”",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 455,
       "width": 260,
       "height": 100,
@@ -1521,7 +1538,7 @@ export const showcasePresentations = [
      "options": {
       "id": "ask",
       "text": "Our ask",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 600,
       "width": 250,
       "height": 110,
@@ -1544,15 +1561,6 @@ export const showcasePresentations = [
         "id": "ask-intros",
         "parentId": "ask",
         "childId": "intros"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "ask-cfo",
-        "parentId": "ask",
-        "childId": "cfo"
        }
       ]
      }
@@ -1561,7 +1569,7 @@ export const showcasePresentations = [
      "options": {
       "id": "intros",
       "text": "Intros to two\ndesign partners",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 605,
       "width": 260,
       "height": 100,
@@ -1575,14 +1583,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "intros-cfo",
+        "parentId": "intros",
+        "childId": "cfo"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "cfo",
       "text": "A finance lead\none day a month",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 605,
       "width": 260,
       "height": 100,
@@ -1756,7 +1774,7 @@ export const showcasePresentations = [
      "options": {
       "id": "invite",
       "text": "Can’t find\nthe invite",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 0,
       "width": 250,
       "height": 110,
@@ -1779,15 +1797,6 @@ export const showcasePresentations = [
         "id": "invite-inviteq",
         "parentId": "invite",
         "childId": "inviteq"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "invite-invites",
-        "parentId": "invite",
-        "childId": "invites"
        }
       ]
      }
@@ -1796,7 +1805,7 @@ export const showcasePresentations = [
      "options": {
       "id": "inviteq",
       "text": "“Where do I add my team?”",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 5,
       "width": 260,
       "height": 100,
@@ -1810,14 +1819,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "inviteq-invites",
+        "parentId": "inviteq",
+        "childId": "invites"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "invites",
       "text": "74 answers",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 5,
       "width": 260,
       "height": 100,
@@ -1838,7 +1857,7 @@ export const showcasePresentations = [
      "options": {
       "id": "setup",
       "text": "Setup takes\ntoo long",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 150,
       "width": 250,
       "height": 110,
@@ -1861,15 +1880,6 @@ export const showcasePresentations = [
         "id": "setup-setupq",
         "parentId": "setup",
         "childId": "setupq"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "setup-setups",
-        "parentId": "setup",
-        "childId": "setups"
        }
       ]
      }
@@ -1878,7 +1888,7 @@ export const showcasePresentations = [
      "options": {
       "id": "setupq",
       "text": "“I gave up at the import.”",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 155,
       "width": 260,
       "height": 100,
@@ -1892,14 +1902,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "setupq-setups",
+        "parentId": "setupq",
+        "childId": "setups"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "setups",
       "text": "58 answers",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 155,
       "width": 260,
       "height": 100,
@@ -1920,7 +1940,7 @@ export const showcasePresentations = [
      "options": {
       "id": "value",
       "text": "Didn’t see\nthe point yet",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 300,
       "width": 250,
       "height": 110,
@@ -1943,15 +1963,6 @@ export const showcasePresentations = [
         "id": "value-valueq",
         "parentId": "value",
         "childId": "valueq"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "value-values",
-        "parentId": "value",
-        "childId": "values"
        }
       ]
      }
@@ -1960,7 +1971,7 @@ export const showcasePresentations = [
      "options": {
       "id": "valueq",
       "text": "“It looked empty without my data.”",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 305,
       "width": 260,
       "height": 100,
@@ -1974,14 +1985,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "valueq-values",
+        "parentId": "valueq",
+        "childId": "values"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "values",
       "text": "41 answers",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 305,
       "width": 260,
       "height": 100,
@@ -2002,7 +2023,7 @@ export const showcasePresentations = [
      "options": {
       "id": "next",
       "text": "What we test next",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 450,
       "width": 250,
       "height": 110,
@@ -2025,15 +2046,6 @@ export const showcasePresentations = [
         "id": "next-first",
         "parentId": "next",
         "childId": "first"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "next-sample",
-        "parentId": "next",
-        "childId": "sample"
        }
       ]
      }
@@ -2042,7 +2054,7 @@ export const showcasePresentations = [
      "options": {
       "id": "first",
       "text": "Invite on the\nfirst screen",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 455,
       "width": 260,
       "height": 100,
@@ -2056,14 +2068,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "first-sample",
+        "parentId": "first",
+        "childId": "sample"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "sample",
       "text": "A sample slate\nat sign-up",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 455,
       "width": 260,
       "height": 100,
@@ -2235,7 +2257,7 @@ export const showcasePresentations = [
      "options": {
       "id": "offline",
       "text": "Bet 1:\nOffline maps",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 0,
       "width": 250,
       "height": 110,
@@ -2258,15 +2280,6 @@ export const showcasePresentations = [
         "id": "offline-o1",
         "parentId": "offline",
         "childId": "o1"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "offline-o2",
-        "parentId": "offline",
-        "childId": "o2"
        }
       ]
      }
@@ -2275,7 +2288,7 @@ export const showcasePresentations = [
      "options": {
       "id": "o1",
       "text": "Q1: maps that\nwork on a plane",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 5,
       "width": 260,
       "height": 100,
@@ -2289,14 +2302,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "o1-o2",
+        "parentId": "o1",
+        "childId": "o2"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "o2",
       "text": "Q2: routes saved\nfor 30 days",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 5,
       "width": 260,
       "height": 100,
@@ -2317,7 +2340,7 @@ export const showcasePresentations = [
      "options": {
       "id": "groups",
       "text": "Bet 2:\nGroup trips",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 150,
       "width": 250,
       "height": 110,
@@ -2340,15 +2363,6 @@ export const showcasePresentations = [
         "id": "groups-g1",
         "parentId": "groups",
         "childId": "g1"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "groups-g2",
-        "parentId": "groups",
-        "childId": "g2"
        }
       ]
      }
@@ -2357,7 +2371,7 @@ export const showcasePresentations = [
      "options": {
       "id": "g1",
       "text": "Q2: one plan for\nthe whole group",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 155,
       "width": 260,
       "height": 100,
@@ -2371,14 +2385,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "g1-g2",
+        "parentId": "g1",
+        "childId": "g2"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "g2",
       "text": "Q3: split the costs\nin the app",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 155,
       "width": 260,
       "height": 100,
@@ -2399,7 +2423,7 @@ export const showcasePresentations = [
      "options": {
       "id": "carbon",
       "text": "Bet 3:\nCarbon receipts",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 300,
       "width": 250,
       "height": 110,
@@ -2422,15 +2446,6 @@ export const showcasePresentations = [
         "id": "carbon-c1",
         "parentId": "carbon",
         "childId": "c1"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "carbon-c2",
-        "parentId": "carbon",
-        "childId": "c2"
        }
       ]
      }
@@ -2439,7 +2454,7 @@ export const showcasePresentations = [
      "options": {
       "id": "c1",
       "text": "Q3: the footprint\nof every booking",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 305,
       "width": 260,
       "height": 100,
@@ -2453,14 +2468,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "c1-c2",
+        "parentId": "c1",
+        "childId": "c2"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "c2",
       "text": "Q4: the greener\nroute by default",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 305,
       "width": 260,
       "height": 100,
@@ -2481,7 +2506,7 @@ export const showcasePresentations = [
      "options": {
       "id": "not",
       "text": "Not this year",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 450,
       "width": 250,
       "height": 110,
@@ -2504,15 +2529,6 @@ export const showcasePresentations = [
         "id": "not-n1",
         "parentId": "not",
         "childId": "n1"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "not-n2",
-        "parentId": "not",
-        "childId": "n2"
        }
       ]
      }
@@ -2521,7 +2537,7 @@ export const showcasePresentations = [
      "options": {
       "id": "n1",
       "text": "Hotel bookings",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 455,
       "width": 260,
       "height": 100,
@@ -2535,14 +2551,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "n1-n2",
+        "parentId": "n1",
+        "childId": "n2"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "n2",
       "text": "A desktop app",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 455,
       "width": 260,
       "height": 100,
@@ -2708,7 +2734,7 @@ export const showcasePresentations = [
      "options": {
       "id": "week1",
       "text": "Week 1:\nmeet the team",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 0,
       "width": 250,
       "height": 110,
@@ -2731,15 +2757,6 @@ export const showcasePresentations = [
         "id": "week1-buddy",
         "parentId": "week1",
         "childId": "buddy"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "week1-tour",
-        "parentId": "week1",
-        "childId": "tour"
        }
       ]
      }
@@ -2748,7 +2765,7 @@ export const showcasePresentations = [
      "options": {
       "id": "buddy",
       "text": "Lunch with\nyour buddy",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 5,
       "width": 260,
       "height": 100,
@@ -2762,14 +2779,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "buddy-tour",
+        "parentId": "buddy",
+        "childId": "tour"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "tour",
       "text": "A tour of\nthe product",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 5,
       "width": 260,
       "height": 100,
@@ -2790,7 +2817,7 @@ export const showcasePresentations = [
      "options": {
       "id": "week2",
       "text": "Week 2:\nship something small",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 150,
       "width": 250,
       "height": 110,
@@ -2813,15 +2840,6 @@ export const showcasePresentations = [
         "id": "week2-fix",
         "parentId": "week2",
         "childId": "fix"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "week2-demo",
-        "parentId": "week2",
-        "childId": "demo"
        }
       ]
      }
@@ -2830,7 +2848,7 @@ export const showcasePresentations = [
      "options": {
       "id": "fix",
       "text": "Your first fix,\nreviewed by Dev",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 155,
       "width": 260,
       "height": 100,
@@ -2844,14 +2862,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "fix-demo",
+        "parentId": "fix",
+        "childId": "demo"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "demo",
       "text": "Show it at\nFriday demo",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 155,
       "width": 260,
       "height": 100,
@@ -2872,7 +2900,7 @@ export const showcasePresentations = [
      "options": {
       "id": "week3",
       "text": "Week 3:\nsit with customers",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 300,
       "width": 250,
       "height": 110,
@@ -2895,15 +2923,6 @@ export const showcasePresentations = [
         "id": "week3-calls",
         "parentId": "week3",
         "childId": "calls"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "week3-notes",
-        "parentId": "week3",
-        "childId": "notes"
        }
       ]
      }
@@ -2912,7 +2931,7 @@ export const showcasePresentations = [
      "options": {
       "id": "calls",
       "text": "Join three\ncustomer calls",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 305,
       "width": 260,
       "height": 100,
@@ -2926,14 +2945,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "calls-notes",
+        "parentId": "calls",
+        "childId": "notes"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "notes",
       "text": "Share what\nyou heard",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 305,
       "width": 260,
       "height": 100,
@@ -2954,7 +2983,7 @@ export const showcasePresentations = [
      "options": {
       "id": "week4",
       "text": "Week 4:\nown a project",
-      "xPos": 400,
+      "xPos": 480,
       "yPos": 450,
       "width": 250,
       "height": 110,
@@ -2977,15 +3006,6 @@ export const showcasePresentations = [
         "id": "week4-plan",
         "parentId": "week4",
         "childId": "plan"
-       },
-       {
-        "lineType": "straight",
-        "lineColor": "#5d6b64",
-        "lineWidth": 3,
-        "showChildArrow": true,
-        "id": "week4-check",
-        "parentId": "week4",
-        "childId": "check"
        }
       ]
      }
@@ -2994,7 +3014,7 @@ export const showcasePresentations = [
      "options": {
       "id": "plan",
       "text": "Write your\nfirst plan",
-      "xPos": 720,
+      "xPos": 800,
       "yPos": 455,
       "width": 260,
       "height": 100,
@@ -3008,14 +3028,24 @@ export const showcasePresentations = [
       "borderWidth": 1
      },
      "relationships": {
-      "associations": []
+      "associations": [
+       {
+        "lineType": "straight",
+        "lineColor": "#5d6b64",
+        "lineWidth": 3,
+        "showChildArrow": true,
+        "id": "plan-check",
+        "parentId": "plan",
+        "childId": "check"
+       }
+      ]
      }
     },
     {
      "options": {
       "id": "check",
       "text": "30-day check-in\nwith Mara",
-      "xPos": 1010,
+      "xPos": 1120,
       "yPos": 455,
       "width": 260,
       "height": 100,
