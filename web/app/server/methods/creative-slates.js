@@ -28,6 +28,18 @@ function namedFrom(config, model) {
   return { name: config.name?.(model) ?? config.title, description: config.describe(model) }
 }
 
+/**
+ * A new private slate for `user` holding `content` (its notes, and a board as `creative`), stored once
+ * under `id` through the save core: a retried request names the same id and gets the same slate.
+ * `source` is the writer the save log names. Answers the slate's share id.
+ */
+export async function createWorkshopSlate(user, content, id, source = 'create') {
+  const shareId = await Meteor.callAsync(CONSTANTS.methods.slates.generateShareId)
+  const row = privateSlateDocument({ content, id, user, shareId, now: Date.now() })
+  await slateSaveCore.create({ row, actor: { kind: user.isAnonymous ? 'guest' : 'person', userId: user._id }, source })
+  return (await Slates.findOneAsync({ _id: id, userId: user._id }, { fields: { shareId: 1 } })).shareId
+}
+
 const unavailable = () => new Meteor.Error('unavailable', 'This slate is unavailable.')
 const validKey = value => typeof value === 'string' && /^[A-Za-z0-9]{1,40}$/.test(value)
 // Which of the slate's boards a save or a move is for: its first board ("main") when the page names none.
@@ -125,13 +137,7 @@ Meteor.methods({
       if (model?.kind !== kind) throw unavailable()
       content = { options: namedFrom(config, model), nodes: [], creative: { model, revision: 0 } }
     }
-    const id = 'creative-' + user._id + '-' + requestId
-    const shareId = await Meteor.callAsync(CONSTANTS.methods.slates.generateShareId)
-    const now = Date.now()
-    const row = privateSlateDocument({content, id, user, shareId, now})
-    // A retried request names the same id: the slate is made once.
-    await slateSaveCore.create({ row, actor: { kind: user.isAnonymous ? 'guest' : 'person', userId: user._id }, source: 'create' })
-    return (await Slates.findOneAsync({ _id: id, userId: user._id }, { fields: { shareId: 1 } })).shareId
+    return createWorkshopSlate(user, content, 'creative-' + user._id + '-' + requestId)
   },
 
   // `boardId`: which board of the slate (its first, "main", when not given); `revision` is that board's own.
