@@ -57,6 +57,8 @@ import './methods/images'
 
 // the meter for AI and calls, own keys and the shared budget
 import './metering/meteor'
+// Server admin: admin.status and the admin home's Overview (server/admin/meteor.js)
+import './admin/meteor'
 
 // AI control: the snapshot of providers, models, bindings and prompts administrators manage at runtime
 import './ai-control/index.mjs'

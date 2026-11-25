@@ -24,6 +24,10 @@ import AlertTitle from '@mui/material/AlertTitle'
 import DeveloperAccess from '../components/profile/DeveloperAccess'
 import AISettings from '../components/profile/AISettings'
 import { enterpriseState } from '../../api/common/edition.mjs'
+import { adminLinksFor } from '../../api/common/server-admin.mjs'
+import useServerAdmin from '../common/useServerAdmin'
+import Box from '@mui/material/Box'
+import Link from '@mui/material/Link'
 
 const BASE_DAILY_URL = Meteor.settings.public.dailyBaseUrl
 // /profile?tab=developer opens the Developer tab (the instance description links there);
@@ -37,6 +41,8 @@ export default function Profile() {
   const setMessage = useSetAtom(globalMessage)
   const setRegistrationDetails = useSetAtom(registrationDetails)
   const t = useTranslator()
+  // Server admin links, for an administrator of this server only (the server checks again on each page)
+  const adminLinks = adminLinksFor(useServerAdmin())
   const [currentPassword, setCurrentPassword] = React.useState('')
   const [newPassword1, setNewPassword1] = React.useState('')
   const [newPassword2, setNewPassword2] = React.useState('')
@@ -454,6 +460,19 @@ export default function Profile() {
                 <AccountSection title="Integrations">
                   <Typography variant="body2" sx={{ mb: 1 }}>Connect outside agents and Google once, then invite them onto any slate.</Typography>
                   <Button component={RouterLink} to="/integrations" variant="outlined" data-profile-integrations="">Manage integrations</Button>
+                </AccountSection>
+              )}
+              {adminLinks.length > 0 && (
+                <AccountSection title="Server admin" data-profile-server-admin="">
+                  <Typography variant="body2" sx={{ mb: 1 }}>You administer this Slatebox server.</Typography>
+                  <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'grid', gap: 1 }}>
+                    {adminLinks.map((section) => (
+                      <li key={section.id}>
+                        <Link component={RouterLink} to={section.to} underline="hover" sx={{ fontWeight: 650 }} data-profile-admin-link={section.id}>{section.title}</Link>
+                        <Typography variant="body2" color="text.secondary" component="span">{` — ${section.detail}`}</Typography>
+                      </li>
+                    ))}
+                  </Box>
                 </AccountSection>
               )}
             </AccountPanel>

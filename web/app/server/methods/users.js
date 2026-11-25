@@ -20,6 +20,8 @@ import { resolveSlateRole, slateVisibility } from './slate-role.mjs'
 import { isSharedGuestPassword } from '../common/shared-guest-password.mjs'
 import CONSTANTS from '../../imports/api/common/constants'
 import AuthManager from '../../imports/api/common/AuthManager'
+// The server administrator check (the uberMensch claim alone; no team needed)
+import { isInstanceAdmin } from '../permissions'
 import { teamPerson } from '../common/team-person'
 import { roleChangeRefusal, clearedByAdmin } from '../team-guard.mjs'
 import { readCreditName } from '../../imports/api/common/library-model.mjs'
@@ -180,11 +182,7 @@ method[CONSTANTS.methods.users.setCreditName] = async function setCreditName(tex
 
 method[CONSTANTS.methods.users.certifyForEducation] = async (opts) => {
   if (
-    await AuthManager.userHasClaim(
-      Meteor.userId(),
-      [CONSTANTS.claims.uberMensch._id],
-      true
-    )
+    await isInstanceAdmin(Meteor.userId())
   ) {
     const curUser = await Meteor.users.findOneAsync({ _id: opts.userId })
     if (curUser) {
@@ -296,11 +294,7 @@ method[CONSTANTS.methods.users.resetPassword] = async (opts) => {
 // only for uber admins
 method[CONSTANTS.methods.users.search] = async (opts) => {
   if (
-    await AuthManager.userHasClaim(
-      Meteor.userId(),
-      [CONSTANTS.claims.uberMensch._id],
-      true
-    )
+    await isInstanceAdmin(Meteor.userId())
   ) {
     check(opts.search, String)
     const re = { $regex: opts.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' }

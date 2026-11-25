@@ -37,7 +37,7 @@ export default function AIControl() {
   return (
     <Container maxWidth="xl">
       <Box py={2}>
-        <Link component={RouterLink} to="/admin" underline="hover" variant="body2">Admin tools</Link>
+        <Link component={RouterLink} to="/admin" underline="hover" variant="body2">Server admin</Link>
         <Typography component="h1" variant="h5" color="text.primary" sx={{ mt: 0.5 }}>AI control</Typography>
         <Typography variant="body2" color="text.secondary">
           Which AI answers each part of Slatebox on this server, where each choice comes from, and who changed it.

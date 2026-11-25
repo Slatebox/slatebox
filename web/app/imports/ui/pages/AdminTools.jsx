@@ -1,5 +1,10 @@
 /* eslint-disable no-underscore-dangle */
-import React, { useEffect, useState } from 'react'
+// Admin (/admin): the home of a server administrator (the uberMensch claim alone; no team needed).
+// The sections (Overview here, AI control, Library review) are linked at the top; the Overview
+// dashboard comes first, then the tools. The route shows this page to administrators only
+// (SBRoutes AdminRoute) and every method on it checks the claim again on the server.
+import React, { useEffect } from 'react'
+import { Link as RouterLink } from 'react-router-dom'
 import { Meteor } from 'meteor/meteor'
 import { useAtom } from 'jotai'
 import Container from '@mui/material/Container'
@@ -13,7 +18,9 @@ import TextField from '@mui/material/TextField'
 import Box from '@mui/material/Box'
 import CONSTANTS from '../../api/common/constants'
 import { globalMessage } from '../jotai/atoms'
-import AuthManager from '../../api/common/AuthManager'
+import useServerAdmin from '../common/useServerAdmin'
+import { ADMIN_SECTIONS } from '../../api/common/server-admin.mjs'
+import AdminOverview from './admin/AdminOverview'
 import FreeBudget from './admin/FreeBudget'
 import TeamImports from './admin/TeamImports'
 import EnterpriseLicense from './admin/EnterpriseLicense'
@@ -27,7 +34,7 @@ export default function AdminTools() {
     CONSTANTS.educationCertification.requestStatuses.PENDING
   )
   const [, setGlobalMessage] = useAtom(globalMessage)
-  const [hasUberMenschClaim, setHasUberMenschClaim] = useState(false)
+  const hasUberMenschClaim = useServerAdmin() === true
 
   const searchUsers = async () => {
     const allUsers = await Meteor.callAsync(CONSTANTS.methods.users.search, {
@@ -38,23 +45,8 @@ export default function AdminTools() {
   }
 
   useEffect(() => {
-    searchUsers()
-  }, [filter])
-
-  useEffect(() => {
-    async function checkClaims() {
-      if (Meteor.user()) {
-        const hasUberMensch = await AuthManager.userHasClaim(
-          Meteor.userId(),
-          [CONSTANTS.claims.uberMensch._id],
-          true
-        )
-        setHasUberMenschClaim(hasUberMensch)
-      }
-    }
-
-    checkClaims()
-  }, [])
+    if (hasUberMenschClaim) searchUsers()
+  }, [filter, hasUberMenschClaim])
 
   const certifyUserForEducation = (userId) => async () => {
     const copyUsers = [...users]
@@ -101,12 +93,28 @@ export default function AdminTools() {
         spacing={3}
       >
         <Grid size={12}>
-          <Typography component="h1" variant="h5" color="text.primary">
-            <Box p={1}>Admin Tools</Box>
-          </Typography>
+          <Box sx={{ pt: { xs: 1, md: 3 } }}>
+            <Typography component="h1" variant="h4" sx={{ fontWeight: 750, fontSize: { xs: 26, sm: 32 } }}>Server admin</Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>How this Slatebox server is doing, and the tools to run it.</Typography>
+          </Box>
+          <Box component="nav" aria-label="Admin sections" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 2 }} data-admin-sections="">
+            {ADMIN_SECTIONS.map((section) => (
+              <Button key={section.id} component={RouterLink} to={section.to} size="small" disableElevation
+                variant={section.id === 'overview' ? 'contained' : 'outlined'} aria-current={section.id === 'overview' ? 'page' : undefined}
+                data-admin-section={section.id}>
+                {section.id === 'overview' ? 'Overview' : section.title}
+              </Button>
+            ))}
+          </Box>
         </Grid>
         {Meteor.user() && hasUberMenschClaim && (
           <>
+            <Grid size={12}>
+              <AdminOverview />
+            </Grid>
+            <Grid size={12}>
+              <Typography component="h2" variant="h5" sx={{ fontWeight: 750, mt: 2 }}>Tools</Typography>
+            </Grid>
             {Meteor.settings.public.metered && (
               <Grid size={12}>
                 <FreeBudget />

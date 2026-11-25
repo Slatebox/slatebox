@@ -12,7 +12,10 @@ import Logout from '@mui/icons-material/Logout'
 import Login from '@mui/icons-material/Login'
 import Save from '@mui/icons-material/Save'
 import Savings from '@mui/icons-material/Savings'
+import AdminPanelSettings from '@mui/icons-material/AdminPanelSettings'
 import HeaderMenu from './HeaderMenu'
+import useServerAdmin from '../common/useServerAdmin'
+import { adminLinksFor } from '../../api/common/server-admin.mjs'
 import { signOut as signOutAndLeave } from '../../api/client/signOut'
 import { registrationDetails, mainDrawerOpen } from '../jotai/atoms'
 
@@ -65,6 +68,9 @@ export default function AccountMenu({ sheet = false }) {
   const setMainDrawerOpen = useSetAtom(mainDrawerOpen)
   const saveYourWork = useSaveYourWork()
   const { mode, systemMode, setMode } = useColorScheme()
+  // An administrator of this server (the server answers; it checks again on every admin page)
+  const admin = useServerAdmin()
+  const [adminHome] = adminLinksFor(admin)
   const { user, name, email } = useTracker(() => {
     const u = Meteor.user()
     return { user: u, name: displayName(u), email: u && !u.isAnonymous ? u.emails?.[0]?.address : null }
@@ -109,6 +115,9 @@ export default function AccountMenu({ sheet = false }) {
       </MenuItem>}
       {!guest && metered() && <MenuItem onClick={go(() => navigate('/profile?tab=credits'))}>
         <ListItemIcon><Savings fontSize="small" /></ListItemIcon><ListItemText>Credits</ListItemText>
+      </MenuItem>}
+      {!guest && adminHome && <MenuItem onClick={go(() => navigate(adminHome.to))} data-account-admin="">
+        <ListItemIcon><AdminPanelSettings fontSize="small" /></ListItemIcon><ListItemText>Admin</ListItemText>
       </MenuItem>}
       <Divider />
       <MenuItem role="menuitemcheckbox" aria-checked={dark} onClick={() => setMode(dark ? 'light' : 'dark')}>

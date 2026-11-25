@@ -48,7 +48,9 @@ test('no guest shares a known password, and sign-up options cannot choose a team
 
 test('a team claim counts only in the team the person is in', () => {
   const auth = read('imports/api/common/AuthManager.js')
-  assert.match(auth, /\{ orgId: user\.orgId \}/)
+  // the team's rows only; a person with no team holds no team claim (uberMensch is read on its own)
+  assert.match(auth, /query = \{ userId, orgId: user\.orgId \}/)
+  assert.match(auth, /if \(!user\?\.orgId\) return decideClaims\(\{ claims, isServerAdmin, mustBeInAll \}\)/)
   const orgs = read('server/methods/organizations.js')
   assert.doesNotMatch(orgs, /createdByUserId: opts\.createdByUserId|_id: opts\.createdByUserId/)
   const users = read('server/methods/users.js')

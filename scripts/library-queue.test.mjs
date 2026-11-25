@@ -63,7 +63,7 @@ test("only an administrator opens the queue and reads a submission's thread; the
   assert.equal((await run(root, "library.get", { itemId: "retro" })).thread, undefined);
   // The routes: the review queue sits behind the administrator check, My library behind sign-in.
   const routes = app("imports/ui/SBRoutes.jsx");
-  assert.match(routes, /isElevatedUser && \(\s*<Route\s+path="\/admin\/library"/);
+  assert.match(routes, /<Route path="\/admin\/library" element=\{<PrivateRoute><AdminRoute><LibraryReview \/><\/AdminRoute><\/PrivateRoute>\} \/>/);
   assert.match(routes, /path="\/library\/mine"\s+element=\{\s*<PrivateRoute>\s*<MyLibrary \/>/);
 });
 

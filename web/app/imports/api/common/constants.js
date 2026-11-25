@@ -224,6 +224,12 @@ const CONSTANTS = {
     auth: {
       isAuthenticated: 'auth.isAuthenticated',
     },
+    // Server admin (server/admin/meteor.js): whether the signed-in account administers this server,
+    // and the admin home's Overview. Plain methods for the admin pages, not registry actions.
+    admin: {
+      status: 'admin.status',
+      dashboard: 'admin.dashboard',
+    },
     // The consent page for an app connecting over OAuth (server/oauth/meteor.js)
     oauth: {
       describe: 'oauth.describe',

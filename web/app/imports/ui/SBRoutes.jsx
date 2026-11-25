@@ -1,7 +1,7 @@
 /* eslint-disable react/jsx-props-no-spreading */
 /* eslint-disable react/jsx-boolean-value */
 /* eslint-disable no-underscore-dangle */
-import React, { Suspense, lazy, useEffect, useState } from 'react'
+import React, { Suspense, lazy, useEffect } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
@@ -11,7 +11,8 @@ import MySlates from './pages/MySlates'
 import Canvas from './pages/Canvas'
 import AIPassthrough from './pages/AIPassthrough'
 import NotFound from './pages/NotFound'
-import AuthManager from '../api/common/AuthManager'
+import { adminRouteState } from '../api/common/server-admin.mjs'
+import useServerAdmin from './common/useServerAdmin'
 import CONSTANTS from '../api/common/constants'
 import CSSUnicorn from './components/ai/Unicorn'
 import { enterpriseState } from '../api/common/edition.mjs'
@@ -49,6 +50,22 @@ function PrivateRoute({ children }) {
   }
 
   return children
+}
+
+// The server admin pages (/admin, /admin/ai, /admin/library): for an administrator of this server
+// (the uberMensch claim alone; no team needed). Anyone else meets the page an unknown address shows.
+// The server decides (admin.status) and checks again on every admin method.
+function AdminRoute({ children }) {
+  const admin = useServerAdmin()
+  const loggingIn = useTracker(() => Meteor.loggingIn())
+  const state = adminRouteState({ loggingIn, userId: Meteor.userId(), admin })
+  if (state === 'wait') return null
+  if (state === 'notfound') return <NotFound />
+  return children
+}
+
+AdminRoute.propTypes = {
+  children: PropTypes.node.isRequired,
 }
 
 function SlateCreateRoute() {
@@ -135,20 +152,6 @@ function GetBusiness() {
 }
 
 export default function SBRoutes() {
-  const [isElevatedUser, setElevatedUser] = useState(false)
-
-  useEffect(() => {
-    async function getElevatedUser() {
-      const eu = await AuthManager.userHasClaim(
-        Meteor.userId(),
-        [CONSTANTS.claims.uberMensch._id],
-        true
-      )
-      setElevatedUser(eu)
-    }
-    getElevatedUser()
-  }, [Meteor.userId()])
-
   return (
     <Suspense fallback={null}>
     <Routes>
@@ -196,36 +199,9 @@ export default function SBRoutes() {
           </PrivateRoute>
         }
       />
-      {isElevatedUser && (
-        <Route
-          path="/admin"
-          element={
-            <PrivateRoute>
-              <AdminTools />
-            </PrivateRoute>
-          }
-        />
-      )}
-      {isElevatedUser && (
-        <Route
-          path="/admin/library"
-          element={
-            <PrivateRoute>
-              <LibraryReview />
-            </PrivateRoute>
-          }
-        />
-      )}
-      {isElevatedUser && (
-        <Route
-          path="/admin/ai"
-          element={
-            <PrivateRoute>
-              <AIControl />
-            </PrivateRoute>
-          }
-        />
-      )}
+      <Route path="/admin" element={<PrivateRoute><AdminRoute><AdminTools /></AdminRoute></PrivateRoute>} />
+      <Route path="/admin/library" element={<PrivateRoute><AdminRoute><LibraryReview /></AdminRoute></PrivateRoute>} />
+      <Route path="/admin/ai" element={<PrivateRoute><AdminRoute><AIControl /></AdminRoute></PrivateRoute>} />
       <Route path="/library" element={<Library />} />
       <Route
         path="/library/mine"

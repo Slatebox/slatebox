@@ -97,6 +97,7 @@ export default function LibraryReview() {
   const items = answer?.items || []
   return (
     <AccountPage title="Library review">
+      <Button component={RouterLink} to="/admin" size="small" sx={{ justifySelf: 'start', alignSelf: 'flex-start', px: 0, minWidth: 0 }} data-admin-back="">Server admin</Button>
       <Typography color="text.secondary">
         What people sent to the library. Nothing is public until you approve it.
       </Typography>
