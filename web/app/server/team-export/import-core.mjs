@@ -37,7 +37,7 @@ import { ArchiveError } from './archive.mjs'
 import { addressQuery } from './invite.mjs'
 import { encodeUseKeys } from '../methods/ai/connection-store.mjs'
 import { USE_KEYS } from '../methods/ai/connections.mjs'
-import { LIMITS, OPTION_FLAGS, SECTIONS, SLATE_FLAGS, contentHash, eachObject, mapStrings, replaceUrls } from './format.mjs'
+import { LIMITS, OPTION_FLAGS, SECTIONS, SLATE_FLAGS, contentHash, eachObject, matchesContentHash, mapStrings, replaceUrls } from './format.mjs'
 import { LIBRARY_LICENSE, slugify } from '../../imports/api/common/library-model.mjs'
 
 export const PENDING_DAYS = 14
@@ -302,7 +302,7 @@ export function createTeamImporter({
         done.add('slates:' + d._id)
         if ((d.options !== undefined && !isPlain(d.options)) || (d.nodes !== undefined && !Array.isArray(d.nodes))) return skip('slates', d._id, 'invalid')
         // The hash the exporter wrote, of the content as it left: a slate that differs was changed.
-        if (typeof record.h === 'string' && contentHash(d, (url) => fileNames.get(url) ?? url) !== record.h) return skip('slates', d._id, 'hash_mismatch')
+        if (typeof record.h === 'string' && !matchesContentHash(d, (url) => fileNames.get(url) ?? url, record.h)) return skip('slates', d._id, 'hash_mismatch')
         if (validateBoard) {
           let broken = false
           eachObject(d, (item) => {

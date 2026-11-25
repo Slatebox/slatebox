@@ -112,14 +112,14 @@ function selfHosted() {
     slates: [
       {
         _id: 'slateA1', shareId: 'aaaa000001', userId: alice, orgId: A,
-        options: { id: 'slateA1', name: 'Roadmap', isPublic: false, isPrivate: false, isUnlisted: true },
+        options: { id: 'slateA1', shareId: 'aaaa000001', name: 'Roadmap', isPublic: false, isPrivate: false, isUnlisted: true },
         nodes: [
           { options: { id: 'n1', text: 'Ship it', image: `${origin}/files/${picture}` } },
           { options: { id: 'n2', text: 'See notes', link: `${origin}/canvas/aaaa000002` } },
         ],
         creative: { model: board, revision: 3 },
       },
-      { _id: 'slateA2', shareId: 'aaaa000002', userId: bob, orgId: A, options: { id: 'slateA2', name: 'Notes', isPrivate: true }, nodes: [{ options: { id: 'n3', text: 'Plain note' } }] },
+      { _id: 'slateA2', shareId: 'aaaa000002', userId: bob, orgId: A, options: { id: 'slateA2', shareId: 'aaaa000002', name: 'Notes', isPrivate: true }, nodes: [{ options: { id: 'n3', text: 'Plain note' } }] },
     ],
     comments: [{ _id: 'c1', slateId: 'slateA1', nodeId: 'n1', text: 'Looks good', createdByUserId: bob, mentionedTeamMembers: [alice] }],
     presentations: [{ _id: 'pr1', slateShareId: 'aaaa000001', userId: bob, orgId: A, isPublic: true, isPublished: true, name: 'Roadmap talk', slides: [{ image: `${origin}/files/${deckPicture}` }] }],
@@ -447,4 +447,16 @@ test('the move actions: a token needs team:move, and none of them is bound into 
   assert.equal(registry.get('teamMove.confirm').confirm, true)
   assert.equal(registry.get('teamMove.discard').destructive, true)
   assert.ok(registry.scopes.includes('team:move'))
+})
+
+test('a slate whose exporter hashed options.shareId (the share address inside its options) still reads', async () => {
+  const { contentHash: _h, matchesContentHash } = await import('../web/app/server/team-export/format.mjs')
+  const { slateContent, canonicalJson } = await import('../web/app/server/team-export/format.mjs')
+  const slate = { _id: 's', shareId: 'abc', options: { id: 's', shareId: 'abc', name: 'X' }, nodes: [{ options: { text: 'hi' } }] }
+  const legacy = createHash('sha256').update(canonicalJson(slateContent(slate, undefined, { keepOptionShareId: true }))).digest('hex')
+  assert.ok(matchesContentHash(slate, undefined, legacy))
+  assert.ok(matchesContentHash(slate, undefined, _h(slate)))
+  assert.equal(matchesContentHash({ ...slate, nodes: [] }, undefined, legacy), false)
+  // The share address inside options is identity: a moved slate hashes the same.
+  assert.equal(_h(slate), _h({ ...slate, shareId: 'xyz', options: { ...slate.options, shareId: 'xyz' } }))
 })

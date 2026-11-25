@@ -144,7 +144,8 @@ export const canonicalJson = (value) => JSON.stringify(canonical(value ?? null))
 // export and an import must keep the same. Files are named by their content, so a slate whose
 // pictures moved to new addresses hashes the same.
 export const IDENTITY_FIELDS = ['_id', 'shareId', 'userId', 'orgId', 'created', 'lastSaved', 'revision', 'recentTouches', 'teamImportId', 'importedVisibility', 'importedFrom']
-const OPTION_IDENTITY = ['id', 'isPrivate', 'isPublic', 'isUnlisted', 'searchName', 'searchText', 'searchDescription']
+// options.shareId repeats the slate's share address, which a move changes.
+const OPTION_IDENTITY = ['id', 'shareId', 'isPrivate', 'isPublic', 'isUnlisted', 'searchName', 'searchText', 'searchDescription']
 
 // Every string in value, passed through fn, at any depth.
 export function mapStrings(value, fn, depth = 0) {
@@ -184,12 +185,12 @@ export const OPTION_FLAGS = ['isTemplate', 'templateApproved', 'isFeatured', 'is
 // A link to another slate is content, but its address is not: it changes when the slate moves.
 const canvasLink = (url) => url.replace(/\/canvas\/[A-Za-z0-9_-]{1,80}(?=$|[/?#])/, '/canvas/*')
 
-export function slateContent(slate, fileName = (url) => url) {
+export function slateContent(slate, fileName = (url) => url, { keepOptionShareId = false } = {}) {
   const rest = { ...slate }
   for (const field of [...IDENTITY_FIELDS, ...SLATE_FLAGS]) delete rest[field]
   if (rest.options && typeof rest.options === 'object') {
     rest.options = { ...rest.options }
-    for (const field of [...OPTION_IDENTITY, ...OPTION_FLAGS]) delete rest.options[field]
+    for (const field of [...OPTION_IDENTITY, ...OPTION_FLAGS]) if (!(keepOptionShareId && field === 'shareId')) delete rest.options[field]
   }
   // the search fields the save core builds
   for (const key of Object.keys(rest)) if (/^search[A-Z]/.test(key)) delete rest[key]
@@ -198,6 +199,13 @@ export function slateContent(slate, fileName = (url) => url) {
 
 export function contentHash(slate, fileName) {
   return createHashHex(canonicalJson(slateContent(slate, fileName)))
+}
+
+// Does a slate as received match the hash its exporter wrote? A server whose exporter kept
+// options.shareId in the content wrote that hash; it is taken too, so an archive from either reads.
+export function matchesContentHash(slate, fileName, hash) {
+  if (contentHash(slate, fileName) === hash) return true
+  return createHashHex(canonicalJson(slateContent(slate, fileName, { keepOptionShareId: true }))) === hash
 }
 
 

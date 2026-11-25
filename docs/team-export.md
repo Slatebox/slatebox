@@ -66,7 +66,10 @@ wallet and meter records. These fields are removed wherever they appear (`format
 A slate that shows another team's file keeps that file's address, and the file is not copied.
 
 **Content hash:** the SHA-256 of the slate's canonical JSON (keys sorted). These are left out:
-- its ids, owner, team, dates, revision, visibility, search and directory flags.
+- its ids (including the share address its options repeat), owner, team, dates, revision,
+  visibility, search and directory flags.
+
+An importer also takes the hash of a slate whose options' share address was hashed with it.
 
 Two kinds of address are replaced before hashing:
 - files are named `sbx-file:<sha256>`;
