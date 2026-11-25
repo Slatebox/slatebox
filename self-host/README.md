@@ -7,8 +7,8 @@ database. Install Docker, run one command, open one address.
 docker run -d --name slatebox -p 7070:7070 -v slatebox-data:/data ghcr.io/slatebox/slatebox
 ```
 
-`latest` is version 0.2.1 (`ghcr.io/slatebox/slatebox:0.2.1`, index
-`sha256:208d4bfc460ed2feedc435ccc22231177929e8885ab5f856933c67e6831ca5b5`), for
+`latest` is version 0.2.2 (`ghcr.io/slatebox/slatebox:0.2.2`, index
+`sha256:8a64b09e8e6d53a0fb2b76b60048474eba52a010ddd7f7b834ea898a003e4ec5`), for
 linux/amd64 and linux/arm64. It needs no registry login.
 
 A start usually takes well under a minute; `docker ps` shows the container as

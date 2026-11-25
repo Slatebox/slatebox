@@ -213,8 +213,9 @@ you confirm. The team stays where it was until you remove it there.
 ## Which image
 
 Each release of this package installs one public image,
-`ghcr.io/slatebox/slatebox`, by its digest (this release: `0.2.1`, which adds
-the team-address tunnel, the setup link and team moves). It needs
+`ghcr.io/slatebox/slatebox`, by its digest (this release: `0.2.2`, which adds
+SSO accounts joining the setup team as members and the Help and support menu,
+over the team-address tunnel, the setup link and team moves in 0.2.1). It needs
 no registry login. To install a local build instead, give `--image <name>`
 (or `--image-archive slatebox.tar` for a server).
 
