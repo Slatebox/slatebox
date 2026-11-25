@@ -1222,8 +1222,8 @@
     },
     {
       "name": "list_components",
-      "title": "List boards: retro, pipeline, budget and more",
-      "description": "List the boards and starters a person can add to a slate, such as a retro, pros and cons, now / next / later, impact × effort, decision path, triage, team board, launch plan, hiring plan, sales pipeline, budget and incident review, with what each one is for. A slate holds up to 8 boards side by side.\n\nLibrary. Everything a person can add to a slate from the library (boards and starters): each entry with its group, one line, the message that adds it (\"Add a retro\"), the edits it takes (joined to the workshop_edits table), the rule kinds it can be given by chat, its limits and its looping picture. The phrases that make each change (moves) and the picture's steps come with components.get for one entry. With shareId, whether each fits that slate: a slate holds up to 8 boards, side by side. slates.applyOperations adds one (plan operation add_component, with the slate revision), the same door as the chat's Add; it goes beside the boards already there.",
+      "title": "Find a board: retro, kanban lanes, pipeline, budget",
+      "description": "List the boards a person can add to a slate for the team to work on, such as a retro, team board (kanban lanes), pros and cons, now / next / later, impact × effort, decision path, triage, launch plan, hiring plan, sales pipeline, budget and incident review, with what each one is for. edit_slate adds one to a slate. A slate holds up to 8 boards side by side.\n\nLibrary. Everything a person can add to a slate from the library (boards and starters): each entry with its group, one line, the message that adds it (\"Add a retro\"), the edits it takes (joined to the workshop_edits table), the rule kinds it can be given by chat, its limits and its looping picture. The phrases that make each change (moves) and the picture's steps come with components.get for one entry. With shareId, whether each fits that slate: a slate holds up to 8 boards, side by side. slates.applyOperations adds one (plan operation add_component, with the slate revision), the same door as the chat's Add; it goes beside the boards already there.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1238,7 +1238,7 @@
         "additionalProperties": false
       },
       "annotations": {
-        "title": "List boards: retro, pipeline, budget and more",
+        "title": "Find a board: retro, kanban lanes, pipeline, budget",
         "readOnlyHint": true,
         "destructiveHint": false,
         "idempotentHint": true,
@@ -2520,7 +2520,7 @@
     {
       "name": "create_presentation",
       "title": "Create a presentation",
-      "description": "Turn a slate into slides: the Slatebox agent plans a styled presentation (its steps, layouts and captions) that flies across the canvas. Returns the steps and a link that plays it.\n\nPresent. Create a presentation of a slate with the planner the Present button uses: the AI (feature presentation, counted like other AI use) groups the notes into steps and chooses each step's layout, kicker and caption, played on the live canvas with camera moves. Optional: a style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), a palette (3 to 6 colors) and a brief (what to focus on). Needs edit access to the slate. Each call plans a new version; mode \"preview\" plans and returns the steps and saves nothing. Returns the presentation id, its steps and a link that opens the slate and plays it.",
+      "description": "Make a presentation (slides) from a slate: the Slatebox agent composes a styled deck (its steps, layouts and captions) that flies across the canvas. For slides about a topic, draw the points on a slate first (import_mermaid). Returns the steps and a link that plays it.\n\nPresent. Create a presentation of a slate with the planner the Present button uses: the AI (feature presentation, counted like other AI use) groups the notes into steps and chooses each step's layout, kicker and caption, played on the live canvas with camera moves. Optional: a style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), a palette (3 to 6 colors) and a brief (what to focus on). Needs edit access to the slate. Each call plans a new version; mode \"preview\" plans and returns the steps and saves nothing. Returns the presentation id, its steps and a link that opens the slate and plays it.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2966,8 +2966,8 @@
     },
     {
       "name": "edit_slate",
-      "title": "Edit a slate",
-      "description": "Edit a diagram, mind map, whiteboard or board on a slate: add, change, connect, lay out or remove notes and lines, and edit boards (cards, lanes, rules, plan weeks, budgets, presentation order; name the board on a slate with several). One call saves atomically; mode \"preview\" shows the result without saving. Your canvas edits appear live as suggestions people on the slate keep or discard. The full reference is in describe, methods [\"slates.applyOperations\"].",
+      "title": "Edit a diagram, mind map or whiteboard",
+      "description": "Edit a slate (a diagram, mind map, whiteboard or board): add, change, connect, lay out or remove notes and lines, add boards such as a retro, and edit boards (cards, lanes, rules, plan weeks, budgets, presentation order; name the board on a slate with several). One call saves atomically; mode \"preview\" shows the result without saving. Your canvas edits appear live as suggestions people on the slate keep or discard. The full reference is in describe, methods [\"slates.applyOperations\"].",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -3019,7 +3019,7 @@
         "additionalProperties": false
       },
       "annotations": {
-        "title": "Edit a slate",
+        "title": "Edit a diagram, mind map or whiteboard",
         "readOnlyHint": false,
         "destructiveHint": true,
         "idempotentHint": false,
@@ -3357,8 +3357,8 @@
     },
     {
       "name": "import_mermaid",
-      "title": "Draw a mind map, flowchart or Gantt plan from Mermaid",
-      "description": "Draw a mind map, brainstorm, flowchart or project plan (Gantt chart) written in Mermaid (flowchart/graph, mindmap or gantt) as editable notes and lines on a shared slate, new or beside what an existing slate holds. Returns the slate link, where the team edits it live and can present it.\n\nDraw Mermaid. Draw a Mermaid flowchart, mind map or Gantt chart as real notes and lines, laid out in the diagram's direction (subgraphs and Gantt sections become frames). With shareId the diagram is added beside what that slate holds (it needs edit access; everyone on the slate sees it drawn); without, it becomes a new private slate of yours named name (or the diagram's title). Mermaid in a Markdown ```mermaid block is read too. Another kind of diagram is refused with 422 mermaid_unsupported; a mistake with 400 mermaid_invalid naming its line; a diagram past a slate's limits (1,000 notes counting frames, 5,000 lines, frames 50 deep, or a subgraph too big for one frame) with 422 mermaid_too_large. mode \"preview\" shows what would be drawn without saving.",
+      "title": "Draw a mind map, flowchart or Gantt plan",
+      "description": "Draw an editable mind map, brainstorm, flowchart or project plan (Gantt chart) on a shared slate, from an outline written in Mermaid (flowchart/graph, mindmap or gantt), on a new slate or beside what an existing slate holds. Returns the slate link, where the team edits it live and can present it.\n\nDraw Mermaid. Draw a Mermaid flowchart, mind map or Gantt chart as real notes and lines, laid out in the diagram's direction (subgraphs and Gantt sections become frames). With shareId the diagram is added beside what that slate holds (it needs edit access; everyone on the slate sees it drawn); without, it becomes a new private slate of yours named name (or the diagram's title). Mermaid in a Markdown ```mermaid block is read too. Another kind of diagram is refused with 422 mermaid_unsupported; a mistake with 400 mermaid_invalid naming its line; a diagram past a slate's limits (1,000 notes counting frames, 5,000 lines, frames 50 deep, or a subgraph too big for one frame) with 422 mermaid_too_large. mode \"preview\" shows what would be drawn without saving.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -3407,7 +3407,7 @@
         "additionalProperties": false
       },
       "annotations": {
-        "title": "Draw a mind map, flowchart or Gantt plan from Mermaid",
+        "title": "Draw a mind map, flowchart or Gantt plan",
         "readOnlyHint": false,
         "destructiveHint": false,
         "idempotentHint": false,
