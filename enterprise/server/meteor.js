@@ -299,6 +299,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     callTool: (address, f, call, options) => (address === GOOGLE_ADDRESS ? googleService.driveSession.callTool(address, f, call, options) : callTool(address, f, call, options)),
   }
   const service = createConnectorService({
+    oauthApps: settings.oauthApps,
     connections: connectionsStore,
     suggestions: suggestionsStore,
     fetch,

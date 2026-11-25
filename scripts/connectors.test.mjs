@@ -855,12 +855,24 @@ test('the gallery: the enabled cards, whether this person may invite, and the ga
   const world = makeWorld({ pro: ['ada'] })
   const ada = await world.service.gallery(world.ada)
   assert.equal(ada.canInvite, true)
-  assert.deepEqual(ada.cards.map((c) => c.id), GALLERY.map((c) => c.id))
+  const ready = GALLERY.filter((c) => !c.needsApp)
+  assert.deepEqual(ada.cards.map((c) => c.id), ready.map((c) => c.id), 'a card whose vendor app is not set up yet is not offered')
   assert.equal(ada.cards[0].recipe, undefined, 'recipes stay on the server')
-  assert.deepEqual(ada.cards.map((c) => c.group), GALLERY.map((c) => c.group), 'each card keeps its chip')
+  assert.deepEqual(ada.cards.map((c) => c.group), ready.map((c) => c.group), 'each card keeps its chip')
   assert.equal((await world.service.gallery(world.sam)).canInvite, false)
   const listed = await world.service.list(world.ada, { shareId: 'share1' })
   assert.equal(listed.canInvite, true)
+})
+
+test('the gallery: Slack, Asana and HubSpot appear once their vendor app is set up (they have no automatic registration)', async () => {
+  const world = makeWorld({ pro: ['ada'] })
+  assert.deepEqual(GALLERY.filter((c) => c.needsApp).map((c) => c.id).sort(), ['asana', 'hubspot', 'slack'])
+  const before = await world.service.gallery(world.ada)
+  assert.ok(!before.cards.some((c) => ['slack', 'asana', 'hubspot'].includes(c.id)))
+  const withSlack = createConnectorService({ ...world.serviceOptions, oauthApps: { slack: { clientId: 'slack-app' }, asana: {} } })
+  const after = await withSlack.gallery(world.ada)
+  assert.ok(after.cards.some((c) => c.id === 'slack'), 'Slack shows once its app has a client id')
+  assert.ok(!after.cards.some((c) => c.id === 'asana'), 'an app entry without a client id is not set up')
 })
 
 test('one ask is one answer: the same ask while its answer waits is that answer; a save that failed for another reason is not tried again', async () => {

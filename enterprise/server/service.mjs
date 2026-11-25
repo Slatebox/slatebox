@@ -232,6 +232,7 @@ export function createConnectorService({
   later = (fn, ms) => setTimeout(fn, ms),
   audit = () => {},
   promptOf = promptText, // (id, values) -> the prompt's text (the registry)
+  oauthApps = {}, // settings.connectors.oauthApps: a card with needsApp shows only once its vendor app is set up
   gallery = async () => GALLERY, // the live gallery (aiAgents, edited in /admin/ai), else the built-in cards
   integrations = memoryStore(), // { insert, findOne, find, update, remove }: each person's connected agent servers, apart from any slate
   slateSettings = memoryStore(), // { findOne({ _id: slateId }), insert, update }: a slate owner's outsideAgents choice
@@ -636,7 +637,8 @@ export function createConnectorService({
 
   /** The gallery the invite dialog shows: the enabled cards in order, and whether this person may invite. */
   async function galleryList(principal) {
-    const cards = await gallery()
+    // A vendor that needs an app registered ahead of time (no automatic registration) is hidden until it is.
+    const cards = (await gallery()).filter((card) => !card.needsApp || Boolean(oauthApps?.[card.needsApp]?.clientId))
     const canInvite = principal?.userId && principal.kind !== 'guest' && principal.kind !== 'visitor' ? await pro(principal.userId) : false
     return {
       cards: cards.map(({ id, name, url, job, lands, try: tryThis, featured, signIn, keyHint, cost, group }) => ({ id, name, url, job, lands, try: tryThis, featured: Boolean(featured), signIn: signIn || null, keyHint: keyHint || null, cost: cost || '', group: group || null })),
