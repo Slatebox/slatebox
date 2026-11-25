@@ -42,6 +42,19 @@ Outside agent connections: Slatebox as an MCP *client*.
 - Actions: `connectors.outsideActions` (`list_agent_changes`), `connectors.approve` (`approve_agent_change`; a token only for an agent that acts without asking, never destructive), `connectors.decline` (`decline_agent_change`), and the person-only `connectors.setActing`, `integrations.setActing`.
 - Tests: `scripts/agents-read-write.test.mjs` (in `npm run test:enterprise`) and the gate in `scripts/agent-suggestions.test.mjs`.
 
+### What is built (team addresses, Slatebox Cloud only, 2026-11-24)
+
+A free `https://<name>.slatebox.team` for a self-hosted Slatebox (`npx slatebox install`): Slatebox Cloud makes a Cloudflare Tunnel and a proxied CNAME in Slatebox's own Cloudflare account and gives the install that tunnel's connector token; `cloudflared` in the install connects outbound, so nobody sets up DNS, ports or certificates.
+
+- `team-addresses/names.mjs`, `blocked.mjs`: one DNS label (3–32, a–z 0–9 hyphens, no `--`, so no punycode), reserved names, brand and offensive words with look-alike digits folded, and the administrators' runtime blocklist. Reserved, blocked, taken and held names all answer "unavailable".
+- `team-addresses/cf.mjs`: the only Cloudflare calls (injected fetch; 10 s timeout; 4 attempts with backoff on network errors, 429 and 5xx only; only `errors[].code`/`message` kept).
+- `team-addresses/claims.mjs`: the claim service. Create is an idempotent saga (tunnel `sbx-<claim id>`, ingress to the constant origin `http://localhost:7070` with a 404 catch-all and private routing off, CNAME, then the connector token, then the install credential) that a replay resumes and a hard failure undoes in reverse. 3 addresses per account, 5 new a day, 20 in 30 days, 3 renames in 30 days, 12 token fetches an hour per address, a tunnel cap (800) and a circuit breaker (more than 50 claims an hour pauses new claims). Released and renamed names are held for their owner for 30 days; a takedown holds the name from everyone for a year. Connector tokens are never stored; install credentials (`sbxi_…`) only as their SHA-256. Every step is audited without secrets.
+- `team-addresses/reconcile.mjs`: every 10 minutes on one server (a lease): finishes releases and cleanups, records status from Cloudflare, tells owners when two connectors serve one address, repairs ingress and records, deletes orphans, reaps names that never connected within 24 hours or sat idle 90 days (told at 60), and checks the zone's settings.
+- `team-addresses/routes.mjs`: `/api/v1/team-addresses` (availability, claim, list, rename, release, install-credential; `/self`, `/self/connector-token`, `/self/rename-complete`, `DELETE /self` for the install). Plain routes, never actions, so no token reaches an MCP tool or exec. User routes take the device-code token from `/oauth/device_authorization` (`web/app/server/oauth/device.mjs`, scope `team-addresses`, 15 minutes, bound to this resource).
+- `team-addresses/admin.mjs`, `client/TeamAddressesAdmin.jsx`: Admin tools › Team addresses: search, suspend (451 at the edge within seconds), unsuspend, release with a one-year hold, pause new claims, why a name is unavailable, the audit.
+- Gating: registered wherever enterprise code runs, but every route and method answers 404 unless this server is Slatebox Cloud by its signed key (`cloudLicensed`, checked on every call) and `settings.cloudflare.teamClaims` is set; nothing starts on a licensed on-prem install.
+- Tests: `scripts/team-addresses.test.mjs` (in `npm run test:enterprise`, against the fake Cloudflare in `scripts/fake-cloudflare.mjs`) and `scripts/oauth-device.test.mjs`.
+
 Slatebox as an MCP *server* (`/mcp`, the CLI, `/api/v1`) is not here. It is MIT and works on every install.
 
 ## Where it runs

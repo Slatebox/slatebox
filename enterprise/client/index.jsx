@@ -9,10 +9,13 @@
 import AgentsOnSlate, { InvitedAgentControls } from './AgentsOnSlate'
 import IntegrationsPage from './IntegrationsPage'
 import { GoogleExport, GoogleImport } from './GoogleIntegration'
+import TeamAddressesAdmin from './TeamAddressesAdmin'
 
 export const manifest = Object.freeze({ name: 'slatebox-enterprise', features: ['agents.invite'] })
 
 export function register(api, context) {
+  // Admin tools › Team addresses: Slatebox Cloud only (the server refuses everywhere else too).
+  if (context?.via === 'cloud') api.fill('admin.teamAddresses', TeamAddressesAdmin)
   if (!context?.agentInvite) return
   // The slate's invited agents: each one chip on the app's roster, "+ Invite agent" and the walkthrough.
   api.fill('canvas.agents', AgentsOnSlate)

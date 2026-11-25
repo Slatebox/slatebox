@@ -26,6 +26,7 @@ import TeamImports from './admin/TeamImports'
 import EnterpriseLicense from './admin/EnterpriseLicense'
 import LibraryQueueCard from './admin/LibraryQueueCard'
 import AIControlCard from './admin/ai/AIControlCard'
+import EnterpriseSlot from '../common/EnterpriseSlot'
 
 export default function AdminTools() {
   const [txtSearch, setSearch] = React.useState('')
@@ -125,6 +126,10 @@ export default function AdminTools() {
             </Grid>
             <Grid size={12}>
               <LibraryQueueCard />
+            </Grid>
+            {/* Slatebox Cloud's team addresses (enterprise/client/TeamAddressesAdmin.jsx); empty elsewhere */}
+            <Grid size={12}>
+              <EnterpriseSlot name="admin.teamAddresses" />
             </Grid>
             <Grid size={12}>
               <AIControlCard />

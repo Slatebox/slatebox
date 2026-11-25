@@ -234,6 +234,9 @@ const CONSTANTS = {
     oauth: {
       describe: 'oauth.describe',
       decide: 'oauth.decide',
+      // /device: device-code sign-in for the slatebox command (server/oauth/device.mjs)
+      deviceDescribe: 'oauth.deviceDescribe',
+      deviceDecide: 'oauth.deviceDecide',
     },
     apiTokens: {
       create: 'apiTokens.create',

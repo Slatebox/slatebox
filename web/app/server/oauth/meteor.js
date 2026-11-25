@@ -12,7 +12,9 @@ import { SlateApiTokens } from '../../imports/api/common/models'
 import CONSTANTS from '../../imports/api/common/constants'
 import { clientAddress } from '../actions/http.mjs'
 import { registry } from '../actions/mount'
+import { cloudOn } from '../cloud-lock-meteor'
 import { createOAuthCore, REQUEST_ID } from './core.mjs'
+import { createDeviceFlow, createWindowCounter, DeviceError, teamClaimsConfigured } from './device.mjs'
 import { mountOAuth as mount } from './routes.mjs'
 
 /* eslint-disable camelcase, no-undef */
@@ -29,6 +31,10 @@ export const OAuthCodes = new Mongo.Collection('oauthCodes')
 // Rotated refresh tokens, by hash only, until the connection they belonged to could have lapsed.
 export const OAuthRefreshFamily = new Mongo.Collection('oauthRefreshFamily')
 
+// Device-code sign-in (device.mjs): grants by hash only, and the counters its limits use.
+export const OAuthDeviceGrants = new Mongo.Collection('oauthDeviceGrants')
+const OAuthDeviceCounters = new Mongo.Collection('oauthDeviceCounters')
+
 export const appOrigin = () => Meteor.settings.public?.baseUrl || Meteor.absoluteUrl()
 
 export const oauth = createOAuthCore({
@@ -42,6 +48,17 @@ export const oauth = createOAuthCore({
   errors: load('@modelcontextprotocol/sdk/server/auth/errors.js'),
 })
 
+// Offered only where its one client's scope is: team addresses on Slatebox Cloud.
+export const device = createDeviceFlow({
+  grants: OAuthDeviceGrants,
+  apiTokens: SlateApiTokens,
+  users: Meteor.users,
+  origin: appOrigin(),
+  counter: createWindowCounter({ collection: OAuthDeviceCounters.rawCollection() }),
+  enabled: () => cloudOn() && teamClaimsConfigured(Meteor.settings),
+  pepper: Meteor.settings.cloudflare?.teamClaims?.auditPepper || 'slatebox-device',
+})
+
 export function mountOAuth(app) {
   const forwardedCount = Number.parseInt(process.env.HTTP_FORWARDED_COUNT, 10) || 0
   // express-rate-limit is the SDK's own dependency: load it the way the SDK's handlers do.
@@ -51,6 +68,8 @@ export function mountOAuth(app) {
     core: oauth,
     // What the metadata advertises: every scope a tool needs, from the actions.
     scopes: registry.neededScopes(),
+    device,
+    address: (req) => clientAddress(req, forwardedCount),
     handlers: {
       authorizationHandler: load('@modelcontextprotocol/sdk/server/auth/handlers/authorize.js').authorizationHandler,
       tokenHandler: load('@modelcontextprotocol/sdk/server/auth/handlers/token.js').tokenHandler,
@@ -73,6 +92,10 @@ Meteor.startup(async () => {
     OAuthCodes.rawCollection().createIndex({ purgeAt: 1 }, { expireAfterSeconds: 0 }),
     OAuthRefreshFamily.rawCollection().createIndex({ purgeAt: 1 }, { expireAfterSeconds: 0 }),
     OAuthRefreshFamily.rawCollection().createIndex({ tokenId: 1 }),
+    OAuthDeviceGrants.rawCollection().createIndex({ purgeAt: 1 }, { expireAfterSeconds: 0 }),
+    OAuthDeviceGrants.rawCollection().createIndex({ deviceHash: 1 }, { unique: true }),
+    OAuthDeviceGrants.rawCollection().createIndex({ userCodeHash: 1, status: 1 }),
+    OAuthDeviceCounters.rawCollection().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     SlateApiTokens.rawCollection().createIndex({ refreshHash: 1 }, { unique: true, partialFilterExpression: { refreshHash: { $type: 'string' } } }),
     SlateApiTokens.rawCollection().createIndex({ refreshHashPrev: 1 }, { partialFilterExpression: { refreshHashPrev: { $type: 'string' } } }),
     SlateApiTokens.rawCollection().createIndex({ codeHash: 1 }, { partialFilterExpression: { codeHash: { $type: 'string' } } }),
@@ -80,6 +103,15 @@ Meteor.startup(async () => {
 })
 
 const currentUser = (userId) => (userId ? Meteor.users.findOneAsync(userId, { fields: { _id: 1, isAnonymous: 1 } }) : null)
+
+const deviceCall = async (fn) => {
+  try {
+    return await fn()
+  } catch (error) {
+    if (error instanceof DeviceError) throw new Meteor.Error(error.error, error.message)
+    throw error
+  }
+}
 
 Meteor.methods({
   // What the consent page shows, or null when the request is unknown, decided or lapsed.
@@ -100,9 +132,19 @@ Meteor.methods({
       throw error
     }
   },
+  // /device: what a code asks for (null when it is unknown, used or lapsed), and the person's answer.
+  async [CONSTANTS.methods.oauth.deviceDescribe]({ userCode }) {
+    check(userCode, String)
+    return deviceCall(async () => device.describe({ userCode, user: await currentUser(this.userId) }))
+  },
+  async [CONSTANTS.methods.oauth.deviceDecide]({ userCode, allow }) {
+    check(userCode, String)
+    check(allow, Boolean)
+    return deviceCall(async () => device.decide({ userCode, user: await currentUser(this.userId), allow }))
+  },
 })
 
 // Twenty answers a minute per connection: enough for a person, not for guessing request ids.
-;[CONSTANTS.methods.oauth.describe, CONSTANTS.methods.oauth.decide].forEach((name) =>
+;[CONSTANTS.methods.oauth.describe, CONSTANTS.methods.oauth.decide, CONSTANTS.methods.oauth.deviceDescribe, CONSTANTS.methods.oauth.deviceDecide].forEach((name) =>
   DDPRateLimiter.addRule({ type: 'method', name, connectionId: () => true }, 20, 60 * 1000)
 )

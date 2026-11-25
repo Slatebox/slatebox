@@ -136,5 +136,9 @@
     "off": false,
     "//": "Enterprise (enterprise/). oauthApps: apps registered with a vendor ahead of time. The client id is public; the client secret comes from this file or the environment that fills it, never from code. The OAuth callback is <public.baseUrl>/connectors/oauth/callback. Sign-in to outside servers also needs the SLATEBOX_KEY_ENCRYPTION_KEY environment variable.",
     "oauthApps": { "github": { "clientId": "", "clientSecret": "" } }
+  },
+  "cloudflare": {
+    "//": "Slatebox Cloud only: team addresses (https://<name>.slatebox.team for self-hosted installs, enterprise/team-addresses). Nothing here runs without Slatebox Cloud's own key; leave it out for local development and self-hosting. Server only, never under public. token: a Cloudflare API token with Cloudflare Tunnel Write on accountId and DNS Write plus Zone Read on zoneId only, filled from the private settings file, never pasted. paused: true stops new claims (live addresses keep working). e2eAccounts: user ids that may claim e2e-* names (the end-to-end test).",
+    "teamClaims": { "accountId": "", "zoneId": "", "zoneName": "slatebox.team", "token": "", "maxTunnels": 800, "paused": true, "e2eAccounts": [] }
   }
 }
