@@ -22,7 +22,6 @@ import CloseIcon from '@mui/icons-material/Close'
 import AddIcon from '@mui/icons-material/Add'
 import SaveIcon from '@mui/icons-material/Save'
 import LoginIcon from '@mui/icons-material/Login'
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import Drawer from '@mui/material/Drawer'
 import ListSubheader from '@mui/material/ListSubheader'
 import Button from '@mui/material/Button'
@@ -42,6 +41,7 @@ import Tooltip from '@mui/material/Tooltip'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import CookieNotice from './components/CookieNotice'
 import ChatWootConfig from './components/ChatWootConfig'
+import HelpMenu from './components/HelpMenu'
 import CanvasToolbar from './components/CanvasToolbar'
 import ConnectionStatus from './components/ConnectionStatus'
 import MessageListener from './components/MessageListener'
@@ -177,12 +177,6 @@ export default function Main() {
   // const handleChat = () => {
   //   setChatOpen(!chatIsOpen)
   // }
-
-  const handleSupport = () => {
-    // window.open('https://community.slatebox.com', '_blank')
-    if (window.$chatwoot) window.$chatwoot.toggle()
-    else window.location.href = 'mailto:support@slatebox.com'
-  }
 
   // const showVideoGuides = (e) => {
   //   setVideoGuideOpen(true)
@@ -362,13 +356,6 @@ export default function Main() {
     </List>
   }
 
-  // `onDone` closes the menu the row sits in, so the support chat is not left under it.
-  const helpRow = ({ collapsed = false, onDone } = {}) => <Box component="li" sx={{ listStyle: 'none' }}><Tooltip placement="right" title={collapsed ? 'Help and support' : ''}>
-    <ListItemButton onClick={() => { onDone?.(); handleSupport() }} sx={{ mx: .5, borderRadius: 1, color: 'shell.ink' }}>
-      <ListItemIcon sx={{ color: 'inherit' }}><HelpOutlineIcon /></ListItemIcon>
-      <ListItemText primary="Help and support" sx={{ ml: -2 }} />
-    </ListItemButton>
-  </Tooltip></Box>
 
   const closeCanvasNav = () => setCanvasNavOpen(false)
   const canvasNav = (
@@ -391,7 +378,7 @@ export default function Main() {
           <ListItemIcon sx={{ color: 'inherit' }}><LoginIcon /></ListItemIcon><ListItemText primary="Sign in" sx={{ ml: -2 }} />
         </ListItemButton></Box></List>}
         <Box sx={{ flex: 1 }} />
-        <List sx={{ borderTop: 1, borderColor: 'shell.border' }}>{helpRow({ onDone: closeCanvasNav })}</List>
+        <List sx={{ borderTop: 1, borderColor: 'shell.border' }}><HelpMenu onDone={closeCanvasNav} /></List>
       </Box>
     </Drawer>
   )
@@ -507,7 +494,7 @@ export default function Main() {
           </>
           {navList({ collapsed: mdmq && !isMainDrawerOpen, onNavigate: () => { if (!mdmq) handleDrawerClose() } })}
           <Box sx={{ flex: 1 }} />
-          <List sx={{ borderTop: 1, borderColor: 'shell.border' }}>{helpRow({ collapsed: mdmq && !isMainDrawerOpen })}</List>
+          <List sx={{ borderTop: 1, borderColor: 'shell.border' }}><HelpMenu collapsed={mdmq && !isMainDrawerOpen} /></List>
         </SwipeableDrawer>
       )}
     </>
