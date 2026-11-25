@@ -93,7 +93,9 @@ export function publicHeaders(res, action) {
   res.setHeader('Cache-Control', `public, max-age=60, s-maxage=${action.publicCache.maxAge}`)
 }
 
-export function mountHttp(app, registry, { express, authenticate, forwardedCount = 0 }) {
+// onAgentCall(principal, action, req): told of every call a token makes (agent-reach counts it by
+// action and User-Agent); never fails the request.
+export function mountHttp(app, registry, { express, authenticate, forwardedCount = 0, onAgentCall = null }) {
   const router = express.Router()
   const openApi = buildOpenApi(registry)
   router.get('/openapi.json', (_req, res) => {
@@ -126,6 +128,7 @@ export function mountHttp(app, registry, { express, authenticate, forwardedCount
           principal = principalFromVisitor(clientAddress(req, forwardedCount))
         // Authentication answers first, so a stranger learns nothing about the request shape.
         if (!principal) throw problem(401, 'unauthorized', 'A valid Slatebox API token is required.')
+        if (onAgentCall && principal.kind === 'agent') await Promise.resolve(onAgentCall(principal, action, req)).catch(() => {})
         const input = readHttpInput(action, req, registry.components)
         const key = req.get('idempotency-key')
         // A call from a local exec script carries Slatebox-Exec-* headers; the gated registry

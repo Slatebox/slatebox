@@ -47,6 +47,7 @@ import { createPresentationFor } from '../methods/presentations'
 import { mediaLookup } from '../media/meteor'
 import { posterAllowedFor } from '../media/media-lookup.mjs'
 import { createAppLibrary } from '../library/meteor'
+import { countApiCall, noticingFirstAction } from '../agent-reach/usage-meteor'
 
 const IdempotencyRecords = new Mongo.Collection('apiIdempotencyRecords')
 const RateWindows = new Mongo.Collection('apiRateWindows')
@@ -213,12 +214,15 @@ export function mountActions(app) {
     express,
     authenticate: async (req) => principalFromToken(await apiTokenService.authenticateApiRequest(req)),
     forwardedCount,
+    // a token's calls, counted by action and User-Agent (agent-reach), for Admin › Overview
+    onAgentCall: countApiCall,
   })
   // A public slate's Mermaid as plain text: /slates/<id>.mmd and .md.
   mountMermaidFiles(app, registry, { forwardedCount })
   // The one-time addresses a team export downloads from and an import uploads to.
   mountTeamExport(app, express)
-  mountDdp(registry, {
+  // each account's first action through the app, beside the first by an agent (agent-reach)
+  mountDdp(noticingFirstAction(registry), {
     defineMethods: (methods) => Meteor.methods(methods),
     makeError: (code, reason, details) => new Meteor.Error(code, reason, details),
     loadUser: (userId) => Meteor.users.findOneAsync(userId, { fields: { _id: 1, isAnonymous: 1 } }),

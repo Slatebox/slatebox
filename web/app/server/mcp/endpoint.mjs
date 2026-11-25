@@ -6,7 +6,8 @@
 // checks. describe answers from the client manifest. SLATEBOX_MCP_TYPED_TOOLS=off (typedTools
 // false) lists exec and describe only. Authentication is a bearer token: a personal access
 // token, or an access token a connected app got by OAuth (server/oauth), bound to this endpoint.
-// A 401 names the protected resource metadata (resourceMetadata, RFC 9728) and the default
+// usage (agent-reach/usage-core.mjs) counts connections (initialize) and tool calls per client,
+// by name only. A 401 names the protected resource metadata (resourceMetadata, RFC 9728) and the default
 // scope, which is how an MCP client discovers where to sign the person in. A connected app's
 // tool call refused only for a missing permission answers 403 insufficient_scope with the scope
 // to ask for (the MCP authorization spec's scope challenge), the refusal still in the body; a
@@ -14,6 +15,7 @@
 import { clientGuide, matchSlateResource, promptMessages, resourceExecArgs, servedPrompt, typedExecArgs, typedToolResult } from '../actions/agent-surface.mjs'
 import { describeClient, listedTemplates, listedTools, renderDeclarations } from '../actions/client-render.mjs'
 import { ActionError } from '../actions/errors.mjs'
+import { cleanClient } from '../agent-reach/usage-core.mjs'
 
 export const MCP_PATH = '/mcp'
 export const MCP_BODY_LIMIT = '128kb'
@@ -75,6 +77,16 @@ export function reportedClientName(body) {
   return null
 }
 
+/** The client's {name, version} from the same places (initialize first), or null. */
+export function reportedClientInfo(body) {
+  const messages = (Array.isArray(body) ? body : [body]).filter((message) => message && typeof message === 'object')
+  const init = messages.find((message) => message.method === 'initialize')
+  const info = init?.params?.clientInfo ?? messages.map((message) => message.params?._meta?.[CLIENT_INFO_META]).find((i) => typeof i?.name === 'string')
+  if (typeof info?.name !== 'string') return null
+  return { name: info.name, version: typeof info.version === 'string' ? info.version : null }
+}
+const isInitialize = (body) => (Array.isArray(body) ? body : [body]).some((message) => message?.method === 'initialize')
+
 // The script did not run: say why, in the API's words.
 function refusalText(error) {
   const known = error instanceof ActionError || error?.code === 'invalid_request'
@@ -95,7 +107,7 @@ function missingScope(registry, principal, refusal, calls = []) {
 
 export function createMcpHandler({
   sdk, registry, manifest, tools, authenticate, appOrigin, version, recordClient = null, typedTools = true,
-  resourceMetadata = null, challengeScopes = null,
+  resourceMetadata = null, challengeScopes = null, usage = null, lastClientOf = null,
 }) {
   const {
     Server, StreamableHTTPServerTransport, ListToolsRequestSchema, CallToolRequestSchema, ListPromptsRequestSchema,
@@ -171,6 +183,12 @@ export function createMcpHandler({
     }
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params
+      // Counted by name only (agent-reach/usage-core.mjs): never the arguments or the result.
+      if (usage) {
+        const client = state.client ?? (lastClientOf ? await Promise.resolve(lastClientOf(principal)).catch(() => null) : null)
+        await usage.call({ surface: 'mcp', client, tool: name })
+        await usage.first({ userId: principal.userId, via: 'mcp', client })
+      }
       const typed = typedByName.get(name)
       if (typed) {
         try {
@@ -236,6 +254,11 @@ export function createMcpHandler({
     const client = recordClient && principal.tokenId ? reportedClientName(req.body) : null
     if (client !== null) await Promise.resolve(recordClient(principal, client)).catch(() => {})
     const state = {}
+    if (usage) {
+      const info = reportedClientInfo(req.body)
+      state.client = info ? cleanClient(info.name, info.version) : null
+      if (isInitialize(req.body)) await usage.connection({ surface: 'mcp', client: state.client })
+    }
     const server = serverFor(principal, state)
     // The transport answers 200; a scope challenge turns that into 403 with WWW-Authenticate.
     const writeHead = res.writeHead.bind(res)

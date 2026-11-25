@@ -15,6 +15,7 @@ import { mountMcp as mount } from './endpoint.mjs'
 import { oauth } from '../oauth/meteor'
 import { SlateApiTokens } from '../../imports/api/common/models'
 import { sanitizeClientName } from '../presence/agentPresence.mjs'
+import { agentUsage, lastClientOf } from '../agent-reach/usage-meteor'
 
 const load = createRequire(
   typeof __meteor_bootstrap__ === 'undefined'
@@ -50,6 +51,9 @@ export function mountMcp(app) {
     // The client's own name, cleaned, for the label of its agent on the canvas.
     // Clients on the 2026-07-28 protocol name themselves on every request: the token is written
     // only when the name changes.
+    // Connections and tool calls per client, counts only (agent-reach), for Admin › Overview.
+    usage: agentUsage,
+    lastClientOf,
     recordClient: (principal, name) => {
       const cleaned = sanitizeClientName(name)
       return SlateApiTokens.updateAsync(

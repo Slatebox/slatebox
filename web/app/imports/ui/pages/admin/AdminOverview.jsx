@@ -17,6 +17,7 @@ import OpenInNew from '@mui/icons-material/OpenInNew'
 import Refresh from '@mui/icons-material/Refresh'
 import CONSTANTS from '../../../api/common/constants'
 import { PLAN_ROWS, count, day, micros, moneyTotals } from './overview-format.mjs'
+import ShareOfVoiceCard from './ShareOfVoiceCard'
 
 // the card the new settings pages share (Team settings, Integrations): warm paper, a soft border
 const cardSx = (theme) => ({
@@ -193,6 +194,46 @@ function Usage({ data }) {
 Usage.propTypes = { data: PropTypes.object }
 Usage.defaultProps = { data: null }
 
+// Which agent clients reach this server (server/agent-reach/usage-core.mjs): counts only.
+function Agents({ data }) {
+  if (!data) return null
+  const t = data.totals || {}
+  const change = (now, before) => (before ? ` (${now >= before ? '+' : ''}${Math.round(((now - before) / before) * 100)}% on the week before)` : '')
+  return (
+    <Card title="Agents, last 7 days" data={data} wide>
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' } }}>
+        <Big value={count(t.connections)} label="connections" />
+        <Big value={count(t.calls)} label={`tool calls${change(t.calls || 0, t.prevCalls || 0)}`} />
+        <Big value={count(data.clients?.length)} label="agent clients" />
+        <Big value={`${count(data.newAccounts?.viaAgent)} of ${count(data.newAccounts?.total)}`} label="new accounts that came by an agent" />
+      </Box>
+      <Box sx={{ display: 'grid', gap: 2, mt: 2, gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' } }}>
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 650, mb: 0.5 }}>By client</Typography>
+          {data.clients?.length ? data.clients.map((c) => (
+            <Row key={c.client} label={`${c.client} · ${c.surfaces.join(', ')}`} value={`${count(c.connections)} conn · ${count(c.calls)} calls`} />
+          )) : <Typography variant="body2" color="text.secondary">No agent has connected this week.</Typography>}
+        </Box>
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 650, mb: 0.5 }}>Top tools</Typography>
+          {data.tools?.length ? data.tools.map((tool) => <Row key={tool.tool} label={tool.tool} value={count(tool.calls)} />)
+            : <Typography variant="body2" color="text.secondary">No tool calls this week.</Typography>}
+        </Box>
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 650, mb: 0.5 }}>New accounts by agent</Typography>
+          {data.newAccounts?.byClient?.length ? data.newAccounts.byClient.map((c) => <Row key={c.client} label={c.client} value={count(c.accounts)} />)
+            : <Typography variant="body2" color="text.secondary">None this week.</Typography>}
+        </Box>
+      </Box>
+      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+        Since {data.since}. mcp is the hosted /mcp endpoint, api is /api/v1 (the slatebox-mcp package, the CLI and scripts). Counts only: never what an agent asked or got back. A new account came by an agent when its first recorded action was an agent&apos;s.
+      </Typography>
+    </Card>
+  )
+}
+Agents.propTypes = { data: PropTypes.object }
+Agents.defaultProps = { data: null }
+
 export default function AdminOverview() {
   const [state, setState] = React.useState({ loading: true, data: null, error: null })
   const load = React.useCallback((refresh = false) => {
@@ -240,6 +281,8 @@ export default function AdminOverview() {
                 <Big value={count(data.library?.waiting)} label="waiting for review" />
               </Card>
               <Usage data={data.usage} />
+              <Agents data={data.agents} />
+              <ShareOfVoiceCard />
             </Box>
           </Box>
         </>

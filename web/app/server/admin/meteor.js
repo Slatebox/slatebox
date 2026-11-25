@@ -17,6 +17,8 @@ import { meterOn } from '../metering/meteor'
 import { keyMode } from '../pay-settings.mjs'
 import { businessPriceIds } from '../business-billing.mjs'
 import { createAdminDashboard } from './dashboard-core.mjs'
+import { agentSummary } from '../agent-reach/usage-core.mjs'
+import { agentUsageIo } from '../agent-reach/usage-meteor'
 
 const DAY = 86_400_000
 const raw = (collection) => collection.rawCollection()
@@ -86,6 +88,8 @@ const io = {
     const waiting = await raw(LibraryItems).countDocuments({ origin: 'user', reviewStatus: { $in: [...QUEUE_WAITING] } })
     return { waiting }
   },
+  // agent clients this week: connections, tool calls, top tools, accounts that came by an agent
+  agents: (now) => agentSummary({ io: agentUsageIo, now }),
   async emailsOf(ids) {
     const rows = await users().find({ _id: { $in: ids } }, { projection: { 'emails.address': 1 } }).toArray()
     return Object.fromEntries(rows.map((u) => [u._id, u.emails?.[0]?.address || null]))

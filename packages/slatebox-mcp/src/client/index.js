@@ -2,7 +2,12 @@
 // action, named by its action id (slatebox.slates.get(input)). Types: generated/slatebox.d.ts.
 // Use it in your own code (an AI SDK tool, a script). Outside an exec run it sends no
 // Slatebox-Exec-* headers, so each call is an ordinary API call.
+import { readFileSync } from "node:fs";
 import { defaultGenerated } from "../generated.js";
+
+// Every call names this package (the server counts calls per client, never their content).
+const { version } = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
+export const USER_AGENT = `slatebox-mcp/${version}`;
 
 export class SlateboxError extends Error {
   constructor({ code = "error", status = 0, message, details, retryAfter } = {}) {
@@ -85,7 +90,7 @@ function retryAfterSeconds(payload, response) {
  */
 export async function sendCall({ baseUrl, token, fetchImpl = fetch, method, input, headers = {} }) {
   const { url, init } = buildRequest(baseUrl, method, input);
-  init.headers = { ...init.headers, authorization: `Bearer ${token}`, ...headers };
+  init.headers = { ...init.headers, "user-agent": USER_AGENT, authorization: `Bearer ${token}`, ...headers };
   let response;
   try {
     response = await fetchImpl(url, init);

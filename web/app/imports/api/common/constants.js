@@ -229,6 +229,10 @@ const CONSTANTS = {
     admin: {
       status: 'admin.status',
       dashboard: 'admin.dashboard',
+      // Share of voice (server/agent-reach/sov-meteor.js): the panel, its questions, Run now
+      shareOfVoice: 'admin.shareOfVoice',
+      shareOfVoiceQuestions: 'admin.shareOfVoice.questions',
+      shareOfVoiceRun: 'admin.shareOfVoice.run',
     },
     // The consent page for an app connecting over OAuth (server/oauth/meteor.js)
     oauth: {

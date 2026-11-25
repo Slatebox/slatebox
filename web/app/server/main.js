@@ -59,6 +59,7 @@ import './methods/images'
 import './metering/meteor'
 // Server admin: admin.status and the admin home's Overview (server/admin/meteor.js)
 import './admin/meteor'
+import './agent-reach/sov-meteor' // share of voice: the weekly job (Cloud) and its admin methods
 
 // AI control: the snapshot of providers, models, bindings and prompts administrators manage at runtime
 import './ai-control/index.mjs'

@@ -189,10 +189,11 @@ export async function stripeSummary({ stripe, plans, mode, now = Date.now(), cap
 
 /**
  * The database's cards. io: { people(now), plans(), usage(month), grants(month, now), library(),
- * emailsOf(ids) }; each async. proAllowanceMicros: what one person's Pro includes a month.
+ * emailsOf(ids), agents?(now) }; each async. proAllowanceMicros: what one person's Pro includes a
+ * month. agents (agent-reach/usage-core.mjs agentSummary): which agent clients connect and call.
  */
 export async function localSummary({ io, now = Date.now(), month, meterOn = false, proAllowanceMicros = 0 }) {
-  const [people, plans, usage, library] = await Promise.all([
+  const [people, plans, usage, library, agents] = await Promise.all([
     card(() => io.people(now)),
     card(() => io.plans()),
     card(async () => {
@@ -216,8 +217,9 @@ export async function localSummary({ io, now = Date.now(), month, meterOn = fals
       }
     }),
     card(() => io.library()),
+    io.agents ? card(() => io.agents(now)) : Promise.resolve(null),
   ])
-  return { people, plans, usage, library }
+  return { people, plans, usage, library, ...(agents && { agents }) }
 }
 
 /**
