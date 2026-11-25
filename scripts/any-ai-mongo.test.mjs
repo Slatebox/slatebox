@@ -15,7 +15,11 @@ import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomBytes, randomUUID } from 'node:crypto'
-import { M1_INDEXES, runM1, runM2, M2_MARKER } from '../web/app/server/metering/migrations.mjs'
+import { M1_INDEXES, runM1, runM2, runM5, M2_MARKER, M5_MARKER } from '../web/app/server/metering/migrations.mjs'
+import { createKeyStore } from '../web/app/server/ai-control/keys.mjs'
+import { importSettingsKeys } from '../web/app/server/migrations/ai-control-002.mjs'
+import { PROVIDER_PRESETS } from '../web/app/server/ai-control/provider-presets.mjs'
+import { BUILTIN_PROVIDERS } from '../web/app/server/ai-control/providers.mjs'
 import { createConnectionStore } from '../web/app/server/methods/ai/connection-store.mjs'
 import { createAISettings } from '../web/app/server/methods/ai/ai-settings-core.mjs'
 import { loadMasterKey, seal, last4 } from '../web/app/server/metering/vault.mjs'
@@ -127,12 +131,6 @@ test('an installation migrated before named connections: the old index is replac
   const view = await ai.view('ana')
   assert.deepEqual(view.mine.connections.map((c) => c.name).sort(), ['deepinfra', 'desk', 'di-big', 'lan'])
   assert.equal((await ai.resolveFor({ userId: 'ana', feature: 'generation' })).connection.baseUrl, 'http://192.168.1.30:1234/v1')
-  // the server level may hold several of one type too
-  await ai.update('root', { level: 'server', connections: [
-    { name: 'one', type: 'openai-compatible', baseUrl: 'http://10.0.0.1/v1', model: 'a' },
-    { name: 'two', type: 'openai-compatible', baseUrl: 'http://10.0.0.2/v1', model: 'b' },
-  ] })
-  assert.equal(await keys.countDocuments({ ownerType: 'server' }), 2)
 
   // the older own-keys panel (keys.save, metering/meteor.js) still keeps one unnamed key per
   // provider: saving again replaces it in place
@@ -152,8 +150,8 @@ test('an installation migrated before named connections: the old index is replac
   await ai.update('ana', { level: 'me', remove: ['lan'] })
   await ai.update('ana', { level: 'me', connections: [{ name: 'lan', type: 'openai-compatible', baseUrl: 'http://192.168.1.31/v1', model: 'c' }] })
   assert.equal(await keys.countDocuments({ ownerType: 'user', ownerId: 'ana', name: 'lan' }), 1)
-  // a legacy key turned named: the unnamed document is replaced, not doubled
-  await ai.update('ana', { level: 'me', connections: [{ name: 'deepinfra', type: 'deepinfra', apiKey: 'key-new-0123456789' }] })
+  // a legacy key turned named: the unnamed document is replaced, not doubled (a connection names its model)
+  await ai.update('ana', { level: 'me', connections: [{ name: 'deepinfra', type: 'deepinfra', apiKey: 'key-new-0123456789', model: 'x' }] })
   assert.equal(await keys.countDocuments({ ownerType: 'user', ownerId: 'ana', provider: 'deepinfra' }), 2)
   assert.equal(await keys.countDocuments({ ownerType: 'user', ownerId: 'ana', provider: 'deepinfra', name: { $exists: false } }), 0)
 })
@@ -170,42 +168,51 @@ test('a fresh installation gets the new indexes from M1 and M2 changes nothing',
   assert.ok(providerIndexes.every(([, , options]) => options.unique && options.partialFilterExpression && options.name))
 })
 
-// AI control S3: the fields a server connection gained (where its key lives, its fingerprint, the
-// key a rotation replaced, on/off, its last test) against a real database, with the M1 indexes.
-test('S3 connection fields round-trip in MongoDB: sealed and env keys, rotation grace, last test, services beside the models', { skip }, async (t) => {
+// The server's provider keys against a real database (metering/migrations.mjs M5): beside the own
+// keys an installation already has, at most one active key per provider, each key once (so two
+// servers importing a settings-file key at once store it once), and a revoked key never returns.
+test('server keys in MongoDB: M5 indexes beside the own keys, one active key per provider, an import that is idempotent and parallel-safe', { skip }, async (t) => {
   const db = await database(t)
   await db.collection('aiAudit').insertOne({ _id: 'x' })
   await runM1(migrationIo(db))
-  const master = loadMasterKey({ SLATEBOX_KEY_ENCRYPTION_KEY: randomBytes(32).toString('base64') })
+  await runM2(migrationIo(db))
   const keys = db.collection('providerKeys')
-  const store = createConnectionStore({ keys, choices: db.collection('aiChoices') })
-  let clock = Date.parse('2026-11-24T10:00:00Z')
-  const env = { SLATEBOX_AI_KEY_META: 'meta-env-key-1234' }
-  const ai = createAISettings({
-    store, master, settings: { public: { env: 'selfhost' } }, hosted: false, env, now: () => clock,
-    loadUser: async (id) => people[id] || null, isAdmin: async (id) => id === 'root', isTeamAdmin: async () => false,
-    check: async () => ({ ok: false, message: 'HTTP 401 for sk-proj-0000000000000000000000' }),
+  // an installation from before: the server's unnamed Daily key and a person's unnamed key
+  const master = loadMasterKey({ SLATEBOX_KEY_ENCRYPTION_KEY: randomBytes(32).toString('base64') })
+  await keys.insertOne({ _id: randomUUID(), ownerType: 'server', ownerId: 'server', provider: 'daily', last4: '9999', cipher: seal({ master, owner: { ownerType: 'server', ownerId: 'server', provider: 'daily' }, plaintext: 'daily-test-9999' }) })
+  assert.equal(await runM5(migrationIo(db)), true)
+  assert.equal(await runM5(migrationIo(db)), false, 'once')
+  assert.ok(await db.collection('systemSettings').findOne({ _id: M5_MARKER }))
+  const names = (await keys.indexes()).map((i) => i.name)
+  for (const name of ['providerKeys_unnamed_provider', 'providerKeys_named', 'providerKeys_key_fingerprint', 'providerKeys_key_active']) assert.ok(names.includes(name), name)
+  assert.ok('kind' in (await keys.indexes()).find((i) => i.name === 'providerKeys_unnamed_provider').partialFilterExpression)
+  const store = createKeyStore({
+    keys, master, providerOf: (id) => BUILTIN_PROVIDERS[id] || (PROVIDER_PRESETS[id] ? { _id: id, ...PROVIDER_PRESETS[id] } : null),
+    check: async () => ({ ok: true, message: 'Connected.' }),
   })
-  await ai.saveServerConnections('root', [
-    { name: 'oa', type: 'openai', model: 'gpt-x', apiKey: 'sk-proj-0000000000000000000000' },
-    { name: 'meta', type: 'openai-compatible', baseUrl: 'https://api.meta.example/v1', model: 'muse-ember-1.0', keyRef: { kind: 'env', name: 'SLATEBOX_AI_KEY_META' } },
-    { name: 'search', type: 'google-cse', model: 'cx-1', apiKey: 'AIza-search-000000000000000000' },
-  ])
-  await ai.saveServerConnections('root', [{ name: 'oa', type: 'openai', model: 'gpt-x', apiKey: 'sk-proj-1111111111111111111111', rotate: { graceHours: 1 } }])
-  const oa = await keys.findOne({ ownerType: 'server', name: 'oa' })
-  assert.deepEqual([oa.keyRef, oa.keyFingerprint.startsWith('sha256:'), oa.previousCipher.until instanceof Date, oa.status], [{ kind: 'sealed' }, true, true, undefined])
-  assert.deepEqual((await keys.findOne({ name: 'meta' })).keyRef, { kind: 'env', name: 'SLATEBOX_AI_KEY_META' })
-  await ai.check('root', { level: 'server', name: 'oa' })
-  const checked = await keys.findOne({ name: 'oa' })
-  assert.equal(checked.lastCheck.ok, false)
-  assert.ok(!checked.lastCheck.error.includes('sk-proj'))
-  assert.equal((await ai.auxCredential('google-cse')).model, 'cx-1')
-  const listed = await ai.serverConnections('root')
-  assert.deepEqual(listed.connections.map((c) => [c.name, c.keyRef.kind]).sort(), [['meta', 'env'], ['oa', 'sealed'], ['search', 'sealed']])
-  assert.equal(await store.clearExpiredGrace(new Date(clock)), 0)
-  clock += 2 * 3600 * 1000
-  assert.equal(await store.clearExpiredGrace(new Date(clock)), 1)
-  assert.equal((await keys.findOne({ name: 'oa' })).previousCipher, null)
-  // the unique (owner, name) index holds for the new kinds too
-  await assert.rejects(keys.insertOne({ _id: randomUUID(), ownerType: 'server', ownerId: 'server', provider: 'deepgram', name: 'search' }), /E11000/)
+  const actor = { userId: 'root', principal: 'person', via: 'ddp' }
+  const first = await store.add({ actor, provider: 'meta', apiKey: 'sk-test-meta-aaaaaaaaaaaaaaaa1111' })
+  await store.add({ actor, provider: 'meta', apiKey: 'sk-test-meta-bbbbbbbbbbbbbbbb2222' })
+  // the database itself refuses a second active key and a key saved twice
+  await assert.rejects(keys.insertOne({ _id: randomUUID(), ownerType: 'server', ownerId: 'server', kind: 'key', provider: 'meta', status: 'active', keyFingerprint: 'sha256:x' }), /E11000/)
+  await assert.rejects(keys.insertOne({ _id: randomUUID(), ownerType: 'server', ownerId: 'server', kind: 'key', provider: 'meta', status: 'standby', keyFingerprint: first.keyFingerprint }), /E11000/)
+  // several key documents of one provider sit beside the unnamed Daily key and the named-connection index
+  assert.equal(await keys.countDocuments({ ownerType: 'server', provider: 'meta', kind: 'key' }), 2)
+  // a settings-file key moved by two servers at once is stored once
+  const settings = { ai: { connections: { gem: { type: 'openai-compatible', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-3.8-flash', apiKey: 'AIza-test-gemini-00000000000000000' } } } }
+  const catalog = { ensureProvider: async ({ id }) => ({ _id: id }) }
+  const quiet = { info() {}, warn() {}, error() {} }
+  const reports = await Promise.all([1, 2, 3].map(() => importSettingsKeys({ settings, keys: store, catalog, log: quiet })))
+  assert.equal(await keys.countDocuments({ provider: 'gemini', kind: 'key' }), 1)
+  assert.equal(reports.reduce((n, r) => n + r.moved.length, 0), 1)
+  assert.equal(reports.reduce((n, r) => n + r.failed.length, 0), 0)
+  // revoked: the record stays without its cipher, and the settings file never brings it back
+  const gem = await store.activeOf('gemini')
+  await store.revoke({ actor, id: gem.id, reason: 'leaked' })
+  const revoked = await keys.findOne({ _id: gem.id })
+  assert.deepEqual([revoked.status, revoked.cipher], ['revoked', undefined])
+  const again = await importSettingsKeys({ settings, keys: store, catalog, log: quiet })
+  assert.deepEqual(again.revoked.map((r) => r.provider), ['gemini'])
+  assert.equal(await keys.countDocuments({ provider: 'gemini', kind: 'key' }), 1)
+  assert.match((await store.keyFor('gemini')).error, /no active key/)
 })

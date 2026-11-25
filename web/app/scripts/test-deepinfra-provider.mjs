@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import {
-  DEFAULT_DEEPINFRA_MODEL,
   getDeepInfraToolArguments,
   normalizeDeepInfraMessages,
   toDeepInfraToolChoice,
@@ -11,21 +10,12 @@ import {
   AI_PROVIDERS,
   buildProviderBody,
   buildProviderTelemetry,
-  getProviderApiKey,
-  getProviderEndpoint,
   getNormalizedAssistantContent,
   isAllowedPlainTextResponse,
   keepsFallbackAfterShapeExhaustion,
   normalizeProviderResponse,
-  resolveAIModel,
-  resolveAIProvider,
   resolveAIRequestTimeout,
-  shouldFallbackToModel,
 } from '../server/methods/ai/provider.mjs'
-import {
-  DEFAULT_AI_FEATURES,
-  resolveAIFeatureConfig,
-} from '../server/methods/ai/feature-config.mjs'
 import {
   resolveWelcomeFunctionCall,
   validateWelcomeResponse,
@@ -36,116 +26,26 @@ import validateGenerationResponse, {
   shouldAttachGenerationOrphansToMain,
 } from '../server/methods/ai/generation-response.mjs'
 
-assert.equal(DEFAULT_DEEPINFRA_MODEL, 'deepseek-ai/DeepSeek-V3')
-assert.deepEqual(resolveAIFeatureConfig('presentation'), {
-  ...DEFAULT_AI_FEATURES.presentation,
-  feature: 'presentation',
-})
-// the presentation default changed 2026-11-22 (server/config/ai-defaults.json: Qwen3 took 59 s+
-// for the forced plan call; gemini-3.5-flash 3.8 to 5.8 s, valid 3 of 3)
-assert.equal(
-  resolveAIFeatureConfig('presentation').engine,
-  'google/gemini-3.5-flash'
-)
-assert.equal(
-  resolveAIFeatureConfig('presentation').fallback.engine,
-  'google/gemini-3.7-flash'
-)
-assert.equal(
-  resolveAIFeatureConfig('presentation').fallback.provider,
-  AI_PROVIDERS.deepinfra
-)
-assert.equal(resolveAIFeatureConfig('welcome').provider, AI_PROVIDERS.deepinfra)
-assert.equal(
-  resolveAIFeatureConfig('welcome').fallback.provider,
-  AI_PROVIDERS.deepinfra
-)
-assert.equal(
-  resolveAIFeatureConfig('welcome').engine,
-  'Qwen/Qwen3-235B-A22B-Instruct-2507'
-)
-assert.equal(
-  resolveAIFeatureConfig('welcome').fallback.engine,
-  'deepseek-ai/DeepSeek-V3.1-Terminus'
-)
-assert.deepEqual(resolveAIFeatureConfig('generation'), {
-  provider: AI_PROVIDERS.deepinfra,
-  engine: 'Qwen/Qwen3-235B-A22B-Instruct-2507',
-  fallback: {
-    provider: AI_PROVIDERS.deepinfra,
-    engine: 'deepseek-ai/DeepSeek-V3.1-Terminus',
-  },
-  feature: 'generation',
-})
-assert.deepEqual(
-  resolveAIFeatureConfig('layout', {
-    ai: {
-      features: {
-        layout: { provider: 'deepinfra', engine: 'candidate-model' },
-      },
-    },
-  }),
-  {
-    provider: 'deepinfra',
-    engine: 'candidate-model',
-    feature: 'layout',
-    // a same-provider override keeps the default fallback pair; another provider
-    // drops it (scripts/ai-config.test.mjs).
-    fallback: {
-      provider: 'deepinfra',
-      engine: 'deepseek-ai/DeepSeek-V3.1-Terminus',
-    },
-  }
-)
-assert.equal(
-  resolveAIProvider({ engine: 'claude-3-5-sonnet-latest' }),
-  AI_PROVIDERS.openai,
-  'engine-name inference to the dead Anthropic key must stay retired'
-)
-assert.equal(
-  resolveAIProvider({
-    provider: 'deepinfra',
-    engine: 'claude-3-5-sonnet-latest',
-  }),
-  AI_PROVIDERS.deepinfra
-)
-assert.equal(resolveAIProvider({ engine: 'gpt-4o' }), AI_PROVIDERS.openai)
-assert.throws(
-  () => resolveAIProvider({ provider: 'deepinfa' }),
-  /Unsupported AI provider/
-)
-assert.equal(
-  resolveAIModel({
-    provider: AI_PROVIDERS.deepinfra,
-    engine: 'requested-model',
-    settings: { deepinfra: { model: 'configured-model' } },
-  }),
-  'requested-model'
-)
-assert.equal(
-  getProviderApiKey({
-    provider: AI_PROVIDERS.deepinfra,
-    env: { API_KEY_DEEP_INFRA: 'secret' },
-  }),
-  'secret'
-)
-assert.equal(
-  getProviderEndpoint(AI_PROVIDERS.deepinfra),
-  'https://api.deepinfra.com/v1/openai/chat/completions'
-)
+// Which provider, model and key answer a feature is chosen in Admin → AI control (the built-in
+// model table, the provider and model resolution and the settings-file keys are gone); what stays
+// here is the wire: message and tool shapes, telemetry, timeouts and response checks.
+const TELEMETRY_MODEL = 'deepseek-ai/DeepSeek-V3'
+const { CODE_LIMITS } = await import('../server/ai-control/resolve.mjs')
+assert.equal(CODE_LIMITS.shapeRetries, 3, 'shape retry cap is a cost contract: 3 attempts per provider')
+assert.equal(CODE_LIMITS.infraRetries, 2)
 assert.equal(resolveAIRequestTimeout(), 90000)
 assert.equal(resolveAIRequestTimeout({ requested: 100 }), 1000)
 assert.equal(resolveAIRequestTimeout({ requested: 300000 }), 180000)
 const telemetry = buildProviderTelemetry({
   provider: AI_PROVIDERS.deepinfra,
-  model: DEFAULT_DEEPINFRA_MODEL,
+  model: TELEMETRY_MODEL,
   feature: 'presentation',
   status: 'success',
   usage: { totalTokens: 20 },
 })
 assert.deepEqual(telemetry, {
   provider: AI_PROVIDERS.deepinfra,
-  model: DEFAULT_DEEPINFRA_MODEL,
+  model: TELEMETRY_MODEL,
   feature: 'presentation',
   status: 'success',
   duration: 0,
@@ -165,9 +65,9 @@ const welcomeMethodSource = await readFile(
   'utf8'
 )
 assert.equal(
-  welcomeMethodSource.match(/fallback: welcomePrompt\.fallback/g)?.length,
-  3,
-  'every welcome provider request must retain the configured fallback'
+  welcomeMethodSource.match(/fallback: welcomePrompt\.fallback/g)?.length || 0,
+  0,
+  'no welcome request names a fallback model: req.js tries the default model once after a failing service'
 )
 assert.equal(
   welcomeMethodSource.match(/allowPlainText: true/g)?.length,
@@ -202,15 +102,8 @@ assert.match(
   'setIntention intentionItems must use a valid array items schema'
 )
 assert.equal(WELCOME_INSTRUCTION_MIN_WORDS, 60)
-// Fallback policy (ladder-cost): shape-exhausted aborts carry
-// fallbackBlocked and must not re-burn the ladder on the fallback model;
-// infra aborts (timeout/provider_error) keep the fallback.
-assert.equal(shouldFallbackToModel({ abort: true }), true)
-assert.equal(
-  shouldFallbackToModel({ abort: true, fallbackBlocked: true }),
-  false,
-)
-assert.equal(shouldFallbackToModel({ abort: false }), false)
+// Fallback policy (ladder-cost): shape-exhausted aborts carry fallbackBlocked; the one fallback
+// req.js makes (the default model) is for a failing service only, never for a shape failure.
 assert.equal(keepsFallbackAfterShapeExhaustion('generation'), true)
 assert.equal(keepsFallbackAfterShapeExhaustion('vision'), true)
 assert.equal(keepsFallbackAfterShapeExhaustion('welcome'), false)
@@ -231,9 +124,10 @@ const reqSourceForPolicy = await readFile(
 assert.equal(
   reqSourceForPolicy.match(/!keepsFallbackAfterShapeExhaustion\(aiOpts\.feature\)/g)
     ?.length,
-  3,
-  'every shape-exhaustion path (a tool the binding does not allow, validation, the invalid-JSON ladder) must run the fallback policy',
+  2,
+  'every shape-exhaustion path (validation, the invalid-JSON ladder) must run the fallback policy',
 )
+assert.match(reqSourceForPolicy, /first\.failure !== 'infra'/, 'the default model is tried only after a failing service')
 assert.match(
   reqSourceForPolicy,
   /if \(errs >= (?:SHAPE_RETRY_LIMIT|\(aiOpts\.shapeRetries \?\? SHAPE_RETRY_LIMIT\))\)\s*\{[\s\S]{0,600}?return \{\s*abort: true,[\s\S]{0,200}fallbackBlocked:/,
@@ -246,7 +140,7 @@ assert.doesNotMatch(
 )
 assert.match(
   reqSourceForPolicy,
-  /const SHAPE_RETRY_LIMIT = 3/,
+  /const SHAPE_RETRY_LIMIT = CODE_LIMITS\.shapeRetries/,
   'shape retry cap is a cost contract: 3 attempts per provider, down from 6+6',
 )
 assert.deepEqual(
@@ -526,13 +420,13 @@ assert.deepEqual(toDeepInfraToolChoice({ name: 'createPresentation' }), {
 
 const providerBody = buildProviderBody({
   provider: AI_PROVIDERS.deepinfra,
-  model: DEFAULT_DEEPINFRA_MODEL,
+  model: TELEMETRY_MODEL,
   prompts: [{ role: 'user', content: 'Lay this out.' }],
   system: 'Avoid overlap.',
   functions,
   functionCall: { name: 'createPresentation' },
 })
-assert.equal(providerBody.model, DEFAULT_DEEPINFRA_MODEL)
+assert.equal(providerBody.model, TELEMETRY_MODEL)
 assert.equal(providerBody.tools[0].function.name, 'createPresentation')
 assert.equal(providerBody.tool_choice.function.name, 'createPresentation')
 
@@ -661,23 +555,8 @@ assert.deepEqual(
 
 assert.match(
   welcomeMethodSource,
-  /hasImagePayload \? 'vision' : 'generation',\s*Meteor\.settings/,
-  'all generation flows must receive a settings-driven provider config, selected by payload modality (never by stale intention flags or provider inference)'
-)
-assert.equal(
-  DEFAULT_AI_FEATURES.vision?.provider,
-  'deepinfra',
-  'vision flows must default to a keyed provider (DeepInfra), not the legacy Anthropic key'
-)
-assert.match(
-  DEFAULT_AI_FEATURES.vision?.engine || '',
-  /Qwen3-235B/,
-  'vision default must stay on the shape-verified DeepInfra model'
-)
-assert.doesNotMatch(
-  welcomeMethodSource,
-  /opts\.isConversation\?\.id === 'expert-collaborator'[\s\S]*?resolveAIFeatureConfig\('generation'/,
-  'DeepInfra generation must not be limited to the expert collaborator intention'
+  /const generationConfig = \{ feature: hasImagePayload \? 'vision' : 'generation' \}/,
+  'all generation flows name their part (vision or generation), selected by payload modality (never by stale intention flags or provider inference); Admin → AI control picks the model'
 )
 assert.match(
   welcomeMethodSource,
@@ -846,15 +725,9 @@ assert.match(
   'chat UI must surface aborted conversations and release the spinner, not set a null context'
 )
 
-assert.ok(
-  !JSON.stringify(DEFAULT_AI_FEATURES).includes('claude-3-5'),
-  'no default feature may name a legacy claude model (dead-key routing class)'
-)
-assert.equal(
-  resolveAIFeatureConfig('layout').provider,
-  AI_PROVIDERS.deepinfra,
-  'layout default must not depend on the retired Anthropic key'
-)
+// the built-in default is Meta Muse Ember (Admin → AI control), never a legacy claude model
+const { BUILTIN_DEFAULT } = await import('../server/ai-control/provider-presets.mjs')
+assert.deepEqual(BUILTIN_DEFAULT, { preset: 'meta', model: 'muse-ember-1.0' })
 const openaiSource = await readFile(
   new URL('../server/methods/openai.js', import.meta.url),
   'utf8'

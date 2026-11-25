@@ -164,8 +164,8 @@ test('the server plan is Present\'s: its permission check, its planner and the A
   assert.match(create, /runAIAction\(\{ feature: 'presentation', estimateMicros, userId: user\._id \}, fn\)/)
   assert.match(create, /analyzePresentation\(args, user, stored, layout, counted, \{ brief, persist: !preview, keyed: false \}\)/)
   assert.match(create, /styleChange\(row, palette \? \{ id: style, overrides: \{ palette \} \} : \{ id: style \}\)/)
-  // The model and its connection are chosen for that person (config-driven: settings.ai use 'presentation').
-  assert.match(source, /resolveAIFeatureConfig\('presentation', Meteor\.settings\)/)
+  // The model is chosen for that person: the presentation part's model in Admin → AI control (or their own AI).
+  assert.match(source, /feature: 'presentation',\n\s+\/\/ Named, so a plan/)
   assert.match(source, /resolveRequestConnection\(\{ feature: 'presentation', request: \{ tools: true \}, userId: user\._id \}\)/)
   assert.match(source, /if \(!persist\) \{\n\s+return \{ presentationId: null/)
   // The presenter opens a presentation's link: /canvas/<id>?present=1 starts Present for someone who may edit.

@@ -3,11 +3,9 @@ import assert from 'node:assert/strict'
 import {
   AI_PROVIDERS,
   buildProviderBody,
-  buildProviderHeaders,
-  getProviderEndpoint,
   normalizeProviderResponse,
 } from '../server/methods/ai/provider.mjs'
-import { resolveAIFeatureConfig } from '../server/methods/ai/feature-config.mjs'
+import { DEEPINFRA_ENDPOINT, deepinfraHeaders, evalFeature } from './eval-deepinfra-wire.mjs'
 
 const apiKey = process.env.API_KEY_DEEP_INFRA
 assert.ok(
@@ -15,7 +13,7 @@ assert.ok(
   'API_KEY_DEEP_INFRA is required for the live welcome evaluation'
 )
 
-const feature = resolveAIFeatureConfig('welcome')
+const feature = evalFeature('welcome')
 const model = process.env.DEEPINFRA_MODEL || feature.engine
 const intentionIds = {
   default: 'expert-collaborator',
@@ -121,12 +119,9 @@ async function evaluateFixture(fixture) {
     const attemptStartedAt = Date.now()
     let fetchResponse
     try {
-      fetchResponse = await fetch(getProviderEndpoint(AI_PROVIDERS.deepinfra), {
+      fetchResponse = await fetch(DEEPINFRA_ENDPOINT, {
         method: 'POST',
-        headers: buildProviderHeaders({
-          provider: AI_PROVIDERS.deepinfra,
-          apiKey,
-        }),
+        headers: deepinfraHeaders(apiKey),
         body: JSON.stringify(body),
         signal: controller.signal,
       })

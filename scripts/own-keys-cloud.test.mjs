@@ -193,8 +193,8 @@ test('Cloud refuses a person\'s or team\'s own AI with one sentence: save, choos
   await assert.rejects(cloud.check('ana', { level: 'team', connection: desk }), refused)
   await assert.rejects(cloud.update('root', { level: 'server', ownProviders: 'on' }), refused)
   assert.equal(store.keys.length, 0, 'nothing was saved')
-  // the operator's own AI is not an own key: an administrator still sets Cloud's server AI
-  await cloud.update('root', { level: 'server', connections: [desk], use: { chat: 'server:desk' } })
+  // the server's own models are not own keys: an administrator sets them in Admin → AI control, never here
+  await assert.rejects(cloud.update('root', { level: 'server', connections: [desk], use: { chat: 'builtin' } }), (error) => error.code === 'invalid_request' && /Admin → AI control/.test(error.message))
   assert.equal((await cloud.resolveFor({ userId: 'ana', feature: 'workshop' })).scope, 'server')
 })
 
@@ -303,10 +303,13 @@ test('Cloud draws shapes with the server\'s AI only; a self-hosted server still 
   assert.notEqual(onCloud.scope, 'me')
   assert.notEqual(onCloud.scope, 'team')
   await assert.rejects(cloud.update('ana', { level: 'me', use: { shape: 'me:desk' } }), { code: 'forbidden', message: OWN_KEYS_CLOUD })
-  // the operator may route Cloud's shapes to a server connection (as test and prod do with meta-muse)
-  await cloud.update('root', { level: 'server', connections: [{ ...desk, name: 'meta-muse', toolChoice: 'auto' }], use: { shape: 'server:meta-muse' } })
-  const served = await cloud.resolveFor({ userId: 'ana', feature: 'shape' })
-  assert.equal(served.ref, 'server:meta-muse')
+  // Cloud's shapes answer with the server's model (Admin → AI control: Meta Muse Ember, tool choice auto)
+  const { aiControlWorld } = await import('./ai-control-kit.mjs')
+  const w = await aiControlWorld({ settings: { public: { env: 'prod' } }, hosted: true })
+  await w.catalog.addProvider({ actor: w.actor, input: { preset: 'meta' }, models: ['muse-ember-1.0'] })
+  await w.keyStore.add({ actor: w.actor, provider: 'meta', apiKey: 'sk-test-meta-cloud-000000000001' })
+  const served = await w.aiSettings.resolveFor({ userId: 'ana', feature: 'shape' })
+  assert.equal(served.ref, 'server:meta')
   assert.equal(served.own, false)
   assert.equal(served.connection.toolChoice, 'auto')
 })

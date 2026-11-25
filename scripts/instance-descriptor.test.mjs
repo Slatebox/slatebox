@@ -102,6 +102,8 @@ function makeWorld(settings = cloudSettings(), { cloudKey = settings.public?.env
     mailAvailable: () => true,
     accounts,
     cloud: () => cloudKey,
+    // the default model's provider has a key in Admin → AI control (the key store, not the settings file)
+    aiAvailable: async () => true,
   });
   const deps = { apiTokens: service, instance: describer, accounts };
   const build = () => createAppRegistry({ deps });
@@ -275,7 +277,7 @@ test("Cloud and a self-hosted instance answer the same shape with different fact
   noSecret(selfOpen);
 });
 
-test("self-hosted AI drafting reads off, or a vendor key, as data and never the key", () => {
+test("AI drafting reads off, or a key in Admin → AI control, as data and never the key; a settings-file key alone does not count", () => {
   const off = selfHostSettings();
   off.selfHosted = { workshopAI: false };
   delete off.ai;
@@ -288,6 +290,11 @@ test("self-hosted AI drafting reads off, or a vendor key, as data and never the 
   const cloudNoKey = cloudSettings();
   delete cloudNoKey.deepinfra;
   assert.deepEqual(instanceCapabilities(cloudNoKey, { mailAvailable: () => true }).aiDrafting, { available: false, provider: "none" });
+  assert.deepEqual(instanceCapabilities(cloudSettings(), { mailAvailable: () => true }).aiDrafting, { available: false, provider: "none" }, "settings.deepinfra.apiKey is not read");
+  assert.deepEqual(instanceCapabilities(cloudNoKey, { mailAvailable: () => true, aiAvailable: true }).aiDrafting, { available: true, provider: "slatebox" });
+  const selfOff = selfHostSettings();
+  selfOff.selfHosted = { workshopAI: false };
+  assert.deepEqual(instanceCapabilities(selfOff, { mailAvailable: () => true, aiAvailable: true }).aiDrafting, { available: true, provider: "instance" }, "a self-hosted server with a model key in Admin → AI control");
 });
 
 test("the identity: two starts keep the id; a restore into a new container changes the id and keeps the lineage", async () => {

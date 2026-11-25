@@ -2,16 +2,14 @@ import assert from 'node:assert/strict'
 import {
   AI_PROVIDERS,
   buildProviderBody,
-  buildProviderHeaders,
-  getProviderEndpoint,
   normalizeProviderResponse,
 } from '../server/methods/ai/provider.mjs'
-import { DEFAULT_DEEPINFRA_MODEL } from '../server/methods/ai/deepinfra.mjs'
+import { DEEPINFRA_ENDPOINT, deepinfraHeaders, evalFeature } from './eval-deepinfra-wire.mjs'
 
 const apiKey = process.env.API_KEY_DEEP_INFRA
 assert.ok(apiKey, 'API_KEY_DEEP_INFRA is required for the live layout evaluation')
 
-const model = process.env.DEEPINFRA_MODEL || DEFAULT_DEEPINFRA_MODEL
+const model = evalFeature('layout').engine
 const layoutTool = {
   name: 'updateLayout',
   description:
@@ -121,12 +119,9 @@ async function evaluateFixture(fixture) {
   const startedAt = Date.now()
   let fetchResponse
   try {
-    fetchResponse = await fetch(getProviderEndpoint(AI_PROVIDERS.deepinfra), {
+    fetchResponse = await fetch(DEEPINFRA_ENDPOINT, {
       method: 'POST',
-      headers: buildProviderHeaders({
-        provider: AI_PROVIDERS.deepinfra,
-        apiKey,
-      }),
+      headers: deepinfraHeaders(apiKey),
       body: JSON.stringify(body),
       signal: controller.signal,
     })

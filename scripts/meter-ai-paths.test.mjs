@@ -53,7 +53,8 @@ test('with metering on and no action, req returns the unmetered abort before any
   const body = reqSource.slice(reqSource.indexOf('async function requestFromProvider'))
   const gateAt = body.indexOf('aiRequestGate()')
   assert.ok(gateAt > 0, 'req.js calls aiRequestGate')
-  for (const marker of ['getProviderApiKey(', 'fetch(endpoint', 'sdkChatRequest(']) {
+  // (the key is opened with the route, resolveRequestConnection: the backend's key store, never the settings file)
+  for (const marker of ['resolveRequestConnection(', 'fetch(endpoint', 'sdkChatRequest(']) {
     assert.ok(body.indexOf(marker) > gateAt, marker + ' comes after the gate')
   }
   assert.match(body, /status: 'unmetered'/)

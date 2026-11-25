@@ -615,23 +615,25 @@ return slatebox.library.saveDraft({ shareId, title: "Probe triage", summary: "So
     const refusedRead = await exec(`return slatebox.${call}`);
     assert.deepEqual([refusedRead.error.status, refusedRead.error.code, refusedRead.error.details?.requiredScope], [403, "insufficient_scope", "ai:admin:read"], call);
   }
-  const refusedReset = await exec(`return slatebox.ai.control.reset({ target: "use", reason: "probe" })`);
+  const refusedReset = await exec(`return slatebox.ai.control.reset({ target: "bindings", reason: "probe" })`);
   assert.deepEqual([refusedReset.status, refusedReset.error.status, refusedReset.error.code, refusedReset.error.details?.requiredScope], ["failed", 403, "insufficient_scope", "ai:admin"]);
-  // AI control S3: providers, connections and models, the same way (their rules: scripts/ai-providers.test.mjs)
-  // AI control S4: bindings, the same way (publish, rollback and the global switch are a person's,
-  // in the app only, so they are no client methods; their rules: scripts/ai-bindings.test.mjs)
+  // Providers, keys, models and bindings, the same way (adding, switching, revoking and deleting a key,
+  // archiving a provider, removing a model and the global switch are a person's, in the app only, so
+  // they are no client methods; their rules: scripts/ai-providers.test.mjs, ai-keys.test.mjs, ai-bindings.test.mjs)
   // AI control S6: prompts, the same way (publish and rollback are a person's, in the app only;
   // their rules: scripts/ai-prompt-publish.test.mjs)
-  for (const call of ["ai.connections.list({})", "ai.models.discover({ connection: \"gem\" })", "ai.bindings.list({})",
+  for (const call of ["ai.keys.list({})", "ai.models.discover({ provider: \"meta\" })", "ai.bindings.list({})",
     "ai.prompts.list({})", "ai.prompts.get({ id: \"shape.system\" })", "ai.prompts.render({ id: \"shape.system\" })"]) {
     const refusedRead = await exec(`return slatebox.${call}`);
     assert.deepEqual([refusedRead.error.status, refusedRead.error.code, refusedRead.error.details?.requiredScope], [403, "insufficient_scope", "ai:admin:read"], call);
   }
   for (const call of [
-    "ai.providers.save({ provider: { id: \"gemini\", label: \"Gemini\", protocol: \"openai-chat\" } })",
-    "ai.connections.save({ connections: [{ name: \"gem\", type: \"deepinfra\" }] })",
-    "ai.models.save({ models: [{ connection: \"builtin:deepinfra\", model: \"m\" }] })",
-    "ai.bindings.saveDraft({ binding: { surface: \"shape\", enabled: false } })",
+    "ai.providers.add({ provider: { preset: \"meta\" } })",
+    "ai.providers.save({ provider: { id: \"meta\", label: \"Meta\" } })",
+    "ai.keys.test({ id: \"k1\" })",
+    "ai.models.save({ models: [{ provider: \"meta\", model: \"m\" }] })",
+    "ai.models.test({ id: \"meta:m\" })",
+    "ai.bindings.set({ changes: [{ surface: \"shape\", use: \"off\" }] })",
     "ai.prompts.saveDraft({ id: \"shape.system\", body: \"Draw {{count}} outlines.\" })",
     "ai.prompts.test({ id: \"shape.system\" })",
   ]) {

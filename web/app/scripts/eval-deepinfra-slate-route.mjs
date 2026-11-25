@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict'
+import { DEEPINFRA_ENDPOINT, deepinfraHeaders } from './eval-deepinfra-wire.mjs'
 import { SLATE_OPERATION_TOOL } from 'slateboxjs/operations'
 import { validateSlateMessageRoute } from '../server/methods/ai/welcome-response.mjs'
 import {
   AI_PROVIDERS,
   buildProviderBody,
-  buildProviderHeaders,
-  getProviderEndpoint,
   normalizeProviderResponse,
 } from '../server/methods/ai/provider.mjs'
 
@@ -70,9 +69,9 @@ const body = buildProviderBody({
 })
 
 const startedAt = Date.now()
-const response = await fetch(getProviderEndpoint(AI_PROVIDERS.deepinfra), {
+const response = await fetch(DEEPINFRA_ENDPOINT, {
   method: 'POST',
-  headers: buildProviderHeaders({ provider: AI_PROVIDERS.deepinfra, apiKey }),
+  headers: deepinfraHeaders(apiKey),
   body: JSON.stringify(body),
 })
 const payload = await response.json()

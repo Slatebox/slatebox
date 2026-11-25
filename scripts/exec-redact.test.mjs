@@ -56,8 +56,8 @@ test("a key written as a literal in a hand-written script is replaced in every q
 });
 
 // ---------- AI control S3: keys in AI control actions and in provider error text (spec 6.2) ----------
-test("a key sent to ai.connections.save is replaced in a run's record", () => {
-  const code = 'await slatebox.ai.connections.save({ connections: [{ name: "gem", type: "gemini", model: "m", apiKey: "AIzaSyExample000000000000000000000" }] })';
+test("a key sent to ai.keys.test is replaced in a run's record", () => {
+  const code = 'await slatebox.ai.keys.test({ provider: "gemini", apiKey: "AIzaSyExample000000000000000000000" })';
   const kept = redact(code);
   assert.doesNotMatch(kept, /AIzaSyExample/);
   assert.match(kept, /apiKey: "\[redacted\]"/);

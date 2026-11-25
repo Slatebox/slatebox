@@ -25,7 +25,6 @@ import { sanitizeClientName } from '../web/app/imports/api/common/agent-label.mj
 import { connectorSuggestions } from './connector-suggestions-world.mjs'
 import { applyPlanToJSON } from 'slateboxjs/operations'
 import { createAgentPresence, publicRecord } from '../web/app/server/presence/agentPresence.mjs'
-import { resolveAIChoice, operatorConfig } from '../web/app/server/methods/ai/connections.mjs'
 
 let servers
 let fetch
@@ -603,11 +602,16 @@ test('presence: an invited agent wears its name, "added by <inviter>" and its ch
   assert.deepEqual(publicRecord({ targets: ['ghost-../x', 'other-slate-note'] }, new Set()).targets, [])
 })
 
-test('AI: settings.ai.use.connectors is honoured, and follows the conversation choice when unset', () => {
-  const server = operatorConfig({ ai: { connections: { a: { type: 'openai-compatible', baseUrl: 'https://a.example/v1', model: 'm' }, b: { type: 'openai-compatible', baseUrl: 'https://b.example/v1', model: 'n' } }, use: { chat: 'a' } } })
-  assert.equal(resolveAIChoice({ feature: 'connectors', server }).ref, 'server:a')
-  const own = operatorConfig({ ai: { connections: { a: { type: 'openai-compatible', baseUrl: 'https://a.example/v1', model: 'm' }, b: { type: 'openai-compatible', baseUrl: 'https://b.example/v1', model: 'n' } }, use: { chat: 'a', connectors: 'b' } } })
-  assert.equal(resolveAIChoice({ feature: 'connectors', server: own }).ref, 'server:b')
+test('AI: the connectors part answers with its own binding, and follows the conversation part when unset', async () => {
+  const { buildSnapshot } = await import('../web/app/server/ai-control/snapshot.mjs')
+  const { resolveModel } = await import('../web/app/server/ai-control/resolve.mjs')
+  const { providerFromPreset } = await import('../web/app/server/ai-control/provider-presets.mjs')
+  const model = (id) => ({ _id: `meta:${id}`, provider: 'meta', model: id, capabilities: { tools: true }, status: 'enabled' })
+  const snap = (bindings) => buildSnapshot({ providers: [providerFromPreset('meta')], models: [model('a'), model('b')], bindings })
+  const follows = resolveModel(snap([{ _id: 'chat', surface: 'chat', use: 'model', model: 'meta:a' }]), { surface: 'connectors' })
+  assert.deepEqual([follows.route.model, follows.followed], ['a', 'chat'])
+  const own = resolveModel(snap([{ _id: 'chat', surface: 'chat', use: 'model', model: 'meta:a' }, { _id: 'connectors', surface: 'connectors', use: 'model', model: 'meta:b' }]), { surface: 'connectors' })
+  assert.deepEqual([own.route.model, own.source], ['b', 'part'])
 })
 
 test('the connector actions join the one registry: Meteor method, /api/v1 route, exec and MCP tool', async () => {
