@@ -1,16 +1,18 @@
 // The six presentations Slatebox built for the marketing site's Presentations page, as library items: origin
-// builtin, author Slatebox, always published, kind presentation. Each publishes its slate as the site draws it (every
-// note's id, place, size, shape and colors, every connection) and its deck as the app's Present saves one: the art
-// direction checked against the slate (normalizeDirection), its style, and the steps composeDeck makes of them. So
-// "Make it yours" (library.fork) opens a copy of the same slate with the same deck, and Present in the copy plays it.
+// builtin, author Slatebox, always published, kind presentation. The slate IS the presentation: each publishes its
+// slate wearing its style (presentationBake.wearStyle: the style's background, its notes' outlines, fills and fonts,
+// and the style's title cards, numbers, quotes, captions and art as real notes), and its deck as the app's Present
+// saves a worn style's: the art direction checked against the slate and the camera steps over the styled slate
+// (deck version 5). So "Make it yours" (library.fork) opens a copy that looks like the site's poster on the canvas
+// itself, and Present in the copy plays the same deck, drawing nothing the slate does not hold.
 //
 // Run at startup, beside the built-in components (builtins.mjs); idempotent: a version is added only when an item's
 // content changed (contentHash), so a new composer that composes the steps differently publishes a new version. A
 // presentation gone from the list is unpublished, never deleted. The content is shipped with the app
 // (showcase/presentations.mjs, written by the site's scripts/make-present-decks.mjs); no account owns it.
 import { BUILTIN_AUTHOR, LIBRARY_LICENSE } from '../../imports/api/common/library-model.mjs'
-import { composeDeck, normalizeDirection } from '../../imports/ui/components/presentations/presentationCompose.mjs'
 import { cleanStyleRef } from '../../imports/ui/components/presentations/presentationStyles.mjs'
+import { wearStyle } from '../../imports/ui/components/presentations/presentationBake.mjs'
 import { storedSlateLayout } from '../methods/presentationLayout.mjs'
 import { sanitizeLayout } from '../methods/presentationRequest.mjs'
 import { playerSlateCopy } from '../methods/presentationDeck.mjs'
@@ -21,22 +23,27 @@ import { showcasePresentations } from './showcase/presentations.mjs'
 const SYSTEM = { kind: 'system', userId: null, name: 'Slatebox' }
 export const SHOWCASE_PREFIX = 'builtin-presentation-'
 
-/** A showcase entry's library content: { kind: 'presentation', slate, deck }, the deck composed by the app's own code. */
+/**
+ * A showcase entry's library content: { kind: 'presentation', slate, deck }. The slate wears the entry's style (the
+ * app's own code, presentationBake), and the deck plays it (deck.deck, version 5).
+ */
 export function showcaseContent(entry) {
-  const slate = structuredClone(entry.slate)
-  slate.options = { ...(slate.options || {}), name: entry.title }
-  const { layout } = sanitizeLayout(storedSlateLayout(slate))
+  const plain = structuredClone(entry.slate)
+  plain.options = { ...(plain.options || {}), name: entry.title }
+  const { layout } = sanitizeLayout(storedSlateLayout(plain))
   if (!layout) throw new Error(`showcase ${entry.slug}: the slate has no notes to present`)
   const style = cleanStyleRef(entry.look?.style)
-  const direction = { ...normalizeDirection(entry.look?.direction, layout, { name: entry.title }), style }
+  const worn = wearStyle(plain, style, { direction: entry.look?.direction, name: entry.title })
+  const slate = worn.slate
   const deck = {
     name: entry.title,
     description: entry.summary,
     showNarrative: false,
-    viewpoints: composeDeck(layout, direction, { style }).steps,
-    direction,
+    viewpoints: worn.deck.steps,
+    direction: worn.direction,
     style,
-    presentationData: layout,
+    deck: worn.deck,
+    presentationData: sanitizeLayout(storedSlateLayout(slate)).layout,
     slateJSON: playerSlateCopy(slate),
   }
   return { kind: 'presentation', slate, deck }

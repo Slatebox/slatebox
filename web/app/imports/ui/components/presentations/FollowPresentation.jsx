@@ -6,7 +6,7 @@ import prepareSlateSurface from './prepareSlateSurface'
 import { reconcileViewpoints } from './buildFallbackPresentation.mjs'
 import { workshopScenes } from './workshopScenes.mjs'
 import { currentPresentation } from '../../jotai/atoms'
-import { composeDeck } from './presentationCompose.mjs'
+import { isBakedDeck, playableDeck } from './presentationBake.mjs'
 
 /**
  * Following a live presentation: the presenter's sequence (`deck`), played over this person's own
@@ -28,13 +28,15 @@ export default function FollowPresentation({ slate, deck, step, workshop }) {
         containerRef.current.style.backgroundImage = `url(${surface.backgroundImage})`
         containerRef.current.style.backgroundSize = 'cover'
       }
-      // A styled deck is composed over this person's drawing of the slate, as the presenter's is.
-      let styled = null
-      if (deck.direction?.steps) {
-        try { styled = composeDeck(surface.layout, deck.direction, { style: deck.style }) } catch { styled = null }
-      }
+      // A deck with a look plays on a live canvas over this person's copy of the slate, as the
+      // presenter's does: a worn style is on the slate itself; the player draws nothing of its own.
+      const looks = isBakedDeck(deck.deck) || Boolean(deck.direction?.steps)
       let copy = null
-      try { copy = styled ? slate.exportJSON?.() : null } catch { copy = null }
+      try { copy = looks ? slate.exportJSON?.() : null } catch { copy = null }
+      let styled = null
+      if (copy) {
+        try { styled = playableDeck({ deck: deck.deck, viewpoints: deck.viewpoints, slateJSON: copy }) } catch { styled = null }
+      }
       setPresentation(previous => ({
         ...previous,
         isAnalyzing: false, isPlaying: false, currentView: -1,
@@ -42,7 +44,7 @@ export default function FollowPresentation({ slate, deck, step, workshop }) {
         slateSVG: surface.svg, orientData: surface.orient, presentationData: surface.layout,
         presentationName: deck.name,
         slateJSON: copy,
-        deckLook: styled && copy ? { direction: deck.direction, style: styled.style } : null,
+        deckLook: styled && copy ? { deck: styled } : null,
         // The deck as the presenter plays it; cards that moved since are framed where they are now.
         viewpoints: styled && copy ? styled.steps : reconcileViewpoints(deck.viewpoints, surface.layout, scenes, { keep: true }),
       }))

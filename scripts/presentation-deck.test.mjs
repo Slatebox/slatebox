@@ -12,7 +12,7 @@ import { carryImages, deckFor, normalizeDirection, composeDeck, pendingImages, s
 import { STYLES } from '../web/app/imports/ui/components/presentations/presentationStyles.mjs'
 import { isArt } from '../web/app/imports/ui/components/presentations/presentationArt.mjs'
 import { readDeck } from '../web/app/server/methods/live-presentation.mjs'
-import { whatIsSlatebox } from './presentation-fixtures.mjs'
+import { slateOfLayout, whatIsSlatebox } from './presentation-fixtures.mjs'
 
 const NAME = 'What is Slatebox'
 const aiDirection = () => normalizeDirection({
@@ -246,9 +246,11 @@ test('a searched picture names its source where it shows (its licence asks for a
   assert.ok(shown.length >= 1)
   assert.ok(shown.every((note) => note.credit === 'stranger.example'))
   assert.ok(deck.stageNotes.filter((note) => note.image === 'https://store.slatebox.example/made.png').every((note) => !note.credit))
-  // The credit is the player's to show, never an engine option on the note.
-  const { stageNodes } = await import('../web/app/imports/ui/components/presentations/livePresenter.mjs')
-  assert.ok(stageNodes(deck).every((node) => node.options.credit === undefined))
+  // The credit is the player's to show (the deck names it on the steps where the picture shows), never an option
+  // on the note the slate wears.
+  const { wearStyle } = await import('../web/app/imports/ui/components/presentations/presentationBake.mjs')
+  const worn = wearStyle(slateOfLayout(whatIsSlatebox(), NAME), direction.style, { direction, name: NAME })
+  assert.ok(worn.slate.nodes.every((node) => node.options.credit === undefined))
 })
 
 test('a restyle (or another picture) of a published version gives it a new share card; an unpublished one keeps none', async () => {

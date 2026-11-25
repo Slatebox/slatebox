@@ -1,9 +1,11 @@
 // The six presentations Slatebox built for the site's Presentations page, as library items (server/library/showcase.mjs):
 // published, by Slatebox, each with its slate and the deck the app's own composer makes of its look; re-seeding
 // changes nothing; changed content is a new version; a presentation gone from the list is unpublished, never deleted;
-// the built-in components' seed leaves them alone. "Make it yours" (library.fork) copies the slate as it is (every
-// note's id, place, size, shape and colors, every connection, the title) and the deck with its look, and Present keeps
-// that deck instead of planning the slate again.
+// the built-in components' seed leaves them alone. The slate IS the presentation: each is published wearing its style
+// (its background, its notes' look, the style's title cards, captions and art as real notes), so "Make it yours"
+// (library.fork) copies a slate that looks like the site's poster on the canvas itself (every note's id and words, the
+// style on them, every connection, the title) and the deck that plays it, and Present keeps that deck instead of
+// planning the slate again.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -18,12 +20,15 @@ import { API_TOKEN_SCOPES } from "../web/app/server/api-token-core.mjs";
 import { needsPlan } from "../web/app/imports/ui/components/presentations/presentationPlan.mjs";
 import { STYLES } from "../web/app/imports/ui/components/presentations/presentationStyles.mjs";
 import { nativeSlateFromBrief } from "../web/app/imports/api/common/native-diagram-brief.mjs";
+import { DECOR_ROLES, wearStyle } from "../web/app/imports/ui/components/presentations/presentationBake.mjs";
 
 const SLUGS = ["launch-war-room", "checkout-postmortem", "investor-update", "trial-research", "roadmap-bets", "first-month"];
 const STYLE_OF = { "launch-war-room": "neon", "checkout-postmortem": "blueprint", "investor-update": "editorial", "trial-research": "sketch", "roadmap-bets": "voyage", "first-month": "journey" };
 let n = 0;
 const world = () => ({ items: libraryCollection(), versions: libraryCollection(), events: libraryCollection(), newId: () => "e" + ++n, now: () => Date.parse("2026-11-24T00:00:00Z") });
 const counts = (w) => ({ items: w.items.docs.length, versions: w.versions.docs.length, events: w.events.docs.length });
+// The bundled slate wearing its style, as the app's own code wears it.
+const wornOf = (entry) => wearStyle({ ...entry.slate, options: { ...entry.slate.options, name: entry.title } }, { id: entry.look.style }, { direction: entry.look.direction, name: entry.title });
 
 test("the bundled six: a slug, title, summary, slate and look each; every step names notes of its slate; a style the app has", () => {
   assert.deepEqual(showcasePresentations.map((entry) => entry.slug), SLUGS);
@@ -61,13 +66,24 @@ test("seeding publishes six presentations by Slatebox, each with its slate and t
     const item = await w.items.findOne({ slug: entry.slug });
     assert.deepEqual([item._id, item.kind, item.origin, item.status, item.authorId, item.authorName, item.title, item.summary, item.publishedVersion],
       [SHOWCASE_PREFIX + entry.slug, "presentation", "builtin", "published", null, "Slatebox", entry.title, entry.summary, 1], entry.slug);
-    assert.deepEqual(item.preview, { kind: "presentation", notes: entry.slate.nodes.length });
+    const worn = wornOf(entry);
+    assert.deepEqual(item.preview, { kind: "presentation", notes: worn.slate.nodes.length });
     const version = await w.versions.findOne({ itemId: item._id, n: 1 });
     const { slate, deck } = version.content;
     assert.equal(version.content.kind, "presentation");
     assert.equal(slate.options.name, entry.title);
-    assert.deepEqual(slate.nodes, entry.slate.nodes, entry.slug + ": the slate as the site draws it");
-    assert.deepEqual(slate.options.containerStyle, entry.slate.options.containerStyle);
+    assert.deepEqual(slate.nodes, worn.slate.nodes, entry.slug + ": the slate wearing its style");
+    assert.deepEqual(slate.options.containerStyle, worn.slate.options.containerStyle);
+    // The style is on the slate: its background, its record, every note of the site's slate with its words, and its
+    // art as real notes (each with the part it plays).
+    assert.equal(slate.options.containerStyle.backgroundColor, STYLES[entry.look.style].bg, entry.slug + ": the style's background");
+    assert.deepEqual(slate.options.style, { id: entry.look.style, v: 4 });
+    for (const source of entry.slate.nodes) assert.equal(slate.nodes.find((node) => node.options.id === source.options.id)?.options.text, source.options.text, `${entry.slug}: ${source.options.id} keeps its words`);
+    const art = slate.nodes.filter((node) => node.options.styleRole);
+    assert.equal(art.length, slate.nodes.length - entry.slate.nodes.length, entry.slug + ": every added note is the style's");
+    assert.ok(art.some((node) => node.options.styleRole === "title" && node.options.text === entry.look.direction.title), entry.slug + ": the title card is a note");
+    assert.equal(deck.deck.version, 5, entry.slug + ": the deck plays the worn style");
+    assert.deepEqual(deck.deck.steps.map((step) => step.box), deck.viewpoints.map((step) => step.box));
     assert.equal(deck.name, entry.title);
     assert.deepEqual(deck.style, { id: entry.look.style });
     assert.equal(deck.direction.style.id, entry.look.style);
@@ -75,7 +91,7 @@ test("seeding publishes six presentations by Slatebox, each with its slate and t
     assert.deepEqual(deck.direction.steps.map((step) => step.nodeIds), entry.look.direction.steps.map((step) => step.nodeIds), entry.slug + ": the same steps");
     assert.ok(deck.viewpoints.length >= entry.look.direction.steps.length, entry.slug + ": composed steps");
     assert.ok(deck.viewpoints.every((viewpoint) => Array.isArray(viewpoint.nodeIds)));
-    assert.equal(JSON.parse(deck.slateJSON).nodes.length, entry.slate.nodes.length, entry.slug + ": the player's copy of the slate");
+    assert.equal(JSON.parse(deck.slateJSON).nodes.length, slate.nodes.length, entry.slug + ": the player's copy of the slate, art and all");
     assert.equal(deck.presentationData.nodes.length, 1, entry.slug + ": one root");
   }
 });
@@ -137,15 +153,20 @@ function segmentHitsBox([x1, y1], [x2, y2], b) {
   }
   return t1 - t0 > 1e-9;
 }
-function crossings(slate) {
+// On a slate that wears a style, only the style's decoration (stars, grids, the trace ribbon and the route, drawn as
+// line art behind or across the map on purpose) is exempt, by its role; a line across any note with words still fails.
+function crossings(slate, { worn = false } = {}) {
   const byId = new Map(slate.nodes.map((node) => [node.options.id, node]));
   const mid = (node) => { const b = boxOf(node); return [b.x + b.w / 2, b.y + b.h / 2]; };
   const found = [];
   for (const node of slate.nodes) for (const link of node.relationships?.associations || []) {
     const from = byId.get(link.parentId), to = byId.get(link.childId);
     assert.ok(from && to, link.id);
-    assert.equal(link.lineType, "straight", link.id + ": a straight line");
-    for (const other of slate.nodes) if (other !== from && other !== to && segmentHitsBox(mid(from), mid(to), boxOf(other))) found.push(link.id + " crosses " + other.options.id);
+    if (!worn) assert.equal(link.lineType, "straight", link.id + ": a straight line");
+    for (const other of slate.nodes) {
+      if (worn && DECOR_ROLES.includes(other.options.styleRole)) continue;
+      if (other !== from && other !== to && segmentHitsBox(mid(from), mid(to), boxOf(other))) found.push(link.id + " crosses " + other.options.id);
+    }
   }
   return found;
 }
@@ -186,8 +207,8 @@ test("a re-laid slate in the bundle updates the six already seeded in place: one
     const item = await w.items.findOne({ _id: SHOWCASE_PREFIX + entry.slug });
     assert.deepEqual([item.publishedVersion, item.versionCount], [2, 2], entry.slug);
     const published = await w.versions.findOne({ itemId: item._id, n: 2 });
-    assert.deepEqual(published.content.slate.nodes, entry.slate.nodes, entry.slug + ": the bundled slate is the published one");
-    assert.deepEqual(crossings(published.content.slate), [], entry.slug);
+    assert.deepEqual(published.content.slate.nodes, wornOf(entry).slate.nodes, entry.slug + ": the bundled slate, wearing its style, is the published one");
+    assert.deepEqual(crossings(published.content.slate, { worn: true }), [], entry.slug);
   }
   assert.equal((await seedShowcase(w)).unchanged.length, 6, "then unchanged");
 });
@@ -235,7 +256,7 @@ async function setup(t) {
 
 const lines = (nodes) => nodes.flatMap((node) => (node.relationships?.associations || []).map((link) => ({ ...link })));
 
-test("Make it yours: the copy is the same slate (notes, shapes, colors, places, lines, title) with the same deck, kept by Present", async (t) => {
+test("Make it yours: the copy is the slate wearing its style (notes, style, art, places, lines, title) with the same deck, kept by Present", async (t) => {
   const { env, copies, ddp, person, run } = await setup(t);
   const visitor = { kind: "visitor", userId: null, scopes: [] };
   // Listed with the library's presentations, credited to Slatebox.
@@ -248,15 +269,18 @@ test("Make it yours: the copy is the same slate (notes, shapes, colors, places, 
     const copy = env.slate(forked.shareId);
     assert.equal(copy.options.name, entry.title, entry.slug + ": the item's title, never a row of notes");
     assert.equal(copy.options.isPrivate, true);
-    assert.deepEqual(copy.options.containerStyle, entry.slate.options.containerStyle, entry.slug + ": the background");
-    assert.equal(copy.nodes.length, entry.slate.nodes.length, entry.slug + ": every note");
-    for (const source of entry.slate.nodes) {
+    const worn = wornOf(entry).slate;
+    assert.deepEqual(copy.options.containerStyle, worn.options.containerStyle, entry.slug + ": the style's background");
+    assert.deepEqual(copy.options.style, worn.options.style, entry.slug + ": the style it wears");
+    assert.equal(copy.nodes.length, worn.nodes.length, entry.slug + ": every note and every note of the style's art");
+    for (const source of worn.nodes) {
       const mine = copy.nodes.find((node) => node.options.id === source.options.id);
       assert.ok(mine, `${entry.slug}: note ${source.options.id} keeps its id`);
-      for (const key of ["text", "xPos", "yPos", "width", "height", "shapeHint", "backgroundColor", "foregroundColor", "borderColor", "borderWidth", "fontSize", "fontFamily", "textXAlign"])
+      for (const key of ["text", "xPos", "yPos", "width", "height", "shape", "shapeHint", "vectorPath", "backgroundColor", "foregroundColor", "borderColor", "borderWidth", "fontSize", "fontFamily", "fontWeight", "textXAlign", "styleRole", "isLocked"])
         assert.deepEqual(mine.options[key], source.options[key], `${entry.slug}: ${source.options.id}.${key}`);
     }
-    assert.deepEqual(lines(copy.nodes), lines(entry.slate.nodes), entry.slug + ": every connection, with its look");
+    for (const source of entry.slate.nodes) assert.equal(copy.nodes.find((node) => node.options.id === source.options.id).options.text, source.options.text, `${entry.slug}: ${source.options.id} keeps its words`);
+    assert.deepEqual(lines(copy.nodes), lines(worn.nodes), entry.slug + ": every connection, with its look");
     assert.equal(copy.libraryOrigin.itemId, SHOWCASE_PREFIX + entry.slug);
     // Its deck: the published one, private to the copier, marked as a library copy.
     const made = copies.at(-1);

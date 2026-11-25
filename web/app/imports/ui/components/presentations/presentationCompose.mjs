@@ -636,7 +636,7 @@ export function fitNoteFont(options, measure) {
  * 'all'), and `steps` the viewpoints (nodeIds, narrative, duration, layout, kicker, camera, lit,
  * reveal), first the title (or cover) and last the finale.
  */
-export function composeDeck(layout, rawDirection, { style: styleRef = null } = {}) {
+export function composeDeck(layout, rawDirection, { style: styleRef = null, bake = false } = {}) {
   const graph = slateGraph(layout)
   // A direction from anywhere (an old save, a published row, a live session) composes: missing
   // steps are none, a step without notes is skipped, a missing title is the default.
@@ -890,6 +890,8 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null } = {
   pushStep({ layout: openingLayout, nodeIds: allIds, lit: openingLit, narrative: '', kicker: '', camera: openingCamera, duration: 4200 })
   const bookendBoxes = stageNotes.filter((note) => bookend.includes(note.id)).map((note) => inflate({ x: note.x, y: note.y, width: note.w, height: note.h }, U * 0.3))
   blockers.push(...bookendBoxes)
+  // The call to action shows only at the finale; baked, it is on the canvas throughout.
+  if (bake && ctaAnchor) blockers.push(inflate({ x: ctaAnchor.x, y: ctaAnchor.y, width: ctaAnchor.w, height: ctaAnchor.h }, U * 0.3))
 
   // 4. The middle steps.
   const stepNotes = []
@@ -908,7 +910,12 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null } = {
     const avoid = []
     const pAvoid = []
     const boxOfBlock = (box) => inflate({ x: box.x, y: box.y, width: box.w ?? box.width, height: box.h ?? box.height }, U * 0.3)
-    const reserve = (box) => avoid.push(boxOfBlock(box))
+    // Baked onto the slate, every step's notes are on the canvas at once: what one step places,
+    // no later step places anything on (one avoid set across all steps).
+    const reserve = (box) => {
+      avoid.push(boxOfBlock(box))
+      if (bake) blockers.push(boxOfBlock(box))
+    }
     const headline = (text, w, h, max) => textNote(text, kit.headline.font, fitFont(text, w, h, max, kit.headline.font), kit.headline.color, fontWeight(kit.headline))
     // On a phone a block keeps to a column (a picture as wide as the step's notes, so it stays the
     // biggest thing in the frame).
@@ -922,7 +929,8 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null } = {
       placed.forEach(reserve)
       // A block with its own phone geometry (a picture behind the step's notes) keeps it.
       blocks.filter((b) => b.pAt).forEach((b) => pAvoid.push(boxOfBlock(b.pAt)))
-      const pBlocks = blocks.filter((b) => !b.pAt).map((b) => portraitOf(b, b.pScale || 1.25))
+      // A baked deck has one geometry: a phone fits the same frame.
+      const pBlocks = bake ? [] : blocks.filter((b) => !b.pAt).map((b) => portraitOf(b, b.pScale || 1.25))
       let pStacked = []
       if (pBlocks.length) {
         const pSize = columnSize(pBlocks)
@@ -934,7 +942,7 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null } = {
         pStacked = column(pBlocks, { x: pBox.x, y: pBox.y })
         pStacked.forEach((b) => pAvoid.push(boxOfBlock(b)))
       }
-      const pPlaced = blocks.map((b) => b.pAt || pStacked.shift())
+      const pPlaced = bake ? placed : blocks.map((b) => b.pAt || pStacked.shift())
       return { placed, pPlaced }
     }
     // On a phone a step frames its own stacked column (a picture, a headline): big and readable.
@@ -1084,6 +1092,57 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null } = {
     camera: { frame: [...(openingCamera.cover ? [bookend[0]] : bookend), ctaId], cover: Boolean(openingCamera.cover), fill: 0.86, roll: -Math.min(3, rollMax), via: 'overview', p: { frame: [...(openingCamera.cover ? [bookend[0]] : bookend), ctaId], cover: Boolean(openingCamera.cover) } },
     duration: 5000, reveal: 'fade',
   })
+  // Baked, a step's kicker and caption are real notes in the style's caption type, in a band
+  // under what the step frames (the player draws no captions of its own).
+  if (bake) {
+    const chrome = style.chrome
+    const boxOfId = (id) => {
+      const skinBox = boxes.get(id)
+      if (skinBox) return skinBox
+      const note = stageNotes.find((n) => n.id === id)
+      return note ? { x: note.x, y: note.y, width: note.w, height: note.h } : null
+    }
+    steps.forEach((step, index) => {
+      const words = cleanCaption(step.narrative || '')
+      const kick = String(step.kicker || '').trim()
+      if (step.camera.cover || (!words && !kick)) return
+      const frame = unionBoxes(step.camera.frame.filter(Boolean).map(boxOfId))
+      if (!(frame.width > 0)) return
+      const w = Math.max(U * 7, Math.min(U * 26, frame.width * 0.62))
+      const kickH = kick ? w * 0.05 : 0
+      const capH = words ? w * 0.15 : 0
+      const gapK = kick && words ? w * 0.015 : 0
+      const h = kickH + gapK + capH
+      // The band under the frame (as a caption reads, bottom left), pushed down past what is in the way, then
+      // above it; only a slate with no room above or below puts it beside.
+      let spot = null
+      for (let push = 0; push < 24 && !spot; push += 1) {
+        const dy = U * 0.6 + push * U * 0.5
+        const tries = [
+          { x: frame.x, y: frame.y + frame.height + dy, width: w, height: h },
+          { x: frame.x + (frame.width - w) / 2, y: frame.y + frame.height + dy, width: w, height: h },
+          { x: frame.x, y: frame.y - dy - h, width: w, height: h },
+        ]
+        spot = tries.find((box) => isFree(box)) || null
+      }
+      if (!spot) spot = place(w, h, frame, { sides: ['below', 'above', 'right', 'left'], gap: U * 0.6 })
+      const ids = []
+      const panel = chrome.panel && chrome.panel !== 'transparent' ? { backgroundColor: chrome.panel } : {}
+      if (kick) {
+        const text = kick.toUpperCase()
+        ids.push(add('kicker', { x: spot.x, y: spot.y, w, h: kickH }, textNote(text, chrome.kickerFont, fitFont(text, w, kickH, kickH * 0.8, chrome.kickerFont), chrome.accent, { fontWeight: 'bold', caption: true }), [index]))
+      }
+      if (words) {
+        const text = chrome.captionCase === 'uppercase' ? words.toUpperCase() : words
+        const at = { x: spot.x, y: spot.y + kickH + gapK, w, h: capH }
+        ids.push(add('caption', at, textNote(text, chrome.captionFont, fitFont(text, w * 0.94, capH * 0.9, capH * 0.42, chrome.captionFont), chrome.ink, { ...panel, ...(chrome.italic ? { fontStyle: 'italic' } : {}), ...(chrome.big ? { fontWeight: 'bold' } : {}), caption: true }), [index]))
+      }
+      blockers.push(inflate({ x: spot.x, y: spot.y, width: w, height: h }, U * 0.3))
+      step.camera.frame.push(...ids)
+      if (step.camera.p) step.camera.p.frame.push(...ids)
+      if (Array.isArray(step.lit)) step.lit = [...step.lit, ...ids]
+    })
+  }
   // Decoration (stars, orbits, grids) belongs to every step; drawn behind everything.
   // Kept to a few dozen: every one is a real note the camera's flights repaint.
   const decor = (kit.decor?.(B, U) || []).slice(0, MAX_DECOR).map((d) => {
@@ -1107,7 +1166,7 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null } = {
     .forEach((image) => { if (image?.url && image.source !== 'generated' && typeof image.credit === 'string' && image.credit) credits.set(image.url, image.credit.split(' · ')[0].slice(0, 60)) })
   stageNotes.forEach((note) => { if (note.image && credits.has(note.image)) note.credit = credits.get(note.image) })
   const staged = [...decor, ...stageNotes].map((note) => P.asCustomShape(note, note.kind, shapes))
-  return { version: DECK_VERSION, style: ref, skin, lines, stageNotes: staged, steps }
+  return { version: DECK_VERSION, style: ref, skin, lines, stageNotes: staged, steps, ...(bake ? { baked: true } : {}) }
 }
 
 /**

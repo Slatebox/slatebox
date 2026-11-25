@@ -20,16 +20,17 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import BasePresent from './presentations/BasePresent'
 import CONSTANTS from '../../api/common/constants'
 import { currentPresentation, isMobileOrTouchDevice } from '../jotai/atoms'
-import { composeDeck } from './presentations/presentationCompose.mjs'
-import { resolveStyle } from './presentations/presentationStyles.mjs'
+import { isBakedDeck, playableDeck } from './presentations/presentationBake.mjs'
 
-// A published deck with its look plays on a live canvas: the slate copy it was published with,
-// its art direction composed in its style. → { deck, layout } or null.
+// A published deck with a look plays on a live canvas: the camera over the slate copy it was
+// published with. A worn style is on that slate (deck version 5); an older look plays the slate as
+// drawn (the player draws nothing of its own). → { deck, background } or null.
 function publishedLook(row) {
-  if (!row?.direction?.steps || !row.slateJSON || !row.presentationData) return null
+  if (!row?.slateJSON || !(isBakedDeck(row.deck) || row.direction?.steps)) return null
   try {
-    const layout = typeof row.presentationData === 'string' ? JSON.parse(row.presentationData) : row.presentationData
-    return { deck: composeDeck(layout, row.direction, { style: row.style }), layout }
+    const deck = playableDeck({ deck: row.deck, viewpoints: row.viewpoints, slateJSON: row.slateJSON })
+    const slate = typeof row.slateJSON === 'string' ? JSON.parse(row.slateJSON) : row.slateJSON
+    return deck ? { deck, background: slate?.options?.containerStyle?.backgroundColor || null } : null
   } catch {
     return null
   }
@@ -83,8 +84,8 @@ export default function PresentPublishedSlate({ slateShareId, surfaceId = 'prese
           }
         }
       }
-      // A styled deck's page is its style's colour, not a forced dark theme.
-      document.getElementById(surfaceId).style.background = styled ? resolveStyle(styled.deck.style).bg : bg
+      // A deck on a live canvas sits on its slate's own background (read from the slate).
+      document.getElementById(surfaceId).style.background = styled ? styled.background || bg : bg
       setPublished({ background: pinnedPrezi.background, styled: Boolean(styled) })
 
       console.log(
@@ -98,10 +99,10 @@ export default function PresentPublishedSlate({ slateShareId, surfaceId = 'prese
         isAnalyzing: false,
         slateSVG: pinnedPrezi.svg,
         orientData: pinnedPrezi.orientData,
-        presentationData: styled ? styled.layout : pinnedPrezi.presentationData,
+        presentationData: pinnedPrezi.presentationData,
         presentationName: pinnedPrezi.name,
         slateJSON: styled ? pinnedPrezi.slateJSON : null,
-        deckLook: styled ? { direction: pinnedPrezi.direction, style: styled.deck.style } : null,
+        deckLook: styled ? { deck: styled.deck } : null,
         viewpoints: styled ? styled.deck.steps : pinnedPrezi.viewpoints,
         autoplayOnPublish: pinnedPrezi.autoplayOnPublish ?? false,
         isEmbedded: pinnedPrezi.isEmbedded ?? false,

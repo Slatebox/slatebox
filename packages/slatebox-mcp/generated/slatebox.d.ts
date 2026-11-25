@@ -2317,7 +2317,7 @@ interface CanvasPlan {
       borderStyle?: "solid" | "dashed" | "dotted" | "combo";
       /** (0 to 1) */
       opacity?: number;
-      fontFamily?: "Manrope" | "Arial" | "Times New Roman" | "Georgia" | "Courier Prime" | "Indie Flower" | "Abril Fatface" | "Bangers" | "Caveat" | "EB Garamond" | "Fredoka One" | "Graduate" | "Gravitas One" | "IBM Plex Mono" | "IBM Plex Sans" | "IBM Plex Serif" | "Lemon" | "Lora" | "Nixie One" | "Noto Sans" | "Open Sans" | "Poppins" | "PT Sans" | "PT Sans Narrow" | "PT Serif" | "Permanent Marker" | "Rammetto One" | "Roboto" | "Roboto Condensed" | "Roboto Mono" | "Roboto Slab" | "Rubik" | "Titan One" | "Urbanist";
+      fontFamily?: "Manrope" | "Arial" | "Times New Roman" | "Georgia" | "Courier Prime" | "Indie Flower" | "Abril Fatface" | "Bangers" | "Caveat" | "EB Garamond" | "Fredoka One" | "Graduate" | "Gravitas One" | "IBM Plex Mono" | "IBM Plex Sans" | "IBM Plex Serif" | "Lemon" | "Lora" | "Nixie One" | "Noto Sans" | "Open Sans" | "Poppins" | "PT Sans" | "PT Sans Narrow" | "PT Serif" | "Permanent Marker" | "Rammetto One" | "Roboto" | "Roboto Condensed" | "Roboto Mono" | "Roboto Slab" | "Rubik" | "Titan One" | "Urbanist" | "Anton" | "Space Grotesk" | "Fraunces" | "Inter";
       /** (1 to 500) */
       fontSize?: number;
       textXAlign?: "left" | "middle" | "right";
@@ -2402,7 +2402,7 @@ interface CanvasPlan {
     };
     /** arrange_nodes: row, column, grid, circle; align-* and distribute-* as the canvas aligns by what you see; tidy moves notes apart until none overlaps; tree lays connected notes out in layers under their root. */
     layout?: "row" | "column" | "grid" | "circle" | "align-left" | "align-center" | "align-right" | "align-top" | "align-middle" | "align-bottom" | "distribute-horizontal" | "distribute-vertical" | "tidy" | "tree";
-    /** update_nodes: note keys (and order: front or back). update_connections: connector keys. update_slate: name, description, background, mindMapMode, autoResizeNodesBasedOnText, showGrid, snapToObjects, defaultLineColor. */
+    /** update_nodes: note keys (and order: front or back). update_connections: connector keys. update_slate: name, description, background, style, mindMapMode, autoResizeNodesBasedOnText, showGrid, snapToObjects, defaultLineColor. */
     changes?: {
       /** The note's text. (at most 10000 characters) */
       text?: string;
@@ -2446,7 +2446,7 @@ interface CanvasPlan {
       /** Note opacity from 0 to 1. (0 to 1) */
       opacity?: number;
       /** A font this instance offers. */
-      fontFamily?: "Manrope" | "Arial" | "Times New Roman" | "Georgia" | "Courier Prime" | "Indie Flower" | "Abril Fatface" | "Bangers" | "Caveat" | "EB Garamond" | "Fredoka One" | "Graduate" | "Gravitas One" | "IBM Plex Mono" | "IBM Plex Sans" | "IBM Plex Serif" | "Lemon" | "Lora" | "Nixie One" | "Noto Sans" | "Open Sans" | "Poppins" | "PT Sans" | "PT Sans Narrow" | "PT Serif" | "Permanent Marker" | "Rammetto One" | "Roboto" | "Roboto Condensed" | "Roboto Mono" | "Roboto Slab" | "Rubik" | "Titan One" | "Urbanist";
+      fontFamily?: "Manrope" | "Arial" | "Times New Roman" | "Georgia" | "Courier Prime" | "Indie Flower" | "Abril Fatface" | "Bangers" | "Caveat" | "EB Garamond" | "Fredoka One" | "Graduate" | "Gravitas One" | "IBM Plex Mono" | "IBM Plex Sans" | "IBM Plex Serif" | "Lemon" | "Lora" | "Nixie One" | "Noto Sans" | "Open Sans" | "Poppins" | "PT Sans" | "PT Sans Narrow" | "PT Serif" | "Permanent Marker" | "Rammetto One" | "Roboto" | "Roboto Condensed" | "Roboto Mono" | "Roboto Slab" | "Rubik" | "Titan One" | "Urbanist" | "Anton" | "Space Grotesk" | "Fraunces" | "Inter";
       /** Font size. (1 to 500) */
       fontSize?: number;
       /** Horizontal text alignment. */
@@ -2516,6 +2516,21 @@ interface CanvasPlan {
           direction?: "horizontal" | "vertical" | "diagonal";
         };
       };
+      style?: {
+        id: string;
+        /** (1 to 1000) */
+        v?: number;
+        overrides?: {
+          /** A CSS colour, such as #336699. (at most 64 characters) */
+          bg?: string;
+          /** (1–12 items) */
+          palette?: string[];
+          fonts?: {
+            display?: string;
+            body?: string;
+          };
+        };
+      } | null;
       mindMapMode?: boolean;
       autoResizeNodesBasedOnText?: boolean;
       showGrid?: boolean;

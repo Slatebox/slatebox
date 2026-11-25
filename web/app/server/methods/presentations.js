@@ -28,7 +28,7 @@ import { keepActionOpen, runAIAction } from '../metering/context.mjs'
 import { resolveRequestConnection } from './ai/ai-settings'
 import {
   LICENCE_FILTER, MAX_DECK_IMAGES, MAX_DECK_IMAGES_PER_DAY, deckRecord, imageEstimateMicros, ogCardReady, pictureChange, shareCardChange, pictureTime, playerSlateCopy,
-  resolveDirectionImages, styleChange,
+  resolveDirectionImages, sanitizeBakedDeck, sanitizeDirectionShape, styleChange,
 } from './presentationDeck.mjs'
 import { carryImages, composeDeck, normalizeDirection, pendingImages } from '../../imports/ui/components/presentations/presentationCompose.mjs'
 import { cleanStyleRef } from '../../imports/ui/components/presentations/presentationStyles.mjs'
@@ -397,6 +397,8 @@ method[CONSTANTS.methods.presentations.publish] = async ({
         presentationData,
         viewpoints,
         ...(look ? { direction: look.direction, style: look.style, slateJSON: look.slateJSON } : {}),
+        // A style worn on the slate plays its deck over the published slate (which carries the art).
+        ...(look && presentation.deck?.version === 5 ? { deck: presentation.deck } : {}),
         url: presentationUrl,
         viewpointsManuallyChanged: manualViewpointChanges, // carry any changes forward
       },
@@ -770,11 +772,16 @@ method[CONSTANTS.methods.presentations.update] = async ({
   playOnHover,
   isPublic,
   style,
+  deck,
+  direction,
   picture,
 }) => {
   const user = await Meteor.userAsync()
   if (!user) return null
   check(picture, Match.Maybe({ slot: Match.Integer, action: Match.OneOf('art', 'next') }))
+  check(deck, Match.Maybe(Object))
+  check(direction, Match.Maybe(Object))
+  if (deck && JSON.stringify(deck).length > 400_000) throw new Meteor.Error('presentation-deck', 'That presentation is too large to save.')
 
   // first check to see if any SlatePresentations exist for this slate
   const existingPresentation = await SlatePresentations.findOneAsync({
@@ -862,7 +869,20 @@ method[CONSTANTS.methods.presentations.update] = async ({
   }
   // A one-click style switch: the same direction composed in the new style. The steps stay the
   // same notes in the same order; no AI is asked and nothing is counted.
-  if (style != null) {
+  // Worn on the slate ("Wear this style"): the browser put the style on the slate itself (one undo
+  // step, saved with the slate) and sends the deck that plays it: camera steps over the slate's own
+  // notes. Kept as sent, made safe; the direction is checked as any is.
+  const worn = style != null && deck != null ? sanitizeBakedDeck(deck) : null
+  if (style != null && deck != null && !worn) throw new Meteor.Error('presentation-deck', 'That presentation could not be saved. Choose the style again.')
+  if (worn) {
+    const shaped = sanitizeDirectionShape(direction)
+    Object.assign(updateFields, {
+      style: cleanStyleRef(style),
+      deck: worn,
+      ...(shaped ? { direction: { ...shaped, style: cleanStyleRef(style) } } : {}),
+      viewpoints: worn.steps.map(({ nodeIds, narrative, duration }) => ({ nodeIds, narrative, duration })),
+    })
+  } else if (style != null) {
     const change = styleChange(existingPresentation, style)
     if (!change) throw new Meteor.Error('presentation-unstyled', 'This presentation has no art direction to restyle. Press Present to plan it again.')
     Object.assign(updateFields, change)

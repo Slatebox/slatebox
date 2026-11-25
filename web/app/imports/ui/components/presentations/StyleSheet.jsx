@@ -20,8 +20,10 @@ export const REFINE_PILLS = [
 ]
 
 /**
- * The style sheet: one click restyles the deck (the same steps composed in another style, no AI),
- * and the chat refines it with Slatebox (`onRefine`, the planner's conversation).
+ * The style sheet: one click and the slate wears a style ("Wear this style": its background, its
+ * notes' look and the style's title cards, captions and art become real notes on the canvas, the
+ * same steps remixed for it, no AI; Undo takes it off), and the chat refines the deck with Slatebox
+ * (`onRefine`, the planner's conversation). Present plays exactly what the slate wears.
  */
 export default function StyleSheet({ anchorEl, onClose, current, onPick, onRefine, onRemix, busy = false, pictures = [], onPicture = null }) {
   const [text, setText] = useState('')
@@ -41,10 +43,10 @@ export default function StyleSheet({ anchorEl, onClose, current, onPick, onRefin
       slotProps={{ paper: { sx: { bgcolor: 'rgba(18,18,24,.92)', color: '#fff', backdropFilter: 'blur(14px)', borderRadius: '20px', width: 'min(980px, calc(100vw - 32px))', p: 2, boxSizing: 'border-box' } } }}
     >
       <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '4px 12px', mb: 1.25, mx: 0.5 }}>
-        <Typography variant="overline" sx={{ letterSpacing: '.12em', opacity: 0.75, lineHeight: 1.6 }}>Style</Typography>
-        <Typography variant="caption" sx={{ opacity: 0.7 }}>Switching keeps your steps · no AI call</Typography>
+        <Typography variant="overline" sx={{ letterSpacing: '.12em', opacity: 0.75, lineHeight: 1.6 }}>Wear this style</Typography>
+        <Typography variant="caption" sx={{ opacity: 0.7 }}>Your slate wears it, so the canvas and Present match · Undo takes it off · no agent call</Typography>
       </Box>
-      <Box role="radiogroup" aria-label="Presentation style" sx={{ display: 'flex', gap: 1.25, overflowX: 'auto', pb: 0.5, scrollbarWidth: 'none' }}>
+      <Box role="radiogroup" aria-label="Slate style" sx={{ display: 'flex', gap: 1.25, overflowX: 'auto', pb: 0.5, scrollbarWidth: 'none' }}>
         {STYLE_CHIPS.map((chip) => {
           const on = chip.id === current
           return (
@@ -52,7 +54,7 @@ export default function StyleSheet({ anchorEl, onClose, current, onPick, onRefin
               key={chip.id}
               role="radio"
               aria-checked={on}
-              aria-label={`${chip.name}: ${chip.blurb}`}
+              aria-label={`Wear ${chip.name}: ${chip.blurb}`}
               data-style-chip={chip.id}
               disabled={busy}
               onClick={() => onPick(chip.id)}

@@ -12,6 +12,7 @@ import { useAtom } from 'jotai'
 import SlateSettings from './slate/SlateSettings'
 import SlateColors from './slate/SlateColors'
 import SlateBackgrounds from './slate/SlateBackgrounds'
+import SlateStyle from './slate/SlateStyle'
 import GenerateNodeColors from './slate/GenerateNodeColors'
 import slateProps from '../propTypes/slateProps'
 import {
@@ -124,11 +125,15 @@ export default function SlateDrawer({
         <Typography
           sx={{ fontSize: (theme) => theme.typography.pxToRem(15) }}
         >
-          Slate Color
+          Slate style
         </Typography>
         </AccordionSummary>
         <AccordionDetails sx={{ margin: (theme) => theme.spacing(1) }}>
-        <SlateColors slate={slate} onChange={updateSlate} />
+        {/* The slate's style (it replaces the old themes), with custom colors and backgrounds under it. */}
+        <SlateStyle>
+          <SlateColors slate={slate} onChange={updateSlate} />
+          {Meteor.settings.public.pixabayAPIKey && <SlateBackgrounds slate={slate} onChange={updateSlate} />}
+        </SlateStyle>
         </AccordionDetails>
       </Accordion>
       {!onWorkshop && (
@@ -173,26 +178,7 @@ export default function SlateDrawer({
           </AccordionDetails>
         </Accordion>
       )}
-      {/* Background images come from Pixabay, which needs the instance's own key. */}
-      {Meteor.settings.public.pixabayAPIKey && <Accordion
-        expanded={expandedPanel === 'backgroundPanel'}
-        onChange={handleChange('backgroundPanel')}
-      >
-        <AccordionSummary
-          expandIcon={<ExpandMoreIcon color="secondary" />}
-          aria-controls="backgroundPanelbh-content"
-          id="backgroundPanelbh-header"
-        >
-          <Typography
-            sx={{ fontSize: (theme) => theme.typography.pxToRem(15) }}
-          >
-            Backgrounds
-          </Typography>
-        </AccordionSummary>
-        <AccordionDetails sx={{ margin: (theme) => theme.spacing(1) }}>
-          <SlateBackgrounds slate={slate} onChange={updateSlate} />
-        </AccordionDetails>
-      </Accordion>}
+      {/* Background images (Pixabay, the instance's own key) are under the slate style's Custom colors. */}
     </Paper> : null
   )
 }

@@ -23,3 +23,23 @@ export function whatIsSlatebox() {
     }],
   }
 }
+
+/**
+ * A stored slate drawn from a presenter layout: each note at its box, each child linked from its
+ * parent. For tests of a style worn by the slate (presentationBake), which takes a slate.
+ */
+export function slateOfLayout(layout, name = 'Slate') {
+  const nodes = []
+  const walk = (list, parent) => (list || []).forEach((entry) => {
+    const box = entry.metrics?.bbox || { x: 0, y: 0, width: 200, height: 100 }
+    const node = {
+      options: { id: String(entry.nodeId), text: entry.description || '', xPos: box.x, yPos: box.y, width: box.width, height: box.height, backgroundColor: '#eef0e6', foregroundColor: '#22302a' },
+      relationships: { associations: [] },
+    }
+    nodes.push(node)
+    if (parent) parent.relationships.associations.push({ id: `${parent.options.id}-${node.options.id}`, parentId: parent.options.id, childId: node.options.id, lineColor: '#5d6b64', lineWidth: 3 })
+    walk(entry.childrenNodes, node)
+  })
+  walk(layout.nodes, null)
+  return { options: { name, containerStyle: { backgroundColor: '#ffffff' } }, nodes }
+}

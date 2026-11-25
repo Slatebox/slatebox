@@ -56,6 +56,8 @@ import {
 import { completeDeck, isTrivialLayout, planFailureReason } from './presentations/presentationPlan.mjs'
 import { planArrival } from './presentations/presentationSteps.mjs'
 import { carryImages, composeDeck, deckRecord, pictureSlots, remixDirection } from './presentations/presentationCompose.mjs'
+import { isBakedDeck, takeOffStyle, wearStyle } from './presentations/presentationBake.mjs'
+import { layoutOfNodes } from '../../api/common/slate-layout-core.mjs'
 import StyleSheet from './presentations/StyleSheet'
 import PayNotice from './PayNotice'
 
@@ -74,6 +76,8 @@ const playDeck = (viewpoints, layout, scenes) => completeDeck(reconcileViewpoint
 // its steps are the viewpoints played, its look what the live canvas draws. → { viewpoints, look }
 // or null for a deck without a look.
 function styledDeck(saved, layout) {
+  // A style the slate wears: its deck is the camera over the slate's own notes and art.
+  if (isBakedDeck(saved?.deck)) return { viewpoints: saved.deck.steps, look: { deck: saved.deck, direction: saved.direction, style: saved.style || saved.deck.style } }
   if (!saved?.direction?.steps || !layout) return null
   try {
     const deck = composeDeck(layout, saved.direction, { style: saved.style || saved.direction.style })
@@ -635,17 +639,41 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
     }
   }
 
-  // One click: the same steps remixed for another style, at once, and saved without the AI.
+  // Wear a style: the slate itself takes it (its background, its notes' look, the style's title
+  // cards, captions and art as real notes), as one step of this person's undo; the deck is the
+  // camera over it. Present never draws a look the slate does not have. → the worn { slate, deck }.
+  const wearOnSlate = async (direction, styleRef) => {
+    const engine = slate?.v2 ?? slate
+    const current = slateCopy(slate)
+    if (!current || !engine?.ownStep) return null
+    const worn = wearStyle(current, styleRef, { direction, name: slate.options.name })
+    const snapshot = JSON.stringify(worn.slate)
+    await engine.ownStep(() => engine.invoker.onSlateReplaced({ type: 'onSlateReplaced', data: { snapshot } }))
+    // The room and the save path take the styled slate (as an undo's replacement is sent).
+    engine.broadcast?.('onSlateReplaced', { action: 'style', snapshot })
+    setCurPresentation((prev) => ({ ...prev, slateJSON: snapshot, deckLook: { deck: worn.deck, direction: worn.direction, style: worn.deck.style }, viewpoints: worn.deck.steps }))
+    return worn
+  }
+  // One click: the slate wears the style ("Wear this style"), the same steps remixed for it, and
+  // the deck is saved without the AI. Undo on the canvas takes the style off again.
   const handleStylePick = async (id) => {
     const look = curPresentation.deckLook
-    if (!look?.direction || !curPresentation.presentationData) return
-    // The same steps in the new style's beats (its layouts; Slatebox's own words in its voice).
-    const direction = remixDirection(look.direction, curPresentation.presentationData, { id }, { name: slate.options.name })
-    const deck = composeDeck(curPresentation.presentationData, direction, { style: { id } })
-    setCurPresentation((prev) => ({ ...prev, deckLook: { direction, style: deck.style }, viewpoints: deck.steps }))
-    if (!presentationId) return
+    const current = slateCopy(slate)
+    if (!look?.direction || !current) return
+    // The same steps in the new style's beats, read from the slate's own notes (not a worn style's art).
+    const { layout } = layoutOfNodes(takeOffStyle(current).nodes || [])
+    const direction = remixDirection(look.direction, layout, { id }, { name: slate.options.name })
+    let worn = null
     try {
-      await Meteor.callAsync(CONSTANTS.methods.presentations.update, { presentationId, style: { id } })
+      worn = await wearOnSlate(direction, { id })
+    } catch (err) {
+      setPublishMessage(`The style could not be worn: ${err?.message || 'try again'}`)
+      setTimeout(() => setPublishMessage(null), 6000)
+      return
+    }
+    if (!presentationId || !worn) return
+    try {
+      await Meteor.callAsync(CONSTANTS.methods.presentations.update, { presentationId, style: { id }, deck: worn.deck, direction: worn.direction })
     } catch (err) {
       setPublishMessage(`The style could not be saved: ${planFailureReason(err)}`)
       setTimeout(() => setPublishMessage(null), 6000)
@@ -667,7 +695,11 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
     try {
       const result = await Meteor.callAsync(CONSTANTS.methods.presentations.update, { presentationId, picture: { slot, action } })
       const look = curPresentation.deckLook
-      if (result?.direction && look) {
+      if (result?.direction && look?.deck) {
+        // A worn style takes the new picture onto the slate (one undo step).
+        const worn = await wearOnSlate(result.direction, look.style)
+        if (worn) await Meteor.callAsync(CONSTANTS.methods.presentations.update, { presentationId, style: look.style, deck: worn.deck, direction: worn.direction })
+      } else if (result?.direction && look) {
         const deck = composeDeck(curPresentation.presentationData, result.direction, { style: look.style })
         setCurPresentation((prev) => ({ ...prev, deckLook: { direction: result.direction, style: deck.style }, viewpoints: deck.steps }))
       }
@@ -1482,10 +1514,10 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
   const styleButton = (
     <>
             {curPresentation.deckLook?.direction && (
-              <Tooltip title="Style" disableTouchListener disableFocusListener>
+              <Tooltip title="Wear a style" disableTouchListener disableFocusListener>
                 <span>
                   <IconButton
-                    aria-label="Presentation style"
+                    aria-label="Wear a style"
                     aria-haspopup="dialog"
                     data-present-style-button
                     onClick={(event) => setStyleAnchorEl(event.currentTarget)}
@@ -1875,7 +1907,7 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
       <StyleSheet
         anchorEl={styleAnchorEl}
         onClose={() => setStyleAnchorEl(null)}
-        current={curPresentation.deckLook?.style?.id}
+        current={curPresentation.deckLook?.deck?.style?.id}
         onPick={handleStylePick}
         onRefine={handleStyleRefine}
         onRemix={handleRemix}

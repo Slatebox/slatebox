@@ -4,6 +4,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- The slate is the presentation. A slate wears a style (`options.style`, one property that replaces the
+  old themes): "Wear this style" in Present's style picker, or in Slate settings → Slate style, puts the
+  style's background, its notes' outlines, fills and fonts, its lines and its art (title cards, kickers,
+  numbers, quotes, captions, bolts, bursts, ribbons, stars, grids) on the canvas as real notes you can
+  edit, as one step that Undo takes back. Present is a camera over the slate as saved: it frames, flies,
+  dims and reveals notes, and draws nothing of its own (no painted background, caption overlay, step
+  dots, phone layout or web-font link). The six presentations Slatebox built are published wearing
+  their styles (a new version of each library item), so Make it yours opens a canvas that looks like
+  the site's poster. The styles' faces (Anton, Space Grotesk, Fraunces, Inter, IBM Plex Mono, Abril
+  Fatface, PT Sans) are served by the app itself under the OFL.
+- A presentation saved before styles were worn plays the slate as it is drawn; choose a style in
+  Present to wear it.
+
 ### Fixed
 
 - A copy of a library presentation keeps its look: Present plays the copied deck instead of planning

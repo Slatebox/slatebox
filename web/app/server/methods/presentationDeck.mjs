@@ -155,23 +155,85 @@ export async function pictureChange(row, { slot, action }, { search = null, copy
 
 /**
  * The slate a published deck plays on, built on the server from the saved slate: each note's
- * place, size, words and shape, and the connections between them. Nothing else of the slate
- * (its settings, pictures, comments, rules) is published. → a JSON string, or null.
+ * place, size, words and everything that draws it (shape and custom outline, fills, fonts, effects;
+ * pictures only of a worn style's art), the connections between them, the canvas background and the
+ * style the slate wears.
+ * A worn style's art is real notes, so it is published with the slate: the player draws only this.
+ * Nothing else of the slate (its settings, comments, rules) is published. → a JSON string, or null.
  */
-const PLAYER_NODE_KEYS = ['id', 'text', 'xPos', 'yPos', 'width', 'height', 'rotate', 'shape', 'shapeHint', 'vectorPath', 'fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'foregroundColor', 'fontColor', 'textXAlign', 'textYAlign', 'backgroundColor', 'borderColor', 'borderWidth', 'borderStyle', 'opacity']
-const PLAYER_LINE_KEYS = ['parentId', 'childId', 'lineColor', 'lineWidth', 'lineType', 'lineCurviness', 'lineDash', 'showChildArrow', 'showParentArrow']
+const PLAYER_NODE_KEYS = ['id', 'text', 'xPos', 'yPos', 'width', 'height', 'rotate', 'shape', 'shapeHint', 'vectorPath', 'fillRule', 'textBox', 'shapeRef',
+  'fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'foregroundColor', 'fontColor', 'textXAlign', 'textYAlign', 'textOffset', 'textInset', 'textOpacity',
+  'backgroundColor', 'borderColor', 'borderWidth', 'borderStyle', 'borderOpacity', 'opacity', 'filters', 'imageFit', 'imageOrigWidth', 'imageOrigHeight',
+  'isLocked', 'styleRole']
+const PLAYER_LINE_KEYS = ['parentId', 'childId', 'lineColor', 'lineWidth', 'lineType', 'lineCurviness', 'lineCurveType', 'lineDash', 'lineEffect', 'lineOpacity', 'isStraightLine', 'showChildArrow', 'showParentArrow']
+const PLAYER_BACKGROUND_KEYS = ['backgroundColor', 'backgroundColorAsGradient', 'backgroundGradientType', 'backgroundGradientColors', 'backgroundGradientStrategy']
 const pick = (source, keys) => Object.fromEntries(keys.filter((key) => source?.[key] !== undefined && typeof source[key] !== 'function').map((key) => [key, source[key]]))
 export function playerSlateCopy(slateDoc) {
   const nodes = Array.isArray(slateDoc?.nodes) ? slateDoc.nodes : null
   if (!nodes) return null
+  const style = slateDoc.options?.style
   const copy = {
-    options: { name: String(slateDoc.options?.name || '').slice(0, 200), viewPort: pick(slateDoc.options?.viewPort, ['width', 'height']) },
-    nodes: nodes.filter((node) => node?.options?.id != null).slice(0, 2000).map((node) => ({
-      options: { ...pick(node.options, PLAYER_NODE_KEYS), text: String(node.options.text ?? '').slice(0, 2000) },
-      relationships: { associations: (node.relationships?.associations || []).slice(0, 200).map((assoc) => pick(assoc, PLAYER_LINE_KEYS)) },
-    })),
+    options: {
+      name: String(slateDoc.options?.name || '').slice(0, 200),
+      viewPort: pick(slateDoc.options?.viewPort, ['width', 'height']),
+      ...(slateDoc.options?.containerStyle?.backgroundColor ? { containerStyle: pick(slateDoc.options.containerStyle, PLAYER_BACKGROUND_KEYS) } : {}),
+      ...(style && typeof style === 'object' && typeof style.id === 'string' ? { style: cleanStyleRecord(style) } : {}),
+    },
+    nodes: nodes.filter((node) => node?.options?.id != null).slice(0, 2000).map((node) => {
+      const options = { ...pick(node.options, PLAYER_NODE_KEYS), text: String(node.options.text ?? '').slice(0, 2000) }
+      // A person's own pictures stay unpublished; a worn style's pictures (its art, or one found for a step with
+      // a reason and a credit) are part of the presentation, from a safe link only.
+      const image = node.options.styleRole ? safeImageUrl(node.options.image) : null
+      if (image) options.image = image
+      return {
+        options,
+        relationships: { associations: (node.relationships?.associations || []).slice(0, 200).map((assoc) => pick(assoc, PLAYER_LINE_KEYS)) },
+      }
+    }),
   }
   return JSON.stringify(copy)
+}
+
+/** A style record made safe to publish: { id, overrides?, v }. */
+function cleanStyleRecord(style) {
+  const ref = cleanStyleRef(style)
+  return { ...ref, ...(Number.isInteger(style.v) ? { v: style.v } : {}) }
+}
+
+const finite = (value) => Number.isFinite(Number(value)) ? Number(value) : 0
+const ids = (list, n = 400) => (Array.isArray(list) ? list : []).filter((id) => (typeof id === 'string' || typeof id === 'number') && String(id).length <= 128).slice(0, n).map(String)
+/**
+ * A worn style's deck (version 5) from a browser, made safe: a box, the ids each step lights,
+ * reveals and hides, its camera and its words, nothing else. → the deck, or null.
+ */
+export function sanitizeBakedDeck(raw) {
+  if (!raw || typeof raw !== 'object' || raw.version !== 5 || !Array.isArray(raw.steps) || !raw.steps.length) return null
+  const str = (value, n) => (typeof value === 'string' ? value.slice(0, n) : '')
+  const steps = raw.steps.slice(0, 40).filter((step) => step && typeof step === 'object' && step.box).map((step) => ({
+    layout: str(step.layout, 20) || 'group',
+    box: { x: finite(step.box.x), y: finite(step.box.y), width: Math.max(1, finite(step.box.width)), height: Math.max(1, finite(step.box.height)) },
+    lit: step.lit === 'all' ? 'all' : ids(step.lit),
+    own: ids(step.own),
+    hide: ids(step.hide, 2000),
+    ...(Number.isFinite(Number(step.dim)) ? { dim: Math.min(1, Math.max(0, Number(step.dim))) } : {}),
+    ...(step.deep ? { deep: true } : {}),
+    camera: {
+      fill: Math.min(1, Math.max(0.2, finite(step.camera?.fill) || 0.86)),
+      roll: Math.min(30, Math.max(-30, finite(step.camera?.roll))),
+      ...(step.camera?.cover ? { cover: true } : {}),
+      ...(step.camera?.deep ? { deep: true } : {}),
+      ...(step.camera?.via === 'overview' ? { via: 'overview' } : {}),
+    },
+    reveal: ['fade', 'pop', 'stagger', 'draw'].includes(step.reveal) ? step.reveal : 'fade',
+    duration: Math.round(Math.min(10000, Math.max(1500, finite(step.duration) || 3200))),
+    kicker: str(step.kicker, 48),
+    narrative: str(step.narrative, 200),
+    nodeIds: ids(step.nodeIds),
+    ...(Array.isArray(step.credits) ? { credits: step.credits.slice(0, 6).map((c) => str(c, 60)).filter(Boolean) } : {}),
+  }))
+  if (!steps.length) return null
+  const style = raw.style && typeof raw.style === 'object' && typeof raw.style.id === 'string' ? cleanStyleRecord(raw.style) : null
+  return { version: 5, style, decor: ids(raw.decor, 400), steps }
 }
 
 /**

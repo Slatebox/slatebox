@@ -5,10 +5,10 @@ import { mountLiveDeck } from './livePresenter.mjs'
 import { PRESENTATION_STYLES_MARKER } from './presentationStyles.mjs'
 
 /**
- * A styled deck played on a live SlateboxJS canvas of its own (see livePresenter): the slate's
- * real notes in the style, the deck's stage notes, and the engine's camera flying between steps.
- * `goTo(index)` moves it; it remounts when the deck, its style or the screen's orientation
- * changes, landing on the step it was on (a style switch keeps the place).
+ * A deck played on a live SlateboxJS canvas of its own (see livePresenter): the slate as saved
+ * (a worn style is on it as real notes) and the engine's camera flying between steps. Nothing is
+ * drawn here that the slate does not hold. `goTo(index)` moves it; it remounts when the deck or the
+ * slate changes, landing on the step it was on. A phone fits the same frames.
  */
 const LiveStage = forwardRef(({ deck, slateJSON, name = '', onReady, onTap, bottomInset = 0 }, ref) => {
   const hostRef = useRef(null)
@@ -18,7 +18,6 @@ const LiveStage = forwardRef(({ deck, slateJSON, name = '', onReady, onTap, bott
   const insetRef = useRef(bottomInset)
   insetRef.current = bottomInset
   useEffect(() => { controller.current?.setInset(bottomInset) }, [bottomInset])
-  const [portrait, setPortrait] = useState(() => (typeof window !== 'undefined' ? window.innerHeight > window.innerWidth : false))
   const [failed, setFailed] = useState(false)
 
   useImperativeHandle(ref, () => ({
@@ -35,7 +34,7 @@ const LiveStage = forwardRef(({ deck, slateJSON, name = '', onReady, onTap, bott
     let alive = true
     let live = null
     setFailed(false)
-    mountLiveDeck({ host, Slatebox, slateJSON, deck, name, portrait })
+    mountLiveDeck({ host, Slatebox, slateJSON, deck, name })
       .then(async (mounted) => {
         if (!alive) { mounted.destroy(); return }
         live = mounted
@@ -53,20 +52,16 @@ const LiveStage = forwardRef(({ deck, slateJSON, name = '', onReady, onTap, bott
       if (controller.current === live) controller.current = null
       live?.destroy()
     }
-  }, [deck, slateJSON, portrait])
+  }, [deck, slateJSON])
 
-  // Refit on resize; a turn of the phone composes the portrait (or landscape) stage again.
+  // Refit on resize (a turn of the phone fits the same frames to the new screen).
   useEffect(() => {
     const host = hostRef.current
     if (!host || typeof ResizeObserver === 'undefined') return undefined
-    const observer = new ResizeObserver(() => {
-      const nowPortrait = host.clientHeight > host.clientWidth
-      if (nowPortrait !== portrait) setPortrait(nowPortrait)
-      else controller.current?.resize()
-    })
+    const observer = new ResizeObserver(() => controller.current?.resize())
     observer.observe(host)
     return () => observer.disconnect()
-  }, [portrait])
+  }, [])
 
   return (
     <div

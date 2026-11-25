@@ -166,7 +166,7 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
   const slateItems = [
     manage && { key: 'rename', label: 'Rename', icon: <Edit />, run: () => { afterSlateMenu.current = startRename } },
     manage && { key: 'settings', label: 'Slate settings', icon: <Sliders />, run: () => onSettings('settingsPanel'), disabled: busy },
-    manage && { key: 'colors', label: 'Colors', icon: <Brush />, run: () => onSettings('colorPanel'), disabled: busy },
+    manage && { key: 'colors', label: 'Slate style', icon: <Brush />, run: () => onSettings('colorPanel'), disabled: busy },
     manage && !onWorkshop && { key: 'history', label: 'Version history', icon: <History />, run: onHistory, disabled: busy },
     'divider',
     { key: 'link', label: 'Copy link', icon: <LinkIcon />, run: copyLink },

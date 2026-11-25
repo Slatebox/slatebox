@@ -56,6 +56,21 @@ test('no code reads or writes a theme field, calls a theme method or offers a th
   assert.deepEqual(hits, [])
 })
 
+// The slate's style (options.style, presentationBake) replaced themes: the engine has no theme left to call either
+// (no Theme module, no applyTheme, no ThemeDefinition, no window.Theme), so none can come back through it.
+test('the engine the app runs has no theme system; a slate wears a style instead', async () => {
+  // The engine as the app resolves it (its node_modules link, or the checkout beside it).
+  const engineDir = join(app, 'node_modules/slateboxjs')
+  const types = readFileSync(join(engineDir, 'dist/index.d.ts'), 'utf8')
+  assert.doesNotMatch(types, /ThemeDefinition|ThemeStyle|applyTheme|\bTheme,/, 'no Theme export or types')
+  assert.equal(existsSync(join(engineDir, 'dist/core/Theme.d.ts')), false)
+  assert.doesNotMatch(readFileSync(join(engineDir, 'dist/slateboxjs.mjs'), 'utf8'), /window\.Theme\b|\.Theme\s*=|onSlateThemeChanged/)
+  const code2 = /ThemeDefinition|window\.Theme\b/
+  assert.deepEqual(code.filter((file) => code2.test(read(file))), [])
+  const { SLATE_KEYS } = await import('slateboxjs/operations')
+  assert.ok(SLATE_KEYS.style, 'update_slate takes the slate style')
+})
+
 test('delete takes any of your slates: there is no "theme in use" rule', () => {
   const action = read('server/actions/slate-delete.mjs')
   assert.doesNotMatch(action, /theme|409|conflict/i)

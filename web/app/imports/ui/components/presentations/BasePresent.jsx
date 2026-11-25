@@ -35,8 +35,8 @@ import { cameraTransform, fitFrame, inSvgPixels, unionFrame, wholeSlateFrame } f
 import { isOverviewAt, startView, stepOf } from './presentationSteps.mjs'
 import { currentPresentation, isMobileOrTouchDevice } from '../../jotai/atoms'
 import LiveStage from './LiveStage'
-import { composeDeck } from './presentationCompose.mjs'
-import { resolveStyle } from './presentationStyles.mjs'
+import { playableDeck } from './presentationBake.mjs'
+import { STYLES } from './presentationStyles.mjs'
 
 const BasePresent = forwardRef(
   (
@@ -60,20 +60,20 @@ const BasePresent = forwardRef(
     const [baseUrl, setBaseUrl] = useState(Meteor.settings.public.baseUrl)
     const [curPresentation, setCurPresentation] = useAtom(currentPresentation)
     const isMobile = useAtomValue(isMobileOrTouchDevice)
-    // A styled deck plays on a live canvas (LiveStage): its look (art direction and style), the
-    // slate's layout and a copy of the slate. Without them, the slate's SVG snapshot.
+    // A deck with a look plays on a live canvas (LiveStage): the camera over the slate as saved.
+    // A worn style is on the slate itself (deck version 5); an older look plays the slate as it is
+    // drawn, since the player draws nothing of its own. Without a look, the slate's SVG snapshot.
     const liveRef = useRef(null)
     const look = curPresentation.deckLook
     const liveDeck = useMemo(() => {
-      if (!look?.direction?.steps || !curPresentation.slateJSON || !curPresentation.presentationData) return null
+      if (!(look?.deck || look?.direction?.steps) || !curPresentation.slateJSON) return null
       try {
-        const layout = typeof curPresentation.presentationData === 'string' ? JSON.parse(curPresentation.presentationData) : curPresentation.presentationData
-        return composeDeck(layout, look.direction, { style: look.style })
+        return playableDeck({ deck: look.deck, viewpoints: curPresentation.viewpoints, slateJSON: curPresentation.slateJSON })
       } catch (error) {
-        console.error('The styled deck could not be composed:', error)
+        console.error('The deck could not be read:', error)
         return null
       }
-    }, [look, curPresentation.slateJSON, curPresentation.presentationData])
+    }, [look, curPresentation.slateJSON])
     const isLive = Boolean(liveDeck)
     // The controls' height: the live stage keeps its captions and framing above them.
     const [controlsHeight, setControlsHeight] = useState(0)
@@ -84,7 +84,8 @@ const BasePresent = forwardRef(
       observer.observe(bar)
       return () => observer.disconnect()
     }, [isLive, showControls])
-    const chrome = isLive ? resolveStyle(liveDeck.style).chrome : null
+    // The controls take the worn style's colors (player chrome, not the slate's look).
+    const chrome = isLive ? STYLES[liveDeck.style?.id]?.chrome ?? null : null
     const resizeObserver = useRef(null)
     const controlsRef = useRef(null)
     const narrativeRef = useRef(null)

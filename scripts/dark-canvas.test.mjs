@@ -244,5 +244,7 @@ test('a styled deck keeps its style\'s backdrop in both modes, in the presenter 
   assert.match(frame, /const surface = !immersive && canvasMode\(/, 'nor swap its backdrop for the dark canvas')
   const share = ui('components/PresentPublishedSlate.jsx')
   assert.match(share, /published && !published\.styled \? document\.getElementById\(surfaceId\) : null/, 'the share page does not theme a styled deck')
-  assert.match(share, /styled \? resolveStyle\(styled\.deck\.style\)\.bg : bg/, 'the share page paints a styled deck in its style\'s colour')
+  // Restated (slate style): the style is on the slate, so the share page paints a live deck in its slate's own
+  // background (a worn style's colour), read from the published slate, never a colour the player picks.
+  assert.match(share, /styled \? styled\.background \|\| bg : bg/, 'the share page paints a live deck in its slate\'s own background')
 })

@@ -418,7 +418,8 @@ test('on a phone a dive\'s or split\'s picture is the biggest thing in its frame
 
 test('words are fitted by measured widths: a wide face gets a smaller size, never a word broken across lines', async () => {
   const { fitNoteFont } = await import('../web/app/imports/ui/components/presentations/presentationCompose.mjs')
-  const { fitPresentedWords } = await import('../web/app/imports/ui/components/presentations/livePresenter.mjs')
+  // Fitted where a style is worn (in the browser, with the faces loaded), so the slate keeps the sizes it is drawn at.
+  const { fitSlateWords: fitPresentedWords } = await import('../web/app/imports/ui/components/presentations/presentationBake.mjs')
   // A face far wider than the estimate (bold Inter at weight 900 runs ~0.66 em a character).
   const wide = (text, size, font, weight) => String(text).length * size * (weight === 'bold' ? 0.66 : 0.6)
   const fitsWhole = (text, size, area) => text.split(/\s+/).every((word) => wide(word, size, 'Inter', 'bold') <= area)
