@@ -439,6 +439,9 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
         return { status: 201, body: { claim: publicClaim(resumed.doc, s.zoneName), installCredential: resumed.installCredential, connectorToken: resumed.connectorToken } }
       }
       await gateNew()
+      // A claim attempt answers "unavailable" like a check does, so it counts against the same
+      // daily check limit: claiming is not a way round it to probe names or the blocklist.
+      await limit(`check-account:${owner._id}`, limits.checksPerDayPerAccount, DAY_MS, 'Too many checks today.')
       if (!checked.ok || !(await free(name, owner._id))) {
         await audit({ actor, action: 'claim', name, ok: false, error: { code: 'unavailable' }, ip, ua })
         throw UNAVAILABLE(hostOf(name))
@@ -682,15 +685,20 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
     async unsuspend({ admin, id, ip }) {
       const doc = await store.claims.get(id)
       if (!doc || doc.status !== 'suspended') throw refuse('not_found', 'No suspended team address with that id.')
-      try {
-        await cf.putConfig(doc.cf.tunnelId, ingress([hostOf(doc.name), ...(doc.previousNames || []).map((entry) => hostOf(entry.name))]))
-      } catch (error) {
-        await audit({ actor: { kind: 'admin', id: admin }, action: 'cf_error', claim: doc, ok: false, error, ip })
-        throw UPSTREAM()
+      // A claim suspended before it was set up has no tunnel to restore: it goes back to pending,
+      // where a replay of the claim finishes it (or the reaper releases it).
+      const status = doc.activatedAt ? 'active' : 'pending'
+      if (doc.cf?.tunnelId) {
+        try {
+          await cf.putConfig(doc.cf.tunnelId, ingress([hostOf(doc.name), ...(doc.previousNames || []).map((entry) => hostOf(entry.name))]))
+        } catch (error) {
+          await audit({ actor: { kind: 'admin', id: admin }, action: 'cf_error', claim: doc, ok: false, error, ip })
+          throw UPSTREAM()
+        }
       }
-      await store.claims.update(doc._id, { status: 'active', suspension: null, updatedAt: now() }, { status: 'suspended' })
+      await store.claims.update(doc._id, { status, suspension: null, updatedAt: now() }, { status: 'suspended' })
       await audit({ actor: { kind: 'admin', id: admin }, action: 'unsuspend', claim: doc, ip })
-      return { id: doc._id, status: 'active' }
+      return { id: doc._id, status }
     },
 
     // A takedown's end: released, and the name held from everyone for a year.

@@ -464,6 +464,29 @@ test('a replayed claim hands out the connector token under the same hourly limit
   await rejectsWith(w.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k', idempotencyKey: 'i' }), 'rate_limited')
 })
 
+test('claim attempts count against the daily check limit, so claiming cannot probe names without limit', async () => {
+  const w = world({ limits: { checksPerDayPerAccount: 3 } })
+  for (const name of ['admin', 'paypal-x', 'support']) await rejectsWith(w.service.claim({ user: user('ada'), name, clientKey: 'k' }), 'unavailable')
+  await rejectsWith(w.service.claim({ user: user('ada'), name: 'www', clientKey: 'k' }), 'rate_limited')
+  await rejectsWith(w.service.availability({ name: 'acme', user: user('ada'), ip: '198.51.100.9' }), 'rate_limited')
+  // Another account is not affected.
+  assert.equal((await w.service.claim({ user: user('sam'), name: 'acme', clientKey: 'k' })).status, 201)
+})
+
+test('a claim suspended before Cloudflare set it up can be unsuspended back to pending, and a replay finishes it', async () => {
+  const w = world()
+  w.fake.fail('POST', /cfd_tunnel$/, { status: 503, times: 4 })
+  await rejectsWith(w.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k', idempotencyKey: 'i' }), 'upstream_unavailable')
+  const [pending] = [...w.store.claims.docs.values()]
+  assert.equal(pending.status, 'pending')
+  await w.service.suspend({ admin: 'root', id: pending._id, reason: 'check', notice: 'Held.' })
+  assert.deepEqual(await w.service.unsuspend({ admin: 'root', id: pending._id }), { id: pending._id, status: 'pending' })
+  const resumed = await w.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k', idempotencyKey: 'i' })
+  assert.equal(resumed.status, 201)
+  assert.equal(resumed.body.claim.status, 'active')
+  assert.ok(resumed.body.installCredential)
+})
+
 test('the MongoDB store removes a blocklist entry by the id it returned', async () => {
   // A collection that compares _id strictly, like MongoDB (an ObjectId never equals its string).
   const rows = []
