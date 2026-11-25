@@ -4,6 +4,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- A copy of a library presentation keeps its look: Present plays the copied deck instead of planning
+  the slate again in another style.
+- A slate made from a brief of steps is named after its first note, not after a whole row of steps.
+
 ### Removed
 
 - Themes: the Themes panel, the theme library (`/themes`), theme generator slates, the "Create with
@@ -13,6 +19,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   style.
 
 ### Added
+
+- Six presentations built by Slatebox in the library (Launch day war room, The 41-minute checkout
+  outage, Q3 investor update, Why trials stall, 2027: three bets, Your first month), one in each of
+  six presentation styles. Open a copy and it is the same slate, notes, colors and connections, with
+  the same presentation: Present in the copy plays it in its style. The marketing site's Make it yours
+  opens these copies.
 
 - Integrations (Pro and Business; licensed self-hosted installs): connect an outside agent or Google
   once on the new Integrations page (`/integrations`) and invite it onto any slate with no new sign-in,

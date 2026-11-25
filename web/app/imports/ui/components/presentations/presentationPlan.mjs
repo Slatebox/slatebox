@@ -473,14 +473,15 @@ export function planKey(layout) {
 /**
  * Whether Present plans this deck (the person's latest) again: a missing deck, an automatic one
  * (made while the AI was unavailable), one from the old one-note-per-step planner and a current
- * plan the slate has moved on from (`layout`: the slate as it is drawn now) are; a published deck
- * and one a person edited are kept (completeDeck brings them up to date when they are played).
+ * plan the slate has moved on from (`layout`: the slate as it is drawn now) are; a published deck,
+ * one a person edited and a copy of a library presentation (libraryCopy: the deck as it was
+ * published, with its look) are kept (completeDeck brings them up to date when they are played).
  * options.prompts: the presentation prompts' versions the server plans with now (promptsKey).
  */
 export function needsPlan(deck, layout = null, { prompts } = {}) {
   if (!deck?.viewpoints?.length) return true
   if (deck.automatic) return true
-  if (deck.isPublished || changedByHand(deck)) return false
+  if (deck.isPublished || deck.libraryCopy || changedByHand(deck)) return false
   if (deck.planVersion !== PLAN_VERSION) return true
   // a plan made with other planning instructions (a prompt published or rolled back since): the
   // server passes the versions it plans with now ('' while every one is built in)

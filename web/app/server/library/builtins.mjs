@@ -68,7 +68,8 @@ export async function seedBuiltins({ items, versions, events, samples = catalogS
     report.updated.push(_id)
   }
   // Entries the catalogue no longer has: unpublished, with an event (forks and copies stay with their owners).
-  const stale = await items.find({ origin: 'builtin', status: 'published' }).toArray()
+  // Components only: the presentations Slatebox built are built-ins too, and showcase.mjs keeps them.
+  const stale = await items.find({ origin: 'builtin', kind: 'component', status: 'published' }).toArray()
   for (const item of stale) {
     if (ids.has(item._id)) continue
     await items.updateOne({ _id: item._id }, { $set: { status: 'unpublished', updatedAt: at() } })

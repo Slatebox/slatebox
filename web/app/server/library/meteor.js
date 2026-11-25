@@ -11,6 +11,7 @@ import CONSTANTS from '../../imports/api/common/constants'
 import { catalogSamples } from 'slateboxjs/workshops/samples'
 import { createLibraryCore } from './core.mjs'
 import { seedBuiltins } from './builtins.mjs'
+import { seedShowcase } from './showcase.mjs'
 import { LibraryCounters } from './counters'
 import { migrateCommunity } from './migrate.mjs'
 import { createRefineAI } from './refine-ai.mjs'
@@ -112,6 +113,11 @@ export async function ensureLibraryIndexes() {
 /** The built-in catalogue entries as library items, refreshed at every start. */
 export function seedLibraryBuiltins() {
   return seedBuiltins({ items: raw(LibraryItems), versions: raw(LibraryVersions), events: raw(LibraryEvents), samples: catalogSamples, newId: () => Random.id() })
+}
+
+/** The presentations Slatebox built (the site's six) as published library items, refreshed at every start. */
+export function seedLibraryShowcase() {
+  return seedShowcase({ items: raw(LibraryItems), versions: raw(LibraryVersions), events: raw(LibraryEvents), newId: () => Random.id() })
 }
 
 /** Community slates, templates and featured presentations as library items (QUEUE runs it at startup). */

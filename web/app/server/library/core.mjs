@@ -52,7 +52,9 @@ const readCursor = (cursor) => {
 // How many times an item has been published (approvals; a migrated or built-in item counts its one).
 const publishedCountOf = (item) => item?.publishedCount ?? (item?.publishedVersion ? 1 : 0)
 const boardKindOf = (workshop) => workshop?.kind ?? (workshop?.lanes?.[0]?.station ? 'map' : 'lanes')
-const builtinRefusal = () => fail(409, 'builtin', 'This is part of Slatebox and can’t be changed here. Branch off it to make your own.')
+const builtinRefusal = (item) => fail(409, 'builtin', item?.kind === 'component'
+  ? 'This is part of Slatebox and can’t be changed here. Branch off it to make your own.'
+  : 'This is part of Slatebox and can’t be changed here. Open a copy to make your own.')
 
 /** What a list card shows of an item's content: its kind, its board's kind and how many notes or cards. */
 export function previewOf(content) {
@@ -134,7 +136,7 @@ export function createLibraryCore(deps) {
   async function authoredItem(principal, ref) {
     const item = await findItem(ref)
     if (!item) throw notFound()
-    if (item.origin === 'builtin') throw builtinRefusal()
+    if (item.origin === 'builtin') throw builtinRefusal(item)
     if (!principal?.userId || item.authorId !== principal.userId) {
       if (canReadItem(item, { userId: principal?.userId })) throw fail(403, 'author_required', 'Only its author can do this.')
       throw notFound()
@@ -350,8 +352,10 @@ export function createLibraryCore(deps) {
       if (mode === 'preview') return { shareId: null, itemId: item._id, version: version.n, name, notes: version.content.slate?.nodes?.length ?? 0 }
       await spend(principal, 'fork')
       const made = await newSlate(principal, version.content, { name, libraryOrigin: origin })
+      // The deck comes along as the copier's own private presentation, marked as a library copy: Present plays it as
+      // it was published (presentationPlan.mjs needsPlan keeps it) instead of planning the slate again.
       if (item.kind === 'presentation' && version.content.deck)
-        await copyPresentation({ ...version.content.deck, isPublished: false, isPublic: false }, { shareId: made.shareId, sourceShareId: null, user: made.user, now: now() })
+        await copyPresentation({ ...version.content.deck, isPublished: false, isPublic: false, libraryCopy: true }, { shareId: made.shareId, sourceShareId: null, user: made.user, now: now() })
       await bump(item, 'copies', principal)
       return { shareId: made.shareId, revision: made.revision, itemId: item._id, version: version.n }
     }
@@ -581,7 +585,7 @@ export function createLibraryCore(deps) {
   async function comment(principal, input) {
     const item = await findItem(input.itemId)
     if (!item) throw notFound()
-    if (item.origin === 'builtin') throw builtinRefusal()
+    if (item.origin === 'builtin') throw builtinRefusal(item)
     const reviewer = await isReviewer(principal.userId)
     const author = item.authorId === principal.userId
     if (!reviewer && !author) {
@@ -624,7 +628,7 @@ export function createLibraryCore(deps) {
     await requireReviewer(principal)
     const item = await findItem(ref)
     if (!item) throw notFound()
-    if (item.origin === 'builtin') throw builtinRefusal()
+    if (item.origin === 'builtin') throw builtinRefusal(item)
     return item
   }
   // A second person reviews what someone publishes: an administrator never opens, refines, edits or
@@ -665,8 +669,10 @@ export function createLibraryCore(deps) {
       const library = { mode: 'review', itemId: item._id, version: version.n, ...(item.kind === 'component' && { boardId: MAIN_BOARD }) }
       const content = item.kind === 'component' ? boardSlateContent(validateWorkshop(structuredClone(version.content.workshop)), item.title) : version.content
       const made = await newSlate(principal, content, { name: item.title, library })
+      // The deck comes along as the copier's own private presentation, marked as a library copy: Present plays it as
+      // it was published (presentationPlan.mjs needsPlan keeps it) instead of planning the slate again.
       if (item.kind === 'presentation' && version.content.deck)
-        await copyPresentation({ ...version.content.deck, isPublished: false, isPublic: false }, { shareId: made.shareId, sourceShareId: null, user: made.user, now: now() })
+        await copyPresentation({ ...version.content.deck, isPublished: false, isPublic: false, libraryCopy: true }, { shareId: made.shareId, sourceShareId: null, user: made.user, now: now() })
       reviewShareId = made.shareId
     }
     await items.updateOne({ _id: item._id }, { $set: { status: next.status, reviewStatus: next.reviewStatus, reviewShareId, reviewerId: principal.userId, updatedAt: at() } })

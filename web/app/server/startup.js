@@ -12,7 +12,7 @@ import { LibraryItems } from '../imports/api/common/models'
 import setup from './email/setup'
 import { storedFileBase } from './common/fileStore'
 import { onCreateUser } from './common/accounts'
-import { ensureLibraryIndexes, migrateCommunitySlates, seedLibraryBuiltins } from './library/meteor'
+import { ensureLibraryIndexes, migrateCommunitySlates, seedLibraryBuiltins, seedLibraryShowcase } from './library/meteor'
 import './bootstrap/all'
 import {
   IconPacks,
@@ -428,6 +428,15 @@ Meteor.startup(async () => {
     const seeded = await seedLibraryBuiltins()
     if (seeded.created.length || seeded.updated.length || seeded.unpublished.length)
       console.log('[library] built-ins', JSON.stringify({ created: seeded.created.length, updated: seeded.updated.length, unpublished: seeded.unpublished.length }))
+    // The presentations Slatebox built (the site's six), each with its slate and deck: "Make it yours" copies both.
+    // Its own guard, so a failure here never stops the migration below.
+    try {
+      const shown = await seedLibraryShowcase()
+      if (shown.created.length || shown.updated.length || shown.unpublished.length || shown.skipped.length)
+        console.log('[library] showcase', JSON.stringify({ created: shown.created.length, updated: shown.updated.length, unpublished: shown.unpublished.length, skipped: shown.skipped }))
+    } catch (error) {
+      console.error('[library] showcase', error?.message)
+    }
     // Community slates, approved templates and featured presentations become library items once
     // (keyed by migratedFrom, so a second run adds nothing). Community slates wait in the review
     // queue. It runs beside the start, never in its way; a finished run is remembered.

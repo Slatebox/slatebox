@@ -61,8 +61,9 @@ export function nativeSlateFromBrief(input, source = null) {
   if (source !== null && !sources.has(source)) throw new Error('Unknown source for this slate.')
   const rows = briefRows(brief)
   const paths = rows.map(splitSteps)
+  // Named after its first note, never a whole row of steps glued together ("A → B").
   const board = source ? JSON.parse(JSON.stringify(sources.get(source))) : {
-    options: { name: rows[0].slice(0, 120) },
+    options: { name: (paths[0]?.[0] || rows[0]).slice(0, 120) },
     nodes: [],
   }
   board.options.creationBrief = brief
