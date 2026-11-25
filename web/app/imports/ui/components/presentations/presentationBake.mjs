@@ -10,7 +10,7 @@
 // (Wear this style), the server (agents, the showcase seed) and the site's player share it, so
 // the same slate wears the same style the same way everywhere.
 import * as shapes from 'slateboxjs/shapes'
-import { composeDeck, fitNoteFont, frameBox, localDirection, normalizeDirection, showsOn } from './presentationCompose.mjs'
+import { composeDeck, engineTextHeight, fitNoteFont, frameBox, localDirection, normalizeDirection, showsOn } from './presentationCompose.mjs'
 import { PRESENTATION_STYLES_MARKER, STYLES, cleanStyleRef, resolveStyle } from './presentationStyles.mjs'
 import { layoutOfNodes } from '../../../api/common/slate-layout-core.mjs'
 
@@ -133,6 +133,19 @@ function skinNote(options, look, origin) {
   else if (look.shape) out.shapeHint = look.shape
   delete out.x
   delete out.y
+  // A plain outline grows to fit its words when the engine draws it (a custom one shrinks its text
+  // instead): stored that tall now, around its centre, so the canvas and the player draw the same box.
+  if (out.shape !== 'custom' && !out.vectorPath && out.text) {
+    const inset = out.textInset || {}
+    const share = (v) => (Number.isFinite(Number(v)) ? Math.min(0.45, Math.max(0, Number(v))) : 0)
+    const round = /circle|ellipse/i.test(String(out.shape || out.shapeHint || '')) ? 0.82 : 1
+    const width = num(out.width) * round * (1 - share(inset.left) - share(inset.right))
+    const need = engineTextHeight(out.text, Number(out.fontSize) || 14, width, out.fontFamily, out.fontWeight)
+    if (need > num(out.height)) {
+      out.yPos = num(out.yPos) - (need - num(out.height)) / 2
+      out.height = need
+    }
+  }
   // What the note was before the style grew or turned it, so wearing another style (or taking it
   // off) starts from the note itself, never from the last style's growth.
   if (num(out.width) !== num(options.width) || num(out.height) !== num(options.height) || angleOf(out.rotate) !== angleOf(options.rotate)) {

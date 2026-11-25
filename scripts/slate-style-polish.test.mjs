@@ -44,7 +44,8 @@ test('a worn deck\'s plain notes of words are as tall as the engine draws them, 
     const { slate } = wearStyle(entry.slate, { id: entry.look.style }, { direction: entry.look.direction, name: entry.title })
     for (const node of slate.nodes) {
       const o = node.options
-      if (!o.styleRole || !o.text || o.vectorPath || o.image) continue
+      // The style's words and the slate's own notes in a plain outline (a custom outline shrinks its text instead).
+      if (!o.text || o.vectorPath || o.image || o.shape === 'custom' || /circle|ellipse/i.test(String(o.shape || ''))) continue
       assert.ok(o.height >= engineTextHeight(o.text, o.fontSize, o.width, o.fontFamily, o.fontWeight), `${entry.slug}: ${o.id} ${o.height}`)
     }
   }
