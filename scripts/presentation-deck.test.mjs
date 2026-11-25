@@ -116,13 +116,20 @@ test('agents read a deck and restyle it in one call: same steps, no AI, saved', 
   const record = deckRecord({ layout: whatIsSlatebox(), direction: aiDirection(), name: NAME })
   const row = { _id: 'p1', version: 2, name: 'Six ways in.', presentationData: JSON.stringify(whatIsSlatebox()), ...record }
   const saved = []
-  const deps = { latestPresentation: async (shareId, userId) => (shareId === 'abc' && userId === 'u1' ? row : null), savePresentation: async (id, set) => { saved.push([id, set]) } }
+  // The slate the deck presents: a restyle wears the style on it (the slate IS the presentation), through the save core.
+  const { createSlateSaveCore } = await import('../web/app/server/slate-save-core.mjs')
+  const { memoryMongo } = await import('./memory-mongo.mjs')
+  const slates = memoryMongo()
+  const saveCore = createSlateSaveCore({ slates, events: memoryMongo(), now: () => 1000 })
+  const slate = { _id: 's1', shareId: 'abc', userId: 'u1', ...slateOfLayout(whatIsSlatebox(), NAME) }
+  await saveCore.create({ row: slate, actor: { kind: 'person', userId: 'u1' }, source: 'create' })
+  const deps = { saveCore, latestPresentation: async (shareId, userId) => (shareId === 'abc' && userId === 'u1' ? row : null), savePresentation: async (id, set) => { saved.push([id, set]) } }
   const principal = { kind: 'agent', userId: 'u1' }
   const read = await presentationsGet.handler(principal, { shareId: 'abc' }, { deps })
   assert.equal(read.style, 'neon')
   assert.equal(read.steps.length, record.viewpoints.length)
   assert.equal(read.steps[0].layout, 'title')
-  const styled = await presentationsSetStyle.handler(principal, { shareId: 'abc', style: 'sketch', palette: ['#ff0000', '#00ff00', '#0000ff'] }, { deps })
+  const styled = await presentationsSetStyle.handler(principal, { shareId: 'abc', style: 'sketch', palette: ['#ff0000', '#00ff00', '#0000ff'] }, { deps, resource: await slates.findOne({ _id: 's1' }) })
   assert.equal(styled.style, 'sketch')
   // The same steps (notes, order, the deep zoom); the layouts are the new style's own beats.
   assert.equal(styled.steps.length, read.steps.length)

@@ -318,6 +318,44 @@ export function inkCanvas(root, scheme) {
   unpaintStale(root, touched)
 }
 
+/**
+ * The minimap's colours on a slate with a background of its own (a worn style's, or one somebody
+ * chose): its own background a step towards its ink, and a soft edge, so a dark slate's minimap is
+ * not a white card. Null for a slate that follows the app's mode (main.css colours that one) or
+ * one with a picture. → { scheme: 'dark'|'light', tokens: { --sb-minimap-* } } or null.
+ */
+export function minimapTokens(containerStyle) {
+  if (followsTheme(containerStyle) || typeof containerStyle !== 'object' || containerStyle.backgroundImage) return null
+  const cs = containerStyle
+  const gradient = cs.backgroundColorAsGradient && Array.isArray(cs.backgroundGradientColors) ? cs.backgroundGradientColors : null
+  const bg = parseColor(gradient?.[0] || cs.backgroundColor)
+  if (!bg || bg.a === 0) return null
+  const solid = { ...bg, a: 1 }
+  const dark = luminance(solid) < 0.18
+  const ink = dark ? '#ffffff' : '#000000'
+  return {
+    scheme: dark ? 'dark' : 'light',
+    tokens: {
+      '--sb-minimap-bg': toHex(mix(ink, solid, dark ? 0.08 : 0.04)),
+      '--sb-minimap-edge': toHex(mix(ink, solid, dark ? 0.28 : 0.2)),
+      '--sb-minimap-view': toHex(mix(ink, solid, dark ? 0.7 : 0.6)),
+    },
+  }
+}
+
+const MINIMAP_TOKENS = ['--sb-minimap-bg', '--sb-minimap-edge', '--sb-minimap-view']
+/** The minimap tinted from the slate's own background (minimapTokens), or back to the app's colours. */
+function setMinimapTokens(el, containerStyle) {
+  const tint = minimapTokens(containerStyle)
+  if (!tint) {
+    if (el.hasAttribute('data-sb-slate-bg')) el.removeAttribute('data-sb-slate-bg')
+    MINIMAP_TOKENS.forEach((name) => el.style.removeProperty(name))
+    return
+  }
+  if (el.getAttribute('data-sb-slate-bg') !== tint.scheme) el.setAttribute('data-sb-slate-bg', tint.scheme)
+  Object.entries(tint.tokens).forEach(([name, value]) => { if (el.style.getPropertyValue(name) !== value) el.style.setProperty(name, value) })
+}
+
 /** The dark canvas's colour, the board's dark ink and its chrome's, as custom properties on the canvas element. */
 function setCanvasTokens(el, dark) {
   const tokens = { '--sb-canvas-bg': CANVAS.dark.background, ...BOARD_INK.dark }
@@ -342,7 +380,9 @@ export function themeCanvas(el, { mode, getContainerStyle }) {
   let frame = 0
   const flush = () => {
     frame = 0
-    const scheme = canvasMode(mode, getContainerStyle?.())
+    const containerStyle = getContainerStyle?.()
+    const scheme = canvasMode(mode, containerStyle)
+    setMinimapTokens(el, containerStyle)
     // The app's mode, for the canvas's own controls (the minimap's frame), whatever the slate's background.
     const app = mode === 'dark' ? 'dark' : 'light'
     if (el.getAttribute('data-sb-mode') !== app) el.setAttribute('data-sb-mode', app)
@@ -370,6 +410,7 @@ export function themeCanvas(el, { mode, getContainerStyle }) {
     el.removeAttribute('data-sb-canvas')
     el.removeAttribute('data-sb-mode')
     setCanvasTokens(el, false)
+    setMinimapTokens(el, null)
     unpaintStale(el, new Map())
   }
 }

@@ -9,6 +9,8 @@ import { cleanStyleRef, resolveStyle } from '../../imports/ui/components/present
 import { ogCardMeasure, ogCardText } from './presentationCard.mjs'
 import { artImage } from '../../imports/ui/components/presentations/presentationArt.mjs'
 import { MASKS, swoosh } from '../../imports/ui/components/presentations/presentationPaths.mjs'
+import { takeOffStyle, wearStyle } from '../../imports/ui/components/presentations/presentationBake.mjs'
+import { layoutOfNodes } from '../../imports/api/common/slate-layout-core.mjs'
 
 /** How long a deck's pictures may take to find, all of them together. */
 export const IMAGE_TIME_LIMIT_MS = 7000
@@ -288,6 +290,43 @@ export function styleChange(row, styleRef) {
   const deck = composeDeck(layout, direction, { style })
   return { style, direction, viewpoints: deck.steps }
 }
+
+/**
+ * A saved deck's style worn on the slate itself (the slate IS the presentation), as Present's "Wear
+ * this style" does in the browser: the deck's steps remixed for the style from the slate's own notes
+ * (not a worn style's art), and the slate wearing it. `slateDoc` is the stored slate ({ options,
+ * nodes }); `row` the saved deck ({ direction, name }). `remix: false` keeps the direction as saved
+ * (it was written for this style already). → { slate, deck, direction, change } where change is
+ * what the deck row saves, or null when the deck has no direction to wear.
+ */
+export function wearDeckOnSlate(slateDoc, row, styleRef, { remix = true } = {}) {
+  if (!row?.direction?.steps || !Array.isArray(slateDoc?.nodes) || !slateDoc.nodes.length) return null
+  const style = cleanStyleRef(styleRef)
+  const name = slateDoc.options?.name || row.name || ''
+  const { layout } = layoutOfNodes(takeOffStyle(slateDoc).nodes || [])
+  if (!layout.nodes.length) return null
+  const direction = remix ? remixDirection(row.direction, layout, style, { name }) : { ...row.direction, style }
+  const worn = wearStyle(slateDoc, style, { direction, name })
+  return {
+    slate: worn.slate,
+    deck: worn.deck,
+    direction: worn.direction,
+    change: {
+      style,
+      deck: worn.deck,
+      direction: worn.direction,
+      viewpoints: worn.deck.steps.map(({ nodeIds, narrative, duration, layout, kicker }) => ({ nodeIds, narrative, duration, layout, kicker })),
+    },
+  }
+}
+
+/** The slate fields a worn style writes (what the save core stores). */
+export const wornSlateSet = (slate) => ({
+  nodes: slate.nodes,
+  'options.containerStyle': slate.options.containerStyle,
+  'options.style': slate.options.style,
+  'options.defaultLineColor': slate.options.defaultLineColor ?? null,
+})
 
 const esc = (text) => String(text || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const lines = (text, max) => {

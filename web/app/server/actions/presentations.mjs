@@ -9,7 +9,11 @@ import { shareIdInput } from './slate-schemas.mjs'
 import { STYLE_IDS } from '../../imports/ui/components/presentations/presentationStyles.mjs'
 import { MAX_REFINEMENT_CHARS } from '../methods/presentationRequest.mjs'
 import { LAYOUTS } from '../../imports/ui/components/presentations/presentationCompose.mjs'
-import { styleChange } from '../methods/presentationDeck.mjs'
+import { wearDeckOnSlate, wornSlateSet } from '../methods/presentationDeck.mjs'
+import { sharedSaveConditions } from '../methods/native-slate-save.mjs'
+import { runExpiry } from '../../imports/api/common/slate-operation-runs.mjs'
+import { undoRecord } from './slate-undo-record.mjs'
+import { showAgent } from './slate-operations.mjs'
 
 const hex = { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' }
 
@@ -165,7 +169,7 @@ export const presentationsSetStyle = defineAction({
   id: 'presentations.setStyle',
   title: 'Restyle',
   description:
-    `Play your latest presentation of a slate in another style (${STYLE_IDS.join(', ')}), optionally with your own palette (3 to 6 colors). The same steps in the same order: no AI is asked and nothing is counted.`,
+    `Put another style (${STYLE_IDS.join(', ')}) on a slate and your latest presentation of it, optionally with your own palette (3 to 6 colors). The slate itself wears the style (its background, its notes' look, and the style's title cards, captions and art as real notes), and the presentation is the camera over it: the same steps in the same order. No AI is asked and nothing is counted. Saved as your own edit of the slate (slates.undo takes it back). An agent wears a style by the rules slate settings meet: 423 agents_paused while people paused agents, 409 needs_direct_edit unless a person lets it edit directly.`,
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:write',
@@ -187,15 +191,78 @@ export const presentationsSetStyle = defineAction({
   },
   output: deckOutput,
   load: loadSlate(true),
-  tool: { name: 'style_presentation', title: 'Restyle a presentation', description: 'Switch a slate\'s presentation (its slides) to another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), keeping its steps.' },
-  async handler(principal, input, { deps }) {
+  tool: { name: 'style_presentation', title: 'Restyle a presentation', description: 'Put another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm) on a slate and its presentation, keeping its steps. The slate itself wears it: its background, its notes\' look, and the style\'s title cards, captions and art as real notes on the canvas; Present only plays the slate. undo_my_edit takes it back.' },
+  async handler(principal, input, ctx) {
+    const { deps } = ctx
+    const slate = ctx.resource
     const row = await deckOf(deps, input.shareId, principal)
+    if (!row?.direction?.steps) throw problem(409, 'conflict', 'This presentation has no art direction to restyle. Open the slate and press Present to plan it again.')
     const overrides = input.palette ? { palette: input.palette } : {}
-    const change = styleChange(row, Object.keys(overrides).length ? { id: input.style, overrides } : { id: input.style })
-    if (!change) throw problem(409, 'conflict', 'This presentation has no art direction to restyle. Open the slate and press Present to plan it again.')
-    await deps.savePresentation(row._id, change)
-    return deckSummary({ ...row, ...change })
+    const styleRef = Object.keys(overrides).length ? { id: input.style, overrides } : { id: input.style }
+    const extra = await asAgentWearing(principal, slate, ctx)
+    // The slate IS the presentation: the style goes on the slate as stored (inside the save core, so a
+    // person's save that lands first is built on), and the deck is the camera over it. One edit of the
+    // caller's own: slates.undo takes the whole style back.
+    let worn = null
+    let before = null
+    let undoable = null
+    if (typeof deps.saveCore?.save !== 'function') throw problem(503, 'unavailable', 'Styles cannot be worn on this server.')
+    let saved
+    try {
+      saved = await deps.saveCore.save({
+        slateId: slate._id,
+        actor: principal,
+        source: 'operations',
+        expectedRevision: slate.revision ?? 0,
+        conditions: { userId: slate.userId, orgId: slate.orgId ?? null, ...sharedSaveConditions(slate, principal.userId) },
+        build(current) {
+          before = current
+          worn = wearDeckOnSlate(current, row, styleRef)
+          if (!worn) throw problem(409, 'conflict', 'There is nothing on this slate to wear a style on.')
+          // Each line is kept on its own (defaultLineColor, put back, would recolor every line).
+          undoable = undoRecord(current, worn.slate, ['background', 'style'])
+          return { set: wornSlateSet(worn.slate) }
+        },
+      })
+    } catch (error) {
+      if (error?.status && error?.code) throw error
+      if (error?.code === 'slate_changed' || error?.code === 'save_refused')
+        throw problem(409, 'slate_changed', 'The slate changed while the style was being worn. Refresh and retry.')
+      throw error
+    }
+    const message = `Wore the ${input.style} style on the slate: its canvas background, its notes' look and its art.`
+    const now = ctx.now ? ctx.now() : Date.now()
+    if (deps.operationRuns?.insertAsync && undoable) {
+      await deps.operationRuns.insertAsync({
+        userId: principal.userId, tokenId: principal.tokenId, slateId: slate._id, slateShareId: slate.shareId, idempotencyKey: null,
+        revision: saved.revision, plan: { message, operations: [] }, userMessage: message, report: {},
+        response: { ok: true, shareId: slate.shareId, revision: saved.revision, message, operations: [], report: {}, mode: 'save' },
+        undoable, undoneBy: null, createdAt: now, expiresAt: runExpiry(now),
+      })
+    }
+    if (extra.onApplied) await extra.onApplied({ before, after: worn.slate, revision: saved.revision })
+    await showAgent(principal, slate, { message, report: { targets: worn.deck.steps[0]?.nodeIds || [] } }, deps)
+    await deps.savePresentation(row._id, worn.change)
+    return deckSummary({ ...row, ...worn.change })
   },
 })
+
+// A style is a slate setting (its background, its record): an agent wears one by the rules update_slate
+// meets. Not while people paused the slate's agents, and only when a person lets it edit directly (there
+// is no suggestion of a background); the Slatebox agent works on tasks a person approved, and saves.
+async function asAgentWearing(principal, slate, ctx) {
+  const store = ctx.deps.suggestions
+  if (!store || principal.kind !== 'agent') return {}
+  if ((await store.controlsOf(slate._id)).paused)
+    throw problem(423, 'agents_paused', 'People on this slate paused its agents. Ask one of them to resume agents, then retry.')
+  if (principal.builtin === 'slatebox' || !ctx.deps.presence?.identify) return {}
+  const who = await ctx.deps.presence.identify(principal, slate)
+  const direct = (await store.modeOf(slate._id, who.agentId, Boolean(ctx.deps.agentOptions?.editDirectly?.()))) === 'direct'
+  if (!direct)
+    throw problem(409, 'needs_direct_edit', 'A style changes the slate itself (its background and its notes\' look), which a person does, or an agent a person lets edit directly. Ask a person to let this agent edit directly, or to wear the style from Present.')
+  return {
+    onApplied: ({ before, after, revision }) => store.applied(principal, slate, { before, after, revision, message: 'Wore a style', identity: who }),
+  }
+}
 
 export default [presentationsCreate, presentationsGet, presentationsSetStyle]

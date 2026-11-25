@@ -17,8 +17,12 @@ import PresetColors from '../../common/PresetColors'
 import HexColor from '../../common/HexColor'
 import { currentSlate } from '../../jotai/atoms'
 
-export default function SlateColors({ onChange }) {
-  const slate = useAtomValue(currentSlate)
+export default function SlateColors({ slate: live = null, onChange, styleVersion = 0 }) {
+  const saved = useAtomValue(currentSlate)
+  // The live engine's own options first: the currentSlate atom holds the JSON copy last saved, which
+  // can still have the background a style just replaced (a worn style showed #ffffff here).
+  const liveOptions = live?.v2?.options ?? live?.options
+  const slate = liveOptions ? { options: liveOptions } : saved
 
   let bcolor = slate?.options?.containerStyle?.backgroundColor
   bcolor = bcolor || '#fff'
@@ -36,6 +40,15 @@ export default function SlateColors({ onChange }) {
     bgStrategy: style?.backgroundGradientStrategy || 'shades',
   }))
   const { selectedColor, asGradient, linearOrRadial, gradientColorCount, bgStrategy } = settings
+  // The slate's background or line color changed (a style worn or taken off, an undo, another
+  // person): the picker shows what the slate has now.
+  useEffect(() => {
+    setSettings((prev) => {
+      const shown = colorType === 'onSlateBackgroundColorChanged' ? bcolor : lcolor
+      const gradient = Boolean(style?.backgroundColorAsGradient)
+      return prev.selectedColor === shown && Boolean(prev.asGradient) === gradient ? prev : { ...prev, selectedColor: shown, asGradient: gradient }
+    })
+  }, [bcolor, lcolor, style?.backgroundColorAsGradient, styleVersion])
   const paletteRequest = React.useRef(0)
   useEffect(() => () => { paletteRequest.current++ }, [])
 
@@ -210,4 +223,8 @@ export default function SlateColors({ onChange }) {
   )
 }
 
-SlateColors.propTypes = { onChange: PropTypes.func.isRequired }
+SlateColors.propTypes = {
+  onChange: PropTypes.func.isRequired,
+  slate: PropTypes.shape({ options: PropTypes.object }),
+  styleVersion: PropTypes.number,
+}

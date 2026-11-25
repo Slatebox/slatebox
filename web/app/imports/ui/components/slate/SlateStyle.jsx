@@ -31,6 +31,8 @@ export async function replaceSlateAsOwnStep(slate, doc, action) {
 export default function SlateStyle({ slate = null, children = null }) {
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState('')
+  // Bumped after each wear, so the Custom colors under the styles show the slate's new background.
+  const [version, setVersion] = useState(0)
   let worn = null
   try { worn = wornStyle(slate?.exportJSON?.() ?? null) } catch { worn = null }
   const run = async (make, action) => {
@@ -39,6 +41,7 @@ export default function SlateStyle({ slate = null, children = null }) {
     try {
       const doc = make(slate.exportJSON())
       await replaceSlateAsOwnStep(slate, doc, action)
+      setVersion((v) => v + 1)
     } catch (error) {
       setProblem(error?.message || 'The style could not be worn.')
     } finally {
@@ -83,7 +86,7 @@ export default function SlateStyle({ slate = null, children = null }) {
       {children && (
         <Box sx={{ mt: 2 }}>
           <Typography variant="overline" sx={{ letterSpacing: '.1em' }}>Custom</Typography>
-          {children}
+          {React.Children.map(children, (child) => (React.isValidElement(child) ? React.cloneElement(child, { styleVersion: version }) : child))}
         </Box>
       )}
     </Box>

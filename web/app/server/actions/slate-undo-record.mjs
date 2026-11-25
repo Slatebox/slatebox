@@ -6,7 +6,7 @@
 // plan that puts back the "before" of each of those that still holds the "after"; a part someone else
 // has changed since is left as it is and listed in `left`. It is saved as any canvas plan is (the save
 // core, a receipt, drawn live on every open canvas), so a person watching sees it happen.
-import { NODE_KEYS, NODE_STYLE_KEYS, CONNECTOR_STYLE_KEYS, SLATE_KEYS, readConnector, readNote } from 'slateboxjs/operations'
+import { NODE_KEYS, NODE_STYLE_KEYS, CONNECTOR_STYLE_KEYS, SLATE_KEYS, backgroundOf, readConnector, readNote } from 'slateboxjs/operations'
 
 const same = (a, b) => a === b || JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
 const nodesOf = (slate) => (Array.isArray(slate?.nodes) ? slate.nodes : [])
@@ -28,11 +28,20 @@ function connectorsById(slate) {
   return out
 }
 
+// Settings the contract stores but does not read back, read here: the canvas background (as
+// update_slate takes it; none is unreadable) and the style a slate wears (none is null, which
+// update_slate takes as "take it off").
+const READ_HERE = {
+  background: (slate) => backgroundOf(slate?.options?.containerStyle) ?? undefined,
+  style: (slate) => slate?.options?.style ?? null,
+}
+
 /** A setting as the contract reads it, or undefined when the key cannot be read back. */
 function readSetting(slate, key) {
   const spec = SLATE_KEYS[key]
   try {
     if (typeof spec?.read === 'function') return spec.read(slate)
+    if (spec && READ_HERE[key]) return READ_HERE[key](slate)
   } catch { /* unreadable: treated as unchanged */ }
   return undefined
 }
@@ -101,7 +110,11 @@ export function stepPlan(record, current, direction) {
       if (!now) continue
       if (!same(now, from)) changedSince('note', id)
       else if (theirLineOn(id)) left.push({ kind: 'note', id, reason: 'connected since by someone else' })
-      else deletes.push(id)
+      else {
+        // A locked note the step made (a style's decoration) is unlocked first: a plan removes no locked note.
+        if (now.locked === true) updates.push({ kind: 'update_nodes', target: { ids: [id] }, changes: { locked: false } })
+        deletes.push(id)
+      }
     } else if (from && to) {
       if (!now) { changedSince('note', id); continue }
       const changes = {}

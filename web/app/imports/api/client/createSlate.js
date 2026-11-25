@@ -8,6 +8,7 @@ import { createAINodes } from '../common/ai'
 import defaultShapes from '../../ui/components/node/defaultShapes'
 import { presetNoteStyle } from '../../ui/common/noteStyle.mjs'
 import { DEFAULT_PRESET_QUERY, defaultPreset as teamStyle } from '../common/brandSettings.mjs'
+import { loadSlateFaces } from '../../ui/components/presentations/slateFaces.mjs'
 
 async function createSlate(
   slateBase,
@@ -256,6 +257,9 @@ async function createSlate(
   const loaded = newSlate.creative
     ? { ...newSlate, options: { ...newSlate.options, collabTrades: { through: newSlate.creative.revision ?? 0, trades: newSlate.creative.trades ?? {} } } }
     : newSlate
+  // Every note drawn in its own face from the start, as Present draws it (slateFaces.mjs): the
+  // engine wraps and fits a note's words with the face it has when the note is drawn.
+  await loadSlateFaces(loaded)
   await slate.loadJSON(JSON.stringify(loaded))
 
   // if (currentAIContext?.aid && !currentAIContext?.isConversation) {

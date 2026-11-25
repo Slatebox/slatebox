@@ -13,6 +13,8 @@ import setup from './email/setup'
 import { storedFileBase } from './common/fileStore'
 import { onCreateUser } from './common/accounts'
 import { ensureLibraryIndexes, migrateCommunitySlates, seedLibraryBuiltins, seedLibraryShowcase } from './library/meteor'
+import { slateSaveCore } from './slate-save'
+import { wearStyledDecks } from './migrations/slate-style-001.mjs'
 import './bootstrap/all'
 import {
   IconPacks,
@@ -444,6 +446,10 @@ Meteor.startup(async () => {
   } catch (error) {
     console.error('[library] startup', error?.message)
   }
+  // slate-style-001: presentations saved with a style before slates wore styles: their slates wear
+  // it now (the slate IS the presentation). Beside the start, never in its way; idempotent.
+  wearStyledDecks({ presentations: SlatePresentations.rawCollection(), slates: Slates.rawCollection(), saveCore: slateSaveCore })
+    .catch((error) => console.error('[slate-style-001]', error?.message))
 
   await Promise.all([
     SlateApiTokens.rawCollection().createIndex(

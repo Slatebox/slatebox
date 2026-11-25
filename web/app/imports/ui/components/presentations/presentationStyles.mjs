@@ -57,7 +57,7 @@ export const STYLES = {
       if (role === 'branch') return { vectorPath: P.blob(11 + branch, 0.12), backgroundColor: c, fontFamily: 'Space Grotesk', fontWeight: 'bold', fontScale: 0.38, fontColor: textOn(c) }
       return { vectorPath: P.pill, backgroundColor: '#141c4f', borderColor: c, borderWidth: 3, fontFamily: 'Space Grotesk', fontScale: 0.3, fontColor: '#eef1ff' }
     },
-    line: (fromRole, branch, palette) => ({ lineColor: palette[branch % palette.length], lineWidth: fromRole === 'root' ? 7 : 3.5, lineCurviness: 0.45, showChildArrow: false }),
+    line: (fromRole, branch, palette) => ({ lineColor: palette[branch % palette.length], lineWidth: fromRole === 'root' ? 7 : 3.5, lineOpacity: 0.75, lineCurviness: 0.45, showChildArrow: false }),
     kit: {
       title: { font: 'Anton', color: '#ffffff', size: 1.9 },
       kicker: { path: P.pill, fill: '#ff4d8d', color: '#ffffff', font: 'Space Grotesk' },
@@ -180,7 +180,9 @@ export const STYLES = {
       if (role === 'branch') return { vectorPath: P.chevron, backgroundColor: c, fontFamily: 'Anton', fontScale: 0.44, fontColor: '#0b0016', rotate: branch % 2 ? 3 : -3 }
       return { vectorPath: P.slant, backgroundColor: '#1a0833', borderColor: '#00f0ff', borderWidth: 2.5, fontFamily: 'Space Grotesk', fontWeight: 'bold', fontScale: 0.3, fontColor: '#ffffff' }
     },
-    line: (fromRole) => ({ lineColor: fromRole === 'root' ? '#ff2e93' : '#7a5cff', lineWidth: fromRole === 'root' ? 6 : 3, lineType: 'straight', showChildArrow: false }),
+    // Lines glow under the notes rather than compete with them: the canvas shows them at the strength
+    // a step's unlit lines have in Present.
+    line: (fromRole) => ({ lineColor: fromRole === 'root' ? '#ff2e93' : '#7a5cff', lineWidth: fromRole === 'root' ? 6 : 3, lineOpacity: fromRole === 'root' ? 0.7 : 0.55, lineType: 'straight', showChildArrow: false }),
     kit: {
       title: { font: 'Anton', color: '#ffffff', size: 3.4, rotate: -4 },
       kicker: { path: P.chevron, fill: '#00f0ff-#7a5cff', color: '#0b0016', font: 'Anton' },

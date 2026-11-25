@@ -13402,7 +13402,7 @@
       "post": {
         "operationId": "setPresentationStyle",
         "summary": "Restyle",
-        "description": "Play your latest presentation of a slate in another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), optionally with your own palette (3 to 6 colors). The same steps in the same order: no AI is asked and nothing is counted.",
+        "description": "Put another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm) on a slate and your latest presentation of it, optionally with your own palette (3 to 6 colors). The slate itself wears the style (its background, its notes' look, and the style's title cards, captions and art as real notes), and the presentation is the camera over it: the same steps in the same order. No AI is asked and nothing is counted. Saved as your own edit of the slate (slates.undo takes it back). An agent wears a style by the rules slate settings meet: 423 agents_paused while people paused agents, 409 needs_direct_edit unless a person lets it edit directly.",
         "x-required-scope": "slates:write",
         "x-slatebox": {
           "action": "presentations.setStyle",

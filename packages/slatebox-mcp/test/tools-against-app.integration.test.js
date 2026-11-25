@@ -514,15 +514,27 @@ return slatebox.presence.step({ shareId: "canvas", index: 0, status: "done" })`)
   assert.deepEqual([tried.presentationId, tried.link, tried.mode], [null, null, "preview"]);
   assert.deepEqual(planned.map(({ userId, shareId, style, brief, preview }) => [userId, shareId, style, brief, preview]),
     [["owner", "canvas", "calm", "the risks", false], ["owner", "canvas", null, "", true]]);
-  // Read a slate's deck, and restyle it in one call (the same steps, no AI).
+  // Read a slate's deck, and restyle it in one call (the same steps, no AI). A restyle wears the style on the slate
+  // itself (the slate IS the presentation), read as it is now: the deck is planned from the slate as it is now too
+  // (the probe's edits above added notes since its deck was first made).
+  {
+    const { layoutOfNodes } = await import(new URL("imports/api/common/slate-layout-core.mjs", app));
+    const { layout } = layoutOfNodes((await stored("canvas")).nodes);
+    Object.assign(deckRow, { presentationData: JSON.stringify(layout), ...deckRecord({ layout, name: "Probe" }) });
+  }
   const deck = await ok(`return slatebox.presentations.get({ shareId: "canvas" })`);
   assert.equal(deck.style, deckRow.style.id);
   assert.equal(deck.steps[0].layout, "title");
   const restyled = await ok(`return slatebox.presentations.setStyle({ shareId: "canvas", style: "neon" })`);
   assert.equal(restyled.style, "neon");
   // The same steps (each the same notes, in the same order) in the new style's own beats: a style
-  // may show a step as another layout (2244bafe: "beats that differ by style").
-  assert.deepEqual(restyled.steps.map((step) => [step.step, step.notes]), deck.steps.map((step) => [step.step, step.notes]));
+  // may show a step as another layout (2244bafe: "beats that differ by style"), and wearing it on the
+  // slate may add its own beat (a deep zoom into a step's note), never drop or reorder one.
+  const kept = deck.steps.map((step) => step.notes);
+  let at = 0;
+  for (const step of restyled.steps) if (at < kept.length && step.notes === kept[at]) at += 1;
+  assert.equal(at, kept.length, JSON.stringify([kept, restyled.steps.map((step) => step.notes)]));
+  assert.ok(restyled.steps.length <= deck.steps.length + 1);
   assert.deepEqual([restyled.steps[0].layout, restyled.steps.at(-1).layout], [deck.steps[0].layout, deck.steps.at(-1).layout]);
   assert.deepEqual(restyles, [["deck1", { id: "neon" }]]);
   // Parity: list, copy and delete slates; read, add, resolve and remove comments. A removal is held.

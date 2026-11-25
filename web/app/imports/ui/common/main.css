@@ -208,6 +208,11 @@ body:has(.sb-cookie) .sb-canvas-page{box-sizing:border-box;padding-bottom:calc(m
 .slatebox-zoom-slider.slatebox-zoom-slider button{color:inherit!important}
 /* While the + dock is open it covers the pill: the pill steps aside rather than show through dimly. */
 html[data-sb-add-open] .slatebox-zoom-slider{visibility:hidden}
+/* A slate with a background of its own (a worn style): the minimap takes its colours from it (canvasTheme.mjs minimapTokens). */
+#slateCanvas[data-sb-slate-bg] .slateboxjs-birdseye{background-color:var(--sb-minimap-bg)!important;border-color:var(--sb-minimap-edge)!important}
+#slateCanvas[data-sb-slate-bg] .slateboxjs-birdseye > svg > rect:first-child{fill:var(--sb-minimap-bg)}
+#slateCanvas[data-sb-slate-bg] .slateboxjs-birdseye-viewport{fill:transparent;stroke:var(--sb-minimap-view)}
+#slateCanvas[data-sb-slate-bg=dark] .slateboxjs-birdseye{box-shadow:0 4px 18px rgb(0 0 0 / 40%)!important}
 /* The dark rules carry the canvas's id too: without it the #slateCanvas rules above outrank them. */
 #slateCanvas[data-sb-canvas=dark] .slateboxjs-birdseye{box-shadow:0 4px 18px rgb(0 0 0 / 40%)!important}
 #slateCanvas[data-sb-canvas=dark] .slateboxjs-birdseye > svg > rect:first-child{fill:var(--sb-canvas-bg)}

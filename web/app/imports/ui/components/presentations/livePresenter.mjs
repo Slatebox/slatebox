@@ -8,6 +8,7 @@
 // between framings with a short crossfade instead. Beside the canvas it shows only player chrome:
 // the credit a searched picture's licence asks for, and words for a screen reader.
 import { STYLES } from './presentationStyles.mjs'
+import { loadSlateFaces } from './slateFaces.mjs'
 
 const LOCKED = { allowDrag: false, allowMenu: false, allowContext: false, allowResize: false, showMenu: false }
 const CALM_MOTION = { arc: 'prezi', pace: 1, reveal: 'fade', rollMax: 0 }
@@ -150,6 +151,9 @@ export async function mountLiveDeck({ host, Slatebox, slateJSON, deck, reduced =
   const slate = facade.v2 || facade
   // The engine behind the stage, for checks that read the notes as drawn (never enumerable).
   Object.defineProperty(root, 'sbpSlate', { value: slate, configurable: true })
+  // Every note drawn in its own face from the start, as the canvas draws it (slateFaces.mjs), so
+  // the player wraps each note's words exactly as the canvas does.
+  await loadSlateFaces(presented, { doc })
   await slate.loadJSON(presented, false, true)
   try { slate.disablePanZoom?.() } catch { /* already off */ }
   // The faces the notes are drawn in, as the canvas loads them (the slate's own fonts).

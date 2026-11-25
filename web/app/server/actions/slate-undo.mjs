@@ -140,7 +140,9 @@ function stepAction(direction) {
           if (operations.length) {
             const saved = await applyToCanvas(principal, {
               plan: { message: said, operations },
-              userMessage: undo ? 'Undo' : 'Redo',
+              // What the person asked for when the edit was made goes with its undo: a background they asked
+              // to change (a style worn) may be put back.
+              userMessage: (undo ? 'Undo' : 'Redo') + (target.userMessage ? `: ${String(target.userMessage).slice(0, 200)}` : ''),
               expectedRevision: slate.revision ?? 0,
             }, { ...ctx, ...extra, mode: 'save', stepOf: { [direction]: target._id } })
             body = { ...body, revision: saved.body.revision, operations: saved.body.operations }

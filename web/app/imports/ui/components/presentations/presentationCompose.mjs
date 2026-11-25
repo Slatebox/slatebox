@@ -87,7 +87,7 @@ export function slateGraph(layout) {
       const bbox = node.metrics?.bbox
       const box = bbox && [bbox.x, bbox.y, bbox.width, bbox.height].every(Number.isFinite)
         ? rotatedBounds(bbox, Number(node.metrics.rotation) || 0) : { x: 0, y: 0, width: 0, height: 0 }
-      notes.set(id, { id, text: firstLine(node.description), box, parent: null, children: [] })
+      notes.set(id, { id, text: firstLine(node.description), words: String(node.description || '').trim(), box, parent: null, children: [] })
     }
     const entry = notes.get(id)
     if (parent && parent !== id && !entry.parent) {
@@ -594,18 +594,41 @@ export function fitFont(text, w, h, max, font = 'Inter', min = 4, { weight = 'no
   for (let size = max; size > min; size *= 0.93) {
     // A word is never broken: the longest one fits on its own line.
     if (width(longest, size) > w * 0.94) continue
-    let lines = 1
+    // Each line the words were written on starts a line of its own, as the engine draws them.
+    if (wrappedLines(text, w * 0.94, (str) => width(str, size)) * size * 1.18 <= h * 0.96) return Math.round(size * 10) / 10
+  }
+  return min
+}
+
+// How many lines the words take at `w` (each written line starts a new one; words wrap whole).
+function wrappedLines(text, w, width) {
+  let lines = 0
+  for (const para of String(text || '').split('\n')) {
+    const list = words(para)
+    if (!list.length) continue
+    lines += 1
     let line = ''
     for (const word of list) {
       const next = line ? `${line} ${word}` : word
-      if (line && width(next, size) > w * 0.94) {
+      if (line && width(next) > w) {
         lines += 1
         line = word
       } else line = next
     }
-    if (lines * size * 1.18 <= h * 0.96) return Math.round(size * 10) / 10
   }
-  return min
+  return Math.max(1, lines)
+}
+
+/**
+ * The height the engine gives a plain note's words (SlateboxJS Node.fitHeightToText): its lines
+ * at 1.3 times the size (SVG.js leading), wrapped at the note's width less 14 px, plus 14 px. A
+ * note at least this tall is never grown when it is drawn, so the canvas and the player (the same
+ * engine) keep the size the slate stores. Estimated widths run high, so this errs taller.
+ */
+export function engineTextHeight(text, size, width, font = 'Inter', weight = 'normal') {
+  if (!String(text || '').trim() || !(size > 0)) return 0
+  const lines = wrappedLines(text, Math.max(24, width - 14), (str) => estimateWidth(str, size, font, weight))
+  return Math.ceil(lines * size * 1.3) + 14
 }
 
 /**
@@ -690,7 +713,8 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null, bake
       // The style's size, made smaller where the note's words would not fit its shape.
       fontSize: Math.min(
         Math.round(Math.min(height, U) * (fontScale || 0.32) * (role === 'root' ? Math.min(2.2, height / U) : 1) * 10) / 10,
-        fitFont(note.text, innerW * 0.92 - 14, innerH * 0.86, U * 2, look.fontFamily),
+        // Every line the note holds (the engine draws them all), not only the first.
+        fitFont(note.words || note.text, innerW * 0.92 - 14, innerH * 0.86, U * 2, look.fontFamily, 4, { weight: look.fontWeight || 'normal' }),
       ),
       ...(rotate ? { rotate: { rotationAngle: rotate } } : {}),
       ...(image === 'art' ? { image: artImage({ kind: style.art, palette: style.palette, bg: style.bg, seedText: note.text, width: 800, height: 800 }), imageOrigWidth: width, imageOrigHeight: height, imageFit: 'cover' } : {}),
@@ -742,6 +766,13 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null, bake
     const id = `sb-stage-${serial}-${kind}`
     const inset = options.text && options.vectorPath ? P.textInsetFor(options.vectorPath) : null
     const note = { id, kind, x: geometry.x, y: geometry.y, w: geometry.w ?? geometry.width, h: geometry.h ?? geometry.height, ...(inset ? { textInset: inset } : {}), ...options, steps }
+    // Baked onto the slate, a plain note of words is as tall as the engine makes it when it is
+    // drawn, so neither the canvas nor the player grows it on load (they would agree, but differ
+    // from the slate as stored and from each other while faces load).
+    if (bake && note.text && !note.vectorPath && !note.image) {
+      const need = engineTextHeight(note.text, Number(note.fontSize) || 14, note.w, note.fontFamily, note.fontWeight)
+      if (need > note.h) note.h = need
+    }
     note.p = portrait ? { x: portrait.x, y: portrait.y, w: portrait.w ?? portrait.width, h: portrait.h ?? portrait.height, ...(portrait.fontSize ? { fontSize: portrait.fontSize } : {}) } : { x: note.x, y: note.y, w: note.w, h: note.h }
     stageNotes.push(note)
     return id
@@ -1092,8 +1123,10 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null, bake
     camera: { frame: [...(openingCamera.cover ? [bookend[0]] : bookend), ctaId], cover: Boolean(openingCamera.cover), fill: 0.86, roll: -Math.min(3, rollMax), via: 'overview', p: { frame: [...(openingCamera.cover ? [bookend[0]] : bookend), ctaId], cover: Boolean(openingCamera.cover) } },
     duration: 5000, reveal: 'fade',
   })
-  // Baked, a step's kicker and caption are real notes in the style's caption type, in a band
-  // under what the step frames (the player draws no captions of its own).
+  // Baked, a step's kicker and caption are real notes in the style's caption type, close under
+  // what the step frames (the player draws no captions of its own). They are sized for the screen
+  // the step fills, as the posters set a caption (a kicker, then the words in large type across
+  // about half the screen), so the step's frame keeps the posters' composition.
   if (bake) {
     const chrome = style.chrome
     const boxOfId = (id) => {
@@ -1108,38 +1141,68 @@ export function composeDeck(layout, rawDirection, { style: styleRef = null, bake
       if (step.camera.cover || (!words && !kick)) return
       const frame = unionBoxes(step.camera.frame.filter(Boolean).map(boxOfId))
       if (!(frame.width > 0)) return
-      const w = Math.max(U * 7, Math.min(U * 26, frame.width * 0.62))
-      const kickH = kick ? w * 0.05 : 0
-      const capH = words ? w * 0.15 : 0
-      const gapK = kick && words ? w * 0.015 : 0
-      const h = kickH + gapK + capH
-      // The band under the frame (as a caption reads, bottom left), pushed down past what is in the way, then
-      // above it; only a slate with no room above or below puts it beside.
-      let spot = null
-      for (let push = 0; push < 24 && !spot; push += 1) {
-        const dy = U * 0.6 + push * U * 0.5
-        const tries = [
-          { x: frame.x, y: frame.y + frame.height + dy, width: w, height: h },
-          { x: frame.x + (frame.width - w) / 2, y: frame.y + frame.height + dy, width: w, height: h },
-          { x: frame.x, y: frame.y - dy - h, width: w, height: h },
-        ]
-        spot = tries.find((box) => isFree(box)) || null
+      // The height of the 16:9 screen the step fills (its camera's fill), in canvas units.
+      const screen = Math.max(frame.height, (frame.width * 9) / 16) / (step.camera.fill ?? 0.86)
+      const kickText = kick.toUpperCase()
+      const capText = chrome.captionCase === 'uppercase' ? words.toUpperCase() : words
+      const capWeight = chrome.big ? 'bold' : 'normal'
+      // The kicker and the words at a width: the words in at most four lines.
+      const sized = (w) => {
+        const kickSize = kick ? fitFont(kickText, w, screen * 0.04, screen * 0.024, chrome.kickerFont, 4, { weight: 'bold' }) : 0
+        const capSize = words ? fitFont(capText, w, screen * 0.046 * 1.18 * 4.2, screen * 0.046, chrome.captionFont, 4, { weight: capWeight }) : 0
+        const kickH = kick ? engineTextHeight(kickText, kickSize, w, chrome.kickerFont, 'bold') : 0
+        const capH = words ? engineTextHeight(capText, capSize, w, chrome.captionFont, capWeight) : 0
+        return { w, kickSize, capSize, kickH, capH, h: kickH + capH }
       }
-      if (!spot) spot = place(w, h, frame, { sides: ['below', 'above', 'right', 'left'], gap: U * 0.6 })
+      // About half the screen's width, as the posters set a caption; narrower where that is in the way.
+      const full = Math.max(U * 7, screen * 0.98)
+      const widths = [full, full * 0.75, full * 0.55].map(sized)
+      const gap = screen * 0.02
+      // In the frame's own free foot first (the frame stays as it is), then just under it, above it
+      // (each at the left, the middle and the right) or beside its foot, pushed out past what is in
+      // the way, the nearest first.
+      let spot = null
+      let size = widths[0]
+      const fx = (w) => [frame.x, frame.x + (frame.width - w) / 2, frame.x + frame.width - w]
+      for (let push = 0; push < 24 && !spot; push += 1) {
+        const dy = gap + push * U * 0.5
+        for (const option of widths) {
+          const { w, h } = option
+          const tries = [
+            // Free room inside the frame, from its foot up (the lowest first).
+            ...(push === 0 && w <= frame.width && h < frame.height * 0.6
+              ? Array.from({ length: Math.max(1, Math.floor((frame.height - h) / (U * 0.5)) + 1) }, (_, k) => frame.y + frame.height - h - k * U * 0.5)
+                .flatMap((y) => fx(w).map((x) => ({ x, y, width: w, height: h })))
+              : []),
+            ...fx(w).map((x) => ({ x, y: frame.y + frame.height + dy, width: w, height: h })),
+            ...fx(w).map((x) => ({ x, y: frame.y - dy - h, width: w, height: h })),
+            // Beside the frame's foot, where the screen has room at its side (a tall frame).
+            ...(frame.width + dy + w <= (screen * 16) / 9 ? [
+              { x: frame.x + frame.width + dy, y: frame.y + frame.height - h, width: w, height: h },
+              { x: frame.x - dy - w, y: frame.y + frame.height - h, width: w, height: h },
+            ] : []),
+          ]
+          spot = tries.find((box) => isFree(box)) || null
+          if (spot) { size = option; break }
+        }
+      }
+      if (!spot) spot = place(size.w, size.h, frame, { sides: ['below', 'above', 'right', 'left'], gap })
+      const { w, kickSize, capSize, kickH, capH } = size
+      const h = kickH + capH
       const ids = []
       const panel = chrome.panel && chrome.panel !== 'transparent' ? { backgroundColor: chrome.panel } : {}
       if (kick) {
-        const text = kick.toUpperCase()
-        ids.push(add('kicker', { x: spot.x, y: spot.y, w, h: kickH }, textNote(text, chrome.kickerFont, fitFont(text, w, kickH, kickH * 0.8, chrome.kickerFont), chrome.accent, { fontWeight: 'bold', caption: true }), [index]))
+        ids.push(add('kicker', { x: spot.x, y: spot.y, w, h: kickH }, textNote(kickText, chrome.kickerFont, kickSize, chrome.accent, { fontWeight: 'bold', caption: true }), [index]))
       }
       if (words) {
-        const text = chrome.captionCase === 'uppercase' ? words.toUpperCase() : words
-        const at = { x: spot.x, y: spot.y + kickH + gapK, w, h: capH }
-        ids.push(add('caption', at, textNote(text, chrome.captionFont, fitFont(text, w * 0.94, capH * 0.9, capH * 0.42, chrome.captionFont), chrome.ink, { ...panel, ...(chrome.italic ? { fontStyle: 'italic' } : {}), ...(chrome.big ? { fontWeight: 'bold' } : {}), caption: true }), [index]))
+        const at = { x: spot.x, y: spot.y + kickH, w, h: capH }
+        ids.push(add('caption', at, textNote(capText, chrome.captionFont, capSize, chrome.ink, { ...panel, ...(chrome.italic ? { fontStyle: 'italic' } : {}), ...(chrome.big ? { fontWeight: 'bold' } : {}), caption: true }), [index]))
       }
       blockers.push(inflate({ x: spot.x, y: spot.y, width: w, height: h }, U * 0.3))
-      step.camera.frame.push(...ids)
-      if (step.camera.p) step.camera.p.frame.push(...ids)
+      // New arrays: a step's frame can be the very list of the notes it names (nodeIds), which keeps
+      // naming only the slate's notes.
+      step.camera.frame = [...step.camera.frame, ...ids]
+      if (step.camera.p) step.camera.p.frame = [...step.camera.p.frame, ...ids]
       if (Array.isArray(step.lit)) step.lit = [...step.lit, ...ids]
     })
   }

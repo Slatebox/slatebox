@@ -1459,7 +1459,7 @@ declare namespace slatebox.presentations {
 }
 
 declare namespace slatebox.presentations {
-  /** Restyle. Play your latest presentation of a slate in another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), optionally with your own palette (3 to 6 colors). The same steps in the same order: no AI is asked and nothing is counted. @scope slates:write @idempotent */
+  /** Restyle. Put another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm) on a slate and your latest presentation of it, optionally with your own palette (3 to 6 colors). The slate itself wears the style (its background, its notes' look, and the style's title cards, captions and art as real notes), and the presentation is the camera over it: the same steps in the same order. No AI is asked and nothing is counted. Saved as your own edit of the slate (slates.undo takes it back). An agent wears a style by the rules slate settings meet: 423 agents_paused while people paused agents, 409 needs_direct_edit unless a person lets it edit directly. @scope slates:write @idempotent */
   function setStyle(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;

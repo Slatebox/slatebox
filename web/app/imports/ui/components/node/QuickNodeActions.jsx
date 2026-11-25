@@ -49,7 +49,24 @@ export default function QuickNodeActions({
 
   const baseOpts = noteBase(ownNotes)
 
-  const handleActionMenuOpen = () => {
+  // A press somewhere else (Got it on the cookie notice, a canvas click) a moment ago: the dock does
+  // not open because that notice went away from over it with the pointer still resting there.
+  const lastPressAt = React.useRef(0)
+  React.useEffect(() => {
+    const pressed = (event) => { if (!event.target?.closest?.('.sb-add-dock')) lastPressAt.current = performance.now() }
+    window.addEventListener('pointerdown', pressed, true)
+    return () => window.removeEventListener('pointerdown', pressed, true)
+  }, [])
+  // Hover opens the dock only when the pointer came to it: never when something that lay over it went
+  // away (the browser then reports the resting pointer as entering it, without moving), so a fresh
+  // slate, a copy from the library or a slate full of notes opens with the dock closed.
+  const handleActionMenuOpen = (event, reason) => {
+    const hover = reason === 'mouseEnter' || event?.type === 'pointermove' || event?.type === 'mouseenter'
+    if (hover) {
+      const native = event?.nativeEvent ?? event
+      const still = !native?.movementX && !native?.movementY
+      if (still || performance.now() - lastPressAt.current < 800) return
+    }
     setActionMenuOpen(true)
   }
 
@@ -207,6 +224,7 @@ export default function QuickNodeActions({
         stroke={baseOpts.borderColor || '#333'}
       />
       <SpeedDial
+        className="sb-add-dock"
         ariaLabel={
           commentAccessOnly
             ? 'Slatebox - comment'
@@ -266,7 +284,7 @@ export default function QuickNodeActions({
           // Firefox then sends movement inside it without a new mouseenter.
           onPointerMove: (event) => {
             if (!actionMenuOpen && event.buttons === 0 && event.pointerType !== 'touch') {
-              handleActionMenuOpen()
+              handleActionMenuOpen(event, 'mouseEnter')
             }
           },
         }}

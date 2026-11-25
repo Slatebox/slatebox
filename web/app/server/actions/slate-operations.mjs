@@ -25,6 +25,10 @@ const SLATE_OPTION_PATHS = {
   defaultLineColor: 'options.defaultLineColor',
 }
 
+// Slate keys only an undo or redo of a caller's own edit writes back (slates.undo after
+// presentations.setStyle): the style record is worn with everything it brings, never set alone.
+const STEP_OPTION_PATHS = { style: 'options.style' }
+
 const result = {
   type: 'object',
   properties: {
@@ -147,7 +151,7 @@ export async function applyToCanvas(principal, input, { deps, mode, now, idempot
     for (const operation of applied.materializedPlan.operations) {
       if (operation.kind !== 'update_slate') continue
       Object.keys(operation.changes).forEach((key) => {
-        const path = SLATE_OPTION_PATHS[key]
+        const path = SLATE_OPTION_PATHS[key] ?? (stepOf ? STEP_OPTION_PATHS[key] : undefined)
         // A slate key the engine accepts but this route cannot save is a contract gap, not a silent no-op.
         if (!path) throw problem(500, 'unsaved_slate_key', `The slate key ${key} cannot be saved by this server.`)
         set[path] = path.split('.').reduce((value, part) => value?.[part], applied.slate)
