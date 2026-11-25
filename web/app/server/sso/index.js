@@ -26,6 +26,7 @@ import {
 } from './policy.mjs'
 import { createTicketStore } from './tickets.mjs'
 import { gateHandlers } from './gate.mjs'
+import { clearSetupCookie, completeSetupWith, pendingSsoSetup } from '../self-host-setup/meteor'
 
 const tickets = createTicketStore()
 const credentials = { apiTokens: SlateApiTokens, loginLinks: LoginLinks, apiLinks: APILinks }
@@ -96,9 +97,13 @@ function routes(sso) {
     const clear = stateCookie('', { secure, maxAge: 0 })
     try {
       const result = await completeSignIn({ config: sso, key: sso.stateKey, cookie: cookieValue(req.headers.cookie, STATE_COOKIE), query })
-      const userId = await accountFor(sso, result.claims, result.refreshToken)
+      // A self-hosted server's first sign-in through its setup link makes the server administrator.
+      const setup = await pendingSsoSetup(req)
+      const userId = setup
+        ? await completeSetupWith(setup.token, () => accountFor(sso, result.claims, result.refreshToken), { teamName: setup.teamName, via: 'sso' })
+        : await accountFor(sso, result.claims, result.refreshToken)
       const fragment = new URLSearchParams({ ticket: tickets.issue(userId, result.binding), next: result.next })
-      redirect(res, `/sso/done#${fragment}`, clear)
+      redirect(res, `/sso/done#${fragment}`, setup ? [clear, clearSetupCookie()] : clear)
     } catch (error) {
       const code = error instanceof SsoError ? error.code : 'failed'
       log(`sign-in refused (${code}${error instanceof SsoError && code === 'account' ? `: ${error.message}` : ''})`)

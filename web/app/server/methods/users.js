@@ -18,6 +18,8 @@ import { DDPRateLimiter } from 'meteor/ddp-rate-limiter'
 import { createGuestAccount, createTrustedUser, guestLoginToken } from '../common/accounts'
 import { resolveSlateRole, slateVisibility } from './slate-role.mjs'
 import { isSharedGuestPassword } from '../common/shared-guest-password.mjs'
+import { setupRequired } from '../self-host-setup/state.js'
+import { NOT_SET_UP_MESSAGE } from '../self-host-setup/core.mjs'
 import CONSTANTS from '../../imports/api/common/constants'
 import AuthManager from '../../imports/api/common/AuthManager'
 // The server administrator check (the uberMensch claim alone; no team needed)
@@ -132,6 +134,8 @@ method[CONSTANTS.methods.users.identify] = async (opts) => {
   }))
   const user = await Meteor.userAsync()
   if (user) {
+    // A guest from before a self-hosted server had setup links saves itself only after setup.
+    if (user.isAnonymous && await setupRequired()) throw new Meteor.Error('not-set-up', NOT_SET_UP_MESSAGE)
     if (user.isAnonymous && !(opts.password?.length >= 6)) {
       throw new Meteor.Error('password-required', 'Choose a password to save your account.')
     }

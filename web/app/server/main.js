@@ -99,5 +99,7 @@ import './methods/presentations'
 // Custom shapes: the AI feature `shape`, the shape library and its methods.
 import './shapes/meteor'
 
+// a self-hosted server's setup link: nobody signs up until its first admin exists (Cloud: off)
+import './self-host-setup/meteor'
 // single sign-on (off unless settings.sso.enabled; see server/sso)
 import './sso'

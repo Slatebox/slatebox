@@ -25,14 +25,13 @@ import {
 import AuthManager from '../../imports/api/common/AuthManager'
 
 const method = {}
-// A registered person without a team makes one, and becomes its owner and admin. The owner is
-// always the caller, never a person the request names.
-method[CONSTANTS.methods.organizations.create] = async function createOrganization(opts) {
-  check(opts, Match.ObjectIncluding({ name: String }))
-  const user = this.userId && await Meteor.users.findOneAsync(this.userId, { fields: { isAnonymous: 1, orgId: 1, isEducationCertified: 1 } })
-  if (!user || user.isAnonymous) throw new Meteor.Error('team-denied', 'Save your account before making a team.')
-  if (user.orgId) return user.orgId
-  const name = opts.name.trim().slice(0, 120)
+
+/**
+ * Make a team for a registered person without one: they become its owner and admin, and their
+ * slates move into it. Used by organizations.create and by a self-hosted server's setup link.
+ */
+export async function createTeamFor(user, teamName) {
+  const name = String(teamName || '').trim().slice(0, 120)
   if (!name) throw new Meteor.Error('team-name', 'Give the team a name.')
   const orgId = Random.id()
   await Organizations.insertAsync({
@@ -50,6 +49,16 @@ method[CONSTANTS.methods.organizations.create] = async function createOrganizati
   await Slates.updateAsync({ userId: user._id }, { $set: { orgId } }, { multi: true })
   await Permissions.insertAsync({ userId: user._id, orgId, claimId: CONSTANTS.claims.admin._id })
   return orgId
+}
+
+// A registered person without a team makes one, and becomes its owner and admin. The owner is
+// always the caller, never a person the request names.
+method[CONSTANTS.methods.organizations.create] = async function createOrganization(opts) {
+  check(opts, Match.ObjectIncluding({ name: String }))
+  const user = this.userId && await Meteor.users.findOneAsync(this.userId, { fields: { isAnonymous: 1, orgId: 1, isEducationCertified: 1 } })
+  if (!user || user.isAnonymous) throw new Meteor.Error('team-denied', 'Save your account before making a team.')
+  if (user.orgId) return user.orgId
+  return createTeamFor(user, opts.name)
 }
 
 // A subscription still billing: the statuses endProForRemoval and endBusinessForRemoval skip.
