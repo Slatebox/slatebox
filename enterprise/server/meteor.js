@@ -23,7 +23,6 @@ import { suggestions as suggestionStore } from '/server/agents/suggestions-meteo
 import { waitingActions } from '/server/agents/suggestions.mjs'
 import { resolvePresentationSlate } from '/server/methods/creative-slates'
 import req from '/server/methods/ai/req'
-import { resolveAIFeatureConfig } from '/server/methods/ai/feature-config.mjs'
 import { runAIAction } from '/server/metering/context.mjs'
 import { proActive } from '/server/pro-billing.mjs'
 import { invitesAgents } from '/imports/api/business/membership.mjs'
@@ -90,11 +89,11 @@ const registry = createAppRegistry({
   limiter,
 })
 
+// The part's model and key come from Admin → AI control (req resolves the route by feature).
 function model() {
-  const config = resolveAIFeatureConfig('chat', Meteor.settings)
   return async ({ feature, tool, system, user, userId, shareId }) => {
     const turn = await req({
-      provider: config.provider, engine: config.engine, feature, sdkChat: true, shareId, userId,
+      feature, sdkChat: true, shareId, userId,
       system, prompts: [{ role: 'user', content: user }], functions: [tool], function_call: { name: tool.name },
       maxResponseValidationRetries: 1,
       validateResponse: ({ toolCall }) => (toolCall?.name === tool.name && toolCall.arguments && typeof toolCall.arguments === 'object'

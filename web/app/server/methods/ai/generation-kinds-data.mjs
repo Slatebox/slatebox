@@ -2,7 +2,7 @@
 // with setIntention. Each kind carries its gather items, prompts, respond schema and layout, read by
 // initAIConversation on the client. Moved verbatim from the shared chatIntentions records production
 // served on 2026-11-24 (the scenarios editor is gone; the collection is no longer read). The model
-// is not here: the server picks it (AI control bindings, server/config/ai-defaults.json).
+// is not here: the server picks it (the part's model in Admin → AI control).
 /* eslint-disable */
 export default [
   {
