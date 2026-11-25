@@ -10,7 +10,8 @@ import {
   JOBS, STEP_TWO, PLAN_KEYS, BRIEF_OPENER, firstSlatePlan, firstTextPlan, resolveFirstText, hasStarted, worksOnLine, startGroup,
 } from '../web/app/imports/api/common/first-slate.mjs'
 import { firstRunStarters, firstStarterWorks } from '../web/app/imports/api/common/first-slate-starters.mjs'
-import { firstSlateContent, firstWorkshop } from '../web/app/server/first-slate-board.mjs'
+import { clearOfHolidays, firstSlateContent, firstWorkshop, rebuiltNoteLines } from '../web/app/server/first-slate-board.mjs'
+import { isoAt } from 'slateboxjs/workshops/rules'
 import { businessBoardFromBrief } from '../web/app/imports/api/common/business-board-brief.mjs'
 import { launchPlanOpener } from '../web/app/imports/api/common/launch-plan-brief.mjs'
 import { pipelineOpener } from '../web/app/imports/api/common/pipeline-brief.mjs'
@@ -44,6 +45,13 @@ const texts = [
   'Groceries, laundry, taxes',
   'Write the quarterly letter',
 ]
+// The things people most often type: each opens a working board, never a one-card toy.
+const common = [
+  'Plan our product launch for March', 'Launch the new website by Dec 12', 'Sales pipeline for Q4', 'Sprint planning',
+  'Weekly team standup', 'Product roadmap', 'Write the quarterly letter', 'Long-term goals for 2027', 'Onboard a new hire',
+  'Customer support queue',
+]
+texts.push(...common)
 const plans = [...answers.map(answer => firstSlatePlan(answer)), ...texts.map(text => firstTextPlan(text))]
 
 const sameStarter = (model, item) => {
@@ -114,7 +122,7 @@ test('every seeded starter can be sent on its board', () => {
   // A selected part is the words a person swaps for their own.
   const ship = firstSlatePlan({ job: 'ship', with: 'team' })
   const [from, to] = ship.starters[0].select
-  assert.equal(ship.starters[0].text.slice(from, to), 'Design 4 days, Build 6 days after Design, QA 2 days after Build')
+  assert.equal(ship.starters[0].text.slice(from, to), 'Design 4 days on Product, Build 6 days after Design on Engineering, QA 2 days after Build on Engineering')
 })
 
 test('starter 2 falls back to the board’s own move once the planned one no longer works', () => {
@@ -155,7 +163,7 @@ test('own words route first-match-wins', () => {
   assert.equal(route('Homework this week').key, 'text.plan.school')
   assert.equal(route('one\ntwo').route, 'list')
   assert.equal(route('a, b, c').route, 'list')
-  assert.equal(route('Write the quarterly letter').route, 'phrase')
+  assert.equal(route('Clean the garage').route, 'phrase')
   assert.equal(route('x'.repeat(80)).title.length <= 60, true)
   assert.throws(() => route(''))
   assert.throws(() => route('x'.repeat(1201)))
@@ -222,4 +230,122 @@ test('Make it yours: a same-kind brief rebuilds an untouched first-run board in 
   assert.equal(firstRunReplace({ ...slate, creative: { ...slate.creative, revision: 1 } }, theirs), null)
   assert.equal(firstRunReplace(slate, businessBoardFromBrief('Make a sales pipeline with A 1k')), null)
   assert.equal(firstRunReplace({ ...slate, options: { ...slate.options, firstRun: undefined } }, theirs), null)
+})
+
+test('the common things people type open a real board, by the right keyword', () => {
+  const key = text => resolveFirstText(text).key
+  for (const text of common) assert.notEqual(resolveFirstText(text).route, 'phrase', text)
+  assert.equal(key('Plan our product launch for March'), 'text.ship.team')
+  assert.equal(key('Launch the new website by Dec 12'), 'text.ship.team')
+  assert.equal(key('Get the app out by Friday'), 'text.ship.team')
+  assert.equal(key('Sales pipeline for Q4'), 'text.deals')
+  assert.equal(key('Sprint planning'), 'text.week.team')
+  assert.equal(key('Weekly team standup'), 'text.week.team')
+  assert.equal(key('Product roadmap'), 'text.roadmap')
+  assert.equal(key('Write the quarterly letter'), 'text.ship.me')
+  // Their title stays; the board is the job's.
+  const launch = firstTextPlan('Plan our product launch for March')
+  assert.equal(launch.title, 'Plan our product launch for March')
+  assert.equal(firstWorkshop(launch, { today }).kind, 'launch-plan')
+  assert.equal(firstTextPlan('Product roadmap').job, 'plan')
+})
+
+test('broad words do not send work to the wrong board', () => {
+  const key = text => resolveFirstText(text).key
+  assert.equal(key('Long-term goals for 2027'), 'text.roadmap')
+  assert.notEqual(key('A first-class onboarding plan for hires'), 'text.plan.school')
+  assert.notEqual(key('Customer support queue'), 'text.golive')
+  assert.equal(key('Customer support queue'), 'text.week.team')
+  assert.equal(key('Onboard a new hire'), 'text.onboard')
+  assert.notEqual(key('Onboard a new hire'), 'text.money.hires')
+  assert.equal(key('Get our new customer live'), 'text.golive')
+  assert.equal(key('Study for the biology exam'), 'text.plan.school')
+  assert.equal(firstWorkshop(firstTextPlan('Onboard a new hire'), { today }).cards.some(card => /\$/.test(card.label)), false)
+})
+
+test('a typed list is their list, whatever words are in it', () => {
+  const read = resolveFirstText('Hire a designer, Fix billing, Write docs')
+  assert.equal(read.route, 'list')
+  assert.deepEqual(firstWorkshop(firstTextPlan('Hire a designer, Fix billing, Write docs'), { today }).cards.map(card => card.label), ['Hire a designer', 'Fix billing', 'Write docs'])
+  assert.equal(resolveFirstText('Customer calls\nBudget review').route, 'list')
+  // One comma in a sentence is not a list.
+  assert.notEqual(resolveFirstText('Plan our product launch for March, with the design team').route, 'list')
+})
+
+test('starter 1 on the ship paths rebuilds from that board’s own tasks', () => {
+  const me = firstSlatePlan({ job: 'ship', with: 'me' })
+  assert.match(me.starters[0].text, /Outline .* Draft .* Publish/)
+  assert.doesNotMatch(me.starters[0].text, /Design|Build|QA/)
+  const client = firstSlatePlan({ job: 'ship', with: 'client' })
+  assert.match(client.starters[0].text, /on Client/)
+  const rebuilt = businessBoardFromBrief(client.starters[0].text)
+  assert.ok(rebuilt.lanes.some(lane => lane.label === 'Client'))
+  assert.ok(rebuilt.cards.some(card => card.label === 'Client review'))
+})
+
+test('a rebuilt board’s note names its own tasks', () => {
+  const plan = businessBoardFromBrief('Plan a launch for day 18: Spec 2 days, Build 4 days after Spec, Ship 1 day after Build')
+  assert.deepEqual(rebuiltNoteLines(plan), ['Drag Spec later and Build and Ship move with it.', 'The red line is launch day; nothing may cross it.'])
+  assert.doesNotMatch(rebuiltNoteLines(businessBoardFromBrief('Split a 1.2M budget across Product, Sales and Marketing')).join(' '), /400k/)
+  assert.match(rebuiltNoteLines(businessBoardFromBrief('Split a 1.2M budget across Product, Sales; Product at least 400k')).join(' '), /Product can’t drop below 400k/)
+})
+
+test('no starter or note says workshop, sets cash, or names a joke company', () => {
+  const words = JSON.stringify([...answers.map(answer => firstSlatePlan(answer)), ...common.map(text => firstTextPlan(text))].map(plan => [plan.starters, plan.note, plan.board.brief ?? null, plan.board.cards ?? null]))
+  assert.doesNotMatch(words, /Rename the workshop|cash and burn|Acme|Globex|Initech|Hooli|Umbrella/)
+  const feedback = firstWorkshop(firstSlatePlan({ job: 'feedback' }), { today })
+  assert.ok(feedback.cards.filter(card => card.source).every(card => !/Acme|Globex|Initech|Hooli|Umbrella/.test(card.source)))
+  assert.ok(new Set(feedback.cards.map(card => card.source).filter(Boolean)).size >= 5)
+})
+
+test('a launch day never falls on a weekend or between Dec 24 and Jan 1', () => {
+  for (const day of ['2026-11-25', '2026-11-30', '2026-12-02', '2027-11-24', '2026-12-14']) {
+    for (const key of ['ship.team', 'ship.me', 'ship.client', 'golive']) {
+      const [job, withId] = key.split('.')
+      const board = firstWorkshop(firstSlatePlan({ job, with: withId }), { today: day })
+      const at = isoAt(board.clock.origin, board.launch.day)
+      assert.ok(!(at.slice(5) >= '12-24' || at.slice(5) <= '01-01'), key + ' from ' + day + ' launches ' + at)
+      assert.ok(![0, 6].includes(new Date(at).getUTCDay()), key + ' launches on a weekend ' + at)
+      for (const task of scheduleLaunch(board).values()) assert.ok(task.to <= board.launch.day, key + ' fits by launch')
+    }
+  }
+  // From 2026-11-25, Launch plan's day 25 (Dec 25) moves to the last workday before Dec 24.
+  const team = firstWorkshop(firstSlatePlan({ job: 'ship', with: 'team' }), { today })
+  assert.equal(isoAt(team.clock.origin, team.launch.day), '2026-12-23')
+  assert.equal(clearOfHolidays({ kind: 'budget' }).kind, 'budget')
+})
+
+test('Skip names no one to invite; the share label stays short on a narrow header', async () => {
+  const { firstShareLabel } = await import('../web/app/imports/api/common/first-slate.mjs')
+  assert.equal(firstSlatePlan({}).share, null)
+  assert.equal(firstShareLabel({ share: 'team' }), 'Invite your team')
+  assert.equal(firstShareLabel({ share: 'team' }, { short: true }), 'Invite')
+  assert.equal(firstShareLabel({ share: 'client' }, { short: true }), 'Share')
+  assert.equal(firstShareLabel({ share: 'team', shareSeen: true }), 'Share')
+})
+
+test('typed steps get the note too, with the steps to its right', () => {
+  const content = firstSlateContent(firstTextPlan('Request comes in → Triage → Close'), { today })
+  assert.equal(content.nodes[0].options.id, 'first-run-how')
+  assert.match(content.nodes[0].options.text, /Each step is a note/)
+  assert.ok(content.nodes.slice(1).every(node => node.options.xPos > 40 + 280))
+})
+
+test('how the answer was given is read on the server, not taken from the page', async () => {
+  const { viaOfAnswer } = await import('../web/app/imports/api/common/first-slate.mjs')
+  assert.equal(viaOfAnswer({ via: 'card', text: 'Fix billing, Write docs' }), 'text')
+  assert.equal(viaOfAnswer({ via: 'deeplink', text: 'Q3 budget' }), 'text')
+  assert.equal(viaOfAnswer({ via: 'text', text: '  ' }), 'card')
+  assert.equal(viaOfAnswer({ via: 'skip', text: 'x' }), 'skip')
+  assert.equal(viaOfAnswer({ via: 'deeplink' }), 'deeplink')
+})
+
+test('a preview says what Keep does: rebuilt in place, beside the board, or a route', async () => {
+  const { drawingHeading, previewKeepSentence } = await import('../web/app/imports/api/common/conversation-preview.mjs')
+  assert.equal(drawingHeading({ mode: 'play', replace: true, labels: [] }), 'This board, rebuilt from your words')
+  assert.equal(drawingHeading({ mode: 'play', beside: true, title: '$1.2M budget', labels: [] }), '$1.2M budget, beside the board')
+  assert.equal(drawingHeading({ mode: 'play', component: 'retro', title: 'Retro', labels: [] }), 'Retro, beside the board')
+  assert.equal(drawingHeading({ mode: 'play', labels: ['A'] }), 'Interactive route')
+  assert.equal(drawingHeading({ labels: ['A'] }), '1 note for the slate')
+  assert.match(previewKeepSentence({ replace: true, canvas: { workshop: { kind: 'launch-plan', clock: { origin: '2026-11-30' } } } }), /rebuild this board/)
 })

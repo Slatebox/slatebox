@@ -7,7 +7,7 @@ import { Meteor } from 'meteor/meteor'
 import { check, Match } from 'meteor/check'
 import { DDPRateLimiter } from 'meteor/ddp-rate-limiter'
 import CONSTANTS from '../../imports/api/common/constants'
-import { FIRST_SLATE_VERSION, FIRST_TEXT_LIMIT, JOBS, firstSlatePlan, firstTextPlan, validWith } from '../../imports/api/common/first-slate.mjs'
+import { FIRST_SLATE_VERSION, FIRST_TEXT_LIMIT, JOBS, firstSlatePlan, firstTextPlan, validWith, viaOfAnswer } from '../../imports/api/common/first-slate.mjs'
 import { firstSlateContent } from '../first-slate-board.mjs'
 import { createWorkshopSlate } from './creative-slates'
 import { Slates } from '../../imports/api/common/models'
@@ -41,7 +41,7 @@ Meteor.methods({
     try { content = firstSlateContent(plan) } catch (error) { throw new Meteor.Error('invalid-answer', error.message) }
     const shareId = await createWorkshopSlate(user, content, 'first-' + user._id + '-' + answer.requestId, 'first-run')
     // What they answered, and nothing else about them.
-    const start = { job: plan.job ?? null, with: plan.with ?? null, via: answer.via, resolved: plan.key, at: new Date(), v: FIRST_SLATE_VERSION }
+    const start = { job: plan.job ?? null, with: plan.with ?? null, via: viaOfAnswer(answer), resolved: plan.key, at: new Date(), v: FIRST_SLATE_VERSION }
     await Meteor.users.updateAsync({ _id: user._id }, { $set: { 'profile.start': start } })
     return shareId
   },
@@ -55,5 +55,10 @@ Meteor.methods({
   },
 })
 
-// Anyone may start once a click; five a minute per connection keeps a script from filling the database.
-DDPRateLimiter.addRule({ type: 'method', name: CONSTANTS.methods.firstSlate.create, connectionId: () => true }, 5, 60000)
+// Anyone may start once a click. A script must not fill the database: five a minute per connection, and
+// since a new connection is cheap, thirty a minute per address (an office shares one) and ten per account as well.
+const create = CONSTANTS.methods.firstSlate.create
+DDPRateLimiter.addRule({ type: 'method', name: create, connectionId: () => true }, 5, 60000)
+DDPRateLimiter.addRule({ type: 'method', name: create, clientAddress: () => true }, 30, 60000)
+DDPRateLimiter.addRule({ type: 'method', name: create, userId: userId => Boolean(userId) }, 10, 60000)
+DDPRateLimiter.addRule({ type: 'method', name: CONSTANTS.methods.firstSlate.shareSeen, connectionId: () => true }, 10, 60000)

@@ -19,7 +19,7 @@ import { loadLibrary } from '../library/libraryBus'
 import { pickBoard, whichBoard } from '../../../api/common/board-pick.mjs'
 import { MAX_BOARDS } from '../../../api/common/slate-boards.mjs'
 import BoardRules from './BoardRules'
-import { previewKeepSentence } from '../../../api/common/conversation-preview.mjs'
+import { drawingHeading, previewKeepSentence } from '../../../api/common/conversation-preview.mjs'
 
 const LibraryView = lazy(loadLibrary)
 const LibraryCards = lazy(() => loadLibrary().then(m => ({ default: m.LibraryCards })))
@@ -373,16 +373,13 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
     setError('')
     try {
       const kept = await Meteor.callAsync((drawing.via || 'nativeCanvas') + '.keep', shareId, drawing.id)
-      // A library board, added beside the boards here: the page draws it live, with no reload.
-      // The first-run board rebuilt from their words: the page opens it again as saved.
-      if (kept?.replaced) {
-        append({ role: 'user', content: drawing.message }, { role: 'assistant', content: 'Rebuilt the board from your words' + (drawing.said ? ' · ' + drawing.said.replace(/^Added an? [^·]+· /, '') : '') })
-        setTimeout(() => window.location.reload(), 50)
-        return
-      }
-      if (drawing.component || drawing.beside) {
-        append({ role: 'user', content: drawing.message }, { role: 'assistant', content: drawing.beside ? drawing.said : 'Added ' + drawing.title + ' beside the board' + (drawing.rules?.length ? ' · ' + drawing.rules.join(' ') : '') })
-        onKept?.({ board: true, boardId: kept?.boardId, origin: kept?.origin, nativeConversationRevision: kept?.nativeConversationRevision, ...(kept?.name && { name: kept.name }) })
+      // A library board or a board brief, added beside the boards here, or the first-run board rebuilt from
+      // their words in place: the page takes it live, with no reload (the board's record brings the new model;
+      // `note` is its "How this board works" note, written again for the new board).
+      if (drawing.component || drawing.beside || kept?.replaced) {
+        append({ role: 'user', content: drawing.message }, { role: 'assistant', content: kept?.replaced ? 'Rebuilt the board from your words' + (drawing.said ? ' · ' + drawing.said.replace(/^Added an? [^·]+· /, '') : '')
+          : drawing.beside ? drawing.said : 'Added ' + drawing.title + ' beside the board' + (drawing.rules?.length ? ' · ' + drawing.rules.join(' ') : '') })
+        onKept?.({ board: true, boardId: kept?.boardId, origin: kept?.origin, nativeConversationRevision: kept?.nativeConversationRevision, ...(kept?.name && { name: kept.name }), ...(kept?.note && { note: kept.note }) })
         setDrawing(null)
         running.current = false
         setBusy(false)
@@ -541,11 +538,10 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
     {drawing ? <Box aria-label="Review proposed drawing" aria-live="polite" sx={{ my: 1 }}>
       <ChatTurn who="you" as="div">{drawing.message}</ChatTurn>
       <ChatTurn who="slatebox" as="div"><Box sx={{ typography: 'body2', '& ul': { my: .5, pl: 2.5 } }}>
-      <Typography variant="body2" sx={{ fontWeight: 700, mb: .5 }}>{drawing.provider === 'ai' ? 'AI preview' : 'Preview'} · {drawing.component ? drawing.title + ', beside the board'
-        : drawing.mode === 'play' ? 'Interactive route' : drawing.labels.length === 1 ? '1 note for the slate' : drawing.labels.length + ' notes for the slate'}</Typography>
+      <Typography variant="body2" sx={{ fontWeight: 700, mb: .5 }}>{drawing.provider === 'ai' ? 'AI preview' : 'Preview'} · {drawingHeading(drawing)}</Typography>
       <Typography variant="body2">{drawingStale ? 'Your drawing changed after this preview, so it is no longer shown. Discard it and ask again on the drawing as it is now.'
         : 'Shown on the canvas with dashed outlines. Nothing is added until you keep it.'}</Typography>
-      {drawing.component ? drawing.canvas?.workshop && <BoardRules workshop={drawing.canvas.workshop} />
+      {drawing.component || drawing.beside || drawing.replace ? drawing.canvas?.workshop && <BoardRules workshop={drawing.canvas.workshop} />
         : <ul>{drawing.labels.map((label, i) => <li key={i}>{label}</li>)}</ul>}
       {/* What Keep does, in the board's own words: "play the route" is a map's only. */}
       {!drawingStale && (drawing.component || drawing.mode === 'play') && previewKeepSentence(drawing) && <Typography variant="body2">{previewKeepSentence(drawing)}</Typography>}

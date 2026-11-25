@@ -61,7 +61,7 @@ function laneStarters(model, selection) {
     ...(card ? [starter('Move ' + cardName(card) + ' to ' + laneName(to))] : []),
     starter(release ? 'Give ' + laneName(model.lanes[0]) + ' 12 points' : 'Let ' + laneName(roomy) + ' hold two cards'),
     starter('Add a card called New idea to ' + laneName(model.lanes[0]), 'New idea'),
-    starter('Rename the workshop to Team review', 'Team review'),
+    starter('Rename the board to Team review', 'Team review'),
   ]
 }
 

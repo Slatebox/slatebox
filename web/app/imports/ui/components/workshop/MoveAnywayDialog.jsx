@@ -12,7 +12,7 @@ import { undoWordsHere } from '../../../api/common/undo-redo-keys.mjs'
  * moves the card, marked on it with who and when; it is one step of the person's undo history, so the canvas's Undo
  * (or Ctrl/Cmd+Z) puts it back, and the dialog names that key. Cancel leaves it where it was. Escape cancels.
  * `ask`: { card, lane, reason, to? } (the engine's WorkshopOverrideAsk): `to` says where the move takes the card when it
- * is more than a lane ("to start Thu 17 Dec" on a plan, "under Activation to 40%" on a nested board). The dialog is
+ * is more than a lane ("to start Thu, Dec 17" on a plan, "under Activation to 40%" on a nested board). The dialog is
  * the keyboard's too: Move anyway has the focus, Escape cancels, and the focus goes back where it was (a card moved
  * with the arrow keys keeps its place).
  */

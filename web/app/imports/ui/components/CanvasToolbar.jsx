@@ -80,9 +80,9 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
 
   // A first-run slate's Share says who it is for ("Invite your team") until Share is first opened.
   const [shareSeen, setShareSeen] = useState(false)
-  const shareLabel = shareSeen ? 'Share' : firstShareLabel(slate?.firstRun)
+  const shareLabel = shareSeen ? 'Share' : firstShareLabel(slate?.firstRun, { short: narrow })
   const openShare = () => {
-    if (shareLabel !== 'Share') {
+    if (!shareSeen && firstShareLabel(slate?.firstRun) !== 'Share') {
       setShareSeen(true)
       Meteor.callAsync(CONSTANTS.methods.firstSlate.shareSeen, route).catch(() => { /* Shown once more next time. */ })
     }

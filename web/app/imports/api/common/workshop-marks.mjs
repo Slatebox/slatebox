@@ -1,4 +1,4 @@
-// A "Moved anyway by Sam · 23 Nov" mark (a workshop card's `override`) is written by the server, from who made the
+// A "Moved anyway by Sam · Nov 23" mark (a workshop card's `override`) is written by the server, from who made the
 // move and when, never by a page. A board that comes from a page, an AI draft or an imported file starts with none:
 // they are taken off before the board is read, so a board the rules would refuse without them is refused too.
 export function withoutMoveMarks(board) {

@@ -201,7 +201,7 @@ function change(board, message, selection) {
       (m = is('(?:change|set)\\s+(?:the\\s+)?(?:title|name)(?:\\s+of\\s+(?:the|this)\\s+' + boardWord + ')?\\s+to\\s+(.+)')) ||
       (m = is('(?:change|set)\\s+(?:the|this)\\s+' + boardWord + '(?:\'s|’s)?\\s+(?:title|name)\\s+to\\s+(.+)'))) {
     board.title = named(m[1])
-    return done(board, 'Renamed the workshop to ' + said(board.title) + '.')
+    return done(board, 'Renamed the board to ' + said(board.title) + '.')
   }
 
   // How much a lane holds.

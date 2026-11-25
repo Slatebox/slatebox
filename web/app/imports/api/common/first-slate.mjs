@@ -52,9 +52,11 @@ const ADD_NNL = add('Add a now next later board')
 const ADD_GOLIVE = add('Add a customer go-live')
 const ADD_TEAM = add('Add a team board')
 
-const launchNote = (first, rest) => ['Drag ' + first + ' later and ' + rest + ' move with it.', 'The red line is launch day; nothing may cross it.']
-const shipStarter = starter('Plan a launch for day 18: Design 4 days, Build 6 days after Design, QA 2 days after Build',
-  'Design 4 days, Build 6 days after Design, QA 2 days after Build', 'brief')
+// A launch plan's note: which task to drag, and what waits on it (first-slate-board.mjs writes it again
+// from the new board when "Make it yours" rebuilds the board in place).
+export const launchNote = (first, rest) => ['Drag ' + first + ' later and ' + rest + ' move with it.', 'The red line is launch day; nothing may cross it.']
+// "Make it yours": each plan's own tasks, shorter, with the part a person swaps selected.
+const ownPlan = (day, steps) => starter('Plan a launch for day ' + day + ': ' + steps, steps, 'brief')
 const cards = (lane, ...labels) => labels.map(label => ({ lane, label }))
 const weekNote = ['Doing holds 3. Cards move one column at a time; Won’t do is the bin.', 'Drag a card across, or ask Slatebox to move one.']
 
@@ -65,13 +67,16 @@ const weekNote = ['Doing holds 3. Cards move one column at a time; Won’t do is
 const PLANS = {
   'ship.team': { title: 'Launch plan', board: { kind: 'brief', dated: true,
     brief: 'Plan a launch for day 25: Scope 2 days on Product, Design 4 days after Scope on Product, Build 6 days after Design on Engineering, QA 2 days after Build on Engineering, Launch copy 2 days on Marketing, Announce 1 day after QA on Marketing' },
-    note: launchNote('Build', 'QA and Announce'), starters: [shipStarter, edit('Make Build 8 days'), ADD_RETRO], share: 'team' },
+    note: launchNote('Build', 'QA and Announce'),
+    starters: [ownPlan(18, 'Design 4 days on Product, Build 6 days after Design on Engineering, QA 2 days after Build on Engineering'), edit('Make Build 8 days'), ADD_RETRO], share: 'team' },
   'ship.me': { title: 'My launch plan', board: { kind: 'brief', dated: true,
     brief: 'Plan a launch for day 18: Outline 2 days on Me, Draft 4 days after Outline on Me, Review 2 days after Draft on Reviewer, Polish 2 days after Review on Me, Publish 1 day after Polish on Me' },
-    note: launchNote('Draft', 'Review, Polish and Publish'), starters: [shipStarter, edit('Make Draft 6 days'), ADD_NNL], share: null },
+    note: launchNote('Draft', 'Review, Polish and Publish'),
+    starters: [ownPlan(18, 'Outline 2 days on Me, Draft 4 days after Outline on Me, Publish 1 day after Draft on Me'), edit('Make Draft 6 days'), ADD_NNL], share: null },
   'ship.client': { title: 'Client delivery plan', board: { kind: 'brief', dated: true,
     brief: 'Plan a launch for day 25: Kickoff 1 day on Us, Draft 5 days after Kickoff on Us, Client review 3 days after Draft on Client, Revisions 3 days after Client review on Us, Sign-off 1 day after Revisions on Client' },
-    note: launchNote('Draft', 'Client review, Revisions and Sign-off'), starters: [shipStarter, edit('Make Client review 5 days'), ADD_GOLIVE], share: 'client' },
+    note: launchNote('Draft', 'Client review, Revisions and Sign-off'),
+    starters: [ownPlan(20, 'Kickoff 1 day on Us, Draft 5 days after Kickoff on Us, Client review 3 days after Draft on Client, Sign-off 1 day after Client review on Client'), edit('Make Client review 5 days'), ADD_GOLIVE], share: 'client' },
 
   'week.team': { title: 'Our week', board: { kind: 'preset', preset: 'team-board',
     cards: [...cards('todo', 'Write the weekly update', 'Review open requests', 'Fix the top customer issue', 'Prep the demo'), ...cards('doing', 'Plan next sprint')] },
@@ -87,15 +92,17 @@ const PLANS = {
     note: ['In progress holds 3. Work moves one column at a time, so nothing skips the client.', 'Share it with your client so both sides see where things are.'],
     starters: [edit('Add a card called your first request to Requested', 'your first request'), edit('Move Launch checklist to In progress'), ADD_GOLIVE], share: 'client' },
 
-  deals: { title: 'Pipeline', board: { kind: 'brief', brief: 'Make a sales pipeline with Northwind 40k, Acme 25k, Globex 60k, Brightline 15k, target 250k' },
+  deals: { title: 'Pipeline', board: { kind: 'brief', brief: 'Make a sales pipeline with Clinic chain 40k, Regional bank 25k, Retail group 60k, Design studio 15k, target 250k' },
     note: ['These deals are examples. The forecast is each deal times its stage’s odds.', 'Proposal holds 3; deals move one stage at a time.'],
-    starters: [starter('Make a sales pipeline with Northwind 40k, Acme 25k, Globex 60k, target 250k', 'Northwind 40k, Acme 25k, Globex 60k', 'brief'), edit('Move Acme to Qualified'), ADD_GOLIVE], share: null },
+    starters: [starter('Make a sales pipeline with Clinic chain 40k, Regional bank 25k, Retail group 60k, target 250k', 'Clinic chain 40k, Regional bank 25k, Retail group 60k', 'brief'), edit('Move Regional bank to Qualified'), ADD_GOLIVE], share: null },
 
   golive: { title: 'Customer go-live', board: { kind: 'sample', sample: 'go-live' },
     note: ['Their steps and yours, on workdays.', 'Share it with your customer so both sides see the date.'],
-    starters: [edit('Rename the workshop to Acme go-live', 'Acme go-live'), edit('Make Security review 5 days'), ADD_RETRO], share: 'client' },
+    starters: [edit('Rename the board to our go-live with your customer', 'your customer'), edit('Make Security review 5 days'), ADD_RETRO], share: 'client' },
 
-  feedback: { title: 'Customer feedback', board: { kind: 'sample', sample: 'sort-evidence' },
+  feedback: { title: 'Customer feedback', board: { kind: 'sample', sample: 'sort-evidence',
+    // Plain example customers in place of the sample's made-up company names (each still one customer).
+    sources: { Acme: 'Clinic chain', Globex: 'Regional bank', Initech: 'Design studio', Umbrella: 'Retail group', Hooli: 'Law firm' } },
     note: ['Piles re-rank by how many customers said it.', 'These quotes are examples; paste yours.'],
     starters: [edit('Add a card called paste a customer quote to Onboarding', 'paste a customer quote'), edit('Move I don’t trust the numbers to Reporting'), add('Add a discovery tree')], share: null },
 
@@ -107,12 +114,12 @@ const PLANS = {
     relabel: { outage: 'What broke and when', certificate: 'What we saw first', rollback: 'Why it reached customers', 'rota-alerts': 'Add an alert for it', 'script-rollback': 'Make the fix stick' },
     reparent: { 'rota-alerts': 'certificate' }, remove: ['alert-inbox', 'status-page'] },
     note: ['Causes sit under the problem, and fixes under their causes.', 'Write what happened first; ask Slatebox to add a cause or a fix.'],
-    starters: [edit('Add a cause called Missing alert', 'Missing alert'), edit('Rename the workshop to Sign-in outage review', 'Sign-in outage review'), ADD_TEAM], share: 'team' },
+    starters: [edit('Add a cause called Missing alert', 'Missing alert'), edit('Rename the board to what broke, in a few words', 'what broke, in a few words'), ADD_TEAM], share: 'team' },
   'lookback.me': { title: 'Break it down', board: { kind: 'sample', sample: 'break-down',
     relabel: { problem: 'The stubborn problem', 'drop-off': 'Why does it happen?', 'price-rise': 'What makes it worse?', 'needs-engineer': 'And why is that?', guided: 'One small thing to try', survey: 'Ask someone who solved it' },
     remove: ['free-tier'] },
     note: ['Ask why, then why again, until you reach something you can change.', 'Put a fix under the cause it answers.'],
-    starters: [edit('Add a cause called Not enough time', 'Not enough time'), edit('Rename the workshop to Why I keep putting it off', 'Why I keep putting it off'), ADD_NNL], share: null },
+    starters: [edit('Add a cause called Not enough time', 'Not enough time'), edit('Rename the board to the problem, in a few words', 'the problem, in a few words'), ADD_NNL], share: null },
 
   'money.team': { title: 'Budget', board: { kind: 'brief', brief: 'Split a 1.2M budget across Product, Sales, Marketing and Operations; Product at least 400k' },
     note: ['The total stays fixed: give one team more and the rest give way.', 'Product can’t drop below 400k.'],
@@ -121,8 +128,8 @@ const PLANS = {
     note: ['The total stays fixed: give one line more and the rest give way.', 'Savings can’t drop below 10k.'],
     starters: [starter('Split a 60k budget across Rent, Savings and Everyday', '60k', 'brief'), edit('Move $5k from Travel to Savings'), ADD_NNL], share: null },
   'money.hires': { title: 'Hiring plan and runway', board: { kind: 'sample', sample: 'hiring-plan' },
-    note: ['These numbers are examples. Move a hire and runway updates.', 'Set your own cash and burn.'],
-    starters: [edit('Rename the workshop to Our hiring plan', 'Our hiring plan'), edit('Make Designer 4 weeks'), starter('Split a 1.2M budget across Engineering, Product and Sales', 'Engineering, Product and Sales', 'brief')], share: null },
+    note: ['These numbers are examples. Move a hire and runway updates.', 'Rename a hire by typing on it, or ask Slatebox to change one.'],
+    starters: [edit('Rename the board to our hiring plan', 'our hiring plan'), edit('Make Designer 4 weeks'), starter('Split a 1.2M budget across Engineering, Product and Sales', 'Engineering, Product and Sales', 'brief')], share: null },
 
   'plan.school': { title: 'This term', board: { kind: 'preset', preset: 'now-next-later',
     cards: [...cards('now', 'Read chapters 4 and 5', 'Problem set 3'), ...cards('next', 'Essay outline', 'Lab report'), ...cards('later', 'Final review')] },
@@ -138,11 +145,26 @@ const PLANS = {
     // Doing starts with 2: "Drag me to Doing" makes 3, and the next card dragged in is refused.
     cards: [...cards('todo', 'Write your first task here', 'Drag me to Doing'), ...cards('doing', 'Doing holds 3: try a 4th', 'Drop a note in to make a card')] },
     note: ['Doing holds 3. Cards move one column at a time.', 'Rename anything by typing on it, or ask Slatebox.'],
-    starters: [edit('Add a card called your first task to To do', 'your first task'), edit('Move Drag me to Doing to Doing'), edit('Add a column called Blocked', 'Blocked')], share: 'team' },
+    starters: [edit('Add a card called your first task to To do', 'your first task'), edit('Move Drag me to Doing to Doing'), edit('Add a column called Blocked', 'Blocked')], share: null },
+
+  // Reached from their own words only (resolveFirstText).
+  roadmap: { title: 'Roadmap', board: { kind: 'preset', preset: 'now-next-later',
+    cards: [...cards('now', 'Finish the current release', 'Fix the top customer issue'), ...cards('next', 'Self-serve onboarding', 'Usage reporting'), ...cards('later', 'Integrations')] },
+    note: ['Next holds 3, so the roadmap stays honest.', 'These items are examples: rename them, or ask Slatebox to add yours.'],
+    starters: [edit('Add a card called your top priority to Now', 'your top priority'), edit('Move Usage reporting to Now'), ADD_TEAM], share: 'team' },
+  onboard: { title: 'Onboarding checklist', board: { kind: 'preset', preset: 'team-board',
+    lanes: [['todo', 'To do'], ['doing', 'Doing'], ['done', 'Done']],
+    cards: cards('todo', 'Laptop and accounts ready', 'Meet the team', 'First small task', 'Week one check-in', 'Goals for the first month') },
+    note: ['Doing holds 3. Drag each step across as it happens.', 'Add a step, or ask Slatebox to add one.'],
+    starters: [edit('Add a card called a step of your own to To do', 'a step of your own'), edit('Move Meet the team to Doing'), ADD_RETRO], share: 'team' },
 }
 
-/** Every plan's key, for the tests and the server's check. */
-export const PLAN_KEYS = Object.freeze(Object.keys(PLANS))
+// The plans a one-click answer can open (the rest are reached from their own words).
+const TEXT_ONLY = new Set(['roadmap', 'onboard'])
+/** Every one-click plan's key, for the tests and the server's check. */
+export const PLAN_KEYS = Object.freeze(Object.keys(PLANS).filter(key => !TEXT_ONLY.has(key)))
+/** The plans their own words can open by keyword. */
+export const TEXT_PLAN_KEYS = Object.freeze([...TEXT_ONLY])
 
 const clone = value => JSON.parse(JSON.stringify(value))
 const keyOf = (job, withId) => asksStepTwo(job) ? job + '.' + withId : job
@@ -164,15 +186,27 @@ export function firstSlatePlan({ job, with: withId } = {}) {
 export const BRIEF_OPENER = /^(?:plan\s+a\s+launch|make\s+a\s+launch\s+plan|make\s+a\s+(?:sales\s+)?pipeline|make\s+a\s+budget|split\s+(?:a\s+|the\s+)?\S+\s+budget)\b/i
 const LANES_OPENER = /^(?:make|create|build|start|add) (?:an? )?(?:interactive )?(?:lane )?workshop (?:with|using) /i
 const COLUMNS = /^(?:(?:make|create|build|start|add)\s+(?:an?\s+)?(?:board\s+)?)?(?:with\s+)?columns?\s*(?:with\s+)?:?\s*(.+)$/i
+// A phrase that names a job opens that job's board, titled with their words: first match wins, so the
+// narrow readings come before the broad ones ("Write up the outage" is an incident review, "Onboard a
+// new hire" a checklist, not runway). Words inside others never count ("long-term" is not a term).
+const DATE_WORDS = '(?:mon|tues?|wed(?:nes)?|thu(?:rs)?|fri|sat(?:ur)?|sun)(?:day)?|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|q[1-4]|\\d{1,2}(?:st|nd|rd|th)?\\b|the end of|end of|next|eo[dwmqy]\\b'
 const KEYWORDS = [
-  [/\b(?:feedback|interviews?|research)\b/i, 'feedback'],
-  [/\b(?:outages?|incidents?|broke|broken|postmortem|post-mortem)\b/i, 'lookback.broke'],
-  [/\b(?:retros?|retrospective|sprint review)\b/i, 'lookback.team'],
-  [/\b(?:hires?|hiring|runway|headcount)\b/i, 'money.hires'],
+  [/\b(?:feedback|interviews?|surveys?|(?:user|customer|market) research|nps)\b/i, 'feedback'],
+  [/\b(?:outages?|incidents?|broke|broken|postmortem|post-mortem|downtime)\b/i, 'lookback.broke'],
+  [/\b(?:retros?|retrospective|sprint review|lessons learned)\b/i, 'lookback.team'],
+  [/\bonboard(?:ing)?\b.*\b(?:hires?|starters?|joiners?|employees?|teammates?)\b|\bnew (?:hire|starter|joiner|employee|teammate)s?\b/i, 'onboard'],
+  [/\b(?:hires?|hiring|runway|headcount|recruit(?:ing|ment)?)\b/i, 'money.hires'],
   [/\bbudgets?\b/i, 'money.team'],
-  [/\b(?:customers?|onboarding|go-live|go live)\b/i, 'golive'],
-  [/\b(?:study|studying|exams?|essays?|homework|class(?:es)?|term)\b/i, 'plan.school'],
+  [/\b(?:pipeline|deals?|sales|leads|prospects|forecast)\b/i, 'deals'],
+  [/\bgo[- ]live\b|\bimplementation\b|\b(?:customers?|clients?)\b.*\b(?:live|launch|onboard(?:ing)?|rollout)\b|\b(?:live|launch|onboard(?:ing)?|rollout)\b.*\b(?:customers?|clients?)\b|\bonboarding\b/i, 'golive'],
+  [/\b(?:school|semester|exams?|homework|essays?|study|studying|coursework|lectures?|syllabus|thesis)\b/i, 'plan.school'],
+  [/\b(?:write|writing|draft|drafting)\b|\b(?:newsletter|blog|article|whitepaper)\b/i, 'ship.me'],
+  [new RegExp('\\b(?:launch(?:es|ing)?|ship(?:ping)?|release|deadline|due)\\b|\\bby\\s+(?:' + DATE_WORDS + ')', 'i'), 'ship.team'],
+  [/\b(?:standups?|stand-ups?|sprints?|backlog|kanban|tasks?|to-?dos?|weekly|queue|tickets|requests)\b/i, 'week.team'],
+  [/\b(?:roadmap|quarters?|goals?|okrs?|objectives|priorities|strategy)\b/i, 'roadmap'],
 ]
+// The jobs those plans belong to, for profile.start.
+const KEYWORD_JOB = { onboard: ['week', null], roadmap: ['plan', null] }
 
 // A team board without Won't do: room for a column of their own ("Add a column called Blocked").
 const FOUR_LANES = [['todo', 'To do'], ['doing', 'Doing'], ['review', 'Review'], ['done', 'Done']]
@@ -181,17 +215,23 @@ const titled = text => {
   const line = tidy(text).replace(/\s+/g, ' ')
   return line.length > 60 ? line.slice(0, 59).replace(/\s+\S*$/, '') + '…' : line
 }
+const words = text => text.split(/\s+/).filter(Boolean).length
+// Their list: one item a line, or items split by commas (three or more, or two short ones; a sentence
+// with one comma in it is not a list).
 const itemsOf = text => {
   const lines = tidy(text).split('\n').map(line => line.trim().replace(/^[-*•]\s+|^\d+[.)]\s+/, '')).filter(Boolean)
-  const parts = lines.length > 1 ? lines : lines[0]?.split(/\s*,\s*/).filter(Boolean) ?? []
-  return parts.map(part => part.slice(0, 80))
+  if (lines.length > 1) return lines.map(part => part.slice(0, 80))
+  const parts = lines[0]?.split(/\s*[,;]\s*/).filter(Boolean) ?? []
+  const list = parts.length > 2 || (parts.length === 2 && parts.every(part => words(part) <= 4))
+  return list ? parts.map(part => part.replace(/^and\s+/i, '').slice(0, 80)) : []
 }
 
 /**
  * Their own words, read with no agent call (first match wins): a launch, pipeline or budget brief; lanes
- * ("Make a workshop with Ideas, Pilot and Done" or "columns: …"); typed steps (→ or ->); a keyword that
- * names a job, titled with their words; else a team board, its To do the lines or comma items they wrote,
- * or the one phrase as its title and first card. `route` names which.
+ * ("Make a workshop with Ideas, Pilot and Done" or "columns: …"); typed steps (→ or ->); a list (the lines
+ * or comma items they wrote, as cards on a team board, whatever words are in them); a keyword that names a
+ * job, titled with their words; else a team board with the one phrase as its title and first card.
+ * `route` names which.
  */
 export function resolveFirstText(input) {
   const text = tidy(input)
@@ -202,13 +242,13 @@ export function resolveFirstText(input) {
   const columns = COLUMNS.exec(brief)
   if (columns && /,|\band\b/i.test(columns[1])) return { route: 'lanes', key: 'text.lanes', title: null, board: { kind: 'lanes', brief: 'Make a workshop with ' + columns[1].replace(/\.$/, '') } }
   if (/→|->/.test(text)) return { route: 'steps', key: 'text.steps', title: null, board: { kind: 'steps', brief: text } }
-  const found = KEYWORDS.find(([pattern]) => pattern.test(text))
-  if (found) {
-    const [job, withId] = found[1].split('.')
-    return { route: 'keyword', key: 'text.' + found[1], job, with: withId ?? null, title: titled(text) }
-  }
   const items = itemsOf(text)
   if (items.length > 1) return { route: 'list', key: 'text.list', title: 'Our board', board: { kind: 'preset', preset: 'team-board', lanes: FOUR_LANES, cards: cards('todo', ...items.slice(0, 12)) } }
+  const found = KEYWORDS.find(([pattern]) => pattern.test(text))
+  if (found) {
+    const [job, withId] = KEYWORD_JOB[found[1]] ?? found[1].split('.')
+    return { route: 'keyword', key: 'text.' + found[1], plan: found[1], job, with: withId ?? null, title: titled(text) }
+  }
   return { route: 'phrase', key: 'text.phrase', title: titled(text), board: { kind: 'preset', preset: 'team-board', lanes: FOUR_LANES, cards: cards('todo', titled(text)) } }
 }
 
@@ -223,8 +263,7 @@ export function firstTextPlan(input) {
   const read = resolveFirstText(input)
   const creationBrief = tidy(input).slice(0, FIRST_TEXT_LIMIT)
   if (read.route === 'keyword') {
-    const plan = firstSlatePlan({ job: read.job, with: read.with ?? undefined })
-    return { ...plan, key: read.key, route: read.route, title: read.title, creationBrief }
+    return { ...clone(PLANS[read.plan]), key: read.key, route: read.route, job: read.job, with: read.with, title: read.title, creationBrief }
   }
   const lanes = read.board.kind === 'preset'
   return {
@@ -235,8 +274,8 @@ export function firstTextPlan(input) {
       : ['Doing holds 3. Cards move one column at a time.', 'Drag a card across, or ask Slatebox to move one.'],
     starters: read.board.kind === 'steps' ? [starter('Add Review after ' + read.board.brief.split(/→|->/)[0].trim(), 'Review', 'steps'), ADD_TEAM, ADD_NNL]
       : lanes ? [edit('Add a card called your next task to To do', 'your next task'), edit('Add a column called Blocked', 'Blocked'), ADD_RETRO]
-      : read.board.kind === 'lanes' ? [edit('Add a card called your first card to ' + firstLaneOf(read.board.brief), 'your first card'), edit('Rename the workshop to Our board', 'Our board'), ADD_RETRO]
-      : [edit('Rename the workshop to Our plan', 'Our plan'), ADD_RETRO, ADD_TEAM],
+      : read.board.kind === 'lanes' ? [edit('Add a card called your first card to ' + firstLaneOf(read.board.brief), 'your first card'), edit('Rename the board to our board', 'our board'), ADD_RETRO]
+      : [edit('Rename the board to our plan', 'our plan'), ADD_RETRO, ADD_TEAM],
     share: null,
   }
 }
@@ -244,6 +283,16 @@ export function firstTextPlan(input) {
 /** What the browser remembers (localStorage 'slatebox.start'), and what the server stores on the guest. */
 export function startRecord({ job = null, with: withId = null, via }) {
   return { job: job ?? null, with: withId ?? null, via, v: FIRST_SLATE_VERSION }
+}
+
+/**
+ * How the answer was given, as the server reads it (never as the page claims): their words when there
+ * are any, Skip, else a card or a deep link. The first run's counts (spec §10) read this.
+ */
+export function viaOfAnswer({ text, via }) {
+  if (via === 'skip') return 'skip'
+  if (typeof text === 'string' && text.trim()) return 'text'
+  return via === 'deeplink' ? 'deeplink' : 'card'
 }
 
 /** Whether this browser or account has answered (or skipped) the first run. */
@@ -262,8 +311,12 @@ export function worksOnLine(profileStart) {
 /** The library group to show first for this person, or null. */
 export const startGroup = profileStart => jobOf(profileStart?.job)?.group ?? null
 
-/** The Share button's words on a first-run slate until Share is first opened: who the board is for. */
-export function firstShareLabel(firstRun) {
+/**
+ * The Share button's words on a first-run slate until Share is first opened: who the board is for. On a
+ * narrow header (`short`) the words stay as short as "Share", so the slate's title keeps its room.
+ */
+export function firstShareLabel(firstRun, { short = false } = {}) {
   if (!firstRun || firstRun.shareSeen) return 'Share'
-  return firstRun.share === 'team' ? 'Invite your team' : firstRun.share === 'client' ? 'Share with your customer' : 'Share'
+  if (firstRun.share === 'team') return short ? 'Invite' : 'Invite your team'
+  return firstRun.share === 'client' && !short ? 'Share with your customer' : 'Share'
 }

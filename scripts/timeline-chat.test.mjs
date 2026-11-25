@@ -11,7 +11,7 @@ import { proposeLaneReply } from '../web/app/imports/api/common/lane-conversatio
 import '../web/app/imports/api/common/board-chat.mjs'
 import { workshopStarters } from '../web/app/imports/api/common/workshop-starters.mjs'
 
-const today = '2026-11-21' // plans start Monday 23 Nov
+const today = '2026-11-21' // plans start Monday Nov 23
 const tim = { by: 'Tim' }
 const goLive = () => validateWorkshop(goLiveSample(today))
 const configure = { kind: 'card', id: 'configure' }
@@ -44,7 +44,7 @@ test('every way of saying a task’s length or start, with it selected or named'
     ['extend Kick-off by 2 days', null, { kickoff: { duration: 3 } }],
     // A week is five working days where weekends don't count.
     ['make it a week', { kind: 'card', id: 'kickoff' }, { kickoff: { duration: 5 } }],
-    // Configure can first start Fri 27 Nov (when Send data ends): the Monday after is one working day later.
+    // Configure can first start Fri, Nov 27 (when Send data ends): the Monday after is one working day later.
     ['start it on Monday', configure, { configure: { lag: 1, duration: 5 } }],
     ['move it 2 days later', configure, { configure: { lag: 2, duration: 5 } }],
     ['push Configure back a day', null, { configure: { lag: 1, duration: 5 } }],
@@ -64,7 +64,7 @@ test('every way of saying a task’s length or start, with it selected or named'
 
 test('the board’s rules decide: past go-live is refused in its sentence, and a slip pushes what waits', () => {
   const plan = goLive()
-  assert.throws(() => say(plan, 'make it 14 days', configure), /^Error: Sign-off would run until Mon 21 Dec; go-live is Fri 18 Dec\.$/)
+  assert.throws(() => say(plan, 'make it 14 days', configure), /^Error: Sign-off would run until Mon, Dec 21; go-live is Fri, Dec 18\.$/)
   const longer = say(plan, 'extend it by 1 day', configure).workshop
   assert.equal(scheduleLaunch(longer).get('train').start, scheduleLaunch(plan).get('train').start + 1)
 })
@@ -77,7 +77,7 @@ test('ambiguous or unknown: a short question, never a guess', () => {
     assert.throws(() => say(plan, phrase, { kind: 'lane', id: 'us' }), /^Error: Which task\?/, phrase)
   }
   assert.throws(() => say(plan, 'shorten Deploy to 3 days'), /^Error: There is no task called “Deploy” here\. The tasks are /)
-  assert.throws(() => say(plan, 'start it on Thursday the 40th', configure), /^Error: Which day\? Say a date, such as “start it on Mon 30 Nov”\.$/)
+  assert.throws(() => say(plan, 'start it on Thursday the 40th', configure), /^Error: Which day\? Say a date, such as “start it on Mon, Nov 30”\.$/)
 })
 
 test('a number of days is never a name, on any board', () => {
@@ -121,7 +121,7 @@ test('the launch or go-live is the plan’s line, never a task that shares the w
   const launch = validateWorkshop(launchPlanSample(today))
   // “Launch post” shares the word: ask which is meant instead of moving the task.
   for (const phrase of ['move the launch 2 days later', 'push launch back a week', 'start the launch on Friday', 'push the launch to Friday', 'extend the launch by 2 days']) {
-    assert.throws(() => say(launch, phrase), /^Error: Do you mean the launch line or the task “Launch post”\? To move the line, say “Move launch to Fri 18 Dec”; for the task, name it: “Move Launch post 2 days later”\.$/, phrase)
+    assert.throws(() => say(launch, phrase), /^Error: Do you mean the launch line or the task “Launch post”\? To move the line, say “Move launch to Fri, Dec 18”; for the task, name it: “Move Launch post 2 days later”\.$/, phrase)
   }
   // The line's own grammar still moves the line, and the task by its full name still moves the task.
   assert.equal(say(launch, 'move launch to Fri 18 Dec').workshop.launch.day, 25)
@@ -129,19 +129,19 @@ test('the launch or go-live is the plan’s line, never a task that shares the w
   // A go-live with no task of that name says how to move the line, not “there is no task called go-live”.
   const plan = goLive()
   for (const phrase of ['start go-live on Friday', 'begin the go-live day on Friday', 'make go-live 3 days']) {
-    assert.throws(() => say(plan, phrase), /^Error: To move go-live, say its day: “Move go-live to Fri 25 Dec”\.$/, phrase)
+    assert.throws(() => say(plan, phrase), /^Error: To move go-live, say its day: “Move go-live to Fri, Dec 25”\.$/, phrase)
   }
-  assert.equal(say(plan, 'move go-live to Dec 18').reply, 'Go-live is now Fri 18 Dec.')
+  assert.equal(say(plan, 'move go-live to Dec 18').reply, 'Go-live is now Fri, Dec 18.')
   // A move to a team is still the lane conversation's, in both start forms.
   assert.equal(task(say(plan, 'move Configure to Customer').workshop, 'configure').laneId, 'customer')
 })
 
 test('“start it on Monday” is the coming Monday from where the task starts now, never weeks earlier', () => {
   const plan = goLive()
-  // Configure moved to start Tue 1 Dec (two working days after it can first start, Fri 27 Nov).
+  // Configure moved to start Tue, Dec 1 (two working days after it can first start, Fri, Nov 27).
   const later = say(plan, 'move it 2 days later', configure).workshop
-  assert.equal(task(say(later, 'start it on Monday', configure).workshop, 'configure').lag, 6) // Mon 7 Dec
-  assert.equal(task(say(later, 'start it on Friday', configure).workshop, 'configure').lag, 5) // Fri 4 Dec
+  assert.equal(task(say(later, 'start it on Monday', configure).workshop, 'configure').lag, 6) // Mon, Dec 7
+  assert.equal(task(say(later, 'start it on Friday', configure).workshop, 'configure').lag, 5) // Fri, Dec 4
   // A hire already waiting 8 weeks keeps its start; it is not pulled back to the first Monday.
   const hiring = validateWorkshop(hiringPlanSample(today))
   const designer = say(hiring, 'start it on Monday', { kind: 'card', id: 'designer' }).workshop
@@ -152,15 +152,15 @@ test('“start it on Monday” is the coming Monday from where the task starts n
 })
 
 test('go-live by a date or by an amount: one set_launch_day, landing on a working day where weekends don’t count', () => {
-  const plan = goLive() // go-live Fri 18 Dec (day 25)
+  const plan = goLive() // go-live Fri, Dec 18 (day 25)
   const line = (phrase, board = plan) => say(board, phrase)
   // By a date.
   assert.equal(line('move go-live to 23 Dec').workshop.launch.day, 30)
-  assert.equal(line('move go-live to 23 Dec').reply, 'Go-live is now Wed 23 Dec.')
+  assert.equal(line('move go-live to 23 Dec').reply, 'Go-live is now Wed, Dec 23.')
   assert.equal(line('push go-live to Dec 23').workshop.launch.day, 30)
   // A Saturday, coming later, is the Monday after; coming earlier, the Friday before.
   assert.equal(line('move go-live to Sat 19 Dec').workshop.launch.day, 28)
-  assert.equal(line('move go-live to Sat 19 Dec').reply, 'Go-live is now Mon 21 Dec: Sat 19 Dec is a weekend, and weekends don’t count on this plan.')
+  assert.equal(line('move go-live to Sat 19 Dec').reply, 'Go-live is now Mon, Dec 21: Sat, Dec 19 is a weekend, and weekends don’t count on this plan.')
   assert.equal(line('move go-live to Sat 12 Dec').workshop.launch.day, 18)
   // By an amount: a week is Friday to Friday; days are working days.
   for (const [phrase, day] of [['push go-live back a week', 32], ['push the deadline back a week', 32], ['move go-live 2 weeks later', 39],
@@ -170,13 +170,13 @@ test('go-live by a date or by an amount: one set_launch_day, landing on a workin
     assert.deepEqual(result.workshop.cards, plan.cards, phrase + ' moves only the line')
   }
   // Earlier than the tasks end: refused in the board’s sentence, with the earliest go-live that fits.
-  assert.throws(() => line('pull go-live forward 2 weeks'), /^Error: Sign-off would run until Tue 8 Dec; go-live is Fri 4 Dec\. The earliest go-live that fits is Wed 9 Dec\.$/)
+  assert.throws(() => line('pull go-live forward 2 weeks'), /^Error: Sign-off would run until Tue, Dec 8; go-live is Fri, Dec 4\. The earliest go-live that fits is Wed, Dec 9\.$/)
   // A launch plan whose task shares the word still asks which is meant.
   assert.throws(() => say(validateWorkshop(launchPlanSample(today)), 'push launch back a week'), /^Error: Do you mean the launch line/)
 })
 
 test('the plan’s first day and a hiring plan’s weeks in words: one set_plan_start or set_plan_weeks, every task keeping its dates', () => {
-  const plan = goLive() // starts Mon 23 Nov
+  const plan = goLive() // starts Mon, Nov 23
   const dates = board => Object.fromEntries([...scheduleLaunch(board)].map(([id, t]) => [id, new Date(Date.parse(board.clock.origin) + t.from * 864e5).toISOString().slice(0, 10)]))
   for (const [phrase, origin] of [['start the plan on Nov 16', '2026-11-16'], ['move the start date to Nov 16', '2026-11-16'], ['move the plan’s first day to 16 Nov', '2026-11-16'],
     ['start the plan a week earlier', '2026-11-16'], ['start a week earlier', '2026-11-16'], ['start the plan on 1 Dec', '2026-12-01'], ['move the start 3 days later', '2026-11-26'], ['start the plan on Sun 22 Nov', '2026-11-20']]) {
@@ -184,36 +184,36 @@ test('the plan’s first day and a hiring plan’s weeks in words: one set_plan_
     assert.equal(result.workshop.clock.origin, origin, phrase)
     if (origin < plan.clock.origin) assert.deepEqual(dates(result.workshop), dates(plan), phrase + ' keeps every date')
   }
-  assert.equal(say(plan, 'start the plan a week earlier').reply, 'The plan now starts Mon 16 Nov.')
-  assert.throws(() => say(plan, 'start the plan 3 weeks later'), /The latest first day that fits is Wed 2 Dec\.$/)
+  assert.equal(say(plan, 'start the plan a week earlier').reply, 'The plan now starts Mon, Nov 16.')
+  assert.throws(() => say(plan, 'start the plan 3 weeks later'), /The latest first day that fits is Wed, Dec 2\.$/)
   // A task called by its name still starts where it is asked to.
   assert.equal(task(say(plan, 'start Configure on Monday').workshop, 'configure').lag, 1)
   assert.equal(task(say(plan, 'start it a week later', configure).workshop, 'configure').lag, 5)
   const hiring = validateWorkshop(hiringPlanSample(today))
   assert.equal(say(hiring, 'run the plan 60 weeks').workshop.hiring.weeks, 60)
   assert.equal(say(hiring, 'extend the plan by 4 weeks').workshop.hiring.weeks, 56)
-  assert.throws(() => say(hiring, 'shorten the plan by 30 weeks'), /^Error: AE #2 starts Mon 10 May, after the plan’s last week\.$/)
+  assert.throws(() => say(hiring, 'shorten the plan by 30 weeks'), /^Error: AE #2 starts Mon, May 10, after the plan’s last week\.$/)
 })
 
 // Boards S2b (owner addendum, 2026-11-22): with the plan in focus (the gear's "Change this board"), the chat takes
-// the span in words: "move go-live to 23 Dec", "start on 1 Dec", "make this a 3-week plan". The same edits as a
+// the span in words: "move go-live to Dec 23", "start on Dec 1", "make this a 3-week plan". The same edits as a
 // grip (set_launch_day, set_plan_start, set_plan_weeks), decided by the plan's rules.
 test('in focus, the plan’s span in words: go-live, its first day and how many weeks it runs', () => {
-  const plan = goLive() // starts Mon 23 Nov, go-live Fri 18 Dec (day 25)
+  const plan = goLive() // starts Mon, Nov 23, go-live Fri, Dec 18 (day 25)
   const board = { kind: 'board', id: 'main' }
   assert.equal(say(plan, 'move go-live to 23 Dec', board).workshop.launch.day, 30)
   const start = say(plan, 'start on 1 Dec', board)
   assert.equal(start.workshop.clock.origin, '2026-12-01')
   assert.equal(say(plan, 'Start on Mon 30 Nov', board).workshop.clock.origin, '2026-11-30')
-  // A 3-week plan goes live on the last working day of its third week: Fri 11 Dec (day 18).
+  // A 3-week plan goes live on the last working day of its third week: Fri, Dec 11 (day 18).
   const three = say(plan, 'make this a 3-week plan', board)
   assert.equal(three.workshop.launch.day, 18)
-  assert.equal(three.reply, 'Go-live is now Fri 11 Dec.')
+  assert.equal(three.reply, 'Go-live is now Fri, Dec 11.')
   assert.deepEqual(three.workshop.cards, plan.cards)
   for (const phrase of ['make it a three week plan', 'make the plan 3 weeks long', 'make this plan 3 weeks']) assert.equal(say(plan, phrase, board).workshop.launch.day, 18, phrase)
   assert.equal(say(plan, 'make this a 5-week plan', board).workshop.launch.day, 32)
   // Too short for the tasks: refused in the board’s sentence, with the earliest go-live that fits.
-  assert.throws(() => say(plan, 'make this a 2-week plan', board), /The earliest go-live that fits is Wed 9 Dec\.$/)
+  assert.throws(() => say(plan, 'make this a 2-week plan', board), /The earliest go-live that fits is Wed, Dec 9\.$/)
   // A hiring plan runs a number of weeks.
   const hiring = validateWorkshop(hiringPlanSample(today))
   assert.equal(say(hiring, 'make this a 40-week plan', board).workshop.hiring.weeks, 40)

@@ -177,8 +177,14 @@ export default function Canvas() {
     return () => { if (typeof window.cancelIdleCallback === 'function') window.cancelIdleCallback(idle); else clearTimeout(idle) }
   }, [])
   // "Browse all boards" on the first run opens the new slate with the library showing.
-  const { state: routeState } = useLocation()
-  useEffect(() => { if (routeState?.openLibrary) { setNativeChatOpen(true); setLibraryRequest({ start: {}, nonce: Date.now() }) } }, [])
+  // The state is cleared once acted on, so a reload of the slate does not open the library again.
+  const routeLocation = useLocation()
+  useEffect(() => {
+    if (!routeLocation.state?.openLibrary) return
+    setNativeChatOpen(true)
+    setLibraryRequest({ start: {}, nonce: Date.now() })
+    history(routeLocation.pathname + routeLocation.search, { replace: true, state: null })
+  }, [])
   useEffect(() => {
     const hear = event => { setNativeChatOpen(true); setLibraryRequest({ ...event.detail, nonce: Date.now() }) }
     window.addEventListener(LIBRARY_EVENT, hear)
@@ -1443,6 +1449,9 @@ export default function Canvas() {
               onKept={kept => {
                 takeBoardName(kept?.name)
                 if (kept?.nativeConversationRevision !== undefined) takeBoard({ ...kept, boardIds: [...new Set([...(nativeBoard?.boardIds ?? ['main']), kept.boardId].filter(Boolean))] })
+                // The first-run board rebuilt in place: its note says the server's new words here too (the same text, so the next save changes nothing).
+                const how = kept?.note && slate.current?.v2?.getNode?.(kept.note.id)
+                if (how && how.options?.text !== kept.note.text) updateNode([{ type: 'onNodeTextChanged', data: { text: kept.note.text } }], [how])
                 if (kept?.boardId) setRevealing(kept.boardId)
               }} onClose={()=>setNativeChatOpen(false)} onPreview={setDrawingPreview}
               readNodes={()=>JSON.stringify(JSON.parse(slate.current.exportJSON()).nodes)} /></React.Suspense>

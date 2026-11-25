@@ -252,10 +252,10 @@ function taskDayEdits(board, text, selection) {
     return moved(m[1], m[3], m[4], /^(?:later|back|out)$/i.test(m[2]) ? 1 : -1)
   }
   // ("Push the designer to May" on a hiring plan is when the hire starts: planEdits reads it.)
-  // "Move launch to Fri 18 Dec" moves the line, and "Move Configure to Customer" the task to a team: not these.
+  // "Move launch to Fri, Dec 18" moves the line, and "Move Configure to Customer" the task to a team: not these.
   m = is('(?:start|begin)\\s+' + T + '\\s+(?:on|from)\\s+(.+)') ?? (board.kind === 'launch-plan' ? is('(?:move|push|pull|bring)\\s+' + T + '\\s+to\\s+(?:start\\s+on\\s+)?(.+)') : null)
   if (m && lineReference(board, m[1])) {
-    // "Move launch to Fri 18 Dec" is the line's (planEdits); "start the launch on Friday" asks which is meant.
+    // "Move launch to Fri, Dec 18" is the line's (planEdits); "start the launch on Friday" asks which is meant.
     if (/^move\s/i.test(text) || (/^(?:push|pull|bring)\s/i.test(text) && !taskLike(board, m[1]))) return null
     throw lineQuestion(board, m[1])
   }

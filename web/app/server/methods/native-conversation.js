@@ -17,7 +17,7 @@ import {catalogFits} from 'slateboxjs/catalog'
 import {boardNamesSlate,componentPlacing} from '../../imports/api/common/component-add.mjs'
 import {datedLaunchPlan} from '../../imports/api/common/plan-dates.mjs'
 import {MAIN_BOARD,MAX_BOARDS,slateBoards} from '../../imports/api/common/slate-boards.mjs'
-import {firstRunReplace} from '../first-slate-board.mjs'
+import {HOW_NOTE_ID,firstRunReplace,howItWorksText,rebuiltNoteLines} from '../first-slate-board.mjs'
 import {worksOnLine} from '../../imports/api/common/first-slate.mjs'
 
 import {slateSaveCore} from '../slate-save'
@@ -125,7 +125,7 @@ Meteor.methods({
     // The board sits beside the slate's notes and its other boards, covering none of them (where its preview
     // was shown), and the place is stored with it, so every page draws it there. The place and the board's id
     // are worked out on the slate as the write finds it (the save core fences it on the slate's revision).
-    let made,named
+    let made,named,note
     try {
       await slateSaveCore.save({slateId:board._id,actor:{kind:'person',userId:this.userId},source:'conversation',
         conditions:{userId:board.userId,
@@ -139,7 +139,11 @@ Meteor.methods({
             // In place of the first-run board: only while it is still as it was made (revision 0, the only board).
             if(!firstRunReplace(current,draft.workshop)) throw Object.assign(new Error('changed'),{code:'save_refused'})
             made={boardId:MAIN_BOARD,origin:slateBoards(current)[0].origin}
-            return {set:{lastNativeCanvasProposal:{id,uid:this.userId,boardId:MAIN_BOARD},'creative.model.workshop':draft.workshop,'creative.revision':1},inc:{nativeConversationRevision:1}}
+            // Its "How this board works" note is written again from the new board (it named the old board's tasks).
+            const how=(current.nodes??[]).find(node=>node?.options?.id===HOW_NOTE_ID)
+            note=how ? {id:HOW_NOTE_ID,...howItWorksText(rebuiltNoteLines(draft.workshop))} : null
+            const nodes=note ? current.nodes.map(node=>node===how ? {...node,options:{...node.options,text:note.text}} : node) : null
+            return {set:{lastNativeCanvasProposal:{id,uid:this.userId,boardId:MAIN_BOARD},'creative.model.workshop':draft.workshop,'creative.revision':1,...(nodes && {nodes})},inc:{nativeConversationRevision:1}}
           }
           made=componentPlacing(current,draft.workshop)
           // An untitled slate takes the kept board's title as its name; a name the person gave stays.
@@ -158,6 +162,6 @@ Meteor.methods({
     if (board.userId!==this.userId) await rememberInvitedEdit(this.userId,board,shareId).catch(()=>{})
     // The page takes the board live (no reload): where it sits, and the revision its saves now name.
     // `name`: the slate's new name, when the board named it (the page shows it, and its saves keep it).
-    return {kept:true,boardId:made.boardId,origin,nativeConversationRevision:(board.nativeConversationRevision??0)+1,...(named && {name:named}),...(draft.replace && {replaced:true})}
+    return {kept:true,boardId:made.boardId,origin,nativeConversationRevision:(board.nativeConversationRevision??0)+1,...(named && {name:named}),...(draft.replace && {replaced:true,...(note && {note:{id:note.id,text:note.text}})})}
   },
 })

@@ -107,8 +107,11 @@ export default function FirstSlate() {
     create({ ...linked, via: 'deeplink' })
   }, [])
 
+  // Step two takes the place of step one in history (its Back button returns to step one): the board then
+  // replaces that one entry, so the browser's Back from the board never lands on /new again, where a
+  // visitor who has answered would get a new, empty slate.
   const pick = job => {
-    if (asksStepTwo(job.id)) setParams({ job: job.id })
+    if (asksStepTwo(job.id)) setParams({ job: job.id }, { replace: true })
     else create({ job: job.id, via: 'card' })
   }
   const skip = () => create({ via: 'skip' })
@@ -142,7 +145,7 @@ export default function FirstSlate() {
     return <Box component="main" sx={page}>
       <Box sx={column}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: space.section }}>
-          <Button startIcon={<ArrowBack />} onClick={() => setParams({})} sx={{ minHeight: 48, borderRadius: 6, textTransform: 'none', fontWeight: 600, '&:focus-visible': ring }}>Back</Button>
+          <Button startIcon={<ArrowBack />} onClick={() => setParams({}, { replace: true })} sx={{ minHeight: 48, borderRadius: 6, textTransform: 'none', fontWeight: 600, '&:focus-visible': ring }}>Back</Button>
           {skipButton}
         </Box>
         <Typography role="status" aria-live="polite" variant="body2" sx={{ color: 'text.secondary', mb: space.tight }}>Step 2 of 2</Typography>

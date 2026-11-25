@@ -82,9 +82,23 @@ export const KIT_KINDS = ['launch-plan', 'hiring-plan', 'pipeline', 'budget', 'n
  * The sentence under a board preview in the chat: what Keep does, in the board's own words. "Play the route"
  * is a map's only; a plan's is its own; a board of columns takes notes.
  */
+/**
+ * The heading of a drawing's preview, after "Preview · ": a library board or a board brief added beside
+ * the boards, a first-run board rebuilt in place, an interactive route, or notes for the slate.
+ */
+export function drawingHeading(drawing) {
+  if (drawing.replace) return 'This board, rebuilt from your words'
+  if (drawing.component || drawing.beside) return (drawing.title || 'A board') + ', beside the board'
+  if (drawing.mode === 'play') return 'Interactive route'
+  const count = drawing.labels?.length ?? 0
+  return count === 1 ? '1 note for the slate' : count + ' notes for the slate'
+}
+
 export function previewKeepSentence(draft) {
   const workshop = draft?.canvas?.workshop
   if (!workshop) return null
+  // The first-run board rebuilt in place (methods/native-conversation.js, firstRunReplace).
+  if (draft.replace) return 'Keep it to rebuild this board from your words. Its title' + (workshop.clock ? ' and start date stay.' : ' stays.')
   if (workshop.lanes?.[0]?.station) return 'Keep this to play the route alongside your original drawing.'
   if (workshop.kind === 'launch-plan' || workshop.kind === 'hiring-plan') return 'Keep it to add the plan; slide a task and what waits on it follows.'
   if (KIT_KINDS.includes(workshop.kind)) return null
