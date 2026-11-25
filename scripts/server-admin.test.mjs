@@ -21,8 +21,7 @@ import {
 } from '../web/app/server/admin/dashboard-core.mjs'
 import { count, micros, money, moneyTotals } from '../web/app/imports/ui/pages/admin/overview-format.mjs'
 import { libraryCollection, makeLibrary } from './library-test-stores.mjs'
-import { createAISettings } from '../web/app/server/methods/ai/ai-settings-core.mjs'
-import { loadMasterKey } from '../web/app/server/metering/vault.mjs'
+import { aiControlWorld, asPerson, bodyOf, registryFor } from './ai-control-kit.mjs'
 import { PRO_LOOKUP_KEYS } from '../web/app/imports/api/pro/prices.mjs'
 
 const app = fileURLToPath(new URL('../web/app/', import.meta.url))
@@ -142,28 +141,23 @@ test('library review answers a team-less administrator and refuses a team admin'
   await assert.rejects(library.review.queue({ userId: 'ann' }, { status: 'waiting' }), (error) => error.status === 403 && error.code === 'reviewer_required')
 })
 
-test('AI control\'s server connections answer a team-less administrator and refuse a team admin', async () => {
-  const keys = []
-  const store = {
-    async listConnections() { return keys.map((k) => ({ ...k })) },
-    async saveConnection(owner, doc) { keys.push({ ...doc }) },
-    async removeConnection() {},
-    async getUse() { return null },
-    async setUse() {},
-  }
-  const ai = createAISettings({
-    store,
-    // a key made for this test run only
-    master: loadMasterKey({ SLATEBOX_KEY_ENCRYPTION_KEY: randomBytes(32).toString('base64') }),
-    settings: {}, hosted: true,
-    loadUser: async (userId) => USERS[userId] || null,
-    isAdmin: isInstanceAdmin,
-    isTeamAdmin: async (user) => Boolean(user?.orgId && PERMISSIONS.some((p) => p.userId === user._id && p.orgId === user.orgId && p.claimId === 'admin')),
-    check: async () => ({ ok: true }),
-  })
-  const answer = await ai.serverConnections('tim')
-  assert.ok(Array.isArray(answer.connections))
-  await assert.rejects(ai.serverConnections('ann'), (error) => error.status === 403)
+test('AI control\'s keys answer a team-less administrator and refuse a team admin', async () => {
+  // The server's AI keys live in the backend (ai.keys.*, ai-control/keys.mjs) behind the same
+  // check the server makes (isInstanceAdmin): tim holds the uberMensch row and no team, ann runs a team.
+  const w = await aiControlWorld()
+  const registry = await registryFor(w, { aiControlAdmin: isInstanceAdmin })
+  bodyOf(await registry.run(asPerson('tim'), 'ai.providers.add', { provider: { preset: 'meta' }, models: ['muse-ember-1.0'] }))
+  await assert.rejects(registry.run(asPerson('ann'), 'ai.providers.add', { provider: { preset: 'openai' } }), (error) => error.status === 403)
+  const listed = bodyOf(await registry.run(asPerson('tim'), 'ai.keys.list', {}))
+  assert.ok(Array.isArray(listed.keys))
+  // a key made for this test run only
+  const added = bodyOf(await registry.run(asPerson('tim'), 'ai.keys.add', { provider: 'meta', apiKey: `sk-test-${randomBytes(12).toString('hex')}` }))
+  assert.equal(added.key?.status ?? added.status, 'active')
+  assert.equal(bodyOf(await registry.run(asPerson('tim'), 'ai.keys.list', {})).keys.length, 1)
+  await assert.rejects(registry.run(asPerson('ann'), 'ai.keys.list', {}), (error) => error.status === 403)
+  await assert.rejects(registry.run(asPerson('ann'), 'ai.keys.add', { provider: 'meta', apiKey: `sk-test-${randomBytes(12).toString('hex')}` }), (error) => error.status === 403)
+  await assert.rejects(registry.run(asPerson('ann'), 'ai.control.get', {}), (error) => error.status === 403)
+  assert.ok(bodyOf(await registry.run(asPerson('tim'), 'ai.control.get', {})))
 })
 
 // ---------- the Overview ----------
