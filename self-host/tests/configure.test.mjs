@@ -202,6 +202,38 @@ async function configureTunnel(env) {
   return { code: Number(code), log, token, tokenMode: tokenMode.trim(), app, relay, caddy, state }
 }
 
+test('an on-prem license: SLATEBOX_LICENSE or SLATEBOX_LICENSE_FILE reaches the app settings as enterprise.license / licenseFile, never printed; one license only', async () => {
+  // Shaped like a key (sblic1.<key id>.<payload>.<signature>); configure only checks the shape, the app checks the signature.
+  const key = `sblic1.slatebox-2026-11.${randomBytes(48).toString('base64url')}.${randomBytes(64).toString('base64url')}`
+  const given = await configure({ SLATEBOX_LICENSE: key })
+  assert.equal(given.code, 0, given.log)
+  assert.equal(JSON.parse(given.app.settings).enterprise.license, key)
+  assert.ok(!given.log.includes(key), 'the key is not in the log')
+  // a file: the path goes to the app, which reads the key from it
+  const file = await configure({ SLATEBOX_LICENSE_FILE: '/etc/hostname' })
+  assert.equal(file.code, 0, file.log)
+  assert.equal(JSON.parse(file.app.settings).enterprise.licenseFile, '/etc/hostname')
+  const missing = await configure({ SLATEBOX_LICENSE_FILE: '/run/secrets/slatebox.license' })
+  assert.notEqual(missing.code, 0)
+  assert.match(missing.log, /SLATEBOX_LICENSE_FILE: \/run\/secrets\/slatebox.license is not in the container/)
+  // not a key: refused without printing it
+  const wrong = await configure({ SLATEBOX_LICENSE: 'not-a-license-value-12345' })
+  assert.notEqual(wrong.code, 0)
+  assert.match(wrong.log, /SLATEBOX_LICENSE is not a Slatebox license key/)
+  assert.ok(!wrong.log.includes('not-a-license-value-12345'))
+  // said twice: refused, never silently one of them
+  const twice = await configure({ SLATEBOX_LICENSE: key, SLATEBOX_SETTINGS: JSON.stringify({ enterprise: { license: key } }) })
+  assert.notEqual(twice.code, 0)
+  assert.match(twice.log, /both give a license: keep one/)
+  assert.ok(!twice.log.includes(key))
+  const both = await configure({ SLATEBOX_LICENSE: key, SLATEBOX_LICENSE_FILE: '/etc/hostname' })
+  assert.notEqual(both.code, 0)
+  assert.match(both.log, /Set SLATEBOX_LICENSE or SLATEBOX_LICENSE_FILE, not both/)
+  // still accepted by name: the image lists both settings for installers
+  const listed = JSON.parse(await ok(['run', '--rm', '--network', 'none', '-v', `${LIB}:/opt/slatebox/lib:ro`, '--entrypoint', 'node', IMAGE, '/opt/slatebox/lib/settings.mjs', '--json']))
+  for (const name of ['SLATEBOX_LICENSE', 'SLATEBOX_LICENSE_FILE']) assert.ok(listed.settings.includes(name), name)
+})
+
 test('a tunnel token: HTTPS off in Caddy, the visitor address kept, the token only in its 0600 file, never printed', async () => {
   const run = await configureTunnel({ SLATEBOX_URL: 'https://acme.slatebox.team', SLATEBOX_TUNNEL_TOKEN: TUNNEL_TOKEN })
   assert.equal(run.code, 0, run.log)

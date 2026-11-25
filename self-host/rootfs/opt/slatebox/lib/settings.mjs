@@ -10,6 +10,9 @@ export const SETTINGS = Object.freeze([
   'SLATEBOX_SETTINGS', 'SLATEBOX_SSO', 'SLATEBOX_SSO_ONLY', 'SLATEBOX_SSO_ADMIN', 'SLATEBOX_KEY_ENCRYPTION_KEY',
   // A Cloudflare Tunnel connector token: a team address (https://<name>.slatebox.team) or your own tunnel.
   'SLATEBOX_TUNNEL_TOKEN',
+  // An on-prem license key from Slatebox LLC for the enterprise features (enterprise/README.md):
+  // the key itself, or the path of a file inside the container that holds it.
+  'SLATEBOX_LICENSE', 'SLATEBOX_LICENSE_FILE',
 ])
 export const DATABASE_SETTINGS = Object.freeze(['MONGO_URL', 'MONGO_OPLOG_URL'])
 // One key variable per provider in SLATEBOX_AI_PROVIDERS (its keyEnv), never listed by name.

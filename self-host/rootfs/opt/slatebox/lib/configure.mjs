@@ -121,6 +121,29 @@ function keyEncryptionKey() {
   return value
 }
 
+// An on-prem license key (enterprise/README.md): SLATEBOX_LICENSE holds the key, SLATEBOX_LICENSE_FILE
+// the path of a file inside the container that holds it. Either goes into the app's private settings
+// (enterprise.license / enterprise.licenseFile), where the app checks it offline. One license, said
+// once: the same thing in SLATEBOX_SETTINGS as well stops the start. The key is never printed.
+function licenseSettings(extra) {
+  const key = setting('SLATEBOX_LICENSE')
+  const file = setting('SLATEBOX_LICENSE_FILE')
+  if (!key && !file) return null
+  if (key && file) throw new Plain('Set SLATEBOX_LICENSE or SLATEBOX_LICENSE_FILE, not both')
+  if (extra.enterprise?.license || extra.enterprise?.licenseFile) {
+    throw new Plain(`${key ? 'SLATEBOX_LICENSE' : 'SLATEBOX_LICENSE_FILE'} and SLATEBOX_SETTINGS enterprise.license or enterprise.licenseFile both give a license: keep one`)
+  }
+  if (key) {
+    if (!/^sblic1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(key)) {
+      throw new Plain(`SLATEBOX_LICENSE is not a Slatebox license key, which is one line starting with sblic1. (received ${key.length} characters, not shown)`)
+    }
+    return { license: key }
+  }
+  if (!file.startsWith('/')) throw new Plain(`SLATEBOX_LICENSE_FILE must be a path inside the container, starting with / (received ${file})`)
+  if (!existsSync(file)) throw new Plain(`SLATEBOX_LICENSE_FILE: ${file} is not in the container. Mount the file there, for example -v /path/on/host/slatebox.license:${file}:ro`)
+  return { licenseFile: file }
+}
+
 function mergeSettings(base, extra) {
   for (const [key, value] of Object.entries(extra)) {
     if (value && typeof value === 'object' && !Array.isArray(value) && base[key] && typeof base[key] === 'object') {
@@ -256,6 +279,7 @@ function main() {
   if (externalMongo) parseUrl('MONGO_URL', externalMongo, ['mongodb:', 'mongodb+srv:'])
   if (externalOplog && !externalMongo) throw new Plain('MONGO_OPLOG_URL only applies together with MONGO_URL')
   const extra = extraSettings()
+  const license = licenseSettings(extra)
   const sso = ssoMode(setting)
   const ownKeysKey = keyEncryptionKey()
 
@@ -277,6 +301,7 @@ function main() {
     },
     slateboxAPI: { publicKey: secrets.apiPublicKey, secretKey: secrets.apiSecretKey },
   })
+  if (license) settings.enterprise = { ...settings.enterprise, ...license }
   // Single sign-on is either wired to the bundled Keycloak or off; SLATEBOX_SETTINGS cannot half-configure it.
   delete settings.sso
   if (settings.public) delete settings.public.sso

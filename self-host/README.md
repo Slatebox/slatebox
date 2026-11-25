@@ -74,6 +74,7 @@ Every setting is optional and is given with `-e NAME=value`.
 | `SLATEBOX_AI_PRIVATE_ENDPOINTS` | `off` lets people and teams connect only models at public addresses, so they cannot use the server to reach other machines on your network. Default `on`: they may use your LAN or `host.docker.internal`. Your own connections are not affected. |
 | `SLATEBOX_KEY_ENCRYPTION_KEY` | 32 random bytes in base64, made once with `openssl rand -base64 32`. Every AI and call key saved on this server (an administrator's in Admin, AI control, and people's and teams' own) is encrypted with it. Unset, the first start makes one and keeps it in the data volume (`/data/secrets/key-encryption.key`), and every later start reads it back; it is never replaced. Either way, keep the same key for the life of the server and store it with your backups, which do not contain it: with a different key, saved keys cannot be read and are added again. It is never written to the log. |
 | `SLATEBOX_SETTINGS` | A JSON object of further app settings, for example `{"daily":{"apiKey":"…"}}` to turn on calls, or `{"enterprise":{"license":"sblic1.…"}}` for an on-prem license (below). |
+| `SLATEBOX_LICENSE`, `SLATEBOX_LICENSE_FILE` | An on-prem license key for the enterprise features (below): the key itself, or the path inside the container of a file that holds it. Give one of them, or the license in `SLATEBOX_SETTINGS`, not both. The key is never written to the log. |
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use a MongoDB you run elsewhere. The bundled database is then not started. |
 | `SLATEBOX_SSO` | `keycloak` turns on single sign-on with the Keycloak bundled in the image (off by default). People sign in with Entra ID, Okta, Google Workspace, SAML, OpenID Connect or LDAP through it. Keycloak's admin console is at `/auth/admin/` on the same address. |
 | `SLATEBOX_SSO_ONLY` | `true`, with `SLATEBOX_SSO=keycloak`: single sign-on is the only way in, no passwords and no guests. |
@@ -156,8 +157,10 @@ moving to Slatebox Cloud. Single sign-on with the bundled Keycloak needs no
 license and is never locked. To ask for a license, use **Admin tools → Upgrade
 on prem** in the app, or [contact Slatebox](https://slatebox.com/contact/).
 
-Give the key you receive with `-e SLATEBOX_SETTINGS='{"enterprise":{"license":"sblic1.…"}}'`
-and start the container again. The log says `[enterprise] licensed to …` and
+Give the key you receive with `-e SLATEBOX_LICENSE=sblic1.…`, or keep it in a file
+and mount it (`-v /path/slatebox.license:/run/secrets/slatebox.license:ro -e
+SLATEBOX_LICENSE_FILE=/run/secrets/slatebox.license`), and start the container
+again. `SLATEBOX_SETTINGS='{"enterprise":{"license":"sblic1.…"}}'` works too. The log says `[enterprise] licensed to …` and
 **Admin tools** shows the license and its end date. The key is checked inside
 the app, offline: nothing is sent to Slatebox. A key names its install's host
 name and works only at that address (`SLATEBOX_URL`). Without a valid key the
