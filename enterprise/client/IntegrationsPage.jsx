@@ -33,6 +33,7 @@ import { enterpriseState } from '/imports/api/common/edition.mjs'
 import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
 import { PRICING_URL } from '/imports/api/common/contact.mjs'
 import InviteWalkthrough from './InviteWalkthrough'
+import { changesOffer, toolSummary } from '../common/integration-words.mjs'
 import GoogleIntegration from './GoogleIntegration'
 
 export const INTEGRATION_STATUS = {
@@ -54,7 +55,7 @@ const card = (theme) => ({
 })
 
 /** Review an integration's tools as its server lists them now, and consent again (resumes every slate). */
-function ReviewDialog({ integration, onClose, onDone }) {
+function ReviewDialog({ integration, onClose, onDone, onUpgrade }) {
   const [review, setReview] = useState(null)
   const [allowed, setAllowed] = useState({})
   const [error, setError] = useState('')
@@ -70,6 +71,9 @@ function ReviewDialog({ integration, onClose, onDone }) {
   }, [integration.integrationId])
   const lookups = (review?.tools || []).filter((tool) => tool.group === 'lookup')
   const changes = (review?.tools || []).filter((tool) => tool.group === 'change')
+  // Changes its server offers that are off, not destructive: one click ticks them (Save keeps it).
+  const offChanges = changes.filter((tool) => !tool.destructive && !allowed[tool.name])
+  const offer = changesOffer(integration)
   const toolRow = (tool) => (
     <FormControlLabel key={tool.name} data-review-tool={tool.name}
       control={<Checkbox checked={Boolean(allowed[tool.name])} onChange={(e) => setAllowed({ ...allowed, [tool.name]: e.target.checked })} />}
@@ -100,7 +104,18 @@ function ReviewDialog({ integration, onClose, onDone }) {
             {lookups.length > 0 && <Typography variant="overline">Look things up</Typography>}
             {lookups.map(toolRow)}
             {changes.length > 0 && <Typography variant="overline" sx={{ mt: 1 }}>Change things outside Slatebox (each waits on a card you approve)</Typography>}
+            {offChanges.length > 0 && (
+              <Box><Button size="small" variant="outlined" data-review-allow-changes="" onClick={() => setAllowed({ ...allowed, ...Object.fromEntries(offChanges.map((tool) => [tool.name, true])) })}>
+                Let {integration.name} make changes too (you approve each one)
+              </Button></Box>
+            )}
             {changes.map(toolRow)}
+            {offer?.kind === 'address' && (
+              <Box sx={{ mt: 1 }} data-review-upgrade="">
+                <Typography variant="body2">{integration.name} is connected at its read-only address, so it can only look things up.</Typography>
+                <Button size="small" variant="outlined" sx={{ mt: 0.5 }} data-review-upgrade-go="" onClick={() => onUpgrade(integration)}>Let {integration.name} make changes too (you approve each one)</Button>
+              </Box>
+            )}
             <Typography variant="caption" color="text.secondary">Saving resumes {integration.name} on every slate it is on. A tool you turned off on one slate stays off there.</Typography>
           </Box>
         )}
@@ -113,19 +128,31 @@ function ReviewDialog({ integration, onClose, onDone }) {
     </Dialog>
   )
 }
-ReviewDialog.propTypes = { integration: PropTypes.shape({ integrationId: PropTypes.string, name: PropTypes.string }).isRequired, onClose: PropTypes.func.isRequired, onDone: PropTypes.func.isRequired }
+ReviewDialog.propTypes = { integration: PropTypes.shape({ integrationId: PropTypes.string, name: PropTypes.string, kind: PropTypes.string, writesAt: PropTypes.string, tools: PropTypes.arrayOf(PropTypes.shape({})) }).isRequired, onClose: PropTypes.func.isRequired, onDone: PropTypes.func.isRequired, onUpgrade: PropTypes.func.isRequired }
 
-function IntegrationRow({ integration, pro, cloud, onChanged, onReview, onSignIn }) {
+function IntegrationRow({ integration, pro, cloud, onChanged, onReview, onSignIn, onUpgrade, highlight }) {
   const [confirming, setConfirming] = useState(false)
   const [note, setNote] = useState('')
-  const allowedTools = integration.tools.filter((tool) => tool.policy === 'allow')
+  const [allowing, setAllowing] = useState(false)
+  const offer = changesOffer(integration)
+  // One click, the person's own: turns on the changes its server offers (never destructive ones).
+  const allowChanges = () => {
+    if (cloud && !pro) return onReview(integration)
+    if (offer?.kind === 'address') return onUpgrade(integration)
+    setAllowing(true)
+    return Meteor.callAsync('integrations.allowChanges', { integrationId: integration.integrationId })
+      .then((answer) => { setNote(`${integration.name} can make changes now. Each one waits on a card you approve.`); onChanged(answer) })
+      .catch((e) => (e?.error === 'tools_changed' ? (setNote(errorText(e)), onReview(integration)) : setNote(errorText(e))))
+      .finally(() => setAllowing(false))
+  }
   const setRule = (rule) => Meteor.callAsync('integrations.setRule', { integrationId: integration.integrationId, rule }).then(onChanged).catch((e) => setNote(errorText(e)))
   const writes = integration.tools.filter((tool) => tool.group === 'change' && tool.policy === 'allow')
   const setActing = (actWithoutAsking) => Meteor.callAsync('integrations.setActing', { integrationId: integration.integrationId, actWithoutAsking }).then(onChanged).catch((e) => setNote(errorText(e)))
   const disconnect = () => Meteor.callAsync('integrations.disconnect', { integrationId: integration.integrationId })
     .then((answer) => { setNote(''); onChanged(answer) }).catch((e) => setNote(errorText(e)))
   return (
-    <Box sx={card} data-integration-row={integration.name} data-integration-status={integration.status}>
+    <Box sx={(t) => ({ ...card(t), scrollMarginTop: 80, ...(highlight && { outline: '2px solid #2e7d32', outlineOffset: 2 }) })} data-integration-row={integration.name} data-integration-status={integration.status}
+      id={`integration-${integration.integrationId}`} tabIndex={-1}>
       <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <Hexagon color={agentColor(integration.colorIndex ?? 1)} size={26} style={{}} />
         <Box sx={{ flex: 1, minWidth: 220 }}>
@@ -138,9 +165,10 @@ function IntegrationRow({ integration, pro, cloud, onChanged, onReview, onSignIn
             {cloud && !pro && <Chip size="small" label="Pro" data-integration-pro="" />}
             {integration.signedIn && <Chip size="small" variant="outlined" label={integration.auth?.kind === 'key' ? 'Signed in with your key' : 'Signed in as you'} />}
           </Box>
-          <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.75 }}>
-            May use: {allowedTools.length ? allowedTools.map((tool) => tool.title || tool.name).join(', ') : 'nothing yet'}
-            {integration.scopes?.length ? ` · Google access: ${integration.scopes.join(', ')}` : ''}
+          <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.75 }} data-integration-tools="">
+            {toolSummary(integration)}
+            {offer?.kind === 'address' ? ' · Makes no changes at this address' : ''}
+            {integration.kind === 'google' && integration.scopes?.length ? ` · Google access: ${integration.scopes.join(', ')}` : ''}
           </Typography>
           <Typography variant="caption" color="text.secondary" component="div" data-integration-slates={integration.slateCount}>
             {integration.slateCount ? (
@@ -175,6 +203,11 @@ function IntegrationRow({ integration, pro, cloud, onChanged, onReview, onSignIn
       {note && <Typography role="status" variant="body2" sx={{ mt: 1 }}>{note}</Typography>}
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.25 }}>
         {integration.kind === 'mcp' && <Button size="small" variant={integration.status === 'paused' ? 'contained' : 'outlined'} data-integration-review-open="" onClick={() => onReview(integration)}>Review tools</Button>}
+        {offer && integration.status === 'active' && (
+          <Button size="small" variant="contained" data-integration-allow-changes={offer.kind} disabled={allowing} onClick={allowChanges}>
+            {allowing ? 'Turning on…' : `Let ${integration.name} make changes too (you approve each one)`}
+          </Button>
+        )}
         {integration.status === 'needs_sign_in' && <Button size="small" variant="contained" data-integration-sign-in="" onClick={() => onSignIn(integration)}>Sign in again</Button>}
         {!confirming && <Button size="small" color="error" data-integration-disconnect="" onClick={() => setConfirming(true)}>Disconnect</Button>}
       </Box>
@@ -199,6 +232,8 @@ IntegrationRow.propTypes = {
   onChanged: PropTypes.func.isRequired,
   onReview: PropTypes.func.isRequired,
   onSignIn: PropTypes.func.isRequired,
+  onUpgrade: PropTypes.func.isRequired,
+  highlight: PropTypes.bool,
 }
 
 export default function IntegrationsPage() {
@@ -207,6 +242,8 @@ export default function IntegrationsPage() {
   const [connecting, setConnecting] = useState(false)
   const [reconnect, setReconnect] = useState(null)
   const [reviewing, setReviewing] = useState(null)
+  const [upgrade, setUpgrade] = useState(null)
+  const [highlight, setHighlight] = useState(null)
   const { open: openPay } = usePaySheet()
   const cloud = enterpriseState(Meteor.settings).via === 'cloud'
   const live = useRef(true)
@@ -218,6 +255,18 @@ export default function IntegrationsPage() {
   const pay = (retry) => openPay({ action: 'pro', from: 'integrations', reason: 'Connect outside agents and Google once, and invite them onto any slate.', retry })
   const connect = () => (cloud && state.pro === false ? pay(() => { refresh(); setConnecting(true) }) : setConnecting(true))
   const mcp = (state.integrations || []).filter((row) => row.kind !== 'google')
+  // Its card in the gallery said ✓ Connected · Manage: close the gallery and bring its row into view.
+  const manage = (integrationId) => {
+    setConnecting(false)
+    setHighlight(integrationId)
+    setTimeout(() => {
+      const row = document.getElementById(`integration-${integrationId}`)
+      row?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      row?.focus({ preventScroll: true })
+    }, 350) // after the dialog's closing transition, which hands focus back to its button
+    setTimeout(() => live.current && setHighlight(null), 2400)
+  }
+  const startUpgrade = (row) => { setReviewing(null); setUpgrade({ address: row.writesAt, replaces: row.integrationId, name: row.name }) }
 
   return (
     <Box data-integrations-page="" sx={{ display: 'grid', gap: 2 }}>
@@ -244,10 +293,12 @@ export default function IntegrationsPage() {
       )}
       {mcp.map((integration) => (
         <IntegrationRow key={integration.integrationId} integration={integration} pro={Boolean(state.pro)} cloud={cloud} onChanged={refresh}
-          onReview={(row) => (cloud && !state.pro ? pay(refresh) : setReviewing(row))} onSignIn={(row) => setReconnect({ address: row.address, name: row.name })} />
+          onReview={(row) => (cloud && !state.pro ? pay(refresh) : setReviewing(row))} onSignIn={(row) => setReconnect({ address: row.address, name: row.name })}
+          onUpgrade={startUpgrade} highlight={highlight === integration.integrationId} />
       ))}
-      <InviteWalkthrough open={connecting || Boolean(reconnect)} reconnect={reconnect} onClose={() => { setConnecting(false); setReconnect(null); refresh() }} onConnected={refresh} />
-      {reviewing && <ReviewDialog integration={reviewing} onClose={() => setReviewing(null)} onDone={() => { setReviewing(null); refresh() }} />}
+      <InviteWalkthrough open={connecting || Boolean(reconnect) || Boolean(upgrade)} reconnect={reconnect} upgrade={upgrade} integrations={mcp} onManageIntegration={manage}
+        onClose={() => { setConnecting(false); setReconnect(null); setUpgrade(null); refresh() }} onConnected={refresh} />
+      {reviewing && <ReviewDialog integration={reviewing} onClose={() => setReviewing(null)} onDone={() => { setReviewing(null); refresh() }} onUpgrade={startUpgrade} />}
     </Box>
   )
 }

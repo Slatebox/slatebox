@@ -16,7 +16,7 @@
 import { defineAction } from '/server/actions/registry.mjs'
 import { requireAIControlAdmin } from '/server/actions/ai-control-get.mjs'
 import { guardControlWrite } from '/server/actions/ai-providers.mjs'
-import { GALLERY, NATIVE_CARDS, RETIRED } from '../common/gallery.mjs'
+import { GALLERY, NATIVE_CARDS, RETIRED, RETIRED_WORDS } from '../common/gallery.mjs'
 import { checkRecipe } from './recipes.mjs'
 import { plainText } from './tools.mjs'
 
@@ -29,7 +29,9 @@ export function liveGallery(docs = [], builtin = GALLERY, { all = false } = {}) 
   const cards = builtin.map((card, index) => {
     const doc = byId.get(card.id)
     if (!doc) return { ...card, enabled: true, order: index, edited: false }
-    const text = Object.fromEntries(Object.keys(EDITABLE).filter((key) => typeof doc[key] === 'string' && doc[key].trim()).map((key) => [key, doc[key]]))
+    // A saved word that is still a retired built-in default ("Reads only.") gives way to the card's current one.
+    const retired = (key) => (RETIRED_WORDS[card.id]?.[key] || []).includes(doc[key].trim())
+    const text = Object.fromEntries(Object.keys(EDITABLE).filter((key) => typeof doc[key] === 'string' && doc[key].trim() && !retired(key)).map((key) => [key, doc[key]]))
     return {
       ...card,
       ...text,

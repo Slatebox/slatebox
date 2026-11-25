@@ -12,7 +12,11 @@
 // `integrations`: the person's connected integrations, invited onto this slate in one step (no
 // sign-in, no consent again); a server they already connected says so and offers the same.
 // Without a shareId it is "Connect an integration" (the Integrations page): the same steps, ending
-// in integrations.connect, with when it joins slates in place of what it may see on one.
+// in integrations.connect, with when it joins slates in place of what it may see on one. There a
+// card for one of the person's integrations says ✓ Connected and offers Manage (onManageIntegration);
+// on a slate it offers Invite. No card is tinted for any other reason (a featured card is only first).
+// With `upgrade` ({ address, replaces, name }: an integration connected at its card's read-only
+// address) it signs in at the card's own address and the consent moves that integration there.
 import React, { useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
@@ -44,6 +48,7 @@ import Hexagon from '/imports/ui/components/AgentMark.jsx'
 import { enterpriseState } from '/imports/api/common/edition.mjs'
 import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
 import { GALLERY, cardFor } from '../common/gallery.mjs'
+import { cardState, connectedAction, STATUS_WORDS } from '../common/integration-words.mjs'
 import { followSignIn, openSignInWindow } from './signin'
 
 // The walkthrough's look, light and dark (the app's palette: greens on warm neutrals, sticky
@@ -127,8 +132,6 @@ function Problem({ text }) {
 }
 Problem.propTypes = { text: PropTypes.string.isRequired }
 
-// What an integration's state says, where it can't be invited now.
-const STATUS_WORDS = { paused: 'tools changed: review it on the Integrations page', needs_sign_in: 'needs sign-in', pro_ended: 'Pro ended' }
 
 const RULE_CHOICES = [
   { value: 'ask', label: 'When I invite it to a slate' },
@@ -151,14 +154,7 @@ const errorText = (error) => {
   return error?.reason || error?.message || 'That did not work. Try again.'
 }
 
-/** The gallery card's state for this person: { here } when one of their agents on this slate came from it. */
-export function cardState(item, invited = []) {
-  // A paused copy (its tools changed) is invited again to look at them, so its card stays open.
-  const here = invited.find((c) => c.galleryId === item.id && c.mine && c.status !== 'removed' && c.status !== 'paused') || null
-  return { here }
-}
-
-export default function InviteWalkthrough({ open, onClose, shareId = null, slateName, onInvited, reconnect, invited = [], onManage = null, integrations = [], onConnected = null }) {
+export default function InviteWalkthrough({ open, onClose, shareId = null, slateName, onInvited, reconnect, invited = [], onManage = null, integrations = [], onConnected = null, onManageIntegration = null, upgrade = null }) {
   const integrationMode = !shareId
   const [step, setStep] = useState('choose') // choose | discovering | signin | waiting | consent | inviting | reconnected
   const [rule, setRule] = useState('ask')
@@ -193,7 +189,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
   const live = useRef(true)
   useEffect(() => () => { live.current = false }, [])
   useEffect(() => {
-    if (open && !reconnect) Meteor.callAsync('connectors.gallery', {}).then((answer) => {
+    if (open && !reconnect && !upgrade) Meteor.callAsync('connectors.gallery', {}).then((answer) => {
       if (live.current) setGallery(Array.isArray(answer?.cards) ? { cards: answer.cards, canInvite: Boolean(answer.canInvite) } : { cards: GALLERY, canInvite: null })
     }).catch(() => { if (live.current) setGallery({ cards: GALLERY, canInvite: null }) })
     if (open && shareId && !reconnect) Meteor.callAsync('integrations.slateSetting', { shareId }).then((answer) => { if (live.current) setSetting(answer) }).catch(() => {})
@@ -203,6 +199,9 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
     } else if (reconnect?.address) {
       setAddress(reconnect.address)
       discover(reconnect.address)
+    } else if (upgrade?.address) {
+      setAddress(upgrade.address)
+      discover(upgrade.address)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -261,7 +260,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
         setStep('reconnected')
         return
       }
-      setName(result.alreadyHere?.lookAgain ? result.alreadyHere.name : result.suggestedName)
+      setName(result.alreadyHere?.lookAgain ? result.alreadyHere.name : upgrade?.name || result.suggestedName)
       setAllowed(Object.fromEntries(result.tools.map((tool) => [tool.name, tool.policy === 'allow'])))
       setStep('consent')
     } catch (e) {
@@ -322,7 +321,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
     try {
       const tools = found.tools.map(({ name: tool, hash }) => ({ name: tool, hash, policy: allowed[tool] ? 'allow' : 'off' }))
       if (integrationMode) {
-        const integration = await Meteor.callAsync('integrations.connect', { address: found.address, name, tools, rule })
+        const integration = await Meteor.callAsync('integrations.connect', { address: found.address, name, tools, ...(upgrade?.replaces ? { replaces: upgrade.replaces } : { rule }) })
         if (!live.current) return
         onConnected?.(integration)
         onClose()
@@ -377,13 +376,18 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
         </Box>
         <Box sx={{ minWidth: 0 }}>
           <DialogTitle id="invite-agent-title" sx={{ p: 0, fontSize: { xs: 17, sm: 19 }, fontWeight: 750, lineHeight: 1.3, letterSpacing: '-0.01em' }}>
-            {integrationMode ? 'Connect an integration' : `Invite an agent to “${slateName || 'this slate'}”`}
+            {upgrade ? `Let ${upgrade.name} make changes too` : integrationMode ? 'Connect an integration' : `Invite an agent to “${slateName || 'this slate'}”`}
           </DialogTitle>
           {subtitle && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, overflowWrap: 'anywhere' }} data-invite-subtitle="">{subtitle}</Typography>}
         </Box>
       </Box>
       <DialogContent sx={{ px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 2.5 }, borderTop: 'none' }}>
-        {step === 'choose' && (
+        {step === 'choose' && upgrade && (
+          <Box sx={{ display: 'grid', gap: 1.5 }} data-invite-upgrade-problem="">
+            {error ? <Problem text={error} /> : <Typography variant="body2">Close this and try again from the Integrations page.</Typography>}
+          </Box>
+        )}
+        {step === 'choose' && !upgrade && (
           <Box sx={{ display: 'grid', gap: 2 }}>
             <Typography variant="body2" sx={{ fontSize: 15, lineHeight: 1.55 }}>
               {integrationMode
@@ -443,24 +447,32 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fill, minmax(200px, 1fr))' }, gap: 1.5 }}>
               {!gallery.cards && <Box data-gallery-loading="" sx={{ gridColumn: '1 / -1' }}><LinearProgress aria-label="Loading the gallery" /></Box>}
               {(gallery.cards || []).map((item) => {
-                const { here } = cardState(item, invited)
+                const state = cardState(item, invited, integrations)
+                const next = connectedAction(state, integrationMode)
+                const go = () => {
+                  if (next?.act === 'manage-agent') return onManage?.(state.here.agentId)
+                  if (next?.act === 'manage-integration') return onManageIntegration?.(state.linked.integrationId)
+                  if (next?.act === 'invite') return inviteIntegration(state.linked)
+                  setAddress(item.url)
+                  return discover(item.url)
+                }
                 return (
-                  <Box key={item.id} component="button" type="button" data-gallery-card={item.id} data-gallery-here={here ? '' : undefined}
-                    aria-label={here ? `${item.name}: on this slate. Manage it.` : undefined}
-                    onClick={() => (here ? onManage?.(here.agentId) : (setAddress(item.url), discover(item.url)))} onPointerEnter={here ? undefined : prefetch}
+                  <Box key={item.id} component="button" type="button" data-gallery-card={item.id} data-gallery-here={state.here ? '' : undefined} data-gallery-connected={next ? '' : undefined}
+                    aria-label={next ? `${item.name}: ${next.words.replace('✓ ', '').replace(' · ', '. ')}` : undefined}
+                    onClick={go} onPointerEnter={next ? undefined : prefetch}
                     sx={(t) => ({
+                      // Every card has the same surface; only a connected one has a green edge and its ✓ line.
+                      // Hover lifts any card; keyboard focus is an outline outside the edge, never green.
                       ...surface(t), textAlign: 'left', p: 1.75, cursor: 'pointer', font: 'inherit', color: 'inherit', display: 'flex', flexDirection: 'column', gap: 0.75,
                       transition: 'transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease',
-                      ...(item.featured && { bgcolor: '#f3f8ee', borderColor: '#b9d2b0' }),
-                      ...(here && { borderColor: '#2e7d32' }),
-                      '&:hover': { borderColor: '#7fa78a', boxShadow: '0 2px 4px rgba(32,61,50,0.08), 0 10px 24px rgba(32,61,50,0.10)', transform: 'translateY(-1px)' },
-                      '&:focus-visible': { outline: '2px solid #254b3b', outlineOffset: 2 },
+                      ...(next && { borderColor: '#2e7d32', boxShadow: 'inset 0 0 0 1px #2e7d32' }),
+                      '&:hover': { borderColor: next ? '#2e7d32' : '#7fa78a', boxShadow: `${next ? 'inset 0 0 0 1px #2e7d32, ' : ''}0 2px 4px rgba(32,61,50,0.08), 0 10px 24px rgba(32,61,50,0.10)`, transform: 'translateY(-1px)' },
+                      '&:focus-visible': { outline: '3px solid #254b3b', outlineOffset: 3 },
                       '@media (prefers-reduced-motion: reduce)': { transition: 'none', '&:hover': { transform: 'none' } },
                       ...t.applyStyles('dark', {
-                        ...(item.featured && { bgcolor: '#26402f', borderColor: '#4f6e59' }),
-                        ...(here && { borderColor: '#81c784' }),
-                        '&:hover': { borderColor: '#8fb39a', boxShadow: '0 10px 26px rgba(0,0,0,0.35)', transform: 'translateY(-1px)' },
-                        '&:focus-visible': { outline: '2px solid #f2ce8b', outlineOffset: 2 },
+                        ...(next && { borderColor: '#81c784', boxShadow: 'inset 0 0 0 1px #81c784' }),
+                        '&:hover': { borderColor: next ? '#81c784' : '#8fb39a', boxShadow: `${next ? 'inset 0 0 0 1px #81c784, ' : ''}0 10px 26px rgba(0,0,0,0.35)`, transform: 'translateY(-1px)' },
+                        '&:focus-visible': { outline: '3px solid #f2ce8b', outlineOffset: 3 },
                       }),
                     })}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
@@ -472,7 +484,12 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                         <Typography variant="caption" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>{item.job} · {cardCost(item)}</Typography>
                       </Box>
                     </Box>
-                    {here && <Typography variant="caption" component="div" data-gallery-on-slate="" sx={(t) => ({ color: '#1b5e20', fontWeight: 650, ...t.applyStyles('dark', { color: '#a5d6a7' }) })}>✓ On this slate · Manage</Typography>}
+                    {next && (
+                      <Typography variant="caption" component="div" data-gallery-on-slate={state.here ? '' : undefined} data-gallery-connected-words=""
+                        sx={(t) => ({ alignSelf: 'flex-start', px: 1, py: 0.25, borderRadius: 999, bgcolor: '#e3f0e1', color: '#1b5e20', fontWeight: 700, ...t.applyStyles('dark', { bgcolor: 'rgba(129,199,132,0.16)', color: '#a5d6a7' }) })}>
+                        {next.words}
+                      </Typography>
+                    )}
                     <Typography variant="body2" sx={{ lineHeight: 1.45 }}>{item.lands}</Typography>
                     {cloud && gallery.canInvite === false && <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 'auto', pt: 0.25 }}>Needs Slatebox Pro or Business</Typography>}
                   </Box>
@@ -549,6 +566,11 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
         {(step === 'consent' || step === 'inviting') && found && (
           <Box data-invite-consent="" sx={{ display: 'grid', gap: 1.5 }}>
             {found.alreadyHere?.lookAgain && <Box sx={section} data-invite-look-again=""><Typography variant="body2">{found.alreadyHere.text}</Typography></Box>}
+            {upgrade && (
+              <Callout kind="info" data-invite-upgrade="">
+                <Box component="span" sx={{ display: 'block' }}>{upgrade.name} moves to {found.host}&apos;s full address, where it can make changes. Its name, its slates and when it joins them stay as they are; its read-only sign-in is removed. Each change still waits on a card you approve.</Box>
+              </Callout>
+            )}
             <Box sx={success}>
               <Found>Reached <b>{found.host}</b>{found.serverName ? ` · it calls itself “${found.serverName}” (self-reported)` : ''}</Found>
               <Found>{found.signedIn ? `Signed in${found.signedIn.kind === 'key' ? ' with your key' : ''}: it acts as you on ${found.host}, and only you can ask it` : 'No sign-in: anyone with this address can use this server'}</Found>
@@ -609,7 +631,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
               <Typography variant="body2" sx={{ lineHeight: 1.5 }}><b>Suggest:</b> its work arrives as ghost notes anyone who can edit may keep or discard.</Typography>
               {changes.length > 0 && <Typography variant="body2" sx={{ lineHeight: 1.5, mt: 0.5 }}><b>Ask before changing things elsewhere:</b> each change waits on a card for you. You can let it act without asking later, on its chip.</Typography>}
             </Box>
-            {integrationMode && (
+            {integrationMode && !upgrade && (
               <Box sx={section} data-invite-rule="">
                 <Typography component="div" sx={heading} id="invite-rule-label">It joins slates</Typography>
                 <RadioGroup value={rule} onChange={(e) => setRule(e.target.value)} aria-labelledby="invite-rule-label" sx={{ display: 'grid', gap: 1 }}>
@@ -662,14 +684,14 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
       })}>
         {step === 'consent' || step === 'inviting' ? (
           <>
-            <Button onClick={() => { setStep('choose'); setError('') }}>Back</Button>
+            <Button onClick={() => (upgrade ? onClose() : (setStep('choose'), setError('')))}>{upgrade ? 'Cancel' : 'Back'}</Button>
             <Button variant="contained" data-invite-go="" disabled={step === 'inviting' || !name.trim() || !chosen.length} onClick={invite} sx={{ px: 3, py: 1, flex: { xs: 1, sm: 'none' } }}>
-              {step === 'inviting' ? (integrationMode ? 'Connecting…' : 'Inviting…') : `${integrationMode ? 'Connect' : 'Invite'} ${name || 'agent'} ⬡`}
+              {step === 'inviting' ? (integrationMode ? 'Connecting…' : 'Inviting…') : upgrade ? `Save ${name || 'agent'} ⬡` : `${integrationMode ? 'Connect' : 'Invite'} ${name || 'agent'} ⬡`}
             </Button>
           </>
         ) : step === 'signin' || step === 'waiting' ? (
           <>
-            {!reconnect && <Button onClick={() => { pending.current?.cancel(); setStep('choose'); setError('') }}>Back</Button>}
+            {!reconnect && !upgrade && <Button onClick={() => { pending.current?.cancel(); setStep('choose'); setError('') }}>Back</Button>}
             <Button onClick={() => { pending.current?.cancel(); onClose() }}>{step === 'waiting' ? 'Cancel' : 'Close'}</Button>
           </>
         ) : (
@@ -689,6 +711,8 @@ InviteWalkthrough.propTypes = {
   reconnect: PropTypes.shape({ connectionId: PropTypes.string, address: PropTypes.string, name: PropTypes.string }),
   invited: PropTypes.arrayOf(PropTypes.shape({ agentId: PropTypes.string, name: PropTypes.string, galleryId: PropTypes.string, mine: PropTypes.bool, status: PropTypes.string })),
   onManage: PropTypes.func,
-  integrations: PropTypes.arrayOf(PropTypes.shape({ integrationId: PropTypes.string, name: PropTypes.string, host: PropTypes.string, status: PropTypes.string })),
+  integrations: PropTypes.arrayOf(PropTypes.shape({ integrationId: PropTypes.string, name: PropTypes.string, host: PropTypes.string, status: PropTypes.string, galleryId: PropTypes.string, kind: PropTypes.string })),
   onConnected: PropTypes.func,
+  onManageIntegration: PropTypes.func,
+  upgrade: PropTypes.shape({ address: PropTypes.string, replaces: PropTypes.string, name: PropTypes.string }),
 }

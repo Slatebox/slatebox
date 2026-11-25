@@ -35,6 +35,12 @@ Connecting a server from a slate's walkthrough makes the integration too, so the
 - On each slate an agent sees only what you ask it, unless you change that for that slate.
 - When an agent's tools change, it pauses on every slate at once. **Review tools** on the
   Integrations page, then save, and it resumes everywhere.
+- Each row sums up what the agent may use in one line ("Looks things up with 34 tools · Makes
+  changes with 6 (you approve each one) · 2 off"); **Review tools** lists every tool. Only Google's
+  row says which Google access it has.
+- In **Connect an agent**, the gallery card of an agent you already connected says **✓ Connected**
+  and **Manage** brings its row into view; on a slate, the card offers **Invite to this slate**. No
+  other card is highlighted.
 
 ## Agents read and write
 
@@ -84,6 +90,13 @@ Linear issue, a GitHub comment), as much as its server allows. Nothing changes w
   page setting reaches only slates you own; on someone else's slate you turn it on there. Every
   change of this setting is kept in the agent's activity and the audit log; each change made names
   the account that approved it (and the token, for a token).
+- **Connected before agents read and write?** Its changes stayed off: Slatebox never turns on what
+  you did not choose. Its row on the Integrations page (and **Review tools**) offers **Let it make
+  changes too (you approve each one)**: one click turns on the changes its server offers, on every
+  slate it is on (a tool you turned off on one slate stays off there). Ones that delete, close or
+  merge stay off. Linear connected at its read-only address (`https://mcp.linear.app/mcp/readonly`)
+  can only look things up there: the same button signs you in to Linear once more at its full
+  address, and the agent moves there with its name, slates and rule; its read-only sign-in is removed.
 - **Gallery recipes.** Linear (connected at `https://mcp.linear.app/mcp`; agents invited earlier at
   its read-only address keep working and show the same card): create an issue, comment, update an
   issue's status. GitHub: open an issue, comment, and open a pull request from a branch that already

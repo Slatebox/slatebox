@@ -52,7 +52,7 @@
 // to edit the slate.
 import { createHash, randomBytes } from 'node:crypto'
 import { sameAgentName } from '/imports/api/common/agent-mention.mjs'
-import { canonicalAddress, cardFor, DEAD_HOSTS, GALLERY, lookalikeHost } from '../common/gallery.mjs'
+import { canonicalAddress, cardFor, DEAD_HOSTS, GALLERY, lookalikeHost, writesAddress } from '../common/gallery.mjs'
 import { checkMcpUrl, McpFetchRefused } from './mcp-fetch.mjs'
 import { SignInNeeded } from './credentials.mjs'
 import { SignInProblem } from './oauth.mjs'
@@ -143,6 +143,9 @@ export function publicIntegration(doc, { slates = [], cards = GALLERY, pro = tru
     ...(doc.auth && { auth: { kind: doc.auth.kind } }),
     scopes: Array.isArray(doc.scopes) ? doc.scopes.slice(0, 24) : [],
     tools: (doc.tools || []).map(({ name, title, group, policy, destructive }) => ({ name, title, group, policy, ...(destructive && { destructive: true }) })),
+    // Connected at a card's read-only address (Linear's, before agents read and write): the card's
+    // own address, where it can make changes (one more sign-in there: integrations.connect replaces).
+    writesAt: (doc.kind || 'mcp') === 'mcp' ? writesAddress(doc.address, cards) : null,
     actWithoutAsking: doc.actWithoutAsking === true,
     ...(doc.changed?.length && { changed: doc.changed.map((c) => c.name) }),
     colorIndex: doc.colorIndex ?? 1,
@@ -603,12 +606,15 @@ export function createConnectorService({
 
   // One consent again resumes every slate the integration is on, with the tools just consented to. A
   // tool someone turned off on one slate stays off there: a new consent never switches it back on.
-  async function resumeEverywhere(integration, tools) {
+  // turnOn: tools the person just turned on for the integration itself ("let it make changes too"),
+  // on every slate it is on, so a copy that was off only because the integration was follows them.
+  // move: { address, host, auth } when the integration moved to its card's own address.
+  async function resumeEverywhere(integration, tools, { turnOn = new Set(), agents = null, move = null } = {}) {
     const at = new Date(now())
-    for (const other of await agentsOf(integration)) {
-      const offHere = new Set((other.tools || []).filter((tool) => tool.policy === 'off').map((tool) => tool.name))
+    for (const other of agents || (await agentsOf(integration))) {
+      const offHere = new Set((other.tools || []).filter((tool) => tool.policy === 'off' && !turnOn.has(tool.name)).map((tool) => tool.name))
       const kept = tools.map((tool) => (offHere.has(tool.name) && tool.policy === 'allow' ? { ...tool, policy: 'off' } : tool))
-      const set = { tools: kept, changed: null, integrationId: integration._id, updatedAt: at, ...((other.status === 'paused' || other.status === 'needs_sign_in') && { status: 'active' }) }
+      const set = { tools: kept, changed: null, integrationId: integration._id, updatedAt: at, ...move, ...((other.status === 'paused' || other.status === 'needs_sign_in') && { status: 'active' }) }
       await connections.update(other._id, set)
     }
   }
@@ -1606,13 +1612,14 @@ export function createConnectorService({
     return oneAtATime(principal, () => integrationConnectNow(principal, input))
   }
 
-  async function integrationConnectNow(principal, { address: raw, name: rawName, tools: chosen = [], rule = null }) {
+  async function integrationConnectNow(principal, { address: raw, name: rawName, tools: chosen = [], rule = null, replaces = null }) {
     await requirePerson(principal)
     await requirePro(principal.userId, INTEGRATIONS_PRO)
     const { address, host } = checkAddress(raw)
     const name = slateName(rawName, sanitizeName)
     if (!name) refuse(400, 'bad_name', 'Choose another name. Names can\'t say Slatebox, admin, support or a person\'s name.')
     if (rule !== null && !RULES.includes(rule)) refuse(400, 'invalid_request', 'Choose when it joins: when you invite it, or on every slate you own.')
+    if (replaces) return replaceAddress(principal, { replaces, address, host, name, chosen, rule })
     const reached = await discoverAs(principal.userId, address)
     if (reached.needsSignIn) refuse(401, 'needs_sign_in', `Sign in to ${host} first.`)
     const stored = consented(name, await toolsFrom(address, reached.found.tools), chosen)
@@ -1627,6 +1634,71 @@ export function createConnectorService({
     if (existing) await resumeEverywhere(doc, stored)
     audit({ kind: existing ? 'integration_reconsent' : 'integration_connected', userId: principal.userId, host, integrationId: doc._id })
     return publicIntegration(doc, { cards: await gallery() })
+  }
+
+  /**
+   * "Let it make changes too" for an agent connected at its card's read-only address: the person
+   * signed in at the card's own address and consented to its tools there (hashes they saw), and the
+   * integration moves to it in place. Its name, colour, rule and slates stay; each slate's copy moves
+   * with it (a tool turned off on one slate stays off there); the read-only sign-in is removed.
+   */
+  async function replaceAddress(principal, { replaces, address, host, name, chosen, rule }) {
+    const old = await ownIntegration(principal, replaces)
+    const cards = await gallery()
+    if ((old.kind || 'mcp') !== 'mcp' || canonicalAddress(writesAddress(old.address, cards)) !== address)
+      refuse(400, 'invalid_request', `That is not where ${old.name} makes changes.`)
+    if (await integrations.findOne({ ownerId: principal.userId, address }))
+      refuse(409, 'already_connected', `You already connected ${host} as another integration. Disconnect one of them first.`)
+    const reached = await discoverAs(principal.userId, address)
+    if (reached.needsSignIn) refuse(401, 'needs_sign_in', `Sign in to ${host} first.`)
+    const stored = consented(name, await toolsFrom(address, reached.found.tools), chosen)
+    const described = reached.token ? await vault.describe(principal.userId, address) : null
+    const auth = described ? { kind: described.kind, issuer: described.issuer } : null
+    // The slates it is on, found by its old address before it moves.
+    const agents = await agentsOf(old)
+    const allowedBefore = new Set((old.tools || []).filter((tool) => tool.policy === 'allow').map((tool) => tool.name))
+    const set = {
+      address, host, name, tools: stored, auth, scopes: described?.scopes || [], status: 'active', changed: null,
+      galleryId: cardFor(address, cards)?.id || old.galleryId || null, serverName: plainText(reached.found.serverInfo?.name || '', 60),
+      ...(rule && { rule }), movedFrom: old.address, updatedAt: new Date(now()),
+    }
+    await integrations.update(old._id, set)
+    const doc = Object.assign(old, set)
+    // On each slate: a tool the person turned off there (while the integration allowed it) stays off.
+    const turnOn = new Set(stored.filter((tool) => !allowedBefore.has(tool.name)).map((tool) => tool.name))
+    await resumeEverywhere(doc, stored, { turnOn, agents, move: { address, host, auth } })
+    const signedOut = vault ? (await vault.remove(principal.userId, set.movedFrom).catch(() => ({ removed: false }))).removed : false
+    audit({ kind: 'integration_moved', userId: principal.userId, host, integrationId: doc._id, from: set.movedFrom, slates: agents.length, signedOut })
+    return publicIntegration(doc, { cards })
+  }
+
+  /**
+   * "Let it make changes too": turns on the changes its server offers that the person's consent has
+   * off (an integration connected before agents read and write kept them off). Destructive ones stay
+   * off. Only what the person consented to before, at the same hashes: a tool that changed since asks
+   * for Review tools first. Every slate it is on follows.
+   */
+  async function integrationAllowChanges(principal, { integrationId }) {
+    return oneAtATime(principal, async () => {
+      const doc = await ownIntegration(principal, integrationId)
+      await requirePro(principal.userId, INTEGRATIONS_PRO)
+      if ((doc.kind || 'mcp') !== 'mcp') refuse(400, 'invalid_request', `${doc.name} has fixed tools.`)
+      const cards = await gallery()
+      if (writesAddress(doc.address, cards)) refuse(409, 'sign_in_at_full_address', `${doc.name} makes changes at its full address. Sign in there once more to let it.`, { address: writesAddress(doc.address, cards) })
+      const reached = await discoverAs(principal.userId, doc.address)
+      if (reached.needsSignIn) refuse(401, 'needs_sign_in', `${doc.name} needs you to sign in again first.`)
+      const listed = new Map((await toolsFrom(doc.address, reached.found.tools)).map((tool) => [tool.name, tool]))
+      if ((doc.tools || []).some((tool) => listed.has(tool.name) && listed.get(tool.name).hash !== tool.hash))
+        refuse(409, 'tools_changed', `${doc.name}'s tools changed since you allowed them. Review its tools first.`)
+      const turnOn = new Set((doc.tools || []).filter((tool) => tool.policy === 'off' && listed.get(tool.name)?.group === 'change' && !listed.get(tool.name)?.destructive).map((tool) => tool.name))
+      if (!turnOn.size) refuse(400, 'nothing_to_turn_on', `${doc.name} has no changes to turn on. Its server may offer only lookups.`)
+      const tools = doc.tools.map((tool) => (turnOn.has(tool.name) ? { ...tool, policy: 'allow' } : tool))
+      await integrations.update(doc._id, { tools, updatedAt: new Date(now()) })
+      doc.tools = tools
+      await resumeEverywhere(doc, tools, { turnOn })
+      audit({ kind: 'integration_allow_changes', userId: principal.userId, host: doc.host, integrationId: doc._id, turnedOn: [...turnOn] })
+      return { ...publicIntegration(doc, { cards }), turnedOn: [...turnOn] }
+    })
   }
 
   /** Review an integration's tools as its server lists them now: what changed since consent. */
@@ -1841,6 +1913,7 @@ export function createConnectorService({
     integrationsList,
     integrationConnect,
     integrationReview,
+    integrationAllowChanges,
     integrationSetRule,
     integrationDisconnect,
     integrationInvite,

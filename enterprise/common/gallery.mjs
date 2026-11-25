@@ -2,7 +2,8 @@
 // Not MIT: see enterprise/README.md.
 //
 // The curated gallery of outside agents (first-party servers only, no gateways). The cards say
-// what lands on the slate, never how many tools a server has. `featured` cards come first.
+// what lands on the slate, never how many tools a server has. `featured` cards come first (in order
+// only: a featured card looks like every other card, so a tint never reads as "connected").
 // signIn: 'oauth' cards need the person to sign in to the vendor (a popup on the vendor's own
 // page); keyHint says what they may paste instead. Agents read and write (owner, 2026-11-24): Linear
 // is listed by its full address (its read-only one, where earlier agents were invited, is an alias
@@ -56,7 +57,7 @@ export const GALLERY = Object.freeze([
     name: 'GitHub',
     url: 'https://api.githubcopilot.com/mcp/',
     job: 'Code and issues',
-    lands: 'Adds your commits, pull requests and issues as linked notes, one per item.',
+    lands: 'Adds your commits, pull requests and issues as linked notes, and opens issues, comments and pull requests you approve.',
     try: 'My PRs to review',
     featured: true,
     signIn: 'oauth',
@@ -189,6 +190,25 @@ export const NATIVE_CARDS = Object.freeze([
     recipe: { rounds: 1, calls: 2, intents: [] },
   },
 ])
+
+// Card words the built-in cards said before agents read and write (owner, 2026-11-24). A saved edit
+// that is still one of these is the old default, not an administrator's choice: the card's current
+// words are served instead (enterprise/server/gallery-admin.mjs liveGallery).
+export const RETIRED_WORDS = Object.freeze({
+  linear: Object.freeze({ lands: Object.freeze(['Brings your team\'s issues and cycles onto the slate as linked notes. Reads only.']) }),
+  github: Object.freeze({ lands: Object.freeze(['Adds your commits, pull requests and issues as linked notes, one per item.']) }),
+})
+
+/**
+ * Where an agent connected at a card's other address makes changes: the card's own address, when
+ * the stored one is an alias (Linear's read-only address). null when it is the card's address already.
+ */
+export function writesAddress(address, cards = GALLERY) {
+  const card = cardFor(address, cards)
+  const canonical = canonicalAddress(address)
+  if (!card || !canonical || canonicalAddress(card.url) === canonical) return null
+  return card.recipe?.writes?.length ? card.url : null
+}
 
 // Listed once, no longer in the gallery: an invited copy keeps working (any MCP address does), it
 // is just not offered. Shown in /admin/ai › Gallery so an administrator sees why.
