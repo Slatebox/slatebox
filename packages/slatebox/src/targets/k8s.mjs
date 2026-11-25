@@ -12,6 +12,7 @@ import { installDir, recordText, writeRecord } from '../record.mjs'
 import { MANAGER, names, renderK8s, renderSecret } from '../render/k8s.mjs'
 import { settingsFor } from '../render/settings.mjs'
 import { secretValues } from '../secret-values.mjs'
+import { firstAdmin, makeSetupLink, setupState } from '../setup-link.mjs'
 import { checkTeamAddress, ensureTeamAddress, TUNNEL_TOKEN } from './address.mjs'
 import { stringifyAll } from '../yaml.mjs'
 
@@ -299,7 +300,9 @@ export async function applyK8s(ctx, answers, { record, planOnly = false, imageRe
   }
   if (result.warning) out.step('route', 'warn', result.warning)
   out.step('start', 'ok', `Slatebox is ready${answers.k8s.route === 'none' ? ' (port-forward to reach it)' : ` at ${answers.address.url}`}`)
-  if (!previous) {
+  // The first admin comes from the image's one-time setup link; an image without one keeps the old advice.
+  const linked = await firstAdmin(ctx, args => k(['exec', '-n', answers.k8s.namespace, n.pod, '-c', 'slatebox', '--', SLATEBOX, ...args]))
+  if (!linked && !previous) {
     out.say(`\n${answers.adminEmail ? `Open ${answers.address.url} and create the first account with ${answers.adminEmail}.` : `Open ${answers.address.url} and create the first account.`}`)
   }
   nextRecord.lastHealthy = new Date().toISOString()
@@ -340,12 +343,14 @@ export async function statusK8s(ctx, record) {
   const ready = info?.status?.containerStatuses?.find(item => item.name === 'slatebox')?.ready
   const version = ready ? await k(['exec', '-n', record.k8s.namespace, n.pod, '-c', 'slatebox', '--', SLATEBOX, 'version']) : null
   const backups = ready && record.backups.to !== 'off' ? await k(['exec', '-n', record.k8s.namespace, n.pod, '-c', 'backups', '--', 'sh', '-c', 'ls -1t /backups | head -1']) : null
+  const setup = ready ? await setupState(args => k(['exec', '-n', record.k8s.namespace, n.pod, '-c', 'slatebox', '--', SLATEBOX, ...args])) : null
   return {
     name: record.name, target: 'k8s', where: `context ${record.k8s.context}, namespace ${record.k8s.namespace}`, address: record.address.url,
     running: Boolean(info), health: ready ? 'healthy' : info ? info.status.phase : 'missing',
     version: version?.code === 0 ? JSON.parse(version.stdout) : null, imageDigest: record.imageDigest,
     ai: record.ai.mode === 'none' ? 'off' : record.ai.providers.map(provider => provider.id).join(', '),
     sso: record.sso.enabled ? 'on' : 'off', lastBackup: backups?.stdout.trim() || null,
+    setup: setup ? (setup.setUp ? 'done' : 'waiting for the first admin') : null,
   }
 }
 
@@ -385,6 +390,12 @@ export async function uninstallK8s(ctx, record, { deleteData }) {
 export function execNodeK8s(ctx, record, script, args = []) {
   const k = kube(ctx, record.k8s.context)
   return k(['exec', '-i', '-n', record.k8s.namespace, names(record).pod, '-c', 'slatebox', '--', 'node', '--input-type=module', '-', ...args], { input: script, timeout: 120_000 })
+}
+
+/** A fresh one-time setup link from the install's pod (setup-link.mjs makeSetupLink). */
+export function setupLinkK8s(ctx, record) {
+  const k = kube(ctx, record.k8s.context)
+  return makeSetupLink(ctx, args => k(['exec', '-n', record.k8s.namespace, names(record).pod, '-c', 'slatebox', '--', SLATEBOX, ...args]))
 }
 
 export async function readSecretK8s(ctx, record, name) {

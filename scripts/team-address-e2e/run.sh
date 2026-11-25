@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The one REAL team-address run (spec 11.4), for what the CLI and the container can show:
 # claim e2e-<random>.slatebox.team through a local claim service, install the locally built
-# image with the CLI from this checkout, check HTTPS through Cloudflare, the tunnel, a restart,
+# image with the CLI from this checkout, check HTTPS through Cloudflare, the tunnel, the first admin
+# through the one-time setup link, a restart,
 # token rotation (and that the old token can no longer connect), a rename, and an uninstall that
 # releases the name; then confirm through Cloudflare's API that nothing is left. The cleanup
 # runs from a trap whatever happens.
@@ -73,6 +74,18 @@ status_out=$("${cli[@]}" status --name "$INSTALL" || true)
 echo "$status_out"
 check grep -qE "Team address +https://$NAME\.slatebox\.team \(active, [1-9]" <<<"$status_out"
 
+say "2b. the first admin: nobody can sign up before the one-time setup link is used"
+check bash -c "curl -fsS 'https://$NAME.slatebox.team/' | grep -q \"This Slatebox isn't set up yet\""
+setup_url=$("${cli[@]}" setup-link --name "$INSTALL" --force-stdout)
+check grep -qE "^https://$NAME\.slatebox\.team/setup/[A-Za-z0-9_-]{43}$" <<<"$setup_url"
+check bash -c "curl -fsS '$setup_url' | grep -q 'Create the admin account'"
+admin_password=$(openssl rand -hex 16)
+check bash -c "curl -fsS --data-urlencode firstName=E2E --data-urlencode email=e2e-admin@example.test --data-urlencode password=$admin_password --data-urlencode team=E2E '$setup_url' | grep -q 'Slatebox is set up'"
+check bash -c "curl -sS --data-urlencode firstName=Again --data-urlencode email=again@example.test --data-urlencode password=$admin_password --data-urlencode team=Again '$setup_url' | grep -q 'already set up'"
+check bash -c "curl -fsS 'https://$NAME.slatebox.team/' | grep -q __meteor_runtime_config__"
+setup_token=${setup_url##*/}
+unset admin_password setup_url
+
 say "3. live editing: the relay answers through the tunnel at wss://$NAME.slatebox.team/live"
 nonce=$(openssl rand -base64 16)   # a WebSocket handshake nonce, not a secret
 check bash -c "curl -s --max-time 10 -o /dev/null -w '%{http_code}' -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H \"Sec-WebSocket-Key: $nonce\" 'https://$NAME.slatebox.team/live/slatebox-e2e' | grep -qE '^(101|401|403)$'"
@@ -100,10 +113,10 @@ check test "$registered" = 0
 say "6. logs carry no token or credential (counts only)"
 cred=$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).installCredential)' "$SLATEBOX_INSTALL_HOME/installs/$INSTALL/credentials.json")
 tok=$(secret SLATEBOX_TUNNEL_TOKEN)
-hits=$(docker logs "$INSTALL" 2>&1 | grep -cF -e "$tok" -e "$cred" || true)
-cli_hits=$("${cli[@]}" logs --name "$INSTALL" | grep -cF -e "$tok" -e "$cred" || true)
-unset cred tok
-echo "   container log lines with the token or credential: $hits; slatebox logs: $cli_hits"
+hits=$(docker logs "$INSTALL" 2>&1 | grep -cF -e "$tok" -e "$cred" -e "$setup_token" || true)
+cli_hits=$("${cli[@]}" logs --name "$INSTALL" | grep -cF -e "$tok" -e "$cred" -e "$setup_token" || true)
+unset cred tok setup_token
+echo "   container log lines with the token, credential or setup link: $hits; slatebox logs: $cli_hits"
 check test "$hits" = 0 -a "$cli_hits" = 0
 
 say "7. rename to $RENAMED.slatebox.team; the old name stops answering"

@@ -6,6 +6,7 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { EXIT, InstallError } from '../errors.mjs'
+import { firstAdmin, makeSetupLink, setupState } from '../setup-link.mjs'
 import { checkArch, checkCpu, DEFAULT_IMAGE, FALLBACK_CAPABILITIES, inspectImage, normalArch, pinImage, probeImage, refreshTag, resolveImage } from '../image.mjs'
 import { emptyPlan } from '../plan.mjs'
 import { installDir, recordText, writeRecord } from '../record.mjs'
@@ -517,7 +518,10 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
   if (result.warning) out.step('health', 'warn', result.warning)
   out.step('start', 'ok', answers.address.team ? `Slatebox is healthy on ${host.where}` : `Slatebox is healthy at ${answers.address.url}`)
 
-  if (fresh) await firstAccount(ctx, host, answers, caps)
+  // The first admin comes from the image's one-time setup link; an image without one keeps the old advice.
+  const inImage = args => host.docker(['exec', answers.name, SLATEBOX, ...args])
+  const linked = caps.commands.includes('setup-link') && await firstAdmin(ctx, inImage)
+  if (!linked && fresh) await firstAccount(ctx, host, answers, caps)
   if (scriptText || previous[BACKUP_SCRIPT]) {
     try {
       const how = await scheduleBackups(ctx, host, answers, facts)
@@ -563,8 +567,6 @@ async function rollback(ctx, host, answers, { fresh, previous, preUpgrade, why }
 }
 
 async function firstAccount(ctx, host, answers, caps) {
-  // With a team address the closing text says it, with why it matters on a public address.
-  if (!answers.adminEmail && answers.address.team) return
   if (!answers.adminEmail) {
     ctx.out.say(`\nOpen ${answers.address.url} and create the first account.`)
     return
@@ -653,6 +655,7 @@ export async function statusDocker(ctx, record) {
       lastBackup = existsSync(dir) ? readdirSync(dir).filter(file => /^slatebox-\d{8}-\d{6}\.gz$/.test(file)).sort().pop() || null : null
     }
     const tunnel = record.address?.team && state?.Running ? await tunnelState(host, record.name) : null
+    const setup = state?.Running ? await setupState(args => host.docker(['exec', record.name, SLATEBOX, ...args])) : null
     const age = backupLate(record, lastBackup)
     if (age?.late) ctx.out.warn(`The last backup is ${age.ageHours} hours old, older than the schedule "${record.backups.schedule}" allows. See ${join(host.dir, 'backup.log')}${host.kind === 'ssh' ? ` on ${host.where}` : ''}.`)
     return {
@@ -663,6 +666,7 @@ export async function statusDocker(ctx, record) {
       sso: record.sso.enabled ? (record.sso.only ? 'on (only)' : 'on') : 'off',
       lastBackup, backupLate: age ? age.late : null,
       ...(record.address?.team ? { tunnel } : {}),
+      setup: setup ? (setup.setUp ? 'done' : 'waiting for the first admin') : null,
     }
   } finally {
     await host.close?.()
@@ -779,6 +783,11 @@ export function logsDocker(ctx, record, { follow = false, service, since } = {})
 /** Run a script inside the container with node, the script on standard input (never in the arguments). */
 export function execNode(ctx, record, script, args = []) {
   return withHost(ctx, record, host => host.docker(['exec', '-i', record.name, 'node', '--input-type=module', '-', ...args], { input: script, timeout: 120_000 }))
+}
+
+/** A fresh one-time setup link from the install's container (setup-link.mjs makeSetupLink). */
+export function setupLinkDocker(ctx, record) {
+  return withHost(ctx, record, host => makeSetupLink(ctx, args => host.docker(['exec', record.name, SLATEBOX, ...args])))
 }
 
 export function readSecretDocker(ctx, record, name) {

@@ -87,12 +87,16 @@ test('happy path: sign in, claim, 0600 credential and token, URL and HTTPS off, 
   assert.ok(result.events.some(event => event.event === 'step' && event.id === 'tunnel' && /4 connections/.test(event.detail)))
 })
 
-test('the closing text names the address and says to make the first account now', async () => {
-  const { run } = setup()
+test('the closing text names the address and how the first admin gets in: the one-time setup link, nobody signs up before it', async () => {
+  const { run, docker } = setup({ docker: { commands: ['tunnel', 'setup-link'] } })
   const result = await run(['install', '--team-address', 'acme', ...BASE, '--yes'])
   assert.equal(result.code, 0, result.stderr)
   assert.match(result.stdout, /Slatebox is running at {2}https:\/\/acme\.slatebox\.team/)
-  assert.match(result.stdout, /Create the first account now/)
+  // Not at a terminal: no link is made or printed; the closing says how to get one at a terminal.
+  assert.match(result.stdout, /Nobody can sign up until the first admin exists\. Get the one-time setup link at a terminal:\n {2}slatebox setup-link\n/)
+  assert.deepEqual(docker.setupLinks, [])
+  // The stopgap "sign up before anyone else does" advice is gone: nobody else can.
+  assert.doesNotMatch(result.stdout, /Create the first account now|before you share it/)
   assert.match(result.stdout, /credentials\.json|team-address credential/)
   noSecretIn(result, 'closing')
 })

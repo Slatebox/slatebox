@@ -20,9 +20,10 @@ import { installDir, listRecords, readRecord, slateboxHome, writeRecord } from '
 import { makeRunner } from './runner.mjs'
 import { Redactor } from './secrets.mjs'
 import { finishRename, releaseTeamAddress, renameTeamAddress, rotateTeamAddress, teamStatus } from './targets/address.mjs'
-import { applyDocker, backupDocker, defaultLocalPort, execNode, LOG_SERVICES, logsDocker, readSecretDocker, restoreDocker, statusDocker, uninstallDocker } from './targets/docker.mjs'
+import { applyDocker, backupDocker, defaultLocalPort, execNode, LOG_SERVICES, logsDocker, readSecretDocker, restoreDocker, setupLinkDocker, statusDocker, uninstallDocker } from './targets/docker.mjs'
 import { exportFiles } from './targets/export.mjs'
-import { applyK8s, backupK8s, execNodeK8s, readSecretK8s, restoreK8s, statusK8s, uninstallK8s } from './targets/k8s.mjs'
+import { applyK8s, backupK8s, execNodeK8s, readSecretK8s, restoreK8s, setupLinkK8s, statusK8s, uninstallK8s } from './targets/k8s.mjs'
+import { setupLines } from './setup-link.mjs'
 import { parse as parseYaml } from './yaml.mjs'
 
 const PKG = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
@@ -31,7 +32,8 @@ const PKG = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
 // run for it.
 export const COMMANDS = Object.freeze([
   { name: 'install', usage: 'install [--team-address <name> | --domain <host> | --local] [target]', summary: 'install, or change, your own Slatebox (safe to run again)' },
-  { name: 'status', usage: 'status [--json]', summary: 'health, address, tunnel, version, AI and SSO, last backup' },
+  { name: 'status', usage: 'status [--json]', summary: 'health, address, tunnel, setup, version, AI and SSO, last backup' },
+  { name: 'setup-link', usage: 'setup-link', summary: 'a new one-time link that creates the first admin (ends the last one)' },
   { name: 'logs', usage: 'logs [-f] [--service app|relay|mongo|proxy|tunnel|sso] [--since 10m]', summary: 'the container\'s log' },
   { name: 'upgrade', usage: 'upgrade [--to <image>]', summary: 'back up, upgrade, check health, roll back on failure' },
   { name: 'rename', usage: 'rename <new-name>', summary: 'move the team address to https://<new-name>.slatebox.team' },
@@ -328,7 +330,11 @@ function upgradeImage(record, flags) {
 
 function finish(ctx, done, lines = []) {
   ctx.out.event({ event: 'done', ...done })
-  for (const line of lines) ctx.out.say(line)
+  // { terminal } lines carry a setup link: straight to the terminal, past the redactor (setup-link.mjs).
+  for (const line of lines) {
+    if (typeof line === 'string') ctx.out.say(line)
+    else ctx.stderr.write(`${line.terminal}\n`)
+  }
   return 0
 }
 
@@ -363,11 +369,9 @@ async function applyTarget(ctx, answers, options) {
 function closing(ctx, done) {
   if (done.nothingToChange) return [`Nothing to change: ${done.name} is running at ${done.address}.${done.teamAddress ? ' (slatebox upgrade gets a newer image.)' : ''}`]
   if (done.target === 'export') return [`Wrote ${done.files.length} files to ${done.dir}. Nothing was applied.`]
-  const lines = ['', `Slatebox is running at  ${done.address}`]
+  const lines = ['', `Slatebox is running at  ${done.address}`, ...setupLines(ctx, done.name)]
   if (done.teamAddress) {
-    lines.push('', 'Create the first account now: open the address above and sign up. Your address is public',
-      '(your slates are not), so make the first account before you share it.',
-      `On this computer it also answers at ${done.localAddress}.`,
+    lines.push('', `On this computer it also answers at ${done.localAddress}.`,
       '', `Keep a copy of ${installDir(ctx.home, done.name)}/ (keys and the team-address credential).`)
   }
   if (done.keyGenerated) {
@@ -428,12 +432,25 @@ async function dispatch(ctx, positionals, flags) {
       if (record.address?.team) status.teamAddress = await teamStatus(ctx, record)
       ctx.out.event({ event: 'done', ...status })
       if (!ctx.json) {
-        for (const [label, value] of Object.entries({ Name: status.name, Where: status.where, Address: status.address, ...(status.teamAddress ? { 'Team address': teamLine(status) } : {}), Health: status.health, Version: status.version ? `app ${status.version.app}, engine ${status.version.engine}` : '-', Image: status.imageDigest, AI: status.ai, SSO: status.sso, 'Last backup': status.lastBackup || 'none yet' })) {
+        for (const [label, value] of Object.entries({ Name: status.name, Where: status.where, Address: status.address, ...(status.teamAddress ? { 'Team address': teamLine(status) } : {}), Health: status.health, ...(status.setup === 'waiting for the first admin' ? { Setup: `waiting for the first admin: ${record.name === 'slatebox' ? 'slatebox setup-link' : `slatebox setup-link --name ${record.name}`} prints a one-time link` } : {}), Version: status.version ? `app ${status.version.app}, engine ${status.version.engine}` : '-', Image: status.imageDigest, AI: status.ai, SSO: status.sso, 'Last backup': status.lastBackup || 'none yet' })) {
           ctx.out.say(`${label.padEnd(12)} ${value}`)
         }
         if (status.tunnel?.connectors > 1) ctx.out.warn(`The tunnel has ${status.tunnel.connectors} connectors. If you did not start a second copy of this install, someone may hold its tunnel token: slatebox address rotate`)
       }
       return status.health === 'healthy' ? 0 : EXIT.PRECONDITION
+    }
+    case 'setup-link': {
+      const record = requireRecord(ctx, flags)
+      // As good as an admin password: a terminal only, never --json or a pipe, unless --force-stdout.
+      if (ctx.json || !(ctx.stdout.isTTY || flags['force-stdout'])) {
+        throw new InstallError(EXIT.USAGE, 'The setup link is printed only to a terminal, never with --json or into a pipe (add --force-stdout if you really mean to).')
+      }
+      const link = record.target === 'k8s' ? await setupLinkK8s(ctx, record) : await setupLinkDocker(ctx, record)
+      if (link.setUp) throw new InstallError(EXIT.PRECONDITION, `"${record.name}" is already set up: its administrator invites people from the Team page. A lost password: docker exec ${record.name} slatebox password-link <email>`)
+      if (!link.url) throw new InstallError(EXIT.PRECONDITION, `No setup link could be made (${link.error}). Is "${record.name}" running an image from 0.2.0 on? slatebox status; slatebox upgrade`)
+      ctx.stdout.write(`${link.url}\n`)
+      ctx.stderr.write('Open it to create the first account: the server administrator and the owner of the first team.\nIt works once, expires in 24 hours, and the link before it no longer works.\n')
+      return 0
     }
     case 'backup': {
       const record = requireRecord(ctx, flags)

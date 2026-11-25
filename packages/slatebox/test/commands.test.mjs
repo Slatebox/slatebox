@@ -10,7 +10,7 @@ import { cli, FakeDocker, sandbox } from './fakes.mjs'
 const words = COMMANDS.map(command => command.name)
 
 test('the command table names every command the spec lists, once', () => {
-  for (const word of ['install', 'status', 'logs', 'upgrade', 'rename', 'address', 'uninstall', 'backup', 'restore', 'ai', 'secrets', 'installs', 'plan', 'agent-prompt', 'exec', 'describe', 'mcp', 'help']) {
+  for (const word of ['install', 'status', 'setup-link', 'logs', 'upgrade', 'rename', 'address', 'uninstall', 'backup', 'restore', 'ai', 'secrets', 'installs', 'plan', 'agent-prompt', 'exec', 'describe', 'mcp', 'help']) {
     assert.ok(words.includes(word), word)
   }
   assert.equal(new Set(words).size, words.length)

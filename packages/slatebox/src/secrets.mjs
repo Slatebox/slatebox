@@ -88,9 +88,10 @@ export function parseEnvFile(text) {
 // ------------------------------------------------------------ redaction
 
 const MIN_SECRET = 6
-// Shapes that are secrets whatever their value: a team-address install credential, and a
-// Cloudflare tunnel connector token (base64 of {"a":…,"t":…,"s":…}).
-export const SECRET_SHAPES = [/sbxi_[A-Za-z0-9]+_[A-Za-z0-9_-]+/g, /eyJhIjoi[A-Za-z0-9+/_-]{16,}={0,2}/g]
+// Shapes that are secrets whatever their value: a team-address install credential, a
+// Cloudflare tunnel connector token (base64 of {"a":…,"t":…,"s":…}), and a setup link's token.
+// A self-hosted server's one-time setup link (/setup/<32 bytes base64url>) is as good as an admin password.
+export const SECRET_SHAPES = [/sbxi_[A-Za-z0-9]+_[A-Za-z0-9_-]+/g, /eyJhIjoi[A-Za-z0-9+/_-]{16,}={0,2}/g, /(?<=\/setup\/)[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g]
 
 /** Every secret the installer has seen is replaced by *** in anything it prints or logs. */
 export class Redactor {

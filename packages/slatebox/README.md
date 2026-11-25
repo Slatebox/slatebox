@@ -10,7 +10,11 @@ Pick a team address and sign in; Slatebox runs at `https://<name>.slatebox.team`
 with no DNS, ports or certificates. Or choose your own domain, or this computer
 only. It asks a few short questions (Enter takes the default), shows a plan of
 everything it will write, run and create, and installs once you say yes. Then
-it prints the address. `npx slatebox --dry-run` asks the same questions and
+it prints the address and a one-time setup link: nobody can sign up until the
+first admin exists, and the person who opens the link creates that account (the
+server administrator and the owner of the first team). The link works once and
+expires in 24 hours; `slatebox setup-link` prints a new one at a terminal and
+ends the last. `npx slatebox --dry-run` asks the same questions and
 prints the plan without changing anything. You need Node.js 22.13 or newer, and
 Docker (or Podman with its Docker compatibility on) on whatever runs Slatebox.
 Plain `npx slatebox` lists the commands.
@@ -34,6 +38,7 @@ tunnel token again and give the address back, and nothing else.
 
 ```sh
 slatebox status                 # includes the address and the tunnel's connections
+slatebox setup-link             # a new one-time link for the first admin (ends the last one)
 slatebox rename acme-boards     # move to https://acme-boards.slatebox.team (sign-in)
 slatebox address rotate         # a new tunnel token; any copy of the old one stops working
 slatebox address release        # give the address back; Slatebox keeps running on this computer

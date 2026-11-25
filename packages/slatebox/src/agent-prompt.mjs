@@ -60,6 +60,11 @@ you what it still needs. Follow these steps exactly.
    Report \`done.address\` from the last line. Do not print or copy any secret;
    the output never contains one. Tell the person where the key encryption key
    is stored (\`done.secretsFile\`) and that they must back it up themselves.
+   Nobody can sign up until the first admin exists. Tell the person to run
+   \`slatebox setup-link\` in their own terminal: it prints a one-time link
+   (24 hours, single use) that creates the first account, the server
+   administrator. Never run it yourself or ask for the link: it is as good as
+   an admin password.
 6. **If it fails**: exit 5 means the change was rolled back and the previous
    state is running; exit 6 means a person must act: show them
    \`error.commands\` and stop.

@@ -8,11 +8,13 @@ import { PassThrough } from 'node:stream'
 import { LEGACY_SETTINGS } from '../src/ai/settings-adapter.mjs'
 import { main } from '../src/cli.mjs'
 
+// A setup link token has the real shape: 43 base64url characters.
+export const SETUP_TOKEN_PREFIX = 'SetupToken0123456789abcdefghijklmnopqrst'
 export const ID = tag => `sha256:${Buffer.from(tag).toString('hex').padEnd(64, '0').slice(0, 64)}`
 const USAGE = 'Usage, from the Docker host:\n  docker exec slatebox slatebox backup > x\n  docker exec slatebox slatebox health\n'
 
 export class FakeDocker {
-  constructor({ settings = LEGACY_SETTINGS, broken = [], serverArch = 'amd64', commands = [] } = {}) {
+  constructor({ settings = LEGACY_SETTINGS, broken = [], serverArch = 'amd64', commands = [], setUp = false } = {}) {
     this.calls = []
     this.images = new Map()
     this.arch = new Map()
@@ -25,6 +27,15 @@ export class FakeDocker {
     this.commands = commands
     // What `docker pull <ref>` gets: ref -> the tag of the image it resolves to.
     this.registry = new Map()
+    // Every one-time setup link token the fake image made (setup-link --json).
+    this.setupLinks = []
+    // A data volume whose first admin already exists.
+    this.alreadySetUp = setUp
+  }
+
+  /** The first admin used the link: the image is set up. */
+  setUp(name = 'slatebox') {
+    this.containers.get(name).setUp = true
   }
 
   addImage(ref, { arch } = {}) {
@@ -81,7 +92,7 @@ export class FakeDocker {
         const { readFileSync } = await import('node:fs')
         const image = /image: (\S+)/.exec(readFileSync(join(dir, 'compose.yaml'), 'utf8'))[1]
         const broken = this.broken.has(image)
-        this.containers.set(name, { running: true, health: broken ? 'unhealthy' : 'healthy', image })
+        this.containers.set(name, { running: true, health: broken ? 'unhealthy' : 'healthy', image, setUp: this.alreadySetUp })
         this.volumes.add(`${name}-data`)
         return broken ? fail('container slatebox is unhealthy') : ok()
       }
@@ -94,6 +105,15 @@ export class FakeDocker {
       if (!container) return fail('No such container')
       if (args.includes('health')) return container.health === 'healthy' ? ok() : fail('The app is not ready (HTTP 502 from /readyz).')
       if (args.includes('tunnel')) return this.commands.includes('tunnel') ? ok('{"configured":true,"ready":true,"connections":4}\n') : fail('Usage, from the Docker host:', 2)
+      if (args.includes('setup-link')) {
+        // The image's one-time setup link: only while nobody is set up; each new link ends the last.
+        if (!this.commands.includes('setup-link')) return fail('Usage, from the Docker host:', 2)
+        if (args.includes('--check')) return ok(`${JSON.stringify({ setUp: Boolean(container.setUp), linkExpiresAt: container.link ? '2026-11-25T12:00:00.000Z' : null })}\n`)
+        if (container.setUp) return fail('This Slatebox is already set up.', 3)
+        container.link = `${SETUP_TOKEN_PREFIX}${String(this.setupLinks.length).padStart(3, '0')}`
+        this.setupLinks.push(container.link)
+        return ok(`${JSON.stringify({ url: `https://box.example/setup/${container.link}`, expiresAt: '2026-11-25T12:00:00.000Z' })}\n`)
+      }
       if (args.includes('backup')) {
         if (options.outputFile) writeFileSync(options.outputFile, 'BACKUP')
         return ok()
