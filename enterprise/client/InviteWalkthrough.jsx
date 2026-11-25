@@ -9,6 +9,8 @@
 // With `reconnect` (an agent that needs sign-in again) it stops after the sign-in.
 // `invited`: the agents already on this slate. A gallery card for one of yours says ✓ On this slate
 // and offers Manage (its chip) instead of inviting it again; a pasted address of one says so too.
+// With more cards than fit at a glance, chips (All, Work, Business …) and a search box narrow the
+// gallery (filterCards); the address box always takes any server.
 // `integrations`: the person's connected integrations, invited onto this slate in one step (no
 // sign-in, no consent again); a server they already connected says so and offers the same.
 // Without a shareId it is "Connect an integration" (the Integrations page): the same steps, ending
@@ -27,6 +29,7 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
+import Chip from '@mui/material/Chip'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
@@ -47,7 +50,7 @@ import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx
 import Hexagon from '/imports/ui/components/AgentMark.jsx'
 import { enterpriseState } from '/imports/api/common/edition.mjs'
 import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
-import { GALLERY, cardFor } from '../common/gallery.mjs'
+import { GALLERY, cardFor, filterCards, groupsIn } from '../common/gallery.mjs'
 import { cardState, connectedAction, STATUS_WORDS } from '../common/integration-words.mjs'
 import { followSignIn, openSignInWindow } from './signin'
 
@@ -146,6 +149,9 @@ const SEES = [
 
 // What the outside service asks of you, in plain words: Slatebox Pro is said once, on its own line.
 // "Free" alone next to "Pro" read as a contradiction; the service's own price is not Slatebox's.
+// The chips and search box show once the gallery has more cards than this.
+export const FILTER_FROM = 8
+
 export const cardCost = (item) => (item.signIn ? item.cost : item.cost === 'Free' ? 'No sign-in needed' : `No sign-in needed · ${item.cost}`)
 
 // A refusal because the server's key ended (enterprise_locked) also empties the app's enterprise slots.
@@ -179,6 +185,8 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
   // null until it answers (cards an administrator turned off are never shown), the built-in cards
   // only if it cannot be asked.
   const [gallery, setGallery] = useState({ cards: null, canInvite: null })
+  // The gallery's chip (a GROUPS id, or 'all') and search words.
+  const [filter, setFilter] = useState({ group: 'all', query: '' })
   const { open: openPay, prefetch } = usePaySheet()
   // On a phone the walkthrough is a full-height sheet; its footer stays in reach.
   const theme = useTheme()
@@ -186,6 +194,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
   // Slatebox Pro is Slatebox Cloud's; a licensed self-hosted install has no Pro to mention. The
   // server says which it is (unlocked as Cloud by Cloud's key, or by an on-prem license).
   const cloud = enterpriseState(Meteor.settings).via === 'cloud'
+  const shownCards = filterCards(gallery.cards || [], filter)
   const live = useRef(true)
   useEffect(() => () => { live.current = false }, [])
   useEffect(() => {
@@ -195,7 +204,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
     if (open && shareId && !reconnect) Meteor.callAsync('integrations.slateSetting', { shareId }).then((answer) => { if (live.current) setSetting(answer) }).catch(() => {})
     if (!open) {
       pending.current?.cancel()
-      setStep('choose'); setFound(null); setError(''); setAddress(''); setShowAll(false); setKey(''); setClientId(''); setShowKey(false); setAlready(null); setConnected(null); setRule('ask')
+      setStep('choose'); setFound(null); setError(''); setAddress(''); setShowAll(false); setKey(''); setClientId(''); setShowKey(false); setAlready(null); setConnected(null); setRule('ask'); setFilter({ group: 'all', query: '' })
     } else if (reconnect?.address) {
       setAddress(reconnect.address)
       discover(reconnect.address)
@@ -444,9 +453,33 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                 {onManage && <Button size="small" variant="outlined" data-invite-manage="" onClick={() => onManage(already.agentId)}>Manage</Button>}
               </Box>
             )}
+            {(gallery.cards || []).length > FILTER_FROM && (
+              <Box data-gallery-filter="" sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, alignItems: { xs: 'stretch', sm: 'center' } }}>
+                <Box role="group" aria-label="Show agents for" sx={{ display: 'flex', gap: 0.75, flexWrap: { xs: 'nowrap', sm: 'wrap' }, overflowX: { xs: 'auto', sm: 'visible' }, flex: 1, pb: { xs: 0.25, sm: 0 } }}>
+                  {[{ id: 'all', label: 'All' }, ...groupsIn(gallery.cards)].map((g) => {
+                    const on = filter.group === g.id
+                    return (
+                      <Chip key={g.id} label={g.label} size="small" clickable data-gallery-chip={g.id} aria-pressed={on}
+                        onClick={() => setFilter({ ...filter, group: g.id })}
+                        sx={(t) => ({
+                          flexShrink: 0, fontWeight: 650, border: '1px solid', borderColor: on ? '#3f7d58' : '#d6dccb', bgcolor: on ? '#3f7d58' : '#fffef8', color: on ? '#fff' : '#2c4a3a',
+                          '&:hover': { bgcolor: on ? '#356b4b' : '#eef4e8' },
+                          '&.Mui-focusVisible': { outline: '2px solid #254b3b', outlineOffset: 2 },
+                          ...t.applyStyles('dark', { borderColor: on ? '#a5c99a' : '#3a5244', bgcolor: on ? '#a5c99a' : '#23362d', color: on ? '#14261c' : '#d7e6d0', '&:hover': { bgcolor: on ? '#b6d6ab' : '#2b4337' }, '&.Mui-focusVisible': { outline: '2px solid #f2ce8b', outlineOffset: 2 } }),
+                        })} />
+                    )
+                  })}
+                </Box>
+                <TextField size="small" type="search" placeholder="Search agents" value={filter.query} onChange={(e) => setFilter({ ...filter, query: e.target.value })}
+                  sx={{ width: { xs: '100%', sm: 200 }, flexShrink: 0 }} inputProps={{ 'aria-label': 'Search agents', 'data-gallery-search': '', maxLength: 80 }} />
+              </Box>
+            )}
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fill, minmax(200px, 1fr))' }, gap: 1.5 }}>
               {!gallery.cards && <Box data-gallery-loading="" sx={{ gridColumn: '1 / -1' }}><LinearProgress aria-label="Loading the gallery" /></Box>}
-              {(gallery.cards || []).map((item) => {
+              {gallery.cards && !shownCards.length && (
+                <Typography variant="body2" color="text.secondary" data-gallery-none="" role="status" sx={{ gridColumn: '1 / -1', py: 1 }}>No agent in the gallery matches. Any MCP server works: paste its address above.</Typography>
+              )}
+              {shownCards.map((item) => {
                 const state = cardState(item, invited, integrations)
                 const next = connectedAction(state, integrationMode)
                 const go = () => {

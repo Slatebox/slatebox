@@ -54,7 +54,7 @@ function CardEditor({ card, onSaved }) {
       <TextField label="Recipe (JSON)" multiline minRows={6} maxRows={20} value={recipe} onChange={(e) => setRecipe(e.target.value)}
         inputProps={{ spellCheck: false, style: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12 }, 'data-gallery-recipe': card.id }}
         helperText="intents: [{ key, keywords (patterns), steps: [{ tool, args, extract?, each? }], output? }]. A step calls only tools the inviter allowed, and only lookups." />
-      <Typography variant="caption" color="text.secondary">The planner&apos;s hint for this card is the prompt {card.promptId}, in Prompts.</Typography>
+      <Typography variant="caption" color="text.secondary">{card.promptId ? <>The planner&apos;s hint for this card is the prompt {card.promptId}, in Prompts.</> : 'This card has no planner hint yet: its agent is planned from its tools\' own descriptions.'}</Typography>
       {problem && <Alert severity="warning">{problem}</Alert>}
       <Box><Button variant="contained" size="small" disabled={busy} onClick={() => save()}>Save card</Button></Box>
     </Box>

@@ -62,6 +62,9 @@ test('the built-in cards serve until edited; an edit changes words, recipe, on/o
   const listed = await ops.list()
   assert.equal(listed.cards.find((c) => c.id === 'exa').enabled, false)
   assert.equal(listed.cards.find((c) => c.id === 'github').promptId, 'connectors.recipe.github')
+  // A card with no planner hint yet says so instead of naming a prompt that is not there.
+  assert.equal(listed.cards.find((c) => c.id === 'notion').promptId, null)
+  assert.ok(listed.cards.filter((c) => c.promptId).every((c) => PROMPT_IDS.includes(c.promptId)))
   assert.deepEqual(listed.retired.map((c) => c.id), ['excalidraw', 'apexcharts'])
 })
 

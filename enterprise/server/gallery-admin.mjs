@@ -12,16 +12,20 @@
 //     the inviter lets the agent act without asking. Its tools word (lookup, change, destructive)
 //     corrects how a tool is grouped: an administrator's call, audited like every edit.
 //   - Only a person saves or reorders (an agent may read). The hint the planner gets for a card is a
-//     prompt (connectors.recipe.<id>) in the Prompts tab, versioned and published there.
+//     prompt (connectors.recipe.<id>) in the Prompts tab, versioned and published there; a card with
+//     none yet (promptIdOf: null) is planned from its tools' own descriptions.
 import { defineAction } from '/server/actions/registry.mjs'
 import { requireAIControlAdmin } from '/server/actions/ai-control-get.mjs'
 import { guardControlWrite } from '/server/actions/ai-providers.mjs'
 import { GALLERY, NATIVE_CARDS, RETIRED, RETIRED_WORDS } from '../common/gallery.mjs'
 import { checkRecipe } from './recipes.mjs'
 import { plainText } from './tools.mjs'
+import { PROMPT_IDS } from '/server/ai-control/prompts/index.mjs'
 
 export const EDITABLE = Object.freeze({ name: 40, job: 40, lands: 200, try: 120, cost: 60, keyHint: 120 })
 const docId = (id) => 'gallery:' + id
+// The planner's hint for a card (connectors.recipe.<id>, in Prompts), or null for a card with none yet.
+export const promptIdOf = (id) => (PROMPT_IDS.includes('connectors.recipe.' + id) ? 'connectors.recipe.' + id : null)
 
 /** The cards as served: the built-in ones with each saved edit on top, the enabled ones in order. */
 export function liveGallery(docs = [], builtin = GALLERY, { all = false } = {}) {
@@ -80,11 +84,11 @@ export function createGalleryOps({ find, store, configured = null }) {
     async list() {
       const cards = liveGallery(await docs(), GALLERY, { all: true })
       return {
-        cards: cards.map((card) => ({ ...card, promptId: 'connectors.recipe.' + card.id })),
+        cards: cards.map((card) => ({ ...card, promptId: promptIdOf(card.id) })),
         retired: RETIRED.map(({ id, name, url, why }) => ({ id, name, url, why })),
         // Built into Slatebox (Google Drive): on or off and their words, like a card; and, as yes or
         // no only, whether this server has what each needs.
-        native: liveGallery(await docs(), NATIVE_CARDS, { all: true }).map((card) => ({ ...card, promptId: 'connectors.recipe.' + card.id })),
+        native: liveGallery(await docs(), NATIVE_CARDS, { all: true }).map((card) => ({ ...card, promptId: promptIdOf(card.id) })),
         ...(configured && { configuration: await configured() }),
       }
     },

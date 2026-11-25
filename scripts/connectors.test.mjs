@@ -16,7 +16,10 @@ import { excalidrawGroup } from '../enterprise/server/excalidraw.mjs'
 import { promptText } from '../web/app/server/ai-control/prompts/index.mjs'
 import { connectorPrincipal, createConnectorService } from '../enterprise/server/service.mjs'
 import { connectorSettings } from '../enterprise/server/connector-settings.mjs'
-import { canonicalAddress, cardFor, GALLERY, RETIRED } from '../enterprise/common/gallery.mjs'
+import { canonicalAddress, cardFor, filterCards, GALLERY, GROUPS, groupsIn, NATIVE_CARDS, RETIRED } from '../enterprise/common/gallery.mjs'
+import { EDITABLE } from '../enterprise/server/gallery-admin.mjs'
+import { matchIntent } from '../enterprise/server/recipes.mjs'
+import { readFileSync } from 'node:fs'
 import { checkRecipe } from '../enterprise/server/recipes.mjs'
 import { sanitizeClientName } from '../web/app/imports/api/common/agent-label.mjs'
 import { connectorSuggestions } from './connector-suggestions-world.mjs'
@@ -274,11 +277,96 @@ test('gallery: curated by what an agent adds that Slatebox cannot do; drawing an
   assert.equal(cardFor('https://mcp.excalidraw.com/mcp'), null)
   assert.equal(cardFor('https://mcp.apexcharts.com/mcp'), null)
   assert.deepEqual(RETIRED.map((c) => c.id), ['excalidraw', 'apexcharts'])
-  assert.deepEqual(GALLERY.map((c) => c.id), ['huggingface', 'github', 'linear', 'deepwiki', 'context7', 'wolfram', 'firecrawl', 'exa'])
+  assert.deepEqual(GALLERY.map((c) => c.id), [
+    'huggingface', 'github', 'linear', 'deepwiki', 'context7', 'wolfram', 'firecrawl', 'exa',
+    'notion', 'atlassian', 'slack', 'granola', 'asana', 'monday', 'clickup', 'trello', 'airtable', 'zapier',
+    'hubspot', 'stripe', 'posthog', 'sentry', 'jina', 'parallel',
+  ])
   // US spelling, and every card has a recipe the server can read
   assert.ok(GALLERY.every((c) => !/summarise|colour|organis/i.test(JSON.stringify(c))), 'US spelling')
   for (const card of GALLERY) assert.ok(checkRecipe(card.recipe), card.id)
   assert.equal(cardFor('https://mcp.deepwiki.com/mcp').job, 'Code Q&A')
+})
+
+test('gallery: every card is a well-formed listing (https address, unique id and address, plain words within the edit limits, a group, no "AI")', () => {
+  const ids = new Set()
+  const addresses = new Set()
+  for (const card of [...GALLERY, ...NATIVE_CARDS]) {
+    assert.match(card.id, /^[a-z0-9]{1,40}$/, card.id) // the admin actions' id pattern
+    assert.ok(!ids.has(card.id), `${card.id} listed once`)
+    ids.add(card.id)
+  }
+  for (const card of GALLERY) {
+    const url = new URL(card.url)
+    assert.equal(url.protocol, 'https:', card.id)
+    assert.equal(url.search + url.hash, '', card.id)
+    const address = canonicalAddress(card.url)
+    assert.ok(!addresses.has(address), `${card.id}: one card per address`)
+    addresses.add(address)
+    assert.equal(cardFor(card.url).id, card.id)
+    assert.equal(RETIRED.some((r) => canonicalAddress(r.url) === address), false, `${card.id} is not a retired listing`)
+    assert.ok(GROUPS.some((g) => g.id === card.group), `${card.id} has a chip`)
+    assert.ok(card.signIn === undefined || card.signIn === 'oauth', card.id)
+    assert.ok(card.cost, card.id)
+    for (const [key, max] of Object.entries(EDITABLE)) {
+      if (card[key] === undefined) continue
+      assert.equal(typeof card[key], 'string', `${card.id}.${key}`)
+      assert.ok(card[key].length > 0 && card[key].length <= max, `${card.id}.${key} fits in ${max}`)
+      assert.equal(card[key], card[key].trim(), `${card.id}.${key}`)
+      // Plain words: no markup, no addresses (a card's example ask may name a page to read), no "AI" (say agent).
+      assert.ok(!/[<>*_`[\]]/.test(card[key]), `${card.id}.${key} is plain text`) // "#launch" is a Slack channel, not markup
+      if (key !== 'try') assert.ok(!/https?:\/\//i.test(card[key]), `${card.id}.${key} carries no address`)
+      assert.ok(!/\bA\.?I\b/.test(card[key]), `${card.id}.${key} says agent, not AI`)
+    }
+    assert.ok(/[.!?]$/.test(card.lands), `${card.id}: what lands is a sentence`)
+    assert.ok(checkRecipe(card.recipe), card.id)
+  }
+  // Agents that only draw what Slatebox draws are not listed (owner, 2026-11-24).
+  assert.ok(!GALLERY.some((c) => /excalidraw|mermaid|whiteboard|miro|tldraw|canva|figma/i.test(c.name + c.url)))
+  // The eight listed before come first, in their order.
+  assert.deepEqual(GALLERY.slice(0, 8).map((c) => c.id), ['huggingface', 'github', 'linear', 'deepwiki', 'context7', 'wolfram', 'firecrawl', 'exa'])
+  assert.ok(GALLERY.slice(8).every((c) => !c.featured))
+})
+
+test('gallery: refunds and destructive tools start off; the open agents need no sign-in; Jina answers papers asks with no planner', () => {
+  assert.equal(checkRecipe(cardFor('https://mcp.stripe.com').recipe).tools.create_refund, 'destructive')
+  assert.equal(checkRecipe(cardFor('https://mcp.atlassian.com/v2/mcp').recipe).tools.executeDestructive, 'destructive')
+  assert.equal(cardFor('https://mcp.parallel.ai/mcp').signIn, undefined)
+  assert.equal(cardFor('https://mcp.jina.ai/v1').signIn, undefined)
+  const jina = checkRecipe(cardFor('https://mcp.jina.ai/v1').recipe)
+  assert.equal(matchIntent(jina, 'Find recent papers on remote team productivity').key, 'papers')
+  assert.equal(matchIntent(jina, 'Read https://example.com/report.pdf'), null, 'reading a page is the planner\'s')
+  assert.deepEqual(jina.intents[0].steps[0].tool, ['search_arxiv', 'search_ssrn'])
+  // Jina's server sends no annotations: its read-only helpers are lookups, not changes waiting on a card.
+  assert.deepEqual(normalizeTools([{ name: 'capture_screenshot_url', inputSchema: { type: 'object' } }, { name: 'sort_by_relevance', inputSchema: { type: 'object' } }]).map((t) => t.group), ['change', 'change'], 'without the recipe')
+  assert.deepEqual(normalizeTools([{ name: 'capture_screenshot_url', inputSchema: { type: 'object' } }, { name: 'sort_by_relevance', inputSchema: { type: 'object' } }], jina.tools).map((t) => t.group), ['lookup', 'lookup'])
+})
+
+test('gallery filter: a chip narrows to its group, search words narrow by name, job, what lands and the group name; order is kept', () => {
+  assert.deepEqual(groupsIn(GALLERY).map((g) => g.id), ['work', 'business', 'research', 'web'])
+  assert.deepEqual(groupsIn([{ id: 'x', group: 'web' }]).map((g) => g.id), ['web'])
+  assert.equal(filterCards(GALLERY).length, GALLERY.length)
+  assert.deepEqual(filterCards(GALLERY, { group: 'all' }).map((c) => c.id), GALLERY.map((c) => c.id))
+  assert.deepEqual(filterCards(GALLERY, { group: 'business' }).map((c) => c.id), ['hubspot', 'stripe', 'posthog', 'sentry'])
+  assert.deepEqual(filterCards(GALLERY, { group: 'web' }).map((c) => c.id), ['wolfram', 'firecrawl', 'exa', 'parallel'])
+  assert.deepEqual(filterCards(GALLERY, { query: 'JIRA' }).map((c) => c.id), ['atlassian'])
+  assert.deepEqual(filterCards(GALLERY, { query: '  meeting   transcripts ' }).map((c) => c.id), ['granola'])
+  assert.deepEqual(filterCards(GALLERY, { query: 'notion' }).map((c) => c.id), ['notion'])
+  assert.ok(filterCards(GALLERY, { query: 'business' }).length >= 4, 'the group name is searched too')
+  assert.deepEqual(filterCards(GALLERY, { group: 'research', query: 'papers' }).map((c) => c.id), ['huggingface', 'jina'])
+  assert.deepEqual(filterCards(GALLERY, { group: 'web', query: 'jira' }), [])
+  assert.deepEqual(filterCards(GALLERY, { query: 'nothing-matches-this' }), [])
+  assert.deepEqual(filterCards(null ?? [], { query: 'x' }), [])
+})
+
+test('the invite dialog narrows the gallery with chips and a search box, and says so when nothing matches', () => {
+  const source = readFileSync(new URL('../enterprise/client/InviteWalkthrough.jsx', import.meta.url), 'utf8')
+  assert.match(source, /filterCards\(gallery\.cards \|\| \[\], filter\)/)
+  assert.match(source, /shownCards\.map\(\(item\)/)
+  assert.ok(!/\(gallery\.cards \|\| \[\]\)\.map\(\(item\)/.test(source), 'the grid draws the filtered cards')
+  for (const marker of ['data-gallery-chip', 'data-gallery-search', 'data-gallery-none', 'aria-pressed', "'aria-label': 'Search agents'"]) assert.ok(source.includes(marker), marker)
+  // A closed dialog opens again on All with no search words.
+  assert.match(source, /setFilter\(\{ group: 'all', query: '' \}\)/)
 })
 
 // ---------- the service's rules ----------
@@ -769,6 +857,7 @@ test('the gallery: the enabled cards, whether this person may invite, and the ga
   assert.equal(ada.canInvite, true)
   assert.deepEqual(ada.cards.map((c) => c.id), GALLERY.map((c) => c.id))
   assert.equal(ada.cards[0].recipe, undefined, 'recipes stay on the server')
+  assert.deepEqual(ada.cards.map((c) => c.group), GALLERY.map((c) => c.group), 'each card keeps its chip')
   assert.equal((await world.service.gallery(world.sam)).canInvite, false)
   const listed = await world.service.list(world.ada, { shareId: 'share1' })
   assert.equal(listed.canInvite, true)

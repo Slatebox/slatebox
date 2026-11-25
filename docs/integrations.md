@@ -24,6 +24,47 @@ An integration is an outside agent (any MCP server) or your Google account, conn
 Connecting a server from a slate's walkthrough makes the integration too, so the next slate only needs
 **Invite to this slate**.
 
+## The agent gallery
+
+**+ Invite agent** (and **Connect an integration**) opens with a gallery of agents that bring in what
+Slatebox can't do itself: your work data, knowledge, the web and facts. Agents that only draw
+diagrams or boards are not listed, since Slatebox draws those itself. Use the chips (**All**,
+**Work**, **Business**, **Research**, **Web and facts**) or the search box to find one. Any MCP server
+works too: paste its address.
+
+| Agent | Address | Sign-in |
+| --- | --- | --- |
+| Hugging Face | `https://huggingface.co/mcp` | None |
+| GitHub | `https://api.githubcopilot.com/mcp/` | GitHub (or a personal access token) |
+| Linear | `https://mcp.linear.app/mcp` | Linear |
+| DeepWiki | `https://mcp.deepwiki.com/mcp` | None |
+| Context7 | `https://mcp.context7.com/mcp` | None |
+| Wolfram | `https://agenttools.wolfram.com/mcp` | None |
+| Firecrawl | `https://mcp.firecrawl.dev/v2/mcp` | None |
+| Exa | `https://mcp.exa.ai/mcp` | None |
+| Notion | `https://mcp.notion.com/mcp` | Notion |
+| Jira and Confluence | `https://mcp.atlassian.com/v2/mcp` | Atlassian |
+| Slack | `https://mcp.slack.com/mcp` | Slack (needs an app registered by the server's operator, see below) |
+| Granola | `https://mcp.granola.ai/mcp` | Granola |
+| Asana | `https://mcp.asana.com/v2/mcp` | Asana (needs an app registered by the server's operator) |
+| monday.com | `https://mcp.monday.com/mcp` | monday.com |
+| ClickUp | `https://mcp.clickup.com/mcp` | ClickUp |
+| Trello | `https://mcp.trello.com/v1` | Atlassian |
+| Airtable | `https://mcp.airtable.com/mcp` | Airtable (or a personal access token) |
+| Zapier | `https://mcp.zapier.com/api/v1/connect` | Zapier |
+| HubSpot | `https://mcp.hubspot.com` | HubSpot (needs an app registered by the server's operator) |
+| Stripe | `https://mcp.stripe.com` | Stripe (or a restricted key) |
+| PostHog | `https://mcp.posthog.com/mcp` | PostHog (or a personal API key) |
+| Sentry | `https://mcp.sentry.dev/mcp` | Sentry |
+| Jina | `https://mcp.jina.ai/v1` | None |
+| Parallel | `https://mcp.parallel.ai/mcp` | None |
+
+Most of the sign-in agents register Slatebox with their service automatically when you first sign
+in. Slack, Asana and HubSpot don't: their sign-in works once the server's operator registers an app
+with that service and adds it under `settings.connectors.oauthApps.<provider>` (`clientId`,
+`clientSecret`, `issuer` and `resources`). Until then, signing in to them asks for a client id. Stripe refunds and every tool that deletes, closes, cancels or merges start **off**.
+Administrators turn cards on or off, reorder them and edit their words in /admin/ai › Agent gallery.
+
 ## Who can do what
 
 - Only you can ask your agent. Everyone on a slate sees its cursor and its suggestions, and that it

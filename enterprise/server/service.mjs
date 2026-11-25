@@ -639,7 +639,7 @@ export function createConnectorService({
     const cards = await gallery()
     const canInvite = principal?.userId && principal.kind !== 'guest' && principal.kind !== 'visitor' ? await pro(principal.userId) : false
     return {
-      cards: cards.map(({ id, name, url, job, lands, try: tryThis, featured, signIn, keyHint, cost }) => ({ id, name, url, job, lands, try: tryThis, featured: Boolean(featured), signIn: signIn || null, keyHint: keyHint || null, cost: cost || '' })),
+      cards: cards.map(({ id, name, url, job, lands, try: tryThis, featured, signIn, keyHint, cost, group }) => ({ id, name, url, job, lands, try: tryThis, featured: Boolean(featured), signIn: signIn || null, keyHint: keyHint || null, cost: cost || '', group: group || null })),
       canInvite,
     }
   }

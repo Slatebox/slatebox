@@ -43,6 +43,7 @@ const COMMENT_WORDS = '\\b(comment|reply)\\b'
 export const GALLERY = Object.freeze([
   {
     id: 'huggingface',
+    group: 'research',
     name: 'Hugging Face',
     url: 'https://huggingface.co/mcp',
     job: 'Models and papers',
@@ -54,6 +55,7 @@ export const GALLERY = Object.freeze([
   },
   {
     id: 'github',
+    group: 'work',
     name: 'GitHub',
     url: 'https://api.githubcopilot.com/mcp/',
     job: 'Code and issues',
@@ -107,6 +109,7 @@ export const GALLERY = Object.freeze([
   },
   {
     id: 'linear',
+    group: 'work',
     name: 'Linear',
     url: 'https://mcp.linear.app/mcp',
     aliases: ['https://mcp.linear.app/mcp/readonly'],
@@ -129,6 +132,7 @@ export const GALLERY = Object.freeze([
   },
   {
     id: 'deepwiki',
+    group: 'research',
     name: 'DeepWiki',
     url: 'https://mcp.deepwiki.com/mcp',
     job: 'Code Q&A',
@@ -148,6 +152,7 @@ export const GALLERY = Object.freeze([
   },
   {
     id: 'context7',
+    group: 'research',
     name: 'Context7',
     url: 'https://mcp.context7.com/mcp',
     job: 'Library docs',
@@ -166,10 +171,84 @@ export const GALLERY = Object.freeze([
       ],
     },
   },
-  { id: 'wolfram', name: 'Wolfram', url: 'https://agenttools.wolfram.com/mcp', job: 'Math and facts', lands: 'Adds computed facts and unit math as notes.', try: 'How far is the Moon in km?', cost: 'Free', recipe: { rounds: 1, calls: 1, intents: [] } },
-  { id: 'firecrawl', name: 'Firecrawl', url: 'https://mcp.firecrawl.dev/v2/mcp', job: 'Web pages', lands: 'Reads a web page and adds a summary note with its link.', try: 'Summarize https://example.com', cost: 'Free tier', recipe: { rounds: 1, calls: 1, intents: [] } },
-  { id: 'exa', name: 'Exa', url: 'https://mcp.exa.ai/mcp', job: 'Research', lands: 'Finds sources on your question, each a note with a quote and link.', try: 'How do others retry declined cards?', cost: 'Free tier', recipe: { rounds: 1, calls: 1, intents: [] } },
+  { id: 'wolfram', group: 'web', name: 'Wolfram', url: 'https://agenttools.wolfram.com/mcp', job: 'Math and facts', lands: 'Adds computed facts and unit math as notes.', try: 'How far is the Moon in km?', cost: 'Free', recipe: { rounds: 1, calls: 1, intents: [] } },
+  { id: 'firecrawl', group: 'web', name: 'Firecrawl', url: 'https://mcp.firecrawl.dev/v2/mcp', job: 'Web pages', lands: 'Reads a web page and adds a summary note with its link.', try: 'Summarize https://example.com', cost: 'Free tier', recipe: { rounds: 1, calls: 1, intents: [] } },
+  { id: 'exa', group: 'web', name: 'Exa', url: 'https://mcp.exa.ai/mcp', job: 'Research', lands: 'Finds sources on your question, each a note with a quote and link.', try: 'How do others retry declined cards?', cost: 'Free tier', recipe: { rounds: 1, calls: 1, intents: [] } },
+  // Added 2026-11-24 (owner: "more agents we can connect to"). Each address answered an MCP
+  // initialize the same day; the sign-in ones advertised protected-resource metadata. Work data
+  // first, then customers and numbers, then research and the web. Slack, Asana and HubSpot offer no
+  // automatic registration: they sign in through an app this server registered with them
+  // (settings.connectors.oauthApps.<provider>, with issuer and resources) or a client id the person
+  // pastes. Notion, Atlassian, Granola, monday.com, ClickUp, Trello, Airtable, Sentry, PostHog,
+  // Stripe and Zapier register Slatebox automatically. Parallel and Jina need no sign-in.
+  { id: 'notion', group: 'work', name: 'Notion', url: 'https://mcp.notion.com/mcp', job: 'Docs and wikis', lands: 'Brings your team\'s Notion pages, wikis and database rows onto the slate, and creates or updates pages and comments you approve.', try: 'Bring in the onboarding wiki page, grouped by section', signIn: 'oauth', cost: 'Uses your Notion account', recipe: { rounds: 1, calls: 2, intents: [] } },
+  // Deletes sit in their own tool on Atlassian's server: off until someone turns them on.
+  { id: 'atlassian', group: 'work', name: 'Jira and Confluence', url: 'https://mcp.atlassian.com/v2/mcp', job: 'Tickets and specs', lands: 'Brings Jira issues, sprints and Confluence pages onto the slate, and creates tickets, status changes and pages you approve.', try: 'Show the open tickets in the PAY epic, grouped by status', signIn: 'oauth', cost: 'Uses your Atlassian account', recipe: { rounds: 1, calls: 2, intents: [], tools: { executeDestructive: 'destructive' } } },
+  { id: 'slack', group: 'work', name: 'Slack', url: 'https://mcp.slack.com/mcp', job: 'Team chat', lands: 'Brings messages, threads and canvases onto the slate so decisions made in chat become notes, and posts messages you approve.', try: 'What did #launch decide about the pricing page this week?', signIn: 'oauth', cost: 'Uses your Slack account', recipe: { rounds: 1, calls: 2, intents: [] } },
+  { id: 'granola', group: 'work', name: 'Granola', url: 'https://mcp.granola.ai/mcp', job: 'Meeting notes', lands: 'Brings the notes and transcripts of your meetings onto the slate for retros and decision maps. It only reads.', try: 'Put the action items from yesterday\'s planning call on the slate', signIn: 'oauth', cost: 'Uses your Granola account', recipe: { rounds: 1, calls: 2, intents: [] } },
+  { id: 'asana', group: 'work', name: 'Asana', url: 'https://mcp.asana.com/v2/mcp', job: 'Projects and tasks', lands: 'Brings Asana projects, tasks and goals onto the slate, and creates or updates tasks and comments you approve.', try: 'Show the overdue tasks in the Website Relaunch project', signIn: 'oauth', cost: 'Uses your Asana account', recipe: { rounds: 1, calls: 2, intents: [] } },
+  { id: 'monday', group: 'work', name: 'monday.com', url: 'https://mcp.monday.com/mcp', job: 'Boards and CRM', lands: 'Brings monday boards, items and CRM records onto the slate, and creates items and groups or changes values you approve.', try: 'Bring the Marketing Calendar board in, grouped by status', signIn: 'oauth', cost: 'Uses your monday.com account', recipe: { rounds: 1, calls: 2, intents: [] } },
+  { id: 'clickup', group: 'work', name: 'ClickUp', url: 'https://mcp.clickup.com/mcp', job: 'Tasks and docs', lands: 'Brings ClickUp tasks, docs and time tracked onto the slate, and creates or updates tasks and docs you approve.', try: 'Show this sprint\'s tasks tagged bug', signIn: 'oauth', cost: 'Uses your ClickUp account', recipe: { rounds: 1, calls: 2, intents: [] } },
+  { id: 'trello', group: 'work', name: 'Trello', url: 'https://mcp.trello.com/v1', job: 'Kanban boards', lands: 'Brings Trello boards, lists and cards onto the slate, and creates or moves cards you approve.', try: 'Bring our Content board onto the slate', signIn: 'oauth', cost: 'Uses your Trello account', recipe: { rounds: 1, calls: 2, intents: [] } },
+  { id: 'airtable', group: 'work', name: 'Airtable', url: 'https://mcp.airtable.com/mcp', job: 'Team databases', lands: 'Brings records from your Airtable bases onto the slate, such as content calendars and trackers, and adds or edits records you approve.', try: 'Put this month\'s content calendar on the slate', signIn: 'oauth', keyHint: 'Or paste an Airtable personal access token.', cost: 'Uses your Airtable account', recipe: { rounds: 1, calls: 2, intents: [] } },
+  { id: 'zapier', group: 'work', name: 'Zapier', url: 'https://mcp.zapier.com/api/v1/connect', job: 'Thousands of apps', lands: 'Reaches the apps your team set up in Zapier, and runs each action you approve, such as adding a row or sending an email.', try: 'Append each note as a row in the Feedback sheet', signIn: 'oauth', cost: 'Uses your Zapier account', recipe: { rounds: 1, calls: 2, intents: [] } },
+  { id: 'hubspot', group: 'business', name: 'HubSpot', url: 'https://mcp.hubspot.com', job: 'Customers and deals', lands: 'Brings HubSpot contacts, companies, deals and tickets onto the slate for account and pipeline reviews, and updates records you approve.', try: 'Show the deals closing this quarter by stage', signIn: 'oauth', cost: 'Uses your HubSpot account', recipe: { rounds: 1, calls: 2, intents: [] } },
+  // Refunds are a payment that leaves the account: off until someone turns them on (cancel_* already is).
+  { id: 'stripe', group: 'business', name: 'Stripe', url: 'https://mcp.stripe.com', job: 'Revenue and billing', lands: 'Brings customers, subscriptions, invoices and payments onto the slate for business reviews, and creates invoices or payment links you approve.', try: 'List our ten largest customers by revenue', signIn: 'oauth', keyHint: 'Or paste a Stripe restricted key.', cost: 'Uses your Stripe account', recipe: { rounds: 1, calls: 2, intents: [], tools: { create_refund: 'destructive' } } },
+  { id: 'posthog', group: 'business', name: 'PostHog', url: 'https://mcp.posthog.com/mcp', job: 'Product numbers', lands: 'Brings product trends, funnels, feature flags and experiments onto the slate, and changes flags or insights you approve.', try: 'Show the onboarding funnel and where people drop off', signIn: 'oauth', keyHint: 'Or paste a PostHog personal API key.', cost: 'Uses your PostHog account', recipe: { rounds: 1, calls: 2, intents: [] } },
+  { id: 'sentry', group: 'business', name: 'Sentry', url: 'https://mcp.sentry.dev/mcp', job: 'Production errors', lands: 'Brings live errors, stack traces and releases onto the slate for incident triage, and changes an issue\'s status or owner when you approve.', try: 'What are the top new errors since yesterday\'s release?', signIn: 'oauth', cost: 'Uses your Sentry account', recipe: { rounds: 1, calls: 2, intents: [] } },
+  {
+    id: 'jina',
+    group: 'research',
+    name: 'Jina',
+    url: 'https://mcp.jina.ai/v1',
+    job: 'Papers and PDFs',
+    lands: 'Finds papers on arXiv and SSRN and reads any web page or PDF, as notes with a link. It only reads.',
+    try: 'Find recent papers on remote team productivity',
+    cost: 'Free',
+    recipe: {
+      rounds: 1,
+      calls: 1,
+      // search_arxiv and search_ssrn take the question as their query (tools/list, 2026-11-24).
+      intents: [
+        { key: 'papers', label: 'Papers', keywords: ['\\b(papers?|preprints?|arxiv|studies|study|research)\\b'],
+          steps: [{ tool: ['search_arxiv', 'search_ssrn'], args: { query: '{request}' } }] },
+      ],
+      // Its server sends no annotations, and these names read as changes; each only reads or
+      // reshapes what it is given, so none should wait on a card (checked against its tools, 2026-11-24).
+      tools: { primer: 'lookup', guess_datetime_url: 'lookup', capture_screenshot_url: 'lookup', sort_by_relevance: 'lookup', deduplicate_strings: 'lookup' },
+    },
+  },
+  { id: 'parallel', group: 'web', name: 'Parallel', url: 'https://mcp.parallel.ai/mcp', job: 'Web search', lands: 'Searches and reads the live web with no account, and adds what it finds as notes with their sources. It only reads.', try: 'What are competitors charging for team plans?', cost: 'Free', recipe: { rounds: 1, calls: 2, intents: [] } },
 ])
+
+// The gallery's filter chips (the invite dialog), in this order after All: each card names one by
+// `group`. A card an administrator added words to keeps its group (it is not an edited field).
+export const GROUPS = Object.freeze([
+  { id: 'work', label: 'Work' },
+  { id: 'business', label: 'Business' },
+  { id: 'research', label: 'Research' },
+  { id: 'web', label: 'Web and facts' },
+])
+
+/**
+ * The cards the invite dialog shows for a chip (group: a GROUPS id, or 'all') and the words typed in
+ * its search box: every word must be in the card's name, what it is for, what it adds, or its
+ * group's name. Order is kept.
+ */
+export function filterCards(cards = [], { group = 'all', query = '' } = {}) {
+  const words = String(query || '').toLowerCase().normalize('NFKC').split(/\s+/).filter(Boolean).slice(0, 8)
+  return cards.filter((card) => {
+    if (group && group !== 'all' && card.group !== group) return false
+    if (!words.length) return true
+    const label = GROUPS.find((g) => g.id === card.group)?.label || ''
+    const text = [card.name, card.job, card.lands, label].join(' ').toLowerCase().normalize('NFKC')
+    return words.every((word) => text.includes(word))
+  })
+}
+
+/** The chips worth showing: All, then each group that has a card in this gallery. */
+export const groupsIn = (cards = []) => GROUPS.filter((g) => cards.some((card) => card.group === g.id))
 
 // Native integrations: built into Slatebox (no MCP address), connected on the Integrations page and
 // invited onto slates like any agent. Administrators turn one on or off and edit its words in
