@@ -7,10 +7,9 @@ database. Install Docker, run one command, open one address.
 docker run -d --name slatebox -p 7070:7070 -v slatebox-data:/data ghcr.io/slatebox/slatebox
 ```
 
-The image is being published at `ghcr.io/slatebox/slatebox`. Until it is, as
-version 0.2.0, that address serves 0.1.0, which runs everything here except a
-team address (`SLATEBOX_TUNNEL_TOKEN`); for that, build the image from this
-repository with `self-host/build-image.sh`.
+`latest` is version 0.2.1 (`ghcr.io/slatebox/slatebox:0.2.1`, index
+`sha256:208d4bfc460ed2feedc435ccc22231177929e8885ab5f856933c67e6831ca5b5`), for
+linux/amd64 and linux/arm64. It needs no registry login.
 
 A start usually takes well under a minute; `docker ps` shows the container as
 `healthy` once a slate can be opened. Then make the one-time setup link:

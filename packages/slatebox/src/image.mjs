@@ -10,10 +10,11 @@ import { EXIT, InstallError } from './errors.mjs'
  * build instead (self-host/build-image.sh).
  */
 export const DEFAULT_REPOSITORY = 'ghcr.io/slatebox/slatebox'
-// 0.2.0 adds the team-address tunnel (cloudflared). Until it is published the pin is the tag;
-// `npm publish` refuses to run until PINNED_DIGEST holds the published index digest.
-export const PINNED_TAG = '0.2.0'
-export const PINNED_DIGEST = null
+// 0.2.0 added the team-address tunnel (cloudflared); 0.2.1 adds the self-host fixes and team
+// moves. PINNED_DIGEST is the published multi-arch index of ghcr.io/slatebox/slatebox:0.2.1
+// (linux/amd64 and linux/arm64); `npm publish` refuses to run without it.
+export const PINNED_TAG = '0.2.1'
+export const PINNED_DIGEST = 'sha256:208d4bfc460ed2feedc435ccc22231177929e8885ab5f856933c67e6831ca5b5'
 export const DEFAULT_IMAGE = PINNED_DIGEST ? `${DEFAULT_REPOSITORY}@${PINNED_DIGEST}` : `${DEFAULT_REPOSITORY}:${PINNED_TAG}`
 
 /** Does this reference name a registry (so a digest reference can be pulled elsewhere)? */
