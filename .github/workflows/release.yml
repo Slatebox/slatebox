@@ -42,11 +42,11 @@ jobs:
     steps:
       # A pushed tag reads the changelog of its own release commit. A manual run reads the
       # default branch, which also covers tags that predate this workflow.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.repository.default_branch || github.ref }}
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22.13.0
 
