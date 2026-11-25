@@ -25,6 +25,10 @@ Plain `npx slatebox` lists the commands.
 npx slatebox install --team-address acme --yes
 ```
 
+With `--yes` nothing is asked: what you did not give takes its default (this
+computer, AI off until you add a model with `slatebox ai add`, no single
+sign-on, daily backups, size small). The pinned image is downloaded first
+(about 1 GB, once), so nothing is claimed for an image this computer cannot get.
 `acme.slatebox.team` is claimed for your Slatebox account when you approve a
 short code in your browser (like `gh auth login`). The container then connects
 out to Cloudflare through a secure tunnel, which carries HTTPS and live
@@ -56,7 +60,7 @@ sign-on is free.
 
 | Where | How |
 | --- | --- |
-| This computer | `npx slatebox install` (the default). A team address, your own domain, or `--local` for `http://localhost` on a free port from 7070. |
+| This computer | `npx slatebox install` (the default). A team address, your own domain, or `--local` for `http://localhost` on a free port from 7070. Daily backups run from cron on Linux and from a launchd agent on a Mac (no permission prompt; a backup missed while the Mac sleeps runs when it wakes). |
 | A Linux server | `npx slatebox install ssh root@203.0.113.5 --team-address acme`, or `--domain boards.example.com`. With a domain, HTTPS certificates are obtained and renewed automatically (point DNS at the server, open ports 80 and 443); without one, `http://<server>:7070`. Docker is installed only if you add `--install-docker`. |
 | Kubernetes | `npx slatebox install k8s --route ingress --domain boards.example.com --tls-issuer ClusterIssuer/letsencrypt`. Uses kubectl and your current context (a context whose name looks like production must be named with `--k8s-context`). One StatefulSet with a volume, a Service, an optional Ingress or Gateway API HTTPRoute, a Secret, and a backups sidecar. |
 | Files only | `npx slatebox install export --format compose\|manifests\|helm --out ./slatebox-deploy` for GitOps. Nothing is applied. |

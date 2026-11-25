@@ -125,8 +125,10 @@ export async function startTeamAddresses({ isUnlocked = () => true } = {}) {
   async function authenticateUser(req) {
     const found = await apiTokenService.authenticateApiRequest(req, { audience: device.resourceFor('slatebox-cli') })
     if (!found || !found.token.scopes?.includes(TEAM_ADDRESSES_SCOPE)) return null
-    return { _id: found.account._id }
+    return { _id: found.account._id, deviceGrantId: found.token.deviceGrantId ?? null }
   }
+  // What came of the change goes to the /device page that approved this sign-in.
+  const reportOutcome = (caller, outcome) => (caller?.deviceGrantId ? device.report({ grantId: caller.deviceGrantId, userId: caller._id, ...outcome }) : undefined)
   const isAdmin = async (userId) => Boolean(await Permissions.findOneAsync({ userId, claimId: CONSTANTS.claims.uberMensch._id }, { fields: { _id: 1 } }))
   const describeOwner = async (userId) => {
     const user = await Meteor.users.findOneAsync(userId, { fields: { emails: 1 } })
@@ -167,5 +169,5 @@ export async function startTeamAddresses({ isUnlocked = () => true } = {}) {
     console.log('[team-addresses] closed: settings.cloudflare.teamClaims is not set on this server; every route answers 503 and nothing calls Cloudflare')
   }
 
-  return { gate, closed, service, authenticateUser, address, isAdmin, describeOwner }
+  return { gate, closed, service, authenticateUser, address, isAdmin, describeOwner, reportOutcome }
 }

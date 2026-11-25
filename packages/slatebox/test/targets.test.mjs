@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { writeFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { parse } from '../src/yaml.mjs'
-import { cli, sandbox } from './fakes.mjs'
+import { cli, FakeCloud, sandbox } from './fakes.mjs'
 
 const IMAGE = 'registry.example.com/slatebox/slatebox@sha256:' + 'b'.repeat(64)
 const BROKEN = 'registry.example.com/slatebox/slatebox@sha256:' + 'c'.repeat(64)
@@ -230,4 +230,16 @@ test('review 13: an image built for another architecture than the nodes is refus
   assert.equal(result.code, 4, result.stderr)
   assert.match(result.events.at(-1).message, /arm64/)
   assert.equal(kube.applies.length, 0)
+})
+
+// The published-installer end-to-end run: with the image not on this computer, a plan assumed the
+// oldest image's settings and refused a team address. This release's own image is known.
+test('Kubernetes with this release\'s image and a team address: planned with the image\'s own settings, not refused', async () => {
+  const kube = new FakeKube()
+  const cloud = new FakeCloud()
+  const result = await cli(['plan', 'k8s', '--team-address', 'acme', '--ai', 'none', '--admin-email', 'ops@example.com', '--json'], { run: kube.run, home: sandbox(), fetch: cloud.fetch, env: { SLATEBOX_CLOUD_URL: cloud.base } })
+  assert.equal(result.code, 0, result.stderr)
+  assert.doesNotMatch(result.stderr, /does not support a team address/)
+  const plan = result.events.find(event => event.event === 'plan')
+  assert.doesNotMatch(plan.warnings.join('\n'), /could not be read from it/, 'nothing is assumed for the pinned image')
 })

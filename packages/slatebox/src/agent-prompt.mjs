@@ -50,8 +50,8 @@ you what it still needs. Follow these steps exactly.
 4. **Show the plan to the person and get an explicit yes.** It lists every
    file, command, object and port, and where the secrets are kept.
    With a team address the short form is
-   \`npx slatebox install --team-address <name> --yes\` (add \`--ai none\` or the
-   providers the person chose). Exit 3 with \`id: "address-unavailable"\` lists free
+   \`npx slatebox install --team-address <name> --yes\` (add the providers the
+   person chose; with --yes and no AI answer, AI is off). Exit 3 with \`id: "address-unavailable"\` lists free
    \`suggestions\`: ask the person to pick one.
 5. **Install**: \`npx -y slatebox@latest install --answers slatebox.yaml --yes --json\`.
    For a team address a \`sign-in\` event carries \`verificationUri\` and \`userCode\`:

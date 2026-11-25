@@ -17,6 +17,11 @@ import { AccountActions, AccountNote, AccountPage, AccountPanel, AccountSection,
 // terminal shows, sees which computer asks, from where, and exactly what it gets, and approves or
 // denies. Nothing is sent back to a browser address: the command polls for its answer. A move
 // (`npx slatebox migrate --to cloud`, `import --from cloud`) asks under the title "Move your team".
+// For a team address the page then follows what the command did with the sign-in (device.mjs
+// outcome): "Claimed …", or the refusal and why (an unconfirmed email, a reserved name), never a
+// bare "Approved" for a claim that was refused.
+const OUTCOME_POLL_MS = 2000
+const OUTCOME_POLLS = 150
 export default function DeviceSignIn() {
   const [query] = useSearchParams()
   const { user, loggingIn } = useTracker(() => ({ user: Meteor.user(), loggingIn: Meteor.loggingIn() }), [])
@@ -25,6 +30,7 @@ export default function DeviceSignIn() {
   const [done, setDone] = React.useState('')
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState('')
+  const [outcome, setOutcome] = React.useState(null)
   const framed = typeof window !== 'undefined' && window.top !== window.self
 
   const look = async (event) => {
@@ -45,13 +51,42 @@ export default function DeviceSignIn() {
     setBusy(true)
     setError('')
     try {
-      await Meteor.callAsync(CONSTANTS.methods.oauth.deviceDecide, { userCode: code, allow })
+      const decided = await Meteor.callAsync(CONSTANTS.methods.oauth.deviceDecide, { userCode: code, allow })
       setDone(allow ? 'approved' : 'denied')
+      if (allow && decided?.grant) setOutcome({ grant: decided.grant, state: 'waiting' })
     } catch (requestError) {
       setError(requestError.reason || requestError.message)
     }
     setBusy(false)
   }
+
+  // After "Approve": ask what the command did, every two seconds, until it says (or five minutes pass).
+  React.useEffect(() => {
+    if (!outcome?.grant || outcome.state !== 'waiting') return undefined
+    let stopped = false
+    let polls = 0
+    const ask = async () => {
+      if (stopped) return
+      polls += 1
+      try {
+        const found = await Meteor.callAsync(CONSTANTS.methods.oauth.deviceOutcome, { grant: outcome.grant })
+        if (stopped) return
+        if (found && found.state !== 'waiting') {
+          setOutcome({ ...outcome, ...found })
+          return
+        }
+      } catch {
+        // keep asking: a dropped connection comes back
+      }
+      if (polls >= OUTCOME_POLLS) setOutcome({ ...outcome, state: 'unknown' })
+      else setTimeout(ask, OUTCOME_POLL_MS)
+    }
+    const first = setTimeout(ask, OUTCOME_POLL_MS)
+    return () => {
+      stopped = true
+      clearTimeout(first)
+    }
+  }, [outcome?.grant, outcome?.state])
 
   const shown = deviceCodeFromQuery(new URLSearchParams({ code })) || ''
   const signIn = `/login?device=${encodeURIComponent(shown || '1')}`
@@ -72,12 +107,35 @@ export default function DeviceSignIn() {
         </AccountActions>
       </AccountSection>
     )
+  } else if (done && outcome?.state === 'refused') {
+    body = (
+      <AccountSection title="Not done" data-testid="device-done" data-outcome="refused">
+        <Alert severity="error" data-testid="device-refusal">{outcome.message || 'Slatebox refused the request.'}</Alert>
+        <Typography>
+          {outcome.code === 'unverified'
+            ? 'Nothing was claimed. Confirm your email address, then run the command in your terminal again.'
+            : 'Nothing was claimed. Your terminal shows the same message; run the command again there (with another name if this one is not available).'}
+        </Typography>
+      </AccountSection>
+    )
+  } else if (done && outcome?.state === 'done') {
+    body = (
+      <AccountSection title="Done" data-testid="device-done" data-outcome="done">
+        <Typography>{outcome.message || 'Your terminal continues on its own.'} You can close this tab.</Typography>
+      </AccountSection>
+    )
+  } else if (done && outcome?.state === 'waiting') {
+    body = (
+      <AccountSection title="Approved: finishing in your terminal…" data-testid="device-done" data-outcome="waiting">
+        <Typography>Keep this tab open for a moment: it shows whether the team address was set up.</Typography>
+      </AccountSection>
+    )
   } else if (done) {
+    let next = 'Nothing was granted. You can close this tab.'
+    if (done === 'approved') next = outcome?.state === 'unknown' ? 'Your terminal shows how it went. You can close this tab.' : 'Your terminal continues on its own. You can close this tab.'
     body = (
       <AccountSection title={done === 'approved' ? 'Approved' : 'Denied'} data-testid="device-done" data-outcome={done}>
-        <Typography>
-          {done === 'approved' ? 'Your terminal continues on its own. You can close this tab.' : 'Nothing was granted. You can close this tab.'}
-        </Typography>
+        <Typography>{next}</Typography>
       </AccountSection>
     )
   } else if (!request) {

@@ -24,17 +24,21 @@ function client(ctx, base) {
   return ctx.cloud
 }
 
-/** A team address that cannot be had: the same answer for taken, reserved and blocked names. */
-function unavailable(name, suggestions = []) {
+/**
+ * A team address that cannot be had: the same answer for taken and blocked names. A reserved name
+ * (Slatebox's own: www, admin, test, e2e-...) says so, in Slatebox Cloud's words.
+ */
+function unavailable(name, suggestions = [], { reason, message } = {}) {
   const free = suggestions?.length ? `\n  Free right now: ${suggestions.join(', ')}` : ''
-  return new InstallError(EXIT.NEEDS_INPUT, `${teamHost(name)} isn't available.${free}\n  Choose another: --team-address <name>`, { id: 'address-unavailable', field: 'address.team', suggestions: suggestions || [] })
+  const why = reason === 'reserved' ? (message && /reserved/i.test(message) ? message.replace(/\s*Choose another name\.?$/, '') : `${teamHost(name)} is reserved for Slatebox itself.`) : `${teamHost(name)} isn't available.`
+  return new InstallError(EXIT.NEEDS_INPUT, `${why}${free}\n  Choose another: --team-address <name>`, { id: 'address-unavailable', field: 'address.team', suggestions: suggestions || [], ...(reason ? { reason } : {}) })
 }
 
 function cloudFailure(error, name) {
   if (error instanceof InstallError) return error
   if (!(error instanceof CloudError)) return error
   switch (error.code) {
-    case 'unavailable': return unavailable(name, error.suggestions)
+    case 'unavailable': return unavailable(name, error.suggestions, { reason: error.reason, message: error.message })
     case 'invalid_name': return new InstallError(EXIT.USAGE, `"${name}" is not a team address: ${TEAM_ADDRESS_RULE}.`, { field: 'address.team' })
     case 'limit_reached': return new InstallError(EXIT.PRECONDITION, `Your Slatebox account already has the most team addresses it may hold, or claimed too many today. ${error.message} Release one you no longer use (slatebox address release on that install), or use your own domain: --domain boards.example.com`, { id: 'address-limit' })
     case 'rate_limited': return new InstallError(EXIT.PRECONDITION, `Slatebox Cloud asks you to wait${error.retryAfter ? ` ${error.retryAfter} seconds` : ''} before trying again. Nothing was changed.`, { id: 'rate-limited', retryAfter: error.retryAfter })

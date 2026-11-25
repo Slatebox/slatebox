@@ -3,7 +3,7 @@
 // (exec, describe and the MCP server, from the slatebox-mcp package, in this same process).
 // main() takes its streams and environment as arguments and returns the exit code, so tests run
 // it in process.
-import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, rmdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { AGENT_PROMPT } from './agent-prompt.mjs'
@@ -69,8 +69,12 @@ export const HELP = `slatebox ${PKG.version}: run your own Slatebox, and work wi
   npx slatebox install                   asks where your team opens it (a free team address at
                                          https://<name>.slatebox.team, your own domain, or this
                                          computer only), shows a plan, installs
-  npx slatebox install --team-address acme --yes      the same without questions (you still sign
-                                         in once in your browser to claim the address)
+  npx slatebox install --team-address acme --yes      the same without questions: anything not
+                                         given takes its default (this computer, no admin email,
+                                         AI off: add a model later with slatebox ai add, no SSO,
+                                         daily backups, size small, no mail). You still approve one
+                                         code in your browser to claim the address (opened for you
+                                         at a terminal)
   npx slatebox install --domain boards.example.com    your own domain (Caddy HTTPS, or --url and your proxy)
   npx slatebox --dry-run                 the questions and the plan only; nothing changes
   npx slatebox agent-prompt              instructions for a coding agent to do it for you
@@ -91,7 +95,9 @@ then --answers, then the environment. Consent never comes from the environment:
   --listen <ip>           this computer only: 127.0.0.1 (default) or 0.0.0.0 for every interface
   --admin-email <email>
   --ai none | --ai-provider "kind=<openai|anthropic|deepinfra|openrouter|groq|together|mistral|ollama|lmstudio|openai-compatible>,model=<m>,url=<endpoint>,key=env:<VAR>"
-                          (repeat for several, then --ai-default <id>; there is no default provider)
+                          (repeat for several, then --ai-default <id>; there is no default provider:
+                          without --yes it is asked, or exit 3 with nobody to ask; with --yes and
+                          no AI answer, AI is off: add a model later with slatebox ai add)
   --sso  --sso-only  --sso-admin open|closed
   --backups default|<dir>|s3://bucket/prefix|off  --backup-schedule "0 3 * * *"  --backup-keep 14
   --size small|team|large   --mail-url-from env:<VAR>  --mail-from "Slatebox <b@example.com>"
@@ -118,7 +124,9 @@ a name is claimed, moved or reconnected. SLATEBOX_CLOUD_URL or --cloud-url point
 Slatebox Cloud. The install credential stays in
 ~/.slatebox/installs/<name>/credentials.json (mode 0600).
 
-Global: --yes (after a person approved the plan)  --json (NDJSON events on stdout)
+Global: --yes (after a person approved the plan; asks nothing, takes the defaults for what is
+        not given; answers with no default, such as --host or a server's --admin-email, are
+        still exit 3)  --json (NDJSON events on stdout)
         --agent auto|yes|no  --debug  --health-timeout <seconds> (default 600)
 
 Exit codes: 0 done or nothing to change; 2 bad flags or answers; 3 an answer or a
@@ -183,7 +191,7 @@ async function slateCommand(argv, io) {
   }
   if (argv[0] === 'mcp') {
     if (argv.includes('--help') || argv.includes('-h')) {
-      io.stdout.write('Usage: slatebox mcp [--base-url ORIGIN] [--typed-tools on|off] [--http [--port N]]\nThe same as slatebox-mcp: SLATEBOX_API_TOKEN is your personal access token.\n')
+      io.stdout.write(commands.mcpHelp ? commands.mcpHelp('slatebox mcp') : 'Usage: slatebox mcp [--base-url ORIGIN] [--typed-tools on|off] [--http [--port N]]\nThe same as slatebox-mcp: SLATEBOX_API_TOKEN is your personal access token.\n')
       return 0
     }
     try {
@@ -279,8 +287,10 @@ export async function main(argv, io = {}) {
     cliFlags: parsed.values, platform: io.platform, cwd: io.cwd,
     openBrowser: io.openBrowser, sleep: io.sleep, deviceLabel: io.deviceLabel, spawn: io.spawn,
     teamHealthAttempts: io.teamHealthAttempts, teamHealthDelay: io.teamHealthDelay,
+    uid: io.uid, schedulerTimeout: io.schedulerTimeout,
   }
   if (interactive) ctx.prompt = createPrompt({ input: io.stdin, output: io.stderr })
+
   ctx.emitPlan = plan => {
     out.event({ event: 'plan', ...plan })
     const text = formatPlan(plan)
@@ -363,14 +373,15 @@ async function prepareAnswers(ctx, flags, positionals) {
   const name = cliFlags.name || file?.name || flags.name || 'slatebox'
   const record = readRecord(ctx.home, name)
   let partial = collect({ record, env: ctx.env, file, flags: cliFlags })
-  if (ctx.interactive) {
+  // --yes asks nothing: what is not given takes its default (resolveAnswers with { yes }).
+  if (ctx.interactive && !ctx.yes) {
     const kube = await ctx.run('kubectl', ['config', 'current-context']).catch(() => null)
     ctx.currentContext = kube?.code === 0 ? kube.stdout.trim() : null
     ctx.freePort = partial.address?.port ?? await defaultLocalPort()
     partial = await interview(ctx, partial)
   }
   const freePort = (partial.target ?? 'local') === 'local' && partial.address?.port === undefined && !partial.address?.url ? await defaultLocalPort() : undefined
-  const { answers, missing, errors } = resolveAnswers(partial, { freePort, cwd: ctx.cwd, home: ctx.env.HOME })
+  const { answers, missing, errors } = resolveAnswers(partial, { freePort, cwd: ctx.cwd, home: ctx.env.HOME, yes: ctx.yes })
   if (errors.length) throw new InstallError(EXIT.USAGE, `Some answers are not valid: ${errors.map(error => error.field).join(', ')}.`, { fields: errors })
   if (missing.length) throw new InstallError(EXIT.NEEDS_INPUT, `Some answers are needed: ${missing.map(item => item.field).join(', ')}.`, { missing })
   return { answers, record, explicitContext: Boolean(cliFlags['k8s-context'] || file?.k8s?.context || record?.k8s?.context) }
@@ -382,10 +393,14 @@ async function applyTarget(ctx, answers, options) {
   return applyDocker(ctx, answers, { ...options, archive: ctx.flags['image-archive'] })
 }
 
+function runningLines(ctx, done) {
+  return ['', `Slatebox is running at  ${done.address}`, ...setupLines(ctx, done.name)]
+}
+
 function closing(ctx, done) {
   if (done.nothingToChange) return [`Nothing to change: ${done.name} is running at ${done.address}.${done.teamAddress ? ' (slatebox upgrade gets a newer image.)' : ''}`, ...setupLines(ctx, done.name)]
   if (done.target === 'export') return [`Wrote ${done.files.length} files to ${done.dir}. Nothing was applied.`]
-  const lines = ['', `Slatebox is running at  ${done.address}`, ...setupLines(ctx, done.name)]
+  const lines = ctx.announced ? [] : runningLines(ctx, done)
   if (done.teamAddress) {
     lines.push('', `On this computer it also answers at ${done.localAddress}.`,
       '', `Keep a copy of ${installDir(ctx.home, done.name)}/ (keys and the team-address credential).`)
@@ -450,6 +465,16 @@ async function dispatch(ctx, positionals, flags) {
     case 'install': {
       const { answers, record, explicitContext } = await prepareAnswers(ctx, flags, positionals)
       const planOnly = command === 'plan' || Boolean(flags['dry-run'])
+      // The address and setup link, printed the moment the install is healthy (before the backup
+      // schedule), and not again at the end.
+      ctx.announce = healthy => {
+        if (ctx.announced || healthy.target === 'export') return
+        ctx.announced = true
+        for (const line of runningLines(ctx, healthy)) {
+          if (typeof line === 'string') ctx.out.say(line)
+          else ctx.stderr.write(`${line.terminal}\n`)
+        }
+      }
       const done = await applyTarget(ctx, answers, { record, planOnly, explicitContext })
       if (done.planned) {
         ctx.out.event({ event: 'done', planned: true, name: answers.name, target: answers.target })
@@ -534,7 +559,11 @@ async function dispatch(ctx, positionals, flags) {
         const dir = installDir(ctx.home, record.name)
         if (keepCredential) {
           for (const entry of existsSync(dir) ? readdirSync(dir) : []) if (entry !== CREDENTIALS_FILE) rmSync(join(dir, entry), { recursive: true, force: true })
-        } else rmSync(dir, { recursive: true, force: true })
+        } else {
+          rmSync(dir, { recursive: true, force: true })
+          // The installs folder goes too once nothing else is in it.
+          try { rmdirSync(join(ctx.home, 'installs')) } catch { /* another install, or files of someone else's */ }
+        }
       } else {
         writeRecord(ctx.home, { ...record, ...(released?.released ? { address: localAddress(record) } : {}), state: 'uninstalled' })
       }

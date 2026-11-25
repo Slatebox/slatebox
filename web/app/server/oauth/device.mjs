@@ -11,6 +11,9 @@
 //            are kept, it lives 10 minutes, and it is used once.
 //   token    one row in slateApiTokens, kind 'oauth' (sbo_), bound to the client's resource, with a
 //            short access token and no refresh token.
+//   outcome  for a purpose that reports one (team addresses), what the command then did with the
+//            sign-in: the service records it on the grant (report) and /device shows it (outcome),
+//            so the page never stops at "Approved" when the claim was refused.
 //
 // MIT, runs without Meteor (scripts/oauth-device.test.mjs); server/oauth/meteor.js wires it.
 // Which purposes are offered is the caller's `enabled(purpose)` (team addresses and moves run only
@@ -55,6 +58,8 @@ export const DEVICE_CLIENTS = Object.freeze({
         tokenSeconds: 15 * 60,
         grants: Object.freeze({ [TEAM_ADDRESSES_SCOPE]: 'claim and manage team addresses on your account' }),
         cannot: 'It will not be able to read or change your slates.',
+        // The claim service reports what came of the sign-in (enterprise/team-addresses/routes.mjs).
+        reportsOutcome: true,
       }),
       move: Object.freeze({
         title: 'Move your team',
@@ -157,6 +162,11 @@ export function memoryWindowCounter({ now = Date.now } = {}) {
 }
 
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
+const GRANT_ID = /^[a-f0-9]{32}$/
+// What /device may show of an outcome: printable, one line, short.
+const outcomeText = (text) => (typeof text === 'string' ? text.replace(/[^\x20-\x7e\u00a0-\u024f\u2018-\u2026]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300) : '')
+// The page asks for a while after approving, then stops: past this the grant has no outcome to wait for.
+export const OUTCOME_WAIT_MS = 10 * 60 * 1000
 
 /**
  * @param {object} options
@@ -360,11 +370,36 @@ export function createDeviceFlow({
     const status = allow ? 'approved' : 'denied'
     if (!(await grants.updateAsync({ _id: grant._id, status: 'pending' }, { $set: { status, userId: user._id, decidedAt: now() } })))
       throw new DeviceError('not_pending', 'This code is no longer waiting. Start signing in again on your device.')
-    return { status }
+    const purpose = purposeOf(clientFor(grant.clientId), grant.purpose)
+    // A purpose that reports its outcome: the page follows the grant to say what came of it.
+    return allow && purpose?.reportsOutcome ? { status, grant: grant._id } : { status }
+  }
+
+  // The service that took the token says what it did (ok, or the refusal and why). Only the grant's
+  // own person is ever recorded against it; a grant already decided otherwise is left alone.
+  async function report({ grantId, userId, ok, code, message, reason }) {
+    if (typeof grantId !== 'string' || !GRANT_ID.test(grantId)) return false
+    const recorded = { ok: Boolean(ok), code: typeof code === 'string' ? code.slice(0, 40) : null, message: outcomeText(message), at: now(), ...(reason === 'reserved' && { reason }) }
+    const grant = await grants.findOneAsync({ _id: grantId, userId })
+    if (!grant || !['approved', 'used'].includes(grant.status)) return false
+    return Boolean(await grants.updateAsync({ _id: grantId, userId }, { $set: { outcome: recorded } }))
+  }
+
+  // What /device shows after "Approve": waiting, done, or refused with the reason. null for a grant
+  // that is not this person's (the same answer as one that does not exist).
+  async function outcome({ grant: grantId, user }) {
+    assertEnabled()
+    signedIn(user)
+    if (typeof grantId !== 'string' || !GRANT_ID.test(grantId)) return null
+    const grant = await grants.findOneAsync({ _id: grantId })
+    if (!grant || grant.userId !== user._id) return null
+    if (grant.outcome) return { state: grant.outcome.ok ? 'done' : 'refused', message: grant.outcome.message, code: grant.outcome.code ?? null, ...(grant.outcome.reason && { reason: grant.outcome.reason }) }
+    if ((grant.decidedAt || grant.createdAt) + OUTCOME_WAIT_MS < now()) return { state: 'unknown' }
+    return { state: 'waiting' }
   }
 
   // resourceFor(clientId[, purpose]): the resource its tokens are bound to (the first purpose by default).
-  return { verificationUri, authorize, poll, describe, decide, resourceFor: (clientId, name) => resourceFor(clientFor(clientId), name) }
+  return { verificationUri, authorize, poll, describe, decide, report, outcome, resourceFor: (clientId, name) => resourceFor(clientFor(clientId), name) }
 }
 
 // The JSON an RFC 8628 client reads for a refusal.

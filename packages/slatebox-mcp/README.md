@@ -34,14 +34,14 @@ If you want a script to run on your Slatebox instead, in its sealed runner with 
 Use Node.js 22.13 or later. Download the archive and checksum from the Slatebox docs. The archive includes the JavaScript source of the `slatebox-mcp` command, the generated client files and the MIT license.
 
 ```sh
-curl -fLO https://docs.slatebox.com/assets/downloads/slatebox-mcp-0.4.0.tgz
-curl -fLO https://docs.slatebox.com/assets/downloads/slatebox-mcp-0.4.0.tgz.sha256
-shasum -a 256 -c slatebox-mcp-0.4.0.tgz.sha256
-npm install --global ./slatebox-mcp-0.4.0.tgz
+curl -fLO https://docs.slatebox.com/assets/downloads/slatebox-mcp-0.4.1.tgz
+curl -fLO https://docs.slatebox.com/assets/downloads/slatebox-mcp-0.4.1.tgz.sha256
+shasum -a 256 -c slatebox-mcp-0.4.1.tgz.sha256
+npm install --global ./slatebox-mcp-0.4.1.tgz
 slatebox-mcp exec --help
 ```
 
-On Linux you can also verify the checksum with `sha256sum -c slatebox-mcp-0.4.0.tgz.sha256`. npm installs the public MCP SDK.
+On Linux you can also verify the checksum with `sha256sum -c slatebox-mcp-0.4.1.tgz.sha256`. npm installs the public MCP SDK.
 
 Open **Profile → Developer access** in your Slatebox account and create a token. Supply it in the `SLATEBOX_API_TOKEN` environment variable. Set `SLATEBOX_BASE_URL`, or pass `--base-url`, to your own instance's origin when self-hosting. The default is `https://app.slatebox.com`, Slatebox Cloud, which serves the API at `/api/v1` and the hosted MCP endpoint at `/mcp`.
 

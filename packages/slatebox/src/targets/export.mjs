@@ -5,7 +5,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { EXIT, InstallError } from '../errors.mjs'
-import { DEFAULT_IMAGE, FALLBACK_CAPABILITIES, probeImage } from '../image.mjs'
+import { DEFAULT_IMAGE, FALLBACK_CAPABILITIES, isPinnedImage, PINNED_CAPABILITIES, probeImage } from '../image.mjs'
 import { emptyPlan } from '../plan.mjs'
 import { renderCompose, SECRETS_FILE, SETTINGS_FILE } from '../render/compose.mjs'
 import { renderHelmChart } from '../render/helm.mjs'
@@ -27,6 +27,8 @@ export async function exportFiles(ctx, answers, { planOnly = false } = {}) {
   let caps = FALLBACK_CAPABILITIES
   if (image.local) {
     try { caps = await probeImage((args, o) => ctx.run('docker', args, o), image.id) } catch { warnings.push('The image did not list its settings; the current image\'s settings were assumed.') }
+  } else if (isPinnedImage(image.ref)) {
+    caps = PINNED_CAPABILITIES
   } else {
     warnings.push(`${image.ref} is not on this computer, so the files assume the current image's settings and are not pinned to a digest.`)
   }

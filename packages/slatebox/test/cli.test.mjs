@@ -210,12 +210,13 @@ test('secrets are never revealed into JSON or a pipe', async () => {
   assert.match(path.stdout, /secrets\.env/)
 })
 
+// Linux: cron. (A Mac uses a launchd agent: backups-macos.test.mjs.)
 test('the crontab keeps every line that is not the installer\'s own', async () => {
   const { docker, home } = setup()
   docker.crontab = '# mine\n\n5 4 * * * /usr/bin/true\n'
-  await cli(['install', '--image', IMAGE, '--ai', 'none', '--port', '17435', '--yes'], { run: docker.run, home })
+  await cli(['install', '--image', IMAGE, '--ai', 'none', '--port', '17435', '--yes'], { run: docker.run, home, platform: 'linux' })
   assert.match(docker.crontab, /^# mine\n\n5 4 \* \* \* \/usr\/bin\/true\n0 3 \* \* \* \/bin\/sh .*backup\.sh.*# slatebox-installer:slatebox\n$/)
-  await cli(['uninstall', '--yes'], { run: docker.run, home })
+  await cli(['uninstall', '--yes'], { run: docker.run, home, platform: 'linux' })
   assert.equal(docker.crontab, '# mine\n\n5 4 * * * /usr/bin/true\n')
 })
 

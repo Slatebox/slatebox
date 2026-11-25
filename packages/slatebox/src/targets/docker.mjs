@@ -3,11 +3,12 @@
 //
 //   preflight -> image -> plan -> confirm -> secrets -> files -> start -> health
 //   -> (rollback on failure) -> first account -> backup schedule -> record
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { EXIT, InstallError } from '../errors.mjs'
 import { firstAdmin, makeSetupLink, setupState, stillWaiting } from '../setup-link.mjs'
-import { checkArch, checkCpu, DEFAULT_IMAGE, FALLBACK_CAPABILITIES, inspectImage, normalArch, pinImage, probeImage, refreshTag, resolveImage } from '../image.mjs'
+import { checkArch, checkCpu, DEFAULT_IMAGE, FALLBACK_CAPABILITIES, inspectImage, isPinnedImage, knownCapabilities, normalArch, pinImage, probeImage, refreshTag, resolveImage } from '../image.mjs'
 import { emptyPlan } from '../plan.mjs'
 import { installDir, recordText, writeRecord } from '../record.mjs'
 import { COMPOSE_FILE, hostPort, ports, renderCompose, SECRETS_FILE, SETTINGS_FILE } from '../render/compose.mjs'
@@ -254,14 +255,14 @@ async function startAndCheck(ctx, host, answers) {
 
 // ------------------------------------------------------------------ backups
 
-function backupScript(host, answers, facts) {
+function backupScript(ctx, host, answers, facts) {
   const to = answers.backups.to
   const s3 = to.startsWith('s3://')
   const dir = backupsDir(host, answers)
   const bucket = `${to.replace(/\/$/, '')}/`
   return `#!/bin/sh
 # Written by the slatebox installer: one backup of the Slatebox "${answers.name}",
-# keeping the last ${answers.backups.keep}. Run by ${host.kind === 'ssh' ? 'a systemd timer or cron' : 'cron'}; safe to run by hand.
+# keeping the last ${answers.backups.keep}. Run by ${host.kind === 'ssh' ? 'a systemd timer or cron' : usesLaunchd(ctx, host, answers) ? 'a launchd agent' : 'cron'}; safe to run by hand.
 set -u
 umask 077
 docker=${shq(facts.docker_path || 'docker')}
@@ -286,10 +287,113 @@ ls -1t "$dir"/slatebox-*.gz 2>/dev/null | tail -n +${answers.backups.keep + 1} |
 
 const MARK = name => `# slatebox-installer:${name}`
 
+// Every scheduler command gets this long. On macOS `crontab -` can wait for a permission prompt
+// that a terminal never shows; nothing the installer runs after "healthy" may hang on it.
+export const SCHEDULER_TIMEOUT_MS = 30_000
+
+/** Why a scheduler command failed, in words: never an empty reason. */
+function schedulerFailure(command, result, ctx) {
+  if (result.code === 124) {
+    const mac = (ctx.platform || process.platform) === 'darwin'
+    return `${command} did not finish within ${(ctx.schedulerTimeout ?? SCHEDULER_TIMEOUT_MS) / 1000}s and was stopped${mac ? ' (macOS may be waiting for permission for your terminal to change the crontab)' : ''}`
+  }
+  if (result.code === 127) return `${command} is not installed on this computer`
+  const said = lastLine(result.stderr) || lastLine(result.stdout)
+  return `${command} exited with code ${result.code}${said ? `: ${said}` : ' without saying why'}`
+}
+
+const schedulerRun = (ctx, cmd, args, options = {}) => ctx.run(cmd, args, { ...options, timeout: ctx.schedulerTimeout ?? SCHEDULER_TIMEOUT_MS })
+
+// ---- macOS: a launchd agent, not cron. It needs no permission prompt (cron's crontab does, and can
+// block on it), and a run missed while the Mac sleeps happens when it wakes.
+export const launchAgentLabel = name => `com.slatebox.${name}.backup`
+export const launchAgentPath = (ctx, name) => join(ctx.env?.HOME || homedir(), 'Library', 'LaunchAgents', `${launchAgentLabel(name)}.plist`)
+
+/** A cron schedule launchd can say (each field * or one number), as StartCalendarInterval keys; else null. */
+export function launchdInterval(schedule) {
+  const fields = String(schedule || '').trim().split(/\s+/)
+  if (fields.length !== 5) return null
+  const keys = ['Minute', 'Hour', 'Day', 'Month', 'Weekday']
+  const out = {}
+  for (const [i, field] of fields.entries()) {
+    if (field === '*') continue
+    if (!/^\d{1,2}$/.test(field)) return null
+    out[keys[i]] = Number(field)
+  }
+  return 'Minute' in out ? out : null
+}
+
+const xml = text => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+export function launchAgentText(label, script, log, interval) {
+  const calendar = Object.entries(interval).map(([key, value]) => `      <key>${key}</key><integer>${value}</integer>`).join('\n')
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Written by the slatebox installer: the backup schedule of a Slatebox on this Mac. -->
+<plist version="1.0">
+  <dict>
+    <key>Label</key><string>${xml(label)}</string>
+    <key>ProgramArguments</key>
+    <array><string>/bin/sh</string><string>${xml(script)}</string></array>
+    <key>StartCalendarInterval</key>
+    <dict>
+${calendar}
+    </dict>
+    <key>StandardOutPath</key><string>${xml(log)}</string>
+    <key>StandardErrorPath</key><string>${xml(log)}</string>
+  </dict>
+</plist>
+`
+}
+
+/** Backups on this Mac go to launchd when the schedule fits it (a daily one always does). */
+export const usesLaunchd = (ctx, host, answers) =>
+  host.kind === 'local' && (ctx.platform || process.platform) === 'darwin' && Boolean(launchdInterval(answers.backups.schedule))
+
+/** Take the installer's own cron line out, if there is one (an install from before launchd). Never writes a crontab otherwise. */
+async function removeCronLine(ctx, name) {
+  const listed = await schedulerRun(ctx, 'crontab', ['-l'])
+  if (listed.code !== 0 || !listed.stdout.split('\n').some(line => line.endsWith(MARK(name)))) return false
+  const others = listed.stdout.split('\n').filter(line => !line.endsWith(MARK(name)))
+  while (others.length && others.at(-1) === '') others.pop()
+  const written = await schedulerRun(ctx, 'crontab', ['-'], { input: others.length ? `${others.join('\n')}\n` : '' })
+  if (written.code !== 0) throw new Error(schedulerFailure('crontab', written, ctx))
+  return true
+}
+
+async function scheduleLaunchd(ctx, host, answers) {
+  const label = launchAgentLabel(answers.name)
+  const path = launchAgentPath(ctx, answers.name)
+  const domain = `gui/${ctx.uid ?? process.getuid?.() ?? 501}`
+  const existing = existsSync(path) ? readFileSync(path, 'utf8') : null
+  if (answers.backups.to === 'off') {
+    if (existing !== null) {
+      await schedulerRun(ctx, 'launchctl', ['bootout', `${domain}/${label}`])
+      rmSync(path, { force: true })
+    }
+    const cron = await removeCronLine(ctx, answers.name).catch(() => false)
+    return existing !== null || cron ? 'removed' : 'unchanged'
+  }
+  const text = launchAgentText(label, join(host.dir, BACKUP_SCRIPT), join(host.dir, 'backup.log'), launchdInterval(answers.backups.schedule))
+  const cron = await removeCronLine(ctx, answers.name).catch(() => false)
+  if (existing === text && !cron) return 'unchanged'
+  mkdirSync(join(path, '..'), { recursive: true })
+  writeFileSync(path, text, { mode: 0o644 })
+  // Load it again so a changed schedule takes effect; "not loaded" from bootout is fine.
+  await schedulerRun(ctx, 'launchctl', ['bootout', `${domain}/${label}`])
+  const loaded = await schedulerRun(ctx, 'launchctl', ['bootstrap', domain, path])
+  if (loaded.code !== 0) throw new Error(schedulerFailure('launchctl bootstrap', loaded, ctx))
+  return `a launchd agent (${label}; a run missed while the Mac sleeps happens when it wakes)`
+}
+
 async function scheduleBackups(ctx, host, answers, facts) {
   const script = join(host.dir, BACKUP_SCRIPT)
+  if (host.kind === 'local' && (ctx.platform || process.platform) === 'darwin' && (answers.backups.to === 'off' || usesLaunchd(ctx, host, answers))) {
+    return scheduleLaunchd(ctx, host, answers)
+  }
   if (host.kind === 'local') {
-    const listed = await ctx.run('crontab', ['-l'])
+    const listed = await schedulerRun(ctx, 'crontab', ['-l'])
+    if (listed.code === 124) throw new Error(schedulerFailure('crontab -l', listed, ctx))
     const current = listed.code === 0 ? listed.stdout : ''
     const lines = current.split('\n')
     const ours = lines.filter(line => line.endsWith(MARK(answers.name)))
@@ -299,8 +403,8 @@ async function scheduleBackups(ctx, host, answers, facts) {
     const others = lines.filter(line => !line.endsWith(MARK(answers.name)))
     while (others.length && others.at(-1) === '') others.pop()
     const next = [...others, ...want].length ? `${[...others, ...want].join('\n')}\n` : ''
-    const written = await ctx.run('crontab', ['-'], { input: next })
-    if (written.code !== 0) throw new Error(`crontab: ${lastLine(written.stderr)}`)
+    const written = await schedulerRun(ctx, 'crontab', ['-'], { input: next })
+    if (written.code !== 0) throw new Error(schedulerFailure('crontab', written, ctx))
     return answers.backups.to === 'off' ? 'removed' : 'cron'
   }
   const unit = `slatebox-${answers.name}-backup`
@@ -353,11 +457,14 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
 
   // The image. Before a yes, only what is already on the host is looked at:
   // nothing is pulled or loaded (an upgrade fetches its tag first, because
-  // whether it is newer is the question the plan answers).
+  // whether it is newer is the question the plan answers). An image that is not
+  // here yet is planned with what it is known to accept (this release's pinned
+  // image: its own list), and nothing is refused on a guess: after the yes it is
+  // pulled and probed first, and only then checked, before any claim or file.
   const dockerMissing = host.kind === 'ssh' && facts.needsDocker
   const wanted = imageRef || answers.image || DEFAULT_IMAGE
   let image = { ref: wanted, pinned: wanted, id: null }
-  let caps = FALLBACK_CAPABILITIES
+  let caps = archive ? FALLBACK_CAPABILITIES : knownCapabilities(wanted)
   let imageReady = false
   const ready = async () => {
     caps = await probeImage(host.docker, image.id)
@@ -377,11 +484,11 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
   const stored = { ...parseEnvFile(existing.files[KEPT_FILE] || ''), ...parseEnvFile(existing.files[SECRETS_FILE] || '') }
   let settings, composeText, settingsText, scriptText, secretsText, generated, kept
   const render = async () => {
-    settings = settingsFor(answers, caps)
+    settings = settingsFor(answers, caps, { deferred: !imageReady })
     guardKey(ctx, host, answers, stored, settings.secrets, existing)
     composeText = renderCompose(answers, { image: image.pinned, hostGateway: settings.hostGateway })
     settingsText = envFileText(settings.env, `Settings for the Slatebox "${answers.name}", written by the slatebox installer. No secrets.`)
-    scriptText = answers.backups.to === 'off' ? null : backupScript(host, answers, facts)
+    scriptText = answers.backups.to === 'off' ? null : backupScript(ctx, host, answers, facts)
     // The key encryption key is made once and then kept; referenced keys are read now. Before
     // the plan is approved, a team address that is still to be claimed has no token: the plan
     // shows a stand-in, and nothing is written until the claim has brought the real one.
@@ -423,7 +530,8 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
   }
   if (!imageReady) {
     plan.commands.push(archive ? `docker load < ${archive} (on ${host.where}, after you confirm)` : `docker pull ${wanted} (on ${host.where}, after you confirm)`)
-    plan.notes.push(`${archive ? `The image is loaded from ${archive}` : `${wanted} is not on ${host.where} yet: it is pulled`} after you confirm, and checked before anything starts. Until then the plan assumes the current image's settings.`)
+    plan.notes.push(`${archive ? `The image is loaded from ${archive}` : `${wanted} is not on ${host.where} yet: it is downloaded`} after you confirm, and checked before anything is claimed, written or started. ${isPinnedImage(wanted) && !archive ? 'The plan uses the settings this release\'s image accepts.' : 'Until then the plan assumes the current image\'s settings.'}`)
+    if (settings.unchecked.length) plan.notes.push(`Checked once the image is here: that it supports ${settings.unchecked.join(', ')}.`)
   }
   if (!nothing) {
     plan.files.push(
@@ -437,14 +545,20 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
       plan.warnings.push(`The container is not running, so no backup can be taken before the ${imageChanged ? 'upgrade' : 'change'}: if it fails there is no copy to roll the data back to. Take one yourself first if you have an older backup to restore from (slatebox restore <file>).`)
     }
     plan.commands.push(`docker compose -p ${answers.name} up -d --wait`, `docker exec ${answers.name} slatebox health --deep`)
-    if (scriptText) plan.commands.push(host.kind === 'local' ? `crontab: ${answers.backups.schedule} ${join(host.dir, BACKUP_SCRIPT)}` : `systemd timer (or /etc/cron.d) slatebox-${answers.name}-backup`)
+    if (scriptText) {
+      if (usesLaunchd(ctx, host, answers)) {
+        plan.files.push({ path: launchAgentPath(ctx, answers.name), note: `the launchd agent that runs ${BACKUP_SCRIPT} (${answers.backups.schedule})` })
+        plan.commands.push(`launchctl bootstrap gui/<you> ${launchAgentPath(ctx, answers.name)}`)
+      } else plan.commands.push(host.kind === 'local' ? `crontab: ${answers.backups.schedule} ${join(host.dir, BACKUP_SCRIPT)}` : `systemd timer (or /etc/cron.d) slatebox-${answers.name}-backup`)
+    }
     if (answers.address.port === null) plan.notes.push(`HTTPS: Slatebox gets and renews a certificate for ${new URL(answers.address.url).hostname} itself; point its DNS here and open ports 80 and 443.`)
     else if (answers.address.url.startsWith('http:') && host.kind === 'ssh') plan.warnings.push('Plain HTTP: anyone on the network path can read what people type. Give --domain for HTTPS.')
     if (host.kind === 'local' && answers.address.port !== null && ['0.0.0.0', '::'].includes(answers.address.listen)) {
       plan.warnings.push(`Published on every network interface (--listen ${answers.address.listen}) over plain HTTP: anyone who can reach this computer can open the first-account page, and Docker's port rules bypass firewalls such as ufw.`)
     }
     if (host.kind === 'local' && scriptText) {
-      if ((ctx.platform || process.platform) === 'darwin') plan.notes.push('Backups run from cron, which skips a run while this computer sleeps; `slatebox status` says when the last backup is late.')
+      if (usesLaunchd(ctx, host, answers)) plan.notes.push('Backups run from a launchd agent (no permission prompt); a run missed while this Mac sleeps happens when it wakes. `slatebox status` says when the last backup is late.')
+      else if ((ctx.platform || process.platform) === 'darwin') plan.notes.push('Backups run from cron, which skips a run while this computer sleeps; `slatebox status` says when the last backup is late.')
       if (ctx.env.WSL_DISTRO_NAME) plan.warnings.push('WSL usually has no cron daemon running: start it (sudo service cron start) or scheduled backups will not run.')
     }
     if (host.kind === 'ssh' && (facts.ufw === 'active' || facts.firewalld === 'running')) {
@@ -476,11 +590,8 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
     if (installed.code !== 0 || check.code !== 0) throw new InstallError(EXIT.PRECONDITION, `Docker could not be installed or started on ${host.where}: ${lastLine(installed.stderr || check.stderr)}`)
     out.step('docker', 'ok', `Docker ${check.stdout.trim()} on ${host.where}`)
   }
-  if (team && !ctx.tunnelToken && !stored[TUNNEL_TOKEN]) {
-    // The claim is kept if anything after this fails: the next run reuses it.
-    await ensureTeamAddress(ctx, answers, team, stored)
-    await render()
-  }
+  // The image first: nobody claims a name, and nothing is written, for an image that cannot be
+  // had (offline) or that does not support what was asked for (render() refuses it now).
   if (!imageReady) {
     image = await resolveImage(host.docker, { ref: imageRef || answers.image, archive, loadArchive: host.loadArchive, step: out.step.bind(out) })
     await ready()
@@ -491,6 +602,11 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
       if (caps.commands.includes('setup-link')) await stillWaiting(ctx, args => host.docker(['exec', answers.name, SLATEBOX, ...args]))
       return done(ctx, host, answers, image, { nothing: true })
     }
+  }
+  if (team && !ctx.tunnelToken && !stored[TUNNEL_TOKEN]) {
+    // The claim is kept if anything after this fails: the next run reuses it.
+    await ensureTeamAddress(ctx, answers, team, stored)
+    await render()
   }
 
   // Before an upgrade, a backup the rollback can restore.
@@ -524,6 +640,9 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
   const inImage = args => host.docker(['exec', answers.name, SLATEBOX, ...args])
   const linked = caps.commands.includes('setup-link') && await firstAdmin(ctx, inImage)
   if (!linked && fresh) await firstAccount(ctx, host, answers, caps)
+  // The address and the setup link are what the person waits for: they are printed now, before
+  // the backup schedule, which only ever warns (and gives up after a timeout) if it cannot be set.
+  ctx.announce?.(done(ctx, host, answers, image, { generated, fresh }))
   if (scriptText || previous[BACKUP_SCRIPT]) {
     try {
       const how = await scheduleBackups(ctx, host, answers, facts)

@@ -27,6 +27,7 @@ export function registerTeamAddresses(api, context, { load = () => import('./met
     authenticateUser: (req) => started.authenticateUser(req),
     address: (req) => (started ? started.address(req) : req.socket?.remoteAddress),
     log,
+    report: (caller, outcome) => started?.reportOutcome?.(caller, outcome),
   })) api.addRoute(route)
   api.addMethods(adminMethods(() => (context?.via === 'cloud' ? started : null)))
   // Nothing starts off Slatebox Cloud: no collections, no Cloudflare client, no reconciler.

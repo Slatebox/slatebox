@@ -593,15 +593,16 @@ test('idle 60 days: the owner is told; idle 90 days: released', async () => {
 
 // ---- HTTP routes --------------------------------------------------------------------------------------------
 
-async function serve(w, { gate = () => true, closed = undefined, tokens = { 'sbo_ada': 'ada', 'sbo_sam': 'sam' } } = {}) {
+async function serve(w, { gate = () => true, closed = undefined, tokens = { 'sbo_ada': 'ada', 'sbo_sam': 'sam', 'sbo_una': 'una' }, report = undefined } = {}) {
   const app = express()
   const routes = teamAddressRoutes({
     gate,
     ...(closed && { closed }),
+    ...(report && { report }),
     service: () => w.service,
     authenticateUser: async (req) => {
       const id = tokens[`${req.headers.authorization}`.replace(/^Bearer /, '')]
-      return id ? { _id: id } : null
+      return id ? { _id: id, deviceGrantId: `grant-${id}` } : null
     },
   })
   for (const { method, path, handler } of routes) app[method.toLowerCase()](path, handler)
@@ -776,4 +777,89 @@ test('the Meteor side: settings paused or missing closes the service, and the Cl
   assert.match(source, /get\(_target, key\) \{\s*if \(!open\(\)\) throw new TeamAddressError\('paused'/)
   assert.match(source, /if \(running \|\| !open\(\)\) return/)
   assert.match(source, /return \{ gate, closed, /)
+})
+
+// ---- what the person sees after approving (the published-installer end-to-end run) -----------------
+
+test('a reserved name says why ("reserved") when a signed-in claim or rename asks for it; taken and blocked names still do not', async () => {
+  const w = world()
+  const reserved = await w.service.claim({ user: user('ada'), name: 'support', clientKey: 'k' }).catch((error) => error)
+  assert.equal(reserved.code, 'unavailable', 'the same code the installer already handles')
+  assert.equal(reserved.details?.reason, 'reserved')
+  assert.match(reserved.message, /^support\.slatebox\.team is reserved: names like www, admin, support and test are kept for Slatebox itself/)
+  const e2e = await w.service.claim({ user: user('ada'), name: 'e2e-497dcc28', clientKey: 'k' }).catch((error) => error)
+  assert.equal(e2e.details?.reason, 'reserved')
+  assert.match(e2e.message, /e2e-… names are kept for Slatebox's own end-to-end tests/)
+  // Taken and blocked: the plain answer, no reason.
+  await w.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k' })
+  for (const name of ['acme', 'paypal-login']) {
+    const plain = await w.service.claim({ user: user('sam'), name, clientKey: 'k' }).catch((error) => error)
+    assert.equal(plain.message, `${name}.slatebox.team isn't available.`)
+    assert.equal(plain.details, undefined)
+  }
+  // A rename to a reserved name says so too.
+  const { body } = await w.service.claim({ user: user('sam'), name: 'sam-co', clientKey: 's' })
+  const renamed = await w.service.rename({ user: user('sam'), id: body.claim.id, name: 'admin' }).catch((error) => error)
+  assert.equal(renamed.details?.reason, 'reserved')
+  // Over HTTP the reason is in the error body.
+  const http = await serve(w)
+  try {
+    const answer = await http.call('POST', BASE, { token: 'sbo_ada', body: { name: 'www', clientKey: 'k' } })
+    assert.equal(answer.status, 409)
+    assert.equal(answer.body.error.code, 'unavailable')
+    assert.equal(answer.body.error.reason, 'reserved')
+    assert.match(answer.body.error.message, /is reserved/)
+  } finally {
+    await http.close()
+  }
+})
+
+test('refusing an unconfirmed email writes an audit entry', async () => {
+  const w = world()
+  await rejectsWith(w.service.claim({ user: user('una'), name: 'una-co', clientKey: 'x', ip: '198.51.100.7', ua: 'slatebox/0.2.1' }), 'unverified')
+  const entry = w.store.audit.docs.at(-1)
+  assert.equal(entry.action, 'claim')
+  assert.equal(entry.ok, false)
+  assert.deepEqual(entry.error, { code: 'unverified' })
+  assert.deepEqual(entry.actor, { kind: 'user', id: 'una' })
+  assert.equal(entry.name, 'una-co')
+  assert.match(entry.ipHash, /^[a-f0-9]{32}$/)
+  assert.ok(!JSON.stringify(entry).includes('198.51.100.7'))
+  // A name that is not even well-formed is not written into the audit.
+  await rejectsWith(w.service.claim({ user: user('una'), name: 'Not A Name!', clientKey: 'x' }), 'unverified')
+  assert.equal(w.store.audit.docs.at(-1).name, null)
+})
+
+test('the routes report what came of a signed-in change to the sign-in that allowed it', async () => {
+  const w = world()
+  const reports = []
+  const http = await serve(w, { report: (caller, outcome) => reports.push({ caller, outcome }) })
+  try {
+    assert.equal((await http.call('POST', BASE, { token: 'sbo_una', body: { name: 'una-co', clientKey: 'k' } })).status, 403)
+    assert.deepEqual(reports.at(-1).caller, { _id: 'una', deviceGrantId: 'grant-una' })
+    assert.equal(reports.at(-1).outcome.ok, false)
+    assert.equal(reports.at(-1).outcome.code, 'unverified')
+    assert.match(reports.at(-1).outcome.message, /^Confirm your email address/)
+    assert.equal((await http.call('POST', BASE, { token: 'sbo_ada', body: { name: 'test', clientKey: 'k' } })).status, 409)
+    assert.deepEqual(reports.at(-1).outcome, { ok: false, code: 'unavailable', reason: 'reserved', message: reports.at(-1).outcome.message })
+    assert.match(reports.at(-1).outcome.message, /test\.slatebox\.team is reserved/)
+    const made = await http.call('POST', BASE, { token: 'sbo_ada', body: { name: 'acme', clientKey: 'k' } })
+    assert.equal(made.status, 201)
+    assert.deepEqual(reports.at(-1).outcome, { ok: true, message: 'Claimed acme.slatebox.team. Your terminal continues on its own.' })
+    // Availability and lists are not changes: nothing is reported for them.
+    const count = reports.length
+    await http.call('GET', `${BASE}/availability?name=acme`, { token: 'sbo_ada' })
+    await http.call('GET', BASE, { token: 'sbo_ada' })
+    assert.equal(reports.length, count)
+  } finally {
+    await http.close()
+  }
+  // A report that fails never changes the answer.
+  const v = world()
+  const failing = await serve(v, { report: () => { throw new Error('down') } })
+  try {
+    assert.equal((await failing.call('POST', BASE, { token: 'sbo_ada', body: { name: 'acme', clientKey: 'k' } })).status, 201)
+  } finally {
+    await failing.close()
+  }
 })

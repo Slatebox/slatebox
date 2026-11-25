@@ -143,9 +143,16 @@ Meteor.methods({
     check(allow, Boolean)
     return deviceCall(async () => device.decide({ userCode, user: await currentUser(this.userId), allow }))
   },
+  // After "Approve": what the command did with it (a team address claimed, or refused and why).
+  async [CONSTANTS.methods.oauth.deviceOutcome]({ grant }) {
+    check(grant, String)
+    return deviceCall(async () => device.outcome({ grant, user: await currentUser(this.userId) }))
+  },
 })
 
 // Twenty answers a minute per connection: enough for a person, not for guessing request ids.
 ;[CONSTANTS.methods.oauth.describe, CONSTANTS.methods.oauth.decide, CONSTANTS.methods.oauth.deviceDescribe, CONSTANTS.methods.oauth.deviceDecide].forEach((name) =>
   DDPRateLimiter.addRule({ type: 'method', name, connectionId: () => true }, 20, 60 * 1000)
 )
+// The page asks every two seconds while it waits for the outcome.
+DDPRateLimiter.addRule({ type: 'method', name: CONSTANTS.methods.oauth.deviceOutcome, connectionId: () => true }, 60, 60 * 1000)

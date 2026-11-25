@@ -31,6 +31,12 @@ export class FakeDocker {
     this.setupLinks = []
     // A data volume whose first admin already exists.
     this.alreadySetUp = setUp
+    // crontab: 'hang' waits like macOS's permission prompt (until the caller's timeout, if any;
+    // forever without one), 'silent' fails with no message; null works.
+    this.crontabFails = null
+    // Every launchctl call, and the agents it holds (label -> plist path).
+    this.launchctl = []
+    this.agents = new Map()
   }
 
   /** The first admin used the link: the image is set up. */
@@ -48,7 +54,22 @@ export class FakeDocker {
     this.calls.push({ cmd, args, input: options.input })
     const ok = (stdout = '') => ({ code: 0, stdout, stderr: '' })
     const fail = (stderr = 'failed', code = 1) => ({ code, stdout: '', stderr })
+    if (cmd === 'launchctl') {
+      this.launchctl.push(args)
+      if (args[0] === 'bootstrap') { this.agents.set(args[2].split('/').pop().replace(/\.plist$/, ''), args[2]); return ok() }
+      if (args[0] === 'bootout') {
+        const label = args[1].split('/').pop()
+        return this.agents.delete(label) ? ok() : fail(`Boot-out failed: 3: No such process`, 3)
+      }
+      return fail(`fake launchctl does not know ${args.join(' ')}`)
+    }
     if (cmd === 'crontab') {
+      if (args[0] === '-' && this.crontabFails === 'hang') {
+        // Like the runner: killed at the timeout (exit 124, "timed out"); with no timeout, never answers.
+        if (!options.timeout) return new Promise(() => {})
+        return new Promise(resolve => setTimeout(() => resolve({ code: 124, stdout: '', stderr: 'timed out' }), options.timeout))
+      }
+      if (args[0] === '-' && this.crontabFails === 'silent') return { code: 1, stdout: '', stderr: '' }
       if (args[0] === '-l') return this.crontab === null ? fail('no crontab for you') : ok(this.crontab)
       this.crontab = options.input
       return ok()
@@ -173,9 +194,11 @@ export const DEVICE = 'device-code-0123456789abcdefghijklmnop'
  * recorded; `offline` makes every Cloud request fail as if DNS did not resolve.
  */
 export class FakeCloud {
-  constructor({ base = 'http://127.0.0.1:3999', taken = [], pendingPolls = 1, offline = false } = {}) {
+  constructor({ base = 'http://127.0.0.1:3999', taken = [], reserved = [], pendingPolls = 1, offline = false } = {}) {
     this.base = base
     this.taken = new Set(taken)
+    // Names Slatebox keeps for itself: a signed-in claim says so (reason "reserved").
+    this.reserved = new Set(reserved)
     this.pendingPolls = pendingPolls
     this.offline = offline
     this.requests = []
@@ -222,6 +245,7 @@ export class FakeCloud {
     if (route === 'POST /api/v1/team-addresses') {
       if (bearer !== ACCESS) return json(401, { error: { code: 'unauthorized', message: 'sign in' } })
       if (this.taken.has(body.name)) return json(409, { error: { code: 'unavailable', message: 'unavailable' } })
+      if (this.reserved.has(body.name)) return json(409, { error: { code: 'unavailable', reason: 'reserved', message: `${body.name}.slatebox.team is reserved: e2e-… names are kept for Slatebox's own end-to-end tests. Choose another name.` } })
       const existing = [...this.claims.values()].find(claim => claim.idempotencyKey === headers['idempotency-key'])
       if (existing) return json(201, { claim: this.view(existing), installCredential: null, connectorToken: this.token })
       const claim = { id: `ta_${this.claims.size + 1}`, name: body.name, status: 'active', idempotencyKey: headers['idempotency-key'], label: body.label, clientKey: body.clientKey }

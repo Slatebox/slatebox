@@ -2,22 +2,30 @@
 // show and to keep in a ConfigMap or slatebox.env) and secret references
 // (secrets, resolved only when the secrets file or Secret is written).
 // Settings the image does not list are left out with a warning, or refused
-// when the person asked for what they turn on.
+// when the person asked for what they turn on. Before the image is on the
+// machine (a plan, or the moment before the yes), what it accepts is only
+// known, not read from it: with { deferred: true } a setting outside that list
+// is noted in `unchecked` instead of refused, and the run checks again once the
+// image is pulled and probed, before anything is claimed or written.
 import { EXIT, InstallError } from '../errors.mjs'
 import { aiEnv } from '../ai/settings-adapter.mjs'
 
 /**
  * @param {object} answers resolved answers
  * @param {{settings: string[]}} caps what the image accepts
- * @returns {{env: Record<string,string>, secrets: Record<string,string>, warnings: string[], notes: string[], hostGateway: boolean}}
+ * @param {{deferred?: boolean}} [options] deferred: the image is not read yet; refuse nothing, list what is unchecked
+ * @returns {{env: Record<string,string>, secrets: Record<string,string>, warnings: string[], notes: string[], hostGateway: boolean, unchecked: string[]}}
  */
-export function settingsFor(answers, caps) {
+export function settingsFor(answers, caps, { deferred = false } = {}) {
   const known = new Set(caps?.settings || [])
   const env = {}
   const secrets = {}
   const warnings = []
   const notes = []
+  const unchecked = []
   const require = (name, what) => {
+    if (known.has(name)) return
+    if (deferred) { if (!unchecked.includes(what)) unchecked.push(what); return }
     if (!known.has(name)) throw new InstallError(EXIT.PRECONDITION, `This Slatebox image does not support ${what} (it does not accept ${name}). Use a newer image, or leave ${what} off.`)
   }
   const k8s = answers.target === 'k8s' || Boolean(answers.k8s)
@@ -63,5 +71,5 @@ export function settingsFor(answers, caps) {
   if (answers.address.team) secrets.SLATEBOX_TUNNEL_TOKEN = 'tunnel'
   if (answers.mail?.urlFrom) secrets.SLATEBOX_MAIL_URL = answers.mail.urlFrom
 
-  return { env, secrets, warnings, notes, hostGateway: ai.hostGateway }
+  return { env, secrets, warnings, notes, hostGateway: ai.hostGateway, unchecked }
 }

@@ -99,7 +99,8 @@ test('the whole flow: pending, approve, one token for team addresses only, used 
   assert.equal(shown.label, 'tims-mbp')
   assert.equal(shown.region, 'US')
   assert.match(shown.cannot, /will not be able to read or change your slates/)
-  assert.deepEqual(await w.device.decide({ userCode: code(answer), user: { _id: 'ada' }, allow: true }), { status: 'approved' })
+  // A team-address sign-in names its grant, so /device can follow what the command did with it.
+  assert.deepEqual(await w.device.decide({ userCode: code(answer), user: { _id: 'ada' }, allow: true }), { status: 'approved', grant: grant._id })
   w.tick(5000)
   const token = await w.device.poll({ clientId: 'slatebox-cli', deviceCode: answer.device_code })
   assert.match(token.access_token, /^sbo_[0-9a-f]{8}_/)
@@ -272,4 +273,60 @@ test('signing in from an invitation to join a moved team returns to it, and only
   assert.equal(recalledLoginReturn(storage, 2000), `/team-move/join?token=${token}`)
   rememberLoginReturn(storage, `/team-move/join?token=${token}&next=//evil`, 1000)
   assert.equal(recalledLoginReturn(storage, 2000), '/')
+})
+
+// ---- the outcome after "Approve" (the published-installer end-to-end run: /device said
+// "Approved" while the claim was refused for an unconfirmed email, and a reserved name said nothing)
+
+test('/device follows a team-address sign-in to its outcome: waiting, then done or refused with the reason', async () => {
+  const w = world()
+  const answer = await w.device.authorize({ clientId: 'slatebox-cli', label: 'tims-mbp' })
+  const decided = await w.device.decide({ userCode: code(answer), user: { _id: 'ada' }, allow: true })
+  assert.match(decided.grant, /^[a-f0-9]{32}$/)
+  assert.deepEqual(await w.device.outcome({ grant: decided.grant, user: { _id: 'ada' } }), { state: 'waiting' })
+  // Only the person who approved it sees it; anyone else gets what an unknown grant gets.
+  assert.equal(await w.device.outcome({ grant: decided.grant, user: { _id: 'sam' } }), null)
+  assert.equal(await w.device.outcome({ grant: 'not-a-grant', user: { _id: 'ada' } }), null)
+  assert.equal(await errorOf(w.device.outcome({ grant: decided.grant, user: null })), 'sign_in_required')
+  w.tick(5000)
+  await w.device.poll({ clientId: 'slatebox-cli', deviceCode: answer.device_code })
+  // The claim service reports a refusal: the page shows it, with its reason, instead of "Approved".
+  assert.equal(await w.device.report({ grantId: decided.grant, userId: 'sam', ok: false, code: 'unverified', message: 'x' }), false, 'never against another person\'s grant')
+  assert.equal(await w.device.report({ grantId: decided.grant, userId: 'ada', ok: false, code: 'unverified', message: 'Confirm your email address before you claim a team address.' }), true)
+  assert.deepEqual(await w.device.outcome({ grant: decided.grant, user: { _id: 'ada' } }), { state: 'refused', message: 'Confirm your email address before you claim a team address.', code: 'unverified' })
+  await w.device.report({ grantId: decided.grant, userId: 'ada', ok: false, code: 'unavailable', reason: 'reserved', message: 'e2e-1.slatebox.team is reserved.\u0000<b>' })
+  assert.deepEqual(await w.device.outcome({ grant: decided.grant, user: { _id: 'ada' } }), { state: 'refused', message: 'e2e-1.slatebox.team is reserved. <b>', code: 'unavailable', reason: 'reserved' })
+  await w.device.report({ grantId: decided.grant, userId: 'ada', ok: true, message: 'Claimed acme.slatebox.team.' })
+  assert.deepEqual(await w.device.outcome({ grant: decided.grant, user: { _id: 'ada' } }), { state: 'done', message: 'Claimed acme.slatebox.team.', code: null })
+})
+
+test('a denied or still-pending sign-in takes no outcome, a move names no grant, and a silent one stops waiting', async () => {
+  const w = world()
+  const denied = await w.device.authorize({ clientId: 'slatebox-cli' })
+  assert.deepEqual(await w.device.decide({ userCode: code(denied), user: { _id: 'ada' }, allow: false }), { status: 'denied' })
+  const deniedGrant = w.grants.docs[0]._id
+  assert.equal(await w.device.report({ grantId: deniedGrant, userId: 'ada', ok: true, message: 'x' }), false)
+  const move = await w.device.authorize({ clientId: 'slatebox-cli', scope: 'team:export team:move' })
+  assert.deepEqual(await w.device.decide({ userCode: code(move), user: { _id: 'ada' }, allow: true }), { status: 'approved' })
+  const quiet = await w.device.authorize({ clientId: 'slatebox-cli' })
+  const decided = await w.device.decide({ userCode: code(quiet), user: { _id: 'ada' }, allow: true })
+  w.tick(11 * 60 * 1000)
+  assert.deepEqual(await w.device.outcome({ grant: decided.grant, user: { _id: 'ada' } }), { state: 'unknown' })
+})
+
+test('/device shows the refusal and its reason instead of "Approved", and asks for the outcome only after approving', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const page = await readFile(new URL('../web/app/imports/ui/pages/DeviceSignIn.jsx', import.meta.url), 'utf8')
+  const constants = await readFile(new URL('../web/app/imports/api/common/constants.js', import.meta.url), 'utf8')
+  const wiring = await readFile(new URL('../web/app/server/oauth/meteor.js', import.meta.url), 'utf8')
+  assert.match(constants, /deviceOutcome: 'oauth\.deviceOutcome'/)
+  assert.match(wiring, /\[CONSTANTS\.methods\.oauth\.deviceOutcome\]\(\{ grant \}\)/)
+  assert.match(page, /CONSTANTS\.methods\.oauth\.deviceOutcome, \{ grant: outcome\.grant \}/)
+  assert.match(page, /if \(allow && decided\?\.grant\) setOutcome/)
+  // Refused: its own title, the service's message, never the "Approved" section.
+  const refused = page.slice(page.indexOf("outcome?.state === 'refused'"), page.indexOf("outcome?.state === 'done'"))
+  assert.match(refused, /title="Not done"/)
+  assert.match(refused, /\{outcome\.message \|\|/)
+  assert.doesNotMatch(refused, /Approved/)
+  assert.ok(page.indexOf("outcome?.state === 'refused'") < page.indexOf("title={done === 'approved' ? 'Approved'"), 'the refusal is checked before the plain Approved')
 })

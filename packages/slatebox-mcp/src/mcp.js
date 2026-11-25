@@ -17,6 +17,27 @@ import { typedToolsEnabled } from "./typed-tools.js";
 
 export const DEFAULT_HTTP_PORT = 3917;
 
+/** `slatebox-mcp --help` (and `slatebox mcp --help`, with that name). */
+export function mcpHelp(name = "slatebox-mcp") {
+  return `Usage: ${name} [--base-url ORIGIN] [--typed-tools on|off] [--http [--port N]]
+       ${name === "slatebox-mcp" ? "slatebox-mcp exec | describe ...   (the same as slatebox exec | describe; see slatebox-mcp exec --help)" : "slatebox exec | describe ...       (see slatebox exec --help)"}
+
+The Slatebox MCP server: exec and describe, one typed tool per client method, prompts and resources.
+
+  (no option)            stdio, for agent hosts that start a command
+  --http [--port N]      loopback Streamable HTTP at http://127.0.0.1:N/mcp (default port ${DEFAULT_HTTP_PORT});
+                         needs SLATEBOX_API_TOKEN, sent as the bearer token
+  --typed-tools on|off   list the typed tools (default on; or SLATEBOX_MCP_TYPED_TOOLS);
+                         exec and describe are always listed
+  --base-url ORIGIN      your Slatebox (or SLATEBOX_BASE_URL; default ${DEFAULT_ORIGIN})
+  --help                 this text
+
+SLATEBOX_API_TOKEN is your personal access token (Profile > Developer in your Slatebox). Without
+one the prompts and the client docs work and every tool says it needs a token. A script runs in
+this process with your rights: there is no sandbox.
+`;
+}
+
 /** What every tool answers when the server started without a token. */
 function tokenRequired() {
   return Object.assign(new Error("No Slatebox token: set SLATEBOX_API_TOKEN to a personal access token from your Slatebox and restart this server. The prompts work without one."), { code: "sign_in_required", status: 401 });

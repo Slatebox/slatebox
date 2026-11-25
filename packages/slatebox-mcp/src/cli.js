@@ -13,10 +13,13 @@
 // package slatebox, which runs these same commands in its own process.
 import { UsageError } from "./client/index.js";
 import { run } from "./commands.js";
-import { startMcp } from "./mcp.js";
+import { mcpHelp, startMcp } from "./mcp.js";
 
 const argv = process.argv.slice(2);
-if (["exec", "describe"].includes(argv[0])) {
+if (argv[0] === "--help" || argv[0] === "-h" || argv[0] === "help" || (!["exec", "describe"].includes(argv[0]) && (argv.includes("--help") || argv.includes("-h")))) {
+  process.stdout.write(mcpHelp());
+  process.exitCode = 0;
+} else if (["exec", "describe"].includes(argv[0])) {
   process.exitCode = await run(argv, { name: "slatebox-mcp" });
 } else {
   startMcp(argv).catch((error) => {

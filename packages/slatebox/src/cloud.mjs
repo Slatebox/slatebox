@@ -117,7 +117,7 @@ export function cloudClient(ctx, base) {
     const code = typeof error === 'string' ? error : error?.code
     const message = typeof error === 'string' ? data?.error_description : error?.message
     const retryAfter = Number(response.headers?.get?.('retry-after')) || undefined
-    throw new CloudError(response.status, code, message, { retryAfter, suggestions: data?.suggestions || error?.suggestions, notice: error?.notice })
+    throw new CloudError(response.status, code, message, { retryAfter, suggestions: data?.suggestions || error?.suggestions, notice: error?.notice, reason: typeof error?.reason === 'string' ? error.reason : undefined })
   }
 
   const api = path => `/api/v1/team-addresses${path}`
@@ -184,7 +184,11 @@ export async function signIn(ctx, cloud, { purpose = 'claim a team address', sco
   if (ctx.interactive) {
     lines.push(`  (The code expires in ${minutes} minutes.)`)
     ctx.stderr.write(`${lines.join('\n')}\n`)
-    if (await ctx.prompt.confirm('Open it in your browser now?', { default: true })) (ctx.openBrowser || openBrowser)(complete || page, ctx.platform)
+    // --yes asks nothing: the page is opened for the person, as Enter at the question would.
+    if (ctx.yes) {
+      ctx.stderr.write('  Opening it in your browser.\n')
+      ;(ctx.openBrowser || openBrowser)(complete || page, ctx.platform)
+    } else if (await ctx.prompt.confirm('Open it in your browser now?', { default: true })) (ctx.openBrowser || openBrowser)(complete || page, ctx.platform)
   } else {
     lines.push(`  (The code expires in ${minutes} minutes. Approve it in a browser where you are signed in to Slatebox.)`)
     ctx.stderr.write(`${lines.join('\n')}\n`)

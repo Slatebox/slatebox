@@ -199,7 +199,7 @@ export const QUESTIONS = {
   'ai.mode': {
     question: 'AI for drafts and the canvas assistant. Slatebox works with any provider, and none is chosen for you.',
     choices: AI_CHOICES,
-    flag: '--ai none | --ai-provider kind=<openai|anthropic|deepinfra|openrouter|groq|together|mistral|ollama|lmstudio|openai-compatible>,model=<model>,url=<endpoint>,key=env:<VAR> (repeat for several, then --ai-default <id>)',
+    flag: '--ai none | --ai-provider kind=<openai|anthropic|deepinfra|openrouter|groq|together|mistral|ollama|lmstudio|openai-compatible>,model=<model>,url=<endpoint>,key=env:<VAR> (repeat for several, then --ai-default <id>); with --yes and no AI answer, AI is off (slatebox ai add later)',
   },
 }
 
@@ -276,7 +276,7 @@ function httpUrl(value) {
 /**
  * Fill in defaults and check everything.
  * @param {object} partial from collect()
- * @param {{freePort?: number}} ctx
+ * @param {{freePort?: number, yes?: boolean}} ctx yes: the run asks nothing (--yes), so an answer that has a default takes it
  * @returns {{answers: object, missing: object[], errors: {field: string, message: string}[]}}
  */
 export function resolveAnswers(partial, ctx = {}) {
@@ -395,9 +395,12 @@ export function resolveAnswers(partial, ctx = {}) {
   if (a.adminEmail && !EMAIL.test(a.adminEmail)) err('adminEmail', 'an email address')
   if (!a.adminEmail && (a.target === 'ssh' || a.target === 'k8s')) missing.push(question('adminEmail'))
 
-  // --- AI: never a default
+  // --- AI: never a default provider. Unanswered with --yes, AI is off (add one later with
+  // `slatebox ai add`); unanswered without it, it is asked, or exit 3 with nobody to ask.
   const ai = p.ai || {}
-  if (ai.mode === undefined || ai.mode === null) {
+  if ((ai.mode === undefined || ai.mode === null) && ctx.yes && !ai.providers?.length) {
+    a.ai = { mode: 'none' }
+  } else if (ai.mode === undefined || ai.mode === null) {
     missing.push(question('ai.mode'))
     a.ai = { mode: null }
   } else if (ai.mode === 'none') {

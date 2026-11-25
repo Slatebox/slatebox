@@ -6,7 +6,7 @@ import { mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { EXIT, InstallError } from '../errors.mjs'
 import { collect, resolveAnswers } from '../answers.mjs'
-import { checkArch, DEFAULT_IMAGE, FALLBACK_CAPABILITIES, hasRegistry, isTag, probeImage } from '../image.mjs'
+import { checkArch, DEFAULT_IMAGE, FALLBACK_CAPABILITIES, hasRegistry, isPinnedImage, isTag, PINNED_CAPABILITIES, probeImage } from '../image.mjs'
 import { emptyPlan } from '../plan.mjs'
 import { installDir, recordText, writeRecord } from '../record.mjs'
 import { MANAGER, names, renderK8s, renderSecret } from '../render/k8s.mjs'
@@ -126,6 +126,8 @@ async function capabilities(ctx, image, warnings) {
   if (image.local) {
     try { return await probeImage((args, o) => ctx.run('docker', args, o), image.id || image.ref) } catch { /* fall through */ }
   }
+  // This release's own image: what it accepts is known without pulling it here (the cluster pulls it).
+  if (isPinnedImage(image.ref)) return PINNED_CAPABILITIES
   warnings.push(`The image was not on this computer, so its settings could not be read from it; the installer assumed the settings of the current image (pull ${image.ref} first to check).`)
   return FALLBACK_CAPABILITIES
 }

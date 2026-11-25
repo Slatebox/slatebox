@@ -25,9 +25,9 @@ const send = (res, status, body) => {
   res.setHeader('Cache-Control', 'no-store')
   res.end(JSON.stringify(body))
 }
-const fail = (res, status, code, message, retryAfter) => {
+const fail = (res, status, code, message, retryAfter, reason) => {
   if (retryAfter !== undefined) res.setHeader('Retry-After', String(retryAfter))
-  send(res, status, { error: { code, message, ...(retryAfter !== undefined && { retryAfter }) } })
+  send(res, status, { error: { code, message, ...(retryAfter !== undefined && { retryAfter }), ...(reason && { reason }) } })
 }
 const unknownRoute = (res) => fail(res, 404, 'unknown_route', 'There is no such API route. See /api/v1/openapi.json.')
 export const CLOSED_MESSAGE = 'Team addresses are not open on Slatebox Cloud right now. Nothing was changed. Use --domain or --local meanwhile.'
@@ -77,9 +77,12 @@ export function readJson(req, limit = BODY_LIMIT) {
  * @param {(req) => Promise<{ _id: string }|null>} options.authenticateUser
  * @param {(req) => string|undefined} [options.address]  the caller's own address
  * @param {(line: string) => void} [options.log]
+ * @param {(caller: { _id: string, deviceGrantId?: string|null }, outcome: { ok: boolean, code?: string, message: string }) => Promise<void>|void} [options.report]
+ *        what came of a signed-in change (claim, rename, new credential, release), for the /device
+ *        page that approved the sign-in: it says "Claimed" or why not, never just "Approved"
  * @returns {{ method: string, path: string, handler: Function }[]}
  */
-export function teamAddressRoutes({ gate, closed = () => false, service, authenticateUser, address = (req) => req.socket?.remoteAddress, log = () => {} }) {
+export function teamAddressRoutes({ gate, closed = () => false, service, authenticateUser, address = (req) => req.socket?.remoteAddress, log = () => {}, report = () => {} }) {
   const context = (req) => ({ ip: address(req), ua: req.headers?.['user-agent'] })
 
   const wrap = (fn) => async (req, res) => {
@@ -89,7 +92,7 @@ export function teamAddressRoutes({ gate, closed = () => false, service, authent
       const { status = 200, body } = await fn(req, res)
       return send(res, status, body)
     } catch (error) {
-      if (error instanceof TeamAddressError) return fail(res, error.status, error.code, error.message, error.retryAfter)
+      if (error instanceof TeamAddressError) return fail(res, error.status, error.code, error.message, error.retryAfter, error.details?.reason)
       if (Number.isInteger(error?.status) && error.status < 500 && typeof error.code === 'string') return fail(res, error.status, error.code, error.message)
       log(`[team-addresses] ${req.method} failed: ${error?.name || 'Error'}`)
       return fail(res, 500, 'internal_error', 'The request could not be completed.')
@@ -105,6 +108,26 @@ export function teamAddressRoutes({ gate, closed = () => false, service, authent
     const claim = await service().authenticateInstall(bearer(req))
     if (!claim) throw new TeamAddressError('unauthorized', 'This install credential is not valid. Sign in again with `slatebox install`.')
     return claim
+  }
+  // The outcome of a signed-in change goes back to the sign-in that allowed it. Reporting never
+  // changes the answer: a failure to record it is logged and the request answers as it would.
+  const reported = async (caller, fn, success) => {
+    const tell = async (outcome) => {
+      try {
+        await report(caller, outcome)
+      } catch (error) {
+        log(`[team-addresses] outcome not recorded: ${error?.name || 'Error'}`)
+      }
+    }
+    try {
+      const result = await fn()
+      await tell({ ok: true, message: success(result) })
+      return result
+    } catch (error) {
+      if (error instanceof TeamAddressError) await tell({ ok: false, code: error.code, message: error.message, ...(error.details?.reason && { reason: error.details.reason }) })
+      else await tell({ ok: false, code: 'internal_error', message: 'The request could not be completed.' })
+      throw error
+    }
   }
   const claimId = (req) => {
     const id = req.params?.id
@@ -157,14 +180,19 @@ export function teamAddressRoutes({ gate, closed = () => false, service, authent
       handler: wrap(async (req) => {
         const caller = await user(req)
         const body = await readJson(req)
-        return service().claim({
-          user: caller,
-          name: body.name,
-          clientKey: typeof body.clientKey === 'string' ? body.clientKey : '',
-          label: body.label,
-          idempotencyKey: req.headers?.['idempotency-key'],
-          ...context(req),
-        })
+        return reported(
+          caller,
+          () =>
+            service().claim({
+              user: caller,
+              name: body.name,
+              clientKey: typeof body.clientKey === 'string' ? body.clientKey : '',
+              label: body.label,
+              idempotencyKey: req.headers?.['idempotency-key'],
+              ...context(req),
+            }),
+          (result) => `Claimed ${result.body?.claim?.host || 'the team address'}. Your terminal continues on its own.`
+        )
       }),
     },
     {
@@ -174,7 +202,7 @@ export function teamAddressRoutes({ gate, closed = () => false, service, authent
         const caller = await user(req)
         const id = claimId(req)
         const body = await readJson(req)
-        return { body: await service().rename({ user: caller, id, name: body.name, ...context(req) }) }
+        return reported(caller, async () => ({ body: await service().rename({ user: caller, id, name: body.name, ...context(req) }) }), (result) => `Renamed to ${result.body?.claim?.host || 'the new name'}. Your terminal continues on its own.`)
       }),
     },
     {
@@ -182,7 +210,7 @@ export function teamAddressRoutes({ gate, closed = () => false, service, authent
       path: `${BASE}/:id`,
       handler: wrap(async (req) => {
         const caller = await user(req)
-        return service().releaseByOwner({ user: caller, id: claimId(req), ...context(req) })
+        return reported(caller, () => service().releaseByOwner({ user: caller, id: claimId(req), ...context(req) }), () => 'Released the team address.')
       }),
     },
     {
@@ -190,7 +218,7 @@ export function teamAddressRoutes({ gate, closed = () => false, service, authent
       path: `${BASE}/:id/install-credential`,
       handler: wrap(async (req) => {
         const caller = await user(req)
-        return { status: 201, body: await service().mintInstallCredential({ user: caller, id: claimId(req), ...context(req) }) }
+        return reported(caller, async () => ({ status: 201, body: await service().mintInstallCredential({ user: caller, id: claimId(req), ...context(req) }) }), (result) => `Reconnected ${result.body?.claim?.host || 'the team address'}. Your terminal continues on its own.`)
       }),
     },
   ]

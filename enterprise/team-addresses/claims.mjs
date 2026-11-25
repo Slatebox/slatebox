@@ -18,14 +18,16 @@
 //   - the connector token is never stored or logged: each fetch asks Cloudflare and hands it on;
 //   - no request field reaches the tunnel's ingress: the service is a constant origin and the
 //     host is derived from a validated name (ingressFor);
-//   - "unavailable" is the one answer for reserved, blocked, taken and held names;
+//   - "unavailable" is the one answer for reserved, blocked, taken and held names; a signed-in
+//     claim or rename of a reserved name (Slatebox's own list, public in names.mjs) also says
+//     why (reason "reserved"), never for a blocked, taken or held one;
 //   - create is an idempotent saga: a replay resumes it, a hard failure undoes it in reverse, and
 //     nothing half-made is ever handed out;
 //   - every step is audited, without tokens, credentials or Cloudflare response bodies.
 import { createHash, createHmac, randomBytes as nodeRandomBytes, timingSafeEqual } from 'node:crypto'
 import { hashApiToken } from '/server/api-token-core.mjs'
 import { CloudflareError, DNS_COMMENT_PREFIX, TUNNEL_PREFIX, tunnelTarget } from './cf.mjs'
-import { checkName, normalizeName, refusal, suggestionsFor } from './names.mjs'
+import { checkName, E2E_PREFIX, normalizeName, refusal, suggestionsFor, validShape } from './names.mjs'
 
 export const DAY_MS = 86_400_000
 export const LIMITS = Object.freeze({
@@ -79,6 +81,16 @@ export class TeamAddressError extends Error {
 
 const refuse = (code, message, extra) => new TeamAddressError(code, message, extra)
 const UNAVAILABLE = (name) => refuse('unavailable', `${name} isn't available.`)
+// Reserved names are Slatebox's own (names.mjs, published): saying so gives nothing away.
+const RESERVED = (host, name) =>
+  refuse(
+    'unavailable',
+    name.startsWith(E2E_PREFIX)
+      ? `${host} is reserved: e2e-… names are kept for Slatebox's own end-to-end tests. Choose another name.`
+      : `${host} is reserved: names like www, admin, support and test are kept for Slatebox itself. Choose another name.`,
+    { details: { reason: 'reserved' } }
+  )
+const notAvailable = (host, name, checked) => (checked.reason === 'reserved' ? RESERVED(host, name) : UNAVAILABLE(host))
 const UPSTREAM = () => refuse('upstream_unavailable', 'The team address service could not finish right now. Nothing half-made was kept. Try again in a minute.', { retryAfter: 30 })
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 
@@ -174,11 +186,16 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
     if (!taken.allowed) throw refuse('rate_limited', message, { retryAfter: taken.retryAfter })
   }
 
-  async function account(user) {
+  // `refused` names the step for the audit when the email is unconfirmed (every refusal is audited).
+  async function account(user, refused = {}) {
     if (!user?._id) throw refuse('unauthorized', 'Sign in to Slatebox to manage team addresses.')
     const found = await findUser(user._id)
     if (!found || found.isAnonymous || found.isDisabled) throw refuse('unauthorized', 'Sign in to Slatebox to manage team addresses.')
-    if (found.emails?.[0]?.verified !== true) throw refuse('unverified', 'Confirm your email address before you claim a team address.')
+    if (found.emails?.[0]?.verified !== true) {
+      const name = normalizeName(refused.name)
+      await audit({ actor: { kind: 'user', id: user._id }, action: refused.action || 'claim', claim: refused.claim, name: validShape(name) ? name : refused.claim?.name, ok: false, error: { code: 'unverified' }, ip: refused.ip, ua: refused.ua })
+      throw refuse('unverified', 'Confirm your email address before you claim a team address: open the link in the email Slatebox sent you (Profile can send it again), then run the install again.')
+    }
     return found
   }
 
@@ -410,7 +427,7 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
     /** POST /: claim a name (idempotent). → { status, body } */
     async claim({ user, name: input, clientKey, label, idempotencyKey, ip, ua }) {
       const actor = { kind: 'user', id: user?._id }
-      const owner = await account(user)
+      const owner = await account(user, { action: 'claim', name: input, ip, ua })
       const s = settings()
       const checked = checkName(input, await blocklist(), { e2e: s.e2eAccounts.includes(owner._id) })
       if (checked.code === 'invalid_name') throw refuse('invalid_name', checked.message)
@@ -444,7 +461,7 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
       await limit(`check-account:${owner._id}`, limits.checksPerDayPerAccount, DAY_MS, 'Too many checks today.')
       if (!checked.ok || !(await free(name, owner._id))) {
         await audit({ actor, action: 'claim', name, ok: false, error: { code: 'unavailable' }, ip, ua })
-        throw UNAVAILABLE(hostOf(name))
+        throw notAvailable(hostOf(name), name, checked)
       }
       if ((await store.claims.countLive(owner._id)) >= limits.perAccount)
         throw refuse('limit_reached', `An account may hold ${limits.perAccount} team addresses. Release one first (slatebox address release).`)
@@ -499,7 +516,7 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
     /** POST /:id/rename: the new name joins the tunnel; the install confirms with renameComplete. */
     async rename({ user, id, name: input, ip, ua }) {
       const actor = { kind: 'user', id: user?._id }
-      await account(user)
+      await account(user, { action: 'rename', name: input, ip, ua })
       const doc = await owned(user, id)
       if (doc.status === 'suspended') throw refuse('suspended', doc.suspension?.notice || 'This team address is suspended.')
       if (doc.status !== 'active') throw refuse('conflict', 'This team address is not active yet.')
@@ -510,7 +527,7 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
       if (name === doc.name) return { claim: publicClaim(doc, s.zoneName) }
       if (!checked.ok || !(await free(name, user._id))) {
         await audit({ actor, action: 'rename', claim: doc, ok: false, error: { code: 'unavailable' }, ip, ua })
-        throw UNAVAILABLE(hostOf(name))
+        throw notAvailable(hostOf(name), name, checked)
       }
       await limit(`renames:${doc._id}`, limits.renamesPer30Days, 30 * DAY_MS, `A team address may be renamed ${limits.renamesPer30Days} times in 30 days.`)
       // Moving back to a name still in its grace period takes that name out of previousNames, so
@@ -557,7 +574,7 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
 
     /** DELETE /:id by the owner. */
     async releaseByOwner({ user, id, ip, ua }) {
-      await account(user)
+      await account(user, { action: 'release', ip, ua })
       const doc = await owned(user, id)
       const result = await release(doc, { actor: { kind: 'user', id: user._id }, ip, ua })
       return { status: result.status === 'released' ? 200 : 202, body: { id: doc._id, status: result.status } }
@@ -571,7 +588,7 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
 
     /** POST /:id/install-credential: a new credential (the old one stops), and a rotated tunnel. */
     async mintInstallCredential({ user, id, ip, ua }) {
-      await account(user)
+      await account(user, { action: 'credential_mint', ip, ua })
       const doc = await owned(user, id)
       if (doc.status === 'suspended') throw refuse('suspended', doc.suspension?.notice || 'This team address is suspended.')
       if (doc.status !== 'active') throw refuse('conflict', 'This team address is not active yet.')

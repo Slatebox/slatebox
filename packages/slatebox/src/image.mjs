@@ -17,6 +17,25 @@ export const PINNED_TAG = '0.2.1'
 export const PINNED_DIGEST = 'sha256:208d4bfc460ed2feedc435ccc22231177929e8885ab5f856933c67e6831ca5b5'
 export const DEFAULT_IMAGE = PINNED_DIGEST ? `${DEFAULT_REPOSITORY}@${PINNED_DIGEST}` : `${DEFAULT_REPOSITORY}:${PINNED_TAG}`
 
+// What the pinned image accepts: its own `slatebox settings --json` (self-host/rootfs/opt/slatebox/
+// lib/settings.mjs at the revision it was built from). A plan for the pinned image on a machine
+// that has not pulled it yet is then the real plan (a team address, several AI providers), not a
+// guess from an older image. The image is still probed after it is pulled, and that answer wins.
+export const PINNED_CAPABILITIES = Object.freeze({
+  settings: Object.freeze([
+    'SLATEBOX_URL', 'SLATEBOX_HTTPS', 'SLATEBOX_ACME_CA', 'SLATEBOX_MAIL_URL', 'SLATEBOX_MAIL_FROM',
+    'SLATEBOX_AI_KEY', 'SLATEBOX_AI_URL', 'SLATEBOX_AI_MODEL', 'SLATEBOX_AI_CONFIG',
+    'SLATEBOX_AI_PROVIDERS', 'SLATEBOX_AI_DEFAULT', 'SLATEBOX_AI_OWN_PROVIDERS', 'SLATEBOX_AI_PRIVATE_ENDPOINTS',
+    'SLATEBOX_SETTINGS', 'SLATEBOX_SSO', 'SLATEBOX_SSO_ONLY', 'SLATEBOX_SSO_ADMIN', 'SLATEBOX_KEY_ENCRYPTION_KEY',
+    'SLATEBOX_TUNNEL_TOKEN', 'SLATEBOX_LICENSE', 'SLATEBOX_LICENSE_FILE', 'MONGO_URL', 'MONGO_OPLOG_URL',
+  ]),
+  commands: Object.freeze(['backup', 'restore', 'password-link', 'setup-link', 'health', 'version', 'sso', 'ai', 'settings', 'tunnel']),
+  source: 'pinned',
+})
+
+/** Is this reference the image this release pins (by digest, or by its tag while unpinned)? */
+export const isPinnedImage = ref => Boolean(ref) && (ref === DEFAULT_IMAGE || (PINNED_DIGEST !== null && ref === `${DEFAULT_REPOSITORY}@${PINNED_DIGEST}`))
+
 /** Does this reference name a registry (so a digest reference can be pulled elsewhere)? */
 export function hasRegistry(ref) {
   const first = ref.split('/')[0]
@@ -46,7 +65,18 @@ export function pinImage(wanted, info) {
   return { ref: wanted, pinned, id, created: info.Created, labels: info.Config?.Labels || {}, architecture: info.Architecture || null }
 }
 
+// What docker pull says when this machine cannot reach the registry at all.
+const OFFLINE = /no such host|dial tcp|i\/o timeout|network is unreachable|connection refused|TLS handshake timeout|temporary failure in name resolution|could not resolve|server misbehaving|Client\.Timeout/i
+
 function unavailable(wanted, why) {
+  const registry = hasRegistry(wanted) ? wanted.split('/')[0] : 'Docker Hub'
+  if (OFFLINE.test(why || '')) {
+    return new InstallError(EXIT.PRECONDITION,
+      `The image ${wanted} could not be downloaded: this computer cannot reach ${registry} (${why}). Nothing was changed. ` +
+      'Check the internet connection (and any proxy or firewall), then run the same command again.' +
+      (wanted.startsWith(DEFAULT_REPOSITORY) ? ' To install a local build instead, give --image <name> or --image-archive <file.tar>.' : ''),
+      { image: wanted, offline: true })
+  }
   return new InstallError(EXIT.PRECONDITION,
     `The image ${wanted} is not available: ${why}\n` +
     (wanted.startsWith(DEFAULT_REPOSITORY) ? 'The public image needs no login: check that this machine can reach ghcr.io (or that the --to version exists), then try again. To install a local build instead, give --image <name> or --image-archive <file.tar>.' : 'Check the name, or log in to its registry with docker login.'),
@@ -98,14 +128,34 @@ export async function resolveImage(docker, { ref, archive, loadArchive, step }) 
   }
   let info = await inspectImage(docker, wanted)
   if (!info) {
-    step('image', 'start', `Pulling ${wanted}`)
-    const pulled = await docker(['pull', wanted], { timeout: 60 * 60_000 })
+    const pulled = await pullWithProgress(docker, wanted, step)
     if (pulled.code !== 0) throw unavailable(wanted, pulled.stderr.trim().split('\n').pop())
     info = await inspectImage(docker, wanted)
     if (!info) throw new InstallError(EXIT.PRECONDITION, `The image ${wanted} was pulled but cannot be inspected.`)
   }
   return pinImage(wanted, info)
 }
+
+/**
+ * docker pull, saying so first and then every so often while it runs (the first pull of the
+ * one-container image is about 1 GB), so a long download never looks like a hang.
+ */
+export async function pullWithProgress(docker, ref, step, { every = 15_000 } = {}) {
+  step('image', 'start', `Downloading ${ref} (about 1 GB the first time; later installs and upgrades fetch only what changed)`)
+  const started = Date.now()
+  const timer = setInterval(() => step('image', 'start', `Still downloading the image (${Math.round((Date.now() - started) / 1000)}s so far)`), every)
+  timer.unref?.()
+  try {
+    const pulled = await docker(['pull', ref], { timeout: 60 * 60_000 })
+    if (pulled.code === 0) step('image', 'ok', `Downloaded the image in ${Math.max(1, Math.round((Date.now() - started) / 1000))}s`)
+    return pulled
+  } finally {
+    clearInterval(timer)
+  }
+}
+
+/** What an image is known to accept before it is on this machine: the pinned image's own list, else the oldest image's. */
+export const knownCapabilities = ref => (isPinnedImage(ref || DEFAULT_IMAGE) ? PINNED_CAPABILITIES : FALLBACK_CAPABILITIES)
 
 /** What the image accepts, read from the image (no network, nothing kept). */
 export async function probeImage(docker, image) {
