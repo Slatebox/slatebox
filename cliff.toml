@@ -59,6 +59,14 @@ commit_parsers = [
   { message = '^release', skip = true },
   { message = '^changelog', skip = true },
   { message = '^Merge ', skip = true },
+  # Slatebox Cloud's plans and payments stay out of public release notes: the app's
+  # notes are also the self-host image's notes, and a self-hosted Slatebox has no
+  # payments. Commits scoped to billing areas are skipped, and so is any subject that
+  # names a plan or a payment term (first line only: `.` never crosses a newline).
+  { message = '^[a-z]+\([^)]*\b(pro|pay|payments?|business|meter|metering|stripe|billing|checkout|wallet)\b[^)]*\)!?:', skip = true },
+  { message = '^.*\b(Pro|Business)(\b[^/]|$)', skip = true },
+  { message = '(?i)^.*\b(payments?|stripe|subscriptions?|balances?|top-ups?|billing|metering|meter|seats?)\b', skip = true },
+  { message = '^.*\$\d', skip = true },
   { message = '^(fix|feat)\(security\)', group = "<!-- 5 -->Security" },
   { message = '^security', group = "<!-- 5 -->Security" },
   { message = '^(feat|fix|refactor|polish)(\(.*\))?!?: (remove|removes|drop|drops|delete|deletes) ', group = "<!-- 3 -->Removed" },

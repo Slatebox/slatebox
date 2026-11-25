@@ -54,7 +54,7 @@ release's highlights.
 - **undo:** first-class Undo and Redo on every slate, per person, with board steps and slates.undo/redo ([d8be3401](https://github.com/Slatebox/slatebox/commit/d8be3401d2238dc9f3f3e5e697adad37ae2a34d6))
 - **shapes:** the custom shape pane searches Noun Project icons first, draws one shape with AI ([c76403a2](https://github.com/Slatebox/slatebox/commit/c76403a2a2ccb4766d6263a7d89453bea17e7ee2))
 - **library:** library.* actions on every surface, with one permission matrix ([c237fa4e](https://github.com/Slatebox/slatebox/commit/c237fa4ebd1ebacba15401d3e293ff7adf4d5f4a))
-- **ai-control:** S0 surface catalogue and one follows table ([9bb337a8](https://github.com/Slatebox/slatebox/commit/9bb337a8df3025d0aacb3ea8f3744e7d5b453cc9))
+- **ai-control:** S0 surface catalog and one follows table ([9bb337a8](https://github.com/Slatebox/slatebox/commit/9bb337a8df3025d0aacb3ea8f3744e7d5b453cc9))
 - **ai-control:** S2 admin shell, audit trail for existing writes, reset and surface status ([a79b5de2](https://github.com/Slatebox/slatebox/commit/a79b5de259d0fbcc3481605e6de6f2552ed5baa2))
 - **ai-control:** S3 providers, connections, models and prices in the DB ([42efeb30](https://github.com/Slatebox/slatebox/commit/42efeb30896f8b389eb2c00052596cbc03012a9b))
 - **ai-control:** S4 bindings: chain, fallbacks, params, tools, limits, kill switches, versions ([171da785](https://github.com/Slatebox/slatebox/commit/171da785845ee80a794e0a26ef31d142b4ac7156))

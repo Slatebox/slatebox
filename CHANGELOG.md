@@ -46,7 +46,7 @@ shipped early. The next release is 2.0.0, which is above both lines.
 - Themes: the Themes panel, the theme library (`/themes`), theme generator slates, the "Create with
   theme?" AI preference, theme approval and the `themeId` creation link parameter. A slate that was
   built on a theme can be deleted like any other. Slates and people that still carry theme fields
-  open and draw as before, with their own colours; restyle a slate through chat or a presentation
+  open and draw as before, with their own colors; restyle a slate through chat or a presentation
   style.
 
 ### Added
@@ -57,7 +57,7 @@ shipped early. The next release is 2.0.0, which is above both lines.
   the same presentation: Present in the copy plays it in its style. The marketing site's Make it yours
   opens these copies.
 
-- Integrations (Pro and Business; licensed self-hosted installs): connect an outside agent or Google
+- Integrations (on Slatebox Cloud, and on self-hosted installs with an enterprise license): connect an outside agent or Google
   once on the new Integrations page (`/integrations`) and invite it onto any slate with no new sign-in,
   or let it join every slate you own. A removal from one slate is remembered; the slate's owner
   chooses who may bring outside agents. Google: Save to Google Drive, Export to Google Docs (and
@@ -70,8 +70,7 @@ shipped early. The next release is 2.0.0, which is above both lines.
 - Agents create presentations: `presentations.create` (`POST /api/v1/slates/{shareId}/presentation`,
   the MCP tool `create_presentation`, `slatebox.presentations.create` in exec and so `slatebox exec`)
   plans a presentation of a slate with the Present button's planner (the AI feature `presentation`,
-  counted like Present: Pro credits on Cloud, the guest allowance, or the person's own key), for
-  someone who may edit the slate. Optional style (voyage, stage, editorial, neon, sketch, blueprint,
+  counted like Present), for someone who may edit the slate. Optional style (voyage, stage, editorial, neon, sketch, blueprint,
   journey, calm), palette and brief; `mode: "preview"` plans without saving. It answers with the
   presentation id, its steps (layout, kicker, caption) and a link, `/canvas/<shareId>?present=1`,
   that opens the slate and plays it.
@@ -105,10 +104,10 @@ shipped early. The next release is 2.0.0, which is above both lines.
   board's lanes in turn.
 
 - A presentation's silhouettes (blobs, chevrons, bubbles, pins, masks) are custom shapes from the
-  shapes service (slateboxjs/shapes: checked, normalised, stored with their text box and name), the
+  shapes service (slateboxjs/shapes: checked, normalized, stored with their text box and name), the
   same as any drawn or library shape; only line art (open ribbons, hairline rings) stays a plain
   outline. A searched picture names its source in a small credit line on the steps it shows
-  (its licence asks for attribution); generated pictures and the style's art need none.
+  (its license asks for attribution); generated pictures and the style's art need none.
 
 - Presentations look like their slate and their style, not a template. Captions, kickers and the
   closing line are written from the slate's own words in each style's voice (a keynote is terse, a
@@ -155,9 +154,8 @@ shipped early. The next release is 2.0.0, which is above both lines.
 
 ### Changed
 
-- **Google Docs export is now part of Slatebox Pro and Slatebox Business** (the Google integration).
-  The old export, which kept a Google token in a browser cookie, is retired: connect Google once on
-  the Integrations page and Slatebox keeps the sign-in encrypted on the server. PNG, SVG and Mermaid
+- **Google Docs export now goes through the Google integration.** The old export, which kept a
+  Google token in a browser cookie, is retired: connect Google once on the Integrations page and Slatebox keeps the sign-in encrypted on the server. PNG, SVG and Mermaid
   downloads stay as they are.
 - Removing an invited agent from a slate no longer signs you out of its server: the sign-in lives as
   long as the integration, and disconnecting the integration revokes it.
@@ -165,7 +163,7 @@ shipped early. The next release is 2.0.0, which is above both lines.
   `{ sessionId, step, revision, expiresAt }`, where `step` is an index into the
   presenter's deck (-1 is the whole slate); it no longer has `laneId`. The read
   no longer has `publication`: a workshop slate is published like any slate.
-  `set_presentation_order` is unchanged. Note this in the MCP publish runbook.
+  `set_presentation_order` is unchanged.
 
 ### Fixed
 
@@ -203,7 +201,6 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.2.1` (index `sha256:208d4bf
 ### Fixed
 
 - **mcp:** keep the exec lead and describe_instance words as they were ([86435713](https://github.com/Slatebox/slatebox/commit/86435713730f71b619104bcacd737b693fd84a0a))
-- **self-host:** no payments or charging copy on a self-hosted server; Google export only when Google is set up; neutral private-address refusal ([a909422d](https://github.com/Slatebox/slatebox/commit/a909422dc85e275630cff58d115219148fdb5d13))
 - **image:** accept SLATEBOX_LICENSE and SLATEBOX_LICENSE_FILE for an on-prem license ([71d4870d](https://github.com/Slatebox/slatebox/commit/71d4870dbbc9781ab06837194fb86b87b7e769d5))
 - **team-export:** a moved slate hashes the same: options.shareId is identity ([ff054fe3](https://github.com/Slatebox/slatebox/commit/ff054fe32180caf382d5295f04d35e57804c18be))
 - **team-move:** after joining a moved team, Open Slatebox reloads so the session shows the new team ([96c0552c](https://github.com/Slatebox/slatebox/commit/96c0552cfd8dd19a57ed59f0dcf372ba4e86bead))
@@ -214,7 +211,6 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.2.0` (index `sha256:78a96e5
 
 ### Added
 
-- **integrations:** connect once, invite anywhere; Google as a native Pro integration ([dae536ac](https://github.com/Slatebox/slatebox/commit/dae536ac96beaca6ff956b9be642fdf837822ae6))
 - **suggestions:** a host's gate on suggestions.decide; retext a waiting note; undo can skip items ([cb27daea](https://github.com/Slatebox/slatebox/commit/cb27daea4f7dac95fd4dce906a1616309ad73871))
 - **agents:** agents read and write: changes elsewhere land as action cards a person approves ([509d6d00](https://github.com/Slatebox/slatebox/commit/509d6d00d6211b5837093f77529276cd573aab10))
 - **brand-kit:** one style for every slate; no per-kind presets ([12ce5bbf](https://github.com/Slatebox/slatebox/commit/12ce5bbf5f6a626a5c1ca829c508ade854c6bb66))
@@ -234,7 +230,6 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.2.0` (index `sha256:78a96e5
 
 - **integrations:** review fixes for Google and connect-once ([365d7ccb](https://github.com/Slatebox/slatebox/commit/365d7ccbd3be5af4320fe9aef888b59bf84d2cee))
 - **emails:** review follow-ups, proven through a local Meteor and SMTP catcher ([8e9b6583](https://github.com/Slatebox/slatebox/commit/8e9b6583af660043110b2d77700dc8bdaa3180b4))
-- **team:** Business card says members, not seats (no-plans copy rule) ([fa65dd16](https://github.com/Slatebox/slatebox/commit/fa65dd164103d57f9e802b3ee2a905b4d2e8930d))
 - **team:** server guards who may remove or re-role a member; invite reviews before sending ([df1b4019](https://github.com/Slatebox/slatebox/commit/df1b40199aef4adc7b10204cdef30d2cef30acf6))
 - **team:** wait for the account before choosing the create page (no "Create your team" flash) ([4a9db848](https://github.com/Slatebox/slatebox/commit/4a9db84825fb06c4710894320e9014a963b601a4))
 - **team-settings:** review fixes — delete dialog names only what applies ([9a47b25d](https://github.com/Slatebox/slatebox/commit/9a47b25d6c5491388b1c9a3971cf3b7daa86d491))
@@ -248,7 +243,6 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.2.0` (index `sha256:78a96e5
 - **auth:** Sign out always ends on the sign-in page, never a new guest ([8b7ff164](https://github.com/Slatebox/slatebox/commit/8b7ff1641d19330a82dff812f0f779ea72389345))
 - **integrations:** Disconnect always forgets the agent; failures say what did not happen ([1c84d894](https://github.com/Slatebox/slatebox/commit/1c84d8944c964fa651d5da69910fd32284a56e3a))
 - **integrations:** Let it make changes too says what did not happen on a server failure ([a37bdbb2](https://github.com/Slatebox/slatebox/commit/a37bdbb20d39eb8027aece8535048650ff14a1a7))
-- **admin:** /admin opens at the Overview; subscription numbers line up ([2249b1ff](https://github.com/Slatebox/slatebox/commit/2249b1fffe75c8b5a6efd80f04b160b39d8eb690))
 - **gallery:** Slack, Asana and HubSpot show only once their vendor app is set up ([b858b4bb](https://github.com/Slatebox/slatebox/commit/b858b4bb809ad184ef153e6a130af001df52572d))
 - **ai-control:** a key's last use is a request that is sent, not an availability check ([55d199c3](https://github.com/Slatebox/slatebox/commit/55d199c32956921ee0435ca57801672fa7428cbf))
 - **ai-control:** no request fails mid-switch, revoked keys stay dead, self-host upgrades keep their model ([35fe3c95](https://github.com/Slatebox/slatebox/commit/35fe3c959a2c7d420f187b02873356f00107ba41))
@@ -275,7 +269,6 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 - **agents:** parity with the Slates page and the comment drawer on every surface ([27bc6b19](https://github.com/Slatebox/slatebox/commit/27bc6b192ebb58ba5884538c0a814706131237a0))
 - **agents:** agent teammates phase 1: agent tasks, the Slatebox agent, hand-offs between agents ([e8e00e63](https://github.com/Slatebox/slatebox/commit/e8e00e63f06f5ae98b4db5c37c9a6cd64c2576f3))
 - **scopes:** slates:delete for deleting; drop the registry's cli field (owner decisions 2026-11-23) ([c429849f](https://github.com/Slatebox/slatebox/commit/c429849f496b8373ae57d1502e4db55e96049053))
-- **pro:** pay for Slatebox Pro at once from the site, no sign-up first ([edff470e](https://github.com/Slatebox/slatebox/commit/edff470e8eda33ecc24a23b2e1bddbd7475dac96))
 - **agents:** create_presentation, a first-class action for Present's planner ([57a1258b](https://github.com/Slatebox/slatebox/commit/57a1258bf92a87ba2e20536c8aeb4ae54f8125e2))
 - **boards:** Move anyway on pipelines, budgets, plans and nested boards (server, exec, dialog) ([a9095d73](https://github.com/Slatebox/slatebox/commit/a9095d73e6a58d33fece0b05cefc004c22538ab3))
 - **enterprise:** carve out Cloud-only enterprise/ under its own license ([3d1e76e3](https://github.com/Slatebox/slatebox/commit/3d1e76e32024acbe08d91c01a13f2ab712c8f790))
@@ -287,7 +280,6 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 - **agents:** ask an invited agent by @name in Ask Slatebox; it answers as itself ([197ea8c7](https://github.com/Slatebox/slatebox/commit/197ea8c7382f504361a016574f06e7738849d1e8))
 - **undo:** first-class Undo and Redo on every slate, per person, with board steps and slates.undo/redo ([d8be3401](https://github.com/Slatebox/slatebox/commit/d8be3401d2238dc9f3f3e5e697adad37ae2a34d6))
 - **agents, undo:** a person's Keep of an agent's suggestion is one step of their own undo history ([d0c982c4](https://github.com/Slatebox/slatebox/commit/d0c982c44fc1ab1b13ed4947a2460179ec3e7538))
-- **agents:** Slatebox Business members count as Pro for inviting outside agents ([6bdabeed](https://github.com/Slatebox/slatebox/commit/6bdabeed59affbc75f3454325d406e0485f7e6cc))
 - **shapes:** the custom shape pane searches Noun Project icons first, draws one shape with AI ([c76403a2](https://github.com/Slatebox/slatebox/commit/c76403a2a2ccb4766d6263a7d89453bea17e7ee2))
 - **library:** the shared library's model and core ([ddee2928](https://github.com/Slatebox/slatebox/commit/ddee2928441bb4d54d145aa9a0f8c5199af04a76))
 - **ai:** a use key for library review and refinement, following chat ([ad9e7e88](https://github.com/Slatebox/slatebox/commit/ad9e7e888371f019e9b5494ca1225c1626110535))
@@ -301,7 +293,7 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 - **library:** Add to this slate lists Yours and the community's components ([fc87f52b](https://github.com/Slatebox/slatebox/commit/fc87f52b771503617003ef43c9834f49e0903ece))
 - **library:** share-preview tags and canonical for /library/<slug> ([0f12e5a5](https://github.com/Slatebox/slatebox/commit/0f12e5a57194d07b4c90ecd6b5adda6c41d35909))
 - **library:** the public gallery, /library and /library/<slug> ([27989e6f](https://github.com/Slatebox/slatebox/commit/27989e6f49f8ddd43894a040451fc5204110dc89))
-- **ai-control:** S0 surface catalogue and one follows table ([9bb337a8](https://github.com/Slatebox/slatebox/commit/9bb337a8df3025d0aacb3ea8f3744e7d5b453cc9))
+- **ai-control:** S0 surface catalog and one follows table ([9bb337a8](https://github.com/Slatebox/slatebox/commit/9bb337a8df3025d0aacb3ea8f3744e7d5b453cc9))
 - **ai-control:** S1 resolver, snapshot, store and audit collection (read path) ([a8e4a13e](https://github.com/Slatebox/slatebox/commit/a8e4a13ed3767867839f45fd4a650ec752015806))
 - **ai-control:** S2 admin shell, audit trail for existing writes, reset and surface status ([a79b5de2](https://github.com/Slatebox/slatebox/commit/a79b5de259d0fbcc3481605e6de6f2552ed5baa2))
 - **ai-control:** S3 providers, connections, models and prices in the DB ([42efeb30](https://github.com/Slatebox/slatebox/commit/42efeb30896f8b389eb2c00052596cbc03012a9b))
@@ -310,12 +302,7 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 - **ai-control:** S5 prompt registry; shapes, boards, exec chat, agent, presentation and library refine prompts move to it ([1678383a](https://github.com/Slatebox/slatebox/commit/1678383a4ec234662b82edae2d2f8f227e6b15b2))
 - **ai-control:** S6 prompts tab: drafts, diff, test runs, eval gate, publish and rollback ([4b136ced](https://github.com/Slatebox/slatebox/commit/4b136ced202ed221f47d9c46110c0fc4d00bcb83))
 - **boards:** say how a board looks in chat or exec, with no AI call ([aa2dfdc4](https://github.com/Slatebox/slatebox/commit/aa2dfdc43bfa91069b40e727961014ffe551fc3a))
-- **pay:** the meter's refusal in a chat carries Pro and a balance inside the message ([2d7cf0e0](https://github.com/Slatebox/slatebox/commit/2d7cf0e0c0102ff8f857ec297db7b6ba0fb6b6e7))
-- **boards:** the owner's sentence names its board, and the browser check for looks and inline Pro ([2f34029b](https://github.com/Slatebox/slatebox/commit/2f34029b0b7b413aa9a650eeab93dfaf531d6aa6))
-- **self-host:** the one-container image on prod: enterprise locked until licensed, no payments, the installer's AI list ([c103f16e](https://github.com/Slatebox/slatebox/commit/c103f16e556e3d78a11b3d774aff3c5105084013))
 - **install:** npx slatebox, the guided installer, and the install_slatebox prompt ([bde42bfe](https://github.com/Slatebox/slatebox/commit/bde42bfe7d8dc69dd50d8c66500fe6be8f66b5fd))
-- **business:** a team buys Slatebox Business in the app ([f120bba3](https://github.com/Slatebox/slatebox/commit/f120bba388a1683ae158e815fda5878744805370))
-- **business,lock:** payments and the meter only on Slatebox Cloud; Business review fixes; $8/$80 ([801c1682](https://github.com/Slatebox/slatebox/commit/801c16824bce16fdf0d6b1abcd61fc0d240a673a))
 - **connectors:** one run per ask, one suggestion per answer, capped to what was asked; GitHub recipes ([78a8d035](https://github.com/Slatebox/slatebox/commit/78a8d035b7e8390ebf4c69dcce2077a37df39d2d))
 - **ai-control:** the layout turn makes only what was asked, once (new code default, its own golden) ([a8e64896](https://github.com/Slatebox/slatebox/commit/a8e6489633807bdfa9a6017fb5e1f747797cf7b5))
 - **agents:** lines kept with both ends, specific failure words, Import from Excalidraw on the server ([38be79ba](https://github.com/Slatebox/slatebox/commit/38be79ba922448f47519d20046aec7c9d7e85db2))
@@ -329,7 +316,7 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 - **no dead ends:** a designed 404, a real sign-up, empty lists with a next step, a slim phone cookie strip, Mermaid for guests ([4b3958f4](https://github.com/Slatebox/slatebox/commit/4b3958f4450cf3b9ea1a005120f1790a0a39661f))
 - **no dead ends:** review fixes: one-row phone header, a sign-up's own email line, no empty flash, a reader's Mermaid note ([82ffdcd7](https://github.com/Slatebox/slatebox/commit/82ffdcd78626eb5163ea5cf37f9151af988fd40a))
 - **dark mode:** the canvas is dark in dark mode, its ink reads, and a chosen background is kept ([92bdc09b](https://github.com/Slatebox/slatebox/commit/92bdc09b0a6d91d82b533de8e898ed80721e89e2))
-- **dark mode:** review fixes: copies of the drawing keep the slate's own colours, the minimap's dark frame shows, a plan's bars are dark ([6a43bbeb](https://github.com/Slatebox/slatebox/commit/6a43bbeb4138dea68fb394cd56aeb1d37d82a586))
+- **dark mode:** review fixes: copies of the drawing keep the slate's own colors, the minimap's dark frame shows, a plan's bars are dark ([6a43bbeb](https://github.com/Slatebox/slatebox/commit/6a43bbeb4138dea68fb394cd56aeb1d37d82a586))
 - **first minute:** a new slate opens on a welcome, the library finds maps and plans, and Ask Slatebox reads as a conversation ([efb747d3](https://github.com/Slatebox/slatebox/commit/efb747d37beddeca39e49f365696d8f29e38bb00))
 - **first minute:** review fixes: the welcome sits under what floats over the canvas, and its note is a slate's usual first note ([c2cd514a](https://github.com/Slatebox/slatebox/commit/c2cd514a7ec274a964e89db4e8fcba0fedb76768))
 - **first minute:** review fixes: one new note everywhere, the library's words, the phone's conversation, one spacing scale ([92a476ac](https://github.com/Slatebox/slatebox/commit/92a476ac3b43b9045b0ea141fd1a0265ac1b513e))
@@ -379,7 +366,6 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 - **slates:** a board kept on an untitled slate names the slate ([a95ffef7](https://github.com/Slatebox/slatebox/commit/a95ffef733719581904e976ed725fe37b17aa43c))
 - **plans:** a launch plan asked for with a date launches on that date ([2d3a7de6](https://github.com/Slatebox/slatebox/commit/2d3a7de6084f36a00306524be3e0e51fb97de0e3))
 - **share:** a public slate's link shows a picture of its board ([7be38173](https://github.com/Slatebox/slatebox/commit/7be381732f97766e07019e50037aaec76eb92687))
-- **metering:** a new guest's first Present is not refused by everyone else's ([fbd54328](https://github.com/Slatebox/slatebox/commit/fbd54328374bfb18c32fb8e7e3b2a20e2292e40e))
 - **mcp:** every tool has annotations.title, and tool descriptions say only what a tool does ([6b38bfbf](https://github.com/Slatebox/slatebox/commit/6b38bfbf4849fffd120f214f3a1551036a82c66e))
 - **save:** a canvas save from a page that is behind changes only what its person changed ([f9a4a3b0](https://github.com/Slatebox/slatebox/commit/f9a4a3b07d6386e2cb76a604b7eae847cdf20701))
 - **decision-path:** a refused move is "Move anyway", never "your model cannot call tools" ([c4522f73](https://github.com/Slatebox/slatebox/commit/c4522f73ee53e8c6b7d8ec1e8cb356247407ac4f))
@@ -395,7 +381,6 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 - **agents:** invited agents work where people look, with one chip each ([5e9c3f93](https://github.com/Slatebox/slatebox/commit/5e9c3f93b80fcef5a1065aa54bcf658b13214522))
 - **media, agents:** posters must be Slatebox's own; pasted videos land on free space; plain gallery copy; new settings in the example ([08ed7bc1](https://github.com/Slatebox/slatebox/commit/08ed7bc1fb18e22181e80bba481a5c40110cbe4b))
 - **agents:** one pointer per agent on screen; Cancel on Remove gives focus back ([2b1727a2](https://github.com/Slatebox/slatebox/commit/2b1727a2eec14874287e46d90c9eb0b28da696eb))
-- **agents:** no Slatebox Pro words in the invite walkthrough on a licensed self-hosted install ([32cd2a1d](https://github.com/Slatebox/slatebox/commit/32cd2a1d851e169dd352f41375b60222ee034b0c))
 - **enterprise:** Cloud unlocks only with its own signed key; a key that ends mid-run locks the publication, the sweep and the browser too ([cfd0b1eb](https://github.com/Slatebox/slatebox/commit/cfd0b1ebc259591970966a3f360dec4a8cf95322))
 - **agents:** @name reaches your own agent first; one agent per name on a slate ([fe919efa](https://github.com/Slatebox/slatebox/commit/fe919efad67bb93d450ea1984675ff30b553d331))
 - **undo:** a board change is a step from the moment it is made; a drawing Keep in place keeps the page current ([b0090eea](https://github.com/Slatebox/slatebox/commit/b0090eea593408b4d630b3ee6830e65e7702c89b))
@@ -418,7 +403,7 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 - **library:** the security review's findings, each held by a test ([0a944686](https://github.com/Slatebox/slatebox/commit/0a944686904dd74f0f8922f0559aeb2c961feb35))
 - **library:** what is taken out leaves shared caches within a minute ([b7cce0e0](https://github.com/Slatebox/slatebox/commit/b7cce0e0aa463718b4c86582d3e2f56d8324fb6e))
 - **library:** the intent and UX review's findings in the app ([965883f4](https://github.com/Slatebox/slatebox/commit/965883f46ddf15ec8ef753bf851dcc33e279270d))
-- **library:** the save sheet opens below the two-line build bar; the specs state the new behaviour ([b46473d6](https://github.com/Slatebox/slatebox/commit/b46473d6d0766707066e8790108e60f336e9b9ee))
+- **library:** the save sheet opens below the two-line build bar; the specs state the new behavior ([b46473d6](https://github.com/Slatebox/slatebox/commit/b46473d6d0766707066e8790108e60f336e9b9ee))
 - **describe:** the index gives each method the start of its summary ([eecb9738](https://github.com/Slatebox/slatebox/commit/eecb9738f09717fb0b8ebc3cd5ba93b6ce2b8a4d))
 - **library, undo:** a rule control's change is one step of the canvas's Undo ([f42369a8](https://github.com/Slatebox/slatebox/commit/f42369a8dfdb9d1bc8431cdbde752ca0686e9de7))
 - **library, agents:** an agent's library.fork onto a slate and a kept refinement meet the agents' pause ([692557e4](https://github.com/Slatebox/slatebox/commit/692557e4ad1c098569c82e61bd04be3c499ba380))
@@ -426,36 +411,27 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 - **ai-control:** review fixes for S0-S4: person-only rule, kill switches, breaker, prices, UI ([19870e25](https://github.com/Slatebox/slatebox/commit/19870e25cbfe10a49d8dd4946f72842dd90251c6))
 - **ai-control:** Off follows the follows chain, Changes tab in words, Off before the rate limit, console warnings ([2c9090d3](https://github.com/Slatebox/slatebox/commit/2c9090d3fda90ed1c5dc7738989ebdea41059fae))
 - **conversation:** a board described with no AI gets the real refusal, never a note holding the prompt ([81db7fec](https://github.com/Slatebox/slatebox/commit/81db7fec78204a523cb14459cf835f4b468f7f33))
-- **library:** refine says the meter's reason (Pro, balance) instead of "AI is not set up" ([16016363](https://github.com/Slatebox/slatebox/commit/16016363620d47e125cd0c232e6eb02fddbaf2cf))
 - **library:** the self-review alert says it in plain words, not the API's selfReview ([1ddb76ab](https://github.com/Slatebox/slatebox/commit/1ddb76ab48145f2d5128357f20ac8a4ed953a63a))
 - **library:** the version shown after approval is the stored publishedVersion ([7a4d327a](https://github.com/Slatebox/slatebox/commit/7a4d327a2f754e21b0c3485b43164fc3ced020b1))
 - **library:** "Say it like this" never renames a column to a name another column has ([4156906d](https://github.com/Slatebox/slatebox/commit/4156906d4ab46efa5830a6b3300be65428d19b1a))
 - **ai-control:** S5/S6 review: rollback eval gate, pins, cache keys, audit, lint, served-now truth ([1af666f2](https://github.com/Slatebox/slatebox/commit/1af666f234312acd6d5623ba9f35fa95c733e380))
 - **ai-control:** Changes names a failed test run and a prompt's first draft; values table scrolls at 390 ([471d65ce](https://github.com/Slatebox/slatebox/commit/471d65ce17761eaaa5966f8ab572f7545844b71a))
-- **pay:** one Payment Element per open, never re-styled at mount; a render test that fails on double mounting ([ee0af3f5](https://github.com/Slatebox/slatebox/commit/ee0af3f54889352a48e07f005b807181298ea159))
 - **library:** the build bar lives in the canvas header, never over the canvas ([58b84a50](https://github.com/Slatebox/slatebox/commit/58b84a50c569a52950b20ede509a82f7da6f03da))
 - **library:** review panel docks beside the canvas; build bar reads in full at 1440, never folds on a desktop ([f0632c45](https://github.com/Slatebox/slatebox/commit/f0632c4565725394bcad24719f1d1ebd20f0941e))
 - **library:** the build bar measures the header and gives way in a fixed order; a width x name sweep proves it ([a4023bb8](https://github.com/Slatebox/slatebox/commit/a4023bb853421970846de811f89640dea70e6964))
 - **boards:** look sentences leave the wording to the agent, ask about one column, clear colors, and say a look the board has ([4333985b](https://github.com/Slatebox/slatebox/commit/4333985b71e13ce94913801e0b4079884b1bbf73))
-- **pay:** the refusing turn alone carries Pro and a balance, the server's answer comes first, Run it now runs once ([902ac195](https://github.com/Slatebox/slatebox/commit/902ac195aedca1ac73cfa257941ede454e956b77))
 - **chat:** on a phone the newest turn's own buttons are in sight; 'make it pop' with a column selected still offers looks ([c3fa1c30](https://github.com/Slatebox/slatebox/commit/c3fa1c30bc04870f1ab008f61687c9c59fe5b952))
 - **sso:** keep prod's Suspense and /oauth/consent route beside the SSO gate and /sso/done ([83837cb9](https://github.com/Slatebox/slatebox/commit/83837cb94e3a045000b2a5c559718e3b6ed3fc08))
 - **sso:** SSO only closes the embed page; prod has no /api/public-presentations ([d5b649f9](https://github.com/Slatebox/slatebox/commit/d5b649f9d41ebabf4c5667f5c0552fde0002d9ea))
 - **self-host:** commit the image's settings module; the build refuses ignored files; README says the image is being published ([231bdee2](https://github.com/Slatebox/slatebox/commit/231bdee29f9abfd4956cf270dbdc61369cccb726))
 - **mcp:** install_slatebox links the install guide's troubleshooting section ([70e26117](https://github.com/Slatebox/slatebox/commit/70e261176440691fd0bf2b1c614c6fc97e783a73))
 - **install:** commit the settings modules; install_slatebox off until npm publish; publish needs a digest pin ([83605135](https://github.com/Slatebox/slatebox/commit/83605135c5bbe72957088fcd2038387f3aa92239))
-- **business,meter:** Business delivers its shared pool; the meter's start rule and reports follow the Cloud key ([f8867bc5](https://github.com/Slatebox/slatebox/commit/f8867bc5b907abf09b04b944b5c72b755a57e826))
-- **business:** a call on the team pool is never cut off because the pool ran out (terms A3) ([3744b6bd](https://github.com/Slatebox/slatebox/commit/3744b6bd1e335d37a67babb66eed819c81111ccf))
 - **suggestions:** Keep and Discard at the same moment never undo each other; a line whose end is gone is refused ([ffa41020](https://github.com/Slatebox/slatebox/commit/ffa410209e5c8a6c241788315d5b90e1c959d8f1))
 - **connectors:** one ask is one answer; beside earlier answers; counts not replies in history; re-invite a paused agent ([11bd79f0](https://github.com/Slatebox/slatebox/commit/11bd79f06ea3f90df4058da45e753988e932b2bf))
 - **agents:** the gallery waits for the live cards; Ask Slatebox keys each ask, cancels cleanly, keeps Slatebox's own starts with Slatebox ([5f8fd041](https://github.com/Slatebox/slatebox/commit/5f8fd041c45149701617e9e207608894957cfeda))
 - **agents:** the same ask while its answer waits is said once in Ask Slatebox ([19dc1706](https://github.com/Slatebox/slatebox/commit/19dc1706cffd0fd1bcb65352fc7688cf88eb9589))
 - **agents:** load the suggestions' drawing (slateboxjs/suggestions) only when a suggestion waits ([177d57e9](https://github.com/Slatebox/slatebox/commit/177d57e929a7a295b890e0baa8be011b64d20c42))
 - **agents:** a pointer whose agent's suggestion waits says "Waiting for you", never "Done" ([a695484d](https://github.com/Slatebox/slatebox/commit/a695484da7f1ff59b78f01f4f56d4b0271db48a6))
-
-### Security
-
-- **security:** meter outside reaches for people too; the MCP 401 asks to read and edit only ([91725513](https://github.com/Slatebox/slatebox/commit/917255132bc3a9f50c40ac4436184f5c63bde86e))
 
 ## [1.3.21] - 2026-07-16
 
