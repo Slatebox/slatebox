@@ -136,7 +136,7 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
   // operator's, or the built-in AI (no connection). Never another one behind their back.
   const withImages = carriesImages(prompts)
   // (req() resolves it once for the whole model chain and hands it in as route)
-  const chosen = operatorWorkshop ? null : aiOpts.route !== undefined ? aiOpts.route : await resolveRequestConnection({ feature: aiOpts.feature, request: { images: withImages, tools: Boolean(aiOpts.functions?.length) }, userId: callerId })
+  const chosen = operatorWorkshop ? null : aiOpts.route !== undefined ? aiOpts.route : await resolveRequestConnection({ feature: aiOpts.feature, request: { images: withImages, tools: Boolean(aiOpts.functions?.length) }, userId: callerId, forRequest: true })
   delete aiOpts.route
   if (chosen?.disabled) {
     return { abort: true, abortMessage: chosen.message || 'This feature is turned off by your administrator.', fallbackBlocked: true, disabled: true, failure: 'stop', surface: chosen.surface ?? null }
@@ -604,7 +604,7 @@ export default async function req(requested, localWorkshop) {
   // Which model serves this request, once: an administrator may have turned the part off.
   const forUser = requestUserId({ userId: requested.userId })
   const request = { images: carriesImages(requested.prompts), tools: Boolean(requested.functions?.length) }
-  const route = await resolveRequestConnection({ feature: requested.feature, request, userId: forUser })
+  const route = await resolveRequestConnection({ feature: requested.feature, request, userId: forUser, forRequest: true })
   if (route?.disabled) {
     return { abort: true, abortMessage: route.message || 'This feature is turned off by your administrator.', fallbackBlocked: true, disabled: true, failure: 'stop', surface: route.surface ?? null }
   }
@@ -615,7 +615,7 @@ export default async function req(requested, localWorkshop) {
   if (!first?.abort || first.failure !== 'infra' || route?.scope !== 'server' || !route.modelId) return first
   let fallback = null
   try {
-    fallback = await resolveRequestConnection({ feature: requested.feature, request, userId: forUser, useDefault: true })
+    fallback = await resolveRequestConnection({ feature: requested.feature, request, userId: forUser, useDefault: true, forRequest: true })
   } catch {
     fallback = null
   }

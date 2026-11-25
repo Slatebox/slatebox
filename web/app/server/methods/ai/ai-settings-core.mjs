@@ -430,7 +430,7 @@ export function createAISettings({
   }
 
   // The server's route (AI control) as a connection with the provider's active key.
-  async function serverRoute({ control, user, feature, request }) {
+  async function serverRoute({ control, user, feature, request, forRequest = false }) {
     const route = control?.route
     if (!route) return { ref: 'builtin', scope: 'server', connection: null, own: false, feature, rules: null, error: 'No model is set for this part of Slatebox. An administrator chooses one in Admin → AI control.' }
     if (route.error) return { ref: 'builtin', scope: 'server', connection: null, own: false, feature, rules: null, error: route.error }
@@ -440,7 +440,8 @@ export function createAISettings({
     const label = serverLabel(route, admin)
     const ref = `server:${route.provider}`
     const base = { ref, scope: 'server', own: false, feature, provider: route.provider, modelId: route.modelId, source: control.source, label }
-    const key = keySource ? await keySource.keyFor(route.provider) : { error: `${route.providerLabel} has no active key. An administrator adds one in Admin → AI control.` }
+    // a key opened for a request that is sent counts as its last use; an availability check does not
+    const key = keySource ? await keySource.keyFor(route.provider, { use: forRequest }) : { error: `${route.providerLabel} has no active key. An administrator adds one in Admin → AI control.` }
     if (key.error) return { ...base, connection: null, rules: null, error: key.error }
     const connection = {
       name: route.provider, type: route.provider, baseUrl: route.baseUrl, model: route.model, apiKey: key.apiKey,
@@ -460,11 +461,12 @@ export function createAISettings({
   /**
    * feature: the name an AI path uses (welcome, workshop, generation, vision, image-generation…).
    * request: { images?, tools? } what this request carries. useDefault: the default model instead
-   * of the part's (the one retry after a failing service, req.js).
+   * of the part's (the one retry after a failing service, req.js). forRequest: the route is for a
+   * request about to be sent (its key's last use is noted), not an availability check.
    * → null for a feature that is not a model choice, else { ref, scope, own, connection (with its
    *   key) | null, rules, label?, gap?, error?, disabled?, message? }
    */
-  async function resolveFor({ userId, feature, request = {}, useDefault = false }) {
+  async function resolveFor({ userId, feature, request = {}, useDefault = false, forRequest = false }) {
     const surface = surfaceFor(feature)
     if (!surface) return null
     const control = await controlFor(surface, { useDefault })
@@ -481,9 +483,9 @@ export function createAISettings({
         const owner = choice.scope === 'me' ? meOwner : teamOwner
         return { ...choice, surface, ...(await loadOwn({ connection: choice.connection, owner, scope: choice.scope, feature: choice.feature, request })) }
       }
-      return { ...(await serverRoute({ control, user, feature: choice.feature, request })), surface }
+      return { ...(await serverRoute({ control, user, feature: choice.feature, request, forRequest })), surface }
     }
-    return { ...(await serverRoute({ control, user, feature: surface, request })), surface }
+    return { ...(await serverRoute({ control, user, feature: surface, request, forRequest })), surface }
   }
 
   /**

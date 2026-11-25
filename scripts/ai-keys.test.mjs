@@ -195,3 +195,15 @@ test('the ai.keys.* actions: a person sends, switches, revokes and deletes; an a
   }
   assert.equal(publicKey({ _id: 'k', provider: 'meta', status: 'active', cipher: { data: 'x' } }).cipher, undefined)
 })
+
+test('a key\'s last use is noted for a request that is sent, never for an availability check', async () => {
+  const w = await withMeta()
+  const saved = await w.keyStore.add({ actor: w.actor, provider: 'meta', apiKey: KEY_A })
+  await w.aiSettings.resolveFor({ userId: 'ana', feature: 'chat' })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(w.keys.rows.find((row) => row._id === saved.id).lastUsedAt, null, 'checking whether AI can answer is not a use')
+  const route = await w.aiSettings.resolveFor({ userId: 'ana', feature: 'chat', forRequest: true })
+  assert.equal(route.connection.apiKey, KEY_A)
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.ok(w.keys.rows.find((row) => row._id === saved.id).lastUsedAt, 'a request that is sent is')
+})

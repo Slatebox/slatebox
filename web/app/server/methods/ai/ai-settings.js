@@ -67,8 +67,8 @@ function callerId() {
 }
 
 // The connection that serves this AI request (see ai-settings-core.mjs resolveFor).
-export function resolveRequestConnection({ feature, request = {}, userId = callerId(), useDefault = false }) {
-  return aiSettings.resolveFor({ userId, feature, request, useDefault })
+export function resolveRequestConnection({ feature, request = {}, userId = callerId(), useDefault = false, forRequest = false }) {
+  return aiSettings.resolveFor({ userId, feature, request, useDefault, forRequest })
 }
 
 /**
