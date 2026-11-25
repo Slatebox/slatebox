@@ -60,7 +60,6 @@ function SlateCreateRoute() {
   const extendedPrompt = searchparams.get('extendedPrompt')
   const templateId = searchparams.get('templateId')
   const isEmbedded = searchparams.get('isEmbedded') === 'true'
-  const intentionId = searchparams.get('intentionId')
   if (!bearer || !dateString) {
     return <Navigate to="/start" replace />
   }
@@ -90,7 +89,6 @@ function SlateCreateRoute() {
         extendedPrompt={extendedPrompt}
         templateId={templateId}
         isEmbedded={isEmbedded}
-        intentionId={intentionId}
       />
     )
   }

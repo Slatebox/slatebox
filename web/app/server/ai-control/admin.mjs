@@ -206,23 +206,6 @@ export async function surfacesStatus({ surfaces, snapshot, bind }) {
 }
 
 /**
- * Only what changed between two versions of a document, for an audit row: the top-level fields
- * that differ, from each side. A new document (before null) or a removed one (after null) keeps
- * every field of the side that exists.
- */
-export function changedFields(before, after) {
-  if (!before || !after) return { before: before ?? null, after: after ?? null }
-  const out = { before: {}, after: {} }
-  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
-    if (key === '_id') continue
-    if (JSON.stringify(before[key]) === JSON.stringify(after[key])) continue
-    if (key in before) out.before[key] = before[key]
-    if (key in after) out.after[key] = after[key]
-  }
-  return out
-}
-
-/**
  * One shared ai.surfaces.status for every subscriber (the status is the same for everyone: it reads
  * only the global switch and the server bindings). One timer runs while anyone subscribes; the
  * status is computed once per generation, not once per subscriber.

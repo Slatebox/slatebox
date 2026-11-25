@@ -21,7 +21,6 @@ import {
   IconPacks,
   AIContent,
   Transcripts,
-  ChatIntentions,
   OrganizationSettings,
 } from '../imports/api/common/models'
 import { templateCategories } from './bootstrap/template-categories.mjs'
@@ -314,34 +313,6 @@ Meteor.publish(CONSTANTS.publications.transcripts, async function (opts) {
   const slateShareId = opts?.slateShareId
   if (this.userId && typeof slateShareId === 'string' && await canReadSlate(this.userId, await findSlate({ shareId: slateShareId }))) {
     return Transcripts.find({ slateShareId }, { sort: { timestamp: -1 } })
-  }
-  this.ready()
-  return null
-})
-
-Meteor.publish(CONSTANTS.publications.chatIntentions, async function () {
-  if (this.userId) {
-    const user = await Meteor.userAsync()
-    const isUserMaster = await Meteor.callAsync(
-      CONSTANTS.methods.users.isMasterUser
-    )
-    if (isUserMaster) {
-      return ChatIntentions.find({}, { sort: { order: 1 } })
-    }
-    // A person sees their own personas, their team's (when they have a team), and the shared
-    // ones. An account without a team has orgId undefined, which must not match every other
-    // such account's personas.
-    return ChatIntentions.find(
-      {
-        $or: [
-          { userId: this.userId },
-          ...(typeof user?.orgId === 'string' && user.orgId ? [{ orgId: user.orgId }] : []),
-          { universal: true },
-          { system: true },
-        ],
-      },
-      { sort: { order: 1 } }
-    )
   }
   this.ready()
   return null

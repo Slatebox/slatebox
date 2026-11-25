@@ -27,6 +27,13 @@ import {
   pruneEmptyTemplateCatalog,
   resolveTemplateFromText,
 } from './ai/welcome-template-routing.mjs'
+import {
+  defaultGenerationKind,
+  fillWelcomePrompt,
+  generationKind,
+  generationKinds,
+  templateGenerationKind,
+} from './ai/generation-kinds.mjs'
 import { getNormalizedAssistantContent } from './ai/provider.mjs'
 import {
   resolveWelcomeFunctionCall,
@@ -44,7 +51,6 @@ import { DEFAULT_PRESET_QUERY, defaultPreset } from '../../imports/api/common/br
 import {
   AIContent,
   Messages,
-  ChatIntentions,
   SystemSettings,
   Slates,
   SlateAccess,
@@ -175,31 +181,6 @@ async function initUsage({
     fullPrompt,
     useClaude,
   }
-}
-
-function extractRequiredAndOptionalItems(intention) {
-  if (intention.gather) {
-    const intentionIntro = intention.gather?.message || ''
-    const requiredItemsToGather = intention.gather.items
-      .filter((ix) => ix.required)
-      .map((ix) => `${ix.key}: ${ix.placeholder}`)
-      .filter((ix) => ix.trim() !== '')
-      .join(', ')
-    const optionalItemsToGather = intention.gather.items
-      .filter((ix) => !ix.required)
-      .map((ix) => `${ix.key}: ${ix.placeholder}`)
-      .filter((ix) => ix.trim() !== '')
-      .join(', ')
-    let fullItemPrompt = `${intentionIntro} `
-    if (requiredItemsToGather.length) {
-      fullItemPrompt = `You must gather the following intentionItems from the user: ${requiredItemsToGather}`
-    }
-    if (optionalItemsToGather.length) {
-      fullItemPrompt += `; these intentionItems are optional: ${optionalItemsToGather}`
-    }
-    return fullItemPrompt
-  }
-  return ''
 }
 
 function extractToolAndMessage(resp) {
@@ -489,9 +470,9 @@ async function invokeTool({
           }
         }
       }
-      let intention = await ChatIntentions.findOneAsync({
-        _id: extractedToolAndMessage.anyToolUsed?.input?.intentionId,
-      })
+      let intention = generationKind(
+        extractedToolAndMessage.anyToolUsed?.input?.intentionId
+      )
       // console.log(
       //   'intentionId is',
       //   extractedToolAndMessage.anyToolUsed?.input?.intentionId,
@@ -528,18 +509,14 @@ async function invokeTool({
         // 106f80017c). Degrade to the default mindmap intention — same
         // 'degrade to no-template, never retry-loop' precedent as invalid
         // template ids — so brainstorm journeys still generate content.
-        const fallbackIntention = await ChatIntentions.findOneAsync({
-          isDefault: true,
-        })
-        if (fallbackIntention) {
-          console.log(
-            'setIntention basedOnTemplate without template, degrading:',
-            intention._id,
-            '->',
-            fallbackIntention._id,
-          )
-          intention = fallbackIntention
-        }
+        const fallbackIntention = defaultGenerationKind()
+        console.log(
+          'setIntention basedOnTemplate without template, degrading:',
+          intention._id,
+          '->',
+          fallbackIntention._id,
+        )
+        intention = fallbackIntention
       }
       if (!intention) {
         systemResponse = {
@@ -947,37 +924,11 @@ method[CONSTANTS.methods.openai.welcome] = metered({ feature: 'welcome' }, async
       return continueConversation()
     }
     // this is the initial message
-    const intentions = await ChatIntentions.find(
-      {
-        $and: [
-          {
-            $or: [
-              { universal: true },
-              // { orgId: user?.orgId },
-              // { userId: user._id },
-            ],
-          },
-          {
-            $or: [{ active: { $exists: false } }, { active: true }],
-          },
-        ],
-      },
-      {
-        fields: {
-          _id: 1,
-          name: 1,
-          gather: 1,
-          details: 1,
-          basedOnTemplate: 1,
-          isDefault: 1,
-        },
-      }
-    ).fetchAsync()
+    const intentions = generationKinds()
 
     let prompt = null
     let welcomeFunctions = null
-    const defaultIntentionId = intentions.find((i) => i.isDefault)?._id
-    const templateIntentionId = intentions.find((i) => i.basedOnTemplate)?._id // this is the default intentionId for all templates
+    const templateIntentionId = templateGenerationKind()._id
     const templateName = isTemplate
       ? await Slates.findOneAsync({ _id: isTemplate })?.options?.templateName
       : 'slate'
@@ -993,35 +944,11 @@ method[CONSTANTS.methods.openai.welcome] = metered({ feature: 'welcome' }, async
         functions: welcomePrompt.functions,
         intentions,
       })
-      prompt = routing.body
-        .replace(
-          '{intentionsAvailable}',
-          routing.intentions
-            .map((i, cnt) => {
-              const fullItemPrompt = extractRequiredAndOptionalItems(i)
-              return `(${cnt + 1}) ${i.name} (intentionId: ${
-                i._id
-              }) - ${i.details.trim()}. ${fullItemPrompt}`
-                .trim()
-                .replace(/\{\{[a-zA-Z]+\}\}/g, 'template')
-            })
-            .join('; ')
-        )
-        .replace(
-          '{topAvailableTemplates}',
-          templates
-            .slice(0, 10)
-            .map((i, cnt) =>
-              `(${cnt}) ${
-                i.options.name
-              } - ${i.options.description.trim()}, (id: ${i.shareId})`.trim()
-            )
-            .join('; ')
-        )
-        .replace('{defaultIntentionId}', defaultIntentionId)
-        .replace('{templateIntentionId}', templateIntentionId)
-        .replace('{templateCount}', templates.length)
-        .trim()
+      prompt = fillWelcomePrompt({
+        body: routing.body,
+        kinds: routing.intentions,
+        templates,
+      })
       welcomeFunctions = routing.functions
     }
 

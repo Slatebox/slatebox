@@ -1,5 +1,5 @@
 // AI control S2: who may read and change AI control, on every surface, and the audit trail of the
-// writes that existed before it (ai.update, persona saves).
+// writes that existed before it (ai.update).
 //   - every ai.control.* and ai.audit.* action needs an administrator of this server: a person or
 //     a token that is not one gets 403, whatever scope it holds;
 //   - ai:admin:read reads and cannot write; ai:admin holds ai:admin:read;
@@ -26,7 +26,7 @@ import { COLLECTIONS, STATE_ID, createControlStore } from '../web/app/server/ai-
 import { buildSnapshot, createSnapshotHolder } from '../web/app/server/ai-control/snapshot.mjs'
 import { createAIControl } from '../web/app/server/ai-control/facade.mjs'
 import { resolveBinding } from '../web/app/server/ai-control/resolve.mjs'
-import { changedFields, createAdminOps, createStatusHub, surfacesStatus } from '../web/app/server/ai-control/admin.mjs'
+import { createAdminOps, createStatusHub, surfacesStatus } from '../web/app/server/ai-control/admin.mjs'
 import { execFileSync } from 'node:child_process'
 import { connectionFormDefaults, modelFormDefaults, providerFormDefaults } from '../web/app/imports/ui/pages/admin/ai/catalog-view.mjs'
 import { createAISettings, keyFingerprint } from '../web/app/server/methods/ai/ai-settings-core.mjs'
@@ -403,19 +403,6 @@ test('the audit list pages by time and filters by kind, id and outcome', async (
   assert.equal((await ops.listAudit({ outcome: 'refused' })).rows.length, 1)
   assert.equal((await ops.listAudit({ id: 'p2' })).rows.length, 1)
   assert.equal((await ops.listAudit({ limit: 1000 })).rows.length, 6) // capped at 200, here all 6
-})
-
-test('a persona save keeps only the fields that changed', () => {
-  assert.deepEqual(changedFields({ _id: 'x', name: 'A', ai: { p: 1 }, icon: 'i' }, { _id: 'x', name: 'B', ai: { p: 1 }, color: 'red' }),
-    { before: { name: 'A', icon: 'i' }, after: { name: 'B', color: 'red' } })
-  assert.deepEqual(changedFields(null, { name: 'A' }), { before: null, after: { name: 'A' } })
-  assert.deepEqual(changedFields({ name: 'A' }, null), { before: { name: 'A' }, after: null })
-  // the method records through the store, and a failure to record never fails the save
-  const source = readFileSync(new URL('../web/app/server/methods/chatIntentions.js', import.meta.url), 'utf8')
-  assert.match(source, /recordIntention\('chatIntentions\.save', user, intention\._id, existing/)
-  assert.match(source, /recordIntention\('chatIntentions\.save', user, saveIntention\._id, null, saveIntention\)/)
-  assert.match(source, /recordIntention\('chatIntentions\.delete', user, id, intention, null\)/)
-  assert.match(source, /catch \(error\) \{\n    console\.warn\(`chatIntentions: could not record/)
 })
 
 test('who made a change: person (ddp), agent (http), a script (exec)', () => {

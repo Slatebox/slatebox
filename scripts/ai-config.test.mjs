@@ -312,9 +312,9 @@ test('the built-in providers\' addresses and default models are data too; no mod
   assert.doesNotMatch(code('server/methods/ai/provider.mjs'), /gpt-4o|https:\/\//)
   assert.doesNotMatch(code('server/methods/stabilityai.js'), /'https:\/\/api\.stability\.ai\/v1\/generation|stable-diffusion-v1-6/)
   assert.match(code('server/methods/stabilityai.js'), /Meteor\.settings\.stabilityai\?\.endpoint \|\| aiProviders\.stabilityai\.endpoint/)
-  // the seed sweep repins a dead model to the generation default, not to a name in the code
+  // the kinds of slate the welcome flow makes name no model: the server picks it
   assert.doesNotMatch(code('server/bootstrap/all.js'), /Qwen|DeepSeek/)
-  assert.match(code('server/bootstrap/all.js'), /DEFAULT_AI_FEATURES\.generation\.engine/)
+  assert.doesNotMatch(code('server/methods/ai/generation-kinds-data.mjs'), /Qwen|DeepSeek|claude-|gpt-|"engine"/)
 })
 
 // ---------- 4. prices as data, with the operator's additions ----------

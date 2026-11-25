@@ -57,8 +57,7 @@ test("pages a slate's first paint never shows load when their route is first ope
   for (const page of ["imports/ui/pages/LibraryReview.jsx", "imports/ui/pages/MyLibrary.jsx", "imports/ui/components/library/review/ReviewPanel.jsx",
     "imports/ui/components/library/PublishDialog.jsx", "imports/ui/pages/Present.jsx", "imports/ui/pages/OAuthConsent.jsx",
     "imports/ui/pages/DecisionWorkshopPage.jsx", "imports/ui/pages/AdminTools.jsx", "imports/ui/pages/BrandingSettings.jsx",
-    "imports/ui/pages/TeamSettings.jsx", "imports/ui/pages/Profile.jsx", "imports/ui/pages/Team.jsx",
-    "imports/ui/components/ai/CreatePersona.jsx"]) {
+    "imports/ui/pages/TeamSettings.jsx", "imports/ui/pages/Profile.jsx", "imports/ui/pages/Team.jsx"]) {
     assert.ok(existsSync(join(app, page)), page + " exists");
     assert.ok(!own(page), page + " is in the first load");
   }

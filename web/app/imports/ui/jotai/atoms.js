@@ -167,8 +167,6 @@ export const isHuddlePropertiesOpen = atom({
 // What is included this month and Slatebox Pro (meter.summary), refreshed after AI runs.
 export const allowance = atom(null)
 
-export const isPersonaOpen = atom(false)
-
 export const initialPrompt = atom(null)
 
 export const currentAISettings = atom({

@@ -24,7 +24,7 @@ graph TD
         S_WelcomeMethod --> S_ReqJS_Welcome(`req Function<br/><i>web/app/server/methods/ai/req.js</i>`)
         S_ReqJS_Welcome --> ExtAI_Welcome(External AI Service)
         ExtAI_Welcome --> S_ReqJS_Welcome
-        S_WelcomeMethod --> DB_ChatIntentions[(`ChatIntentions Collection<br/><i>web/app/server/methods/chatIntentions.js</i>`)]
+        S_WelcomeMethod --> K_GenerationKinds(`Kinds of slate, in code<br/><i>web/app/server/methods/ai/generation-kinds.mjs</i>`)
         S_ReqJS_Welcome --> S_WelcomeMethod
         S_WelcomeMethod -- Intention Response --> C_HandleWelcome(`Chat.jsx Handles Response<br/><i>handleWelcome function</i>`)
 
@@ -92,7 +92,7 @@ graph TD
 
     class C_ChatJSX_Init,C_CheckInitial,C_WaitForMsg,C_UserSendsMsg,C_HandleWelcome,C_StoreContext,C_UserSendsNextMsg,C_AIListener,C_AIListener_Added,C_ChatJSX_Render ui;
     class C_CallWelcomeLoad,C_CallWelcomeMsg,C_InitAIConv,C_CallChat,S_WelcomeMethod,S_ChatMethod,S_ReqJS_Welcome,S_ReqJS_Chat,S_ReqJS_Retry,S_ProcessConv,S_GetIcons,S_GetImages,C_Helpers,C_Helpers_Del,C_RedoLayout method;
-    class DB_ChatIntentions,DB_AIContent_ReadHist,DB_AIContent_Del,DB_AIContent_Upsert,DB_AIContent_SaveResp,DB_Messages_Suggestion,DB_AIContent_Listen,DB_Messages_Listen db;
+    class DB_AIContent_ReadHist,DB_AIContent_Del,DB_AIContent_Upsert,DB_AIContent_SaveResp,DB_Messages_Suggestion,DB_AIContent_Listen,DB_Messages_Listen db;
     class ExtAI_Welcome,ExtAI_Chat,ExtAI_Retry external;
     class S_HandleDeletions,S_ProcessNodesCats,S_CreateNodeHelper internal;
     class C_SlateInstance,C_SlateInstance_Update slate;

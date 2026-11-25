@@ -15,7 +15,7 @@ This document outlines the process flow when a user initiates the creation of a 
     - The user's message content, current `slateShareId`, and any `templateId` are sent.
 3.  **Intention Processing (`openai.js` - Welcome Flow):**
     - The `openai.welcome` method (defined in `web/app/server/methods/openai.js`) receives the request.
-    - It uses an AI call (via the imported `req` function from `web/app/server/methods/ai/req.js`) to analyze the user's message and determine the appropriate `ChatIntention` (fetched from the `ChatIntentions` collection) and potentially extract initial parameters or identify a specific template.
+    - It uses an AI call (via the imported `req` function from `web/app/server/methods/ai/req.js`) to analyze the user's message and choose the kind of slate to make (one of the kinds in `web/app/server/methods/ai/generation-kinds.mjs`) and potentially extract initial parameters or identify a specific template.
     - It responds to `Chat.jsx` with the identified `intention` object, extracted parameters (`intentionItems`), and potentially a `slateTemplateId` or `slateAid` (AI conversation ID).
 4.  **Intention Handling (`Chat.jsx` -> `initAIConversation.js`):**
     - The `handleWelcome` function in `Chat.jsx` receives the response from `openai.welcome`.

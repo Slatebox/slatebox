@@ -47,7 +47,6 @@ import ConnectionStatus from './components/ConnectionStatus'
 import MessageListener from './components/MessageListener'
 import CONSTANTS from '../api/common/constants'
 import AccountMenu, { useSaveYourWork } from './components/AccountMenu'
-import CreatePersona from './components/ai/CreatePersonaLazy'
 import sbTheme from './common/muiThemes'
 import './common/main.css'
 import MainPaper from './components/MainPaper'
@@ -537,7 +536,6 @@ export default function Main() {
           embeddedSlate={embeddedSlate}
           loadedUser={loadedUser}
         />
-        <CreatePersona />
         <MessageListener />
         {!slate?.options?.isEmbedded && !embeddedSlate && (
           // The cookie notice: a small card in the corner, and on a phone one slim line along the

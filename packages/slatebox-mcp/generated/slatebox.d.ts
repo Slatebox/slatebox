@@ -151,7 +151,7 @@ declare namespace slatebox.agentTasks {
 }
 
 declare namespace slatebox.ai.audit {
-  /** AI control changes. Lists changes to the AI configuration, newest first: AI control changes, ai.update (connections and feature choices at any level) and persona saves (chatIntentions.save). Each row has who (account and the name of the person, or "a deleted account"; person or agent, token, and via ddp, http or exec), the action, what it changed, the reason, before and after (keys only as fingerprints), and whether it was refused. Filter by action (exact, or a prefix ending in a dot such as ai.control.), kind, id, userId, outcome and time; pass next as before for the next page. Administrators only. @scope ai:admin:read */
+  /** AI control changes. Lists changes to the agent configuration, newest first: AI control changes and ai.update (connections and feature choices at any level). Each row has who (account and the name of the person, or "a deleted account"; person or agent, token, and via ddp, http or exec), the action, what it changed, the reason, before and after (keys only as fingerprints), and whether it was refused. Filter by action (exact, or a prefix ending in a dot such as ai.control.), kind, id, userId, outcome and time; pass next as before for the next page. Administrators only. @scope ai:admin:read */
   function list(input: {
     /** (1 to 200) */
     limit?: number;

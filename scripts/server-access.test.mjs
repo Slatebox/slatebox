@@ -128,14 +128,14 @@ test('every method and publication handler refuses such arguments before it runs
 
 test('a refused argument is logged by method name and kind of key, never by the key a person typed', () => {
   const logged = []
-  const handlers = { 'chatIntentions.save': () => 'saved' }
+  const handlers = { 'organizationSettings.save': () => 'saved' }
   guardHandlers(handlers, { refuse: () => new Error('refused'), log: (...parts) => logged.push(parts.join(' ')) })
-  assert.throws(() => handlers['chatIntentions.save']({ name: 'x', 'k.Tuesday plan for Ada': 1 }))
-  assert.throws(() => handlers['chatIntentions.save']({ name: 'x', gather: [{ '$Ada secret': 1 }] }))
-  assert.throws(() => handlers['chatIntentions.save']({ name: 'x', ['Ada\0note']: 1 }))
+  assert.throws(() => handlers['organizationSettings.save']({ name: 'x', 'k.Tuesday plan for Ada': 1 }))
+  assert.throws(() => handlers['organizationSettings.save']({ name: 'x', gather: [{ '$Ada secret': 1 }] }))
+  assert.throws(() => handlers['organizationSettings.save']({ name: 'x', ['Ada\0note']: 1 }))
   assert.equal(logged.length, 3)
   for (const line of logged) {
-    assert.match(line, /^chatIntentions\.save /)
+    assert.match(line, /^organizationSettings\.save /)
     assert.doesNotMatch(line, /Ada|Tuesday|secret|note/, 'the log carries a key: ' + line)
   }
 })
@@ -170,18 +170,6 @@ test('the argument guard is installed first, and the deny rules cover every brow
   const allowed = [...rules.matchAll(/^([A-Za-z.]+)\.allow\(/gm)].map((m) => m[1])
   const denied = rules.slice(rules.indexOf('const unsafeWrites'), rules.indexOf('const unsafeWrites') + 600)
   for (const name of allowed) assert.ok(denied.includes(name), name + ' has an allow rule but no unsafe-key deny rule')
-})
-
-test('personas: no lookup by caller operator, no personas of other accounts without a team, no caller-set flags', () => {
-  const intentions = read('server/methods/chatIntentions.js')
-  assert.doesNotMatch(intentions, /chatIntentions\.get\]/)
-  assert.ok(!read('imports/api/common/constants.js').includes("'chatIntentions.get'"))
-  assert.match(intentions, /PERSONA_FIELDS/)
-  assert.doesNotMatch(intentions.slice(intentions.indexOf('const PERSONA_FIELDS'), intentions.indexOf('const MASTER_FIELDS')), /isDefault|universal|system|userId|orgId/)
-  const pubs = read('server/publications.js')
-  const pub = pubs.slice(pubs.indexOf('CONSTANTS.publications.chatIntentions,'), pubs.indexOf("Meteor.publish('organizationSettings'"))
-  assert.doesNotMatch(pub, /\{ orgId: user\.orgId \}, \{ universal/)
-  assert.match(pub, /\{ userId: this\.userId \}/)
 })
 
 test('the signed hooks and the relay credential are separate, and a one-off AI request never reuses a credit', () => {

@@ -10,14 +10,6 @@ import CONSTANTS from './constants'
 import defaultShapes from '../../ui/components/node/defaultShapes'
 import pathAtOrigin from '../../ui/components/node/pathAtOrigin'
 import parseTemplateIntoCategories from './parseTemplateIntoCategories'
-// import {
-//   ChatIntentions,
-//   Slates,
-//   Organizations,
-// } from './models'
-
-// import CONSTANTS from './constants'
-
 function getDocType(url) {
   let docType = null
   let isImage = true
@@ -43,13 +35,14 @@ function getDocType(url) {
 }
 
 /* 
-This function initializes an AI conversation for a Slatebox canvas. It's called after a user selects
-an AI intention and fills out the required form fields in CanvasAIIntentionsDialog.
+This function starts an agent conversation on a Slatebox canvas. The welcome flow calls it with the
+kind of slate the agent chose (server/methods/ai/generation-kinds.mjs); the note actions call it with
+the adhoc kind (adhoc-kind.mjs).
 
 Key Parameters:
 - slate: The current Slatebox canvas instance
-- intention: The selected AI conversation intention with its decision tree and prompts
-- result: Form values gathered from the user through the dialog
+- intention: The kind of slate, with its decision tree and prompts
+- result: The values gathered for it (the agent's intentionItems, or the note action's prompt)
 - showWelcome: Boolean to control if welcome message should be shown
 - aid: Optional AI conversation ID if continuing an existing conversation
 */
@@ -117,7 +110,7 @@ export default async function initAIConversation({
     }.`
     if (aiDecision.prompts?.[0]) {
       // Two prompt-assembly fixes from a live run:
-      // 1) The v1-era ChatIntentions text explicitly permitted the model
+      // 1) The v1-era template-fill text explicitly permitted the model
       //    to "be proactive in asking which categories we should fill out
       //    first" — and the model took the permission: kickoff round-trip
       //    returned a question, zero notes, nothing to apply.

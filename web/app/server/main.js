@@ -53,7 +53,6 @@ import './methods/openai'
 import './methods/stabilityai'
 import './methods/auth'
 import './methods/videoHelpGuides'
-import './methods/chatIntentions'
 import './methods/images'
 
 // the meter for AI and calls, own keys and the shared budget

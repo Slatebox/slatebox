@@ -1547,8 +1547,6 @@ export default function Canvas() {
                 onAIContextReady={setLocalAIContext}
               />
             )}
-          {/* <CanvasAIIntentionsDialog slate={slate.current} />
-          <CreatePersona /> */}
           <CollaborationUsers
             localCollaborator={collaborator.current}
             slate={slate.current}
@@ -1602,18 +1600,6 @@ export default function Canvas() {
           readSelection={() => selectedOwnNotes().map((n) => n.options?.id).filter(Boolean)}
           readView={() => visibleCanvasArea(slate.current, canvasArea.current)} chatOpen={Boolean(sheetOpen)} />
       )}
-      {/* {currentAIContext?.aid &&
-        slate.current &&
-        currentAIContext?.isConversation?.showWelcome && (
-          <ConversationWelcomeDialogue
-            shareId={slate.current.options.id}
-            prompt={currentAIContext.isConversation.intentionInitialData.idea}
-            intentionId={currentAIContext.isConversation.id}
-            personaId={currentAIContext.isConversation.intentionInitialData.persona
-              .replace(/ /gi, '-')
-              .toLowerCase()}
-          />
-        )} */}
     </Grid>
   )
 }

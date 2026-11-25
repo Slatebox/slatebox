@@ -271,7 +271,6 @@ const CONSTANTS = {
       isMasterUser: 'users.isMasterUser',
       generateSpecialUseLoginToken: 'users.generateSpecialUseLoginToken',
       attemptLoginWithLink: 'users.attemptLoginWithLink',
-      getConversationWelcome: 'users.getConversationWelcome',
     },
     images: {
       getColors: 'images.getColors',
@@ -401,10 +400,6 @@ const CONSTANTS = {
     stabilityai: {
       generate: 'stabilityai.generate',
     },
-    chatIntentions: {
-      save: 'chatIntentions.save',
-      delete: 'chatIntentions.delete',
-    },
     organizationSettings: {
       save: 'organizationSettings.save',
       get: 'organizationSettings.get',
@@ -448,7 +443,6 @@ const CONSTANTS = {
     aiContent: 'aiContent',
     slateOperationRuns: 'slateOperationRuns',
     transcripts: 'transcripts,',
-    chatIntentions: 'chatIntentions',
     organizationSettings: 'organizationSettings',
   },
   messageTypes: {

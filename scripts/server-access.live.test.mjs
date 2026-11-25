@@ -293,12 +293,6 @@ test('cloud links and Google Docs export need edit rights on the slate', live, a
   assert.match(String(e.error?.message), /Slate not found/, 'stranger exported the victim slate')
 })
 
-test('chatIntentions.save cannot overwrite an intention it does not own', live, async () => {
-  const id = await victim.call('chatIntentions.save', { name: 'victim intention ' + hex(4), gather: { items: [] } })
-  const r = await errorOf(stranger.call('chatIntentions.save', { _id: id, name: 'hijacked', universal: true, gather: { items: [] } }))
-  assert.ok(r.error || r.value !== id, 'stranger overwrote an intention')
-})
-
 test('messages.recreateMessagesForComment needs the comment author and derives recipients', live, async () => {
   const r = await errorOf(anon.call('messages.recreateMessagesForComment', { commentId: 'x', userId: victim.userId, slateId: slates.private._id, text: 'click here', mentionedTeamMembers: [victim.userId] }))
   assert.ok(r.error || r.value == null, 'anonymous queued messages')
@@ -428,7 +422,7 @@ test('slates.get takes a share id string, never an operator', live, async () => 
 
 test('no method or publication takes a Mongo operator anywhere in its arguments', live, async () => {
   const g = await guestUser()
-  for (const [name, arg] of [['openai.fetchOriginalPrompt', { $ne: null }], ['users.getConversationWelcome', { intentionId: { $ne: null } }],
+  for (const [name, arg] of [['openai.fetchOriginalPrompt', { $ne: null }],
     ['iconPacks.get', { iconPackId: { $ne: null } }], ['organizations.trackGuest', { slateId: { $ne: null } }]]) {
     const r = await errorOf(g.call(name, arg))
     assert.match(r.error?.ddp?.error || 'accepted: ' + JSON.stringify(r.value)?.slice(0, 120), /invalid-argument/, name)
@@ -441,9 +435,6 @@ test('no method or publication takes a Mongo operator anywhere in its arguments'
 test('no stored document carries a key a browser refuses ($ or .)', live, async () => {
   const g = await guestUser()
   const planted = [
-    ['chatIntentions.save', { name: 'x', $gt: 1 }],
-    ['chatIntentions.save', { name: 'x', gather: { items: [{ key: 'a', $where: 1 }] } }],
-    ['chatIntentions.save', { name: 'x', ai: { 'a.b': 1 } }],
     ['iconPacks.update', { icons: [{ id: 'i', $gt: 1 }] }],
     ['/comments/insert', { _id: hex(17), slateId: slates.public._id, nodeId: 'n', createdByUserId: g.userId, text: 'x', timestamp: Date.now(), $gt: 1 }],
     ['/comments/insert', { _id: hex(17), slateId: slates.public._id, nodeId: 'n', createdByUserId: g.userId, text: 'x', timestamp: Date.now(), meta: { 'a.b': 1 } }],
@@ -467,18 +458,13 @@ test('no stored document carries a key a browser refuses ($ or .)', live, async 
   viewer.close(); g.close()
 })
 
-test('chatIntentions.get is gone, and personal personas reach only their owner', live, async () => {
-  assert.ok(notFound(await errorOf(anon.call('chatIntentions.get', { intentionId: { $regex: '^' } }))), 'chatIntentions.get still answers')
-  const owner = await registeredUser('persona')
-  const id = await owner.call('chatIntentions.save', { name: 'private persona ' + hex(4), gather: { items: [] }, isDefault: true, universal: true })
-  const g = await guestUser()
-  await g.subscribe('chatIntentions')
-  assert.ok(!g.collection('chatIntentions').some((p) => p._id === id), 'a guest received another account\'s persona')
-  await owner.subscribe('chatIntentions')
-  const mine = owner.collection('chatIntentions').find((p) => p._id === id)
-  assert.ok(mine, 'the owner receives their persona')
-  assert.ok(!mine.isDefault && !mine.universal, 'an ordinary account made its persona everyone\'s default')
-  owner.close(); g.close()
+test('the scenarios editor\'s methods and publication are gone', live, async () => {
+  const owner = await registeredUser('scenarios')
+  for (const name of ['chatIntentions.save', 'chatIntentions.delete', 'chatIntentions.get', 'users.getConversationWelcome']) {
+    assert.ok(notFound(await errorOf(owner.call(name, { name: 'x', intentionId: 'adhoc', _id: 'adhoc' }))), name + ' still answers')
+  }
+  assert.match(await owner.subscribe('chatIntentions'), /error/, 'the chatIntentions publication still answers')
+  owner.close()
 })
 
 test('a guest cannot spend AI, and has no allowance to read', live, async () => {

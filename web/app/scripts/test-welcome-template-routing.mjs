@@ -114,20 +114,18 @@ console.log('welcome template-routing contract checks passed')
 // ---- iter57: template-less template-population degrades, never dead-ends ----
 assert.match(
   openaiSource,
-  /if \(intention\?\.basedOnTemplate && !slateTemplateId\) \{[\s\S]{0,800}?isDefault: true/,
+  /if \(intention\?\.basedOnTemplate && !slateTemplateId\) \{[\s\S]{0,800}?defaultGenerationKind\(\)/,
   'basedOnTemplate intention without a template must degrade to the default mindmap intention',
 )
+const { fillWelcomePrompt, generationKinds: kindsForMenu } = await import('../server/methods/ai/generation-kinds.mjs')
 assert.ok(
-  openaiSource.includes('replace(/' + '\\{\\{[a-zA-Z]+\\}\\}/g' + ", 'template')"),
+  !/\{\{[a-zA-Z]+\}\}/.test(fillWelcomePrompt({ body: '{intentionsAvailable}', kinds: kindsForMenu() })),
   'welcome-visible intention text must not carry raw Jinja placeholder tokens',
 )
-const bootstrapSource = await readFile(
-  new URL('../server/bootstrap/all.js', import.meta.url),
-  'utf8',
-)
+const { generationKinds } = await import('../server/methods/ai/generation-kinds.mjs')
 assert.ok(
-  bootstrapSource.includes('seed-hygiene') &&
-    bootstrapSource.includes('claude-3-5'),
-  'startup sweep must repin dead claude-3-5 engine pins on seeded intentions',
+  generationKinds().every((kind) => kind.ai.decisionTree.inline.engine === undefined) &&
+    !JSON.stringify(generationKinds()).includes('claude-3-5'),
+  'the kinds of slate pin no model: the server picks it',
 )
 console.log('iter57 degradation + hygiene contracts passed')

@@ -23,7 +23,6 @@ export default function AIPassthrough({
   extendedPrompt,
   templateId,
   isEmbedded,
-  intentionId,
 }) {
   const theme = useTheme()
   const { prompt } = useParams()

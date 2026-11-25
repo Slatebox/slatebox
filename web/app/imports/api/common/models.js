@@ -44,7 +44,6 @@ const LoginLinks = new Mongo.Collection('loginLinks')
 const CodeRepositories = new Mongo.Collection('codeRepositories')
 const APILinks = new Mongo.Collection('apiLinks')
 const Transcripts = new Mongo.Collection('transcripts')
-const ChatIntentions = new Mongo.Collection('chatIntentions')
 const SlatePresentations = new Mongo.Collection('slatePresentations')
 const SlatePresentationConversations = new Mongo.Collection(
   'slatePresentationConversations'
@@ -96,7 +95,6 @@ export {
   CodeRepositories,
   APILinks,
   Transcripts,
-  ChatIntentions,
   SlatePresentations,
   SlatePresentationConversations,
   SlateApiTokens,

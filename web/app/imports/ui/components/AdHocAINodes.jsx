@@ -11,7 +11,7 @@ import { Slatebox } from 'slateboxjs'
 import slateProps from '../propTypes/slateProps'
 import CONSTANTS from '../../api/common/constants'
 import initAIConversation from '../../api/common/initAIConversation'
-import { ChatIntentions } from '../../api/common/models'
+import { adhocKind } from '../../api/common/adhoc-kind.mjs'
 import { imageFromGeneration } from '../../api/common/note-style.mjs'
 import { usePayAction } from './PayNotice'
 
@@ -191,7 +191,7 @@ const AdHocAINodes = forwardRef(({ slate, collaborator }, ref) => {
       if (!currentAIContext || !currentAIContext.aid) {
         // { textToImage, textToChildNodes, generateSimilar }
 
-        const intention = ChatIntentions.findOne({ _id: 'adhoc' })
+        const intention = adhocKind()
         const result = {
           discussion: prompt,
           idea: null,

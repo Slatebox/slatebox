@@ -2,7 +2,7 @@ import React from 'react'
 import { Meteor } from 'meteor/meteor'
 import { useTracker } from 'meteor/react-meteor-data'
 import { useNavigate } from 'react-router-dom'
-import { useAtom, useSetAtom } from 'jotai'
+import { useSetAtom } from 'jotai'
 import { Box, Button, ButtonBase, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Divider, ListItemIcon,
   ListItemText, MenuItem, Tooltip, Typography } from '@mui/material'
 import { useColorScheme } from '@mui/material/styles'
@@ -11,12 +11,10 @@ import Brightness4 from '@mui/icons-material/Brightness4'
 import Logout from '@mui/icons-material/Logout'
 import Login from '@mui/icons-material/Login'
 import Save from '@mui/icons-material/Save'
-import Psychology from '@mui/icons-material/Psychology'
 import Savings from '@mui/icons-material/Savings'
-import CONSTANTS from '../../api/common/constants'
 import HeaderMenu from './HeaderMenu'
 import { signOut as signOutAndLeave } from '../../api/client/signOut'
-import { registrationDetails, isPersonaOpen, mainDrawerOpen } from '../jotai/atoms'
+import { registrationDetails, mainDrawerOpen } from '../jotai/atoms'
 
 // Only a server with a meter (Slatebox Cloud) has credits, a balance and Slatebox Pro to show.
 const metered = () => Meteor.settings.public.metered === true
@@ -63,9 +61,7 @@ function SwitchLook({ on }) {
 export default function AccountMenu({ sheet = false }) {
   const navigate = useNavigate()
   const [anchorEl, setAnchorEl] = React.useState(null)
-  const [isMU, setIsMU] = React.useState(false)
   const [leaving, setLeaving] = React.useState(false)
-  const [personaOpen, setPersonaOpen] = useAtom(isPersonaOpen)
   const setMainDrawerOpen = useSetAtom(mainDrawerOpen)
   const saveYourWork = useSaveYourWork()
   const { mode, systemMode, setMode } = useColorScheme()
@@ -73,10 +69,6 @@ export default function AccountMenu({ sheet = false }) {
     const u = Meteor.user()
     return { user: u, name: displayName(u), email: u && !u.isAnonymous ? u.emails?.[0]?.address : null }
   })
-  React.useEffect(() => {
-    if (!user || user.isAnonymous) return
-    Meteor.callAsync(CONSTANTS.methods.users.isMasterUser).then(setIsMU, () => setIsMU(false))
-  }, [user?._id, user?.isAnonymous])
   if (!user) return null
   const guest = Boolean(user.isAnonymous)
   const dark = (mode === 'system' ? systemMode : mode) === 'dark'
@@ -117,9 +109,6 @@ export default function AccountMenu({ sheet = false }) {
       </MenuItem>}
       {!guest && metered() && <MenuItem onClick={go(() => navigate('/profile?tab=credits'))}>
         <ListItemIcon><Savings fontSize="small" /></ListItemIcon><ListItemText>Credits</ListItemText>
-      </MenuItem>}
-      {!guest && (isMU || user.orgId) && <MenuItem onClick={go(() => setPersonaOpen(!personaOpen))}>
-        <ListItemIcon><Psychology fontSize="small" /></ListItemIcon><ListItemText>Manage AI scenarios</ListItemText>
       </MenuItem>}
       <Divider />
       <MenuItem role="menuitemcheckbox" aria-checked={dark} onClick={() => setMode(dark ? 'light' : 'dark')}>

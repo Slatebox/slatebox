@@ -36,7 +36,6 @@ import {
   SlatePresentations,
   LoginLinks,
   APILinks,
-  ChatIntentions,
   ProviderKeys,
   AIChoices,
 } from '../../imports/api/common/models'
@@ -369,56 +368,6 @@ method[CONSTANTS.methods.users.getTokenByEmailForTesting] = async (opts) => {
   } else {
     return null
   }
-}
-
-method[CONSTANTS.methods.users.getConversationWelcome] = async ({
-  prompt,
-  intentionId,
-  personaId,
-  slateShareId,
-}) => {
-  check(intentionId, String)
-  const user = await Meteor.userAsync()
-  if (user) {
-    const intention = await ChatIntentions.findOneAsync({ _id: intentionId })
-    const rootGather = intention?.gather?.items?.find((i) => i.type === 'select')
-    let persona = null
-    if (personaId && rootGather?.possibleValues?.length > 0) {
-      persona = rootGather.possibleValues.find((pv) => pv.val === personaId)
-    }
-    return persona
-      ? persona.welcomeMessage
-      : {
-          title: 'Welcome to a Slatebox audio conversation!',
-          description: 'Ensure the huddle is turned on for this conversation.',
-        }
-    //   switch (persona) {
-    //     case "note-taker": {
-    //     //   if (utils.isUrl(prompt) && prompt.includes("youtube")) {
-    //     //     const { publicKey, secretKey } = Meteor.settings.slateboxAPI
-    //     //     // console.log('public and secret', publicKey, secretKey)
-    //     //     const timestamp = new Date().toISOString()
-    //     //     const signature = await createHmacString(publicKey, secretKey, timestamp)
-    //     //     let url = encodeURI(
-    //     //       `${Meteor.settings.public.baseUrl}/audio/yt?bearer=${encodeURIComponent(
-    //     //         signature.authToken
-    //     //       )}&dateString=${timestamp}&url=YTURL&date=${Date.now()}&slateShareId=${slateShareId}`
-    //     //     )
-    //     //     url = url.replace(/YTURL/, encodeURIComponent(ytUrl))
-
-    //     //     const message = await SystemSettings.findOneAsync({
-    //     //       _id: CONSTANTS.systemSettings.youTubeAudioToNotesMessage,
-    //     //     })
-
-    //     //     return { url, message }
-    //     //   }
-    //     // }
-    //   }
-    //   case ""
-    //    }
-  }
-
-  return null
 }
 
 // An emailed one-time login link is the only thing a browser may ask for, and only for an

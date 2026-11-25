@@ -177,8 +177,8 @@ export function createControlStore({ collections, newId, now = () => new Date(),
   }
 
   /**
-   * Records a change made outside the AI control collections (ai.update to the AI settings,
-   * chatIntentions.save to a persona): the audit row only, with keys redacted. The generation does
+   * Records a change made outside the AI control collections (ai.update to the agent settings):
+   * the audit row only, with keys redacted. The generation does
    * not move, since nothing in the snapshot changed.
    * entry: { action ('ai.update'), actor, target { kind, id }, before, after, reason? } → the row
    */
