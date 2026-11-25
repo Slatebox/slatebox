@@ -435,3 +435,16 @@ test('the Overview says its numbers plainly', () => {
   assert.match(page, /Agent usage/)
   assert.doesNotMatch(page, />[^<]*\bAI usage\b/, 'agent, not AI, in the copy')
 })
+
+test('/admin opens at the top: nothing on the page takes focus and scrolls past the Overview', () => {
+  const page = read('imports/ui/pages/AdminTools.jsx')
+  assert.doesNotMatch(page, /\bautoFocus\b/)
+  assert.ok(page.indexOf('<AdminOverview />') < page.indexOf('name="txtSearch"'), 'the Overview comes before the tools')
+})
+
+test('the subscription table lines each number up under its heading (only the plan column is left-aligned)', () => {
+  const page = read('imports/ui/pages/admin/AdminOverview.jsx')
+  // td:first-of-type would match the Active column (the row's first td, after the plan's th)
+  assert.doesNotMatch(page, /td:first-of-type/)
+  assert.match(page, /'& tr > :first-child': \{ textAlign: 'left'/)
+})

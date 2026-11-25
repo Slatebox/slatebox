@@ -82,7 +82,7 @@ function Subscriptions({ data }) {
     <Card title="Subscriptions" data={data} wide>
       <Box sx={{ overflowX: 'auto' }}>
         <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', minWidth: 480, '& th, & td': { py: 0.75, px: 1, textAlign: 'right', fontSize: 14, fontVariantNumeric: 'tabular-nums' },
-          '& th:first-of-type, & td:first-of-type': { textAlign: 'left', pl: 0 }, '& thead th': { color: 'text.secondary', fontWeight: 600 }, '& tbody tr': { borderTop: '1px solid', borderColor: 'divider' } }}>
+          '& tr > :first-child': { textAlign: 'left', pl: 0 }, '& thead th': { color: 'text.secondary', fontWeight: 600 }, '& tbody tr': { borderTop: '1px solid', borderColor: 'divider' } }}>
           <thead><tr><th scope="col">Plan</th>{cols.map(([id, label]) => <th scope="col" key={id}>{label}</th>)}</tr></thead>
           <tbody>
             {PLAN_ROWS.map(([id, label]) => (

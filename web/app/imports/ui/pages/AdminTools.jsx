@@ -167,7 +167,6 @@ export default function AdminTools() {
                 onChange={(e) => {
                   setSearch(e.target.value)
                 }}
-                autoFocus
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
