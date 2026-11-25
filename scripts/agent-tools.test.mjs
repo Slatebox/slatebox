@@ -202,10 +202,21 @@ test("install_slatebox is listed only once the npm installer is published, and t
     assert.equal(file.prompts.some((p) => p.name === "install_slatebox"), INSTALLER_PUBLISHED, dir);
   }
   // Switching the prompt on sends people to `npx slatebox`: only with an installer that installs one pinned image.
+  // The repository can hold the NEXT installer version before its image is published (PINNED_DIGEST null,
+  // the moving tag): that source is not what npx runs. What keeps every published version pinned then is
+  // the publish gate: prepublishOnly runs the pin checks with SLATEBOX_PUBLISH=1, which insist on a digest.
   if (INSTALLER_PUBLISHED) {
     const { PINNED_DIGEST, PINNED_TAG } = await import("../packages/slatebox/src/image.mjs");
-    assert.match(String(PINNED_DIGEST), /^sha256:[a-f0-9]{64}$/);
     assert.notEqual(PINNED_TAG, "latest");
+    if (PINNED_DIGEST === null) {
+      const manifest = JSON.parse(await readFile(new URL("../packages/slatebox/package.json", import.meta.url), "utf8"));
+      assert.match(manifest.scripts.prepublishOnly, /SLATEBOX_PUBLISH=1 npm test/, "an unpinned source can never be published");
+      const pin = await readFile(new URL("../packages/slatebox/test/publish-pin.test.mjs", import.meta.url), "utf8");
+      assert.match(pin, /assert\.match\(String\(PINNED_DIGEST\), DIGEST/, "the publish gate insists on a digest");
+      assert.match(PINNED_TAG, /^\d+\.\d+\.\d+$/, "the next release names its version tag");
+    } else {
+      assert.match(String(PINNED_DIGEST), /^sha256:[a-f0-9]{64}$/);
+    }
   }
 });
 
