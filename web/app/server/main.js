@@ -10,6 +10,12 @@ import 'slateboxjs/workshops/rules'
 import 'slateboxjs/workshops/behaviour'
 import '../imports/api/common/library.mjs'
 import { engineIdentity } from './engine-identity.mjs'
+import { WebApp } from 'meteor/webapp'
+import { exitOnTerminate } from './shutdown.mjs'
+
+// A rollout's SIGTERM stops this server promptly (node runs as PID 1 in the image, which ignores signals it does not handle).
+// `meteor run` restarts its server the same way on every server edit: no drain wait there.
+exitOnTerminate({ server: WebApp.httpServer, drainMs: Meteor.isProduction ? 1000 : 0 })
 
 // Which engine build this server runs: the commit its dist was built from (dist/BUILD.json; Meteor resolves by path).
 console.log(engineIdentity(() => require('slateboxjs/dist/BUILD.json')))
