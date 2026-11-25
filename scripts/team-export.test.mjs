@@ -235,6 +235,9 @@ test('the reader keeps to its limits: a gzip that expands too far and an over-lo
   const head = JSON.stringify({ t: 'head', format: 'slatebox-team-export', version: 2 })
   await assert.rejects(lines(gzipSync(Buffer.from(head + '\n' + 'x'.repeat(300000))), { limits: { ...LIMITS, lineBytes: 100000 } }), { code: 'too_large' })
   await assert.rejects(lines(gzipSync(Buffer.from(JSON.stringify({ t: 'head', format: 'slatebox-team-export', version: 3 }) + '\n'))), { code: 'version_unknown' })
+  // A newer archive than this server reads: update this server. Older than it reads: export again.
+  await assert.rejects(lines(gzipSync(Buffer.from(JSON.stringify({ t: 'head', format: 'slatebox-team-export', version: 3 }) + '\n'))), { message: /Update this server to the latest Slatebox, then import it again/ })
+  await assert.rejects(lines(gzipSync(Buffer.from(JSON.stringify({ t: 'head', format: 'slatebox-team-export', version: 1 }) + '\n'))), { code: 'version_too_old', message: /Export it again from an up-to-date server/ })
 })
 
 test('an export holds everything the team owns and no secret', async () => {

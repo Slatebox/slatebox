@@ -10,6 +10,8 @@ const count = { type: 'object', properties: { created: { type: 'integer' }, skip
 // Who a confirmed import invited: emails sent, addresses that already have an account here (that
 // person must agree to move), and addresses the source had not verified (teamImports.invite each
 // once checked).
+// asked: addresses whose account here was emailed an invitation to join, which they accept signed
+// in (teamMove.join); joined: those who accepted.
 const invitedSchema = {
   type: 'object',
   properties: {
@@ -17,8 +19,12 @@ const invitedSchema = {
     needsConsent: { type: 'array', items: { type: 'string' } },
     mailDisabled: { type: 'integer' },
     unverified: { type: 'array', items: { type: 'string' } },
+    asked: { type: 'array', items: { type: 'string' } },
+    joined: { type: 'array', items: { type: 'string' } },
   },
 }
+// What a confirm did with the library items: each went to this server's review queue.
+const librarySchema = { type: 'object', properties: { submitted: { type: 'integer' } } }
 const importSummary = {
   type: 'object',
   properties: {
@@ -30,6 +36,9 @@ const importSummary = {
     expiresAt: { type: 'string' },
     failure: { type: 'object', properties: { code: { type: 'string' }, message: { type: 'string' } } },
     invited: invitedSchema,
+    library: librarySchema,
+    kind: { type: 'string', enum: ['move'], description: 'A move: the team\'s own owner moved it here (teamMove.*).' },
+    movedBy: { type: 'string', description: 'Who moved it here (their address), for administrators.' },
   },
   required: ['importId', 'state'],
 }
@@ -60,6 +69,9 @@ const summarize = (record) => ({
   ...(record.expiresAt && record.state === 'pending' && { expiresAt: new Date(record.expiresAt).toISOString() }),
   ...(record.failure && { failure: record.failure }),
   ...(record.invited && { invited: record.invited }),
+  ...(record.library && { library: record.library }),
+  ...(record.move && { kind: 'move' }),
+  ...(record.movedBy && { movedBy: record.movedBy }),
 })
 
 export const teamExport = defineAction({
@@ -183,6 +195,7 @@ export const teamImportsConfirm = defineAction({
       state: { type: 'string', enum: ['confirmed'] },
       teamId: { type: 'string' },
       invited: invitedSchema,
+      library: librarySchema,
     },
     required: ['importId', 'state', 'teamId'],
   },
@@ -216,7 +229,7 @@ export const teamImportsInvite = defineAction({
     properties: {
       importId: { type: 'string' },
       email: { type: 'string' },
-      outcome: { type: 'string', enum: ['sent', 'needs_consent', 'mail_disabled', 'already_invited'] },
+      outcome: { type: 'string', enum: ['sent', 'asked', 'needs_consent', 'mail_disabled', 'already_invited'] },
     },
     required: ['importId', 'email', 'outcome'],
   },
@@ -265,7 +278,7 @@ export const teamMoveStart = defineAction({
   id: 'teamMove.start',
   title: 'Move a team here',
   description:
-    'For the owner of a team on this server, or a signed-in person in no team yet: a one-time address (1 hour) to upload a team export from another Slatebox server, to move that team here. uploadUrl takes the archive as a POST of application/octet-stream (at most maxBytes uncompressed), with its passphrase when it is encrypted (Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or Slatebox-Export-Passphrase when it is plain ASCII). The answer is the report of a pending move: nothing is visible to anyone until teamMove.confirm. into says where it lands: your_team (it joins the team you own) or new_team (it becomes your team). The same archive uploaded again answers with the first move. One move waits at a time.',
+    'For the owner of a team on this server, or a signed-in person in no team yet: a one-time address (1 hour) to upload a team export from another Slatebox server, to move that team here. At most 3 moves a day per person (429 move_limit). uploadUrl takes the archive as a POST of application/octet-stream (at most maxBytes uncompressed), with its passphrase when it is encrypted (Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or Slatebox-Export-Passphrase when it is plain ASCII). The answer is the report of a pending move: nothing is visible to anyone until teamMove.confirm. into says where it lands: your_team (it joins the team you own) or new_team (it becomes your team). The same archive uploaded again answers with the first move. One move waits at a time.',
   toolset: 'team',
   kind: 'write',
   scope: 'team:move',
@@ -330,7 +343,7 @@ export const teamMoveConfirm = defineAction({
   id: 'teamMove.confirm',
   title: 'Confirm move',
   description:
-    'Confirms your pending move. In no team: the moved team goes live and you become its owner. As a team owner: its slates, presentations, people (as placeholders) and library drafts join your team; your brand kit and agent choices stay, and the moved ones are used only when your team has none. You take the seat of the moved person with your verified address (else of its owner); someone already in your team takes the seat with their address. With invite true, every other person whose address the source had verified gets an email to claim their account (an address that already has an account here must agree to move); nobody gets an account they can sign in to without that email. Slates get back their visibility; board rules stay switched off until reviewed; keys, tokens and agent connections are never moved.',
+    'Confirms your pending move. In no team: the moved team goes live and you become its owner. As a team owner: its slates, presentations, people (as placeholders) and library drafts join your team; your brand kit and agent choices stay, and the moved ones are used only when your team has none. You take the seat of the moved person with your verified address (else of its owner); someone already in your team takes the seat with their address. With invite true, every other person whose address the source had verified gets an email to claim their account; someone who already has an account here gets an invitation to join instead, which they accept signed in (teamMove.join). Nobody gets an account they can sign in to, or joins, without that email; teamMove.invite sends them later. Library items go to this server\'s review queue (submitted, waiting for its approval). Slates get back their visibility; board rules stay switched off until reviewed; keys, tokens and agent connections are never moved.',
   toolset: 'team',
   kind: 'write',
   scope: 'team:move',
@@ -351,11 +364,67 @@ export const teamMoveConfirm = defineAction({
       seats: { type: 'object' },
       settings: { type: 'string', enum: ['imported', 'kept_yours'] },
       invited: invitedSchema,
+      library: librarySchema,
     },
     required: ['importId', 'state', 'teamId'],
   },
   tool: { name: 'confirm_team_move', title: 'Confirm a team move', description: 'Confirm your pending team move: the team becomes yours, or joins the team you own, and optionally its people are emailed to claim their accounts. The person agrees first.' },
   handler: (principal, input, { deps }) => deps.teamTransfer.confirmMove(principal.userId, input.importId, { invite: input.invite }),
+})
+
+export const teamMoveInvite = defineAction({
+  id: 'teamMove.invite',
+  title: 'Invite moved people',
+  description:
+    'After your move is confirmed: emails the moved people nobody invited yet, whose address the source had verified (an enrollment to claim their account, or, when an account here already has the address, an invitation to join that they accept signed in). With email, invites that one person once you have checked their address (one the source had not verified).',
+  toolset: 'team',
+  kind: 'write',
+  scope: 'team:move',
+  principals: ['person', 'agent'],
+  mounts: { ddp: false, http: { method: 'POST', path: '/team/moves/{importId}/invite', operationId: 'inviteTeamMovePeople' } },
+  // emails go out: an agent's request waits for the person's yes
+  confirm: true,
+  idempotency: 'optional',
+  replay: 'stored',
+  successStatus: 200,
+  input: {
+    type: 'object',
+    properties: { importId, email: { type: 'string', minLength: 3, maxLength: 320 } },
+    required: ['importId'],
+    additionalProperties: false,
+  },
+  output: {
+    type: 'object',
+    properties: {
+      importId: { type: 'string' },
+      state: { type: 'string' },
+      invited: invitedSchema,
+      now: invitedSchema,
+      email: { type: 'string' },
+      outcome: { type: 'string', enum: ['sent', 'asked', 'needs_consent', 'mail_disabled', 'already_invited'] },
+    },
+    required: ['importId'],
+  },
+  tool: { name: 'invite_team_move_people', title: 'Invite the people of a moved team', description: 'After your team move is confirmed, email its people who were not invited yet so they can claim their accounts (or join, if they already have one here). The person agrees first.' },
+  handler: (principal, input, { deps }) => deps.teamTransfer.inviteMoved(principal.userId, input.importId, { email: input.email || null }),
+})
+
+export const teamMoveJoin = defineAction({
+  id: 'teamMove.join',
+  title: 'Join a moved team',
+  description:
+    'For someone who already has an account here and was invited to join a team that moved here: accepts the invitation (its token, from the email link). Signed in as the account the invitation was sent to, in no team or already in that team, you take your seat: your slates and comments from the old server become yours, and in no team you join it.',
+  toolset: 'team',
+  kind: 'write',
+  scope: null,
+  principals: ['person'],
+  mounts: { ddp: true },
+  idempotency: 'optional',
+  replay: 'stored',
+  successStatus: 200,
+  input: { type: 'object', properties: { token: { type: 'string', minLength: 20, maxLength: 100 } }, required: ['token'], additionalProperties: false },
+  output: { type: 'object', properties: { importId: { type: 'string' }, teamId: { type: 'string' }, teamName: { type: ['string', 'null'] } }, required: ['teamId'] },
+  handler: (principal, input, { deps }) => deps.teamTransfer.joinMoved(principal.userId, input.token),
 })
 
 export const teamMoveDiscard = defineAction({
@@ -377,4 +446,4 @@ export const teamMoveDiscard = defineAction({
   handler: (principal, input, { deps }) => deps.teamTransfer.discardMove(principal.userId, input.importId),
 })
 
-export default [teamExport, teamImportsStart, teamImportsList, teamImportsGet, teamImportsConfirm, teamImportsInvite, teamImportsDiscard, teamMoveStart, teamMoveList, teamMoveGet, teamMoveConfirm, teamMoveDiscard]
+export default [teamExport, teamImportsStart, teamImportsList, teamImportsGet, teamImportsConfirm, teamImportsInvite, teamImportsDiscard, teamMoveStart, teamMoveList, teamMoveGet, teamMoveConfirm, teamMoveInvite, teamMoveJoin, teamMoveDiscard]

@@ -90,6 +90,14 @@ So a slate whose files and links moved to new addresses still hashes the same.
 
 The reader enforces the same limits while it decompresses. A file that expands past them is refused.
 
+## Versions
+
+A server reads every version from the oldest it supports (2) up to the one it writes. A change an
+older reader can skip safely keeps the version. A file from a newer server, or with a section the
+server does not know, is refused with "update this server to the latest Slatebox, then import it
+again" (`version_unknown`, `section_unknown`). A file older than the server reads is refused with
+`version_too_old`. Slatebox Cloud is updated first, so it reads files from any older server.
+
 ## Import
 
 The file is treated as hostile.
@@ -119,14 +127,21 @@ The file is treated as hostile.
 - **AI connections** arrive without keys, and only when their address is public (HTTPS, not
   localhost, not a private or link-local address).
 - **Tokens** are never made. The report lists them to make again.
-- **Library items** arrive as their authors' drafts. Nothing reaches the receiving server's
-  library until its own review approves it. The report lists each with the status it had.
+- **Library items** arrive as their authors' drafts while the import is pending. On confirm, each
+  is sent to the receiving server's review queue as its author's submission (version 1, source
+  `move`). Nothing reaches that server's library until its own review approves it. The report
+  lists each with the status it had; the confirm answers `library.submitted`.
 - **Event log.** The event log starts again: the source's events stay in the file.
 - **Failure.** A refused file removes everything the import wrote.
 - **Confirm or discard.** Confirm makes the team live. Discard deletes everything the import wrote.
 - **Invitations.** With "invite", confirm emails each person whose address the source had
   verified and no account here uses, in any letter case. The answer lists:
-  - `needsConsent`: addresses an account here already uses. That person has to agree to move.
+  - `asked`: addresses an account here already uses. That account gets an invitation to join
+    instead (`/team-move/join`, 14 days, used once, stored by hash). Signed in as that account, in
+    no team or already in that team, the person accepts (`teamMove.join`) and takes the
+    placeholder's seat. Nothing changes for them until they do. `joined` lists those who accepted.
+  - `needsConsent`: addresses no invitation could go to (two accounts share it in different
+    letter case). That person has to agree to move.
   - `unverified`: addresses the source had not verified. An administrator checks each one and
     invites it with `teamImports.invite` (Admin tools shows a button per address).
   - People who are not invited stay placeholders. Team pages show them as "Not yet invited".
@@ -150,10 +165,29 @@ server. Use it to move a team from your own server to Slatebox Cloud, or back
     that person's seat. The team's own brand kit, agent choices and connection names are kept;
     the moved ones are used only where the team has none.
   - Nobody else gets an account they can sign in to. With `invite`, the other people whose
-    address the source had verified get the email to claim their placeholder, as for an import.
+    address the source had verified get the email to claim their placeholder (or, with an
+    account here, the invitation to join), as for an import.
+  - Library items go to the review queue, as for an import.
+- **Invite later (`teamMove.invite`).** After the confirm, the mover invites everyone nobody
+  invited yet, or one address they checked (`email`).
 - **The same archive twice** (same digest, same person) answers with the first move, and the
   second copy is removed.
-- **Limit.** A move holds at most 2 GB uncompressed.
+- **No staff review.** Nobody at the receiving server reviews a move. Instead:
+  - A move holds at most 2 GB uncompressed, and the archive gets every check an import gets.
+  - A person starts at most 3 moves a day (`429 move_limit`), counted when the address is asked
+    for and again at upload.
+  - Each step is written to the administrators' audit trail (`audit`: `team-move-uploaded`,
+    `-confirmed`, `-discarded`, `-invited`, `-joined`, `-limit`). Admin tools › Import a team
+    export lists moves with who moved each (`kind: "move"`, `movedBy`).
+
+## Signing in for a move
+
+On Slatebox Cloud, `npx slatebox migrate` and `import --from cloud` sign in with a device code
+(RFC 8628, client `slatebox-cli`, scope `team:export team:move`). The consent page is titled
+"Move your team". The token (`sbo_`) lasts an hour, has no refresh token, and is bound to the
+resource `/api/v1/team/moves`: `/api/v1` takes it for `team.export` and `teamMove.*` only, and
+answers `403 token_not_for_this` for anything else. It never works on `/mcp`. A personal access
+token with the same two permissions (`SLATEBOX_CLOUD_TOKEN`) still works for scripts.
 
 ## Addresses
 
@@ -182,5 +216,5 @@ Each address works once, only for the person it was issued to, and is stored by 
 - `team:export` lets a token export (a team admin's token).
 - `team:import` lets a token import, list, read, confirm, invite and discard imports (an
   administrator's token).
-- `team:move` lets a token start, list, read, confirm and discard its person's own moves. Exec
+- `team:move` lets a token start, list, read, confirm, invite for and discard its person's own moves. Exec
   scripts cannot call these: a script cannot send an archive.

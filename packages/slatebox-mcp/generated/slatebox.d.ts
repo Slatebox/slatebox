@@ -2053,6 +2053,12 @@ declare namespace slatebox.teamImports {
       needsConsent?: string[];
       mailDisabled?: number;
       unverified?: string[];
+      asked?: string[];
+      joined?: string[];
+      [key: string]: unknown;
+    };
+    library?: {
+      submitted?: number;
       [key: string]: unknown;
     };
     [key: string]: unknown;
@@ -2091,8 +2097,18 @@ declare namespace slatebox.teamImports {
       needsConsent?: string[];
       mailDisabled?: number;
       unverified?: string[];
+      asked?: string[];
+      joined?: string[];
       [key: string]: unknown;
     };
+    library?: {
+      submitted?: number;
+      [key: string]: unknown;
+    };
+    /** A move: the team's own owner moved it here (teamMove.*). */
+    kind?: "move";
+    /** Who moved it here (their address), for administrators. */
+    movedBy?: string;
     /** What the import made: the team, the source (instance, team, when, and whether a key this server knows signed it), counts per section with each skip and its reason, the people (placeholders until invited), the slates with their content hashes, the files, rewritten links, board rules switched off, AI connections (without keys) and the tokens to make again. */
     report?: {
       team?: Record<string, unknown>;
@@ -2125,7 +2141,7 @@ declare namespace slatebox.teamImports {
   }): Promise<({
     importId: string;
     email: string;
-    outcome: "sent" | "needs_consent" | "mail_disabled" | "already_invited";
+    outcome: "sent" | "asked" | "needs_consent" | "mail_disabled" | "already_invited";
     [key: string]: unknown;
   }) & { mode: "save" }>;
 }
@@ -2150,8 +2166,18 @@ declare namespace slatebox.teamImports {
         needsConsent?: string[];
         mailDisabled?: number;
         unverified?: string[];
+        asked?: string[];
+        joined?: string[];
         [key: string]: unknown;
       };
+      library?: {
+        submitted?: number;
+        [key: string]: unknown;
+      };
+      /** A move: the team's own owner moved it here (teamMove.*). */
+      kind?: "move";
+      /** Who moved it here (their address), for administrators. */
+      movedBy?: string;
       [key: string]: unknown;
     }>;
     [key: string]: unknown;

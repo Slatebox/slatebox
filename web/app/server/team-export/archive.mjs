@@ -30,7 +30,7 @@ import {
 } from 'node:crypto'
 import { PassThrough, Readable, Transform, pipeline } from 'node:stream'
 import { createGunzip, createGzip } from 'node:zlib'
-import { FORMAT, LIMITS, VERSION } from './format.mjs'
+import { FORMAT, LIMITS, OLDEST_VERSION, UPDATE_THIS_SERVER, VERSION } from './format.mjs'
 
 export class ArchiveError extends Error {
   constructor(code, message) {
@@ -314,8 +314,11 @@ export async function* readArchive(source, { passphrase = null, limits = LIMITS 
     if (!head) {
       if (record.t !== 'head' || record.format !== FORMAT)
         throw new ArchiveError('format_unknown', 'This is not a Slatebox team export.')
-      if (record.version !== VERSION)
-        throw new ArchiveError('version_unknown', `This server reads version ${VERSION} team exports; this one is version ${record.version}.`)
+      // Older archives (back to OLDEST_VERSION) read; a newer one asks for this server to be updated.
+      if (!Number.isInteger(record.version) || record.version < OLDEST_VERSION)
+        throw new ArchiveError('version_too_old', `This archive is from a Slatebox too old for this server to read (version ${String(record.version).slice(0, 10)}). Export it again from an up-to-date server.`)
+      // (the code older servers answered with too, so clients that know it keep working)
+      if (record.version > VERSION) throw new ArchiveError('version_unknown', UPDATE_THIS_SERVER)
       head = record
     } else if (record.t === 'head') throw new ArchiveError('corrupt', 'The archive has two heads.')
     return record

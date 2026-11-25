@@ -1,6 +1,7 @@
 // Where signing in returns a person: to the workshop room they were joining (?room=), to the
 // consent page an MCP app sent them to (?oauth=<request id>), to the device sign-in page the
-// slatebox command sent them to (?device=<code> or ?device=1), or to the pay sheet a &pay= link
+// slatebox command sent them to (?device=<code> or ?device=1), to the invitation to join a moved
+// team (?join=<token>, /team-move/join), or to the pay sheet a &pay= link
 // asked for (Login.jsx adds billing/pay/pay-url.mjs loginReturn), otherwise home. A login
 // link opens in a new tab, so the place is also remembered (thirty minutes, read once). Only
 // these shapes of address are ever returned; anything else goes home.
@@ -8,12 +9,15 @@ const ROOM = /^[a-f0-9]{10}$/
 const REQUEST = /^[0-9a-f]{32}$/
 // A device code as /device shows it (server/oauth/device.mjs alphabet).
 const DEVICE_CODE = /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/
+// An invitation to join a moved team (server/team-export/invite.mjs: 32 random bytes, base64url).
+const JOIN_TOKEN = /^[A-Za-z0-9_-]{43}$/
 const KEY = 'slatebox.workshopLogin'
 const LIFETIME_MS = 30 * 60 * 1000
 
 const allowed = (path) =>
   (typeof path === 'string' && (/^\/workshops\?room=[a-f0-9]{10}$/.test(path) || /^\/oauth\/consent\?request=[0-9a-f]{32}$/.test(path) ||
     /^\/device(\?code=[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4})?$/.test(path) ||
+    /^\/team-move\/join\?token=[A-Za-z0-9_-]{43}$/.test(path) ||
     /^\/profile\?tab=credits&pay=(pro|topup|card|manage)$/.test(path)))
 
 export function loginDestination(query) {
@@ -21,6 +25,8 @@ export function loginDestination(query) {
   if (ROOM.test(room || '')) return `/workshops?room=${room}`
   const request = query.get('oauth')
   if (REQUEST.test(request || '')) return `/oauth/consent?request=${request}`
+  const join = query.get('join')
+  if (JOIN_TOKEN.test(join || '')) return `/team-move/join?token=${join}`
   const device = query.get('device')
   if (device !== null) {
     const code = deviceCodeFromQuery(new URLSearchParams({ code: device }))

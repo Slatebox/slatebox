@@ -6,11 +6,14 @@ import { Meteor } from 'meteor/meteor'
 import { Mongo } from 'meteor/mongo'
 import { Random } from 'meteor/random'
 import { Accounts } from 'meteor/accounts-base'
+import { Email } from 'meteor/email'
 import { validateWorkshop } from 'slateboxjs/workshops/model'
 import CONSTANTS from '../../imports/api/common/constants'
 import {
   AIChoices,
+  Audit,
   Comments,
+  LibraryEvents,
   LibraryItems,
   LibraryVersions,
   OrganizationSettings,
@@ -33,7 +36,9 @@ import { enrollmentMailAvailable } from '../instance/meteor'
 import { publicKeyFingerprint } from './archive.mjs'
 import { createTeamExporter } from './export-core.mjs'
 import { createTeamImporter } from './import-core.mjs'
-import { createPlaceholderInvite } from './invite.mjs'
+import { createPlaceholderInvite, hashJoinToken, JOIN_DAYS } from './invite.mjs'
+import { emailLogoUrl } from '../email/setup'
+import { firstNameOf, joinMovedTeam } from '../email/templates.mjs'
 import { createTeamTransfer, createTicketStore } from './transfer.mjs'
 import { previewOf } from '../library/core.mjs'
 import { mountTeamTransfer } from './routes.mjs'
@@ -61,6 +66,7 @@ const db = {
   apiTokens: raw(SlateApiTokens),
   libraryItems: raw(LibraryItems),
   libraryVersions: raw(LibraryVersions),
+  libraryEvents: raw(LibraryEvents),
   imports: raw(TeamImports),
   importMap: raw(TeamImportMap),
 }
@@ -135,11 +141,20 @@ const importer = createTeamImporter({
   // A placeholder becomes an account the person claims by the enrollment email, unless the
   // address already has an account here in any letter case: that person has to agree to move.
   // An address the source had not verified waits for the administrator to confirm it.
+  // An address that already has an account here is asked to join instead (/team-move/join).
   invite: createPlaceholderInvite({
     users: db.users,
     mailAvailable: enrollmentMailAvailable,
     sendEnrollment: (userId, email) => Accounts.sendEnrollmentEmail(userId, email),
+    async askToJoin({ placeholder, account, email, token }) {
+      const origin = Meteor.settings.public.baseUrl || Meteor.absoluteUrl()
+      const org = await db.organizations.findOne({ _id: placeholder.orgId }, { projection: { name: 1 } })
+      const who = await db.users.findOne({ _id: account._id }, { projection: { profile: 1 } })
+      const mail = joinMovedTeam({ firstName: firstNameOf(who), teamName: org?.name, url: new URL('/team-move/join?token=' + token, origin).href, days: JOIN_DAYS, logoUrl: emailLogoUrl() })
+      await Email.sendAsync({ from: Meteor.settings.mailFrom || 'no-reply@slatebox.com', to: email, subject: mail.subject, html: mail.html, text: mail.text })
+    },
   }),
+  hashToken: hashJoinToken,
 })
 
 const isServerAdmin = async (userId) =>
@@ -162,6 +177,8 @@ export const teamTransfer = createTeamTransfer({
     name: Meteor.settings.public.instanceName || 'Slatebox',
   },
   log: (message, fields) => console.log(message, JSON.stringify(fields)),
+  // Moves need no administrator's review: each step lands in the administrators' audit trail.
+  audit: (entry) => Audit.insertAsync({ ...entry, created: Date.now() }),
 })
 
 export function mountTeamExport(app, express) {

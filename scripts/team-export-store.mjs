@@ -157,6 +157,6 @@ export function memoryCollection(name = 'docs') {
 export const DB_NAMES = [
   'organizations', 'users', 'permissions', 'slates', 'events', 'snapshots', 'comments', 'presentations',
   'presentationChats', 'slateAccess', 'orgSettings', 'providerKeys', 'aiChoices', 'apiTokens', 'imports', 'importMap', 'tickets',
-  'libraryItems', 'libraryVersions',
+  'libraryItems', 'libraryVersions', 'libraryEvents',
 ]
 export const memoryDb = () => Object.fromEntries(DB_NAMES.map((name) => [name, memoryCollection(name)]))

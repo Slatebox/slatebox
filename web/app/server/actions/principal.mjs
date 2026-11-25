@@ -17,10 +17,15 @@ export function principalFromUser(user, allScopes) {
   }
 }
 
-export function principalFromToken(authenticated) {
+// A connected app's token (sbo_) authenticates on /api/v1 only when it was issued for a purpose
+// that names its actions: a move sign-in (server/oauth/device.mjs, purpose "move") is bound to
+// `audiences` → its action ids, and the registry admits it for those actions only (onlyActions).
+export function principalFromToken(authenticated, { audiences = null } = {}) {
   if (!authenticated?.token?._id) return null
   const { token } = authenticated
+  const only = token.kind === 'oauth' && audiences && Object.hasOwn(audiences, token.resource) ? audiences[token.resource] : null
   return {
+    ...(only && { onlyActions: [...only] }),
     kind: 'agent',
     userId: token.userId,
     tokenId: token._id,

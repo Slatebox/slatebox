@@ -8,6 +8,8 @@ import express from 'express'
 import {
   createDeviceFlow,
   DEVICE_GRANT,
+  MOVE_ACTIONS,
+  MOVE_SCOPES,
   DeviceError,
   formatUserCode,
   memoryWindowCounter,
@@ -42,7 +44,7 @@ function collection() {
   }
 }
 
-function world({ enabled = true } = {}) {
+function world({ enabled = true, offered = null } = {}) {
   let clock = Date.parse('2026-11-24T12:00:00Z')
   const now = () => clock
   const grants = collection()
@@ -50,7 +52,7 @@ function world({ enabled = true } = {}) {
   const users = collection()
   users.docs.push({ _id: 'ada' }, { _id: 'guest', isAnonymous: true }, { _id: 'gone', isDisabled: true })
   let on = enabled
-  const device = createDeviceFlow({ grants, apiTokens, users, origin: 'https://app.slatebox.com', counter: memoryWindowCounter({ now }), enabled: () => on, now })
+  const device = createDeviceFlow({ grants, apiTokens, users, origin: 'https://app.slatebox.com', counter: memoryWindowCounter({ now }), enabled: (purpose) => on && (!offered || offered.includes(purpose)), now })
   return { device, grants, apiTokens, users, now, tick: (ms) => (clock += ms), setEnabled: (value) => (on = value) }
 }
 
@@ -213,5 +215,61 @@ test('signing in from /device returns to /device with its code, and only that sh
   rememberLoginReturn(storage, '/device?code=WDJB-MJHT', 1000)
   assert.equal(recalledLoginReturn(storage, 2000), '/device?code=WDJB-MJHT')
   rememberLoginReturn(storage, '/device?code=WDJB-MJHT&next=//evil', 1000)
+  assert.equal(recalledLoginReturn(storage, 2000), '/')
+})
+
+test('a move signs in for team:export and team:move: consent says "move your team", the token lasts an hour and is bound to the move resource', async () => {
+  const w = world()
+  assert.deepEqual([...MOVE_SCOPES], ['team:export', 'team:move'])
+  const answer = await w.device.authorize({ clientId: 'slatebox-cli', scope: 'team:export team:move', label: 'tims-mbp' })
+  const shown = await w.device.describe({ userCode: code(answer), user: { _id: 'ada' } })
+  assert.equal(shown.title, 'Move your team')
+  assert.equal(shown.grants.length, 2)
+  for (const grant of shown.grants) assert.match(grant, /^move your team: /)
+  assert.match(shown.cannot, /nothing else/)
+  await w.device.decide({ userCode: code(answer), user: { _id: 'ada' }, allow: true })
+  const token = await w.device.poll({ clientId: 'slatebox-cli', deviceCode: answer.device_code })
+  assert.deepEqual([token.expires_in, token.scope, token.refresh_token], [3600, 'team:export team:move', undefined])
+  const row = w.apiTokens.docs.at(-1)
+  assert.equal(row.resource, 'https://app.slatebox.com/api/v1/team/moves')
+  assert.equal(row.resource, w.device.resourceFor('slatebox-cli', 'move'))
+  assert.equal(row.name, 'Slatebox installer: move your team on tims-mbp')
+  // It never works where a team-address token does, nor on /mcp; /api/v1 takes it only as the move's audience.
+  const service = createApiTokenService({ apiTokens: w.apiTokens, users: w.users, slates: collection(), slateAccess: collection(), now: w.now })
+  const req = { headers: { authorization: `Bearer ${token.access_token}` } }
+  assert.equal(await service.authenticateApiRequest(req, { audience: w.device.resourceFor('slatebox-cli') }), null, 'not on team addresses')
+  assert.equal(await service.authenticateApiRequest(req, { audience: 'https://app.slatebox.com/mcp' }), null)
+  assert.equal((await service.authenticateApiRequest(req, { audience: w.device.resourceFor('slatebox-cli', 'move') })).account._id, 'ada')
+  assert.ok(MOVE_ACTIONS.includes('team.export') && MOVE_ACTIONS.every((id) => id === 'team.export' || id.startsWith('teamMove.')))
+  w.tick(3_601_000)
+  assert.equal(await service.authenticateApiRequest(req, { audience: w.device.resourceFor('slatebox-cli', 'move') }), null, 'it lapses after an hour')
+})
+
+test('one purpose at a time, and only the purposes this server offers', async () => {
+  const w = world()
+  assert.equal(await errorOf(w.device.authorize({ clientId: 'slatebox-cli', scope: 'team-addresses team:move' })), 'invalid_scope', 'never mixed')
+  assert.equal(await errorOf(w.device.authorize({ clientId: 'slatebox-cli', scope: 'team:import' })), 'invalid_scope')
+  // A team:move alone is a move too (a subset of its scopes).
+  await w.device.authorize({ clientId: 'slatebox-cli', scope: 'team:move' })
+  // Cloud without the claim service: moves yes, team addresses no.
+  const movesOnly = world({ offered: ['move'] })
+  assert.equal(await errorOf(movesOnly.device.authorize({ clientId: 'slatebox-cli', scope: 'team-addresses' })), 'invalid_scope')
+  assert.equal(await errorOf(movesOnly.device.authorize({ clientId: 'slatebox-cli' })), 'invalid_scope', 'the default purpose (team addresses) is not offered')
+  await movesOnly.device.authorize({ clientId: 'slatebox-cli', scope: 'team:export team:move' })
+  // A self-hosted server: nothing at all.
+  const none = world({ enabled: false })
+  assert.equal(await errorOf(none.device.authorize({ clientId: 'slatebox-cli', scope: 'team:export team:move' })), 'not_found')
+})
+
+test('signing in from an invitation to join a moved team returns to it, and only with a well-formed token', () => {
+  const token = 'A'.repeat(20) + '_-' + 'b'.repeat(21)
+  assert.equal(loginDestination(new URLSearchParams(`join=${token}`)), `/team-move/join?token=${token}`)
+  assert.equal(loginDestination(new URLSearchParams('join=//evil.example')), '/')
+  assert.equal(loginDestination(new URLSearchParams('join=short')), '/')
+  const store = new Map()
+  const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) }
+  rememberLoginReturn(storage, `/team-move/join?token=${token}`, 1000)
+  assert.equal(recalledLoginReturn(storage, 2000), `/team-move/join?token=${token}`)
+  rememberLoginReturn(storage, `/team-move/join?token=${token}&next=//evil`, 1000)
   assert.equal(recalledLoginReturn(storage, 2000), '/')
 })

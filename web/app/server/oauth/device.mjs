@@ -3,16 +3,19 @@
 // approves it on /device while signed in, and the command polls the token endpoint until then.
 //
 //   client   a first-party public client from DEVICE_CLIENTS (no secret, never registered over
-//            /oauth/register). Each names the only scopes it may ask for and the one resource its
-//            token is bound to, so a device token never works on /mcp or /api/v1 actions.
+//            /oauth/register). Each offers sign-ins for one or more purposes: each purpose names the
+//            only scopes it may ask for and the one resource its token is bound to. A request asks
+//            for the scopes of one purpose only, so a device token never works on /mcp, and on
+//            /api/v1 only for the actions its purpose names (a move: team.export and teamMove.*).
 //   grant    one request (oauthDeviceGrants): only sha256 of the device code and of the user code
 //            are kept, it lives 10 minutes, and it is used once.
 //   token    one row in slateApiTokens, kind 'oauth' (sbo_), bound to the client's resource, with a
 //            short access token and no refresh token.
 //
 // MIT, runs without Meteor (scripts/oauth-device.test.mjs); server/oauth/meteor.js wires it.
-// Whether any client is offered at all is the caller's `enabled()` (team addresses run only on
-// Slatebox Cloud), so elsewhere every device address answers 404.
+// Which purposes are offered is the caller's `enabled(purpose)` (team addresses and moves run only
+// on Slatebox Cloud); where none is, every device address answers 404, and asking for the scopes
+// of a purpose not offered here answers invalid_scope.
 /* eslint-disable no-underscore-dangle */
 import { createHash, createHmac, randomBytes, randomInt } from 'node:crypto'
 import { hashApiToken } from '../api-token-core.mjs'
@@ -31,17 +34,42 @@ export const DEVICE_PATHS = { authorization: '/oauth/device_authorization', page
 // Grants are removed by a TTL index on purgeAt a day after they lapse.
 const PURGE_AFTER_MS = 24 * 60 * 60 * 1000
 
+// A move signs in for exactly these two scopes, and its token works on /api/v1 for exactly these
+// actions (server/actions/mount.js): export the team here, or move a team here, nothing else.
+export const MOVE_SCOPES = Object.freeze(['team:export', 'team:move'])
+export const MOVE_ACTIONS = Object.freeze(['team.export', 'teamMove.start', 'teamMove.list', 'teamMove.get', 'teamMove.confirm', 'teamMove.discard', 'teamMove.invite'])
+export const MOVE_RESOURCE_PATH = '/api/v1/team/moves'
+
 // The first-party clients. team-addresses is a route scope (enterprise/team-addresses), not an
 // action scope: it is never in API_TOKEN_SCOPES, so no personal token, MCP tool or exec call
-// carries it, and '*' or admin tokens never imply it.
+// carries it, and '*' or admin tokens never imply it. The move scopes are action scopes, but the
+// token a move sign-in issues is bound to MOVE_RESOURCE_PATH, which /api/v1 takes for
+// MOVE_ACTIONS only.
 export const DEVICE_CLIENTS = Object.freeze({
   'slatebox-cli': Object.freeze({
     name: 'Slatebox installer',
-    scopes: Object.freeze([TEAM_ADDRESSES_SCOPE]),
-    resourcePath: '/api/v1/team-addresses',
-    tokenSeconds: 15 * 60,
-    grants: Object.freeze({ [TEAM_ADDRESSES_SCOPE]: 'claim and manage team addresses on your account' }),
-    cannot: 'It will not be able to read or change your slates.',
+    purposes: Object.freeze({
+      teamAddresses: Object.freeze({
+        scopes: Object.freeze([TEAM_ADDRESSES_SCOPE]),
+        resourcePath: '/api/v1/team-addresses',
+        tokenSeconds: 15 * 60,
+        grants: Object.freeze({ [TEAM_ADDRESSES_SCOPE]: 'claim and manage team addresses on your account' }),
+        cannot: 'It will not be able to read or change your slates.',
+      }),
+      move: Object.freeze({
+        title: 'Move your team',
+        scopes: MOVE_SCOPES,
+        resourcePath: MOVE_RESOURCE_PATH,
+        // A move downloads and uploads a whole team: an hour, still with no refresh token.
+        tokenSeconds: 60 * 60,
+        actions: MOVE_ACTIONS,
+        grants: Object.freeze({
+          'team:export': 'move your team: export everything your team owns here, if you are its admin',
+          'team:move': 'move your team: bring a team here from another Slatebox server, waiting for your confirmation',
+        }),
+        cannot: 'It can do nothing else: it will not be able to open, change or share your slates one by one, and the sign-in ends after an hour.',
+      }),
+    }),
   }),
 })
 
@@ -157,10 +185,20 @@ export function createDeviceFlow({
   const verificationUri = at + DEVICE_PATHS.page
   const ipHash = (ip) => (ip ? createHmac('sha256', pepper).update(String(ip)).digest('hex').slice(0, 32) : null)
   const clientFor = (clientId) => (typeof clientId === 'string' && Object.hasOwn(clients, clientId) ? clients[clientId] : null)
-  const resourceFor = (client) => at + client.resourcePath
+  // enabled() with no purpose (an older caller): every purpose follows it.
+  const offered = (name) => Boolean(enabled(name))
+  const purposesOf = (client) => Object.entries(client?.purposes || {})
+  const purposeOf = (client, name) => (client && Object.hasOwn(client.purposes || {}, name) ? client.purposes[name] : null)
+  // The purpose a grant (or a token row) was made for: its scopes are all in one purpose.
+  const purposeForScopes = (client, scopes) => purposesOf(client).find(([, purpose]) => scopes.every((scope) => purpose.scopes.includes(scope))) || null
+  const resourceFor = (client, name) => {
+    const purpose = name ? purposeOf(client, name) : purposesOf(client)[0]?.[1]
+    return purpose ? at + purpose.resourcePath : null
+  }
 
   const assertEnabled = () => {
-    if (!enabled()) throw new DeviceError('not_found', 'Nothing is published at this address.', 404)
+    if (!Object.values(clients).some((client) => purposesOf(client).some(([name]) => offered(name))))
+      throw new DeviceError('not_found', 'Nothing is published at this address.', 404)
   }
 
   const newUserCode = () => {
@@ -174,9 +212,10 @@ export function createDeviceFlow({
     assertEnabled()
     const client = clientFor(clientId)
     if (!client) throw new DeviceError('invalid_client', 'Unknown client.', 401)
-    const asked = typeof scope === 'string' && scope.trim() ? [...new Set(scope.trim().split(/\s+/))] : [...client.scopes]
-    const unknown = asked.find((item) => !client.scopes.includes(item))
-    if (unknown) throw new DeviceError('invalid_scope', `This client may ask for ${client.scopes.join(', ')} only.`)
+    const asked = typeof scope === 'string' && scope.trim() ? [...new Set(scope.trim().split(/\s+/))] : [...(purposesOf(client)[0]?.[1].scopes || [])]
+    const found = purposeForScopes(client, asked)
+    if (!found) throw new DeviceError('invalid_scope', `This client may ask for ${purposesOf(client).map(([, purpose]) => purpose.scopes.join(' ')).join(', or ')} only, one purpose at a time.`)
+    if (!offered(found[0])) throw new DeviceError('invalid_scope', `This server does not offer ${asked.join(' ')} sign-ins.`)
     const key = `device:${ipHash(ip) || 'unknown'}`
     for (const [limit, windowMs] of [[10, 60_000], [50, 86_400_000]]) {
       const taken = await counter.take(key, limit, windowMs)
@@ -192,6 +231,7 @@ export function createDeviceFlow({
       deviceHash: sha256(deviceCode),
       userCodeHash: sha256(userCode),
       clientId,
+      purpose: found[0],
       scopes: asked,
       label: sanitizeLabel(label),
       region: region || null,
@@ -240,19 +280,21 @@ export function createDeviceFlow({
       throw new DeviceError('invalid_grant', 'The device code was already used.')
     const account = await users.findOneAsync({ _id: grant.userId }, { fields: { _id: 1, isAnonymous: 1, isDisabled: 1 } })
     if (!account || account.isAnonymous || account.isDisabled) throw new DeviceError('invalid_grant', 'The account that approved this sign-in is not available.')
+    const purpose = purposeOf(client, grant.purpose) || purposeForScopes(client, grant.scopes)?.[1]
+    if (!purpose) throw new DeviceError('invalid_grant', 'The device code is not valid.')
     const prefix = randomBytesImpl(4).toString('hex')
     const access = `sbo_${prefix}_${randomBytesImpl(32).toString('base64url')}`
-    const expiresAt = t + client.tokenSeconds * 1000
+    const expiresAt = t + purpose.tokenSeconds * 1000
     await apiTokens.insertAsync({
       userId: grant.userId,
       kind: 'oauth',
-      name: grant.label ? `${client.name} on ${grant.label}` : client.name,
+      name: `${purpose.title ? `${client.name}: ${purpose.title.toLowerCase()}` : client.name}${grant.label ? ` on ${grant.label}` : ''}`,
       clientId,
       prefix,
       tokenHash: hashApiToken(access),
       scopes: grant.scopes,
       grantedScopes: grant.scopes,
-      resource: resourceFor(client),
+      resource: at + purpose.resourcePath,
       deviceGrantId: grant._id,
       createdAt: t,
       expiresAt,
@@ -261,7 +303,7 @@ export function createDeviceFlow({
       lastUsedAt: null,
       revokedAt: null,
     })
-    return { access_token: access, token_type: 'Bearer', expires_in: client.tokenSeconds, scope: grant.scopes.join(' ') }
+    return { access_token: access, token_type: 'Bearer', expires_in: purpose.tokenSeconds, scope: grant.scopes.join(' ') }
   }
 
   // Wrong entries per person: after WRONG_CODE_LIMIT in ten minutes, entering codes is refused
@@ -292,13 +334,15 @@ export function createDeviceFlow({
     const grant = await lookup(userCode, user._id)
     if (!grant) return null
     const client = clientFor(grant.clientId)
-    if (!client) return null
+    const purpose = purposeOf(client, grant.purpose) || purposeForScopes(client, grant.scopes)?.[1]
+    if (!client || !purpose) return null
     return {
       client: client.name,
+      ...(purpose.title && { title: purpose.title }),
       label: grant.label,
       region: grant.region,
-      grants: grant.scopes.map((scope) => client.grants[scope] || scope),
-      cannot: client.cannot,
+      grants: grant.scopes.map((scope) => purpose.grants[scope] || scope),
+      cannot: purpose.cannot,
       expiresAt: grant.expiresAt,
     }
   }
@@ -319,7 +363,8 @@ export function createDeviceFlow({
     return { status }
   }
 
-  return { verificationUri, authorize, poll, describe, decide, resourceFor: (clientId) => resourceFor(clientFor(clientId)) }
+  // resourceFor(clientId[, purpose]): the resource its tokens are bound to (the first purpose by default).
+  return { verificationUri, authorize, poll, describe, decide, resourceFor: (clientId, name) => resourceFor(clientFor(clientId), name) }
 }
 
 // The JSON an RFC 8628 client reads for a refusal.

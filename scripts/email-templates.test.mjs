@@ -9,7 +9,7 @@ import { readFileSync, readdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  DEFAULT_LOGO_URL, PRIVACY_URL, VML_MAX_WIDTH, enrollAccount, firstNameOf, greeting, libraryDecision, loginLink, logoUrlFor,
+  DEFAULT_LOGO_URL, PRIVACY_URL, VML_MAX_WIDTH, enrollAccount, firstNameOf, greeting, joinMovedTeam, libraryDecision, loginLink, logoUrlFor,
   meterAlert, proMergeLink, resetPassword, verifyEmail, vmlButton,
 } from '../web/app/server/email/templates.mjs'
 import { SAMPLES } from './email-samples.mjs'
@@ -25,6 +25,7 @@ const all = () => [
   proMergeLink({ firstName: 'Ada', url, days: 7 }),
   libraryDecision({ firstName: 'Ada', subject: 's', headline: 'h', nextLine: 'n', libraryUrl: url }),
   meterAlert({ text: 'Half of the budget is spent.', adminUrl: url }),
+  joinMovedTeam({ firstName: 'Ada', teamName: 'Acme', url, days: 14 }),
 ]
 
 test('every email has the layout: logo, preheader, one button, the raw link, why it came, privacy, and a text twin', () => {
@@ -165,4 +166,12 @@ test('the preview script renders every sample, and each matches its snapshot', (
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('the invitation to join a moved team: names the team, says nothing changes until accepted, flattens a hostile team name', () => {
+  const mail = joinMovedTeam({ firstName: 'Bob', teamName: 'Acme\n<script>', url: 'https://app.slatebox.test/team-move/join?token=t', days: 14 })
+  assert.equal(mail.subject, 'Acme <script> moved: join it on Slatebox')
+  assert.ok(!mail.html.includes('<script>'))
+  assert.match(mail.text, /Accept the invitation: https:\/\/app\.slatebox\.test\/team-move\/join\?token=t/)
+  assert.match(mail.text, /works once, for 14 days\. Nothing changes in your account until you accept/)
 })

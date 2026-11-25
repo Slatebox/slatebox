@@ -15,7 +15,8 @@ import { AccountActions, AccountNote, AccountPage, AccountPanel, AccountSection,
 // /device?code=XXXX-XXXX: the slatebox command on another computer (npx slatebox install) asked
 // to sign in as this person (server/oauth/device.mjs). The person types or confirms the code their
 // terminal shows, sees which computer asks, from where, and exactly what it gets, and approves or
-// denies. Nothing is sent back to a browser address: the command polls for its answer.
+// denies. Nothing is sent back to a browser address: the command polls for its answer. A move
+// (`npx slatebox migrate --to cloud`, `import --from cloud`) asks under the title "Move your team".
 export default function DeviceSignIn() {
   const [query] = useSearchParams()
   const { user, loggingIn } = useTracker(() => ({ user: Meteor.user(), loggingIn: Meteor.loggingIn() }), [])
@@ -124,7 +125,7 @@ export default function DeviceSignIn() {
     <Box sx={{ minHeight: '100svh', bgcolor: 'background.default' }}>
       <BrandBar />
       <Box sx={{ maxWidth: 760, mx: 'auto', px: 3, pt: { xs: 2, sm: 3 } }}>
-        <AccountPage title="Sign in a device">
+        <AccountPage title={request?.title || 'Sign in a device'}>
           <AccountPanel>{body}</AccountPanel>
         </AccountPage>
       </Box>

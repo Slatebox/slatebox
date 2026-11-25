@@ -48,14 +48,15 @@ export const oauth = createOAuthCore({
   errors: load('@modelcontextprotocol/sdk/server/auth/errors.js'),
 })
 
-// Offered only where its one client's scope is: team addresses on Slatebox Cloud.
+// Offered only on Slatebox Cloud: team addresses where the claim service is set up, and moves
+// (team:export and team:move for `slatebox migrate` / `import --from cloud`) everywhere on Cloud.
 export const device = createDeviceFlow({
   grants: OAuthDeviceGrants,
   apiTokens: SlateApiTokens,
   users: Meteor.users,
   origin: appOrigin(),
   counter: createWindowCounter({ collection: OAuthDeviceCounters.rawCollection() }),
-  enabled: () => cloudOn() && teamClaimsConfigured(Meteor.settings),
+  enabled: (purpose) => cloudOn() && (purpose === 'move' || teamClaimsConfigured(Meteor.settings)),
   pepper: Meteor.settings.cloudflare?.teamClaims?.auditPepper || 'slatebox-device',
 })
 

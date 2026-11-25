@@ -31,7 +31,13 @@
 import { createHash } from 'node:crypto'
 
 export const FORMAT = 'slatebox-team-export'
+// The version this server writes. It reads every version from OLDEST_VERSION up to it, so an
+// archive from an older server always imports here; one from a newer server is refused with
+// "update this server" (archive.mjs), as is a section this server does not know (import-core).
+// A change an older reader can skip safely (a new optional section) keeps the version.
 export const VERSION = 2
+export const OLDEST_VERSION = 2
+export const UPDATE_THIS_SERVER = 'This archive was written by a newer Slatebox than this server runs. Update this server to the latest Slatebox, then import it again.'
 
 export const SECTIONS = Object.freeze([
   'team',

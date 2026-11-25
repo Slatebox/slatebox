@@ -114,6 +114,7 @@ function Report({ report }) {
 
 const OUTCOMES = {
   sent: 'invitation sent',
+  asked: 'asked to join: an account here already uses this address, and that person accepts signed in',
   needs_consent: 'not invited: an account here already uses this address, so that person has to agree to move',
   mail_disabled: 'not invited: this server cannot send email',
   already_invited: 'already invited',
@@ -126,6 +127,8 @@ function Invited({ invited, last, busy, onInvite }) {
       <Box component="ul" sx={{ m: 0, pl: 3 }}>
         <li>Sent: {invited.sent ?? 0}</li>
         {invited.mailDisabled > 0 && <li>Not sent, this server cannot send email: {invited.mailDisabled}</li>}
+        {invited.asked?.length > 0 && <li>Asked to join (they already have an account here and accept signed in): {invited.asked.join(', ')}</li>}
+        {invited.joined?.length > 0 && <li>Joined: {invited.joined.join(', ')}</li>}
         {invited.needsConsent?.length > 0 && <li>Already have an account here (they must agree to move): {invited.needsConsent.join(', ')}</li>}
       </Box>
       {invited.unverified?.length > 0 && (
@@ -299,6 +302,7 @@ export default function TeamImports() {
             {imports.map((row) => (
               <li key={row.importId}>
                 {row.teamName || 'Unnamed team'}: {row.state}
+                {row.kind === 'move' ? ` (moved here by ${row.movedBy || 'its owner'}, no review needed)` : ''}
                 {row.expiresAt ? ` (discarded ${row.expiresAt.slice(0, 10)} unless confirmed)` : ''}
                 {row.failure ? ` (${row.failure.message})` : ''}{' '}
                 {['pending', 'confirmed'].includes(row.state) && (

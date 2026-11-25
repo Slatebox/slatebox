@@ -254,6 +254,27 @@ export function enrollAccount({ firstName, teamName, url, logoUrl }) {
   })
 }
 
+/** A team moved here, and this address already has an account: an invitation it accepts signed in. */
+export function joinMovedTeam({ firstName, teamName, url, days, logoUrl }) {
+  // eslint-disable-next-line no-control-regex
+  const cleaned = typeof teamName === 'string' ? teamName.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim() : ''
+  const team = cleaned ? cleaned.slice(0, 80) : null
+  return renderEmail({
+    subject: team ? `${team} moved: join it on Slatebox` : 'Your team moved: join it on Slatebox',
+    preheader: team ? `${team} is on this Slatebox server now. Accept to bring your slates along.` : 'Your team is on this Slatebox server now. Accept to bring your slates along.',
+    headline: team ? `Join ${team}` : 'Join your team',
+    firstName,
+    paragraphs: [
+      `${team ? `Your team ${team}` : 'Your team'} moved to this Slatebox server, and you already have an account here.`,
+      'Sign in with this account and accept, and the slates and comments you made there become yours here.',
+    ],
+    cta: { label: team ? `Join ${team}` : 'Join the team', shortLabel: 'Join the team', url, textLabel: 'Accept the invitation' },
+    after: [`The link works once, for ${days} days. Nothing changes in your account until you accept. Not expecting this? Ignore this email.`],
+    reason: 'You got this email because the person who moved your team asked to invite you.',
+    logoUrl,
+  })
+}
+
 /** users.requestLoginLink: a one-time sign-in link, sent to the address that asked for it. */
 export function loginLink({ firstName, url, logoUrl }) {
   return renderEmail({

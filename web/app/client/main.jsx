@@ -28,6 +28,7 @@ const Present = lazy(() => import('../imports/ui/pages/Present'))
 const Workshops = lazy(() => import('../imports/ui/pages/DecisionWorkshopPage.jsx'))
 const OAuthConsent = lazy(() => import('../imports/ui/pages/OAuthConsent'))
 const DeviceSignIn = lazy(() => import('../imports/ui/pages/DeviceSignIn'))
+const TeamMoveJoin = lazy(() => import('../imports/ui/pages/TeamMoveJoin'))
 import './i18n/en/common.i18n.json'
 import './i18n/en/slates.i18n.json'
 import './i18n/en/nodeDrawer.i18n.json'
@@ -111,6 +112,7 @@ function AppWrapper() {
           <Route path="/login/:email?" element={<Login />} />
           <Route path="/oauth/consent" element={<OAuthConsent />} />
           <Route path="/device" element={<DeviceSignIn />} />
+          <Route path="/team-move/join" element={<TeamMoveJoin />} />
           <Route path="/sso/done" element={<SsoDone />} />
           <Route path="/*" element={<App />} />
         </Routes>

@@ -33,6 +33,7 @@ import { accounts, describer } from '../instance/meteor'
 import { createIdempotencyStore, ensureIdempotencyIndexes } from './idempotency.mjs'
 import { createRateLimiter } from './rate-limit.mjs'
 import { principalFromToken } from './principal.mjs'
+import { MOVE_ACTIONS, MOVE_RESOURCE_PATH } from '../oauth/device.mjs'
 import { mountHttp } from './http.mjs'
 import { mountDdp } from './ddp.mjs'
 import { mountMermaidFiles } from './mermaid-file.mjs'
@@ -212,7 +213,11 @@ export function mountActions(app) {
   const forwardedCount = Number.parseInt(process.env.HTTP_FORWARDED_COUNT, 10) || 0
   mountHttp(app, gatedRegistry(registry, exec.gate), {
     express,
-    authenticate: async (req) => principalFromToken(await apiTokenService.authenticateApiRequest(req)),
+    // Personal tokens; and a move's device sign-in (server/oauth/device.mjs), for the move actions only.
+    authenticate: async (req) => {
+      const moveResource = new URL(Meteor.settings.public?.baseUrl || Meteor.absoluteUrl()).origin + MOVE_RESOURCE_PATH
+      return principalFromToken(await apiTokenService.authenticateApiRequest(req, { audience: moveResource }), { audiences: { [moveResource]: MOVE_ACTIONS } })
+    },
     forwardedCount,
     // a token's calls, counted by action and User-Agent (agent-reach), for Admin › Overview
     onAgentCall: countApiCall,

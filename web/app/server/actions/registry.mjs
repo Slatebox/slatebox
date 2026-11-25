@@ -253,6 +253,9 @@ export function createRegistry({
         throw problem(403, 'session_required', 'Sign in to Slatebox to do this. A token cannot.')
       throw problem(403, 'forbidden', 'This is not available to your account.')
     }
+    // A sign-in made for one purpose (a move's device sign-in) reaches that purpose's actions only.
+    if (principal.onlyActions && !principal.onlyActions.includes(action.id))
+      throw problem(403, 'token_not_for_this', 'This sign-in was made only to move a team. Use an access token from Profile → Developer for anything else.')
     // A visitor carries no scopes: what it may read is decided per resource (a public slate).
     if (action.scope && principal.kind !== 'visitor' && !holdsScope(principal, action.scope))
       throw problem(

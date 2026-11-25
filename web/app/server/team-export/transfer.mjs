@@ -12,7 +12,10 @@
 // They ask for a move address (one hour, single use), upload the archive (within MOVE_LIMITS), read
 // the report, and confirm or discard it. Only they see or act on their move. The archive lands in
 // the same hidden team an administrator's import makes; confirming makes it theirs (import-core
-// confirmMove). The other people are invited only when the mover asks.
+// confirmMove). The other people are invited only when the mover asks (then, or later with
+// inviteMoved). Nobody at this server reviews a move first: the size limit and the hostile-archive
+// checks hold, a person starts at most MOVES_PER_DAY moves a day, and every step is written to the
+// administrators' audit (audit) and listed with the imports.
 import { createHash, randomBytes } from 'node:crypto'
 import { readArchive, writeArchive, checkPassphrase, MIN_PASSPHRASE } from './archive.mjs'
 import { LIMITS } from './format.mjs'
@@ -26,6 +29,10 @@ export const IMPORT_TICKET_MS = 60 * 60 * 1000
 export const MOVE_TICKET_MS = 60 * 60 * 1000
 // A move is self-serve, so it holds less than an administrator's import: 2 GiB uncompressed.
 export const MOVE_LIMITS = Object.freeze({ ...LIMITS, totalBytes: 2 * 1024 ** 3 })
+// Moves a person may start here in a day (each upload counts, confirmed, discarded or failed; the
+// same archive sent again does not).
+export const MOVES_PER_DAY = 3
+const DAY_MS = 24 * 60 * 60 * 1000
 
 const hashTicket = (ticket) => createHash('sha256').update(String(ticket)).digest('hex')
 const refused = (status, code, message) => new ImportError(status, code, message)
@@ -54,8 +61,10 @@ export function createTicketStore({ collection, now = Date.now, random = randomB
  * exporter, importer: export-core and import-core. tickets: createTicketStore.
  * loadUser(id) → { _id, orgId, isAnonymous, isOrgOwner, emails } | null. isTeamAdmin(user) and isServerAdmin(userId) → boolean.
  * signer: { privateKey, publicKey } for the archive's signature, or a function giving it. instance: { origin, name }.
+ * audit(entry): one row of the administrators' audit trail ({ type, userId, ... }); movesPerDay: the daily limit.
  */
-export function createTeamTransfer({ exporter, importer, tickets, loadUser, isTeamAdmin, isServerAdmin, signer = null, instance, limits = LIMITS, moveLimits = MOVE_LIMITS, now = Date.now, log = () => {} }) {
+export function createTeamTransfer({ exporter, importer, tickets, loadUser, isTeamAdmin, isServerAdmin, signer = null, instance, limits = LIMITS, moveLimits = MOVE_LIMITS, movesPerDay = MOVES_PER_DAY, audit = async () => {}, now = Date.now, log = () => {} }) {
+  const auditRow = (entry) => Promise.resolve(audit(entry)).catch((error) => log('team move audit failed', { type: entry.type, error: error?.message }))
   async function teamAdmin(userId) {
     const user = userId && (await loadUser(userId))
     if (!user || user.isAnonymous) throw refused(403, 'forbidden', 'Sign in to export your team.')
@@ -148,10 +157,19 @@ export function createTeamTransfer({ exporter, importer, tickets, loadUser, isTe
     return found
   }
 
+  // At most movesPerDay moves started in the last 24 hours, per person.
+  async function underLimit(user) {
+    const started = await importer.countMoves(user._id, new Date(now() - DAY_MS))
+    if (started < movesPerDay) return
+    await auditRow({ type: 'team-move-limit', userId: user._id, started })
+    throw refused(429, 'move_limit', `You can move a team here ${movesPerDay} times a day. Try again tomorrow.`)
+  }
+
   async function startMove(userId) {
     const user = await mover(userId)
-    const open = (await importer.listMoves(user._id)).find((record) => ['running', 'pending', 'confirming'].includes(record.state))
+    const open = (await importer.listMoves(user._id)).find((row) => ['running', 'pending', 'confirming'].includes(row.state))
     if (open) throw refused(409, 'move_pending', `You have a move waiting (${open._id}). Confirm or discard it first.`)
+    await underLimit(user)
     const { ticket, expiresAt } = await tickets.issue({ kind: 'move', userId: user._id, orgId: user.orgId || null, ttlMs: MOVE_TICKET_MS })
     log('team move issued', { userId: user._id, orgId: user.orgId || null })
     return {
@@ -167,16 +185,24 @@ export function createTeamTransfer({ exporter, importer, tickets, loadUser, isTe
   }
 
   async function receiveMove(ticket, body, passphrase) {
-    const record = await tickets.redeem(ticket, 'move')
-    if (!record) throw refused(404, 'ticket_invalid', 'This upload address is used or expired. Ask for a new one.')
-    const user = await mover(record.userId)
-    if ((user.orgId || null) !== (record.orgId || null)) throw refused(409, 'team_changed', 'Your team changed since you asked to move. Ask again.')
+    const issued = await tickets.redeem(ticket, 'move')
+    if (!issued) throw refused(404, 'ticket_invalid', 'This upload address is used or expired. Ask for a new one.')
+    const user = await mover(issued.userId)
+    if ((user.orgId || null) !== (issued.orgId || null)) throw refused(409, 'team_changed', 'Your team changed since you asked to move. Ask again.')
+    // Counted again here: addresses asked for in a row are each still one move.
+    await underLimit(user)
     const result = await importer.importArchive(readArchive(body, { passphrase: passphrase || null, limits: moveLimits }), {
       actorUserId: user._id,
       move: { intoOrgId: user.orgId || null },
       limits: moveLimits,
     })
     log('team move pending', { importId: result.importId, by: user._id, duplicate: Boolean(result.duplicate) })
+    if (!result.duplicate)
+      await auditRow({
+        type: 'team-move-uploaded', userId: user._id, importId: result.importId, intoOrgId: user.orgId || null,
+        teamName: result.report?.team?.name ?? null, source: result.report?.source?.instance ?? null, signerKnown: Boolean(result.report?.source?.signerKnown),
+        slates: result.report?.sections?.slates?.created ?? 0, people: (result.report?.people || []).length,
+      })
     return result
   }
 
@@ -186,6 +212,17 @@ export function createTeamTransfer({ exporter, importer, tickets, loadUser, isTe
     if ((user.orgId || null) !== (found.move.intoOrgId || null)) throw refused(409, 'team_changed', 'Your team changed since this move was uploaded. Discard it and move again.')
     const result = await importer.confirmMove(importId, { actor: { userId: user._id, email: verifiedEmail(user) }, invite })
     log('team move confirmed', { importId, by: user._id, merged: result.merged })
+    await auditRow({ type: 'team-move-confirmed', userId: user._id, importId, teamId: result.teamId, merged: Boolean(result.merged), invited: result.invited?.sent ?? 0, library: result.library?.submitted ?? 0 })
+    return result
+  }
+
+  // The mover invites the moved people later: everyone not invited yet whose address the source
+  // had verified (no email: all of them), or one address they checked themselves.
+  async function inviteMoved(userId, importId, { email = null } = {}) {
+    const found = await ownMove(userId, importId)
+    if (found.state !== 'confirmed') throw refused(409, 'not_confirmed', 'Confirm the move before inviting its people.')
+    const result = email ? await importer.inviteAddress(importId, email) : await importer.inviteRest(importId)
+    await auditRow({ type: 'team-move-invited', userId, importId, ...(email ? { outcome: result.outcome } : { sent: result.invited?.sent ?? 0 }) })
     return result
   }
 
@@ -198,7 +235,19 @@ export function createTeamTransfer({ exporter, importer, tickets, loadUser, isTe
     openExport,
     startImport,
     receiveImport,
-    listImports: asAdmin(() => importer.list()),
+    // Moves are listed with the imports, with who moved each team here.
+    async listImports(userId) {
+      await serverAdmin(userId)
+      const rows = await importer.list()
+      const names = new Map()
+      for (const row of rows) {
+        const by = row.move?.actorUserId
+        if (!by || names.has(by)) continue
+        const user = await loadUser(by)
+        names.set(by, (Array.isArray(user?.emails) && user.emails[0]?.address) || by)
+      }
+      return rows.map((row) => (row.move ? { ...row, movedBy: names.get(row.move.actorUserId) } : row))
+    },
     async getImport(userId, importId) {
       await serverAdmin(userId)
       const found = await importer.get(importId)
@@ -211,6 +260,7 @@ export function createTeamTransfer({ exporter, importer, tickets, loadUser, isTe
     startMove,
     receiveMove,
     confirmMove,
+    inviteMoved,
     async getMove(userId, importId) {
       return ownMove(userId, importId)
     },
@@ -218,9 +268,19 @@ export function createTeamTransfer({ exporter, importer, tickets, loadUser, isTe
       if (!userId) throw refused(403, 'forbidden', 'Sign in to see your moves.')
       return importer.listMoves(userId)
     },
+    // Someone with an account here accepts the invitation to join a moved team (import-core acceptJoin).
+    async joinMoved(userId, token) {
+      const user = userId && (await loadUser(userId))
+      if (!user || user.isAnonymous) throw refused(403, 'forbidden', 'Sign in to accept the invitation.')
+      const result = await importer.acceptJoin({ token, userId: user._id })
+      await auditRow({ type: 'team-move-joined', userId: user._id, importId: result.importId, teamId: result.teamId })
+      return result
+    },
     async discardMove(userId, importId) {
       await ownMove(userId, importId)
-      return importer.discard(importId)
+      const result = await importer.discard(importId)
+      await auditRow({ type: 'team-move-discarded', userId, importId })
+      return result
     },
   }
 }

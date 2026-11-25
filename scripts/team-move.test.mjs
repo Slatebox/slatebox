@@ -3,12 +3,16 @@
 // are two separate databases here, so the archive really crosses from one to the other.
 // - the format round trip: what leaves the self-hosted server arrives on Cloud with identical
 //   slate content (the exporter's content hashes), its files, brand kit logo, presentation
-//   pictures and library items (as drafts), and back the other way;
+//   pictures and library items (sent to the receiving server's review queue on confirm), and
+//   back the other way;
 // - who may move (a team owner, or someone in no team yet), and only their own move;
 // - a move into no team makes the mover its owner; into the mover's team it merges, and people
 //   already there take their own seats; the team's brand kit wins;
 // - the same archive twice is one move; a move holds at most MOVE_LIMITS;
-// - nobody is invited unless the mover asks, and nobody gets a sign-in without that email.
+// - nobody is invited unless the mover asks (then or later), nobody gets a sign-in without that
+//   email, and someone who already has an account here joins only by accepting, signed in;
+// - no review by this server's staff: at most MOVES_PER_DAY moves a person a day, each step in the
+//   administrators' audit, and moves listed with the imports with who moved them.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
@@ -20,7 +24,8 @@ import { readArchive, writeArchive } from '../web/app/server/team-export/archive
 import { LIMITS, contentHash } from '../web/app/server/team-export/format.mjs'
 import { createTeamExporter } from '../web/app/server/team-export/export-core.mjs'
 import { createTeamImporter } from '../web/app/server/team-export/import-core.mjs'
-import { createTeamTransfer, createTicketStore, MOVE_LIMITS } from '../web/app/server/team-export/transfer.mjs'
+import { createTeamTransfer, createTicketStore, MOVE_LIMITS, MOVES_PER_DAY } from '../web/app/server/team-export/transfer.mjs'
+import { createPlaceholderInvite, hashJoinToken } from '../web/app/server/team-export/invite.mjs'
 import { mountTeamTransfer } from '../web/app/server/team-export/routes.mjs'
 import { classifyUpload } from '../web/app/server/common/upload-kinds.mjs'
 import { createAppRegistry } from '../web/app/server/actions/index.mjs'
@@ -267,13 +272,20 @@ test('self-host to Cloud: the moved team arrives with identical slates, its file
   assert.ok(sky.files.get(deck.slides[0].image.slice(sky.origin.length + 7)).equals(DECK))
   assert.deepEqual([deck.isPublic, deck.isPublished], [true, true])
 
-  // Library items arrive as their authors' drafts; built-ins never travel; nothing is published.
+  // Library items wait in Cloud's review queue, each its author's submission (version 1);
+  // built-ins never travel; nothing is published until Cloud's review approves it.
   const items = sky.db.libraryItems.docs()
-  assert.deepEqual(items.map((item) => [item.title, item.status, item.authorId === sky.alice ? 'alice' : item.authorId === placeholders[0]._id ? 'bob' : '?', item.importedLibrary.status]).sort(), [
-    ['Launch board', 'draft', 'alice', 'published'],
-    ['Retro', 'draft', 'bob', 'draft'],
+  assert.deepEqual(items.map((item) => [item.title, item.status, item.reviewStatus, item.authorId === sky.alice ? 'alice' : item.authorId === placeholders[0]._id ? 'bob' : '?', item.importedLibrary.status]).sort(), [
+    ['Launch board', 'submitted', 'submitted', 'alice', 'published'],
+    ['Retro', 'submitted', 'submitted', 'bob', 'draft'],
   ])
-  for (const item of items) assert.equal(item.draft.kind, 'component')
+  assert.deepEqual(confirmed.library, { submitted: 2 })
+  for (const item of items) {
+    assert.deepEqual([item.pendingVersion, item.versionCount, item.publishedVersion, item.draft], [1, 1, undefined, undefined])
+    const version = sky.db.libraryVersions.docs().find((row) => row.itemId === item._id)
+    assert.deepEqual([version.n, version.source, version.content.kind, version.createdBy, version.meta.title], [1, 'move', 'component', item.authorId, item.title])
+    assert.ok(sky.db.libraryEvents.docs().some((row) => row.itemId === item._id && row.type === 'submitted' && row.version === 1))
+  }
 
   // No secret crossed over; AI connections arrive without keys.
   const written = JSON.stringify(Object.fromEntries(Object.entries(sky.db).map(([name, c]) => [name, c.docs()])))
@@ -282,6 +294,16 @@ test('self-host to Cloud: the moved team arrives with identical slates, its file
 
   // Invites are the mover's choice, afterwards (teamImports.invite flow for a confirmed import).
   assert.equal((await transfer.getMove(sky.alice, result.importId)).state, 'confirmed')
+})
+
+test('a pending move puts nothing in the review queue, and a discarded one leaves no library rows', async () => {
+  const self = selfHosted()
+  const sky = cloud()
+  const { result, transfer } = await move(sky, sky.alice, await exportTeam(self, self.alice))
+  assert.deepEqual(sky.db.libraryItems.docs().map((item) => item.status), ['draft', 'draft'])
+  assert.equal(sky.db.libraryVersions.docs().length, 0)
+  await transfer.discardMove(sky.alice, result.importId)
+  assert.equal(sky.db.libraryItems.docs().length, 0)
 })
 
 test('Cloud to self-host: the same format goes back, and a round trip keeps every slate identical', async () => {
@@ -459,4 +481,186 @@ test('a slate whose exporter hashed options.shareId (the share address inside it
   assert.equal(matchesContentHash({ ...slate, nodes: [] }, undefined, legacy), false)
   // The share address inside options is identity: a moved slate hashes the same.
   assert.equal(_h(slate), _h({ ...slate, shareId: 'xyz', options: { ...slate.options, shareId: 'xyz' } }))
+})
+
+test('no staff review, but at most MOVES_PER_DAY moves a day per person, each step in the audit trail, and moves listed for administrators', async () => {
+  const self = selfHosted()
+  const sky = cloud()
+  let clock = Date.parse('2026-11-24T10:00:00Z')
+  const audit = []
+  const transfer = sky.transfer({ now: () => clock, importer: sky.importer({ now: () => clock }), audit: async (entry) => audit.push(entry) })
+  assert.equal(MOVES_PER_DAY, 3)
+  for (let i = 0; i < MOVES_PER_DAY; i += 1) {
+    const { result } = await move(sky, sky.alice, await exportTeam(self, self.alice), { transfer })
+    await transfer.discardMove(sky.alice, result.importId)
+    clock += 60_000
+  }
+  await assert.rejects(transfer.startMove(sky.alice), { status: 429, code: 'move_limit' })
+  // Addresses asked for in a row are each still one move: counted again at upload.
+  assert.deepEqual(audit.filter((row) => row.type === 'team-move-uploaded').length, 3)
+  assert.deepEqual(audit.filter((row) => row.type === 'team-move-discarded').length, 3)
+  assert.ok(audit.some((row) => row.type === 'team-move-limit' && row.userId === sky.alice))
+  const uploaded = audit.find((row) => row.type === 'team-move-uploaded')
+  assert.deepEqual([uploaded.userId, uploaded.teamName, uploaded.source, uploaded.signerKnown, uploaded.intoOrgId], [sky.alice, 'Acme', 'https://boards.acme.test', false, null])
+  // Someone else is not limited by alice's moves; a day later alice may move again.
+  await transfer.startMove(sky.dana)
+  clock += 24 * 60 * 60 * 1000
+  const later = await move(sky, sky.alice, await exportTeam(self, self.alice), { transfer })
+  const done = await transfer.confirmMove(sky.alice, later.result.importId)
+  assert.ok(audit.some((row) => row.type === 'team-move-confirmed' && row.importId === later.result.importId && row.library === 2 && row.merged === false))
+  assert.equal(done.state, 'confirmed')
+  // Two addresses at once, then two uploads, when one move is left: the second upload is refused.
+  const busy = server('busy', 'https://busy.test')
+  busy.put({ users: [{ _id: 'u0000000000000001', emails: [{ address: 'u@busy.test', verified: true }] }] })
+  const t2 = busy.transfer({ movesPerDay: 1 })
+  const a = await t2.startMove('u0000000000000001')
+  const b = await t2.startMove('u0000000000000001')
+  const bytes = await exportTeam(self, self.alice)
+  await t2.receiveMove(a.uploadUrl.split('/').pop(), from(bytes))
+  await assert.rejects(t2.receiveMove(b.uploadUrl.split('/').pop(), from(bytes)), { status: 429, code: 'move_limit' })
+  // Administrators see moves among the imports, with who moved each.
+  sky.put({ permissions: [{ _id: 'root', userId: sky.dana, claimId: 'uberMensch' }] })
+  // (discarded moves are not listed; the audit trail keeps them)
+  const rows = await transfer.listImports(sky.dana)
+  assert.deepEqual(rows.map((row) => [row._id, row.state]), [[later.result.importId, 'confirmed']])
+  for (const row of rows) assert.equal(row.movedBy, 'alice@acme.test')
+  const registry = createAppRegistry({ deps: { teamTransfer: transfer } })
+  const listed = await registry.run({ kind: 'person', userId: sky.dana, tokenId: null, tokenName: null, scopes: registry.scopes }, 'teamImports.list', {})
+  assert.ok(listed.body.imports.every((row) => row.kind === 'move' && row.movedBy === 'alice@acme.test'))
+})
+
+// Cloud with real placeholder invitations (invite.mjs), mail on, and a way to ask an existing account to join.
+function cloudWithMail() {
+  const sky = cloud()
+  const sent = { enrollments: [], asked: [] }
+  const invite = createPlaceholderInvite({
+    users: sky.db.users,
+    mailAvailable: () => true,
+    sendEnrollment: async (userId, email) => sent.enrollments.push(email),
+    askToJoin: async ({ email, token, account }) => sent.asked.push({ email, token, account: account._id }),
+  })
+  const transfer = sky.transfer({ importer: sky.importer({ invite, hashToken: hashJoinToken }) })
+  return { sky, sent, transfer }
+}
+
+test('invitations later: the mover invites everyone not invited yet; an existing account is asked to join and joins only by accepting, signed in as itself', async () => {
+  const self = selfHosted()
+  // bob already has an account on Cloud, in no team; carol (in the archive, unverified) is checked later.
+  self.put({ users: [{ _id: id17('c', 1), orgId: self.A, emails: [{ address: 'carol@acme.test', verified: false }], profile: { firstName: 'Carol', lastName: 'C' } }] })
+  const { sky, sent, transfer } = cloudWithMail()
+  // Here bob's Cloud account is in no team (not in dana's, as in the other tests).
+  sky.db.users.rows.delete(sky.bob)
+  const bobCloud = id17('v', 1)
+  sky.put({ users: [{ _id: bobCloud, emails: [{ address: 'Bob@Acme.test', verified: true }], profile: { firstName: 'Bob', lastName: 'Here' } }] })
+  const { result } = await move(sky, sky.alice, await exportTeam(self, self.alice), { transfer })
+  await assert.rejects(transfer.inviteMoved(sky.alice, result.importId), { status: 409, code: 'not_confirmed' })
+  const confirmed = await transfer.confirmMove(sky.alice, result.importId)
+  assert.deepEqual(confirmed.invited, { sent: 0, needsConsent: [], mailDisabled: 0, unverified: [] })
+  assert.deepEqual([sent.enrollments, sent.asked], [[], []], 'nobody hears anything until the mover says so')
+
+  // Later: bob (has an account) is asked to join; carol's address was never verified.
+  await assert.rejects(transfer.inviteMoved(sky.dana, result.importId), { status: 404 })
+  const later = await transfer.inviteMoved(sky.alice, result.importId)
+  assert.deepEqual(later.invited, { sent: 0, needsConsent: [], mailDisabled: 0, unverified: ['carol@acme.test'], asked: ['bob@acme.test'] })
+  assert.deepEqual(sent.asked.map((row) => [row.email, row.account]), [['bob@acme.test', bobCloud]])
+  const bobSeat = sky.db.users.docs().find((user) => user.importPlaceholder?.email === 'bob@acme.test')
+  assert.deepEqual(bobSeat.emails, [], 'the placeholder never gets the address an account already has')
+  assert.equal(JSON.stringify(bobSeat).includes(sent.asked[0].token), false, 'the token is kept by hash only')
+  // Asking again sends nothing new.
+  assert.equal((await transfer.inviteMoved(sky.alice, result.importId)).now.asked, undefined)
+  assert.equal(sent.asked.length, 1)
+
+  // Not bob, a guest, or a bad token: refused, nothing changes.
+  const { token } = sent.asked[0]
+  await assert.rejects(transfer.joinMoved(sky.erin, token), { status: 403, code: 'invitation_for_another_account' })
+  await assert.rejects(transfer.joinMoved(sky.guest, token), { status: 403 })
+  await assert.rejects(transfer.joinMoved(bobCloud, 'x'.repeat(43)), { status: 404, code: 'invitation_invalid' })
+  assert.equal((await sky.db.users.findOne({ _id: bobCloud })).orgId, undefined)
+
+  // bob accepts: he joins the team with his roles, and his slate and comment are his.
+  const joined = await transfer.joinMoved(bobCloud, token)
+  assert.deepEqual([joined.teamId, joined.teamName], [confirmed.teamId, 'Acme'])
+  assert.equal((await sky.db.users.findOne({ _id: bobCloud })).orgId, confirmed.teamId)
+  assert.equal(sky.db.slates.docs().find((slate) => slate.options.name === 'Notes').userId, bobCloud)
+  assert.equal(sky.db.comments.docs()[0].createdByUserId, bobCloud)
+  assert.deepEqual(sky.db.permissions.docs().filter((row) => row.userId === bobCloud).map((row) => row.claimId), ['canViewUsers'])
+  assert.equal(sky.db.users.docs().some((user) => user._id === bobSeat._id), false, 'the placeholder is gone')
+  await assert.rejects(transfer.joinMoved(bobCloud, token), { code: 'invitation_invalid' }, 'used once')
+  const record = await transfer.getMove(sky.alice, result.importId)
+  assert.deepEqual([record.invited.asked, record.invited.joined], [[], ['bob@acme.test']])
+
+  // carol, once the mover checked her address: an enrollment to claim her placeholder.
+  const one = await transfer.inviteMoved(sky.alice, result.importId, { email: 'carol@acme.test' })
+  assert.equal(one.outcome, 'sent')
+  assert.deepEqual(sent.enrollments, ['carol@acme.test'])
+})
+
+test('an existing account in another team is asked, but cannot join until it leaves that team', async () => {
+  const self = selfHosted()
+  const { sky, sent, transfer } = cloudWithMail()
+  // erin is in dana's team on Cloud and appears in the archive with her verified address.
+  self.put({ users: [{ _id: id17('r', 1), orgId: self.A, emails: [{ address: 'erin@acme.test', verified: true }], profile: { firstName: 'Erin', lastName: 'Self' } }] })
+  const { result } = await move(sky, sky.alice, await exportTeam(self, self.alice), { transfer })
+  const confirmed = await transfer.confirmMove(sky.alice, result.importId, { invite: true })
+  // bob and erin both have Cloud accounts in dana's team: both are asked, nobody gets an enrollment.
+  assert.deepEqual(confirmed.invited, { sent: 0, needsConsent: [], mailDisabled: 0, unverified: [], asked: ['bob@acme.test', 'erin@acme.test'] })
+  assert.deepEqual(sent.enrollments, [])
+  const { token } = sent.asked.find((row) => row.email === 'erin@acme.test')
+  await assert.rejects(transfer.joinMoved(sky.erin, token), { status: 409, code: 'in_another_team' })
+  assert.equal((await sky.db.users.findOne({ _id: sky.erin })).orgId, sky.D)
+  assert.ok(sky.db.users.docs().some((user) => user.importPlaceholder?.email === 'erin@acme.test'), 'her seat waits')
+})
+
+test('the move invite and join actions: invite needs team:move and the person\'s yes; join is for a signed-in person only', async () => {
+  const { sky, transfer } = cloudWithMail()
+  const registry = createAppRegistry({ deps: { teamTransfer: transfer } })
+  const invite = registry.get('teamMove.invite')
+  assert.deepEqual([invite.scope, invite.confirm, invite.mounts.http.path], ['team:move', true, '/team/moves/{importId}/invite'])
+  const join = registry.get('teamMove.join')
+  assert.deepEqual([join.principals, Boolean(join.mounts.http), join.mounts.ddp], [['person'], false, true])
+  const agent = { kind: 'agent', userId: sky.alice, tokenId: 't', tokenName: 'CLI', scopes: ['team:move'] }
+  await assert.rejects(registry.run(agent, 'teamMove.join', { token: 'x'.repeat(43) }), { code: 'session_required' })
+})
+
+test('a move sign-in\'s token reaches the move actions and nothing else', async () => {
+  const sky = cloud()
+  const registry = createAppRegistry({ deps: { teamTransfer: sky.transfer() } })
+  const { principalFromToken } = await import('../web/app/server/actions/principal.mjs')
+  const { MOVE_ACTIONS } = await import('../web/app/server/oauth/device.mjs')
+  const resource = 'https://app.slatebox.test/api/v1/team/moves'
+  const principal = principalFromToken({ token: { _id: 'tok', userId: sky.alice, kind: 'oauth', resource, scopes: ['team:export', 'team:move'], name: 'Slatebox installer' } }, { audiences: { [resource]: MOVE_ACTIONS } })
+  assert.deepEqual(principal.onlyActions, [...MOVE_ACTIONS])
+  assert.equal((await registry.run(principal, 'teamMove.start', {})).body.into, 'new_team')
+  await assert.rejects(registry.run(principal, 'slates.list', {}), { status: 403, code: 'token_not_for_this' })
+  await assert.rejects(registry.run(principal, 'teamImports.list', {}), { status: 403, code: 'token_not_for_this' })
+  // A personal token is not narrowed.
+  assert.equal(principalFromToken({ token: { _id: 't2', userId: sky.alice, scopes: ['team:move'] } }, { audiences: { [resource]: MOVE_ACTIONS } }).onlyActions, undefined)
+  // Every action a move sign-in names exists, and each needs team:export or team:move (or none).
+  for (const id of MOVE_ACTIONS) assert.ok(['team:export', 'team:move'].includes(registry.get(id).scope), id)
+})
+
+test('format: a newer server takes an older archive (no library section), and an archive with a section it does not know says to update this server', async () => {
+  const self = selfHosted()
+  const sky = cloud()
+  async function* only(records, keep) {
+    for await (const record of records) if (keep(record)) yield record
+  }
+  async function* plus(records, extra) {
+    for await (const record of records) yield record
+    yield extra
+  }
+  const archive = (records) => collect(writeArchive(records, { head: { createdAt: '2026-11-01T00:00:00Z', source: { instance: self.origin, name: 'self', team: 'Acme' }, encrypted: false } }))
+  // An archive as a server before the library section wrote it: it imports, with no library items.
+  const older = await archive(only(self.exporter.records(self.A, { skipped: [] }), (record) => record.s !== 'library'))
+  const { result, transfer } = await move(sky, sky.alice, older)
+  assert.equal(result.state, 'pending')
+  assert.deepEqual(result.report.library, [])
+  const done = await transfer.confirmMove(sky.alice, result.importId)
+  assert.deepEqual(done.library, { submitted: 0 })
+  assert.equal(sky.db.slates.docs().filter((slate) => slate.orgId === done.teamId).length, 2)
+  // One from a newer server, with a section this server does not know yet: refused, nothing written.
+  const fresh = cloud()
+  const newer = await archive(plus(self.exporter.records(self.A, { skipped: [] }), { t: 'doc', s: 'tomorrow', d: { _id: 'x' } }))
+  await assert.rejects(move(fresh, fresh.alice, newer), { code: 'section_unknown', message: /Update this server to the latest Slatebox, then import it again/ })
+  assert.equal(fresh.db.slates.docs().length, 0)
 })

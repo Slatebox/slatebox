@@ -17,7 +17,8 @@
 //   Template and directory flags are dropped. Every board rule arrives switched off.
 // - AI connections arrive without keys, and only those with a public address.
 // - Tokens are never made: the report lists them to make again.
-// - Library items arrive as their authors' drafts: nothing reaches this server's library until
+// - Library items arrive as their authors' drafts, and once the team is confirmed each is sent to
+//   this server's review queue (submitted, version 1): nothing reaches this server's library until
 //   its own review approves it.
 //
 // A move (moving a team to another server by its own owner, not by this server's administrator)
@@ -26,7 +27,9 @@
 // hidden team live with the mover as its owner, or merges it into the mover's own team. The mover
 // takes the seat of the archive's person with their address (else the archive's owner); a person
 // whose address belongs to someone already in the team takes that person's seat. The other
-// people stay placeholders until the mover chooses to invite them. The same archive moved twice
+// people stay placeholders until the mover chooses to invite them; someone who already has an
+// account here (in another team or none) is asked to join instead, and takes their seat only once
+// they accept (acceptJoin), signed in as that account. The same archive moved twice
 // by the same person returns the first move (archive digest), and nothing is written twice.
 // Every document the import writes carries teamImportId, so a discard (or a failed import)
 // removes exactly what it wrote.
@@ -37,8 +40,9 @@ import { ArchiveError } from './archive.mjs'
 import { addressQuery } from './invite.mjs'
 import { encodeUseKeys } from '../methods/ai/connection-store.mjs'
 import { USE_KEYS } from '../methods/ai/connections.mjs'
-import { LIMITS, OPTION_FLAGS, SECTIONS, SLATE_FLAGS, contentHash, eachObject, matchesContentHash, mapStrings, replaceUrls } from './format.mjs'
-import { LIBRARY_LICENSE, slugify } from '../../imports/api/common/library-model.mjs'
+import { LIMITS, OPTION_FLAGS, SECTIONS, SLATE_FLAGS, UPDATE_THIS_SERVER, contentHash, eachObject, matchesContentHash, mapStrings, replaceUrls } from './format.mjs'
+import { LIBRARY_LICENSE, slugify, transition } from '../../imports/api/common/library-model.mjs'
+import { contentHash as libraryContentHash } from '../library/snapshot.mjs'
 
 export const PENDING_DAYS = 14
 
@@ -102,7 +106,9 @@ export function isPublicEndpoint(baseUrl) {
  * invite(user, { confirmed }) → 'sent' | 'needs_consent' | 'unverified' | 'mail_disabled' | 'already_invited'
  *     (invite.mjs; confirm with invite, and inviteAddress for an address the source had not verified).
  * libraryPreview(content) → the listing preview of a library item's content (optional).
- * db.libraryItems is optional: without it library items are skipped.
+ * db.libraryItems is optional: without it library items are skipped. With db.libraryVersions (and
+ * db.libraryEvents), a confirm sends the imported items to this server's review queue.
+ * hashToken(token) → the stored form of a join invitation's token (acceptJoin).
  */
 export function createTeamImporter({
   db,
@@ -120,6 +126,7 @@ export function createTeamImporter({
   invite = null,
   libraryPreview = (content) => ({ kind: content?.kind ?? 'component', notes: 0 }),
   limits: defaultLimits = LIMITS,
+  hashToken = (token) => createHash('sha256').update(String(token)).digest('hex'),
   now = Date.now,
 }) {
   const TAGGED = ['organizations', 'users', 'permissions', 'slates', 'snapshots', 'comments', 'presentations', 'presentationChats', 'slateAccess', 'orgSettings', 'providerKeys', 'aiChoices', ...(db.libraryItems ? ['libraryItems'] : [])]
@@ -208,7 +215,7 @@ export function createTeamImporter({
     }
     const enter = async (name) => {
       const at = SECTIONS.indexOf(name)
-      if (at < 0) throw new ImportError(422, 'section_unknown', `The archive has a section this server does not know (${String(name).slice(0, 40)}).`)
+      if (at < 0) throw new ImportError(422, 'section_unknown', `The archive has a section this server does not know (${String(name).slice(0, 40)}). ${UPDATE_THIS_SERVER}`)
       if (at < section) throw new ImportError(422, 'out_of_order', 'The archive is out of order.')
       if (at > 0 && !report.team) throw new ImportError(422, 'team_missing', 'The archive does not start with its team.')
       if (at > section) {
@@ -737,19 +744,51 @@ export function createTeamImporter({
     }
   }
 
-  // Emails each placeholder of the import whose address the source had verified (invite.mjs).
+  // Emails each placeholder of the import whose address the source had verified (invite.mjs): an
+  // enrollment to claim the placeholder, or, when an account here already has the address, an
+  // invitation to join that it accepts signed in (asked).
+  // asked is there only when someone was asked to join.
+  const noneInvited = () => ({ sent: 0, needsConsent: [], mailDisabled: 0, unverified: [] })
   async function inviteAll(importId, orgId) {
-    const invited = { sent: 0, needsConsent: [], mailDisabled: 0, unverified: [] }
+    const invited = noneInvited()
     if (!invite) return invited
     for await (const user of db.users.find({ orgId, 'importPlaceholder.importId': importId })) {
       if (!user.importPlaceholder?.email) continue
       const outcome = await invite(user).catch(() => 'failed')
       if (outcome === 'sent') invited.sent += 1
+      else if (outcome === 'asked') (invited.asked ||= []).push(user.importPlaceholder.email)
       else if (outcome === 'needs_consent') invited.needsConsent.push(user.importPlaceholder.email)
       else if (outcome === 'mail_disabled') invited.mailDisabled += 1
       else if (outcome === 'unverified') invited.unverified.push(user.importPlaceholder.email)
     }
     return invited
+  }
+
+  // Once the team is live, its library items wait in this server's review queue: each draft the
+  // import wrote becomes its author's submission (version 1), as if they had pressed Submit.
+  async function submitLibrary(importId) {
+    const result = { submitted: 0 }
+    if (!db.libraryItems || !db.libraryVersions) return result
+    for (const item of await db.libraryItems.find({ teamImportId: importId, status: 'draft' }).toArray()) {
+      const next = transition(item, 'submit', 'author')
+      if (!next || !isPlain(item.draft)) continue
+      const at = new Date(now())
+      const meta = { title: item.title, summary: item.summary, ...(item.description && { description: item.description }), ...(item.category && { category: item.category }), synonyms: item.synonyms || [] }
+      const n = (item.versionCount || 0) + 1
+      const content = item.draft
+      await db.libraryVersions.insertOne({
+        _id: `${item._id}:${n}`, itemId: item._id, n, source: 'move', createdAt: at, createdBy: item.authorId ?? null, meta, content,
+        contentHash: libraryContentHash(content), sizeBytes: Buffer.byteLength(JSON.stringify(content), 'utf8'),
+      })
+      await db.libraryItems.updateOne(
+        { _id: item._id },
+        { $set: { status: next.status, reviewStatus: next.reviewStatus, pendingVersion: n, versionCount: n, submittedAt: at, updatedAt: at, lastMessage: { at, by: 'author', text: 'Sent for review when the team moved here.' } }, $unset: { draft: 1 } }
+      )
+      if (db.libraryEvents)
+        await db.libraryEvents.insertOne({ _id: newId(), itemId: item._id, at, actor: { kind: 'author', userId: item.authorId ?? null, name: item.authorName || '' }, type: 'submitted', version: n, message: 'Sent for review when the team moved here.' })
+      result.submitted += 1
+    }
+    return result
   }
 
   /** Makes the hidden team live: its slates get back what they were, and, with invite, its people are invited. */
@@ -762,9 +801,10 @@ export function createTeamImporter({
     // Addresses the source had verified are invited; the others wait in invited.unverified until
     // the administrator confirms each one (inviteAddress), since an archive edited by hand could
     // list any address.
-    const invited = sendInvites ? await inviteAll(importId, orgId) : { sent: 0, needsConsent: [], mailDisabled: 0, unverified: [] }
-    await db.imports.updateOne({ _id: importId }, { $set: { state: 'confirmed', confirmedAt: new Date(now()), updatedAt: new Date(now()), invited } })
-    return { importId, state: 'confirmed', teamId: orgId, invited }
+    const invited = sendInvites ? await inviteAll(importId, orgId) : noneInvited()
+    const library = await submitLibrary(importId)
+    await db.imports.updateOne({ _id: importId }, { $set: { state: 'confirmed', confirmedAt: new Date(now()), updatedAt: new Date(now()), invited, library } })
+    return { importId, state: 'confirmed', teamId: orgId, invited, library }
   }
 
   // Everything the import wrote that names placeholder `from` names `to` instead, and the
@@ -848,15 +888,65 @@ export function createTeamImporter({
     }
     if (!into) await db.users.updateOne({ _id: actor.userId }, { $set: { orgId: staging, isOrgOwner: true } })
 
-    const invited = sendInvites ? await inviteAll(importId, team) : { sent: 0, needsConsent: [], mailDisabled: 0, unverified: [] }
-    await db.imports.updateOne({ _id: importId }, { $set: { state: 'confirmed', orgId: team, confirmedAt: new Date(now()), updatedAt: new Date(now()), invited, seats, settings } })
-    return { importId, state: 'confirmed', teamId: team, merged: Boolean(into), seats, settings, invited }
+    const invited = sendInvites ? await inviteAll(importId, team) : noneInvited()
+    const library = await submitLibrary(importId)
+    await db.imports.updateOne({ _id: importId }, { $set: { state: 'confirmed', orgId: team, confirmedAt: new Date(now()), updatedAt: new Date(now()), invited, seats, settings, library } })
+    return { importId, state: 'confirmed', teamId: team, merged: Boolean(into), seats, settings, invited, library }
+  }
+
+  // Invites the people of a confirmed import that nobody invited yet (the mover said "later").
+  async function inviteRest(importId) {
+    const record = await get(importId)
+    if (!record) throw new ImportError(404, 'not_found', 'There is no such import.')
+    if (record.state !== 'confirmed') throw new ImportError(409, 'not_confirmed', 'Confirm the import before inviting its people.')
+    if (!invite) throw new ImportError(422, 'invite_unavailable', 'This server cannot invite people.')
+    const fresh = await inviteAll(importId, record.orgId)
+    const was = { ...noneInvited(), ...(record.invited || {}) }
+    const union = (a, b) => [...new Set([...(a || []), ...(b || [])])]
+    const asked = union(was.asked, fresh.asked)
+    const invited = {
+      sent: (was.sent || 0) + fresh.sent,
+      needsConsent: union(was.needsConsent, fresh.needsConsent).filter((email) => !asked.includes(email)),
+      mailDisabled: fresh.mailDisabled,
+      unverified: union(was.unverified, fresh.unverified),
+      ...(asked.length && { asked }),
+      ...(was.joined && { joined: was.joined }),
+    }
+    await db.imports.updateOne({ _id: importId }, { $set: { invited, updatedAt: new Date(now()) } })
+    return { importId, state: 'confirmed', invited, now: fresh }
+  }
+
+  /**
+   * Someone who already had an account here accepts the invitation to join a moved (or imported)
+   * team: signed in as the account the invitation was for, in no team or already in that team.
+   * They take their placeholder's seat (its slates, comments and the rest); in no team, they join
+   * it with the placeholder's roles. Returns { importId, teamId, teamName }.
+   */
+  async function acceptJoin({ token, userId }) {
+    if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,100}$/.test(token)) throw new ImportError(404, 'invitation_invalid', 'This invitation is used, expired or not valid.')
+    const placeholder = await db.users.findOne({ 'importPlaceholder.join.tokenHash': hashToken(token) })
+    const join = placeholder?.importPlaceholder?.join
+    if (!join || !(new Date(join.expiresAt).valueOf() > now())) throw new ImportError(404, 'invitation_invalid', 'This invitation is used, expired or not valid. Ask the person who moved the team to invite you again.')
+    if (join.userId !== userId) throw new ImportError(403, 'invitation_for_another_account', 'This invitation is for another account. Sign in with the address the invitation was sent to.')
+    const importId = placeholder.importPlaceholder.importId
+    const record = await get(importId)
+    if (!record || record.state !== 'confirmed') throw new ImportError(409, 'not_confirmed', 'This team is not live yet.')
+    const team = placeholder.orgId
+    const user = await db.users.findOne({ _id: userId })
+    if (!user || user.isAnonymous) throw new ImportError(403, 'forbidden', 'Sign in to accept.')
+    if (user.orgId && user.orgId !== team) throw new ImportError(409, 'in_another_team', 'You are in another team on this server. Leave it first, then open the invitation again.')
+    await takeSeat(importId, placeholder._id, userId, { keepRoles: !user.orgId })
+    if (!user.orgId) await db.users.updateOne({ _id: userId }, { $set: { orgId: team } })
+    const email = placeholder.importPlaceholder.email
+    await db.imports.updateOne({ _id: importId }, { $set: { updatedAt: new Date(now()), 'invited.asked': (record.invited?.asked || []).filter((other) => other !== email), 'invited.joined': [...new Set([...(record.invited?.joined || []), email])] } })
+    const org = await db.organizations.findOne({ _id: team }, { projection: { name: 1 } })
+    return { importId, teamId: team, teamName: org?.name ?? record.teamName ?? null }
   }
 
   /**
    * Invites one person of a confirmed import whose address the source had not verified, once the
    * administrator has confirmed that address. Returns { importId, email, outcome } with the
-   * outcome of invite ('sent', 'needs_consent', 'mail_disabled', 'already_invited').
+   * outcome of invite ('sent', 'asked', 'needs_consent', 'mail_disabled', 'already_invited').
    */
   async function inviteAddress(importId, email) {
     const record = await get(importId)
@@ -877,6 +967,7 @@ export function createTeamImporter({
           'invited.unverified': outcome === 'mail_disabled' ? was.unverified || [] : left,
           ...(outcome === 'sent' && { 'invited.sent': (was.sent || 0) + 1 }),
           ...(outcome === 'needs_consent' && { 'invited.needsConsent': [...new Set([...(was.needsConsent || []), address])] }),
+          ...(outcome === 'asked' && { 'invited.asked': [...new Set([...(was.asked || []), address])], 'invited.needsConsent': (was.needsConsent || []).filter((other) => other !== address) }),
         },
       }
     )
@@ -913,11 +1004,16 @@ export function createTeamImporter({
     return { purged }
   }
 
+  // Moves this person started since `since` (every upload that became one, in any state).
+  async function countMoves(actorUserId, since) {
+    return db.imports.countDocuments({ 'move.actorUserId': actorUserId, createdAt: { $gte: since } })
+  }
+
   async function listMoves(actorUserId, { limit = 20 } = {}) {
     return db.imports
       .find({ 'move.actorUserId': actorUserId, state: { $in: ['pending', 'confirming', 'confirmed', 'failed', 'running'] } }, { sort: { createdAt: -1 }, limit, projection: { report: 0 } })
       .toArray()
   }
 
-  return { importArchive, get, list, listMoves, confirm, confirmMove, inviteAddress, discard, purge }
+  return { importArchive, get, list, listMoves, countMoves, confirm, confirmMove, inviteAddress, inviteRest, acceptJoin, discard, purge }
 }
