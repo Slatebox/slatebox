@@ -1,101 +1,190 @@
 # Contributing to Slatebox
 
-Hooray for your interest in contributing to Slatebox!
-
-## Contents
+Thanks for helping. Slatebox is free and open source, and it gets better with every bug report,
+fix, guide and idea. This page covers how to set up, how to write a change, and how changes ship.
 
 - [Code of Conduct](#code-of-conduct)
-- [Directory Structure](#directory-structure)
-- [Development Setup](#development-setup)
-- [Prerequisites](#prerequisites)
-- [Run Slatebox Locally](#run-slatebox-locally)
-- [Developing](#developing)
-- [Testing](#testing)
-- [Documentation](#documentation)
+- [Ways to help](#ways-to-help)
+- [The repository](#the-repository)
+- [Development setup](#development-setup)
+- [Tests](#tests)
+- [Commit messages: Conventional Commits](#commit-messages-conventional-commits)
+- [Pull requests](#pull-requests)
+- [How changes ship](#how-changes-ship)
+- [Licensing of contributions](#licensing-of-contributions)
 
 ## Code of Conduct
 
-This project and everyone participating in it are governed by the Code of
-Conduct which can be found in the file [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-By participating, you are expected to uphold this code. Please report
+Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md). Report
 unacceptable behavior through https://slatebox.com/contact/?topic=conduct.
 
-## Directory Structure
+## Ways to help
 
-Slatebox is structured in a yarn workspace mono-repo, despite not utilizing its full feature set. Below is the current directory structure:
+- **Questions and ideas** go to [Discussions](https://github.com/Slatebox/slatebox/discussions)
+  (support.slatebox.com). See [SUPPORT.md](SUPPORT.md).
+- **Bugs**: open an [issue](https://github.com/Slatebox/slatebox/issues/new/choose) with steps to
+  reproduce.
+- **Security problems**: never in public. Use a
+  [private report](https://github.com/Slatebox/slatebox/security/advisories/new); see
+  [SECURITY.md](SECURITY.md).
+- **Code and docs**: issues labeled
+  [`good first issue`](https://github.com/Slatebox/slatebox/labels/good%20first%20issue) and
+  [`help wanted`](https://github.com/Slatebox/slatebox/labels/help%20wanted) are good places to
+  start. For anything larger than a fix, open an issue or a discussion first so we can agree on the
+  shape before you spend time on it.
 
- - [/web](/web) - The main app, with a Dockerfile and docker-compose file to run Slatebox in a container
- - [/web/app](/web/app) - This is the main Slatebox app, built with Meteor
- - [/desktop](/desktop) - Reserved for a future desktop app
- - [/packages](/packages) - Reserved for a future package integration
- - [/enterprise](/enterprise) - Enterprise features (outside agent connections): on Slatebox Cloud, and locked on a self-hosted install until a license key unlocks them. **Not MIT**: under the [Slatebox Enterprise License](enterprise/LICENSE). See [enterprise/README.md](enterprise/README.md)
+## The repository
 
-### Licensing of contributions
+| Path | What it is | Versioned as |
+| --- | --- | --- |
+| [`web/app`](web/app) | The Slatebox app (Meteor 3.5, React) | app, tags `vX.Y.Z` |
+| [`self-host`](self-host) | The one-container image `ghcr.io/slatebox/slatebox` | with the app |
+| [`packages/slatebox`](packages/slatebox) | `npx slatebox`: the installer and CLI | npm `slatebox`, tags `slatebox@X.Y.Z` |
+| [`packages/slatebox-mcp`](packages/slatebox-mcp) | The MCP server and local CLI | npm `slatebox-mcp`, tags `slatebox-mcp@X.Y.Z` |
+| [`packages/create-slatebox`](packages/create-slatebox) | `npm create slatebox`, a thin wrapper | follows `slatebox` |
+| [`scripts`](scripts) | Tests, checks and the release script | |
+| [`docs`](docs) | Guides that live with the code (docs.slatebox.com is the published site) | |
+| [`enterprise`](enterprise) | Enterprise features. **Not MIT**: [Slatebox Enterprise License](enterprise/LICENSE) | with the app |
 
-Everything in this repository is MIT ([LICENSE](LICENSE); see [LICENSING.md](LICENSING.md)) except the `enterprise/` directory, which is under [enterprise/LICENSE](enterprise/LICENSE). A contribution to MIT code is made under MIT. A contribution to `enterprise/` is made under the terms in section 3 of enterprise/LICENSE. MIT code must work without `enterprise/`: never import from it. Enterprise code reaches the app only through the loader (`web/app/server/enterprise-loader.mjs`, `web/app/imports/api/client/enterprise-slots.mjs`), and only where enterprise code is unlocked: `settings.public.edition` is `"cloud"`, or a self-hosted install has a license key (`web/app/server/enterprise-license.mjs`).
+The canvas engine, SlateboxJS, lives in its own repository,
+[Slatebox/slateboxjs](https://github.com/Slatebox/slateboxjs).
 
-## Development Setup
+Versioning, tags and releases are described in [docs/releasing.md](docs/releasing.md).
 
-Want to help develop Slatebox? Set up external dependencies below:
+## Development setup
 
-### Prerequisites
+You need Node 22 (`web/app/.nvmrc` pins 22.12.0 for the app; the npm packages need 22.13 or later), [Meteor 3.5](https://docs.meteor.com/about/install.html)
+and Git. Meteor runs its own MongoDB in development.
 
-* Node 22+: Use nvm - `nvm install 22.12.0`
-* Install meteor globally: `npm install -g`
-* Install mongosh (if you don't have mongo already): [https://www.mongodb.com/docs/mongodb-shell/install/](mongosh)
+1. Clone this repository and, next to it, the engine. The app links the engine from a sibling
+   folder named `slateboxjs-v2` (see `web/app/package.json`):
 
-### Run Slatebox Locally
+   ```sh
+   git clone https://github.com/Slatebox/slatebox.git
+   git clone https://github.com/Slatebox/slateboxjs.git slateboxjs-v2
+   (cd slateboxjs-v2 && npm install && npm run build)
+   ```
 
-Once Meteor is installed, it's simple to start developing
+2. Install the app's dependencies and make a local settings file. No settings file with real
+   values is ever committed; `settings.dev.json` is git-ignored.
 
-1. Clone the repository
-	```
-	git clone https://github.com/slatebox/slatebox.git
-	```
+   ```sh
+   cd slatebox/web/app
+   meteor npm install
+   cp settings.example.json settings.dev.json
+   ```
 
-2. Go into slatebox root directory
-	```
-	cd slatebox/web/app
-	```
+3. Start the app, then open http://localhost:3000:
 
-3. Clone and build [SlateboxJS](https://github.com/Slatebox/slateboxjs), the canvas engine, next to this repository, into a folder named `slateboxjs-v2` (`web/app/package.json` links `../../../slateboxjs-v2`):
-	```
-	(cd ../../.. && git clone https://github.com/Slatebox/slateboxjs.git slateboxjs-v2 && cd slateboxjs-v2 && npm install && npm run build)
-	```
+   ```sh
+   meteor run --settings ./settings.dev.json
+   ```
 
-4. Install all dependencies of all modules and link them together:
-	```
-	meteor npm install
-	```
+   Meteor reloads the app as you edit. Fill in only the keys you need in `settings.dev.json`
+   (for example an agent provider key to try chat); everything else works without them.
 
-### Developing
+For the npm packages, install the workspaces from the repository root:
 
-To start slatebox, just run:
-
-```
-meteor npm run start
-```
-
-if there is a ns not found error, insert at least one slate object in mongo
-
-```
-meteor mongo
-
-> db.slatePresentations.insert({ title: "Test Presentation" })
-```
-
-Once Slatebox is running, any changes to the code or directory will cause Meteor to hot reload the web app. Feel free to hack on Slatebox as its running live.
-
-### Testing
-
-You can run the e2e tests in the slatebox root app using the below command:
-
-```
-meteor npm run test
+```sh
+npm ci --workspace slatebox --workspace slatebox-mcp
 ```
 
-Tests are currently executed using the [testim development kit](https://help.testim.io/docs/index).
+## Tests
 
-## Documentation
+Run the tests for what you changed before you open a pull request. Most suites are plain
+`node --test` files in [`scripts/`](scripts) and in each package, grouped as npm scripts in the root
+[package.json](package.json). A few examples:
 
-Documentation is accessible at https://docs.slatebox.com
+| You changed | Run |
+| --- | --- |
+| The installer (`packages/slatebox`) | `npm run test:installer` |
+| The MCP server (`packages/slatebox-mcp`) | `npm run test:mcp` |
+| The self-host image (`self-host`) | `npm run test:self-host` |
+| Slate operations, the API, exec | `npm run test:slate-operations`, `npm run test:exec` |
+| Release tooling or a changelog | `npm run test:release` |
+| Something risky in the app | `npm run test:port-container` (builds the image, runs a two-client suite) |
+
+A failing test is fixed in the code, or in the test only when the test itself is wrong. Never
+loosen a test to make it pass.
+
+## Commit messages: Conventional Commits
+
+Commits follow [Conventional Commits 1.0](https://www.conventionalcommits.org/en/v1.0.0/). The
+changelogs and release notes are generated from them ([cliff.toml](cliff.toml)), so the subject is
+written for the people who use Slatebox:
+
+```
+<type>(<scope>): <what changes, in plain words>
+
+<optional body: why, and anything a reviewer should know>
+
+<optional footers, for example BREAKING CHANGE: ... or Fixes #123>
+```
+
+| Type | Use it for | Changelog group |
+| --- | --- | --- |
+| `feat` | Something new people can do | Added |
+| `fix` | Something that was broken now works | Fixed |
+| `perf`, `refactor`, `polish` | Faster, restructured, or a visual refinement | Changed |
+| `feat`/`fix` subject starting with "remove" or "drop" | Taking something away | Removed |
+| `fix(security)` | A security fix (after any advisory is published) | Security |
+| `docs`, `test`, `chore`, `ci`, `build`, `style` | Everything else | not listed |
+
+- The scope is the area: `installer`, `mcp`, `self-host`, `boards`, `agents`, `exec`, `library`,
+  and so on. Look at `git log --oneline` for the names in use.
+- A breaking change adds `!` after the type or scope (`feat(api)!: ...`) or a `BREAKING CHANGE:`
+  footer. It moves the next release up a major version.
+- `chore(release): ...` commits are made by the release script only.
+
+## Pull requests
+
+- Branch from the latest `main` and keep your branch rebased on it (no merge commits from `main`).
+- Keep a pull request to one change. Small pull requests land faster.
+- The title is a Conventional Commit; it becomes the commit subject when a pull request is squashed.
+- Fill in the template: what changes, why, and how you tested it. Screenshots help for anything
+  visible.
+- Update docs, READMEs, or the `[Unreleased]` notes in the relevant changelog when people will
+  notice the change. Hand-written `[Unreleased]` notes become the release's highlights.
+- [CI](.github/workflows/ci.yml) runs secret scanning, workflow lint and the tests for the parts you
+  touched. It is informational: a maintainer reads it, but it is not a required check (see below).
+
+## How changes ship
+
+Slatebox ships from `main` with one script, run by a maintainer on the build box. There is no merge
+queue and no required check on GitHub. The script is the gate:
+
+1. A maintainer reviews your pull request, then lands it with `ship`: it takes your branch rebased
+   on the current `main`, runs the targeted checks (tests for the changed files, the secret scan on
+   the tree, a build and a smoke start), fast-forwards `main`, pushes, deploys and checks that the
+   app answers. If any step fails, nothing reaches `main`.
+2. If your commits land unchanged, GitHub marks the pull request as merged. If they were rebased
+   or squashed on the way, the maintainer closes the pull request with a link to the commit that
+   landed.
+3. After the ship, the full test suite runs against the new `main`. If it turns red, the fix goes
+   forward through the same path; changes are not rolled back by default.
+4. Releases are a step of the same script (`ship --release <artifact>:<bump>`); see
+   [docs/releasing.md](docs/releasing.md).
+
+Maintainers do not use the merge button to update `main`, and nobody pushes to `main` by hand.
+
+## Licensing of contributions
+
+Everything in this repository is MIT ([LICENSE](LICENSE); see [LICENSING.md](LICENSING.md)) except the `enterprise/` directory, which
+is under the [Slatebox Enterprise License](enterprise/LICENSE).
+
+- **MIT code**: you contribute under the MIT license, the same license the project uses
+  ("inbound = outbound", as GitHub's Terms of Service, section D.6, also provide). You keep your
+  copyright.
+- **`enterprise/`**: a contribution there is made under section 3 of
+  [enterprise/LICENSE](enterprise/LICENSE).
+- MIT code must work without `enterprise/` and never imports from it. Enterprise code reaches the
+  app only through the loader (`web/app/server/enterprise-loader.mjs`,
+  `web/app/imports/api/client/enterprise-slots.mjs`), and only where it is unlocked.
+
+**No CLA, and no DCO sign-off.** A CLA would ask contributors to sign a separate agreement, and the
+MIT core does not need one. We considered the Developer Certificate of Origin (`git commit -s`) and
+chose not to require it: the license grant above already covers MIT contributions, and
+`enterprise/` has its own written terms; enforcing sign-offs would need a required check, which
+our shipping policy does not have; and a missing sign-off is the most common reason a first
+contribution stalls. By opening a pull request you confirm that you have the right to submit the
+work under these terms.

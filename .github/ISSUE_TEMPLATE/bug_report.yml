@@ -1,11 +1,11 @@
 name: Bug report
 description: Something in Slatebox isn't working the way it should.
-labels: ["bug"]
+labels: ["bug", "needs-triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to report this. Questions are best asked in [Q&A](https://github.com/Slatebox/slatebox/discussions/categories/q-a), and security reports go through [SECURITY.md](https://github.com/Slatebox/slatebox/blob/main/SECURITY.md), never a public issue.
+        Thanks for taking the time to report this. Questions are best asked in [Q&A](https://github.com/Slatebox/slatebox/discussions/categories/q-a). A security problem goes through a [private report](https://github.com/Slatebox/slatebox/security/advisories/new), never a public issue (see [SECURITY.md](https://github.com/Slatebox/slatebox/blob/main/SECURITY.md)).
   - type: textarea
     id: what
     attributes:
@@ -28,17 +28,19 @@ body:
       label: Where
       options:
         - app.slatebox.com
-        - Self-hosted
-        - SlateboxJS engine in my own app
-        - MCP server or CLI
+        - Self-hosted (the ghcr.io/slatebox/slatebox image)
+        - The npx slatebox installer or CLI
+        - The MCP server (hosted or slatebox-mcp)
+        - The SlateboxJS engine in my own app
         - Other
     validations:
       required: true
   - type: input
     id: version
     attributes:
-      label: Version (if self-hosted or using the engine)
-      placeholder: e.g. 0.2.1
+      label: Version
+      description: "Self-hosted: the image tag (`docker inspect slatebox --format '{{.Config.Image}}'`). Installer: `npx slatebox --version`. MCP: `npm ls -g slatebox-mcp`. Leave empty for app.slatebox.com."
+      placeholder: e.g. 0.2.2
   - type: input
     id: browser
     attributes:

@@ -1,0 +1,23 @@
+name: Documentation
+description: Something in docs.slatebox.com, a README or a guide is wrong, missing or unclear.
+labels: ["documentation", "needs-triage"]
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Page or file
+      description: A link to the page, or the path of the file in this repository.
+      placeholder: https://docs.slatebox.com/installation/install-with-docker/
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's wrong or missing
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: What it should say
+      description: Optional. Suggested wording is very welcome.

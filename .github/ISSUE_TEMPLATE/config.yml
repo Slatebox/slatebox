@@ -5,7 +5,10 @@ contact_links:
     about: Questions and how-tos go to Slatebox support (support.slatebox.com), our GitHub Discussions.
   - name: Share an idea
     url: https://github.com/Slatebox/slatebox/discussions/categories/ideas
-    about: Feature ideas and feedback.
+    about: Feature ideas and feedback that are still taking shape.
+  - name: Report a security vulnerability
+    url: https://github.com/Slatebox/slatebox/security/advisories/new
+    about: Privately, through a GitHub security advisory. Never in a public issue.
   - name: Read the docs
     url: https://docs.slatebox.com
     about: Guides and reference for the app, self-hosting, the engine and the MCP server.

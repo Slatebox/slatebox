@@ -1,0 +1,15 @@
+# Code owners are asked to review pull requests that touch their paths.
+# Review is not a merge gate here (see GOVERNANCE.md): maintainers land changes with
+# the ship script. This file says who looks.
+
+*                      @TimHeckel
+
+# Not MIT: changes here are under the Slatebox Enterprise License (enterprise/LICENSE).
+/enterprise/           @TimHeckel
+
+# Release tooling, CI and repository policy.
+/.github/              @TimHeckel
+/scripts/release.mjs   @TimHeckel
+/cliff.toml            @TimHeckel
+/SECURITY.md           @TimHeckel
+/GOVERNANCE.md         @TimHeckel

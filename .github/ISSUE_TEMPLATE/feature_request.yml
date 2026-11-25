@@ -1,0 +1,45 @@
+name: Feature request
+description: A concrete change you'd like to see. Open-ended ideas fit better in Discussions.
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Still shaping the idea? Start in [Ideas](https://github.com/Slatebox/slatebox/discussions/categories/ideas), where others can weigh in. Use this form when you can describe the change and who it helps.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like
+      description: The change, as you would explain it to a teammate. Screenshots or a sketch on a slate help.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - The app (slates, boards, presentations, chat)
+        - Agents, exec or the API
+        - Self-hosting
+        - The npx slatebox installer or CLI
+        - The MCP server
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've tried
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd like to work on this myself (see CONTRIBUTING.md).
