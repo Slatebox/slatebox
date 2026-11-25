@@ -1,4 +1,4 @@
-FROM geoffreybooth/meteor-base:3.5 AS meteor-build
+FROM geoffreybooth/meteor-base:3.6 AS meteor-build
 
 # Copy the complete app before installing dependencies. Published releases use
 # the registry dependency directly; the local production-candidate gate stages
