@@ -149,6 +149,8 @@ method[CONSTANTS.methods.users.identify] = async (opts) => {
         lastName: user.profile?.lastName || '',
         transcribeOnStart: true,
         audioMutedOnStart: false,
+        // The first run's answer (methods/first-slate.js) comes with the guest into the account.
+        ...(user.profile?.start && { start: user.profile.start }),
       },
     }
     if (opts.firstName) {

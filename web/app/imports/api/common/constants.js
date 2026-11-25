@@ -300,6 +300,11 @@ const CONSTANTS = {
       delete: 'iconPacks.delete',
       removeIcon: 'iconPacks.removeIcon',
     },
+    // The signed-out "Create slate" first run (pages/FirstSlate.jsx, server/methods/first-slate.js).
+    firstSlate: {
+      create: 'firstSlate.create',
+      shareSeen: 'firstSlate.shareSeen',
+    },
     slates: {
       update: 'slates.update',
       generateShareId: 'slates.generateShareId',
