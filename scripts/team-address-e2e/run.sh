@@ -15,6 +15,9 @@
 #
 #   SLATEBOX_CLOUD_URL=http://localhost:3000 IMAGE=slatebox:0.2.0-local scripts/team-address-e2e/run.sh
 #
+# Run from a coding agent's shell, the CLI answers in JSON and never hands out a setup link; the
+# status and setup-link calls below say --agent no, because this harness stands in for the person.
+#
 # The transcript goes to $EVIDENCE (default a new file in $TMPDIR). Nothing secret is printed:
 # the CLI redacts tokens and credentials, and the checks below compare secrets in variables.
 set -euo pipefail
@@ -38,6 +41,8 @@ exec > >(tee -a "$EVIDENCE") 2>&1
 
 say() { printf '\n== %s\n' "$*"; }
 check() { if "$@"; then echo "PASS: $*"; else echo "FAIL: $*"; failures=$((failures + 1)); fi; }
+# For a check whose command carries a secret (a token, the setup link, a password): prints the label only.
+quiet() { local label=$1; shift; if "$@"; then echo "PASS: $label"; else echo "FAIL: $label"; failures=$((failures + 1)); fi; }
 secret() { sed -n "s/^$1='\(.*\)'\$/\1/p" "$SLATEBOX_INSTALL_HOME/installs/$INSTALL/secrets.env"; }
 answers() { curl -fsS --max-time 10 "https://$1.slatebox.team/readyz" | grep -q '"ok":true'; }
 wait_answers() { local i; for i in $(seq 1 60); do answers "$1" && return 0; sleep 3; done; return 1; }
@@ -47,7 +52,7 @@ cleanup() {
   set +e
   say "cleanup (always)"
   "${cli[@]}" uninstall --name "$INSTALL" --delete-data --confirm "$INSTALL" --yes
-  docker rm -f sbx-e2e-old-token >/dev/null 2>&1
+  docker rm -f -v sbx-e2e-old-token >/dev/null 2>&1
   node "$here/cloudflare-leftovers.mjs" "$claim_id" "$NAME" "$RENAMED"
   local leftovers=$?
   if ((leftovers)); then
@@ -70,25 +75,25 @@ check bash -c "curl -fsS 'https://$NAME.slatebox.team/' | grep -qi '<title>'"
 check bash -c "curl -sI 'https://$NAME.slatebox.team/' | grep -qi '^server: cloudflare'"
 
 say "2. status: active, at least one tunnel connection"
-status_out=$("${cli[@]}" status --name "$INSTALL" || true)
+status_out=$("${cli[@]}" status --name "$INSTALL" --agent no || true)
 echo "$status_out"
 check grep -qE "Team address +https://$NAME\.slatebox\.team \(active, [1-9]" <<<"$status_out"
 
 say "2b. the first admin: nobody can sign up before the one-time setup link is used"
 check bash -c "curl -fsS 'https://$NAME.slatebox.team/' | grep -q \"This Slatebox isn't set up yet\""
-setup_url=$("${cli[@]}" setup-link --name "$INSTALL" --force-stdout)
+setup_url=$("${cli[@]}" setup-link --name "$INSTALL" --agent no --force-stdout)
 check grep -qE "^https://$NAME\.slatebox\.team/setup/[A-Za-z0-9_-]{43}$" <<<"$setup_url"
-check bash -c "curl -fsS '$setup_url' | grep -q 'Create the admin account'"
+quiet "the setup link shows the admin form" env U="$setup_url" bash -c 'curl -fsS "$U" | grep -q "Create the admin account"'
 admin_password=$(openssl rand -hex 16)
-check bash -c "curl -fsS --data-urlencode firstName=E2E --data-urlencode email=e2e-admin@example.test --data-urlencode password=$admin_password --data-urlencode team=E2E '$setup_url' | grep -q 'Slatebox is set up'"
-check bash -c "curl -sS --data-urlencode firstName=Again --data-urlencode email=again@example.test --data-urlencode password=$admin_password --data-urlencode team=Again '$setup_url' | grep -q 'already set up'"
+quiet "the setup link creates the first admin" env U="$setup_url" P="$admin_password" bash -c 'curl -fsS --data-urlencode firstName=E2E --data-urlencode email=e2e-admin@example.test --data-urlencode "password=$P" --data-urlencode team=E2E "$U" | grep -q "Slatebox is set up"'
+quiet "the used setup link works no more" env U="$setup_url" P="$admin_password" bash -c 'curl -sS --data-urlencode firstName=Again --data-urlencode email=again@example.test --data-urlencode "password=$P" --data-urlencode team=Again "$U" | grep -q "already set up"'
 check bash -c "curl -fsS 'https://$NAME.slatebox.team/' | grep -q __meteor_runtime_config__"
 setup_token=${setup_url##*/}
 unset admin_password setup_url
 
 say "3. live editing: the relay answers through the tunnel at wss://$NAME.slatebox.team/live"
 nonce=$(openssl rand -base64 16)   # a WebSocket handshake nonce, not a secret
-check bash -c "curl -s --max-time 10 -o /dev/null -w '%{http_code}' -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H \"Sec-WebSocket-Key: $nonce\" 'https://$NAME.slatebox.team/live/slatebox-e2e' | grep -qE '^(101|401|403)$'"
+check bash -c "curl -s --http1.1 --max-time 10 -o /dev/null -w '%{http_code}' -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H \"Sec-WebSocket-Key: $nonce\" 'https://$NAME.slatebox.team/live/slatebox-e2e' | grep -qE '^(101|401|403)$'"
 echo "   (two-tab live editing in a fresh browser session is the browser step of the spec; run it against https://$NAME.slatebox.team now if a browser agent is attached)"
 
 say "4. restart: the tunnel comes back with no CLI"
@@ -99,7 +104,7 @@ say "5. rotate: a new token; the old one cannot connect"
 old=$(secret SLATEBOX_TUNNEL_TOKEN)
 "${cli[@]}" address rotate --name "$INSTALL" --yes
 new=$(secret SLATEBOX_TUNNEL_TOKEN)
-check test -n "$new" -a "$old" != "$new"
+quiet "rotate gave a new tunnel token" test -n "$new" -a "$old" != "$new"
 check wait_answers "$NAME"
 oldfile=$(mktemp); chmod 600 "$oldfile"; printf '%s' "$old" > "$oldfile"; unset old new
 docker run -d --name sbx-e2e-old-token --entrypoint /opt/cloudflared/bin/cloudflared -v "$oldfile:/tok:ro" "$IMAGE" tunnel --no-autoupdate --loglevel info run --token-file /tok >/dev/null
@@ -107,7 +112,7 @@ sleep 30
 registered=$(docker logs sbx-e2e-old-token 2>&1 | grep -c 'Registered tunnel connection' || true)
 echo "   connections the OLD token registered after rotation: $registered"
 docker logs sbx-e2e-old-token 2>&1 | grep -E 'ERR|Unauthorized|failed' | head -3 | sed 's/^/   old-token log: /'
-docker rm -f sbx-e2e-old-token >/dev/null; rm -f "$oldfile"
+docker rm -f -v sbx-e2e-old-token >/dev/null; rm -f "$oldfile"
 check test "$registered" = 0
 
 say "6. logs carry no token or credential (counts only)"
