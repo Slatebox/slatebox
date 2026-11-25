@@ -359,3 +359,33 @@ test('a Cloud URL must be https, except on this computer', async () => {
   assert.equal(result.code, 2)
   assert.match(result.events.at(-1).message, /must be https/)
 })
+
+test('at a terminal the sign-in offers to open the browser on the Cloud\'s own page, and claims after approval', async () => {
+  const { cloud, home, docker } = setup()
+  const opened = []
+  // Every other question is answered by a flag; the one left (mail) is skipped with Enter.
+  const flags = ['--target', 'local', '--admin-email', 'ops@example.com', '--no-sso', '--size', 'small']
+  const result = await cli(['install', '--team-address', 'acme', ...BASE, ...flags, '--yes'], {
+    run: docker.run, home, fetch: cloud.fetch, tty: true, input: '\ny\n', env: { SLATEBOX_CLOUD_URL: cloud.base },
+    io: { sleep: async () => {}, deviceLabel: 'test-box', openBrowser: url => opened.push(url), teamHealthDelay: 1, teamHealthAttempts: 3 },
+  })
+  assert.equal(result.code, 0, result.stderr)
+  assert.match(result.stderr, /Open it in your browser now\? \[Y\/n\]/)
+  assert.deepEqual(opened, [`${cloud.base}/device?code=WDJB-MJHT`])
+  assert.equal(cloud.claims.size, 1)
+})
+
+test('the interview asks where the team opens Slatebox, and asks again for a name that is not free', async () => {
+  const { cloud, home, docker } = setup({ cloud: { taken: ['support'] } })
+  const flags = ['--target', 'local', '--admin-email', 'ops@example.com', '--no-sso', '--size', 'small', '--image', IMAGE, '--ai', 'none', '--backups', 'off']
+  const result = await cli(['install', ...flags, '--yes'], {
+    run: docker.run, home, fetch: cloud.fetch, tty: true, input: '1\nsupport\nacme\n\nn\n', env: { SLATEBOX_CLOUD_URL: cloud.base },
+    io: { sleep: async () => {}, deviceLabel: 'test-box', openBrowser: () => {}, teamHealthDelay: 1, teamHealthAttempts: 3 },
+  })
+  assert.equal(result.code, 0, result.stderr)
+  assert.match(result.stderr, /Where should your team open Slatebox\?\n {2}1\) A free team address, https:\/\/<name>\.slatebox\.team {2}\(recommended: no DNS, ports or certificates\) {2}\[default\]\n {2}2\) My own domain/)
+  assert.match(result.stderr, /\[!!\] support\.slatebox\.team isn't available\.\n {5}Free right now: support-team, team-support/)
+  assert.match(result.stderr, /\[ok\] acme\.slatebox\.team is available/)
+  assert.equal([...cloud.claims.values()][0].name, 'acme')
+  assert.match(result.stdout, /Slatebox is running at {2}https:\/\/acme\.slatebox\.team/)
+})

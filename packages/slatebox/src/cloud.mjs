@@ -185,10 +185,9 @@ export async function signIn(ctx, cloud, { purpose = 'claim a team address' } = 
   ctx.out.event({ event: 'sign-in', status: 'waiting', verificationUri: page, userCode: grant.user_code, expiresIn: grant.expires_in || 600 })
   const lines = ['', `Sign in to Slatebox to ${purpose}.`, `  Open:  ${page}`, `  Code:  ${grant.user_code}`]
   if (ctx.interactive) {
-    lines.push(`  (Press Enter to open your browser. The code expires in ${minutes} minutes.)`)
+    lines.push(`  (The code expires in ${minutes} minutes.)`)
     ctx.stderr.write(`${lines.join('\n')}\n`)
-    await ctx.prompt.text('', { optional: true }).catch(() => '')
-    ;(ctx.openBrowser || openBrowser)(complete || page, ctx.platform)
+    if (await ctx.prompt.confirm('Open it in your browser now?', { default: true })) (ctx.openBrowser || openBrowser)(complete || page, ctx.platform)
   } else {
     lines.push(`  (The code expires in ${minutes} minutes. Approve it in a browser where you are signed in to Slatebox.)`)
     ctx.stderr.write(`${lines.join('\n')}\n`)
