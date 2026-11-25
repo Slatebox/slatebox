@@ -92,7 +92,7 @@ test('a new link ends the one before; an expired link says so; neither shows the
   assert.notEqual(first, second)
   const ended = await get(first)
   assert.equal(ended.status, 410)
-  assert.match(await ended.text(), /This setup link doesn't work/)
+  assert.match(await ended.text(), /<h1>This setup link doesn(&#39;|')t work<\/h1>/)
   // Only the hash is kept.
   const stored = await database("return db.collection('systemSettings').findOne({ _id: 'selfHostSetup' })")
   assert.equal(stored.tokenHash, createHash('sha256').update(tokens[1]).digest('hex'))
