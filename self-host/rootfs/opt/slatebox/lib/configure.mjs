@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   APP_PORT, DATABASE, DB_DIR, FRONT_PORT, HOME, KEYCLOAK_DATA, KEYCLOAK_PORT, MONGO_KEY_FILE, MONGO_PORT, Plain, RELAY_PATH,
-  RELAY_PORT, RUN, SSO_PATH, TMP_DIR, DATA, ensureSecrets, envFile, fail, mongoUrl, writePrivate,
+  RELAY_PORT, RUN, SSO_PATH, TMP_DIR, DATA, ensureKeyEncryptionKey, ensureSecrets, envFile, fail, isKeyEncryptionKey, mongoUrl, writePrivate,
 } from './common.mjs'
 import { appSettings as ssoAppSettings, issuerFor, keycloakEnv, ssoMode } from './sso.mjs'
 import { operatorAI } from './ai-config.mjs'
@@ -79,14 +79,16 @@ function mailSender(mailUrl) {
     'for example SLATEBOX_MAIL_FROM="Slatebox <boards@example.com>"')
 }
 
-// The master key for the AI and call keys people save for themselves. The app
-// reads it as 32 bytes in base64 (standard or URL-safe); anything else would
-// silently decode to a different key, so it is refused here. The value is never
-// printed, not even when it is refused.
+// The master key for every AI and call key saved on this server: the
+// administrator's in Admin → AI control and people's own. The app reads it as
+// 32 bytes in base64 (standard or URL-safe); anything else would silently
+// decode to a different key, so it is refused here. Unset, the installation's
+// own key is used (made on first boot and kept in /data/secrets, see
+// ensureKeyEncryptionKey). The value is never printed, not even when it is refused.
 function keyEncryptionKey() {
   const value = setting('SLATEBOX_KEY_ENCRYPTION_KEY')
   if (!value) return undefined
-  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(value) || Buffer.from(value, 'base64').length !== 32) {
+  if (!isKeyEncryptionKey(value)) {
     throw new Plain(
       'SLATEBOX_KEY_ENCRYPTION_KEY must be 32 random bytes in base64, for example the output of openssl rand -base64 32 ' +
       `(received ${value.length} characters, not shown)`)
@@ -233,6 +235,7 @@ function main() {
     mkdirSync(dir, { recursive: true, mode: 0o700 })
   }
   const { secrets, created } = ensureSecrets({ sso: sso.enabled })
+  const kek = ensureKeyEncryptionKey({ given: ownKeysKey })
 
   // Generated values come last so SLATEBOX_SETTINGS cannot break the wiring
   // between the browser, the app and the relay.
@@ -276,7 +279,7 @@ function main() {
     MAIL_URL: mailUrl,
     API_KEY_DEEP_INFRA: ai.deepInfraKey,
     // Read from the environment only, never from the settings (server/metering/vault.mjs).
-    SLATEBOX_KEY_ENCRYPTION_KEY: ownKeysKey,
+    SLATEBOX_KEY_ENCRYPTION_KEY: kek.value,
   }))
   writePrivate(join(RUN, 'relay.env'), envFile({
     NODE_ENV: 'production',
@@ -313,7 +316,12 @@ function main() {
   say(`Mail:      ${mailUrl ? `on, from ${mailFrom}` : 'off (set SLATEBOX_MAIL_URL to send invitations and sign-in mail)'}`)
   say(`SSO:       ${sso.enabled ? `on, Keycloak ${identity.keycloak || ''} at ${url.origin}${SSO_PATH}/, issuer ${issuerFor(url)}${sso.only ? ', single sign-on only' : ''}${sso.adminOpen ? '' : ', admin console closed on this address'}`.replace('  ', ' ') : 'off (set SLATEBOX_SSO=keycloak to turn on single sign-on)'}`)
   for (const line of ai.summary) say(line)
-  say(`Own keys:  ${ownKeysKey ? 'on, people and teams can save their own AI and call keys, encrypted' : 'off (set SLATEBOX_KEY_ENCRYPTION_KEY to let people save their own AI and call keys)'}`)
+  const kekSource = {
+    setting: 'the key from SLATEBOX_KEY_ENCRYPTION_KEY',
+    kept: `this installation's own key, kept in ${join(DATA, 'secrets')}`,
+    generated: `a key made for this installation, kept in ${join(DATA, 'secrets')} (backups do not hold it: keep it with them)`,
+  }[kek.source]
+  say(`Own keys:  on, AI and call keys saved here are encrypted with ${kekSource}`)
 }
 
 try { main() } catch (error) { fail(error) }

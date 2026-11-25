@@ -10,6 +10,8 @@ export const HOME = '/opt/slatebox'
 export const SECRETS_DIR = join(DATA, 'secrets')
 export const SECRETS_FILE = join(SECRETS_DIR, 'secrets.json')
 export const MONGO_KEY_FILE = join(SECRETS_DIR, 'mongo.key')
+// The key-encryption key made on first boot when SLATEBOX_KEY_ENCRYPTION_KEY is not set.
+export const KEY_ENCRYPTION_KEY_FILE = join(SECRETS_DIR, 'key-encryption.key')
 export const DB_DIR = join(DATA, 'db')
 export const TMP_DIR = join(DATA, 'tmp')
 
@@ -83,6 +85,35 @@ export function ensureSecrets({ sso = false } = {}) {
   }
   if (created) writePrivate(SECRETS_FILE, JSON.stringify(secrets, null, 2) + '\n')
   return { secrets, created: !existing && created ? 'all' : created }
+}
+
+/** 32 bytes in base64 (standard or URL-safe), as the app's key vault reads it. */
+export const isKeyEncryptionKey = (value) =>
+  typeof value === 'string' && /^[A-Za-z0-9+/_-]+={0,2}$/.test(value) && Buffer.from(value, 'base64').length === 32
+
+/**
+ * The master key for every AI and call key saved on this server (the administrator's keys in
+ * Admin → AI control, and people's own). SLATEBOX_KEY_ENCRYPTION_KEY wins when it is set (given,
+ * already checked) and nothing is written. Without it, the key made on this installation's first
+ * boot is read from the data volume; only when there is none is a new one made and kept there.
+ * A kept key is never replaced: one that cannot be read stops the start instead, since a new key
+ * would leave every saved key unreadable. Never prints the key.
+ * → { value, source: 'setting' | 'kept' | 'generated' }
+ */
+export function ensureKeyEncryptionKey({ given, file = KEY_ENCRYPTION_KEY_FILE } = {}) {
+  if (given) return { value: given, source: 'setting' }
+  if (existsSync(file)) {
+    const value = readFileSync(file, 'utf8').trim()
+    if (!isKeyEncryptionKey(value)) {
+      throw new Plain(
+        `${file} does not hold a key-encryption key (32 bytes in base64), so the keys saved on this server cannot be read. ` +
+        'Put the file back from the data volume it came from, or set SLATEBOX_KEY_ENCRYPTION_KEY to the key it held. Nothing was changed.')
+    }
+    return { value, source: 'kept' }
+  }
+  const value = randomBytes(32).toString('base64')
+  writePrivate(file, `${value}\n`)
+  return { value, source: 'generated' }
 }
 
 export function mongoUrl(user, password, { database = DATABASE, authSource } = {}) {

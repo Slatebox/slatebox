@@ -36,7 +36,7 @@
     "test:pro": "node --test scripts/cloud-lock.test.mjs scripts/business-billing.test.mjs scripts/business-pool.test.mjs scripts/pro-now-and-credits.test.mjs scripts/pro-billing.test.mjs scripts/pro-instant-pay.test.mjs scripts/meter-pro.test.mjs scripts/stripe-catalog.test.mjs scripts/inline-pay.test.mjs scripts/refusal-pay.test.mjs",
     "test:team-export": "node --test scripts/team-export.test.mjs scripts/team-isolation.test.mjs",
     "test:mermaid": "node --test scripts/mermaid-read.test.mjs scripts/mermaid-export.test.mjs scripts/mermaid-api.test.mjs scripts/mermaid-limits.test.mjs scripts/mermaid-layout.test.mjs",
-    "test:self-host": "node --test self-host/tests/ai-config.test.mjs self-host/tests/tracked.test.mjs self-host/tests/readme.test.mjs scripts/sso.test.mjs"
+    "test:self-host": "node --test self-host/tests/ai-config.test.mjs self-host/tests/key-encryption-key.test.mjs self-host/tests/tracked.test.mjs self-host/tests/readme.test.mjs scripts/sso.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.57.0"

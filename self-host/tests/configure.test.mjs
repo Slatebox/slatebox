@@ -50,11 +50,14 @@ test('SLATEBOX_KEY_ENCRYPTION_KEY may be given in URL-safe base64 without paddin
   assert.equal(Buffer.from(run.app.key, 'base64').toString('hex'), Buffer.from(key, 'base64url').toString('hex'))
 })
 
-test('without SLATEBOX_KEY_ENCRYPTION_KEY the log says how to turn own keys on', async () => {
+test('without SLATEBOX_KEY_ENCRYPTION_KEY the first start makes one, keeps it in /data/secrets and never prints it', async () => {
   const run = await configure({})
   assert.equal(run.code, 0, run.log)
-  assert.equal(run.app.key, null)
-  assert.match(run.log, /Own keys: +off \(set SLATEBOX_KEY_ENCRYPTION_KEY/)
+  assert.equal(Buffer.from(run.app.key, 'base64').length, 32)
+  assert.match(run.log, /Own keys: +on, .*a key made for this installation, kept in \/data\/secrets/)
+  assert.ok(!run.log.includes(run.app.key), 'the key is not in the log')
+  assert.ok(!run.app.settings.includes(run.app.key), 'the key is not in the app settings')
+  assert.equal(run.secretFiles, 3, 'secrets.json, mongo.key and key-encryption.key')
 })
 
 test('a SLATEBOX_KEY_ENCRYPTION_KEY that is not 32 bytes of base64 stops the start without printing it', async () => {
