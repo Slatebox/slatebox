@@ -35,7 +35,7 @@ export const libraryFork = defineAction({
     },
     required: ['shareId', 'itemId', 'version'],
   },
-  tool: { name: 'use_library_item', title: 'Use a library item', description: 'Copy a slate or presentation from the shared library into a new private slate, or add a smart component to a new slate or beside the boards of one you can edit.' },
+  tool: { name: 'use_library_item', title: 'Use a library item', description: 'Copy a slate or presentation from the shared library into a new private slate, or add a smart component (a board with rules, such as a retro) to a new slate or beside the boards of one you can edit.' },
   handler: (principal, input, { deps, mode }) => deps.library.fork(principal, input, { mode }),
 })
 

@@ -14,7 +14,7 @@ export default defineAction({
   alsoScopes: ['ai:admin'],
   principals: ['person', 'agent'],
   mounts: { ddp: true, http: { method: 'POST', path: '/ai/check', operationId: 'checkAIConnection' } },
-  tool: { name: 'check_ai_connection', title: 'Test an AI connection', description: 'Test whether Slatebox can reach an AI connection (a provider key, or an OpenAI-compatible endpoint) before it is used for drafting.' },
+  tool: { name: 'check_ai_connection', title: 'Test a model connection', description: 'Test whether Slatebox can reach a model connection (a provider key, or an OpenAI-compatible endpoint) before the Slatebox agent drafts with it.' },
   readOnly: true,
   openWorld: true,
   idempotent: true,

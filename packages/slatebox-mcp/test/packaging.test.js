@@ -20,10 +20,11 @@ const packScript = await read("../../../scripts/pack-agent-tools.py");
 const registrySchema = await read("./registry-server.schema.json");
 
 const DESCRIPTION =
-  "Slatebox is an open source visual intelligence platform where you can invite any AI via MCP to collaborate with you and your team.";
+  "Slatebox is the free, open-source visual intelligence platform for your team and agents: diagrams, flowcharts, mind maps, whiteboards, Gantt plans and presentations you build together on one live canvas, with any agent connected over MCP.";
 const KEYWORDS = [
   "mcp", "mcp-server", "modelcontextprotocol", "mind-map", "mindmap", "diagram", "flowchart", "whiteboard",
-  "project-planning", "gantt", "timeline", "presentation", "mermaid", "collaboration", "open-source", "miro-alternative",
+  "brainstorming", "retrospective", "project-planning", "gantt", "timeline", "presentation", "mermaid", "collaboration",
+  "visual-intelligence", "open-source", "miro-alternative",
 ];
 const REPOSITORY = "https://github.com/Slatebox/slatebox";
 const HOMEPAGE = "https://docs.slatebox.com/developers/slateboxapi/mcp/";
@@ -72,7 +73,7 @@ test("server.json is valid for the MCP Registry and matches the package", () => 
   assert.equal(server.$schema, "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json");
   assert.equal(server.name, manifest.mcpName, "the registry checks mcpName in the npm package against this name");
   assert.equal(server.title, "Slatebox");
-  assert.equal(server.description, "Open-source visual intelligence platform: invite any AI via MCP to work with you and your team.");
+  assert.equal(server.description, "Free, open-source visual intelligence for your team and agents: diagrams, mind maps, plans, slides.");
   assert.ok(server.description.length <= 100);
   assert.equal(server.version, manifest.version);
   assert.equal(server.websiteUrl, "https://slatebox.com");
@@ -96,7 +97,7 @@ test("server.json is valid for the MCP Registry and matches the package", () => 
 
 test("Miro is named only in the README's opening, beside the not-affiliated line", async () => {
   const opening = readme.split(/^## /m)[0];
-  assert.match(opening, /\*\*Slatebox is an open source visual intelligence platform where you can invite any AI via MCP to collaborate with you and your team\.\*\*/);
+  assert.match(opening, /\*\*Slatebox is the free, open-source visual intelligence platform for your team and agents\.\*\*/);
   assert.match(opening, /An open-source alternative to whiteboard tools such as Miro\./);
   assert.match(opening, /Not affiliated with or endorsed by Miro\. Miro is a trademark of its owner\./);
   assert.ok(readme.indexOf("Miro") < readme.indexOf("no sandbox"), "the product opening sits above the no-sandbox warning");
@@ -148,7 +149,7 @@ test("npm pack would publish exactly the public files the release archive holds"
 test("the repository README opens with the positioning line and the not-affiliated line", async () => {
   const root = await read("../../../README.md");
   const opening = root.split(/^## /m).slice(0, 2).join("## ");
-  assert.match(opening, /\*\*Slatebox is an open source visual intelligence platform where you can invite any AI via MCP to collaborate with you and your team\.\*\*/);
+  assert.match(opening, /\*\*Slatebox is the free, open-source visual intelligence platform for your team and agents\.\*\*/);
   assert.match(opening, /An open-source alternative to whiteboard tools such as Miro\./);
   assert.match(opening, /Not affiliated with or endorsed by Miro\. Miro is a trademark of its owner\./);
   assert.equal(root.match(/Miro/g).length, opening.match(/Miro/g).length, "Miro appears only in the opening");

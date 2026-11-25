@@ -24,7 +24,7 @@ export default defineAction({
   },
   output: ref('SlateRead'),
   load: loadSlate(false),
-  tool: { name: 'get_slate', title: 'Read a slate', description: 'Read a slate\'s notes, lines, boards, comments and revision. An edit names the revision it was made on (expectedRevision).' },
+  tool: { name: 'get_slate', title: 'Read a slate', description: 'Read a slate (a diagram, mind map, plan or board): its notes, lines, boards, comments and revision. An edit names the revision it was made on (expectedRevision).' },
   async handler(_principal, input, { deps, resource: slate, access }) {
     if (input.include !== 'suggestions' || !deps.suggestions) return deps.readSlate(slate, access, input)
     // What agents suggested here: the same list the canvas draws (suggestions.list), read with the slate.

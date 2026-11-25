@@ -49,6 +49,9 @@ test("tools/list: exec, describe, then one typed tool per method, as the hosted 
   assert.deepEqual(tools, JSON.parse(JSON.stringify(listedTools(file))));
   assert.deepEqual(toolDefinitions(generated), listedTools(file));
   assert.equal(client.getInstructions(), file.instructions);
+  // the same serverInfo words as the hosted endpoint, from the generated file
+  const info = client.getServerVersion();
+  assert.deepEqual({ name: info.name, title: info.title, description: info.description, websiteUrl: info.websiteUrl }, { name: "slatebox", ...file.server });
   for (const tool of tools) for (const hint of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"])
     assert.equal(typeof tool.annotations[hint], "boolean", `${tool.name}.${hint}`);
 });
@@ -104,7 +107,7 @@ test("a refusal and a hold come back as they do for exec; confirm is sent as exe
 
 test("prompts and resources: listed, filled and read (a slate through exec)", async (t) => {
   const { client, requests } = await connected(t, ok);
-  assert.deepEqual((await client.listPrompts()).prompts.map((p) => p.name), ["mind_map", "flowchart", "project_plan", "presentation", "install_slatebox"]);
+  assert.deepEqual((await client.listPrompts()).prompts.map((p) => p.name), ["mind_map", "flowchart", "project_plan", "presentation", "brainstorm", "install_slatebox"]);
   const filled = await client.getPrompt({ name: "project_plan", arguments: { project: "a launch", weeks: "6 weeks" } });
   assert.match(filled.messages[0].content.text, /project plan for a launch, over 6 weeks/);
   await assert.rejects(() => client.getPrompt({ name: "flowchart", arguments: {} }), /needs process/);

@@ -323,7 +323,7 @@ export default defineAction({
   output: result,
   load: loadSlate(true),
   failure: { code: 'operation_failed', message: 'The request could not be completed. Retry with the same key.' },
-  tool: { name: 'edit_slate', title: 'Edit a slate', description: 'Edit a slate: add, change, connect, lay out or remove notes and lines, and edit boards (cards, lanes, rules, plan weeks, budgets, presentation order; name the board on a slate with several). One call saves atomically; mode "preview" shows the result without saving. Your canvas edits appear live as suggestions people on the slate keep or discard.' },
+  tool: { name: 'edit_slate', title: 'Edit a slate', description: 'Edit a diagram, mind map, whiteboard or board on a slate: add, change, connect, lay out or remove notes and lines, and edit boards (cards, lanes, rules, plan weeks, budgets, presentation order; name the board on a slate with several). One call saves atomically; mode "preview" shows the result without saving. Your canvas edits appear live as suggestions people on the slate keep or discard.' },
   async handler(principal, input, ctx) {
     const slate = ctx.resource
     const requested = input.plan?.operations

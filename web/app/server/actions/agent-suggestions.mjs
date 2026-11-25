@@ -185,7 +185,7 @@ const decide = defineAction({
   },
   load: loadFor(true),
   failure: { code: 'decide_failed', message: 'The agent\'s work could not be kept, discarded or undone. Retry.' },
-  tool: { name: 'decide_suggestions', title: 'Keep, discard or undo agent work', description: 'Keep (save) or discard what an agent suggested on a slate (one action or some of its items), or undo one agent action that was kept or saved directly.' },
+  tool: { name: 'decide_suggestions', title: 'Keep, discard or undo agent work', description: 'Keep (save) or discard what an agent suggested on a shared slate (one action or some of its items), or undo one agent action that was kept or saved directly.' },
   async handler(principal, input, ctx) {
     const { deps, resource: slate } = ctx
     decide.precheck(principal, input)

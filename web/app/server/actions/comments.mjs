@@ -98,7 +98,7 @@ export const commentsList = defineAction({
   },
   output: { type: 'object', properties: { comments: { type: 'array', items: comment } }, required: ['comments'] },
   load: loadSlate(false),
-  tool: { name: 'list_comments', title: 'Read comments', description: 'Read the comments people left on a slate\'s notes, or on one note.' },
+  tool: { name: 'list_comments', title: 'Read comments', description: 'Read the comments people left on a slate\'s notes, or on one note: the team\'s feedback on a diagram, plan or board.' },
   async handler(principal, input, { deps, resource: slate }) {
     const rows = await deps.comments.list({ slateId: slate._id, nodeId: input.noteId, unresolved: input.unresolved })
     return { comments: rows.map((row) => commentEntry(row, principal.userId)) }
@@ -132,7 +132,7 @@ export const commentsAdd = defineAction({
     },
   },
   load: loadCommenter,
-  tool: { name: 'add_comment', title: 'Comment on a note', description: 'Leave a comment on a note of a slate, under the person\'s name.' },
+  tool: { name: 'add_comment', title: 'Comment on a note', description: 'Leave a comment on a note of a shared slate, under the person\'s name, where the team sees it live.' },
   async handler(principal, input, { deps, now, resource: slate, access }) {
     if (!hasNote(slate, input.noteId)) throw noNote()
     const text = input.text.trim()

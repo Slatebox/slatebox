@@ -26,7 +26,7 @@ export default defineAction({
     },
     required: ['id', 'name', 'ai', 'links'],
   },
-  tool: { name: 'get_account', title: 'Read your account', description: 'Read the person\'s Slatebox account: name, team, what they can use and their AI drafting access.' },
+  tool: { name: 'get_account', title: 'Read your account', description: 'Read the person\'s Slatebox account: name, team, what they can use and whether the Slatebox agent can draft for them.' },
   async handler(principal, _input, { deps }) {
     const account = await deps.accounts.summary(principal)
     if (!account) throw problem(404, 'not_found', 'This account no longer exists.')

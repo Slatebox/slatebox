@@ -1,6 +1,6 @@
 # Slatebox exec: MCP server and CLI
 
-**Slatebox is an open source visual intelligence platform where you can invite any AI via MCP to collaborate with you and your team.** Mind maps, diagrams, project plans and presentations, drawn by your assistant and edited live with your team. An open-source alternative to whiteboard tools such as Miro. MIT licensed. The canvas is free. On Slatebox Cloud, AI comes with Slatebox Pro; a self-hosted Slatebox can use its own AI key.
+**Slatebox is the free, open-source visual intelligence platform for your team and agents.** Diagrams, flowcharts, mind maps, whiteboards and brainstorms, retro boards, Gantt plans and presentations that compose themselves: you, your team and any agent you invite over MCP work on them together, live. On the web as a mind-mapping tool since 2010. An open-source alternative to whiteboard tools such as Miro. MIT licensed. The canvas is free. On Slatebox Cloud, AI comes with Slatebox Pro; a self-hosted Slatebox can use its own AI key.
 
 *Not affiliated with or endorsed by Miro. Miro is a trademark of its owner.*
 
@@ -8,7 +8,7 @@
 
 Agents create and edit Slatebox slates (mind maps, flowcharts, diagrams, project plans, slides and boards) by running a short script, or by calling one tool per task. This package gives them two ways to do it:
 
-- `slatebox-mcp`, an MCP server. **`exec`** runs a JavaScript or TypeScript script, and **`describe`** explains the typed client the script uses. Beside them it lists one typed tool per client method, such as `create_slate`, `import_mermaid`, `get_slate`, `edit_slate` and `export_mermaid`, five prompts (mind map, flowchart, project plan, presentation, install Slatebox) and resources (the client's types and guide, and any slate as JSON or Mermaid).
+- `slatebox-mcp`, an MCP server. **`exec`** runs a JavaScript or TypeScript script, and **`describe`** explains the typed client the script uses. Beside them it lists one typed tool per client method, such as `create_slate`, `import_mermaid`, `get_slate`, `edit_slate` and `export_mermaid`, six prompts (mind map, brainstorm, flowchart, project plan, presentation, install Slatebox) and resources (the client's types and guide, and any slate as JSON or Mermaid).
 - `slatebox`, a command that runs the same scripts from a terminal.
 
 Inside a script, the global `slatebox` is a typed client with one method for each thing your token may do, such as `slatebox.slates.get({ shareId })` and `slatebox.slates.applyOperations({ shareId, plan })`. The client is generated from the Slatebox action registry, so new Slatebox actions appear in it without a new tool.

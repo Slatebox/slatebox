@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "com.slatebox/slatebox",
   "title": "Slatebox",
-  "description": "Open-source visual intelligence platform: invite any AI via MCP to work with you and your team.",
+  "description": "Free, open-source visual intelligence for your team and agents: diagrams, mind maps, plans, slides.",
   "version": "0.4.0",
   "websiteUrl": "https://slatebox.com",
   "repository": {

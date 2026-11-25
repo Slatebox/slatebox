@@ -1391,13 +1391,13 @@ declare namespace slatebox.presence {
 }
 
 declare namespace slatebox.presentations {
-  /** Present. Create a presentation of a slate with the planner the Present button uses: the AI (feature presentation, counted like other AI use) groups the notes into steps and chooses each step's layout, kicker and caption, played on the live canvas with camera moves. Optional: a style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), a palette (3 to 6 colours) and a brief (what to focus on). Needs edit access to the slate. Each call plans a new version; mode "preview" plans and returns the steps and saves nothing. Returns the presentation id, its steps and a link that opens the slate and plays it. @scope slates:write @modes save|preview @openWorld */
+  /** Present. Create a presentation of a slate with the planner the Present button uses: the AI (feature presentation, counted like other AI use) groups the notes into steps and chooses each step's layout, kicker and caption, played on the live canvas with camera moves. Optional: a style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), a palette (3 to 6 colors) and a brief (what to focus on). Needs edit access to the slate. Each call plans a new version; mode "preview" plans and returns the steps and saves nothing. Returns the presentation id, its steps and a link that opens the slate and plays it. @scope slates:write @modes save|preview @openWorld */
   function create(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
     /** The style to play it in. Left out, the AI chooses. */
     style?: "voyage" | "stage" | "editorial" | "neon" | "sketch" | "blueprint" | "journey" | "calm";
-    /** Your own colours, with a style: the first three lead, the background stays the style's. (3–6 items) */
+    /** Your own colors, with a style: the first three lead, the background stays the style's. (3–6 items) */
     palette?: string[];
     /** What the presentation should focus on or bring out, in plain words. (1–4000 characters) */
     brief?: string;
@@ -1459,12 +1459,12 @@ declare namespace slatebox.presentations {
 }
 
 declare namespace slatebox.presentations {
-  /** Restyle. Play your latest presentation of a slate in another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), optionally with your own palette (3 to 6 colours). The same steps in the same order: no AI is asked and nothing is counted. @scope slates:write @idempotent */
+  /** Restyle. Play your latest presentation of a slate in another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), optionally with your own palette (3 to 6 colors). The same steps in the same order: no AI is asked and nothing is counted. @scope slates:write @idempotent */
   function setStyle(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
     style: "voyage" | "stage" | "editorial" | "neon" | "sketch" | "blueprint" | "journey" | "calm";
-    /** Your own colours: the first three lead, the background stays the style's. (3–6 items) */
+    /** Your own colors: the first three lead, the background stays the style's. (3–6 items) */
     palette?: string[];
   }): Promise<({
     presentationId: string;
@@ -1807,7 +1807,7 @@ declare namespace slatebox.slates {
     shareId: string;
     /** auto: a mind map that is one tree as mindmap, anything else as flowchart. (default "auto") */
     format?: "auto" | "flowchart" | "mindmap" | "gantt";
-    /** Also write each note's colours (style lines). (default false) */
+    /** Also write each note's colors (style lines). (default false) */
     styles?: boolean;
     /** A Gantt chart's first day, YYYY-MM-DD (default today). */
     start?: string;

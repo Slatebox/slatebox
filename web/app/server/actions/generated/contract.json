@@ -1144,7 +1144,7 @@
       "tool": {
         "name": "get_slate",
         "title": "Read a slate",
-        "description": "Read a slate's notes, lines, boards, comments and revision. An edit names the revision it was made on (expectedRevision).",
+        "description": "Read a slate (a diagram, mind map, plan or board): its notes, lines, boards, comments and revision. An edit names the revision it was made on (expectedRevision).",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,
@@ -1936,8 +1936,8 @@
       },
       "tool": {
         "name": "create_slate",
-        "title": "Create a flowchart or decision map",
-        "description": "Create a new private slate and return its link: a flowchart or process diagram from steps written as \"A -> B\" (kind \"diagram\"), or a decision map from a one-line question. Mind maps and project plans are drawn from Mermaid by import_mermaid.",
+        "title": "Draw a flowchart, diagram or decision map",
+        "description": "Draw a flowchart, process diagram or decision map on a new private slate (a canvas the team can edit live) and return its link: steps written as \"A -> B\" (kind \"diagram\"), or a decision map from a one-line question. Mind maps and Gantt project plans are drawn from Mermaid by import_mermaid.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": false,
@@ -7779,7 +7779,7 @@
       "tool": {
         "name": "edit_slate",
         "title": "Edit a slate",
-        "description": "Edit a slate: add, change, connect, lay out or remove notes and lines, and edit boards (cards, lanes, rules, plan weeks, budgets, presentation order; name the board on a slate with several). One call saves atomically; mode \"preview\" shows the result without saving. Your canvas edits appear live as suggestions people on the slate keep or discard.",
+        "description": "Edit a diagram, mind map, whiteboard or board on a slate: add, change, connect, lay out or remove notes and lines, and edit boards (cards, lanes, rules, plan weeks, budgets, presentation order; name the board on a slate with several). One call saves atomically; mode \"preview\" shows the result without saving. Your canvas edits appear live as suggestions people on the slate keep or discard.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": true,
@@ -7876,8 +7876,8 @@
       },
       "tool": {
         "name": "create_slate_invite",
-        "title": "Share a slate by invitation link",
-        "description": "Turn on an unlisted invitation link to a slate, or change the role it gives. Anyone holding the link gets that role.",
+        "title": "Invite people to a slate by link",
+        "description": "Turn on an unlisted invitation link to a slate so teammates can join and collaborate live, or change the role it gives. Anyone holding the link gets that role.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": false,
@@ -8045,7 +8045,7 @@
       "tool": {
         "name": "copy_slate",
         "title": "Copy a slate",
-        "description": "Make a private copy of a slate the person may edit, or of a public slate, and return the copy's id.",
+        "description": "Make a private copy of a slate the person may edit, or of a public slate (such as a template to start from), and return the copy's id.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": false,
@@ -8108,7 +8108,7 @@
           "styles": {
             "type": "boolean",
             "default": false,
-            "description": "Also write each note's colours (style lines)."
+            "description": "Also write each note's colors (style lines)."
           },
           "start": {
             "type": "string",
@@ -8190,7 +8190,7 @@
       "tool": {
         "name": "export_mermaid",
         "title": "Read a slate as Mermaid",
-        "description": "Read a slate as Mermaid text: a mind map as mindmap, a project plan as a Gantt chart, anything else as a flowchart.",
+        "description": "Read a slate as Mermaid text, to put a diagram in docs or code: a mind map as mindmap, a project plan as a Gantt chart, anything else as a flowchart.",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,
@@ -8344,8 +8344,8 @@
       },
       "tool": {
         "name": "import_mermaid",
-        "title": "Draw a mind map, flowchart or project plan",
-        "description": "Draw a mind map, flowchart or project plan (Gantt chart) written in Mermaid as editable notes and lines, on a new slate or beside what an existing slate holds. Returns the slate link.",
+        "title": "Draw a mind map, flowchart or Gantt plan from Mermaid",
+        "description": "Draw a mind map, brainstorm, flowchart or project plan (Gantt chart) written in Mermaid (flowchart/graph, mindmap or gantt) as editable notes and lines on a shared slate, new or beside what an existing slate holds. Returns the slate link, where the team edits it live and can present it.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": false,
@@ -8646,7 +8646,7 @@
       "tool": {
         "name": "describe_instance",
         "title": "Describe this instance",
-        "description": "Describe the Slatebox server these tools talk to: its name, version, what it can do and where its API is.",
+        "description": "Describe the Slatebox server these tools talk to (Slatebox Cloud or a self-hosted one): its name, version, what it can do and where its API is.",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,
@@ -8743,7 +8743,7 @@
       "tool": {
         "name": "get_account",
         "title": "Read your account",
-        "description": "Read the person's Slatebox account: name, team, what they can use and their AI drafting access.",
+        "description": "Read the person's Slatebox account: name, team, what they can use and whether the Slatebox agent can draft for them.",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,
@@ -9240,8 +9240,8 @@
       },
       "tool": {
         "name": "get_ai_settings",
-        "title": "Read your AI settings",
-        "description": "Read which AI connections the person, their team and this server have, and which one each Slatebox feature uses. Keys are never returned.",
+        "title": "Read your model settings",
+        "description": "Read which model connections the person, their team and this server have, and which one each Slatebox feature uses. Keys are never returned.",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,
@@ -9573,8 +9573,8 @@
       },
       "tool": {
         "name": "update_ai_settings",
-        "title": "Change AI connections and choices",
-        "description": "Add, change or remove the AI connections Slatebox drafts with, and choose which connection each feature uses.",
+        "title": "Change model connections and choices",
+        "description": "Add, change or remove the model connections the Slatebox agent drafts with, and choose which connection each feature uses.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": true,
@@ -9751,8 +9751,8 @@
       },
       "tool": {
         "name": "check_ai_connection",
-        "title": "Test an AI connection",
-        "description": "Test whether Slatebox can reach an AI connection (a provider key, or an OpenAI-compatible endpoint) before it is used for drafting.",
+        "title": "Test a model connection",
+        "description": "Test whether Slatebox can reach a model connection (a provider key, or an OpenAI-compatible endpoint) before the Slatebox agent drafts with it.",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,
@@ -12057,7 +12057,7 @@
       "tool": {
         "name": "show_plan",
         "title": "Show your plan to people on the slate",
-        "description": "Show the people on a slate a short checklist (1 to 8 steps) of what you are about to do, beside your name on the canvas.",
+        "description": "Show the people on a shared slate a short checklist (1 to 8 steps) of what you are about to do, beside your name on the live canvas.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": false,
@@ -12273,8 +12273,8 @@
       },
       "tool": {
         "name": "list_components",
-        "title": "List boards and starters",
-        "description": "List the boards and starters a person can add to a slate (such as pipeline, budget, hiring plan, launch plan and release plan boards), with what each one is for. A slate holds up to 8 boards side by side.",
+        "title": "List boards: retro, pipeline, budget and more",
+        "description": "List the boards and starters a person can add to a slate, such as a retro, pros and cons, now / next / later, impact × effort, decision path, triage, team board, launch plan, hiring plan, sales pipeline, budget and incident review, with what each one is for. A slate holds up to 8 boards side by side.",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,
@@ -12351,7 +12351,7 @@
       "tool": {
         "name": "get_component",
         "title": "Read a board or starter",
-        "description": "Read one board or starter from the library in full, by the id list_components gives.",
+        "description": "Read one board or starter in full (such as the retro, sales pipeline or budget board): its lanes, rules and the edits it takes, by the id list_components gives.",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,
@@ -12460,7 +12460,7 @@
       "tool": {
         "name": "check_board_move",
         "title": "Check a move on a board",
-        "description": "Check whether a card may move to a lane on a slate's board (pipeline, budget, hiring plan and others), without moving it, and why not. On a slate with several boards, name the board.",
+        "description": "Check whether a card may move to a lane on a slate's board (retro, pipeline, budget, hiring plan and others), without moving it, and why not. On a slate with several boards, name the board.",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,
@@ -14010,7 +14010,7 @@
     {
       "id": "presentations.create",
       "title": "Present",
-      "description": "Create a presentation of a slate with the planner the Present button uses: the AI (feature presentation, counted like other AI use) groups the notes into steps and chooses each step's layout, kicker and caption, played on the live canvas with camera moves. Optional: a style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), a palette (3 to 6 colours) and a brief (what to focus on). Needs edit access to the slate. Each call plans a new version; mode \"preview\" plans and returns the steps and saves nothing. Returns the presentation id, its steps and a link that opens the slate and plays it.",
+      "description": "Create a presentation of a slate with the planner the Present button uses: the AI (feature presentation, counted like other AI use) groups the notes into steps and chooses each step's layout, kicker and caption, played on the live canvas with camera moves. Optional: a style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), a palette (3 to 6 colors) and a brief (what to focus on). Needs edit access to the slate. Each call plans a new version; mode \"preview\" plans and returns the steps and saves nothing. Returns the presentation id, its steps and a link that opens the slate and plays it.",
       "action": "presentations.create",
       "toolset": "slates",
       "readOnly": false,
@@ -14073,7 +14073,7 @@
               "type": "string",
               "pattern": "^#[0-9a-fA-F]{6}$"
             },
-            "description": "Your own colours, with a style: the first three lead, the background stays the style's."
+            "description": "Your own colors, with a style: the first three lead, the background stays the style's."
           },
           "brief": {
             "type": "string",
@@ -14214,7 +14214,7 @@
       "tool": {
         "name": "create_presentation",
         "title": "Create a presentation",
-        "description": "Create a presentation of a slate: the AI plans its steps, layouts and captions. Returns the steps and a link that plays it.",
+        "description": "Turn a slate into slides: the Slatebox agent plans a styled presentation (its steps, layouts and captions) that flies across the canvas. Returns the steps and a link that plays it.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": false,
@@ -14359,7 +14359,7 @@
       "tool": {
         "name": "get_presentation",
         "title": "Read a presentation",
-        "description": "Read a slate's presentation: its style and each step's layout and caption.",
+        "description": "Read a slate's presentation (its slides): its style and each step's layout and caption.",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,
@@ -14371,7 +14371,7 @@
     {
       "id": "presentations.setStyle",
       "title": "Restyle",
-      "description": "Play your latest presentation of a slate in another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), optionally with your own palette (3 to 6 colours). The same steps in the same order: no AI is asked and nothing is counted.",
+      "description": "Play your latest presentation of a slate in another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), optionally with your own palette (3 to 6 colors). The same steps in the same order: no AI is asked and nothing is counted.",
       "action": "presentations.setStyle",
       "toolset": "slates",
       "readOnly": false,
@@ -14431,7 +14431,7 @@
               "type": "string",
               "pattern": "^#[0-9a-fA-F]{6}$"
             },
-            "description": "Your own colours: the first three lead, the background stays the style's."
+            "description": "Your own colors: the first three lead, the background stays the style's."
           }
         },
         "required": [
@@ -14535,7 +14535,7 @@
       "tool": {
         "name": "style_presentation",
         "title": "Restyle a presentation",
-        "description": "Switch a slate's presentation to another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), keeping its steps.",
+        "description": "Switch a slate's presentation (its slides) to another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), keeping its steps.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": false,
@@ -14656,7 +14656,7 @@
       "tool": {
         "name": "list_slates",
         "title": "List your slates",
-        "description": "List the person's slates, or their team's, newest first, with each one's link. Filter by name.",
+        "description": "List the person's slates (diagrams, mind maps, plans, boards), or their team's, newest first, with each one's link. Filter by name.",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,
@@ -14842,7 +14842,7 @@
       "tool": {
         "name": "list_comments",
         "title": "Read comments",
-        "description": "Read the comments people left on a slate's notes, or on one note.",
+        "description": "Read the comments people left on a slate's notes, or on one note: the team's feedback on a diagram, plan or board.",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,
@@ -14960,7 +14960,7 @@
       "tool": {
         "name": "add_comment",
         "title": "Comment on a note",
-        "description": "Leave a comment on a note of a slate, under the person's name.",
+        "description": "Leave a comment on a note of a shared slate, under the person's name, where the team sees it live.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": false,
@@ -15303,7 +15303,7 @@
       "tool": {
         "name": "list_agent_tasks",
         "title": "List agent tasks on a slate",
-        "description": "See the tasks people and agents asked agents to do on a slate: open ones to claim, who is on each, what waits for a person, and each task's shared log.",
+        "description": "See the tasks people and agents asked agents to do on a shared slate: open ones to claim, who is on each, what waits for a person, and each task's shared log.",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,
@@ -15508,8 +15508,8 @@
       },
       "tool": {
         "name": "ask_agent",
-        "title": "Ask an agent to do something on a slate",
-        "description": "Give the Slatebox agent (or any agent) a task on a slate. It works visibly and holds removals for a person.",
+        "title": "Ask an agent to work on a slate",
+        "description": "Give the Slatebox agent, or any connected agent, a task on a shared slate, such as tidying a brainstorm or drafting a plan. It works visibly on the live canvas beside the team and holds removals for a person.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": false,
@@ -15878,7 +15878,7 @@
       "tool": {
         "name": "decide_suggestions",
         "title": "Keep, discard or undo agent work",
-        "description": "Keep (save) or discard what an agent suggested on a slate (one action or some of its items), or undo one agent action that was kept or saved directly.",
+        "description": "Keep (save) or discard what an agent suggested on a shared slate (one action or some of its items), or undo one agent action that was kept or saved directly.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": true,
@@ -17323,7 +17323,7 @@
       "tool": {
         "name": "use_library_item",
         "title": "Use a library item",
-        "description": "Copy a slate or presentation from the shared library into a new private slate, or add a smart component to a new slate or beside the boards of one you can edit.",
+        "description": "Copy a slate or presentation from the shared library into a new private slate, or add a smart component (a board with rules, such as a retro) to a new slate or beside the boards of one you can edit.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": false,
@@ -18382,8 +18382,8 @@
       },
       "tool": {
         "name": "list_library",
-        "title": "Browse the library",
-        "description": "Browse the shared Slatebox library: smart components (boards with rules, built in or made by people), slates and presentations anyone can copy, by kind, category or words.",
+        "title": "Browse the library of boards, slates and decks",
+        "description": "Browse the shared Slatebox library: smart components (boards with rules, such as retro, planning and pipeline boards, built in or made by people), and slates and presentations anyone can copy, by kind, category or words.",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,

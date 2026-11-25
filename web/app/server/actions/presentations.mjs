@@ -83,7 +83,7 @@ export const presentationsCreate = defineAction({
   id: 'presentations.create',
   title: 'Present',
   description:
-    `Create a presentation of a slate with the planner the Present button uses: the AI (feature presentation, counted like other AI use) groups the notes into steps and chooses each step's layout, kicker and caption, played on the live canvas with camera moves. Optional: a style (${STYLE_IDS.join(', ')}), a palette (3 to 6 colours) and a brief (what to focus on). Needs edit access to the slate. Each call plans a new version; mode "preview" plans and returns the steps and saves nothing. Returns the presentation id, its steps and a link that opens the slate and plays it.`,
+    `Create a presentation of a slate with the planner the Present button uses: the AI (feature presentation, counted like other AI use) groups the notes into steps and chooses each step's layout, kicker and caption, played on the live canvas with camera moves. Optional: a style (${STYLE_IDS.join(', ')}), a palette (3 to 6 colors) and a brief (what to focus on). Needs edit access to the slate. Each call plans a new version; mode "preview" plans and returns the steps and saves nothing. Returns the presentation id, its steps and a link that opens the slate and plays it.`,
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:write',
@@ -102,7 +102,7 @@ export const presentationsCreate = defineAction({
     properties: {
       shareId: shareIdInput,
       style: { type: 'string', enum: STYLE_IDS, description: 'The style to play it in. Left out, the AI chooses.' },
-      palette: { type: 'array', minItems: 3, maxItems: 6, items: hex, description: 'Your own colours, with a style: the first three lead, the background stays the style\'s.' },
+      palette: { type: 'array', minItems: 3, maxItems: 6, items: hex, description: 'Your own colors, with a style: the first three lead, the background stays the style\'s.' },
       brief: { type: 'string', minLength: 1, maxLength: MAX_REFINEMENT_CHARS, description: 'What the presentation should focus on or bring out, in plain words.' },
     },
     required: ['shareId'],
@@ -110,7 +110,7 @@ export const presentationsCreate = defineAction({
   },
   output: createOutput,
   load: loadSlate(true),
-  tool: { name: 'create_presentation', title: 'Create a presentation', description: 'Create a presentation of a slate: the AI plans its steps, layouts and captions. Returns the steps and a link that plays it.' },
+  tool: { name: 'create_presentation', title: 'Create a presentation', description: 'Turn a slate into slides: the Slatebox agent plans a styled presentation (its steps, layouts and captions) that flies across the canvas. Returns the steps and a link that plays it.' },
   precheck(_principal, input) {
     if (input.palette && !input.style) throw problem(400, 'invalid_request', 'A palette goes with a style: name the style too.', { details: { field: 'palette' } })
   },
@@ -155,7 +155,7 @@ export const presentationsGet = defineAction({
   input: { type: 'object', properties: { shareId: shareIdInput }, required: ['shareId'], additionalProperties: false },
   output: deckOutput,
   load: loadSlate(false),
-  tool: { name: 'get_presentation', title: 'Read a presentation', description: 'Read a slate\'s presentation: its style and each step\'s layout and caption.' },
+  tool: { name: 'get_presentation', title: 'Read a presentation', description: 'Read a slate\'s presentation (its slides): its style and each step\'s layout and caption.' },
   async handler(principal, input, { deps }) {
     return deckSummary(await deckOf(deps, input.shareId, principal))
   },
@@ -165,7 +165,7 @@ export const presentationsSetStyle = defineAction({
   id: 'presentations.setStyle',
   title: 'Restyle',
   description:
-    `Play your latest presentation of a slate in another style (${STYLE_IDS.join(', ')}), optionally with your own palette (3 to 6 colours). The same steps in the same order: no AI is asked and nothing is counted.`,
+    `Play your latest presentation of a slate in another style (${STYLE_IDS.join(', ')}), optionally with your own palette (3 to 6 colors). The same steps in the same order: no AI is asked and nothing is counted.`,
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:write',
@@ -180,14 +180,14 @@ export const presentationsSetStyle = defineAction({
     properties: {
       shareId: shareIdInput,
       style: { type: 'string', enum: STYLE_IDS },
-      palette: { type: 'array', minItems: 3, maxItems: 6, items: hex, description: 'Your own colours: the first three lead, the background stays the style\'s.' },
+      palette: { type: 'array', minItems: 3, maxItems: 6, items: hex, description: 'Your own colors: the first three lead, the background stays the style\'s.' },
     },
     required: ['shareId', 'style'],
     additionalProperties: false,
   },
   output: deckOutput,
   load: loadSlate(true),
-  tool: { name: 'style_presentation', title: 'Restyle a presentation', description: 'Switch a slate\'s presentation to another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), keeping its steps.' },
+  tool: { name: 'style_presentation', title: 'Restyle a presentation', description: 'Switch a slate\'s presentation (its slides) to another style (voyage, stage, editorial, neon, sketch, blueprint, journey, calm), keeping its steps.' },
   async handler(principal, input, { deps }) {
     const row = await deckOf(deps, input.shareId, principal)
     const overrides = input.palette ? { palette: input.palette } : {}

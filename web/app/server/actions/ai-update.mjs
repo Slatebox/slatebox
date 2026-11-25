@@ -14,7 +14,7 @@ export default defineAction({
   alsoScopes: ['ai:admin'],
   principals: ['person', 'agent'],
   mounts: { ddp: true, http: { method: 'PUT', path: '/ai', operationId: 'updateAISettings' } },
-  tool: { name: 'update_ai_settings', title: 'Change AI connections and choices', description: 'Add, change or remove the AI connections Slatebox drafts with, and choose which connection each feature uses.' },
+  tool: { name: 'update_ai_settings', title: 'Change model connections and choices', description: 'Add, change or remove the model connections the Slatebox agent drafts with, and choose which connection each feature uses.' },
   confirm: true,
   // It can remove connections and overwrite a saved key. Every change is held (confirm); the
   // person is told it removes something when it names connections to remove.

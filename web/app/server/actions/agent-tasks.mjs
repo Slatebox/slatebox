@@ -89,7 +89,7 @@ export const agentTasksList = defineAction({
   },
   output: { type: 'object', properties: { shareId: { type: 'string' }, tasks: { type: 'array', items: taskOutput } }, required: ['shareId', 'tasks'] },
   load: loadFor(true),
-  tool: { name: 'list_agent_tasks', title: 'List agent tasks on a slate', description: 'See the tasks people and agents asked agents to do on a slate: open ones to claim, who is on each, what waits for a person, and each task\'s shared log.' },
+  tool: { name: 'list_agent_tasks', title: 'List agent tasks on a slate', description: 'See the tasks people and agents asked agents to do on a shared slate: open ones to claim, who is on each, what waits for a person, and each task\'s shared log.' },
   async handler(principal, input, { deps, resource: slate }) {
     const { store } = tasksOf(deps)
     const actor = { key: principal.kind === 'agent' ? 'token:' + principal.tokenId : 'user:' + principal.userId }
@@ -125,7 +125,7 @@ export const agentTasksCreate = defineAction({
   output: oneTask,
   load: loadFor(true),
   failure: { code: 'agent_task_failed', message: 'The task could not be created. Retry with the same key.' },
-  tool: { name: 'ask_agent', title: 'Ask an agent to do something on a slate', description: 'Give the Slatebox agent (or any agent) a task on a slate. It works visibly and holds removals for a person.' },
+  tool: { name: 'ask_agent', title: 'Ask an agent to work on a slate', description: 'Give the Slatebox agent, or any connected agent, a task on a shared slate, such as tidying a brainstorm or drafting a plan. It works visibly on the live canvas beside the team and holds removals for a person.' },
   async handler(principal, input, { deps, mode, resource: slate }) {
     const tasks = tasksOf(deps)
     const actor = await actorOf(principal, deps, slate)

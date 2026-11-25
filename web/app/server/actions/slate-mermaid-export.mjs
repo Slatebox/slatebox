@@ -32,7 +32,7 @@ export default defineAction({
         default: 'auto',
         description: 'auto: a mind map that is one tree as mindmap, anything else as flowchart.',
       },
-      styles: { type: 'boolean', default: false, description: 'Also write each note\'s colours (style lines).' },
+      styles: { type: 'boolean', default: false, description: 'Also write each note\'s colors (style lines).' },
       start: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'A Gantt chart\'s first day, YYYY-MM-DD (default today).' },
     },
     required: ['shareId'],
@@ -57,7 +57,7 @@ export default defineAction({
     required: ['shareId', 'revision', 'format', 'mermaid', 'markdown'],
   },
   load: loadSlate(false),
-  tool: { name: 'export_mermaid', title: 'Read a slate as Mermaid', description: 'Read a slate as Mermaid text: a mind map as mindmap, a project plan as a Gantt chart, anything else as a flowchart.' },
+  tool: { name: 'export_mermaid', title: 'Read a slate as Mermaid', description: 'Read a slate as Mermaid text, to put a diagram in docs or code: a mind map as mindmap, a project plan as a Gantt chart, anything else as a flowchart.' },
   handler(_principal, input, { deps, resource: slate }) {
     let out
     try {

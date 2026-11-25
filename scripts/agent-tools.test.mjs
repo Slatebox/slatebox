@@ -180,8 +180,8 @@ test("the one option: typed tools are listed unless SLATEBOX_MCP_TYPED_TOOLS is 
     assert.ok(["name", "title", "description", "inputSchema", "outputSchema", "annotations"].includes(key), `${tool.name}.${key}`);
 });
 
-test("prompts: mind map, flowchart, project plan and presentation, filled from their arguments", () => {
-  assert.deepEqual(PROMPTS.map((p) => p.name), ["mind_map", "flowchart", "project_plan", "presentation", "install_slatebox"]);
+test("prompts: mind map, flowchart, project plan, presentation and brainstorm, filled from their arguments", () => {
+  assert.deepEqual(PROMPTS.map((p) => p.name), ["mind_map", "flowchart", "project_plan", "presentation", "brainstorm", "install_slatebox"]);
   const mind = promptMessages(PROMPTS[0], { topic: "Q1 launch ideas" });
   assert.equal(mind.messages.length, 1);
   assert.equal(mind.messages[0].role, "user");
@@ -191,6 +191,9 @@ test("prompts: mind map, flowchart, project plan and presentation, filled from t
   assert.match(promptMessages(PROMPTS[2], { project: "x", weeks: "6 weeks" }).messages[0].content.text, /for x, over 6 weeks/);
   assert.match(promptMessages(PROMPTS[3], { topic: "our roadmap" }).messages[0].content.text, /choose Present/);
   assert.throws(() => promptMessages(PROMPTS[1], {}), /needs process/);
+  const ideas = promptMessages(PROMPTS[4], { topic: "how to cut onboarding time" }).messages[0].content.text;
+  assert.match(ideas, /Brainstorm ideas about how to cut onboarding time .*Mermaid mindmap.*import_mermaid.*create_slate_invite \(role "edit"/);
+  assert.throws(() => promptMessages(PROMPTS[4], {}), /needs topic/);
   for (const p of PROMPTS) assert.doesNotMatch(JSON.stringify(promptMessages(p, { topic: "t", process: "a", project: "p" })), /\{\w+\}/);
 });
 

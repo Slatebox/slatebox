@@ -145,7 +145,7 @@ test("the exec description stays within 3,500 characters and sends the rest to d
   const text = execDescription(many);
   assert.ok(text.length <= DESCRIPTION_BUDGET);
   assert.match(text, /\nand \d+ more in describe$/);
-  assert.deepEqual(Object.keys(tool), ["instructions", "instructionsExecOnly", "exec", "describe", "typed", "prompts", "resources", "resourceTemplates"]);
+  assert.deepEqual(Object.keys(tool), ["server", "instructions", "instructionsExecOnly", "exec", "describe", "typed", "prompts", "resources", "resourceTemplates"]);
   assert.deepEqual(tool.exec.inputSchema.required, ["intent", "code"]);
   assert.deepEqual(Object.keys(tool.exec.inputSchema.properties), ["intent", "code", "mode", "confirm", "idempotencyKey"]);
   assert.deepEqual(tool.exec.annotations, { title: tool.exec.title, readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });

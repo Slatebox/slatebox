@@ -17,6 +17,7 @@ import {
   EXEC_TITLE,
   MCP_INSTRUCTIONS,
   MCP_INSTRUCTIONS_EXEC_ONLY,
+  MCP_SERVER_INFO,
   PROMPTS,
   RESOURCES,
   RESOURCE_TEMPLATES,
@@ -487,6 +488,7 @@ export { MCP_INSTRUCTIONS }
 // method (each with the method it calls), served unless SLATEBOX_MCP_TYPED_TOOLS is off.
 export function renderExecTool(manifest) {
   return {
+    server: { ...MCP_SERVER_INFO },
     instructions: MCP_INSTRUCTIONS,
     instructionsExecOnly: MCP_INSTRUCTIONS_EXEC_ONLY,
     exec: {

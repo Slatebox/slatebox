@@ -53,6 +53,11 @@ test("tools/list is exec and describe, byte-equal to the generated file, then on
   const generated = JSON.parse(await readFile(new URL("../web/app/server/actions/generated/exec-tool.json", import.meta.url), "utf8"));
   assert.equal(client.getInstructions(), generated.instructions);
   assert.match(client.getInstructions(), /mind maps, flowcharts/);
+  // initialize names the server with the generated words: title, description and website.
+  const info = client.getServerVersion();
+  assert.equal(info.name, "slatebox");
+  assert.deepEqual({ title: info.title, description: info.description, websiteUrl: info.websiteUrl }, generated.server);
+  assert.match(info.description, /diagrams, mind maps, flowcharts, whiteboards/);
   const listed = await client.listTools();
   assert.deepEqual(listed.tools.map((tool) => tool.name).slice(0, 2), ["exec", "describe"]);
   assert.equal(JSON.stringify(listed.tools.slice(0, 2)), JSON.stringify([generated.exec, generated.describe]));
@@ -248,15 +253,15 @@ test("the AI tools' hints say what they do: a change that can remove is destruct
   const { connect } = await setup(t);
   const client = await connect();
   const byName = new Map((await client.listTools()).tools.map((tool) => [tool.name, tool.annotations]));
-  assert.deepEqual(byName.get("update_ai_settings"), { title: "Change AI connections and choices", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
-  assert.deepEqual(byName.get("check_ai_connection"), { title: "Test an AI connection", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true });
+  assert.deepEqual(byName.get("update_ai_settings"), { title: "Change model connections and choices", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
+  assert.deepEqual(byName.get("check_ai_connection"), { title: "Test a model connection", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true });
 });
 
 test("prompts list and fill; resources give the client docs and a slate as JSON or Mermaid", async (t) => {
   const { world, connect } = await setup(t);
   const client = await connect();
   const { prompts } = await client.listPrompts();
-  assert.deepEqual(prompts.map((p) => p.name), ["mind_map", "flowchart", "project_plan", "presentation", "install_slatebox"]);
+  assert.deepEqual(prompts.map((p) => p.name), ["mind_map", "flowchart", "project_plan", "presentation", "brainstorm", "install_slatebox"]);
   const filled = await client.getPrompt({ name: "mind_map", arguments: { topic: "launch ideas" } });
   assert.match(filled.messages[0].content.text, /mind map of launch ideas/);
   await assert.rejects(() => client.getPrompt({ name: "mind_map", arguments: {} }), /needs topic/);

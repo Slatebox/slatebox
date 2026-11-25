@@ -124,7 +124,7 @@ export function createMcpHandler({
       if (needed) state.missingScope = needed
     }
     const server = new Server(
-      { name: 'slatebox', title: 'Slatebox', version },
+      { name: 'slatebox', title: 'Slatebox', ...tools.server, version },
       {
         capabilities: { tools: {}, ...(withPrompts && { prompts: {} }), ...(withResources && { resources: {} }) },
         instructions: typedTools ? tools.instructions : tools.instructionsExecOnly,

@@ -58,7 +58,7 @@ export function createSlateboxMcpServer({ exec, generated = defaultGenerated(), 
   const spec = generated.tools;
   const instructions = typedTools ? spec.instructions : spec.instructionsExecOnly ?? spec.instructions;
   const server = new Server(
-    { name: "slatebox", version },
+    { name: "slatebox", ...(spec.server ?? {}), version },
     { capabilities: { tools: {}, prompts: {}, resources: {} }, ...(instructions ? { instructions } : {}) },
   );
   const tools = toolDefinitions(generated, { typed: typedTools });

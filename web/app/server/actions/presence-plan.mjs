@@ -36,7 +36,7 @@ export default defineAction({
   output: planOutput,
   load: loadSlate(true),
   failure: { code: 'presence_failed', message: 'The plan could not be shown. Retry with the same key.' },
-  tool: { name: 'show_plan', title: 'Show your plan to people on the slate', description: 'Show the people on a slate a short checklist (1 to 8 steps) of what you are about to do, beside your name on the canvas.' },
+  tool: { name: 'show_plan', title: 'Show your plan to people on the slate', description: 'Show the people on a shared slate a short checklist (1 to 8 steps) of what you are about to do, beside your name on the live canvas.' },
   async handler(principal, input, { deps, mode, resource: slate }) {
     if (mode === 'preview')
       return {

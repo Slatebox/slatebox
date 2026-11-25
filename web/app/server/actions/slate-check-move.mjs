@@ -46,6 +46,6 @@ export default defineAction({
     required: ['shareId', 'card'], additionalProperties: false },
   output: { type: 'object', properties: { revision: { type: 'integer' }, rev: { type: 'integer' }, ok: { type: 'boolean' }, warnings: { type: 'array', items: { type: 'string' } }, refused: { type: 'object' } }, required: ['revision', 'rev'] },
   load: loadSlate(false),
-  tool: { name: 'check_board_move', title: 'Check a move on a board', description: 'Check whether a card may move to a lane on a slate\'s board (pipeline, budget, hiring plan and others), without moving it, and why not. On a slate with several boards, name the board.' },
+  tool: { name: 'check_board_move', title: 'Check a move on a board', description: 'Check whether a card may move to a lane on a slate\'s board (retro, pipeline, budget, hiring plan and others), without moving it, and why not. On a slate with several boards, name the board.' },
   handler: (_principal, input, { resource: slate }) => checkMove(slate, input),
 })

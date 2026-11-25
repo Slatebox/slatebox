@@ -83,7 +83,7 @@ export const libraryList = defineAction({
     limit: { type: 'integer', minimum: 1, maximum: 48 },
   }),
   output: { type: 'object', properties: { items: { type: 'array', items: itemSummary }, next: { type: 'string' }, total: { type: 'integer' } }, required: ['items', 'total'] },
-  tool: { name: 'list_library', title: 'Browse the library', description: 'Browse the shared Slatebox library: smart components (boards with rules, built in or made by people), slates and presentations anyone can copy, by kind, category or words.' },
+  tool: { name: 'list_library', title: 'Browse the library of boards, slates and decks', description: 'Browse the shared Slatebox library: smart components (boards with rules, such as retro, planning and pipeline boards, built in or made by people), and slates and presentations anyone can copy, by kind, category or words.' },
   handler: (principal, input, { deps }) => deps.library.list(principal, input),
 })
 
