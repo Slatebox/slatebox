@@ -313,8 +313,6 @@ const CONSTANTS = {
       scale: 'slates.scale',
       translate: 'slates.translate',
       remove: 'slates.remove',
-      searchBackgroundImages: 'slates.searchBackgroundImages',
-      cacheImage: 'slates.cacheImage',
       createSnapshot: 'slates.createSnapshot',
       getSnapshots: 'slates.getSnapshots',
     },

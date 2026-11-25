@@ -9,7 +9,7 @@ import { cleanStyleRef, resolveStyle } from '../../imports/ui/components/present
 import { ogCardMeasure, ogCardText } from './presentationCard.mjs'
 import { artImage } from '../../imports/ui/components/presentations/presentationArt.mjs'
 import { MASKS, swoosh } from '../../imports/ui/components/presentations/presentationPaths.mjs'
-import { takeOffStyle, wearStyle } from '../../imports/ui/components/presentations/presentationBake.mjs'
+import { ownNotesOf, wearStyle } from '../../imports/ui/components/presentations/presentationBake.mjs'
 import { layoutOfNodes } from '../../imports/api/common/slate-layout-core.mjs'
 
 /** How long a deck's pictures may take to find, all of them together. */
@@ -303,10 +303,11 @@ export function wearDeckOnSlate(slateDoc, row, styleRef, { remix = true } = {}) 
   if (!row?.direction?.steps || !Array.isArray(slateDoc?.nodes) || !slateDoc.nodes.length) return null
   const style = cleanStyleRef(styleRef)
   const name = slateDoc.options?.name || row.name || ''
-  const { layout } = layoutOfNodes(takeOffStyle(slateDoc).nodes || [])
+  const { layout } = layoutOfNodes(ownNotesOf(slateDoc))
   if (!layout.nodes.length) return null
   const direction = remix ? remixDirection(row.direction, layout, style, { name }) : { ...row.direction, style }
-  const worn = wearStyle(slateDoc, style, { direction, name })
+  // The deck the slate played before, kept with the slate's original the first time it wears a style.
+  const worn = wearStyle(slateDoc, style, { direction, name, presentation: { style: row.style ?? null, direction: row.direction ?? null, deck: row.deck ?? null } })
   return {
     slate: worn.slate,
     deck: worn.deck,
@@ -320,12 +321,13 @@ export function wearDeckOnSlate(slateDoc, row, styleRef, { remix = true } = {}) 
   }
 }
 
-/** The slate fields a worn style writes (what the save core stores). */
+/** The slate fields a worn style writes (what the save core stores), its original to go back to included. */
 export const wornSlateSet = (slate) => ({
   nodes: slate.nodes,
   'options.containerStyle': slate.options.containerStyle,
   'options.style': slate.options.style,
   'options.defaultLineColor': slate.options.defaultLineColor ?? null,
+  'options.styleOriginal': slate.options.styleOriginal ?? null,
 })
 
 const esc = (text) => String(text || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))

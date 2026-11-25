@@ -5,9 +5,7 @@
 import { Random } from 'meteor/random'
 import { Meteor } from 'meteor/meteor'
 import { check, Match } from 'meteor/check'
-import { fetchPublicImage } from '../common/safe-fetch.mjs'
 import { SVGPathData } from 'svg-pathdata'
-import fetch from 'node-fetch'
 import stringSimilarity from 'string-similarity'
 
 import slateFilter from '../../imports/api/common/slateFilter'
@@ -20,8 +18,6 @@ import {
   Comments,
   Messages,
   GuestViews,
-  CachedImages,
-  CachedImageTiming,
   SlateSnapshots,
   SlatePresentations,
 } from '../../imports/api/common/models'
@@ -233,122 +229,6 @@ method[CONSTANTS.methods.slates.generateShareId] = async () => {
   const user = await Meteor.userAsync()
   if (user) {
     return attempt()
-  }
-  return null
-}
-
-// A background image from the image search is kept so the canvas can load it from this app.
-// Only an https image from a public address, within the size cap, is fetched (safe-fetch.js).
-method[CONSTANTS.methods.slates.cacheImage] = async (opts) => {
-  check(opts, Match.ObjectIncluding({ url: String }))
-  const user = await Meteor.userAsync()
-  if (user) {
-    const exists = await CachedImages.findOneAsync({ url: opts.url }, { fields: { _id: 1, bytes: 1, contentType: 1 } })
-    if (!exists?.bytes) {
-      const image = await fetchPublicImage(opts.url).catch((error) => {
-        throw new Meteor.Error('image-unavailable', error.message)
-      })
-      await CachedImages.upsertAsync(
-        { url: opts.url },
-        { $set: { bytes: image.bytes, contentType: image.contentType } }
-      )
-    }
-    return `${Meteor.settings.public.baseUrl}/sbimages/${encodeURIComponent(opts.url)}`
-  }
-  return null
-}
-
-method[CONSTANTS.methods.slates.searchBackgroundImages] = async (opts) => {
-  check(opts, Match.ObjectIncluding({ provider: String, filter: String }))
-  const user = await Meteor.userAsync()
-  if (user && opts.filter.length <= 200) {
-    const getCache = await CachedImageTiming.findOneAsync({
-      provider: opts.provider,
-      filter: opts.filter,
-    })
-    if (!getCache) {
-      await CachedImageTiming.insertAsync({
-        provider: opts.provider,
-        filter: opts.filter,
-        lastSearched: new Date().valueOf(),
-      })
-    }
-    const lastTime = getCache?.lastSearched || -1
-    let res = []
-    if (new Date().valueOf() > lastTime + 1000 * 60 * 60 * 24) {
-      await CachedImageTiming.upsertAsync(
-        {
-          provider: opts.provider,
-          filter: opts.filter,
-        },
-        {
-          $set: {
-            lastSearched: new Date().valueOf(),
-          },
-        }
-      )
-      switch (opts.provider) {
-        case 'pixabay': {
-          const url = `https://pixabay.com/api?key=${encodeURIComponent(Meteor.settings.public.pixabayAPIKey)}&category=backgrounds&safesearch=true&q=${encodeURIComponent(opts.filter)}&per_page=50`
-          const response = await fetch(url)
-          const data = await response.json()
-          for (const d of data.hits) {
-            const r = {
-              url: d.largeImageURL,
-              previewUrl: d.previewURL,
-              created: new Date().valueOf(),
-              provider: opts.provider,
-              filter: opts.filter,
-              size: 'cover',
-              attribution: {
-                title: d.tags,
-                author: d.user,
-                authorUrl: d.userImageURL,
-              },
-            }
-            await CachedImages.insertAsync(r)
-            res.push(r)
-          }
-          break
-        }
-        default:
-          break
-      }
-    } else {
-      // retrieve and translate the image url
-      res = await CachedImages.find(
-        { provider: opts.provider, filter: opts.filter },
-        { fields: { bytes: 0 } }
-      ).fetchAsync()
-    }
-
-    return res
-    // [
-    //   {
-    //     id: 2539322,
-    //     pageURL: 'https://pixabay.com/photos/blurred-background-united-sa-la-2539322/',
-    //     type: 'photo',
-    //     tags: 'blurred background, united sa la, focus',
-    //     previewURL: 'https://cdn.pixabay.com/photo/2017/07/25/19/44/blurred-background-2539322_150.jpg',
-    //     previewWidth: 150,
-    //     previewHeight: 99,
-    //     webformatURL: 'https://pixabay.com/get/g3ea0f8c0e1f64b12888229d92058075f0c43ca4910a942451c8e746f549da99b4d9c395bf56511a24633f9b47df360a8aa36c3d03508f182f61f5ec0804ba31c_640.jpg',
-    //     webformatWidth: 640,
-    //     webformatHeight: 426,
-    //     largeImageURL: 'https://pixabay.com/get/g88bf9cf9cf0b491554f8ced8a0cf1bec843f027993f4617263d89607fb02a2c7a2dcdb7e23d906d0952583d2018ec49ed661047eb12db19b01b8b2a4694bff74_1280.jpg',
-    //     imageWidth: 6000,
-    //     imageHeight: 4000,
-    //     imageSize: 3726887,
-    //     views: 477,
-    //     downloads: 156,
-    //     collections: 1,
-    //     likes: 4,
-    //     comments: 1,
-    //     user_id: 4926886,
-    //     user: 'tranhao',
-    //     userImageURL: 'https://cdn.pixabay.com/user/2017/07/29/17-29-20-270_250x250.jpg'
-    //   }
-    // ]
   }
   return null
 }

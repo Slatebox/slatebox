@@ -35,6 +35,8 @@ export function showcaseContent(entry) {
   const style = cleanStyleRef(entry.look?.style)
   const worn = wearStyle(plain, style, { direction: entry.look?.direction, name: entry.title })
   const slate = worn.slate
+  // A library copy's original is the slate as copied (styled), never the seed before it was styled.
+  delete slate.options.styleOriginal
   const deck = {
     name: entry.title,
     description: entry.summary,

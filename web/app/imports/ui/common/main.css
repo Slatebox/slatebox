@@ -117,6 +117,10 @@ input[type='range']:active::-moz-range-thumb {
 .sb-board-name{display:flex;align-items:center;gap:10px;min-width:120px;flex:1 1 auto}
 .sb-board-title{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:100%;padding:4px 8px;border-radius:8px;color:inherit;text-align:left}
 .sb-board-title>div{min-width:0}
+/* The cog beside the name: the slate menu, found without knowing the name is a button. Never squeezed out. */
+.sb-board-cog-wrap{display:inline-flex;flex:none;margin-left:-6px}
+.sb-board-cog{color:var(--sb-ink2,inherit)!important}
+.sb-board-cog:hover,.sb-board-cog[aria-expanded=true]{background:var(--sb-offset)!important;color:inherit!important}
 .sb-board-title:hover,.sb-board-title[aria-expanded=true]{background:var(--sb-offset)}
 .sb-board-toolbar .Mui-focusVisible{outline:2px solid #f2cf87;outline-offset:2px}
 .sb-board-name strong{display:block;max-width:100%;font:700 clamp(17px,1.6vw,23px)/1.2 "Archivo Narrow",Arial,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

@@ -10,17 +10,13 @@ import Typography from '@mui/material/Typography'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { useAtom } from 'jotai'
 import SlateSettings from './slate/SlateSettings'
-import SlateColors from './slate/SlateColors'
-import SlateBackgrounds from './slate/SlateBackgrounds'
 import SlateStyle from './slate/SlateStyle'
-import GenerateNodeColors from './slate/GenerateNodeColors'
 import slateProps from '../propTypes/slateProps'
 import {
   whichSlatePanelIsExpanded,
   registrationDetails,
   isSlateDrawerOpen,
 } from '../jotai/atoms'
-import SlateLayout from './slate/SlateLayout'
 
 /**
  * The slate's settings: a panel beside the canvas under the header (under it on a narrow screen),
@@ -33,12 +29,7 @@ export default function SlateDrawer({
   slate,
   updateSlate,
 }) {
-  // const expanded =
-  //   useSelector((state) => state.whichSlatePanelIsExpanded) || 'settingsPanel'
   const [slateDrawerIsOpen, setSlateDrawerOpen] = useAtom(isSlateDrawerOpen)
-  // Generated colours and automatic layout restyle or move every note on a slate. On a
-  // workshop slate the lanes and cards are the workshop's drawing, so these are not offered there.
-  const onWorkshop = slate?.creativeKind === 'workshop'
   const [expandedPanel, setExpanded] = useAtom(whichSlatePanelIsExpanded)
   const [getRegistrationDetails, setRegistrationDetails] =
     useAtom(registrationDetails)
@@ -48,7 +39,7 @@ export default function SlateDrawer({
       setRegistrationDetails({
         type: 'registration',
         registrationOpen: true,
-        registrationMessage: `Save your work to use colors, exports and sharing controls.`,
+        registrationMessage: `Save your work to choose a style for your slate.`,
       })
     } else {
       setExpanded(panel)
@@ -106,7 +97,7 @@ export default function SlateDrawer({
           <Typography
             sx={{ fontSize: (theme) => theme.typography.pxToRem(15) }}
           >
-            General Settings
+            General
           </Typography>
         </AccordionSummary>
         <AccordionDetails sx={{ margin: (theme) => theme.spacing(1) }}>
@@ -129,56 +120,10 @@ export default function SlateDrawer({
         </Typography>
         </AccordionSummary>
         <AccordionDetails sx={{ margin: (theme) => theme.spacing(1) }}>
-        {/* The slate's style (it replaces the old themes), with custom colors and backgrounds under it. */}
-        <SlateStyle slate={slate}>
-          <SlateColors slate={slate} onChange={updateSlate} />
-          {Meteor.settings.public.pixabayAPIKey && <SlateBackgrounds slate={slate} onChange={updateSlate} />}
-        </SlateStyle>
+        {/* The slate's style (it replaces the old themes), its background and its way back to the original. */}
+        <SlateStyle slate={slate} />
         </AccordionDetails>
       </Accordion>
-      {!onWorkshop && (
-      <Accordion
-        expanded={expandedPanel === 'generateNodeColorsPanel'}
-        onChange={handleChange('generateNodeColorsPanel')}
-      >
-        <AccordionSummary
-        expandIcon={<ExpandMoreIcon color="secondary" />}
-        aria-controls="generateNodeColorsPanelbh-content"
-        id="generateNodeColorsPanelbh-header"
-        >
-        <Typography
-          sx={{ fontSize: (theme) => theme.typography.pxToRem(15) }}
-        >
-          Generate Node Colors
-        </Typography>
-        </AccordionSummary>
-        <AccordionDetails sx={{ margin: (theme) => theme.spacing(1) }}>
-        <GenerateNodeColors slate={slate} />
-        </AccordionDetails>
-      </Accordion>
-      )}
-      {!onWorkshop && (
-        <Accordion
-          expanded={expandedPanel === 'layoutPanel'}
-          onChange={handleChange('layoutPanel')}
-        >
-          <AccordionSummary
-            expandIcon={<ExpandMoreIcon color="secondary" />}
-            aria-controls="layoutPanel-content"
-            id="layoutPanel-header"
-          >
-            <Typography
-              sx={{ fontSize: (theme) => theme.typography.pxToRem(15) }}
-            >
-              Layout
-            </Typography>
-          </AccordionSummary>
-          <AccordionDetails sx={{ margin: (theme) => theme.spacing(1) }}>
-            <SlateLayout slate={slate} onChange={updateSlate} />
-          </AccordionDetails>
-        </Accordion>
-      )}
-      {/* Background images (Pixabay, the instance's own key) are under the slate style's Custom colors. */}
     </Paper> : null
   )
 }

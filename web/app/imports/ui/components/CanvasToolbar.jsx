@@ -28,6 +28,7 @@ import CastIcon from '@mui/icons-material/Cast'
 import GroupAdd from '@mui/icons-material/GroupAdd'
 import Save from '@mui/icons-material/Save'
 import Login from '@mui/icons-material/Login'
+import SettingsOutlined from '@mui/icons-material/SettingsOutlined'
 import HuddleUp from './HuddleUp'
 import CreativeSlate from './CreativeSlate'
 import AccountMenu, { Avatar, displayName, useSaveYourWork } from './AccountMenu'
@@ -263,6 +264,16 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
             aria-expanded={Boolean(slateMenu)} onClick={e => setSlateMenu(e.currentTarget)} disabled={!slate}>
             {slateLabel}<ExpandMore fontSize="small" aria-hidden="true" />
           </ButtonBase>}
+      {/* The cog beside the name opens the same slate menu (settings, style, history and the rest): easier
+          to find than knowing the name is a button. On a phone too, where the menu is a sheet. */}
+      {!renaming && <Tooltip title="Slate settings and actions">
+        <span className="sb-board-cog-wrap">
+          <IconButton className="sb-board-cog" color="inherit" size="small" aria-label="Slate settings and actions" aria-haspopup="menu"
+            aria-expanded={Boolean(slateMenu)} data-slate-cog onClick={() => setSlateMenu(titleButton.current)} disabled={!slate}>
+            <SettingsOutlined fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>}
       {!narrow && visibility && (owner
         ? <ButtonBase className="sb-board-privacy" onClick={onShare} aria-label={`${visibility}. Change who can see this slate`}>
             {privacy.isPublic ? <Public /> : <Lock />}{visibility}</ButtonBase>

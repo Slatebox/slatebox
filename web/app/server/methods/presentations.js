@@ -778,11 +778,14 @@ method[CONSTANTS.methods.presentations.update] = async ({
   deck,
   direction,
   picture,
+  revert,
 }) => {
   const user = await Meteor.userAsync()
   if (!user) return null
   check(picture, Match.Maybe({ slot: Match.Integer, action: Match.OneOf('art', 'next') }))
   check(deck, Match.Maybe(Object))
+  check(revert, Match.Maybe(Match.ObjectIncluding({ deck: Object })))
+  if (revert && JSON.stringify(revert).length > 800_000) throw new Meteor.Error('presentation-deck', 'That presentation is too large to save.')
   check(direction, Match.Maybe(Object))
   if (deck && JSON.stringify(deck).length > 400_000) throw new Meteor.Error('presentation-deck', 'That presentation is too large to save.')
 
@@ -884,6 +887,20 @@ method[CONSTANTS.methods.presentations.update] = async ({
       deck: worn,
       ...(shaped ? { direction: { ...shaped, style: cleanStyleRef(style) } } : {}),
       viewpoints: worn.steps.map(({ nodeIds, narrative, duration }) => ({ nodeIds, narrative, duration })),
+    })
+  } else if (revert) {
+    // "Revert to original": the slate went back to the original it kept when it first wore a style
+    // (presentationBake.revertToOriginal), and the deck goes back to the one it played then: its
+    // style (or none), its direction and the camera over the slate as it is again.
+    const back = sanitizeBakedDeck(revert.deck)
+    if (!back) throw new Meteor.Error('presentation-deck', 'That presentation could not be reverted. Try again.')
+    const shaped = sanitizeDirectionShape(revert.direction)
+    const was = revert.style && typeof revert.style === 'object' && typeof revert.style.id === 'string' ? cleanStyleRef(revert.style) : null
+    Object.assign(updateFields, {
+      style: was,
+      deck: back,
+      ...(shaped ? { direction: { ...shaped, ...(was ? { style: was } : {}) } } : {}),
+      viewpoints: back.steps.map(({ nodeIds, narrative, duration }) => ({ nodeIds, narrative, duration })),
     })
   } else if (style != null) {
     const change = styleChange(existingPresentation, style)

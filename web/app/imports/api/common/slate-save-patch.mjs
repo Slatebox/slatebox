@@ -98,6 +98,8 @@ export function savePatch(base, exported) {
   const reordered = was.length !== is.length || was.some((id, index) => id !== is[index])
   const options = {}
   for (const [key, value] of Object.entries(exported.options || {})) if (base.options[key] !== text(value)) options[key] = value
+  // A setting the page no longer has (a style taken off, the original it kept used up) is stored as none.
+  for (const key of Object.keys(base.options)) if (!Object.hasOwn(exported.options || {}, key) && base.options[key] !== text(null)) options[key] = null
   return { v: PATCH_VERSION, changed, added, removed, order: reordered ? order : null, options }
 }
 

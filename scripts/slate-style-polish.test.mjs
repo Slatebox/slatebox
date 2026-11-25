@@ -109,11 +109,17 @@ test('the add dock opens on hover only when the pointer comes to it, never becau
   assert.match(dock, /handleActionMenuOpen\(event, 'mouseEnter'\)/)
 })
 
-test('the Custom colors show the background the slate has now (a worn style\'s), read from the live engine', () => {
-  const colors = read('imports/ui/components/slate/SlateColors.jsx')
-  assert.match(colors, /const liveOptions = live\?\.v2\?\.options \?\? live\?\.options/)
-  assert.match(colors, /\}, \[bcolor, lcolor, style\?\.backgroundColorAsGradient, styleVersion\]\)/)
-  assert.match(read('imports/ui/components/slate/SlateStyle.jsx'), /React\.cloneElement\(child, \{ styleVersion: version \}\)/)
+test('the slate\'s background is one small control under its style: swatches from the styles and a hex field, written as the style\'s own background', () => {
+  // Owner, 2026-11-25: the old Custom block (Background/Relationships tabs, gradients, complementary/shades, pattern
+  // repeat/stretch, the picture search box) is gone; one background control replaced it, and Revert to original restores it.
+  const panel = read('imports/ui/components/slate/SlateStyle.jsx')
+  assert.match(panel, /aria-label="Background color"/)
+  assert.match(panel, /'aria-label': 'Background color \(hex\)'/)
+  assert.match(panel, /setSlateBackground\(json, color\)/)
+  assert.doesNotMatch(panel, /cloneElement|styleVersion|As Gradient|Complementary|Shades|>Repeat|>Stretch|pixabay/i)
+  const drawer = read('imports/ui/components/SlateDrawer.jsx')
+  assert.doesNotMatch(drawer, /SlateColors|SlateBackgrounds|GenerateNodeColors|SlateLayout|Generate Node Colors|>\s*Layout\s*</)
+  for (const gone of ['SlateColors', 'SlateBackgrounds', 'GenerateNodeColors', 'SlateLayout']) assert.throws(() => read(`imports/ui/components/slate/${gone}.jsx`), gone)
 })
 
 test('neon and voyage lines are drawn at the style\'s strength on the canvas (real lines, under the notes)', () => {

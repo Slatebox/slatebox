@@ -105,10 +105,6 @@ export default function SlateSettings({ onChange }) {
     })
   }
 
-  SlateSettings.propTypes = {
-    onChange: PropTypes.func.isRequired,
-  }
-
   return (
     <Grid container alignItems="center" justifyContent="flex-start" spacing={1}>
       <Grid size={12}>
@@ -139,29 +135,22 @@ export default function SlateSettings({ onChange }) {
         </Grid>
       )}
       <Grid size={8}>
-        <Typography variant="body2">Mind Map Mode</Typography>
+        <Typography variant="body2">Mind map mode</Typography>
       </Grid>
       <Grid size={4}>
-        <Tooltip
-          title="Mind Map Mode - join added nodes by connecting lines"
-          placement="top"
-          aria-label="mindMapMode"
-        >
-          <Switch onChange={setMindMap} checked={mindMapMode} />
+        <Tooltip title="A note you add joins its neighbor with a line" placement="top">
+          <Switch onChange={setMindMap} checked={mindMapMode} inputProps={{ 'aria-label': 'Mind map mode' }} />
         </Tooltip>
       </Grid>
       <Grid size={8}>
-        <Typography variant="body2">Auto Resize Nodes By Text</Typography>
+        <Typography variant="body2">Notes grow to fit their text</Typography>
       </Grid>
       <Grid size={4}>
-        <Tooltip
-          title="Auto Resize Nodes Based On Text - auto resizes nodes to fit the text within"
-          placement="top"
-          aria-label="autoResizeNodesBasedOnText"
-        >
+        <Tooltip title="A note grows as you type, so its words always fit" placement="top">
           <Switch
             onChange={setAutoResize}
             checked={autoResizeNodesBasedOnText}
+            inputProps={{ 'aria-label': 'Notes grow to fit their text' }}
           />
         </Tooltip>
       </Grid>
@@ -173,54 +162,47 @@ export default function SlateSettings({ onChange }) {
             setHuddleType(e.target.value)
           }}
           variant="outlined"
+          inputProps={{ 'aria-label': 'Huddles on this slate' }}
         >
           <MenuItem key="disabled" value="disabled">
-            Disable Huddling
+            No huddles
           </MenuItem>
           <MenuItem key="audio" value="audio">
-            Allow Audio-Only Huddles
+            Audio huddles
           </MenuItem>
           <MenuItem key="video" value="video">
-            Allow Full Video Huddles
+            Video huddles
           </MenuItem>
         </Select>
       </Grid>
       <Grid size={8}>
-        <Typography variant="body2">Show Grid</Typography>
+        <Typography variant="body2">Show grid</Typography>
       </Grid>
       <Grid size={4}>
-        <Tooltip
-          title="Show underlying grid"
-          placement="top"
-          aria-label="setShowGrid"
-        >
-          <Switch onChange={setShowGrid} checked={showGrid} />
+        <Tooltip title="Show a grid behind the notes" placement="top">
+          <Switch onChange={setShowGrid} checked={showGrid} inputProps={{ 'aria-label': 'Show grid' }} />
         </Tooltip>
       </Grid>
       <Grid size={8}>
-        <Typography variant="body2">Snap to Neighbors</Typography>
+        <Typography variant="body2">Snap to neighbors</Typography>
       </Grid>
       <Grid size={4}>
-        <Tooltip
-          title="Automatically align objects to their neighbors"
-          placement="top"
-          aria-label="setSnapToObjects"
-        >
-          <Switch onChange={setSnapToObjects} checked={snapToObjects} />
+        <Tooltip title="A note you drag lines up with the notes beside it" placement="top">
+          <Switch onChange={setSnapToObjects} checked={snapToObjects} inputProps={{ 'aria-label': 'Snap to neighbors' }} />
         </Tooltip>
       </Grid>
       <Grid size={8}>
-        <Typography variant="body2">&#34;Follow Me&#34; Mode</Typography>
+        <Typography variant="body2">Follow me</Typography>
       </Grid>
       <Grid size={4}>
-        <Tooltip
-          title="Synchronize the position of the canvas during collaboration"
-          placement="top"
-          aria-label="setFollowMe"
-        >
-          <Switch onChange={setFollowMe} checked={isFollowMe} />
+        <Tooltip title="Everyone on the slate sees what you see as you move around" placement="top">
+          <Switch onChange={setFollowMe} checked={isFollowMe} inputProps={{ 'aria-label': 'Follow me' }} />
         </Tooltip>
       </Grid>
     </Grid>
   )
+}
+
+SlateSettings.propTypes = {
+  onChange: PropTypes.func.isRequired,
 }

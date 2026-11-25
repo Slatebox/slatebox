@@ -8,6 +8,7 @@ import InputBase from '@mui/material/InputBase'
 import IconButton from '@mui/material/IconButton'
 import Chip from '@mui/material/Chip'
 import SendIcon from '@mui/icons-material/Send'
+import UndoIcon from '@mui/icons-material/Undo'
 import { STYLE_CHIPS } from './presentationStyles.mjs'
 
 /** What the chat suggests: each is a request the planner reads in plain language. */
@@ -22,10 +23,12 @@ export const REFINE_PILLS = [
 /**
  * The style sheet: one click and the slate wears a style ("Wear this style": its background, its
  * notes' look and the style's title cards, captions and art become real notes on the canvas, the
- * same steps remixed for it, no AI; Undo takes it off), and the chat refines the deck with Slatebox
- * (`onRefine`, the planner's conversation). Present plays exactly what the slate wears.
+ * same steps remixed for it, no agent call; nothing on the slate is lost), "Revert to original" brings
+ * the slate back exactly as it was before it first wore a style (`onRevert`, offered while the slate
+ * keeps an original: `canRevert`), and the chat refines the deck with Slatebox (`onRefine`, the
+ * planner's conversation). Present plays exactly what the slate wears.
  */
-export default function StyleSheet({ anchorEl, onClose, current, onPick, onRefine, onRemix, busy = false, pictures = [], onPicture = null }) {
+export default function StyleSheet({ anchorEl, onClose, current, onPick, onRevert = null, canRevert = false, onRefine, onRemix, busy = false, pictures = [], onPicture = null }) {
   const [text, setText] = useState('')
   const send = (ask) => {
     const said = String(ask || '').trim()
@@ -42,9 +45,22 @@ export default function StyleSheet({ anchorEl, onClose, current, onPick, onRefin
       transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       slotProps={{ paper: { sx: { bgcolor: 'rgba(18,18,24,.92)', color: '#fff', backdropFilter: 'blur(14px)', borderRadius: '20px', width: 'min(980px, calc(100vw - 32px))', p: 2, boxSizing: 'border-box' } } }}
     >
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '4px 12px', mb: 1.25, mx: 0.5 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '4px 12px', mb: 1.25, mx: 0.5 }}>
         <Typography variant="overline" sx={{ letterSpacing: '.12em', opacity: 0.75, lineHeight: 1.6 }}>Wear this style</Typography>
-        <Typography variant="caption" sx={{ opacity: 0.7 }}>Your slate wears it, so the canvas and Present match · Undo takes it off · no agent call</Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 12px' }}>
+          <Typography variant="caption" sx={{ opacity: 0.7 }}>Your slate wears it, so the canvas and Present match · nothing on it is lost · no agent call</Typography>
+          {onRevert && (
+            <Chip
+              size="small"
+              icon={<UndoIcon sx={{ color: 'inherit !important' }} fontSize="small" />}
+              label="Revert to original"
+              data-style-revert
+              disabled={busy || !canRevert}
+              onClick={onRevert}
+              sx={{ color: '#fff', bgcolor: 'rgba(255,255,255,.14)' }}
+            />
+          )}
+        </Box>
       </Box>
       <Box role="radiogroup" aria-label="Slate style" sx={{ display: 'flex', gap: 1.25, overflowX: 'auto', pb: 0.5, scrollbarWidth: 'none' }}>
         {STYLE_CHIPS.map((chip) => {
@@ -126,6 +142,8 @@ StyleSheet.propTypes = {
   onClose: PropTypes.func.isRequired,
   current: PropTypes.string,
   onPick: PropTypes.func.isRequired,
+  onRevert: PropTypes.func,
+  canRevert: PropTypes.bool,
   onRefine: PropTypes.func.isRequired,
   onRemix: PropTypes.func.isRequired,
   busy: PropTypes.bool,

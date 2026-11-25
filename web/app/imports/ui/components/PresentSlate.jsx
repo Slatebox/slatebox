@@ -56,7 +56,7 @@ import {
 import { completeDeck, isTrivialLayout, planFailureReason } from './presentations/presentationPlan.mjs'
 import { planArrival } from './presentations/presentationSteps.mjs'
 import { carryImages, composeDeck, deckRecord, pictureSlots, remixDirection } from './presentations/presentationCompose.mjs'
-import { isBakedDeck, takeOffStyle, wearStyle } from './presentations/presentationBake.mjs'
+import { cameraDeck, hasStyleOriginal, isBakedDeck, ownNotesOf, revertToOriginal, wearStyle, wornStyle } from './presentations/presentationBake.mjs'
 import { layoutOfNodes } from '../../api/common/slate-layout-core.mjs'
 import StyleSheet from './presentations/StyleSheet'
 import PayNotice from './PayNotice'
@@ -646,7 +646,10 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
     const engine = slate?.v2 ?? slate
     const current = slateCopy(slate)
     if (!current || !engine?.ownStep) return null
-    const worn = wearStyle(current, styleRef, { direction, name: slate.options.name })
+    // The deck played now is kept with the slate's original the first time it wears a style.
+    const look = curPresentation.deckLook
+    const presentation = look ? { style: look.style ?? null, direction: look.direction ?? null, deck: look.deck ?? null } : null
+    const worn = wearStyle(current, styleRef, { direction, name: slate.options.name, presentation })
     const snapshot = JSON.stringify(worn.slate)
     await engine.ownStep(() => engine.invoker.onSlateReplaced({ type: 'onSlateReplaced', data: { snapshot } }))
     // The room and the save path take the styled slate (as an undo's replacement is sent).
@@ -654,14 +657,37 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
     setCurPresentation((prev) => ({ ...prev, slateJSON: snapshot, deckLook: { deck: worn.deck, direction: worn.direction, style: worn.deck.style }, viewpoints: worn.deck.steps }))
     return worn
   }
+  // "Revert to original": the slate exactly as it was before it first wore a style (kept on the
+  // slate, so it survives reloads and copies), as one step of this person's undo, and the deck it
+  // played then (or the camera over it). Nothing made since is lost (revertToOriginal).
+  const handleStyleRevert = async () => {
+    const engine = slate?.v2 ?? slate
+    const current = slateCopy(slate)
+    if (!current || !engine?.ownStep || !hasStyleOriginal(current)) return
+    try {
+      const { slate: back, presentation } = revertToOriginal(current)
+      const snapshot = JSON.stringify(back)
+      await engine.ownStep(() => engine.invoker.onSlateReplaced({ type: 'onSlateReplaced', data: { snapshot } }))
+      engine.broadcast?.('onSlateReplaced', { action: 'style-revert', snapshot })
+      const look = curPresentation.deckLook
+      const deck = isBakedDeck(presentation?.deck) ? presentation.deck : cameraDeck(back, look?.deck?.steps || curPresentation.viewpoints || [])
+      const direction = presentation?.direction || look?.direction || null
+      const style = presentation ? presentation.style ?? null : wornStyle(back)
+      setCurPresentation((prev) => ({ ...prev, slateJSON: snapshot, deckLook: { deck, direction, style: style || deck.style }, viewpoints: deck.steps }))
+      if (presentationId) await Meteor.callAsync(CONSTANTS.methods.presentations.update, { presentationId, revert: { deck, direction, style } })
+    } catch (err) {
+      setPublishMessage(`The original could not be brought back: ${err?.reason || err?.message || 'try again'}`)
+      setTimeout(() => setPublishMessage(null), 6000)
+    }
+  }
   // One click: the slate wears the style ("Wear this style"), the same steps remixed for it, and
-  // the deck is saved without the AI. Undo on the canvas takes the style off again.
+  // the deck is saved without the AI. Nothing on the slate is lost, and Revert to original undoes it.
   const handleStylePick = async (id) => {
     const look = curPresentation.deckLook
     const current = slateCopy(slate)
     if (!look?.direction || !current) return
     // The same steps in the new style's beats, read from the slate's own notes (not a worn style's art).
-    const { layout } = layoutOfNodes(takeOffStyle(current).nodes || [])
+    const { layout } = layoutOfNodes(ownNotesOf(current))
     const direction = remixDirection(look.direction, layout, { id }, { name: slate.options.name })
     let worn = null
     try {
@@ -1909,6 +1935,8 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
         onClose={() => setStyleAnchorEl(null)}
         current={curPresentation.deckLook?.deck?.style?.id}
         onPick={handleStylePick}
+        onRevert={handleStyleRevert}
+        canRevert={Boolean(styleAnchorEl) && hasStyleOriginal(slateCopy(slate))}
         onRefine={handleStyleRefine}
         onRemix={handleRemix}
         busy={planning || Boolean(curPresentation.isAnalyzing) || pictureBusy}

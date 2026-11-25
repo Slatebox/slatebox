@@ -66,6 +66,7 @@ function page(from) {
     remove(id) { nodes = nodes.filter(n => n.options.id !== id) },
     reorder(ids) { nodes = ids.map(id => nodes.find(n => n.options.id === id)) },
     setOption(key, value) { options = { ...options, [key]: value } },
+    unsetOption(key) { const { [key]: _gone, ...rest } = options; options = rest },
     nodes: () => nodes,
     fold(notes) { foldIntoBase(base, notes) },
     async save(store, user) {
@@ -153,6 +154,22 @@ test('a behind page writes only the settings it changed', async () => {
   await b.save(s, guest)
   assert.equal(s.board.options.name, 'Plan, renamed by the owner')
   assert.equal(s.board.options.theme, 'dark')
+})
+
+test('a setting the page took away is taken away where it is stored (a style removed, its original used up)', async () => {
+  const s = store(slateDoc())
+  const a = page(s.board)
+  a.setOption('style', { id: 'neon', v: 4 })
+  a.setOption('styleOriginal', { v: 1, nodes: [], options: {} })
+  await a.save(s, owner)
+  assert.deepEqual(s.board.options.style, { id: 'neon', v: 4 })
+  a.unsetOption('style')
+  a.unsetOption('styleOriginal')
+  await a.save(s, owner)
+  // Stored as none (null): a reload wears no style and keeps no original, and the room is not told otherwise.
+  assert.equal(s.board.options.style ?? null, null)
+  assert.equal(s.board.options.styleOriginal ?? null, null)
+  assert.equal(s.board.options.name, 'Plan')
 })
 
 test('a run the page drew (not made) is folded into its base, so its next save does not write those words back', async () => {

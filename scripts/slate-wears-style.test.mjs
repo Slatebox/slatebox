@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { DEFAULT_FONTS, validatePlan } from 'slateboxjs/operations'
 import {
-  BAKED_DECK_VERSION, DECOR_ROLES, STYLE_ROLES, cameraDeck, isStyleArt, playableDeck, styleRecord, takeOffStyle, wearStyle, wornStyle,
+  BAKED_DECK_VERSION, DECOR_ROLES, STYLE_ROLES, cameraDeck, isStyleArt, playableDeck, styleRecord, takeOffStyle, wearStyle, wordsOf, wornStyle,
 } from '../web/app/imports/ui/components/presentations/presentationBake.mjs'
 import { STYLES, STYLE_IDS } from '../web/app/imports/ui/components/presentations/presentationStyles.mjs'
 import { emphasis, presentedSlate } from '../web/app/imports/ui/components/presentations/livePresenter.mjs'
@@ -61,8 +61,9 @@ test('each step frames what it lights and reveals; a worn deck has one geometry 
   }
 })
 
-test('every style wears onto a slate: background, record, skin on the notes, idempotent, A then B leaves none of A', () => {
+test('every style wears onto a slate: background, record, skin on the notes, idempotent, A then B keeps every word of A', () => {
   const plain = slateOfLayout(whatIsSlatebox(), 'What is Slatebox')
+  const words = (doc) => doc.nodes.map((node) => wordsOf(node.options.text)).filter(Boolean)
   for (const id of STYLE_IDS) {
     const { slate } = wearStyle(plain, { id })
     assert.equal(slate.options.containerStyle.backgroundColor, STYLES[id].bg, id)
@@ -73,16 +74,21 @@ test('every style wears onto a slate: background, record, skin on the notes, ide
       assert.equal(mine.options.text, source.options.text, `${id}: words kept`)
       assert.ok(mine.options.fontFamily && mine.options.fontFamily !== source.options.fontFamily || mine.options.backgroundColor !== source.options.backgroundColor, `${id}: ${source.options.id} wears the style`)
     }
-    // Wearing it again changes nothing; wearing another style over it is the same as wearing that one alone.
+    // Wearing it again changes nothing; wearing another style over it replaces only A's wordless decoration.
     assert.deepEqual(wearStyle(slate, { id }).slate, slate, `${id}: idempotent`)
     const other = STYLE_IDS[(STYLE_IDS.indexOf(id) + 1) % STYLE_IDS.length]
     const over = wearStyle(slate, { id: other }).slate
-    assert.equal(over.nodes.filter(isStyleArt).length, wearStyle(plain, { id: other }).slate.nodes.filter(isStyleArt).length, `${id} → ${other}: none of ${id}'s art left`)
-    // Taking it off removes the art and the record; the notes keep what they wear.
+    const decorOfA = slate.nodes.filter((node) => isStyleArt(node) && !wordsOf(node.options.text)).map((node) => node.options.id)
+    const fresh = new Set(wearStyle(plain, { id: other }).slate.nodes.map((node) => node.options.id))
+    assert.deepEqual(over.nodes.filter((node) => decorOfA.includes(node.options.id) && !fresh.has(node.options.id)).map((node) => node.options.id), [], `${id} → ${other}: none of ${id}'s decoration left`)
+    const after = words(over)
+    for (const said of words(slate)) assert.ok(after.includes(said), `${id} → ${other}: "${said}" kept`)
+    // Removing it takes off the decoration and the record; every note with words stays, as a plain note.
     const off = takeOffStyle(slate)
     assert.equal(off.nodes.filter(isStyleArt).length, 0)
     assert.equal(off.options.style, undefined)
-    assert.deepEqual(off.nodes.map((node) => node.options.id), plain.nodes.map((node) => node.options.id))
+    assert.deepEqual(words(off).sort(), words(slate).sort())
+    for (const source of plain.nodes) assert.ok(off.nodes.some((node) => node.options.id === source.options.id))
   }
 })
 
@@ -210,5 +216,5 @@ test('the Slate style panel wears the style on the live engine, not on the JSON 
   const panel = read('imports/ui/components/slate/SlateStyle.jsx')
   assert.doesNotMatch(panel, /currentSlate/)
   assert.match(panel, /export default function SlateStyle\(\{ slate = null/)
-  assert.match(read('imports/ui/components/SlateDrawer.jsx'), /<SlateStyle slate=\{slate\}>/)
+  assert.match(read('imports/ui/components/SlateDrawer.jsx'), /<SlateStyle slate=\{slate\} \/>/)
 })
