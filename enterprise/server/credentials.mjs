@@ -178,20 +178,21 @@ export function createVault({ store, master, fetch, secretFor = () => null, now 
     const doc = await store.get(credentialId(userId, address))
     if (!doc) return { removed: false, revoked: false }
     let revoked = false
+    let tried = false
+    // Telling the server to end the sign-in is best effort: a refusal, a timeout or a broken
+    // client never keeps the sign-in here. revokeFailed says the server did not confirm it.
     if (doc.kind === 'oauth' && doc.server?.revocationEndpoint && master) {
-      let client = null
-      try {
-        client = clientOf(doc)
-      } catch {}
       const refresh = openQuietly(doc, 'refresh')
       const access = openQuietly(doc, 'access')
-      if (client) {
-      if (refresh) revoked = (await revokeToken({ server: doc.server, client, token: refresh, hint: 'refresh_token', fetch })) || revoked
-      if (access) revoked = (await revokeToken({ server: doc.server, client, token: access, hint: 'access_token', fetch })) || revoked
-      }
+      tried = Boolean(refresh || access)
+      try {
+        const client = clientOf(doc)
+        if (refresh) revoked = (await revokeToken({ server: doc.server, client, token: refresh, hint: 'refresh_token', fetch })) || revoked
+        if (access) revoked = (await revokeToken({ server: doc.server, client, token: access, hint: 'access_token', fetch })) || revoked
+      } catch {}
     }
     await store.remove(doc._id)
-    return { removed: true, revoked }
+    return { removed: true, revoked, ...(tried && !revoked && { revokeFailed: true }) }
   }
 
   return { available, save, describe, tokenFor, remove }

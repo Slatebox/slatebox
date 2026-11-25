@@ -224,6 +224,9 @@ export function createRegistry({
   idempotency = null,
   now = Date.now,
   waitForPending = { intervalMs: 50, timeoutMs: 10000 },
+  // A failure of this server is answered without its detail; the detail goes to the server's log
+  // (a bare "could not be completed" with nothing logged once hid a broken disconnect for hours).
+  logFailure = (id, error) => console.error(`[actions] ${id} failed:`, error?.stack || error),
 }) {
   const byId = new Map()
   const routes = new Set()
@@ -397,6 +400,11 @@ export function createRegistry({
       return { ...shaped, meta }
     } catch (error) {
       const actionError = toActionError(error, action.failure)
+      if (actionError.status >= 500 && actionError !== error) {
+        try {
+          logFailure(id, error)
+        } catch {}
+      }
       actionError.meta = meta
       throw actionError
     }

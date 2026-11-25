@@ -451,6 +451,21 @@ test('forgetting a sign-in revokes both tokens at the server', async () => {
   assert.equal(credentials.rows.size, 0)
 })
 
+test('a server that will not end the sign-in never keeps it here: forgotten anyway, and the answer says it was not confirmed', async () => {
+  const { credentials, master } = await signedIn()
+  // Its revocation endpoint is down (or refuses): the vault still forgets the sign-in.
+  const down = async (input, init) => (String(input).includes('revoke') ? new Response('nope', { status: 503 }) : signInFetch(input, init))
+  const vault = createVault({ store: credentials, master, fetch: down })
+  const result = await vault.remove('ada', servers.url('/oauth/mcp'))
+  assert.deepEqual(result, { removed: true, revoked: false, revokeFailed: true })
+  assert.equal(credentials.rows.size, 0)
+  // Unreachable altogether: the same.
+  const again = await signedIn()
+  const unreachable = createVault({ store: again.credentials, master: again.master, fetch: async (input, init) => { if (String(input).includes('revoke')) throw new TypeError('fetch failed'); return signInFetch(input, init) } })
+  assert.deepEqual(await unreachable.remove('ada', servers.url('/oauth/mcp')), { removed: true, revoked: false, revokeFailed: true })
+  assert.equal(again.credentials.rows.size, 0)
+})
+
 // ---------- no token passthrough ----------
 
 test('no token passthrough: a server\'s token goes to that server\'s origin only', async () => {

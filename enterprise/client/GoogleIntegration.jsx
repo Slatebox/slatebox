@@ -67,7 +67,7 @@ export default function GoogleIntegration({ integrations = [], pro = true, onPay
     setBusy(true)
     connectGoogle(status.clientId).then(() => { refresh(); onChanged?.() }).catch((e) => setNote(errorText(e))).finally(() => setBusy(false))
   }
-  const disconnect = () => Meteor.callAsync('integrations.disconnect', { integrationId: row.integrationId }).then(() => { refresh(); onChanged?.() }).catch((e) => setNote(errorText(e)))
+  const disconnect = () => Meteor.callAsync('integrations.disconnect', { integrationId: row.integrationId }).then((answer) => { setNote([answer?.say, answer?.note].filter(Boolean).join(' ')); refresh(); onChanged?.() }).catch((e) => setNote(errorText(e)))
   const setRule = (rule) => Meteor.callAsync('integrations.setRule', { integrationId: row.integrationId, rule }).then(() => onChanged?.()).catch((e) => setNote(errorText(e)))
   return (
     <Box data-google-integration={row ? row.status : 'none'} sx={(t) => ({ bgcolor: '#fffef8', border: '1px solid #e1e3d6', borderRadius: '14px', p: { xs: 1.75, sm: 2 }, ...t.applyStyles('dark', { bgcolor: '#23362d', borderColor: '#3a5244' }) })}>

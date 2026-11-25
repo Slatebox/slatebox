@@ -1741,26 +1741,55 @@ export function createConnectorService({
     return publicIntegration(doc, { cards: await gallery() })
   }
 
-  /** Disconnect: removed from every slate (waiting suggestions discarded), the sign-in revoked and forgotten. */
+  /**
+   * Disconnect: removed from every slate (waiting suggestions discarded; kept work stays), the
+   * sign-in revoked and forgotten. It always succeeds for the owner once the integration is theirs:
+   * a step that only tidies up (the agent's ghosts, its presence, telling its server to end the
+   * sign-in, what a native integration kept) is recorded when it fails and never keeps the
+   * integration connected here. An integration no longer in the gallery disconnects the same way.
+   */
   async function integrationDisconnect(principal, { integrationId }) {
     const doc = await ownIntegration(principal, integrationId)
+    const failed = []
+    // A tidy-up step: a throw (sync or async) or a missing promise is recorded, never raised.
+    const tidy = async (step, fn) => {
+      try {
+        return await fn()
+      } catch (error) {
+        failed.push(step)
+        audit({ kind: 'integration_disconnect_step_failed', userId: principal.userId, integrationId: doc._id, step, error: String(error?.message || error).slice(0, 200) })
+        return undefined
+      }
+    }
     let removedFrom = 0
+    let running = 0
     for (const agent of await agentsOf(doc)) {
       await connections.update(agent._id, { status: 'removed', removedBy: 'disconnect', updatedAt: new Date(now()) })
       removedFrom++
-      const found = await access.forUser(agent.shareId, principal.userId).catch(() => null)
+      const found = await tidy('slate', () => access.forUser(agent.shareId, principal.userId))
       if (found?.slate) {
-        const agentId = agent.agentId || (await suggestions.agentIdOf(connectorPrincipal(agent, 'remove:' + agent._id), found.slate))
-        await suggestions.withdraw(principal, found.slate, agentId).catch(() => {})
+        const agentId = agent.agentId || (await tidy('agent', () => suggestions.agentIdOf(connectorPrincipal(agent, 'remove:' + agent._id), found.slate)))
+        if (agentId) await tidy('suggestions', () => suggestions.withdraw(principal, found.slate, agentId))
       }
-      await declineWaiting(agent, principal)
-      await presence.end('hello:' + agent._id, 'done').catch(() => {})
+      running += (await tidy('cards', () => declineWaiting(agent, principal))) || 0
+      await tidy('presence', () => presence.end('hello:' + agent._id, 'done'))
     }
-    const signedOut = vault ? (await vault.remove(doc.ownerId, doc.address).catch(() => ({ removed: false }))).removed : false
-    await forget(doc).catch(() => {})
+    let signedOut = false
+    let note = null
+    if (vault) {
+      const out = await tidy('sign_in', () => vault.remove(doc.ownerId, doc.address))
+      signedOut = Boolean(out?.removed)
+      // Forgotten here either way; its server may still list Slatebox as allowed until revoked there.
+      if (doc.auth && (!out || out.revokeFailed))
+        note = `${doc.host} did not confirm that Slatebox's access ended. Slatebox forgot ${doc.name} here; you can also remove Slatebox's access in your ${doc.host} account settings.`
+    }
+    await tidy('forget', () => forget(doc))
     await integrations.remove(doc._id)
-    audit({ kind: 'integration_disconnect', userId: principal.userId, host: doc.host, integrationId: doc._id, removedFrom, signedOut })
-    return { ok: true, integrationId: doc._id, removedFrom, signedOut }
+    audit({ kind: 'integration_disconnect', userId: principal.userId, host: doc.host, integrationId: doc._id, removedFrom, signedOut, ...(running && { running }), ...(failed.length && { failed }) })
+    const say = running
+      ? `${running === 1 ? 'One change was' : `${running} changes were`} already being made in ${doc.name} and could not be stopped: ${running === 1 ? 'its card says' : 'their cards say'} how it went.`
+      : null
+    return { ok: true, integrationId: doc._id, name: doc.name, removedFrom, signedOut, ...(running && { running, say }), ...(note && { note }) }
   }
 
   // Puts an integration on a slate as a named agent: no sign-in and no consent again (the

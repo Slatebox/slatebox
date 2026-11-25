@@ -332,7 +332,8 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     slateList,
     // Google's card off in /admin/ai (or its client or key gone): Drive agents stop, and none joins.
     nativeOn: (address) => (address === GOOGLE_ADDRESS ? googleService.usable() : true),
-    forget: (integration) => (integration.address === GOOGLE_ADDRESS ? googleService.forget(integration.ownerId) : null),
+    // Async for every integration: the service awaits it (a plain null here once failed every non-Google disconnect).
+    forget: async (integration) => (integration.address === GOOGLE_ADDRESS ? googleService.forget(integration.ownerId) : null),
     outside: outsideStore,
   })
   // Keeping an action card's note approves its change: the app's suggestions.decide asks the service

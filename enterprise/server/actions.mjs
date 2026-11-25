@@ -313,7 +313,7 @@ const INT_OUT = {
   list: obj({ integrations: { type: 'array', items: { type: 'object' }, description: 'Each integration: integrationId, kind, name, host, status, rule, tools and the slates it is on. Never a token.' }, pro: { type: 'boolean' }, canConnect: { type: 'boolean' }, rules: { type: 'array', items: { type: 'string' } } }),
   integration: obj({ integrationId: { type: 'string' }, name: { type: 'string' }, status: { type: 'string' }, rule: { type: 'string' } }),
   review: obj({ integrationId: { type: 'string' }, tools: { type: 'array', items: { type: 'object' } }, changed: { type: 'array', items: { type: 'string' } }, needsSignIn: { type: 'boolean' } }),
-  disconnected: obj({ ok: { type: 'boolean' }, integrationId: { type: 'string' }, removedFrom: { type: 'integer' }, signedOut: { type: 'boolean' } }),
+  disconnected: obj({ ok: { type: 'boolean' }, integrationId: { type: 'string' }, name: { type: 'string' }, removedFrom: { type: 'integer' }, signedOut: { type: 'boolean' }, running: { type: 'integer', description: 'Changes already being made outside Slatebox that could not be stopped (their cards say how they went).' }, say: { type: 'string' }, note: { type: 'string', description: 'Set when its server did not confirm the sign-in ended: forgotten here anyway.' } }),
   rules: obj({ joined: { type: 'array', items: { type: 'object' } }, skipped: { type: 'array', items: { type: 'object' }, description: 'Integrations the rule could not bring here, each with why (a slate limit, or outside agents turned off).' } }),
   setting: obj({ outsideAgents: { type: 'string', enum: ['editors', 'owner', 'off'] }, canChange: { type: 'boolean' } }),
 }
@@ -331,6 +331,8 @@ export function integrationActions(service) {
   return [
     defineAction({
       id: 'integrations.list',
+      // A failure of this server (not a refusal) says what did not happen, never a bare "could not be completed".
+      failure: { code: 'internal_error', message: 'Slatebox could not load your integrations just now. Reload the page to try again.' },
       title: 'List your integrations',
       description: 'Your connected integrations (outside agents and Google), each with its status, standing rule, the tools you allowed and the slates it is on. Never shows a token.',
       toolset: 'connectors',
@@ -345,6 +347,7 @@ export function integrationActions(service) {
     }),
     defineAction({
       id: 'integrations.discover',
+      failure: { code: 'internal_error', message: 'Slatebox could not read that agent\'s server just now. Check the address and try again.' },
       title: 'Look at a server before connecting it',
       description: 'Reach an MCP server\'s address and say in plain words what it can do (its tools, each with the hash consent is given to), or how to sign in to it first. For connecting it as an integration, apart from any slate. Needs Slatebox Pro or Business.',
       toolset: 'connectors',
@@ -361,6 +364,7 @@ export function integrationActions(service) {
     }),
     defineAction({
       id: 'integrations.useKey',
+      failure: { code: 'internal_error', message: 'Slatebox could not save that key just now. Try again in a moment.' },
       title: 'Use a key for an integration',
       description: 'For servers that take a key or token instead of a sign-in page: Slatebox checks it against the server, then keeps it encrypted for you alone. Needs Slatebox Pro or Business.',
       toolset: 'connectors',
@@ -377,6 +381,7 @@ export function integrationActions(service) {
     }),
     defineAction({
       id: 'integrations.connect',
+      failure: { code: 'internal_error', message: 'Slatebox could not connect that agent just now. Try again in a moment.' },
       title: 'Connect an integration',
       description: 'Connect an MCP server once, as an integration you can invite onto any slate without signing in or choosing its tools again. Send each tool from integrations.discover with its hash and allow or off. Connecting one already connected is consenting again, and every slate it is on resumes. Needs Slatebox Pro or Business.',
       toolset: 'connectors',
@@ -404,6 +409,7 @@ export function integrationActions(service) {
     }),
     defineAction({
       id: 'integrations.review',
+      failure: { code: 'internal_error', message: 'Slatebox could not read this agent\'s tools just now. Try again in a moment.' },
       title: 'Review an integration\'s tools',
       description: 'The tools an integration\'s server lists now, marked new or changed since you allowed them. Consent again with integrations.connect.',
       toolset: 'connectors',
@@ -420,6 +426,7 @@ export function integrationActions(service) {
     }),
     defineAction({
       id: 'integrations.setRule',
+      failure: { code: 'internal_error', message: 'Slatebox could not change when it joins slates just now. Try again in a moment.' },
       title: 'Choose when an integration joins slates',
       description: 'An integration\'s standing rule: ask (you invite it yourself) or my_slates (it joins every slate you own when you open it). A removal from one slate is remembered.',
       toolset: 'connectors',
@@ -435,6 +442,7 @@ export function integrationActions(service) {
     }),
     defineAction({
       id: 'integrations.setActing',
+      failure: { code: 'internal_error', message: 'Slatebox could not change how its changes are approved just now. Try again in a moment.' },
       title: 'Let an integration act without asking',
       // People only: an agent never widens an agent's rights.
       description: 'Whether an integration\'s changes outside Slatebox are made at once on the slates you own that it is on (destructive ones still wait for approval), unless a slate chooses otherwise; on someone else\'s slate it is turned on there, by name. Off by default. Audited and shown in each slate\'s agent activity.',
@@ -468,6 +476,7 @@ export function integrationActions(service) {
     }),
     defineAction({
       id: 'integrations.disconnect',
+      failure: { code: 'internal_error', message: 'Slatebox could not finish disconnecting it just now. Try Disconnect again: trying twice is safe.' },
       title: 'Disconnect an integration',
       description: 'Disconnect an integration: it leaves every slate it is on (its waiting suggestions are discarded; kept work stays) and its sign-in is revoked and forgotten.',
       toolset: 'connectors',
@@ -483,6 +492,7 @@ export function integrationActions(service) {
     }),
     defineAction({
       id: 'integrations.invite',
+      failure: { code: 'internal_error', message: 'Slatebox could not invite that agent onto this slate just now. Try again in a moment.' },
       title: 'Invite an integration onto a slate',
       description: 'Invite one of your integrations onto a slate as a named agent, with no new sign-in or consent. Its suggestions appear as ghosts anyone who can edit may keep or discard; only you can ask it. Needs Slatebox Pro or Business.',
       toolset: 'connectors',
@@ -504,6 +514,7 @@ export function integrationActions(service) {
     }),
     defineAction({
       id: 'integrations.applyRules',
+      failure: { code: 'internal_error', message: 'Slatebox could not bring your agents onto this slate just now. Reload the slate to try again.' },
       title: 'Apply your standing rules to a slate',
       description: 'Brings your integrations whose rule is my_slates onto a slate you own (the slate\'s page does this when it opens). Idempotent; one removed from this slate before stays away; limits are skipped with the reason.',
       toolset: 'connectors',
@@ -519,6 +530,7 @@ export function integrationActions(service) {
     }),
     defineAction({
       id: 'integrations.slateSetting',
+      failure: { code: 'internal_error', message: 'Slatebox could not read this slate\'s agent setting just now. Try again in a moment.' },
       title: 'Who may bring outside agents onto a slate',
       description: 'Who may bring outside agents onto this slate: editors, only its owner, or no one; and whether you may change it (the owner only).',
       toolset: 'connectors',
@@ -532,6 +544,7 @@ export function integrationActions(service) {
     }),
     defineAction({
       id: 'integrations.setSlateSetting',
+      failure: { code: 'internal_error', message: 'Slatebox could not change this slate\'s agent setting just now. Try again in a moment.' },
       title: 'Choose who may bring outside agents onto your slate',
       description: 'On a slate you own: editors (default), owner (only you) or off (no outside agents, invited or by rule). It holds for agents already there too: theirs stop answering until it allows them again.',
       toolset: 'connectors',

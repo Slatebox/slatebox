@@ -44,10 +44,17 @@ export const INTEGRATION_STATUS = {
 }
 export const RULE_WORDS = { ask: 'When I invite it', my_slates: 'On every slate I own' }
 
+// Every refusal, and every failure of the server, carries its own words in reason (each integration
+// action names what did not happen); only a call that never reached it falls back to this.
 const errorText = (error) => {
   enterpriseSlots.lockIfRefused(error)
   return error?.reason || error?.message || 'That did not work. Try again.'
 }
+
+// What the page says once an integration is disconnected (its row is gone by then).
+export const disconnectedText = (name, answer) =>
+  [`${answer?.name || name} is disconnected.`, answer?.removedFrom ? `It left ${answer.removedFrom === 1 ? 'the slate it was on' : `the ${answer.removedFrom} slates it was on`}.` : '', answer?.say || '', answer?.note || '']
+    .filter(Boolean).join(' ')
 
 const card = (theme) => ({
   bgcolor: '#fffef8', border: '1px solid #e1e3d6', borderRadius: '14px', p: { xs: 1.75, sm: 2 },
@@ -130,7 +137,7 @@ function ReviewDialog({ integration, onClose, onDone, onUpgrade }) {
 }
 ReviewDialog.propTypes = { integration: PropTypes.shape({ integrationId: PropTypes.string, name: PropTypes.string, kind: PropTypes.string, writesAt: PropTypes.string, tools: PropTypes.arrayOf(PropTypes.shape({})) }).isRequired, onClose: PropTypes.func.isRequired, onDone: PropTypes.func.isRequired, onUpgrade: PropTypes.func.isRequired }
 
-function IntegrationRow({ integration, pro, cloud, onChanged, onReview, onSignIn, onUpgrade, highlight }) {
+function IntegrationRow({ integration, pro, cloud, onChanged, onDisconnected, onReview, onSignIn, onUpgrade, highlight }) {
   const [confirming, setConfirming] = useState(false)
   const [note, setNote] = useState('')
   const [allowing, setAllowing] = useState(false)
@@ -149,7 +156,7 @@ function IntegrationRow({ integration, pro, cloud, onChanged, onReview, onSignIn
   const writes = integration.tools.filter((tool) => tool.group === 'change' && tool.policy === 'allow')
   const setActing = (actWithoutAsking) => Meteor.callAsync('integrations.setActing', { integrationId: integration.integrationId, actWithoutAsking }).then(onChanged).catch((e) => setNote(errorText(e)))
   const disconnect = () => Meteor.callAsync('integrations.disconnect', { integrationId: integration.integrationId })
-    .then((answer) => { setNote(''); onChanged(answer) }).catch((e) => setNote(errorText(e)))
+    .then((answer) => { setNote(''); onDisconnected(disconnectedText(integration.name, answer)) }).catch((e) => setNote(errorText(e)))
   return (
     <Box sx={(t) => ({ ...card(t), scrollMarginTop: 80, ...(highlight && { outline: '2px solid #2e7d32', outlineOffset: 2 }) })} data-integration-row={integration.name} data-integration-status={integration.status}
       id={`integration-${integration.integrationId}`} tabIndex={-1}>
@@ -230,6 +237,7 @@ IntegrationRow.propTypes = {
   pro: PropTypes.bool,
   cloud: PropTypes.bool,
   onChanged: PropTypes.func.isRequired,
+  onDisconnected: PropTypes.func.isRequired,
   onReview: PropTypes.func.isRequired,
   onSignIn: PropTypes.func.isRequired,
   onUpgrade: PropTypes.func.isRequired,
@@ -239,6 +247,7 @@ IntegrationRow.propTypes = {
 export default function IntegrationsPage() {
   const [state, setState] = useState({ integrations: null, pro: null })
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [connecting, setConnecting] = useState(false)
   const [reconnect, setReconnect] = useState(null)
   const [reviewing, setReviewing] = useState(null)
@@ -282,6 +291,7 @@ export default function IntegrationsPage() {
         </Box>
       )}
       {error && <Typography role="alert" color="error">{error}</Typography>}
+      {notice && <Box sx={card} role="status" data-integrations-notice=""><Typography variant="body2">{notice}</Typography></Box>}
       <GoogleIntegration integrations={state.integrations || []} pro={state.pro !== false || !cloud} onPay={pay} onChanged={refresh} />
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
         <Typography variant="h6" component="h2" sx={{ flex: 1, fontWeight: 700 }}>Agents</Typography>
@@ -293,7 +303,7 @@ export default function IntegrationsPage() {
       )}
       {mcp.map((integration) => (
         <IntegrationRow key={integration.integrationId} integration={integration} pro={Boolean(state.pro)} cloud={cloud} onChanged={refresh}
-          onReview={(row) => (cloud && !state.pro ? pay(refresh) : setReviewing(row))} onSignIn={(row) => setReconnect({ address: row.address, name: row.name })}
+          onDisconnected={(text) => { setNotice(text); refresh() }} onReview={(row) => (cloud && !state.pro ? pay(refresh) : setReviewing(row))} onSignIn={(row) => setReconnect({ address: row.address, name: row.name })}
           onUpgrade={startUpgrade} highlight={highlight === integration.integrationId} />
       ))}
       <InviteWalkthrough open={connecting || Boolean(reconnect) || Boolean(upgrade)} reconnect={reconnect} upgrade={upgrade} integrations={mcp} onManageIntegration={manage}

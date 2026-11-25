@@ -41,7 +41,7 @@ const refusedWith = async (promise, code) => {
 }
 
 // Ada owns slate A, where Sam may edit and Vic may read.
-function makeWorld({ writes = [{ tool: 'create_issue', arguments: { title: 'Retry fails on 502', description: 'Retries stop after one 502.', team: 'ENG' } }], cards = GALLERY, session = null } = {}) {
+function makeWorld({ writes = [{ tool: 'create_issue', arguments: { title: 'Retry fails on 502', description: 'Retries stop after one 502.', team: 'ENG' } }], cards = GALLERY, session = null, extra = {} } = {}) {
   const slate = { _id: 'slateA', shareId: 'shareA', userId: 'ada', revision: 1, nodes: [{ options: { id: 'n0', text: 'Retry bug: stops after one 502', xPos: 0, yPos: 0, width: 200, height: 80 }, relationships: { associations: [] } }] }
   const roles = { ada: 'edit', sam: 'edit', vic: 'read' }
   const connections = memoryStore()
@@ -51,6 +51,7 @@ function makeWorld({ writes = [{ tool: 'create_issue', arguments: { title: 'Retr
   const audits = []
   const prompts = []
   const plan = { writes }
+  const shelf = { cards } // the gallery as it is now (an administrator may remove a card)
   const options = {
     connections,
     integrations,
@@ -82,10 +83,11 @@ function makeWorld({ writes = [{ tool: 'create_issue', arguments: { title: 'Retr
     presence: { plan: async () => {}, step: async () => {}, saved: async () => {}, end: async () => {} },
     vault: { available: () => true, describe: async () => null, tokenFor: async () => null, remove: async () => ({ removed: true }) },
     devOrigins: [servers.origin],
-    gallery: async () => cards,
+    gallery: async () => shelf.cards,
     sleep: async () => {},
     later: () => {},
     audit: (entry) => audits.push(entry),
+    ...extra,
   }
   const service = createConnectorService(options)
   // As the app's suggestions.decide does it (server/actions/agent-suggestions.mjs): the gate first, then the store.
@@ -112,7 +114,7 @@ function makeWorld({ writes = [{ tool: 'create_issue', arguments: { title: 'Retr
   }
   const person = (userId) => ({ kind: 'person', userId, scopes: ['slates:read', 'slates:write'] })
   const token = (userId) => ({ kind: 'agent', userId, tokenId: 't-' + userId, scopes: ['slates:read', 'slates:write'] })
-  const world = { service, options, slate, connections, integrations, outside, live, audits, prompts, plan, decide, ada: person('ada'), sam: person('sam'), vic: person('vic'), adaToken: token('ada') }
+  const world = { service, options, slate, connections, integrations, outside, live, audits, prompts, plan, decide, shelf, ada: person('ada'), sam: person('sam'), vic: person('vic'), adaToken: token('ada') }
   world.invite = async (path = '/tracker/mcp', { name = 'Tracker', policy = {} } = {}) => {
     const found = await service.discover(world.ada, { shareId: 'shareA', address: servers.url(path) })
     return service.connect(world.ada, { shareId: 'shareA', address: found.address, name, tools: found.tools.map(({ name: tool, hash, policy: p }) => ({ name: tool, hash, policy: policy[tool] || p })) })
@@ -782,4 +784,94 @@ test('review 12: the Done link is never one the change itself carried (a planted
   assert.equal(linkOf({ content: [{ type: 'text', text: 'body: https://evil.example/phish · issue https://tracker.example/i/9' }] }, args), 'https://tracker.example/i/9')
   assert.equal(linkOf({ structuredContent: { body: 'https://evil.example/phish', url: 'https://tracker.example/i/9' } }, args), 'https://tracker.example/i/9')
   assert.equal(publicCard({ _id: 'oabcdefg', args, state: 'waiting' }).args, args)
+})
+
+// Prod, 2026-11-25: Disconnect on the Integrations page answered "The request could not be completed."
+// and left the agent connected. The app wires forget as (integration) => Google ? … : null, so every
+// non-Google disconnect threw on null.catch after leaving its slates, before the row was removed.
+test('Disconnect (Integrations page) with the app\'s forget, after the gallery dropped the agent: it disconnects; waiting cards declined, one being made stays and says so, kept work stays', async () => {
+  const appForget = (integration) => (integration.address === 'google://drive' ? Promise.resolve() : null)
+  const world = makeWorld({ extra: { forget: appForget } })
+  const conn = await world.invite()
+  const integrationId = world.connections.rows[0].integrationId
+  assert.ok(integrationId)
+  // A lookup answer, kept: kept work stays on the slate after Disconnect.
+  world.plan.writes = []
+  await world.service.call(world.ada, { connectionId: conn.connectionId, request: 'what retry bugs are open' })
+  const lookup = await world.action()
+  const kept = lookup.items.find((i) => i.kind === 'add')
+  await world.decide(world.ada, 'keep', lookup._id, [kept.id])
+  assert.ok(world.slate.nodes.some((n) => n.options.id === kept.nodeId), 'kept onto the slate')
+  // Two changes: one being made right now, one waiting.
+  world.plan.writes = [{ tool: 'create_issue', arguments: { title: 'Retry fails on 502', description: 'Retries stop after one 502.', team: 'ENG' } }]
+  await world.service.call(world.ada, { connectionId: conn.connectionId, request: 'file the retry bug' })
+  await world.service.call(world.ada, { connectionId: conn.connectionId, request: 'file another retry bug' })
+  const [busy, waiting] = world.outside.rows.filter((r) => r.kind === 'card')
+  Object.assign(busy, { state: 'running', runningSince: new Date(), updatedAt: new Date() })
+  // An administrator removed the card from the gallery meanwhile.
+  world.shelf.cards = []
+  const gone = await world.service.integrationDisconnect(world.ada, { integrationId })
+  assert.equal(gone.ok, true)
+  assert.equal(gone.removedFrom, 1)
+  assert.equal(gone.running, 1)
+  assert.match(gone.say, /already being made in Tracker and could not be stopped/)
+  assert.equal(gone.note, undefined, 'nothing to revoke: no note')
+  assert.equal(world.integrations.rows.length, 0, 'forgotten here')
+  assert.equal(world.connections.rows[0].status, 'removed')
+  assert.equal(waiting.state, 'declined')
+  assert.equal(busy.state, 'running', 'a change being made is never declined')
+  assert.ok(world.slate.nodes.some((n) => n.options.id === kept.nodeId), 'kept work stays')
+  assert.equal((await world.live.store.list('slateA')).flatMap((a) => a.items).filter((i) => i.state === 'pending' && i.nodeId !== busy.nodeId).length, 0, 'waiting suggestions discarded')
+  assert.ok(world.audits.some((a) => a.kind === 'integration_disconnect' && a.integrationId === integrationId))
+})
+
+test('Disconnect always forgets the agent here: a tidy-up step that throws is recorded, and a sign-in its server would not end is a note', async () => {
+  const broken = { presence: false }
+  const world = makeWorld({
+    extra: {
+      forget: () => { throw new Error('forget broke') },
+      presence: { plan: async () => {}, step: async () => {}, saved: async () => {}, end: async () => { if (broken.presence) throw new Error('presence broke') } },
+      vault: { available: () => true, describe: async () => null, tokenFor: async () => null, remove: async () => ({ removed: true, revoked: false, revokeFailed: true }) },
+    },
+  })
+  const conn = await world.invite()
+  await world.service.call(world.ada, { connectionId: conn.connectionId, request: 'file the retry bug' })
+  const integration = world.integrations.rows[0]
+  // As a signed-in integration (OAuth) is kept.
+  integration.auth = { kind: 'oauth' }
+  world.options.suggestions.withdraw = async () => { throw new Error('withdraw broke') }
+  broken.presence = true
+  const gone = await world.service.integrationDisconnect(world.ada, { integrationId: integration._id })
+  assert.equal(gone.ok, true)
+  assert.equal(gone.signedOut, true)
+  assert.match(gone.note, /did not confirm that Slatebox's access ended/)
+  assert.equal(world.integrations.rows.length, 0)
+  assert.equal(world.outside.rows.find((r) => r.kind === 'card').state, 'declined')
+  const failed = world.audits.find((a) => a.kind === 'integration_disconnect').failed
+  assert.deepEqual(failed.sort(), ['forget', 'presence', 'suggestions'])
+  // Someone else's (or a gone) integration is still refused, in words.
+  await refusedWith(world.service.integrationDisconnect(world.ada, { integrationId: integration._id }), 'not_found')
+})
+
+test('the integration actions answer a failure of this server in their own words, and log it', async () => {
+  const { createAppRegistry } = await import('../web/app/server/actions/index.mjs')
+  const logged = []
+  const broken = new Proxy({}, { get: () => async () => { throw new TypeError("Cannot read properties of null (reading 'catch')") } })
+  const registry = createAppRegistry({ extraActions: integrationActions(() => broken), logFailure: (id, error) => logged.push([id, error.message]) })
+  const ada = { kind: 'person', userId: 'ada', scopes: ['slates:read', 'slates:write'] }
+  for (const action of registry.list().filter((a) => a.id.startsWith('integrations.'))) {
+    assert.ok(action.failure?.message, `${action.id} names what did not happen`)
+    assert.doesNotMatch(action.failure.message, /could not be completed/, action.id)
+  }
+  await assert.rejects(registry.run(ada, 'integrations.disconnect', { integrationId: 'i1' }), (error) => {
+    assert.equal(error.status, 500)
+    assert.match(error.message, /could not finish disconnecting it just now. Try Disconnect again/)
+    return true
+  })
+  assert.deepEqual(logged, [['integrations.disconnect', "Cannot read properties of null (reading 'catch')"]])
+  // A refusal is the caller's to read, in its own words, and is not logged as a failure.
+  const refusing = { integrationDisconnect: async () => { const e = new Error('That integration is not connected any more.'); e.status = 404; e.code = 'not_found'; throw e } }
+  const again = createAppRegistry({ extraActions: integrationActions(() => refusing), logFailure: (id) => logged.push([id]) })
+  await assert.rejects(again.run(ada, 'integrations.disconnect', { integrationId: 'i1' }), (error) => error.status === 404 && /not connected any more/.test(error.message))
+  assert.equal(logged.length, 1)
 })
