@@ -74,7 +74,7 @@ def main():
                         raise SystemExit("Unexpected package name or release version")
                     if manifest["bin"] != {"slatebox-mcp": "src/cli.js"}:
                         raise SystemExit("Expected only the slatebox-mcp executable (the slatebox command is the slatebox package's)")
-                if name == "LICENSE.md" and data != git("show", f"{revision}:LICENSE.md"):
+                if name == "LICENSE.md" and data != git("show", f"{revision}:LICENSE"):
                     raise SystemExit("The packaged license differs from the app license")
                 info = tarfile.TarInfo("package/" + name)
                 info.mode, info.size = mode, len(data)

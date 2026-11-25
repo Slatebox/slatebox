@@ -24,7 +24,7 @@ export const appRoot = join(repoRoot, 'web/app')
 export const ENTERPRISE_MARKER = 'Licensed under the Slatebox Enterprise License'
 const LICENSE_TITLE = 'Slatebox Enterprise License'
 
-const STUB = `// MIT (LICENSE.md). Self-host build: Slatebox Cloud's enterprise code is not part of this build.
+const STUB = `// MIT (LICENSE). Self-host build: Slatebox Cloud's enterprise code is not part of this build.
 // The app requires this path only on Slatebox Cloud (web/app/server/enterprise-loader.mjs).
 export const selfHostStub = true
 `

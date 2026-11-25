@@ -233,6 +233,7 @@ COPY --from=fonts /fonts.md /opt/slatebox/licenses/third-party/fonts.md
 COPY --from=mongodb-notices / /opt/slatebox/licenses/third-party/
 COPY --from=cloudflared-license / /opt/slatebox/licenses/third-party/
 COPY app-license/LICENSE.md /opt/slatebox/licenses/slatebox-app-LICENSE.md
+COPY app-license/LICENSING.md /opt/slatebox/licenses/slatebox-app-LICENSING.md
 COPY engine/LICENSE /opt/slatebox/licenses/slateboxjs-LICENSE.txt
 COPY relay/LICENSE /opt/slatebox/licenses/slatebox-relay-LICENSE.txt
 COPY --from=node /usr/local/LICENSE /opt/slatebox/licenses/third-party/node-LICENSE.txt

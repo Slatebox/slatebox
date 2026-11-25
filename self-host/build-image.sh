@@ -26,7 +26,7 @@ relay_sha=$(git -C "$relay" rev-parse --short=12 HEAD)
 # refused unless the label is allowed to say so.
 # Git-ignored files count too: rootfs is copied from disk below, so an ignored file there would go
 # into the image without ever being in the revision the label names.
-if [[ -n $(git -C "$app" status --porcelain -- self-host web/app enterprise LICENSE.md) ]] \
+if [[ -n $(git -C "$app" status --porcelain -- self-host web/app enterprise LICENSE LICENSING.md) ]] \
   || [[ -n $(git -C "$app" ls-files --others --ignored --exclude-standard -- self-host/Dockerfile self-host/build self-host/licenses self-host/rootfs) ]]; then
   if [[ ${ALLOW_DIRTY:-} != 1 ]]; then
     echo 'Commit your changes under self-host/ and web/app/ first (git-ignored files under self-host/rootfs, build or licenses count), or set ALLOW_DIRTY=1 for a local trial build.' >&2
@@ -67,7 +67,8 @@ mkdir -p "$stage/app" "$stage/engine" "$stage/relay" "$stage/self-host" "$stage/
 git -C "$app" archive "$app_sha:web/app" | tar -x -C "$stage/app"
 git -C "$engine" archive "$engine_sha" | tar -x -C "$stage/engine"
 git -C "$relay" archive "$relay_sha" | tar -x -C "$stage/relay"
-git -C "$app" show "$app_sha:LICENSE.md" > "$stage/app-license/LICENSE.md"
+git -C "$app" show "$app_sha:LICENSE" > "$stage/app-license/LICENSE.md"
+git -C "$app" show "$app_sha:LICENSING.md" > "$stage/app-license/LICENSING.md"
 
 # The app tree carries settings files for the hosted service. None of them may
 # enter an image: each installation generates its own on first start.

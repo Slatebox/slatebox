@@ -281,10 +281,13 @@ test('copy guards: the exec, API and MCP words name own AI as self-hosted only, 
   const text = JSON.stringify(exec)
   assert.doesNotMatch(text, /top-ups and own keys/)
   assert.match(text, /Own AI \(levels me and team\) is for self-hosted Slatebox: Slatebox Cloud refuses it/)
-  for (const path of ['README.md', 'packages/slatebox-mcp/README.md']) {
+  // The MCP package README says it in its opening paragraph (line 3); the root README, whose top is a
+  // centered logo and badges, says it where it introduces Slatebox Cloud.
+  for (const [path, opening] of [['README.md', null], ['packages/slatebox-mcp/README.md', 2]]) {
     const readme = read(path)
     assert.doesNotMatch(readme, /so is AI on your own key|Your own AI and call keys are free/, path)
-    assert.match(readme.split('\n')[2], /The canvas is free\. On Slatebox Cloud, AI comes with Slatebox Pro; a self-hosted Slatebox can use its own AI key\./, path)
+    const where = opening === null ? readme : readme.split('\n')[opening]
+    assert.match(where, /The canvas is free\. On Slatebox Cloud, AI comes with Slatebox Pro; a self-hosted Slatebox can use its own AI key\./, path)
   }
   const contract = app('server/actions/generated/contract.json')
   assert.doesNotMatch(contract, /top-ups and own keys/)

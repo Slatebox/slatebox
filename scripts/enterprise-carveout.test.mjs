@@ -404,16 +404,23 @@ test('settings: self-host by default, no public invite switch, a license key slo
 })
 
 test('licenses: MIT except enterprise/', () => {
-  const license = read('LICENSE.md')
-  assert.match(license, /"enterprise\/"[\s\S]*enterprise\/LICENSE/)
-  assert.match(license, /MIT License/)
+  // LICENSE is the standard MIT text alone, so GitHub and npm tooling detect MIT; the enterprise/
+  // carve-out is stated in LICENSING.md and the README, never inside LICENSE.
+  const license = read('LICENSE')
+  assert.match(license, /^MIT License\n\nCopyright \(c\) 2026 Slatebox LLC and Slatebox contributors\n\nPermission is hereby granted/)
+  assert.doesNotMatch(license, /enterprise/i)
+  assert.equal(license, read('packages/slatebox-mcp/LICENSE.md'))
+  const licensing = read('LICENSING.md')
+  assert.match(licensing, /`enterprise\/`[\s\S]*Slatebox Enterprise License[\s\S]*enterprise\/LICENSE/)
+  assert.match(licensing, /MIT License in\s+\[`LICENSE`\]/)
+  assert.match(read('README.md'), /enterprise\/[\s\S]*Slatebox Enterprise License/)
   const enterprise = read('enterprise/LICENSE')
   assert.match(enterprise, /^Slatebox Enterprise License/)
   assert.match(enterprise, /not open source/)
   assert.match(enterprise, /Slatebox LLC/)
   assert.match(enterprise, /self-hosted Slatebox images[\s\S]*include the\s+Enterprise Software, locked/)
   assert.match(enterprise, /on-prem license\s+key/)
-  assert.equal(JSON.parse(read('package.json')).license, 'SEE LICENSE IN LICENSE.md')
+  assert.equal(JSON.parse(read('package.json')).license, 'SEE LICENSE IN LICENSING.md')
   assert.equal(JSON.parse(read('web/app/package.json')).license, 'MIT')
   assert.equal(JSON.parse(read('packages/slatebox-mcp/package.json')).license, 'MIT')
 })

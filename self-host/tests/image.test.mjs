@@ -49,7 +49,7 @@ test('license notices say which parts are MIT and which are not', async () => {
   assert.match(notice, /MongoDB Community Server.*Server Side Public License/)
   const files = (await inside('cd /opt/slatebox/licenses && find . -type f | sort')).stdout.trim().split('\n')
   for (const file of [
-    './NOTICE.md', './slatebox-app-LICENSE.md', './slateboxjs-LICENSE.txt', './slatebox-relay-LICENSE.txt',
+    './NOTICE.md', './slatebox-app-LICENSE.md', './slatebox-app-LICENSING.md', './slateboxjs-LICENSE.txt', './slatebox-relay-LICENSE.txt',
     './third-party/mongodb-server-SSPL.txt', './third-party/mongodb-database-tools-LICENSE.md',
     './third-party/caddy-LICENSE.txt', './third-party/node-LICENSE.txt', './third-party/meteor-LICENSE.txt',
     './third-party/tini-LICENSE.txt', './third-party/fonts.md', './third-party/fonts-OFL-1.1.txt', './third-party/fonts-Apache-2.0.txt',
@@ -77,11 +77,14 @@ test('license notices say which parts are MIT and which are not', async () => {
     assert.match(ofl, /Copyright/, `${family}/OFL.txt names the copyright`)
     assert.match(ofl, /SIL OPEN FONT LICENSE Version 1\.1/i, `${family}/OFL.txt is the OFL 1.1`)
   }
-  // The app's license is the repository's LICENSE.md as committed: the enterprise/ carve-out first,
-  // then the MIT License for everything else (so its MIT heading is past the first 200 bytes).
+  // The app's license is the repository's LICENSE as committed (the MIT License alone), and its
+  // LICENSING.md beside it says the enterprise/ directory is under the Slatebox Enterprise License.
   const appLicense = (await inside('cat /opt/slatebox/licenses/slatebox-app-LICENSE.md')).stdout
-  assert.equal(appLicense, readFileSync(join(here, '../../LICENSE.md'), 'utf8'), 'the image carries the app\'s LICENSE.md unchanged')
-  assert.match(appLicense, /"enterprise\/" directory[\s\S]*Slatebox Enterprise License[\s\S]*\nMIT License\n/)
+  assert.equal(appLicense, readFileSync(join(here, '../../LICENSE'), 'utf8'), 'the image carries the app\'s LICENSE unchanged')
+  assert.match(appLicense, /^MIT License\n/)
+  const appLicensing = (await inside('cat /opt/slatebox/licenses/slatebox-app-LICENSING.md')).stdout
+  assert.equal(appLicensing, readFileSync(join(here, '../../LICENSING.md'), 'utf8'), 'the image carries the app\'s LICENSING.md unchanged')
+  assert.match(appLicensing, /`enterprise\/`[\s\S]*Slatebox Enterprise License/)
   const heads = (await inside('cd /opt/slatebox/licenses && head -c 200 slateboxjs-LICENSE.txt third-party/mongodb-server-SSPL.txt')).stdout
   assert.match(heads, /MIT License[\s\S]*Server Side Public License/)
 })

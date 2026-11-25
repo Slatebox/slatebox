@@ -32,7 +32,7 @@ Slatebox is structured in a yarn workspace mono-repo, despite not utilizing its 
 
 ### Licensing of contributions
 
-Everything in this repository is MIT ([LICENSE.md](LICENSE.md)) except the `enterprise/` directory, which is under [enterprise/LICENSE](enterprise/LICENSE). A contribution to MIT code is made under MIT. A contribution to `enterprise/` is made under the terms in section 3 of enterprise/LICENSE. MIT code must work without `enterprise/`: never import from it. Enterprise code reaches the app only through the loader (`web/app/server/enterprise-loader.mjs`, `web/app/imports/api/client/enterprise-slots.mjs`), and only where enterprise code is unlocked: `settings.public.edition` is `"cloud"`, or a self-hosted install has a license key (`web/app/server/enterprise-license.mjs`).
+Everything in this repository is MIT ([LICENSE](LICENSE); see [LICENSING.md](LICENSING.md)) except the `enterprise/` directory, which is under [enterprise/LICENSE](enterprise/LICENSE). A contribution to MIT code is made under MIT. A contribution to `enterprise/` is made under the terms in section 3 of enterprise/LICENSE. MIT code must work without `enterprise/`: never import from it. Enterprise code reaches the app only through the loader (`web/app/server/enterprise-loader.mjs`, `web/app/imports/api/client/enterprise-slots.mjs`), and only where enterprise code is unlocked: `settings.public.edition` is `"cloud"`, or a self-hosted install has a license key (`web/app/server/enterprise-license.mjs`).
 
 ## Development Setup
 
@@ -58,9 +58,9 @@ Once Meteor is installed, it's simple to start developing
 	cd slatebox/web/app
 	```
 
-3. Clone and build SlateboxJS, the canvas engine, next to this repository (`web/app/package.json` links `../../../slateboxjs-v2`):
+3. Clone and build [SlateboxJS](https://github.com/Slatebox/slateboxjs), the canvas engine, next to this repository, into a folder named `slateboxjs-v2` (`web/app/package.json` links `../../../slateboxjs-v2`):
 	```
-	(cd ../../.. && git clone https://github.com/Slatebox/slateboxjs-v2.git && cd slateboxjs-v2 && npm install && npm run build)
+	(cd ../../.. && git clone https://github.com/Slatebox/slateboxjs.git slateboxjs-v2 && cd slateboxjs-v2 && npm install && npm run build)
 	```
 
 4. Install all dependencies of all modules and link them together:

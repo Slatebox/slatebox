@@ -2,7 +2,7 @@
 
 <!-- Copyright (c) 2026 Slatebox LLC. Licensed under the Slatebox Enterprise License (enterprise/LICENSE). -->
 
-This directory holds Slatebox's enterprise features. They run on [Slatebox Cloud](https://app.slatebox.com), and on a self-hosted install once a license key from Slatebox LLC unlocks them ("Upgrade on prem"). It is **not MIT licensed**. Its files are under the [Slatebox Enterprise License](LICENSE). You may read, change and test this code. Running it in production needs an agreement with Slatebox LLC. Everything outside this directory is MIT ([LICENSE.md](../LICENSE.md)).
+This directory holds Slatebox's enterprise features. They run on [Slatebox Cloud](https://app.slatebox.com), and on a self-hosted install once a license key from Slatebox LLC unlocks them ("Upgrade on prem"). It is **not MIT licensed**. Its files are under the [Slatebox Enterprise License](LICENSE). You may read, change and test this code. Running it in production needs an agreement with Slatebox LLC. Everything outside this directory is MIT ([LICENSE](../LICENSE)).
 
 ## What lives here
 

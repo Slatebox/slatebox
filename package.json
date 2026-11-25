@@ -1,7 +1,7 @@
 {
   "name": "slatebox",
   "private": true,
-  "license": "SEE LICENSE IN LICENSE.md",
+  "license": "SEE LICENSE IN LICENSING.md",
   "workspaces": [
     "packages/**",
     "desktop",
