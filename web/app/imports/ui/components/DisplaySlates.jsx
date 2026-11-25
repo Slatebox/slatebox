@@ -329,7 +329,8 @@ export default function DisplaySlates({
             showAdd
             showSearch
             searchOptions={tags.map((t) => t.tag)}
-            onAdd={() => history('/new')}
+            // New, among slates already made: a blank slate (the first run is for Create slate before any).
+            onAdd={() => history('/new?empty=1')}
             onSearchInputChange={filterSlates}
             onPrivateChanged={onPrivateChanged}
             onDelete={onDelete}

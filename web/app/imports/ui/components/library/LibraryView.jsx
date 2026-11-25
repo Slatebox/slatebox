@@ -11,6 +11,7 @@ import { catalogEntry, catalogSample, entryOfBoard, listedEntries, ownEntries, s
 import libraryApi from '../../../api/client/library'
 import { buildLink, BUILD_SHAPES } from './build/buildTurns.mjs'
 import { categoryLabel } from '../../../api/common/library-model.mjs'
+import { startGroup } from '../../../api/common/first-slate.mjs'
 
 // The library (library final.md §2.3): a view inside Ask Slatebox's conversation, in the panel's
 // 344px column and in the phone's sheet. Cards two to a row with a looping picture, a detail view
@@ -283,7 +284,8 @@ function Detail({ entry, onAdd, onSay, hasBoard, full, onBranch }) {
  * chat), the groups, what is on this slate, the cards, and a card's detail in place of the list.
  */
 export default function LibraryView({ onBack, onAdd, onSay, onSend, onWhatCanItDo, board = null, hasBoard = false, full = false, start = {} }) {
-  const [group, setGroup] = useState(start.group ?? 'all')
+  // Opened with no group: the group of the job this person said they work on (the first run's answer), else all.
+  const [group, setGroup] = useState(start.group ?? startGroup(Meteor.user()?.profile?.start) ?? 'all')
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(start.entry ? catalogEntry(start.entry) : null)
   const heading = useRef(null)

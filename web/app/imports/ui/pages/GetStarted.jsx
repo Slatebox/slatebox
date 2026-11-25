@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTracker } from 'meteor/react-meteor-data'
 import { Meteor } from 'meteor/meteor'
 import { useSetAtom } from 'jotai'
@@ -9,8 +9,12 @@ import createAnonymousUser from '../../api/client/createAnonymousUser'
 import { initialPrompt, createSlateWithAIContent } from '../jotai/atoms'
 import SlateLoading from '../components/SlateLoading'
 
+// A blank slate: "Create slate" for someone who has answered the first run (or a member), and the first
+// run's "Start with an empty slate" (?empty=1) and "Browse all boards" (?library=1: the library opens).
 export default function GetStarted() {
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const library = params.get('library') === '1'
   const setPrompt = useSetAtom(initialPrompt)
   const setAIContext = useSetAtom(createSlateWithAIContent)
   const loggingIn = useTracker(() => Meteor.loggingIn(), [])
@@ -31,10 +35,10 @@ export default function GetStarted() {
       if (!active) return
       setPrompt('')
       setAIContext(null)
-      navigate('/canvas/' + shareId, { replace: true })
+      navigate('/canvas/' + shareId, { replace: true, ...(library && { state: { openLibrary: true } }) })
     }).catch(() => { if (active) setError('Could not open the board. Try again.') })
     return () => { active = false }
-  }, [loggingIn, navigate, retry, setPrompt, setAIContext])
+  }, [loggingIn, navigate, retry, setPrompt, setAIContext, library])
 
   if (!error) return <Box component="main"><SlateLoading /></Box>
   return <Box component="main" sx={{ minHeight: '100svh', bgcolor: 'background.default', color: 'text.primary', p: 3,

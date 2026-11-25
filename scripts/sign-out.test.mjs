@@ -128,7 +128,8 @@ test('private pages send someone who signed out to sign in; guest-making pages a
   assert.doesNotMatch(routes, /function PrivateRoute[\s\S]{0,300}<Navigate to="\/start"/)
   assert.match(app('imports/ui/pages/SignUp.jsx'), /export default function SignUp\(\) \{\n  return <GuestStartGate><StartSignUp \/><\/GuestStartGate>/)
   const main = app('client/main.jsx')
-  assert.match(main, /<GuestStartGate><GetStarted \/><\/GuestStartGate>/)
+  // /new with no hash: the first run or a blank slate, both behind the same gate (each makes a guest).
+  assert.match(main, /<GuestStartGate>\{route === 'first' \? <FirstSlate \/> : <GetStarted \/>\}<\/GuestStartGate>/)
   assert.match(main, /<GuestStartGate><NewCreativeSlate fromBrief \/><\/GuestStartGate>/)
   assert.match(main, /path="\/new\/:creativeKind" element=\{<GuestStartGate><NewCreativeSlate \/><\/GuestStartGate>\}/)
   const gate = app('imports/ui/components/GuestStartGate.jsx')

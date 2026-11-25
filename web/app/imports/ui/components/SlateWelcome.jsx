@@ -13,6 +13,9 @@ import { TileLoader } from './SlateLoading'
 import { requestLibrary } from './library/libraryBus'
 import { addNoteInView } from '../common/newNote.mjs'
 import { space } from '../common/AccountLayout' // the app's spacing scale
+import { Meteor } from 'meteor/meteor'
+import { Link as RouterLink } from 'react-router-dom'
+import { startGroup } from '../../api/common/first-slate.mjs'
 
 const arrive = keyframes`from { opacity: 0; transform: translateY(8px) scale(.98) } to { opacity: 1; transform: none }`
 // Sized by the canvas it sits in (a container), not the screen: on a phone the canvas is what Ask
@@ -76,11 +79,13 @@ export default function SlateWelcome({ slate, canvasId, active, phone = false, a
         <Button variant="contained" disableElevation size={phone ? 'medium' : 'large'} startIcon={<EditNoteIcon />} onClick={() => addNoteInView(slate, canvasId)}
           sx={{ borderRadius: 6, px: space.block }}>Add a note</Button>
         {canPick && !boardsInSight && <Button variant="outlined" size={phone ? 'medium' : 'large'} startIcon={<DashboardCustomizeOutlined />}
-          onClick={() => requestLibrary({ start: {} })} sx={{ borderRadius: 6, px: space.block }}>Pick a board</Button>}
+          onClick={() => requestLibrary({ start: startGroup(Meteor.user()?.profile?.start) ? { group: startGroup(Meteor.user()?.profile?.start) } : {} })} sx={{ borderRadius: 6, px: space.block }}>Pick a board</Button>}
       </Box>
       {!phone && <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: space.group, mb: 0, '@media (pointer: coarse)': { display: 'none' } }}>
         Or double-click anywhere on the canvas.
       </Typography>}
+      {/* The first run again: a working board for a job, set up from a one-click answer. */}
+      <Button component={RouterLink} to="/new?again=1" size="small" data-start-from-job="" sx={{ mt: space.text, textTransform: 'none', color: 'text.secondary', [tiny]: { display: 'none' } }}>Start from a job</Button>
     </Box>
   </Box>
 }
