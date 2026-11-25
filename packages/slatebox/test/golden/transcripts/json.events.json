@@ -1,0 +1,38 @@
+[
+ {
+  "event": "step",
+  "id": "preflight",
+  "status": "start"
+ },
+ {
+  "event": "step",
+  "id": "preflight",
+  "status": "ok"
+ },
+ {
+  "event": "plan"
+ },
+ {
+  "event": "step",
+  "id": "files",
+  "status": "start"
+ },
+ {
+  "event": "step",
+  "id": "files",
+  "status": "ok"
+ },
+ {
+  "event": "step",
+  "id": "start",
+  "status": "start"
+ },
+ {
+  "event": "step",
+  "id": "start",
+  "status": "ok"
+ },
+ {
+  "event": "done"
+ }
+]

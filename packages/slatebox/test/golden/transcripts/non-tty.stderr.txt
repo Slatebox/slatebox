@@ -1,0 +1,2 @@
+? Some answers are needed: ai.mode.
+  - ai.mode: AI for drafts and the canvas assistant. Slatebox works with any provider, and none is chosen for you.  (--ai none | --ai-provider kind=<openai|anthropic|deepinfra|openrouter|groq|together|mistral|ollama|lmstudio|openai-compatible>,model=<model>,url=<endpoint>,key=env:<VAR> (repeat for several, then --ai-default <id>); with --yes and no AI answer, AI is off (slatebox ai add later))

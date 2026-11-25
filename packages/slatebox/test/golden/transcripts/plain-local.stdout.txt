@@ -1,0 +1,33 @@
+✓ This computer: Docker 29.4.0 (Colima), arm64
+… Checking this computer
+✓ this computer: Docker 29.4.0 (Colima)
+
+Plan: install Slatebox "slatebox" on this computer
+
+  Address:   http://localhost:17561
+  Image:     slatebox-test:transcript
+             pinned as sha256:736c617465626f782d746573743a7472616e7363726970740000000000000000
+  Ports:     127.0.0.1:17561:7070
+  Secrets:   <HOME>/installs/slatebox/secrets.env on this computer (mode 0600)
+
+  Files:
+    - <HOME>/installs/slatebox/secrets.env (new: SLATEBOX_KEY_ENCRYPTION_KEY and any keys you referenced)
+    - <HOME>/installs/slatebox/slatebox.env
+    - <HOME>/installs/slatebox/install.yaml (the install record, no secrets)
+
+  Commands:
+    - docker run --detach --name slatebox --restart unless-stopped --publish 127.0.0.1:17561:7070 --volume slatebox-data:/data --env-file slatebox.env --env-file secrets.env sha256:736c617465626f782d746573743a7472616e7363726970740000000000000000
+    - docker exec slatebox slatebox health --deep
+… Writing <HOME>/installs/slatebox
+✓ Wrote <HOME>/installs/slatebox
+… Starting Slatebox and waiting until it is healthy (up to 600s)
+✓ Slatebox is healthy at http://localhost:17561
+
+Open http://localhost:17561 and create the first account.
+
+Slatebox is running at  http://localhost:17561
+
+Your key encryption key is stored in <HOME>/installs/slatebox/secrets.env. Back it up with your password manager now.
+Backups do not contain it, and without it people's saved AI keys cannot be read after a restore.
+Install record: <HOME>/installs/slatebox/install.yaml
+Next:  slatebox status   slatebox logs   slatebox upgrade   slatebox uninstall

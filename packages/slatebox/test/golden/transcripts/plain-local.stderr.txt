@@ -1,0 +1,24 @@
+
+Slatebox installer. Enter accepts the default in brackets; Ctrl-C stops without changing anything.
+
+? Where should Slatebox run?
+  1) This computer, with Docker  [default]
+  2) A Linux server over SSH
+  3) Kubernetes (the current kube context)
+  4) Just write the files (compose file or manifests) for GitOps
+  Choose 1-4 (Enter for the default): ? Admin email (the HTTPS certificate contact; the first account comes from the setup link) (Enter skips): ? AI for drafts and the canvas assistant. Slatebox works with any provider, and none is chosen for you.
+  1) None for now (the usual choice; add a provider later with `slatebox ai add`)
+  2) Cloud provider key(s): OpenAI, Anthropic, DeepInfra, OpenRouter, Groq, Together, Mistral
+  3) An endpoint I run: Ollama, vLLM, LM Studio or any OpenAI-compatible URL, and its model
+  4) Both
+  Choose 1-4: ? Single sign-on (bundled Keycloak: Entra ID, Okta, Google Workspace, SAML, LDAP)? [y/N]: ? Backups
+  1) Daily at 03:00, keep 14, next to the install  [default]
+  2) Daily to another folder
+  3) Daily to S3 (needs the aws command on the host)
+  4) Off
+  Choose 1-4 (Enter for the default): ? Size
+  1) small: 1Gi memory, 1 CPU, 10Gi storage  [default]
+  2) team: 2Gi memory, 2 CPU, 20Gi storage
+  3) large: 4Gi memory, 4 CPU, 50Gi storage
+  Choose 1-3 (Enter for the default): ? Mail: name of the environment variable that holds your SMTP URL (smtp://user:pass@host:587) (Enter skips):   Without mail, someone who forgets a password gets a one-time link from you: docker exec slatebox slatebox password-link <email>
+? Apply this plan? [Y/n]: 

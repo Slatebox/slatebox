@@ -1,0 +1,50 @@
+✓ This computer: Docker 29.4.0 (OrbStack), arm64
+… Checking this computer
+✓ this computer: Docker 29.4.0 (OrbStack)
+… Checking acme.slatebox.team
+✓ acme.slatebox.team is available
+
+Plan: install Slatebox "slatebox" on this computer
+
+  Address:   https://acme.slatebox.team
+  Image:     slatebox-test:transcript
+             pinned as sha256:736c617465626f782d746573743a7472616e7363726970740000000000000000
+  Ports:     127.0.0.1:7070:7070
+  Secrets:   <HOME>/installs/slatebox/secrets.env on this computer (mode 0600)
+
+  Files:
+    - <HOME>/installs/slatebox/secrets.env (new: SLATEBOX_KEY_ENCRYPTION_KEY and any keys you referenced)
+    - <HOME>/installs/slatebox/slatebox.env
+    - <HOME>/installs/slatebox/install.yaml (the install record, no secrets)
+    - <HOME>/installs/slatebox/credentials.json (the team-address credential (mode 0600); it stays on this computer)
+
+  Commands:
+    - docker run --detach --name slatebox --restart unless-stopped --publish 127.0.0.1:7070:7070 --volume slatebox-data:/data --env-file slatebox.env --env-file secrets.env sha256:736c617465626f782d746573743a7472616e7363726970740000000000000000
+    - docker exec slatebox slatebox health --deep
+
+  Notes:
+    - After you confirm, you sign in to Slatebox in your browser to claim acme.slatebox.team for your account. Slatebox Cloud then sets up its secure tunnel and sends this install the tunnel token.
+    - https://acme.slatebox.team reaches Slatebox through an outbound Cloudflare Tunnel from the container: no DNS, no open ports, no certificates. Only 127.0.0.1 is published here.
+… Claiming acme.slatebox.team
+✓ Claimed acme.slatebox.team (1 of 3 team addresses on this account)
+… Writing <HOME>/installs/slatebox
+✓ Wrote <HOME>/installs/slatebox
+… Starting Slatebox and waiting until it is healthy (up to 600s)
+✓ Secure tunnel connected (4 connections)
+✓ https://acme.slatebox.team answers
+✓ Slatebox is healthy on this computer
+
+Slatebox is running at  https://acme.slatebox.team
+
+Create the first account (the server administrator) with this one-time setup link.
+It works once and expires in 24 hours; nobody can sign up before it is used:
+Lost it? slatebox setup-link prints a new one and ends this one.
+
+On this computer it also answers at http://localhost:7070.
+
+Keep a copy of <HOME>/installs/slatebox/ (keys and the team-address credential).
+
+Your key encryption key is stored in <HOME>/installs/slatebox/secrets.env. Back it up with your password manager now.
+Backups do not contain it, and without it people's saved AI keys cannot be read after a restore.
+Install record: <HOME>/installs/slatebox/install.yaml
+Next:  slatebox status   slatebox logs   slatebox upgrade   slatebox uninstall

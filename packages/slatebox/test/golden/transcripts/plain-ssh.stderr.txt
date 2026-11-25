@@ -1,0 +1,9 @@
+
+Slatebox installer. Enter accepts the default in brackets; Ctrl-C stops without changing anything.
+
+? Where should Slatebox run?
+  1) This computer, with Docker  [default]
+  2) A Linux server over SSH
+  3) Kubernetes (the current kube context)
+  4) Just write the files (compose file or manifests) for GitOps
+  Choose 1-4 (Enter for the default): ? Server (user@host or a name from ~/.ssh/config): ✗ Docker is not installed on root@box. Nothing was changed. To let the installer install Docker Engine from get.docker.com, run again with --install-docker.
