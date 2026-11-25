@@ -14,8 +14,11 @@ import App from '../imports/ui/App'
 import NewCreativeSlate from '../imports/ui/pages/NewCreativeSlate'
 import GetStarted from '../imports/ui/pages/GetStarted'
 import Login from '../imports/ui/pages/Login'
+import GuestStartGate from '../imports/ui/components/GuestStartGate'
 import { SsoDone, SsoGate } from '../imports/ui/sso/sso'
 import { globalMessage } from '../imports/ui/jotai/atoms'
+// Sign out, and a session ending while a page is open, lead to the sign-in page.
+import '../imports/api/client/signOut'
 // Loads the enterprise/ browser chunk after start where the server says it is unlocked (Cloud, or a
 // licensed self-hosted install); a locked install loads nothing.
 import './enterprise'
@@ -34,8 +37,8 @@ import './i18n/en/teamSettings.i18n.json'
 function CreationEntry({ alias = false }) {
   const { search, hash } = useLocation()
   if (alias) return <Navigate replace to={'/new' + search + hash} />
-  if (hash) return <NewCreativeSlate fromBrief />
-  return <GetStarted />
+  if (hash) return <GuestStartGate><NewCreativeSlate fromBrief /></GuestStartGate>
+  return <GuestStartGate><GetStarted /></GuestStartGate>
 }
 
 // New AppWrapper component
@@ -102,7 +105,7 @@ function AppWrapper() {
           <Route path="/present/:slateShareId" element={<Present />} />
           <Route path="/start" element={<CreationEntry alias />} />
           <Route path="/canvas/new" element={<CreationEntry alias />} />
-          <Route path="/new/:creativeKind" element={<NewCreativeSlate />} />
+          <Route path="/new/:creativeKind" element={<GuestStartGate><NewCreativeSlate /></GuestStartGate>} />
           <Route path="/new" element={<CreationEntry />} />
           <Route path="/login/:email?" element={<Login />} />
           <Route path="/oauth/consent" element={<OAuthConsent />} />

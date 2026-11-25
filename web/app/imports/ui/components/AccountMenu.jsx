@@ -15,6 +15,7 @@ import Psychology from '@mui/icons-material/Psychology'
 import Savings from '@mui/icons-material/Savings'
 import CONSTANTS from '../../api/common/constants'
 import HeaderMenu from './HeaderMenu'
+import { signOut as signOutAndLeave } from '../../api/client/signOut'
 import { registrationDetails, isPersonaOpen, mainDrawerOpen } from '../jotai/atoms'
 
 // Only a server with a meter (Slatebox Cloud) has credits, a balance and Slatebox Pro to show.
@@ -81,7 +82,8 @@ export default function AccountMenu({ sheet = false }) {
   const dark = (mode === 'system' ? systemMode : mode) === 'dark'
   const close = () => setAnchorEl(null)
   const go = (action) => () => { close(); action() }
-  const signOut = () => { Meteor.logout(); setMainDrawerOpen(false); navigate('/') }
+  // Signing out always ends on the sign-in page: no guest, no new slate (imports/api/common/sign-out.mjs).
+  const signOut = () => { setMainDrawerOpen(false); signOutAndLeave() }
 
   return <>
     <Tooltip title={guest ? 'Your account (guest)' : 'Your account'}>

@@ -12,6 +12,7 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Grid from '@mui/material/Grid2'
 import CONSTANTS from '../../api/common/constants'
 import promisify from '../../api/client/promisify'
+import { logoutQuietly } from '../../api/client/signOut'
 import { globalMessage } from '../jotai/atoms'
 import { recalledLoginReturn } from '../../api/common/login-return.mjs'
 
@@ -68,7 +69,7 @@ export default function LoginLink() {
     if (loginToken) {
       Meteor.loginWithToken(loginToken)
     } else {
-      Meteor.logout()
+      logoutQuietly()
       history('/login')
       setGlobalMessage({
         visible: true,

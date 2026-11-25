@@ -15,6 +15,7 @@ import AuthManager from '../api/common/AuthManager'
 import CONSTANTS from '../api/common/constants'
 import CSSUnicorn from './components/ai/Unicorn'
 import { enterpriseState } from '../api/common/edition.mjs'
+import { signedOutPath } from '../api/client/signOut'
 
 // Pages a first visit never opens (a slate, the start page and My Slates stay in the first load): each loads
 // when its route is first opened.
@@ -42,8 +43,9 @@ const LibraryReview = lazy(() => import('./pages/LibraryReview'))
 function PrivateRoute({ children }) {
   const isAuthorized =
     Meteor.loggingIn && (Meteor.loggingIn() || Meteor.userId())
+  // Someone who signed out goes to the sign-in page; a first visit starts as a guest.
   if (!isAuthorized) {
-    return <Navigate to="/start" replace />
+    return <Navigate to={signedOutPath()} replace />
   }
 
   return children

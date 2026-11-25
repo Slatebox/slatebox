@@ -9,9 +9,15 @@ import { Navigate } from 'react-router-dom'
 import { useSetAtom } from 'jotai'
 import { Box, Button, CircularProgress, Typography } from '@mui/material'
 import createAnonymousUser from '../../api/client/createAnonymousUser'
+import GuestStartGate from '../components/GuestStartGate'
 import { registrationDetails } from '../jotai/atoms'
 
+// After a member signs out here, Back to this page goes to the sign-in page instead of making a guest.
 export default function SignUp() {
+  return <GuestStartGate><StartSignUp /></GuestStartGate>
+}
+
+function StartSignUp() {
   const setRegistration = useSetAtom(registrationDetails)
   const { user, loggingIn } = useTracker(() => ({ user: Meteor.user(), loggingIn: Meteor.loggingIn() }), [])
   const started = useRef(false)
