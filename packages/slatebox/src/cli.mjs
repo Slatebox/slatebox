@@ -97,9 +97,9 @@ then --answers, then the environment. Consent never comes from the environment:
   --new-encryption-key    replace a lost SLATEBOX_KEY_ENCRYPTION_KEY over existing data
                           (keys people saved become unreadable; refused without it)
 
-Team addresses: the sign-in is a code you approve in your browser (Slatebox Cloud). SLATEBOX_CLOUD_TOKEN
-(a personal access token with the team-addresses scope) skips the browser; SLATEBOX_CLOUD_URL or
---cloud-url points at another Slatebox Cloud. The install credential stays in
+Team addresses: the sign-in is a code you approve in your browser (Slatebox Cloud), every time
+a name is claimed, moved or reconnected. SLATEBOX_CLOUD_URL or --cloud-url points at another
+Slatebox Cloud. The install credential stays in
 ~/.slatebox/installs/<name>/credentials.json (mode 0600).
 
 Global: --yes (after a person approved the plan)  --json (NDJSON events on stdout)

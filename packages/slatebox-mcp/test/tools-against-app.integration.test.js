@@ -704,7 +704,9 @@ return slatebox.slates.applyOperations({ shareId: "demo", expectedRevision: revi
     const held = await cli(["exec", "-e", del, "--json", ...extra]);
     assert.equal(held.code, 6, held.err);
     assert.equal(JSON.parse(held.out).status, "confirmation_required");
-    assert.match(held.err, /To save, run:\n {2}slatebox exec -e [\s\S]* --confirm cf_[A-Za-z0-9]{24} --idempotency-key \S+\n/);
+    // The hint names the command that was run: this is the slatebox-mcp bin (the slatebox bin's
+    // own "slatebox exec" hint is pinned in shell.integration.test.js and packages/slatebox).
+    assert.match(held.err, /To save, run:\n {2}slatebox-mcp exec -e [\s\S]* --confirm cf_[A-Za-z0-9]{24} --idempotency-key \S+\n/);
   }
   assert.equal(world.slate("demo").nodes.length, before);
 });

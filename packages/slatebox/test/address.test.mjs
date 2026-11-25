@@ -354,12 +354,14 @@ test('the redactor removes install credentials and tunnel tokens by their shape,
   assert.equal(redactor.redact('eyJhbGciOi is a JWT header, sbxi alone is a word'), 'eyJhbGciOi is a JWT header, sbxi alone is a word')
 })
 
-test('SLATEBOX_CLOUD_TOKEN (a personal token with the scope) claims without a browser', async () => {
+test('a claim always goes through the browser sign-in: no personal-token shortcut (Cloud never gives one the scope)', async () => {
   const { cloud, run } = setup()
-  const result = await run(['install', '--team-address', 'acme', ...BASE, '--yes', '--json'], { env: { SLATEBOX_CLOUD_URL: cloud.base, SLATEBOX_CLOUD_TOKEN: ACCESS } })
+  const result = await run(['install', '--team-address', 'acme', ...BASE, '--yes', '--json'], { env: { SLATEBOX_CLOUD_URL: cloud.base, SLATEBOX_CLOUD_TOKEN: 'sbp_personal-token-that-cloud-refuses-for-claims' } })
   assert.equal(result.code, 0, result.stderr)
-  assert.equal(cloud.cloudRequests('/oauth').length, 0)
-  noSecretIn(result, 'pat')
+  assert.equal(cloud.cloudRequests('/oauth/device_authorization').length, 1)
+  const [claim] = cloud.cloudRequests('/api/v1/team-addresses').filter(request => request.method === 'POST')
+  assert.equal(claim.headers.authorization, `Bearer ${ACCESS}`)
+  noSecretIn(result, 'device')
 })
 
 test('a Cloud URL must be https, except on this computer', async () => {

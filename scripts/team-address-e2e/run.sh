@@ -7,12 +7,12 @@
 # runs from a trap whatever happens.
 #
 # Needs: the claim service running at SLATEBOX_CLOUD_URL (a local Meteor in Cloud edition with
-# settings.cloudflare.teamClaims, from the team-claims branch), a personal access token there
-# with the team-addresses scope in SLATEBOX_CLOUD_TOKEN for the e2e account (or E2E_DEVICE=1 to
-# approve the sign-in by hand), Docker, and the image (self-host/build-image.sh).
+# settings.cloudflare.teamClaims, from the team-claims branch), a browser signed in there as an
+# e2e account (one named in cloudflare.teamClaims.e2eAccounts) to approve each sign-in code the
+# CLI prints (Slatebox Cloud gives the team-addresses scope to that sign-in only, never to a
+# personal access token), Docker, and the image (self-host/build-image.sh).
 #
-#   SLATEBOX_CLOUD_URL=http://localhost:3000 SLATEBOX_CLOUD_TOKEN=... \
-#     IMAGE=slatebox:0.2.0-local scripts/team-address-e2e/run.sh
+#   SLATEBOX_CLOUD_URL=http://localhost:3000 IMAGE=slatebox:0.2.0-local scripts/team-address-e2e/run.sh
 #
 # The transcript goes to $EVIDENCE (default a new file in $TMPDIR). Nothing secret is printed:
 # the CLI redacts tokens and credentials, and the checks below compare secrets in variables.
@@ -24,7 +24,6 @@ cli=(node "$repo/packages/slatebox/bin/slatebox.mjs")
 IMAGE=${IMAGE:-slatebox:0.2.0-local}
 : "${SLATEBOX_CLOUD_URL:?set SLATEBOX_CLOUD_URL to the local claim service, e.g. http://localhost:3000}"
 export SLATEBOX_CLOUD_URL
-if [[ ${E2E_DEVICE:-} != 1 ]]; then : "${SLATEBOX_CLOUD_TOKEN:?set SLATEBOX_CLOUD_TOKEN (team-addresses scope) or E2E_DEVICE=1}"; export SLATEBOX_CLOUD_TOKEN; else unset SLATEBOX_CLOUD_TOKEN; fi
 NAME=${NAME:-e2e-$(openssl rand -hex 4)}
 RENAMED=${RENAMED:-e2e-$(openssl rand -hex 4)}
 INSTALL=e2e

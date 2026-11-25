@@ -164,15 +164,11 @@ export function openBrowser(url, platform = process.platform) {
 
 /**
  * Sign in to Slatebox Cloud for the team-addresses scope only. Returns an access token that lives
- * 15 minutes and is kept in memory. A personal access token in SLATEBOX_CLOUD_TOKEN (with the
- * team-addresses scope) skips the browser, for CI and agents that a person set up.
+ * 15 minutes and is kept in memory. There is no token shortcut: Slatebox Cloud gives the
+ * team-addresses scope only to this sign-in, never to a personal access token, so a person
+ * approves every claim, rename and credential in a browser.
  */
 export async function signIn(ctx, cloud, { purpose = 'claim a team address' } = {}) {
-  const pat = ctx.env?.SLATEBOX_CLOUD_TOKEN
-  if (pat) {
-    ctx.redactor.add(pat)
-    return pat
-  }
   const label = ctx.deviceLabel || deviceLabel()
   const grant = await cloud.deviceAuthorize(label).catch(error => { throw signInFailed(error, cloud) })
   if (!grant?.device_code || !grant?.user_code || !grant?.verification_uri) throw new InstallError(EXIT.PRECONDITION, `Slatebox Cloud (${new URL(cloud.base).host}) did not start a sign-in.`)
