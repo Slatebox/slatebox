@@ -40,7 +40,7 @@ export default defineAction({
     },
     required: ['view', 'instance', 'contract', 'api', 'signIn', 'connect', 'link'],
   },
-  tool: { name: 'describe_instance', title: 'Describe this instance', description: 'Describe the Slatebox server these tools talk to (Slatebox Cloud or a self-hosted one): its name, version, what it can do and where its API is.' },
+  tool: { name: 'describe_instance', title: 'Describe this instance', description: 'Describe the Slatebox server these tools talk to: its name, version, what it can do and where its API is.' },
   async handler(principal, _input, { deps }) {
     const described = await deps.instance.describe(principal)
     if (!deps.library || described?.view !== 'account') return described

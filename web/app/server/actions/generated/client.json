@@ -3282,7 +3282,7 @@
       "tool": {
         "name": "describe_instance",
         "title": "Describe this instance",
-        "description": "Describe the Slatebox server these tools talk to (Slatebox Cloud or a self-hosted one): its name, version, what it can do and where its API is.\n\nServer. What this Slatebox instance is and can do. Without a token: its id, name, contract version and where to sign in. With a token: also the build, capability flags, limits, the canvas and workshop vocabularies, the routes it serves and your account.",
+        "description": "Describe the Slatebox server these tools talk to: its name, version, what it can do and where its API is.\n\nServer. What this Slatebox instance is and can do. Without a token: its id, name, contract version and where to sign in. With a token: also the build, capability flags, limits, the canvas and workshop vocabularies, the routes it serves and your account.",
         "inputSchema": {
           "type": "object",
           "properties": {},

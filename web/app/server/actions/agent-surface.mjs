@@ -66,7 +66,9 @@ export const MCP_SERVER_INFO = Object.freeze({
 })
 
 export const EXEC_TITLE = 'Create or edit slates with a script'
-export const EXEC_LEAD = `Create and edit Slatebox slates, the live canvas a team shares: mind maps, flowcharts, diagrams, whiteboards, project plans (Gantt), slides and boards such as a retro. Client reference: ${CLIENT_DOCS_URL}`
+// Kept short: the exec description has a budget, and a longer lead compacts method lines (the
+// in-app chat's golden bytes, scripts/ai-prompts-golden.test.mjs).
+export const EXEC_LEAD = `Create and edit Slatebox slates (mind maps, flowcharts, diagrams, project plans, slides and boards). Client reference: ${CLIENT_DOCS_URL}`
 export const DESCRIBE_TITLE = 'Learn the Slatebox client'
 export const DESCRIBE_DESCRIPTION = `The typed Slatebox client that exec scripts call, for mind maps, flowcharts, diagrams, whiteboards, project plans, slides and boards: the rules, every client method with a one-line summary, the common error codes, the limits and three example scripts. With methods (names), their full TypeScript declarations and the named types they use; with query, the methods those words find. Client reference: ${CLIENT_DOCS_URL}`
 
