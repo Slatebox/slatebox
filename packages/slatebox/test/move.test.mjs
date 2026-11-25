@@ -1,7 +1,8 @@
 // slatebox migrate / import / export (src/move.mjs) against two fake Slatebox servers: the
 // archive downloaded from one is the archive uploaded to the other, encrypted with a passphrase
 // made here; each token goes only to its own server and is never printed; nothing is confirmed
-// without a yes; invitations only when asked; the archive is removed once the move is live.
+// without a yes; invitations: asked once at a terminal (yes by default), --invite / --no-invite,
+// none from a script; the archive stays after the move unless the person says to delete it.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs'
@@ -55,6 +56,12 @@ function fakeServer(origin, token, { into = 'new_team', refuse = {}, pending = n
         state.confirmed = { importId: confirm[1], invite: JSON.parse(init.body).invite }
         return json(200, { importId: confirm[1], state: 'confirmed', teamId: 'T1', merged: into === 'your_team', seats: { mover: 'Alice A', matched: [] }, invited: { sent: state.confirmed.invite ? 1 : 0, needsConsent: [], mailDisabled: 0, unverified: [] } })
       }
+      const invite = /^POST \/api\/v1\/team\/moves\/([^/]+)\/invite$/.exec(route)
+      if (invite) {
+        state.invitedLater = { importId: invite[1], ...JSON.parse(init.body) }
+        if (state.invitedLater.email) return json(200, { importId: invite[1], email: state.invitedLater.email, outcome: 'asked' })
+        return json(200, { importId: invite[1], state: 'confirmed', invited: { sent: 1, asked: [], needsConsent: [], mailDisabled: 0, unverified: [] }, now: { sent: 1, asked: [], needsConsent: [], mailDisabled: 0, unverified: [] } })
+      }
       const discard = /^POST \/api\/v1\/team\/moves\/([^/]+)\/discard$/.exec(route)
       if (discard) {
         state.discarded.push(discard[1])
@@ -91,7 +98,7 @@ function world(options = {}) {
 const run = (w, argv, { env = {}, ...rest } = {}) =>
   cli(argv, { home: w.home, fetch: w.fetch, env: { SLATEBOX_CLOUD_URL: CLOUD, ...env }, io: { sleep: async () => {}, deviceLabel: 'test-box', openBrowser: () => {} }, ...rest })
 
-test('migrate --to cloud: the archive downloaded from your server is the one Cloud gets, encrypted, confirmed, and removed afterwards', async () => {
+test('migrate --to cloud: the archive downloaded from your server is the one Cloud gets, encrypted, confirmed, and kept afterwards for a script', async () => {
   const w = world()
   const result = await run(w, ['migrate', '--to', 'cloud', '--from', OWN, '--yes', '--json'], { env: { SLATEBOX_API_TOKEN: OWN_TOKEN, SLATEBOX_CLOUD_TOKEN: CLOUD_TOKEN } })
   assert.equal(result.code, 0, result.stderr)
@@ -110,7 +117,73 @@ test('migrate --to cloud: the archive downloaded from your server is the one Clo
   const done = result.events.find((event) => event.event === 'done')
   assert.deepEqual([done.moved, done.importId, done.from, done.to], [true, 'MOVE1', OWN, CLOUD])
   assert.ok(result.events.some((event) => event.event === 'move' && event.report.team.name === 'Acme'))
-  assert.deepEqual(readdirSync(join(w.home, 'moves')), [], 'the archive and its key are gone once the move is live')
+  // A script is never asked: the archive stays (the default is no), and the done event names it.
+  const kept = readdirSync(join(w.home, 'moves')).sort()
+  assert.equal(kept.length, 2)
+  assert.ok(kept[0].endsWith('.sbxteam') && kept[1].endsWith('.sbxteam.key'))
+  assert.equal(done.archive, join(w.home, 'moves', kept[0]))
+})
+
+test('after the move: the archive is deleted only when the person says so, or with --delete-archive; otherwise the command is printed', async () => {
+  const env = { SLATEBOX_API_TOKEN: OWN_TOKEN, SLATEBOX_CLOUD_TOKEN: CLOUD_TOKEN }
+  const kept = world()
+  const keptRun = await run(kept, ['migrate', '--to', 'cloud', '--from', OWN, '--yes'], { env })
+  assert.equal(keptRun.code, 0, keptRun.stderr)
+  assert.match(keptRun.stdout, /The archive is kept at .*\.sbxteam .*To delete it: rm .*\.sbxteam .*\.sbxteam\.key/)
+  const flag = world()
+  assert.equal((await run(flag, ['migrate', '--to', 'cloud', '--from', OWN, '--yes', '--delete-archive'], { env })).code, 0)
+  assert.deepEqual(readdirSync(join(flag.home, 'moves')), [], 'the archive and its key are gone')
+  // At a terminal: start, make it live, invite (yes), delete the archive? The default is no.
+  const asked = world()
+  const no = await run(asked, ['migrate', '--to', 'cloud', '--from', OWN], { tty: true, input: 'y\ny\ny\n\n', env })
+  assert.equal(no.code, 0, no.stderr)
+  assert.match(no.stderr, /Delete the archive from this computer now\?/)
+  assert.equal(readdirSync(join(asked.home, 'moves')).length, 2, 'Enter keeps it')
+  const yes = world()
+  assert.equal((await run(yes, ['migrate', '--to', 'cloud', '--from', OWN], { tty: true, input: 'y\ny\ny\ny\n', env })).code, 0)
+  assert.deepEqual(readdirSync(join(yes.home, 'moves')), [])
+})
+
+test('invitations: asked once at a terminal with yes by default, --no-invite and --invite answer ahead, a script sends none and says how to later', async () => {
+  const env = { SLATEBOX_API_TOKEN: OWN_TOKEN, SLATEBOX_CLOUD_TOKEN: CLOUD_TOKEN }
+  // Enter at the question: yes.
+  const enter = world()
+  const byDefault = await run(enter, ['migrate', '--to', 'cloud', '--from', OWN], { tty: true, input: 'y\ny\n\n\n', env })
+  assert.equal(byDefault.code, 0, byDefault.stderr)
+  assert.match(byDefault.stderr, /Send invitations to the 1 other member now\?/)
+  assert.deepEqual(enter.cloud.confirmed, { importId: 'MOVE1', invite: true })
+  // --no-invite: never asked, nobody invited, the later command printed.
+  const off = world()
+  const none = await run(off, ['migrate', '--to', 'cloud', '--from', OWN, '--no-invite'], { tty: true, input: 'y\ny\n\n', env })
+  assert.equal(none.code, 0, none.stderr)
+  assert.doesNotMatch(none.stderr, /Send invitations/)
+  assert.deepEqual(off.cloud.confirmed, { importId: 'MOVE1', invite: false })
+  assert.match(none.stdout, /slatebox migrate invite MOVE1 --to cloud/)
+  // A script with --invite invites; without it, nobody.
+  const scripted = world()
+  assert.equal((await run(scripted, ['migrate', '--to', 'cloud', '--from', OWN, '--yes', '--invite'], { env })).code, 0)
+  assert.deepEqual(scripted.cloud.confirmed, { importId: 'MOVE1', invite: true })
+  // Later: everyone not invited yet, or one checked address.
+  const later = world()
+  const all = await run(later, ['migrate', 'invite', 'MOVE1', '--to', 'cloud', '--yes'], { env })
+  assert.equal(all.code, 0, all.stderr)
+  assert.deepEqual(later.cloud.invitedLater, { importId: 'MOVE1' })
+  assert.match(all.stdout, /Invitations sent: 1/)
+  const one = await run(later, ['migrate', 'invite', 'MOVE1', '--to', 'cloud', '--email', 'bob@acme.test', '--yes'], { env })
+  assert.equal(one.code, 0, one.stderr)
+  assert.deepEqual(later.cloud.invitedLater, { importId: 'MOVE1', email: 'bob@acme.test' })
+  assert.match(one.stdout, /bob@acme\.test: asked to join/)
+  assert.equal((await run(later, ['migrate', 'invite', '--to', 'cloud', '--yes'], { env })).code, 2, 'a move id is needed')
+})
+
+test('an older server than the archive: the refusal says to update that server', async () => {
+  const w = world()
+  const original = w.cloud.handle
+  w.cloud.handle = async (url, init) => (new URL(url).pathname.startsWith('/team-transfer/move/') ? new Response(JSON.stringify({ error: { code: 'section_unknown', message: 'The archive has a section this server does not know (library).' } }), { status: 422 }) : original(url, init))
+  const result = await run(w, ['migrate', '--to', 'cloud', '--from', OWN, '--yes'], { env: { SLATEBOX_API_TOKEN: OWN_TOKEN, SLATEBOX_CLOUD_TOKEN: CLOUD_TOKEN } })
+  assert.equal(result.code, 4)
+  assert.match(result.stderr, /runs an older Slatebox than the archive needs: update that server/)
+  assert.match(result.stderr, /slatebox import .*\.sbxteam --to cloud/, 'the archive is kept to finish once updated')
 })
 
 test('migrate --to cloud without --yes and nobody to ask stops before anything is downloaded', async () => {
@@ -124,12 +197,12 @@ test('migrate --to cloud without --yes and nobody to ask stops before anything i
 
 test('at a terminal: the plan, then the yes, then the choice to invite', async () => {
   const w = world({ cloud: { into: 'your_team' } })
-  const result = await run(w, ['migrate', '--to', 'cloud', '--from', OWN], { tty: true, input: 'y\ny\ny\n', env: { SLATEBOX_API_TOKEN: OWN_TOKEN, SLATEBOX_CLOUD_TOKEN: CLOUD_TOKEN } })
+  const result = await run(w, ['migrate', '--to', 'cloud', '--from', OWN], { tty: true, input: 'y\ny\ny\nn\n', env: { SLATEBOX_API_TOKEN: OWN_TOKEN, SLATEBOX_CLOUD_TOKEN: CLOUD_TOKEN } })
   assert.equal(result.code, 0, result.stderr)
   assert.match(result.stdout, /into the team you own there/)
-  assert.match(result.stdout, /Library: +1 item \(arrive as drafts/)
+  assert.match(result.stdout, /Library: +1 item \(sent to the review queue there/)
   assert.match(result.stdout, /Agent keys: +add the keys again for ours/)
-  assert.match(result.stderr, /Email an invitation to the other people/)
+  assert.match(result.stderr, /Send invitations to the 1 other member now\? \[Y\/n\]/)
   assert.deepEqual(w.cloud.confirmed, { importId: 'MOVE1', invite: true })
   assert.match(result.stdout, /Invitations sent: 1/)
 })
@@ -141,6 +214,9 @@ test('Cloud signs in with a code for team:export and team:move when no token is 
   assert.equal(w.cloud.deviceScope, 'team:export team:move')
   assert.ok(w.own.uploaded.equals(ARCHIVE))
   assert.match(result.stderr, /WDJB-MJHT/)
+  assert.match(result.stderr, /Sign in to Slatebox to move your team from Slatebox Cloud/)
+  // Every Cloud call of the move went with the device sign-in's token.
+  for (const request of w.cloud.requests.filter((r) => r.route.includes('/api/v1/'))) assert.equal(request.headers.authorization, `Bearer ${DEVICE_TOKEN}`)
   assert.equal((result.stdout + result.stderr).includes(DEVICE_TOKEN), false)
 })
 

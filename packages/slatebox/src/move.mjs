@@ -17,8 +17,15 @@
 //   - Your own server: SLATEBOX_API_TOKEN (the same token `slatebox exec` uses), or asked for
 //     with hidden input at a terminal. Its address: --from/--to, SLATEBOX_BASE_URL, or the install
 //     this computer made (--name).
-// The archive is kept in ~/.slatebox/moves/ (0600 in a 0700 folder) only until the move is
-// confirmed, or with --keep-archive; its passphrase sits beside it in a .key file (0600).
+// The archive is kept in ~/.slatebox/moves/ (0600 in a 0700 folder), its passphrase beside it in
+// a .key file (0600). Once the move is live the person is asked whether to delete it (default no,
+// and the command that deletes it is printed); --delete-archive deletes it without asking.
+//
+// The other people: once the move is live the person is asked once, "Send invitations to the N
+// other members now?" (yes by default at a terminal); --invite / --no-invite answer it ahead, and
+// a script (no terminal, or --yes) invites nobody unless --invite. Later: slatebox migrate invite
+// <move id> --to cloud|<url>. Nobody gets an account without that email, and someone who already
+// has an account on the target accepts an invitation to join there.
 import { randomBytes, randomUUID } from 'node:crypto'
 import { chmodSync, createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -110,6 +117,11 @@ export function moveApi(ctx, server) {
       team_owner_required: ' Only the owner of your team there can move a team into it. Sign in as the owner, or as someone in no team yet.',
       team_admin_required: ' Only a team admin can export the team.',
       move_pending: ' Run again with --replace-waiting to discard that move and start over.',
+      move_limit: ' Moves into a server are limited per person per day.',
+      // An older server than the archive: it says so in its own words, or (servers before this
+      // message) only that it does not know a section or version.
+      section_unknown: ` ${server.label} runs an older Slatebox than the archive needs: update that server to the latest Slatebox, then run this again.`,
+      version_unknown: ` ${server.label} runs an older Slatebox than the archive needs: update that server to the latest Slatebox, then run this again.`,
     }[code] || ''
     return new InstallError(EXIT.PRECONDITION, `${server.label} refused: ${error.message || `HTTP ${response.status}`} (${code}).${hint}`, { code, status: response.status })
   }
@@ -154,6 +166,7 @@ export function moveApi(ctx, server) {
     listMoves: () => call('GET', '/team/moves'),
     discardMove: (id) => call('POST', `/team/moves/${encodeURIComponent(id)}/discard`, {}),
     confirmMove: (id, invite) => call('POST', `/team/moves/${encodeURIComponent(id)}/confirm`, { invite }),
+    inviteMoved: (id, email) => call('POST', `/team/moves/${encodeURIComponent(id)}/invite`, email ? { email } : {}),
     async download(address, passphrase, path) {
       let response
       try {
@@ -237,7 +250,7 @@ function reportLines(report = {}, into) {
     `  Slates:        ${created('slates')}   presentations: ${created('presentations')}   comments: ${created('comments')}   files: ${report.files?.created ?? 0}`,
     `  People:        ${plural((report.people || []).length, 'person', 'people')} (invited only if you say so)`,
   ]
-  if ((report.library || []).length) lines.push(`  Library:       ${plural(report.library.length, 'item')} (arrive as drafts; send them for review there)`)
+  if ((report.library || []).length) lines.push(`  Library:       ${plural(report.library.length, 'item')} (sent to the review queue there; published once that server approves)`)
   const needKeys = (report.ai?.imported || []).filter((item) => item.needsKey).map((item) => item.name)
   if (needKeys.length) lines.push(`  Agent keys:    add the keys again for ${needKeys.join(', ')} (keys never move)`)
   if ((report.tokens || []).length) lines.push(`  Access tokens: make ${plural(report.tokens.length, 'token')} again (tokens never move)`)
@@ -288,13 +301,65 @@ async function moveFileTo(ctx, target, path, passphrase, { started = null } = {}
     ctx.out.say(`Not confirmed. It waits on ${target.label} for 14 days (move ${result.importId}); run this command again to finish, or it is discarded then.`)
     return { importId: result.importId, state: 'pending' }
   }
-  const others = (record.report?.people || []).filter((person) => person.email).length
-  let invite = Boolean(ctx.flags.invite)
-  if (!invite && others && ctx.interactive && !ctx.yes)
-    invite = await ctx.prompt.confirm(`Email an invitation to the other people with an address (up to ${others})? You can do it later instead.`, { default: false })
+  const invite = await askInvite(ctx, record.report)
   const done = await api.confirmMove(result.importId, invite)
   ctx.out.step('confirm', 'ok', `The team is live on ${target.label}${done.merged ? ', in the team you own' : ', and you are its owner'}`)
+  if (!ctx.json) invitedLines(ctx, target, result.importId, invite, done.invited, otherMembers(record.report))
   return { importId: result.importId, ...done }
+}
+
+// The people besides the mover (who takes one seat) that an invitation could reach.
+export const otherMembers = (report) => Math.max(0, (report?.people || []).filter((person) => person.email).length - 1)
+
+/** Asked once: --invite / --no-invite answer ahead; a terminal asks (yes by default); a script invites nobody. */
+export async function askInvite(ctx, report) {
+  if (ctx.flags.invite === true) return true
+  if (ctx.flags.invite === false) return false
+  const others = otherMembers(report)
+  if (!others || !ctx.interactive || ctx.yes) return false
+  return ctx.prompt.confirm(`Send invitations to the ${plural(others, 'other member')} now?`, { default: true })
+}
+
+const targetFlag = (target) => (target.kind === 'cloud' ? 'cloud' : target.base)
+
+function invitedLines(ctx, target, importId, asked, invited = {}, others = 0) {
+  if (!asked) {
+    if (others) ctx.out.say(`Nobody was invited yet. Invite the ${plural(others, 'other member')} later with: slatebox migrate invite ${importId} --to ${targetFlag(target)}`)
+    return
+  }
+  const parts = [`Invitations sent: ${invited.sent ?? 0}`]
+  if (invited.asked?.length) parts.push(`asked to join (they already have an account there and accept signed in): ${invited.asked.join(', ')}`)
+  if (invited.needsConsent?.length) parts.push(`not invited, they already have an account there: ${invited.needsConsent.join(', ')}`)
+  if (invited.unverified?.length) parts.push(`addresses to check first (then: slatebox migrate invite ${importId} --email <address> --to ${targetFlag(target)}): ${invited.unverified.join(', ')}`)
+  if (invited.mailDisabled) parts.push(`${invited.mailDisabled} not sent: ${target.label} cannot send email yet`)
+  ctx.out.say(`${parts.join('; ')}.`)
+}
+
+/** slatebox migrate invite <move id>: invite the moved people later (or one checked address with --email). */
+export async function inviteMovedPeople(ctx, { id, to }) {
+  if (!id) throw new InstallError(EXIT.USAGE, 'Which move? slatebox migrate invite <move id> --to cloud|<url> (the move id is printed when the move goes live).')
+  const target = resolveServer(ctx, to)
+  await tokenFor(ctx, target, `invite your team's people on ${target.label}`)
+  const email = typeof ctx.flags.email === 'string' && ctx.flags.email ? ctx.flags.email : null
+  if (!(await agree(ctx, email ? `Email ${email} an invitation from ${target.label}?` : `Email the moved people nobody invited yet, from ${target.label}?`))) throw new InstallError(EXIT.CANCELLED, 'Cancelled; nobody was emailed.')
+  const done = await moveApi(ctx, target).inviteMoved(id, email)
+  ctx.out.event({ event: 'done', importId: id, to: target.base, ...done })
+  if (!ctx.json) {
+    if (email) ctx.out.say(`${email}: ${{ sent: 'invitation sent', asked: 'asked to join (they already have an account there)', needs_consent: 'not invited, they already have an account there', mail_disabled: `not sent, ${target.label} cannot send email yet`, already_invited: 'already invited' }[done.outcome] || done.outcome}.`)
+    else invitedLines(ctx, target, id, true, done.now || done.invited)
+  }
+  return 0
+}
+
+// After a move is live: the archive stays unless the person says to delete it (default no).
+async function afterLive(ctx, path) {
+  const keep = () => ctx.out.say(`The archive is kept at ${path} (encrypted; passphrase in ${keyFile(path)}). To delete it: rm ${path} ${keyFile(path)}`)
+  if (ctx.flags['keep-archive']) return keep()
+  let remove = Boolean(ctx.flags['delete-archive'])
+  if (!remove && ctx.interactive && !ctx.yes) remove = await ctx.prompt.confirm('Delete the archive from this computer now? It is a full copy of the team.', { default: false })
+  if (!remove) return keep()
+  forget(path)
+  ctx.out.step('archive', 'ok', 'Deleted the archive from this computer')
 }
 
 /** Export the source's team to an encrypted archive in ~/.slatebox/moves. */
@@ -316,7 +381,7 @@ export async function moveTeam(ctx, { from, to }) {
   const source = resolveServer(ctx, from)
   const target = resolveServer(ctx, to)
   if (source.base === target.base) throw new InstallError(EXIT.USAGE, `The team is already on ${source.base}: give a different --from or --to.`)
-  await tokenFor(ctx, source, `export your team from ${source.label}`)
+  await tokenFor(ctx, source, `move your team from ${source.label}`)
   await tokenFor(ctx, target, `move your team to ${target.label}`)
 
   // Ask both sides first, so a refusal (not a team admin there, not an owner here, a move
@@ -333,7 +398,7 @@ export async function moveTeam(ctx, { from, to }) {
     ctx.out.say([
       '', `Move ${preflight.team?.name ?? 'your team'} (${plural(preflight.slates ?? 0, 'slate')}, ${plural(preflight.members ?? 0, 'person', 'people')})`,
       `  from ${source.base}`, `  to   ${target.base}${started.into === 'your_team' ? ' (into the team you own there)' : ' (as a new team you own there)'}`,
-      '  What moves: slates and boards, smart components, versions, comments, presentations, files, brand kit, library items (as drafts), people (invited only if you say so).',
+      '  What moves: slates and boards, smart components, versions, comments, presentations, files, brand kit, library items (to the review queue there), people (invited only if you say so).',
       '  What stays: passwords, keys, access tokens, connected agents and integrations. The team stays on the source too until you remove it there.', '',
     ].join('\n'))
   if (!(await agree(ctx, 'Start the move?'))) throw new InstallError(EXIT.CANCELLED, 'Cancelled; nothing was changed.')
@@ -346,12 +411,11 @@ export async function moveTeam(ctx, { from, to }) {
     ctx.out.warn(`The archive is kept at ${exported.path} (encrypted; its passphrase is in ${keyFile(exported.path)}). Finish with: slatebox import ${exported.path} --to ${to === 'cloud' ? 'cloud' : target.base}`)
     throw error
   }
-  if (ctx.flags['keep-archive'] || done.state !== 'confirmed') ctx.out.say(`The archive is kept at ${exported.path} (encrypted; passphrase in ${keyFile(exported.path)}).`)
-  else forget(exported.path)
-  ctx.out.event({ event: 'done', moved: done.state === 'confirmed', ...done, from: source.base, to: target.base })
+  if (done.state === 'confirmed') await afterLive(ctx, exported.path)
+  else ctx.out.say(`The archive is kept at ${exported.path} (encrypted; passphrase in ${keyFile(exported.path)}).`)
+  ctx.out.event({ event: 'done', moved: done.state === 'confirmed', ...done, archive: existsSync(exported.path) ? exported.path : null, from: source.base, to: target.base })
   if (done.state === 'confirmed' && !ctx.json) {
     ctx.out.say(`\nDone. Open ${target.base} to see the team.`)
-    if (done.invited) ctx.out.say(`Invitations sent: ${done.invited.sent}${done.invited.needsConsent?.length ? `; already have an account there (they agree to move): ${done.invited.needsConsent.join(', ')}` : ''}${done.invited.unverified?.length ? `; addresses to check before inviting: ${done.invited.unverified.join(', ')}` : ''}.`)
     ctx.out.say('Next: add your agent keys again, make new access tokens, and reconnect integrations there. The team is still on the source until you remove it.')
   }
   return 0

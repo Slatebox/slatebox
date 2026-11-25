@@ -24,7 +24,7 @@ import { applyDocker, backupDocker, defaultLocalPort, execNode, LOG_SERVICES, lo
 import { exportFiles } from './targets/export.mjs'
 import { applyK8s, backupK8s, execNodeK8s, readSecretK8s, restoreK8s, setupLinkK8s, statusK8s, uninstallK8s } from './targets/k8s.mjs'
 import { setupLines } from './setup-link.mjs'
-import { exportTeamFile, importTeamFile, moveTeam } from './move.mjs'
+import { exportTeamFile, importTeamFile, inviteMovedPeople, moveTeam } from './move.mjs'
 import { parse as parseYaml } from './yaml.mjs'
 
 const PKG = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
@@ -43,7 +43,7 @@ export const COMMANDS = Object.freeze([
   { name: 'backup', usage: 'backup [--to <dir>]', summary: 'a complete backup now' },
   { name: 'restore', usage: 'restore <file.gz>', summary: 'replace everything with a backup' },
   { name: 'ai', usage: 'ai list | add "<spec>" | remove <id> | use <id> | off | test [id]', summary: 'agent providers for this install' },
-  { name: 'migrate', usage: 'migrate --to cloud | --from cloud [--invite] [--keep-archive]', summary: 'move your team between your own Slatebox and Slatebox Cloud' },
+  { name: 'migrate', usage: 'migrate --to cloud | --from cloud [--invite|--no-invite] [--keep-archive|--delete-archive] | migrate invite <move id> --to cloud|<url>', summary: 'move your team between your own Slatebox and Slatebox Cloud' },
   { name: 'import', usage: 'import --from cloud | <file> [--to cloud|<url>]', summary: 'bring a team in (from Slatebox Cloud, or a team export file)' },
   { name: 'export', usage: 'export [--from cloud|<url>] [--out <file>]', summary: 'a team export file of everything your team owns' },
   { name: 'secrets', usage: 'secrets path | reveal <NAME>', summary: 'where secrets are kept; reveal prints one to a terminal' },
@@ -106,8 +106,12 @@ then --answers, then the environment. Consent never comes from the environment:
 Moving a team (slatebox migrate --to cloud | --from cloud, import, export): your own server's
 address is --from/--to <url>, SLATEBOX_BASE_URL, or the install made here (--name); its access
 token is SLATEBOX_API_TOKEN (asked for at a terminal). Slatebox Cloud signs you in with a code in
-your browser, or takes SLATEBOX_CLOUD_TOKEN. Nothing is visible on the other side until you
-confirm; --invite emails the other people; --replace-waiting discards a move already waiting.
+your browser (it asks to "move your team"), or takes SLATEBOX_CLOUD_TOKEN. Nothing is visible on
+the other side until you confirm. Then you are asked once to send invitations to the other members
+(yes by default; --invite / --no-invite answer ahead; a script sends none without --invite; later:
+slatebox migrate invite <move id> --to cloud|<url>), and whether to delete the archive from this
+computer (no by default; --delete-archive, --keep-archive). --replace-waiting discards a move
+already waiting.
 
 Team addresses: the sign-in is a code you approve in your browser (Slatebox Cloud), every time
 a name is claimed, moved or reconnected. SLATEBOX_CLOUD_URL or --cloud-url points at another
@@ -140,7 +144,7 @@ function parse(argv) {
     'cloud-url': { type: 'string' }, 'keep-address': { type: 'boolean' }, follow: { type: 'boolean', short: 'f' },
     service: { type: 'string' }, since: { type: 'string' },
     from: { type: 'string' }, out: { type: 'string' }, invite: { type: 'boolean' }, 'keep-archive': { type: 'boolean' },
-    passphrase: { type: 'string' }, 'replace-waiting': { type: 'boolean' },
+    passphrase: { type: 'string' }, 'replace-waiting': { type: 'boolean' }, 'delete-archive': { type: 'boolean' }, email: { type: 'string' },
   }
   for (const [flag, type] of Object.entries(ANSWER_FLAGS)) {
     options[flag] = type === 'multiple' ? { type: 'string', multiple: true } : { type }
@@ -423,6 +427,8 @@ async function dispatch(ctx, positionals, flags) {
       ctx.stdout.write(AGENT_PROMPT)
       return 0
     case 'migrate': {
+      if (sub === 'invite') return inviteMovedPeople(ctx, { id: rest[0], to: flags.to })
+      if (sub) throw new InstallError(EXIT.USAGE, `Unknown: slatebox migrate ${sub}. Use slatebox migrate --to cloud, --from cloud, or slatebox migrate invite <move id> --to cloud|<url>.`)
       if (!flags.to && !flags.from) throw new InstallError(EXIT.USAGE, 'Say which way: slatebox migrate --to cloud (your own server to Slatebox Cloud) or slatebox migrate --from cloud (Slatebox Cloud to your own server).')
       return moveTeam(ctx, { from: flags.from, to: flags.to })
     }
