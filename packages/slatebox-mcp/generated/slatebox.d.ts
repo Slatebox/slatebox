@@ -839,6 +839,8 @@ declare namespace slatebox.library {
   function export(input: {
     /** The next value the previous page gave. (at most 12 characters) */
     cursor?: string;
+    /** One kind only. Integrations are exported only when asked for by name. */
+    kind?: "component" | "slate" | "presentation" | "integration";
   }): Promise<{
     items: Array<Record<string, unknown>>;
     next?: string;
@@ -889,12 +891,12 @@ declare namespace slatebox.library {
     item: {
       id: string;
       slug: string;
-      kind: "component" | "slate" | "presentation";
+      kind: "component" | "slate" | "presentation" | "integration";
       origin: "builtin" | "user";
       title: string;
       summary: string;
-      /** One of the five categories: plan, decide, meetings, track, map. */
-      category?: "plan" | "decide" | "meetings" | "track" | "map";
+      /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
+      category?: "plan" | "decide" | "meetings" | "track" | "map" | "work" | "business" | "research" | "web";
       authorName: string;
       publishedAt?: string;
       counts: {
@@ -907,7 +909,7 @@ declare namespace slatebox.library {
       provenance?: Record<string, unknown>;
       url: string;
       preview?: {
-        kind?: "component" | "slate" | "presentation";
+        kind?: "component" | "slate" | "presentation" | "integration";
         boardKind?: string;
         notes?: number;
         [key: string]: unknown;
@@ -951,9 +953,9 @@ declare namespace slatebox.library {
 declare namespace slatebox.library {
   /** Library. Published items of the shared library: smart components (boards that keep their rules: the ones built into Slatebox and the ones people built), slates and presentations anyone can copy. Filter by kind, category (plan, decide, meetings, track, map), origin (builtin or user) or words (q); sort new or popular. 24 per page by default (at most 48); pass next as cursor for more. Open to anyone. @scope slates:read */
   function list(input: {
-    kind?: "component" | "slate" | "presentation";
-    /** One of the five categories: plan, decide, meetings, track, map. */
-    category?: "plan" | "decide" | "meetings" | "track" | "map";
+    kind?: "component" | "slate" | "presentation" | "integration";
+    /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
+    category?: "plan" | "decide" | "meetings" | "track" | "map" | "work" | "business" | "research" | "web";
     /** (1–100 characters) */
     q?: string;
     /** (default "new") */
@@ -967,12 +969,12 @@ declare namespace slatebox.library {
     items: Array<{
       id: string;
       slug: string;
-      kind: "component" | "slate" | "presentation";
+      kind: "component" | "slate" | "presentation" | "integration";
       origin: "builtin" | "user";
       title: string;
       summary: string;
-      /** One of the five categories: plan, decide, meetings, track, map. */
-      category?: "plan" | "decide" | "meetings" | "track" | "map";
+      /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
+      category?: "plan" | "decide" | "meetings" | "track" | "map" | "work" | "business" | "research" | "web";
       authorName: string;
       publishedAt?: string;
       counts: {
@@ -985,7 +987,7 @@ declare namespace slatebox.library {
       provenance?: Record<string, unknown>;
       url: string;
       preview?: {
-        kind?: "component" | "slate" | "presentation";
+        kind?: "component" | "slate" | "presentation" | "integration";
         boardKind?: string;
         notes?: number;
         [key: string]: unknown;
@@ -1029,7 +1031,7 @@ declare namespace slatebox.library.review {
 }
 
 declare namespace slatebox.library.review {
-  /** Open for review. For administrators: make (or refresh) your private review copy of a submission's waiting version, a slate you can change on the canvas, and mark it in review. Approving publishes that copy as it stands. Opening again for the same version answers the same copy. @scope library:review */
+  /** Open for review. For administrators: make (or refresh) your private review copy of a submission's waiting version, a slate you can change on the canvas, and mark it in review. Approving publishes that copy as it stands. Opening again for the same version answers the same copy. A suggested integration has no copy: opening it reaches its server again (anonymously, with every address check) and answers what it found. @scope library:review */
   function open(input: {
     /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
     itemId: string;
@@ -1037,10 +1039,13 @@ declare namespace slatebox.library.review {
     selfReview?: boolean;
   }): Promise<({
     itemId: string;
-    reviewShareId: string;
+    /** The review copy (not for kind integration, which has no canvas). */
+    reviewShareId?: string;
     status?: string;
     reviewStatus?: string | null;
     version?: number;
+    /** kind integration: what Slatebox found reaching the server now, anonymously: reachable, sign-in, tools, and what changed since it was suggested. */
+    reviewProbe?: Record<string, unknown>;
     [key: string]: unknown;
   }) & { mode: "save" }>;
 }
@@ -1050,7 +1055,7 @@ declare namespace slatebox.library.review {
   function queue(input: {
     /** (default "waiting") */
     status?: "waiting" | "submitted" | "in_review" | "changes_requested" | "rejected" | "published" | "all";
-    kind?: "component" | "slate" | "presentation";
+    kind?: "component" | "slate" | "presentation" | "integration";
     source?: "migration";
     /** The next value the previous page gave. (at most 12 characters) */
     cursor?: string;
@@ -1155,8 +1160,8 @@ declare namespace slatebox.library.review {
     summary?: string;
     /** Plain text, up to 2,000 characters. (at most 2000 characters) */
     description?: string;
-    /** One of the five categories: plan, decide, meetings, track, map. */
-    category?: "plan" | "decide" | "meetings" | "track" | "map";
+    /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
+    category?: "plan" | "decide" | "meetings" | "track" | "map" | "work" | "business" | "research" | "web";
     /** Smart components only: words people might search for. (at most 12 items) */
     synonyms?: string[];
     /** Review your own submission. Allowed only on a server with one administrator; the thread records it. */
@@ -1165,12 +1170,12 @@ declare namespace slatebox.library.review {
     item: {
       id: string;
       slug: string;
-      kind: "component" | "slate" | "presentation";
+      kind: "component" | "slate" | "presentation" | "integration";
       origin: "builtin" | "user";
       title: string;
       summary: string;
-      /** One of the five categories: plan, decide, meetings, track, map. */
-      category?: "plan" | "decide" | "meetings" | "track" | "map";
+      /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
+      category?: "plan" | "decide" | "meetings" | "track" | "map" | "work" | "business" | "research" | "web";
       authorName: string;
       publishedAt?: string;
       counts: {
@@ -1183,7 +1188,7 @@ declare namespace slatebox.library.review {
       provenance?: Record<string, unknown>;
       url: string;
       preview?: {
-        kind?: "component" | "slate" | "presentation";
+        kind?: "component" | "slate" | "presentation" | "integration";
         boardKind?: string;
         notes?: number;
         [key: string]: unknown;
@@ -1229,8 +1234,8 @@ declare namespace slatebox.library {
     summary: string;
     /** Plain text, up to 2,000 characters. (at most 2000 characters) */
     description?: string;
-    /** One of the five categories: plan, decide, meetings, track, map. */
-    category?: "plan" | "decide" | "meetings" | "track" | "map";
+    /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
+    category?: "plan" | "decide" | "meetings" | "track" | "map" | "work" | "business" | "research" | "web";
     /** Smart components only: words people might search for. (at most 12 items) */
     synonyms?: string[];
   }): Promise<({
@@ -1261,9 +1266,9 @@ declare namespace slatebox.library {
 }
 
 declare namespace slatebox.library {
-  /** Submit to the library. Send something of yours for review, to be published in the shared library: a smart component you saved (itemId), or a slate you own or administer (shareId; kind presentation sends its deck too). Once approved anyone can find, use and change it, shared under CC BY 4.0. Sending a published item again proposes an update; the published version stays until the update is approved. Up to 10 a day. A guest must sign up first (403 sign_in_to_publish). The person agrees first. @scope slates:share @confirm */
+  /** Submit to the library. Send something of yours for review, to be published in the shared library: a smart component you saved (itemId), a slate you own or administer (shareId; kind presentation sends its deck too), or a custom MCP server you connected (kind integration, integrationId: approved, it is offered to everyone in Connect an integration; its address and words become public, never your sign-in). Once approved anyone can find, use and change it, shared under CC BY 4.0. Sending a published item again proposes an update; the published version stays until the update is approved. Up to 10 a day. A guest must sign up first (403 sign_in_to_publish). The person agrees first. @scope slates:share @confirm */
   function submit(input: {
-    kind: "component" | "slate" | "presentation";
+    kind: "component" | "slate" | "presentation" | "integration";
     /** The item: its id or its slug (library.list items[].id or .slug). (1–120 characters) */
     itemId?: string;
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
@@ -1274,10 +1279,18 @@ declare namespace slatebox.library {
     summary?: string;
     /** Plain text, up to 2,000 characters. (at most 2000 characters) */
     description?: string;
-    /** One of the five categories: plan, decide, meetings, track, map. */
-    category?: "plan" | "decide" | "meetings" | "track" | "map";
+    /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
+    category?: "plan" | "decide" | "meetings" | "track" | "map" | "work" | "business" | "research" | "web";
     /** Smart components only: words people might search for. (at most 12 items) */
     synonyms?: string[];
+    /** kind integration: your connected integration to suggest (integrations.list). (1–64 characters) */
+    integrationId?: string;
+    /** kind integration: its homepage or docs (https). (at most 300 characters) */
+    homepage?: string;
+    /** kind integration: how it signs people in: none, oauth or key. */
+    auth?: "none" | "oauth" | "key";
+    /** kind integration: the person agrees its address, name and description become public if approved. */
+    consent?: boolean;
     /** A note for the reviewer: the first message of the item's thread. (1–2000 characters) */
     note?: string;
   }): Promise<({

@@ -39,10 +39,10 @@ export const reviewOpen = defineAction({
   id: 'library.review.open',
   title: 'Open for review',
   description:
-    'For administrators: make (or refresh) your private review copy of a submission\'s waiting version, a slate you can change on the canvas, and mark it in review. Approving publishes that copy as it stands. Opening again for the same version answers the same copy.',
+    'For administrators: make (or refresh) your private review copy of a submission\'s waiting version, a slate you can change on the canvas, and mark it in review. Approving publishes that copy as it stands. Opening again for the same version answers the same copy. A suggested integration has no copy: opening it reaches its server again (anonymously, with every address check) and answers what it found.',
   mounts: { ddp: true, http: { method: 'POST', path: '/library/review/{itemId}/open', operationId: 'openLibraryReview' } },
   input: object({ itemId: itemRef, selfReview }, ['itemId']),
-  output: { type: 'object', properties: { itemId: { type: 'string' }, reviewShareId: { type: 'string' }, status: { type: 'string' }, reviewStatus: { type: ['string', 'null'] }, version: { type: 'integer' } }, required: ['itemId', 'reviewShareId'] },
+  output: { type: 'object', properties: { itemId: { type: 'string' }, reviewShareId: { type: 'string', description: 'The review copy (not for kind integration, which has no canvas).' }, status: { type: 'string' }, reviewStatus: { type: ['string', 'null'] }, version: { type: 'integer' }, reviewProbe: { type: 'object', description: 'kind integration: what Slatebox found reaching the server now, anonymously: reachable, sign-in, tools, and what changed since it was suggested.' } }, required: ['itemId'] },
   tool: { name: 'open_library_review', title: 'Open a library submission', description: 'For administrators: open a library submission for review as a private copy you can change on the canvas.' },
   handler: (principal, input, { deps }) => deps.library.review.open(principal, input),
 })

@@ -20,7 +20,8 @@ import { googleActions } from './google/actions.mjs'
 import { signInRoutes } from './routes.mjs'
 import { registerTeamAddresses } from '../team-addresses/index.mjs'
 
-export const manifest = Object.freeze({ name: 'slatebox-enterprise', features: ['agents.invite'] })
+// library.cloud: a licensed install receives Slatebox Cloud's approved Community integrations (cloud-library.mjs).
+export const manifest = Object.freeze({ name: 'slatebox-enterprise', features: ['agents.invite', 'library.cloud'] })
 
 export function register(api, context) {
   // Team addresses (<name>.slatebox.team) answer on Slatebox Cloud only, whatever the invited
@@ -45,11 +46,12 @@ export function register(api, context) {
     if (!started) throw starting()
     return started.google
   }))
-  // /admin/ai › Gallery: the invite gallery's cards, order and recipes (aiAgents, audited).
+  // /admin/ai › Gallery: the invite gallery's cards, order and recipes (aiAgents, audited), the
+  // Community cards (suggested integrations approved in the library's review queue) among them.
   api.addActions(galleryActions(() => {
     if (!started) throw starting()
     return started.findGallery
-  }, async () => (started ? started.configured() : null)))
+  }, async () => (started ? started.configured() : null), async () => (started ? started.community() : [])))
   // Sign-in's own addresses: the client document, the popup's start and the fixed callback.
   for (const route of signInRoutes({
     signIn: () => {

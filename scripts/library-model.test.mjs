@@ -4,13 +4,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { catalogGroups } from "slateboxjs/catalog";
 import {
-  LIBRARY_CATEGORIES, LIBRARY_KINDS, LIBRARY_LICENSE, LIFECYCLE, canReadItem, categoryLockSentence, nextStatus, readMessage, readMeta,
+  LIBRARY_CATEGORIES, LIBRARY_KINDS, LIBRARY_LICENSE, LIFECYCLE, LISTED_KINDS, canReadItem, categoryLockSentence, nextStatus, readMessage, readMeta,
   reviewStateOf, slugify, transition,
 } from "../web/app/imports/api/common/library-model.mjs";
 
-test("the categories are the engine catalogue's groups less All, and the kinds are three", () => {
+test("the categories are the engine catalogue's groups less All; the kinds are four, three listed (an integration is a gallery card)", () => {
   assert.deepEqual(LIBRARY_CATEGORIES, catalogGroups.map((group) => group.id).filter((id) => id !== "all"));
-  assert.deepEqual(LIBRARY_KINDS, ["component", "slate", "presentation"]);
+  assert.deepEqual(LIBRARY_KINDS, ["component", "slate", "presentation", "integration"]);
+  assert.deepEqual(LISTED_KINDS, ["component", "slate", "presentation"]);
   assert.equal(LIBRARY_LICENSE, "CC-BY-4.0");
   assert.equal(categoryLockSentence("decide"), "A branch stays in its parent's category, Decide.");
 });

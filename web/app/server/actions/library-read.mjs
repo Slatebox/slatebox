@@ -39,7 +39,7 @@ export const libraryExport = defineAction({
   principals: ['agent', 'visitor'],
   mounts: { http: { method: 'GET', path: '/library/export', operationId: 'exportLibrary' } },
   publicCache: { maxAge: 120 },
-  input: object({ cursor: cursorInput }),
+  input: object({ cursor: cursorInput, kind: { ...kindInput, description: 'One kind only. Integrations are exported only when asked for by name.' } }),
   output: { type: 'object', properties: { items: { type: 'array', items: { type: 'object' } }, next: { type: 'string' } }, required: ['items'] },
   tool: { name: 'export_library', title: 'Export the library', description: 'Read every published item of the shared library with its content, 50 per page.' },
   handler: (principal, input, { deps }) => deps.library.export(principal, input),

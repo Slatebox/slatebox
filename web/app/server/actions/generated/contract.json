@@ -17250,7 +17250,8 @@
             "enum": [
               "component",
               "slate",
-              "presentation"
+              "presentation",
+              "integration"
             ]
           },
           "source": {
@@ -17305,7 +17306,7 @@
     {
       "id": "library.review.open",
       "title": "Open for review",
-      "description": "For administrators: make (or refresh) your private review copy of a submission's waiting version, a slate you can change on the canvas, and mark it in review. Approving publishes that copy as it stands. Opening again for the same version answers the same copy.",
+      "description": "For administrators: make (or refresh) your private review copy of a submission's waiting version, a slate you can change on the canvas, and mark it in review. Approving publishes that copy as it stands. Opening again for the same version answers the same copy. A suggested integration has no copy: opening it reaches its server again (anonymously, with every address check) and answers what it found.",
       "action": "library.review.open",
       "toolset": "library",
       "readOnly": false,
@@ -17361,7 +17362,8 @@
             "type": "string"
           },
           "reviewShareId": {
-            "type": "string"
+            "type": "string",
+            "description": "The review copy (not for kind integration, which has no canvas)."
           },
           "status": {
             "type": "string"
@@ -17374,11 +17376,14 @@
           },
           "version": {
             "type": "integer"
+          },
+          "reviewProbe": {
+            "type": "object",
+            "description": "kind integration: what Slatebox found reaching the server now, anonymously: reachable, sign-in, tools, and what changed since it was suggested."
           }
         },
         "required": [
-          "itemId",
-          "reviewShareId"
+          "itemId"
         ]
       },
       "tool": {
@@ -17607,9 +17612,13 @@
               "decide",
               "meetings",
               "track",
-              "map"
+              "map",
+              "work",
+              "business",
+              "research",
+              "web"
             ],
-            "description": "One of the five categories: plan, decide, meetings, track, map."
+            "description": "One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web."
           },
           "synonyms": {
             "type": "array",
@@ -17648,7 +17657,8 @@
                 "enum": [
                   "component",
                   "slate",
-                  "presentation"
+                  "presentation",
+                  "integration"
                 ]
               },
               "origin": {
@@ -17671,9 +17681,13 @@
                   "decide",
                   "meetings",
                   "track",
-                  "map"
+                  "map",
+                  "work",
+                  "business",
+                  "research",
+                  "web"
                 ],
-                "description": "One of the five categories: plan, decide, meetings, track, map."
+                "description": "One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web."
               },
               "authorName": {
                 "type": "string"
@@ -17710,7 +17724,8 @@
                     "enum": [
                       "component",
                       "slate",
-                      "presentation"
+                      "presentation",
+                      "integration"
                     ]
                   },
                   "boardKind": {
@@ -18498,9 +18513,13 @@
               "decide",
               "meetings",
               "track",
-              "map"
+              "map",
+              "work",
+              "business",
+              "research",
+              "web"
             ],
-            "description": "One of the five categories: plan, decide, meetings, track, map."
+            "description": "One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web."
           },
           "synonyms": {
             "type": "array",
@@ -18562,7 +18581,7 @@
     {
       "id": "library.submit",
       "title": "Submit to the library",
-      "description": "Send something of yours for review, to be published in the shared library: a smart component you saved (itemId), or a slate you own or administer (shareId; kind presentation sends its deck too). Once approved anyone can find, use and change it, shared under CC BY 4.0. Sending a published item again proposes an update; the published version stays until the update is approved. Up to 10 a day. A guest must sign up first (403 sign_in_to_publish). The person agrees first.",
+      "description": "Send something of yours for review, to be published in the shared library: a smart component you saved (itemId), a slate you own or administer (shareId; kind presentation sends its deck too), or a custom MCP server you connected (kind integration, integrationId: approved, it is offered to everyone in Connect an integration; its address and words become public, never your sign-in). Once approved anyone can find, use and change it, shared under CC BY 4.0. Sending a published item again proposes an update; the published version stays until the update is approved. Up to 10 a day. A guest must sign up first (403 sign_in_to_publish). The person agrees first.",
       "action": "library.submit",
       "toolset": "library",
       "readOnly": false,
@@ -18594,6 +18613,10 @@
           "description",
           "category",
           "synonyms",
+          "integrationId",
+          "homepage",
+          "auth",
+          "consent",
           "note"
         ],
         "idempotencyKey": "optional"
@@ -18606,7 +18629,8 @@
             "enum": [
               "component",
               "slate",
-              "presentation"
+              "presentation",
+              "integration"
             ]
           },
           "itemId": {
@@ -18647,9 +18671,13 @@
               "decide",
               "meetings",
               "track",
-              "map"
+              "map",
+              "work",
+              "business",
+              "research",
+              "web"
             ],
-            "description": "One of the five categories: plan, decide, meetings, track, map."
+            "description": "One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web."
           },
           "synonyms": {
             "type": "array",
@@ -18660,6 +18688,31 @@
               "maxLength": 40
             },
             "description": "Smart components only: words people might search for."
+          },
+          "integrationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "kind integration: your connected integration to suggest (integrations.list)."
+          },
+          "homepage": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "kind integration: its homepage or docs (https)."
+          },
+          "auth": {
+            "type": "string",
+            "enum": [
+              "none",
+              "oauth",
+              "key"
+            ],
+            "description": "kind integration: how it signs people in: none, oauth or key."
+          },
+          "consent": {
+            "type": "boolean",
+            "description": "kind integration: the person agrees its address, name and description become public if approved."
           },
           "note": {
             "type": "string",
@@ -19054,7 +19107,8 @@
         "path": "/api/v1/library/export",
         "pathParams": [],
         "queryParams": [
-          "cursor"
+          "cursor",
+          "kind"
         ],
         "bodyParams": [],
         "idempotencyKey": "none"
@@ -19067,6 +19121,16 @@
             "maxLength": 12,
             "pattern": "^[0-9]+$",
             "description": "The next value the previous page gave."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "component",
+              "slate",
+              "presentation",
+              "integration"
+            ],
+            "description": "One kind only. Integrations are exported only when asked for by name."
           }
         },
         "required": [],
@@ -19215,7 +19279,8 @@
             "enum": [
               "component",
               "slate",
-              "presentation"
+              "presentation",
+              "integration"
             ]
           },
           "category": {
@@ -19225,9 +19290,13 @@
               "decide",
               "meetings",
               "track",
-              "map"
+              "map",
+              "work",
+              "business",
+              "research",
+              "web"
             ],
-            "description": "One of the five categories: plan, decide, meetings, track, map."
+            "description": "One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web."
           },
           "q": {
             "type": "string",
@@ -19283,7 +19352,8 @@
                   "enum": [
                     "component",
                     "slate",
-                    "presentation"
+                    "presentation",
+                    "integration"
                   ]
                 },
                 "origin": {
@@ -19306,9 +19376,13 @@
                     "decide",
                     "meetings",
                     "track",
-                    "map"
+                    "map",
+                    "work",
+                    "business",
+                    "research",
+                    "web"
                   ],
-                  "description": "One of the five categories: plan, decide, meetings, track, map."
+                  "description": "One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web."
                 },
                 "authorName": {
                   "type": "string"
@@ -19345,7 +19419,8 @@
                       "enum": [
                         "component",
                         "slate",
-                        "presentation"
+                        "presentation",
+                        "integration"
                       ]
                     },
                     "boardKind": {
@@ -19462,7 +19537,8 @@
                 "enum": [
                   "component",
                   "slate",
-                  "presentation"
+                  "presentation",
+                  "integration"
                 ]
               },
               "origin": {
@@ -19485,9 +19561,13 @@
                   "decide",
                   "meetings",
                   "track",
-                  "map"
+                  "map",
+                  "work",
+                  "business",
+                  "research",
+                  "web"
                 ],
-                "description": "One of the five categories: plan, decide, meetings, track, map."
+                "description": "One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web."
               },
               "authorName": {
                 "type": "string"
@@ -19524,7 +19604,8 @@
                     "enum": [
                       "component",
                       "slate",
-                      "presentation"
+                      "presentation",
+                      "integration"
                     ]
                   },
                   "boardKind": {

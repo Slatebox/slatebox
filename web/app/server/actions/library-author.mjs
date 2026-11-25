@@ -3,7 +3,7 @@
 // item's thread. None of it is charged.
 import { defineAction } from './registry.mjs'
 import { shareIdInput } from './slate-schemas.mjs'
-import { itemRef, kindInput, messageInput, metaInputs, object, statusOutput, versionInput } from './library-schemas.mjs'
+import { integrationInputs, itemRef, kindInput, messageInput, metaInputs, object, statusOutput, versionInput } from './library-schemas.mjs'
 
 const write = { kind: 'write', toolset: 'library', idempotency: 'optional', replay: 'stored' }
 
@@ -79,7 +79,7 @@ export const librarySubmit = defineAction({
   id: 'library.submit',
   title: 'Submit to the library',
   description:
-    'Send something of yours for review, to be published in the shared library: a smart component you saved (itemId), or a slate you own or administer (shareId; kind presentation sends its deck too). Once approved anyone can find, use and change it, shared under CC BY 4.0. Sending a published item again proposes an update; the published version stays until the update is approved. Up to 10 a day. A guest must sign up first (403 sign_in_to_publish). The person agrees first.',
+    'Send something of yours for review, to be published in the shared library: a smart component you saved (itemId), a slate you own or administer (shareId; kind presentation sends its deck too), or a custom MCP server you connected (kind integration, integrationId: approved, it is offered to everyone in Connect an integration; its address and words become public, never your sign-in). Once approved anyone can find, use and change it, shared under CC BY 4.0. Sending a published item again proposes an update; the published version stays until the update is approved. Up to 10 a day. A guest must sign up first (403 sign_in_to_publish). The person agrees first.',
   scope: 'slates:share',
   principals: ['person', 'guest', 'agent'],
   confirm: true,
@@ -89,6 +89,7 @@ export const librarySubmit = defineAction({
     itemId: itemRef,
     shareId: shareIdInput,
     ...metaInputs,
+    ...integrationInputs,
     note: { ...messageInput, description: 'A note for the reviewer: the first message of the item\'s thread.' },
   }, ['kind']),
   output: statusOutput,

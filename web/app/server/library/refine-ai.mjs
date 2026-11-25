@@ -18,7 +18,7 @@
 // Everything the author wrote (titles, lane labels, cards, rules made from them) travels in the user
 // turn as one data block, never in the system prompt; and warnings about personal data come from a
 // scan of the item on the server too (personalDataChecks), not from the AI alone.
-import { CATEGORY_LABELS, KIND_LABELS, LIBRARY_CATEGORIES, LIBRARY_LIMITS, categoryLabel, libraryError } from '../../imports/api/common/library-model.mjs'
+import { CATEGORY_LABELS, INTEGRATION_CATEGORIES, INTEGRATION_CATEGORY_LABELS, INTEGRATION_LIMITS, KIND_LABELS, LIBRARY_CATEGORIES, LIBRARY_LIMITS, categoryLabel, libraryError } from '../../imports/api/common/library-model.mjs'
 import { describeWorkshopEdits, rulebook, validateWorkshop } from 'slateboxjs/workshops/model'
 import 'slateboxjs/workshops/behaviour'
 import { promptText } from '../ai-control/prompts/index.mjs'
@@ -94,8 +94,11 @@ export function refineValues(item, board) {
   const edits = componentBoard ? acceptedEdits(board) : []
   return {
     kind: String(KIND_LABELS[item.kind] || item.kind),
-    categories: LIBRARY_CATEGORIES.map((id) => `${CATEGORY_LABELS[id]} (${id})`).join(', '),
-    titleMax: LIBRARY_LIMITS.title,
+    // An integration (a suggested MCP server) takes the agent gallery's categories and a card's shorter name.
+    categories: item.kind === 'integration'
+      ? INTEGRATION_CATEGORIES.map((id) => `${INTEGRATION_CATEGORY_LABELS[id]} (${id})`).join(', ')
+      : LIBRARY_CATEGORIES.map((id) => `${CATEGORY_LABELS[id]} (${id})`).join(', '),
+    titleMax: item.kind === 'integration' ? INTEGRATION_LIMITS.name : LIBRARY_LIMITS.title,
     summaryMax: LIBRARY_LIMITS.summary,
     descriptionMax: LIBRARY_LIMITS.description,
     synonymsMax: LIBRARY_LIMITS.synonyms,

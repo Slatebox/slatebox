@@ -8,6 +8,8 @@
 // tools, Sign in again and Disconnect (revoked, and removed from every slate). "Connect an
 // agent" is the invite walkthrough without a slate. Free accounts on Slatebox Cloud see every row
 // marked Pro, and connecting opens the in-app Pro sheet (prices live on /plans/, never here).
+// A custom agent (connected by its MCP address, not from the gallery) that works offers "Suggest for
+// the library": the library's review queue, free (SuggestIntegration).
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
@@ -35,6 +37,7 @@ import { PRICING_URL } from '/imports/api/common/contact.mjs'
 import InviteWalkthrough from './InviteWalkthrough'
 import { changesOffer, toolSummary } from '../common/integration-words.mjs'
 import GoogleIntegration from './GoogleIntegration'
+import SuggestIntegration from './SuggestIntegration'
 import { AppPageHeader } from '/imports/ui/common/AppPage.jsx'
 
 export const INTEGRATION_STATUS = {
@@ -138,7 +141,7 @@ function ReviewDialog({ integration, onClose, onDone, onUpgrade }) {
 }
 ReviewDialog.propTypes = { integration: PropTypes.shape({ integrationId: PropTypes.string, name: PropTypes.string, kind: PropTypes.string, writesAt: PropTypes.string, tools: PropTypes.arrayOf(PropTypes.shape({})) }).isRequired, onClose: PropTypes.func.isRequired, onDone: PropTypes.func.isRequired, onUpgrade: PropTypes.func.isRequired }
 
-function IntegrationRow({ integration, pro, cloud, onChanged, onDisconnected, onReview, onSignIn, onUpgrade, highlight }) {
+function IntegrationRow({ integration, pro, cloud, onChanged, onDisconnected, onReview, onSignIn, onUpgrade, onSuggest, highlight }) {
   const [confirming, setConfirming] = useState(false)
   const [note, setNote] = useState('')
   const [allowing, setAllowing] = useState(false)
@@ -217,6 +220,9 @@ function IntegrationRow({ integration, pro, cloud, onChanged, onDisconnected, on
           </Button>
         )}
         {integration.status === 'needs_sign_in' && <Button size="small" variant="contained" data-integration-sign-in="" onClick={() => onSignIn(integration)}>Sign in again</Button>}
+        {integration.kind === 'mcp' && !integration.galleryId && integration.status === 'active' && (
+          <Button size="small" variant="outlined" data-integration-suggest="" onClick={() => onSuggest(integration)}>Suggest for the library</Button>
+        )}
         {!confirming && <Button size="small" color="error" data-integration-disconnect="" onClick={() => setConfirming(true)}>Disconnect</Button>}
       </Box>
       {confirming && (
@@ -242,6 +248,7 @@ IntegrationRow.propTypes = {
   onReview: PropTypes.func.isRequired,
   onSignIn: PropTypes.func.isRequired,
   onUpgrade: PropTypes.func.isRequired,
+  onSuggest: PropTypes.func.isRequired,
   highlight: PropTypes.bool,
 }
 
@@ -254,6 +261,7 @@ export default function IntegrationsPage() {
   const [reviewing, setReviewing] = useState(null)
   const [upgrade, setUpgrade] = useState(null)
   const [highlight, setHighlight] = useState(null)
+  const [suggesting, setSuggesting] = useState(null)
   const { open: openPay } = usePaySheet()
   const cloud = enterpriseState(Meteor.settings).via === 'cloud'
   const live = useRef(true)
@@ -296,15 +304,16 @@ export default function IntegrationsPage() {
       </Box>
       {state.integrations === null && <LinearProgress aria-label="Loading your integrations" />}
       {state.integrations !== null && !mcp.length && (
-        <Box sx={card}><Typography variant="body2" color="text.secondary">No agents connected yet. Connect one from the gallery or paste any MCP server&apos;s address.</Typography></Box>
+        <Box sx={card}><Typography variant="body2" color="text.secondary">No agents connected yet. Connect one Slatebox lists under Existing, or paste any MCP server&apos;s address under Custom.</Typography></Box>
       )}
       {mcp.map((integration) => (
         <IntegrationRow key={integration.integrationId} integration={integration} pro={Boolean(state.pro)} cloud={cloud} onChanged={refresh}
           onDisconnected={(text) => { setNotice(text); refresh() }} onReview={(row) => (cloud && !state.pro ? pay(refresh) : setReviewing(row))} onSignIn={(row) => setReconnect({ address: row.address, name: row.name })}
-          onUpgrade={startUpgrade} highlight={highlight === integration.integrationId} />
+          onUpgrade={startUpgrade} onSuggest={setSuggesting} highlight={highlight === integration.integrationId} />
       ))}
       <InviteWalkthrough open={connecting || Boolean(reconnect) || Boolean(upgrade)} reconnect={reconnect} upgrade={upgrade} integrations={mcp} onManageIntegration={manage}
         onClose={() => { setConnecting(false); setReconnect(null); setUpgrade(null); refresh() }} onConnected={refresh} />
+      {suggesting && <SuggestIntegration open integration={suggesting} onClose={() => setSuggesting(null)} />}
       {reviewing && <ReviewDialog integration={reviewing} onClose={() => setReviewing(null)} onDone={() => { setReviewing(null); refresh() }} onUpgrade={startUpgrade} />}
     </Box>
   )

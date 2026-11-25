@@ -1,6 +1,6 @@
 // The words the library's review queue, review panel, My library and the publish dialog say, from
 // an item's status and its thread. Pure, so the tests read the same sentences the pages show.
-import { CATEGORY_LABELS, KIND_LABELS, LIBRARY_CATEGORIES } from '../../../api/common/library-model.mjs'
+import { CATEGORY_LABELS, INTEGRATION_AUTH_LABELS, INTEGRATION_CATEGORIES, INTEGRATION_CATEGORY_LABELS, KIND_LABELS, LIBRARY_CATEGORIES } from '../../../api/common/library-model.mjs'
 
 export const QUEUE_TABS = Object.freeze([
   { id: 'waiting', label: 'Waiting' },
@@ -13,8 +13,41 @@ export const KIND_FILTERS = Object.freeze([
   { id: 'component', label: 'Smart components' },
   { id: 'slate', label: 'Slates' },
   { id: 'presentation', label: 'Presentations' },
+  { id: 'integration', label: 'Integrations' },
 ])
 export const CATEGORY_CHIPS = Object.freeze(LIBRARY_CATEGORIES.map((id) => ({ id, label: CATEGORY_LABELS[id] })))
+// A suggested integration's categories: the agent gallery's chips.
+export const INTEGRATION_CHIPS = Object.freeze(INTEGRATION_CATEGORIES.map((id) => ({ id, label: INTEGRATION_CATEGORY_LABELS[id] })))
+export const categoryChipsFor = (kind) => (kind === 'integration' ? INTEGRATION_CHIPS : CATEGORY_CHIPS)
+
+/**
+ * What the reviewer's check of a suggested integration found, in lines a person reads (the review
+ * panel and the tests): reachable or not, its sign-in, its tools, and what changed since it was suggested.
+ */
+export function probeLines(probe, { auth = 'none' } = {}) {
+  if (!probe) return [{ tone: 'info', text: 'Not checked yet. Check it: Slatebox reaches the server now, signed out.' }]
+  const lines = []
+  if (!probe.reachable) {
+    lines.push({ tone: 'error', text: `Not reachable${probe.host ? ` at ${probe.host}` : ''}${probe.problem ? `: ${probe.problem}` : '.'}` })
+    return lines
+  }
+  lines.push({ tone: 'ok', text: `Reached ${probe.host}` })
+  if (probe.lookalike) lines.push({ tone: 'warning', text: 'Its address looks like it stands for another site. Check the name before you approve.' })
+  if (probe.signIn) {
+    lines.push({ tone: 'info', text: `Sign-in needed${probe.signIn.authHost ? `: people sign in at ${probe.signIn.authHost}` : ''}${probe.signIn.issuer ? ` (${probe.signIn.issuer})` : ''}. Its tools show only after signing in.` })
+    if (auth === 'none') lines.push({ tone: 'warning', text: 'The author said it needs no sign-in, but it asks for one.' })
+  } else {
+    const changes = (probe.tools || []).filter((tool) => tool.group === 'change')
+    lines.push({ tone: 'ok', text: `No sign-in: ${probe.tools.length} ${probe.tools.length === 1 ? 'tool' : 'tools'}, ${changes.length} that change things elsewhere${changes.some((tool) => tool.destructive) ? ' (some delete, close or merge)' : ''}` })
+    if (auth !== 'none') lines.push({ tone: 'info', text: `The author said: ${INTEGRATION_AUTH_LABELS[auth] || auth}. Signed out, it answered anyway.` })
+  }
+  const drift = probe.drift
+  if (drift && !drift.same) {
+    const parts = [drift.added?.length && `${drift.added.length} added`, drift.removed?.length && `${drift.removed.length} removed`, drift.changed?.length && `${drift.changed.length} changed`].filter(Boolean)
+    lines.push({ tone: 'warning', text: `Its tools differ from when it was suggested: ${parts.join(', ')}.` })
+  } else if (drift?.same) lines.push({ tone: 'ok', text: 'Its tools are the ones the author connected.' })
+  return lines
+}
 
 export const REFINE_STARTERS = Object.freeze([
   'What should I check?',

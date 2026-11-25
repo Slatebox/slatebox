@@ -40,6 +40,7 @@ const Integrations = lazy(() => import('./pages/Integrations'))
 const LibraryItem = lazy(() => import('./pages/LibraryItem'))
 const MyLibrary = lazy(() => import('./pages/MyLibrary'))
 const LibraryReview = lazy(() => import('./pages/LibraryReview'))
+const LibraryIntegrationReview = lazy(() => import('./pages/LibraryIntegrationReview'))
 
 function PrivateRoute({ children }) {
   const isAuthorized =
@@ -201,6 +202,7 @@ export default function SBRoutes() {
       />
       <Route path="/admin" element={<PrivateRoute><AdminRoute><AdminTools /></AdminRoute></PrivateRoute>} />
       <Route path="/admin/library" element={<PrivateRoute><AdminRoute><LibraryReview /></AdminRoute></PrivateRoute>} />
+      <Route path="/admin/library/review/:itemId" element={<PrivateRoute><AdminRoute><LibraryIntegrationReview /></AdminRoute></PrivateRoute>} />
       <Route path="/admin/ai" element={<PrivateRoute><AdminRoute><AIControl /></AdminRoute></PrivateRoute>} />
       <Route path="/library" element={<Library />} />
       <Route

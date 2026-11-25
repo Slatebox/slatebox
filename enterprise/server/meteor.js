@@ -28,14 +28,16 @@ import { proActive } from '/server/pro-billing.mjs'
 import { invitesAgents } from '/imports/api/business/membership.mjs'
 import { presence } from '/server/presence/meteor'
 import { firstNameOf, sanitizeClientName } from '/imports/api/common/agent-label.mjs'
-import { AIAgents, Organizations, Slates } from '/imports/api/common/models'
+import { AIAgents, LibraryItems, Organizations, Slates } from '/imports/api/common/models'
+import { setLibraryIntegrations } from '/server/library/integration-hooks.mjs'
 import { loadMasterKey } from '/server/metering/vault.mjs'
 import { createMcpFetch } from './mcp-fetch.mjs'
 import { callTool, discover } from './mcp-session.mjs'
 import { ConnectorRefused, createConnectorService } from './service.mjs'
 import { connectorSettings } from './connector-settings.mjs'
 import { cardFor, retiredFor } from '../common/gallery.mjs'
-import { liveGallery } from './gallery-admin.mjs'
+import { communityCard, liveGallery } from './gallery-admin.mjs'
+import { CLOUD_LIBRARY_LIMITS, CLOUD_ORIGIN, cloudLibraryOn, createCloudCatalog } from './cloud-library.mjs'
 import { createVault } from './credentials.mjs'
 import { createSignIn, probe } from './signin.mjs'
 import { migrateIntegrations } from './integrations-migrate.mjs'
@@ -61,6 +63,8 @@ const GoogleSlateFiles = new Mongo.Collection('googleSlateFiles')
 // Action cards (an invited agent's changes outside Slatebox, waiting, done, failed or declined) and
 // act-without-asking choices: read through connectors.outsideActions, never published.
 const OutsideActions = new Mongo.Collection('mcpOutsideActions')
+// A licensed install's last good copy of Slatebox Cloud's Community cards (cloud-library.mjs): one row.
+const CloudCatalog = new Mongo.Collection('connectorCloudCatalog')
 
 const drawable = (slate) => !slate.creative || slate.nativeCanvasDrawing || slate.creative.model?.kind === 'workshop'
 
@@ -215,10 +219,13 @@ export const appOrigin = () => String(Meteor.settings.public?.baseUrl || Meteor.
 
 // The gallery as administrators set it (aiAgents, /admin/ai › Gallery), read at most every few seconds.
 const findGallery = () => AIAgents.find({ kind: 'outbound-connector' }).fetchAsync()
+// The Community cards after the built-in ones: this server's approved suggestions, then Slatebox
+// Cloud's on a licensed install (set once the connectors start).
+let communitySource = async () => []
 let galleryCache = { at: 0, cards: null }
 async function gallery() {
   if (galleryCache.cards && Date.now() - galleryCache.at < 5000) return galleryCache.cards
-  const cards = liveGallery(await findGallery().catch(() => []))
+  const cards = liveGallery(await findGallery().catch(() => []), undefined, { extra: await communitySource().catch(() => []) })
   galleryCache = { at: Date.now(), cards }
   return cards
 }
@@ -336,6 +343,27 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     forget: async (integration) => (integration.address === GOOGLE_ADDRESS ? googleService.forget(integration.ownerId) : null),
     outside: outsideStore,
   })
+  // Community cards: this server's approved suggestions (the library's review queue), then Slatebox
+  // Cloud's on an install an on-prem license unlocks (cloud-library.mjs), each checked again as a card.
+  const cloud = cloudLibraryOn({ via, settings: Meteor.settings }) ? startCloudCatalog(settings) : null
+  const localCommunity = async () => {
+    const rows = await LibraryItems.find({ kind: 'integration', status: 'published' }, { sort: { publishedAt: 1 }, limit: 200, fields: { title: 1, summary: 1, category: 1, kind: 1, status: 1, integration: 1, authorName: 1 } }).fetchAsync()
+    return rows.map((row) => communityCard(row, { devOrigins: settings.devOrigins })).filter(Boolean)
+  }
+  communitySource = async () => [...(await localCommunity()), ...(cloud ? await cloud.catalog.cards() : [])]
+  galleryCache = { at: 0, cards: null }
+  // Suggesting a custom server for everyone goes through the library (library.submit kind integration):
+  // the MIT core asks these, and only while the license holds.
+  const unlockedOr = (fn) => async (...args) => {
+    if (!isUnlocked()) throw new ConnectorRefused(403, 'enterprise_locked', 'Integrations are not available on this server.')
+    return fn(...args)
+  }
+  setLibraryIntegrations({
+    forSubmit: unlockedOr((principal, input) => service.submissionOf(principal, input)),
+    probe: unlockedOr((address) => service.reviewProbe(address)),
+    covered: async (address) => Boolean(cardFor(address, await gallery())),
+    changed: async () => { galleryCache = { at: 0, cards: null } },
+  })
   // Keeping an action card's note approves its change: the app's suggestions.decide asks the service
   // first (only while the license holds; a locked install has no cards).
   deps.suggestionGate = (principal, slate, choice) => (isUnlocked() ? service.gate(principal, slate, choice) : null)
@@ -396,6 +424,35 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
   })
 
   // /admin/ai › Gallery's configuration row: yes or no only.
-  const configured = async () => ({ google: googleConfiguration(google(), { vaultKey: Boolean(master) }) })
-  return { service, google: googleService, signIn, origin: appOrigin, userFor, findGallery, configured }
+  const configured = async () => ({
+    google: googleConfiguration(google(), { vaultKey: Boolean(master) }),
+    ...(cloud && { cloudLibrary: await cloud.catalog.status() }),
+  })
+  return { service, google: googleService, signIn, origin: appOrigin, userFor, findGallery, configured, community: () => communitySource() }
+}
+
+// Slatebox Cloud's Community cards on a licensed install: pulled at start and every few hours by one
+// server at a time (a lease on the row), the last good copy served in between and while offline.
+function startCloudCatalog(settings) {
+  const fetch = createMcpFetch({ devOrigins: settings.devOrigins, userAgent: settings.userAgent, methods: ['GET'], maxRedirects: 0, maxBytes: CLOUD_LIBRARY_LIMITS.maxBytes, timeoutMs: CLOUD_LIBRARY_LIMITS.timeoutMs })
+  // Another origin only in a development run (a fake Cloud in a test); production always asks Slatebox Cloud.
+  const origin = (Meteor.isDevelopment && typeof Meteor.settings.enterprise?.cloudOrigin === 'string' && Meteor.settings.enterprise.cloudOrigin) || CLOUD_ORIGIN
+  const store = {
+    get: () => CloudCatalog.findOneAsync({ _id: 'cloud' }),
+    put: (doc) => CloudCatalog.upsertAsync({ _id: 'cloud' }, { $set: doc }),
+  }
+  const catalog = createCloudCatalog({ fetch, store, origin, devOrigins: settings.devOrigins, log: (entry) => console.log('[connectors]', JSON.stringify(entry)) })
+  const run = async () => {
+    const until = new Date(Date.now() + 10 * 60 * 1000)
+    const leased = await CloudCatalog.rawCollection().updateOne({ _id: 'lease', $or: [{ until: { $lt: new Date() } }, { until: { $exists: false } }] }, { $set: { until } }, { upsert: false })
+      .then((r) => r.modifiedCount > 0)
+      .catch(() => false)
+    const first = !leased && !(await CloudCatalog.findOneAsync({ _id: 'lease' }).catch(() => null)) && (await CloudCatalog.insertAsync({ _id: 'lease', until }).then(() => true).catch(() => false))
+    if (!leased && !first) return
+    await catalog.sync()
+    galleryCache = { at: 0, cards: null }
+  }
+  Meteor.setTimeout(() => run().catch((error) => console.warn('[connectors] cloud library failed', error?.message)), 15000)
+  Meteor.setInterval(() => run().catch((error) => console.warn('[connectors] cloud library failed', error?.message)), CLOUD_LIBRARY_LIMITS.everyMs)
+  return { catalog, run }
 }

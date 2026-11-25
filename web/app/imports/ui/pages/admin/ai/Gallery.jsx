@@ -99,13 +99,23 @@ export default function Gallery() {
   return (
     <Box data-ai-gallery="">
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        The agents people can invite onto a slate, in the order the invite dialog shows them. Slatebox draws diagrams itself, so the gallery lists agents that bring in what it cannot: code, issues, papers, docs, facts and the web.
+        The agents people can invite onto a slate, in the order the invite dialog shows them. Slatebox draws diagrams itself, so the gallery lists agents that bring in what it cannot: code, issues, papers, docs, facts and the web. Community cards are custom servers people suggested and an administrator approved in Library review.
       </Typography>
+      {data.configuration?.cloudLibrary && (
+        <Alert severity={data.configuration.cloudLibrary.lastError ? 'warning' : 'info'} sx={{ mb: 2 }} data-gallery-cloud="">
+          {data.configuration.cloudLibrary.fetchedAt
+            ? `Community cards from Slatebox Cloud: ${data.configuration.cloudLibrary.cards}, last updated ${new Date(data.configuration.cloudLibrary.fetchedAt).toLocaleString()}.`
+            : 'Community cards from Slatebox Cloud: not fetched yet.'}
+          {data.configuration.cloudLibrary.lastError ? ` The last try did not work (${data.configuration.cloudLibrary.lastError}); the last good copy is still used.` : ''}
+          {' '}Turn this off with settings.enterprise.cloudLibrary: false.
+        </Alert>
+      )}
       {data.cards.map((card, index) => (
         <Box key={card.id} data-gallery-admin-card={card.id} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 1.5, mb: 1.5, opacity: card.enabled ? 1 : 0.7 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <Typography variant="subtitle2" sx={{ flex: '1 1 160px' }}>⬡ {card.name} <Typography component="span" variant="caption" color="text.secondary">· {card.job}</Typography></Typography>
             {card.edited && <Chip size="small" label="Edited" />}
+            {card.origin === 'community' && <Chip size="small" color="primary" variant="outlined" label={card.from === 'cloud' ? 'Community · Slatebox Cloud' : 'Community'} data-gallery-admin-community="" />}
             <Chip size="small" variant="outlined" label={`${card.recipe?.intents?.length || 0} known asks`} />
             <FormControlLabel control={<Switch size="small" checked={card.enabled} disabled={busy} onChange={(e) => run(() => Meteor.callAsync('ai.agents.gallery.save', { id: card.id, changes: { enabled: e.target.checked } }))} />} label={card.enabled ? 'On' : 'Off'} />
             <Button size="small" disabled={busy || index === 0} aria-label={`Move ${card.name} up`} onClick={() => move(index, -1)}>↑</Button>

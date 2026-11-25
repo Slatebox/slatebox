@@ -19,6 +19,12 @@
 // on a slate it offers Invite. No card is tinted for any other reason (a featured card is only first).
 // With `upgrade` ({ address, replaces, name }: an integration connected at its card's read-only
 // address) it signs in at the card's own address and the consent moves that integration there.
+// Two tabs say the two ways in (owner, 2026-11-25): Existing (the gallery: chips, search, the cards,
+// Community cards among them) and Custom (paste any MCP address, an optional name, and "Check it",
+// which reaches the server and lists its tools and sign-in before anything is saved). The last tab
+// is remembered for this browser session only. A custom server connected from the Integrations page
+// ends on a success step that offers "Suggest for the Slatebox library" (SuggestIntegration: the
+// library's review queue, kind integration; free, reviewed before anyone sees it).
 import React, { useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
@@ -38,6 +44,8 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import LinearProgress from '@mui/material/LinearProgress'
 import Radio from '@mui/material/Radio'
 import RadioGroup from '@mui/material/RadioGroup'
+import Tab from '@mui/material/Tab'
+import Tabs from '@mui/material/Tabs'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded'
@@ -50,9 +58,10 @@ import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx
 import Hexagon from '/imports/ui/components/AgentMark.jsx'
 import { enterpriseState } from '/imports/api/common/edition.mjs'
 import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
-import { GALLERY, cardFor, filterCards, groupsIn } from '../common/gallery.mjs'
+import { GALLERY, cardFor, filterCards, groupsIn, lookalikeHost } from '../common/gallery.mjs'
 import { cardState, connectedAction, STATUS_WORDS } from '../common/integration-words.mjs'
 import { followSignIn, openSignInWindow } from './signin'
+import SuggestIntegration from './SuggestIntegration'
 
 // The walkthrough's look, light and dark (the app's palette: greens on warm neutrals, sticky
 // yellow only for the "Try" suggestion). Text on every surface here meets WCAG AA.
@@ -152,6 +161,25 @@ const SEES = [
 // The chips and search box show once the gallery has more cards than this.
 export const FILTER_FROM = 8
 
+// The two ways in, and the one line each says about itself.
+export const CONNECT_TABS = Object.freeze([
+  { id: 'existing', label: 'Existing', line: 'Pick an agent Slatebox lists. You choose what it may do before it connects.' },
+  { id: 'custom', label: 'Custom', line: 'Paste the address of any MCP server. Slatebox reaches it first and shows its tools and what sign-in it needs, before anything is saved.' },
+])
+// Remembered for this browser session only (a new session starts on Existing).
+const TAB_KEY = 'slatebox.connectTab'
+const rememberedTab = () => {
+  try {
+    const tab = window.sessionStorage?.getItem(TAB_KEY)
+    return CONNECT_TABS.some((t) => t.id === tab) ? tab : 'existing'
+  } catch {
+    return 'existing'
+  }
+}
+const rememberTab = (tab) => {
+  try { window.sessionStorage?.setItem(TAB_KEY, tab) } catch {}
+}
+
 export const cardCost = (item) => (item.signIn ? item.cost : item.cost === 'Free' ? 'No sign-in needed' : `No sign-in needed · ${item.cost}`)
 
 // A refusal because the server's key ended (enterprise_locked) also empties the app's enterprise slots.
@@ -162,7 +190,7 @@ const errorText = (error) => {
 
 export default function InviteWalkthrough({ open, onClose, shareId = null, slateName, onInvited, reconnect, invited = [], onManage = null, integrations = [], onConnected = null, onManageIntegration = null, upgrade = null }) {
   const integrationMode = !shareId
-  const [step, setStep] = useState('choose') // choose | discovering | signin | waiting | consent | inviting | reconnected
+  const [step, setStep] = useState('choose') // choose | discovering | signin | waiting | consent | inviting | reconnected | connected
   const [rule, setRule] = useState('ask')
   // A server this person already connected (from discovery): offered to invite in one step.
   const [connected, setConnected] = useState(null)
@@ -187,6 +215,13 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
   const [gallery, setGallery] = useState({ cards: null, canInvite: null })
   // The gallery's chip (a GROUPS id, or 'all') and search words.
   const [filter, setFilter] = useState({ group: 'all', query: '' })
+  // Existing or Custom (CONNECT_TABS), and Custom's optional name for the agent.
+  const [tab, setTabState] = useState(rememberedTab)
+  const setTab = (next) => { setTabState(next); rememberTab(next) }
+  const [customName, setCustomName] = useState('')
+  // A custom server just connected from the Integrations page (the success step), and its suggestion dialog.
+  const [justConnected, setJustConnected] = useState(null)
+  const [suggesting, setSuggesting] = useState(false)
   const { open: openPay, prefetch } = usePaySheet()
   // On a phone the walkthrough is a full-height sheet; its footer stays in reach.
   const theme = useTheme()
@@ -205,6 +240,9 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
     if (!open) {
       pending.current?.cancel()
       setStep('choose'); setFound(null); setError(''); setAddress(''); setShowAll(false); setKey(''); setClientId(''); setShowKey(false); setAlready(null); setConnected(null); setRule('ask'); setFilter({ group: 'all', query: '' })
+      setCustomName(''); setJustConnected(null); setSuggesting(false)
+    } else if (!reconnect && !upgrade) {
+      setTabState(rememberedTab())
     } else if (reconnect?.address) {
       setAddress(reconnect.address)
       discover(reconnect.address)
@@ -269,7 +307,8 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
         setStep('reconnected')
         return
       }
-      setName(result.alreadyHere?.lookAgain ? result.alreadyHere.name : upgrade?.name || result.suggestedName)
+      // Custom's name, when one was typed (the consent step still shows it, and the same rules clean it).
+      setName(result.alreadyHere?.lookAgain ? result.alreadyHere.name : upgrade?.name || (!result.card && customName.trim().slice(0, 32)) || result.suggestedName)
       setAllowed(Object.fromEntries(result.tools.map((tool) => [tool.name, tool.policy === 'allow'])))
       setStep('consent')
     } catch (e) {
@@ -333,6 +372,12 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
         const integration = await Meteor.callAsync('integrations.connect', { address: found.address, name, tools, ...(upgrade?.replaces ? { replaces: upgrade.replaces } : { rule }) })
         if (!live.current) return
         onConnected?.(integration)
+        // A custom server (no card in the gallery): say it worked, and offer to suggest it for everyone.
+        if (!found.card && !upgrade && integration?.integrationId) {
+          setJustConnected({ ...integration, host: integration.host || found.host })
+          setStep('connected')
+          return
+        }
         onClose()
         return
       }
@@ -365,7 +410,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
   const signInWith = plan?.provider || plan?.authHost || found?.host
 
 
-  const agentName = step === 'consent' || step === 'inviting' ? name : reconnect?.name || found?.suggestedName
+  const agentName = step === 'consent' || step === 'inviting' ? name : step === 'connected' ? justConnected?.name : reconnect?.name || found?.suggestedName
   const subtitle = found && step !== 'choose' && step !== 'discovering' ? [agentName, found.host].filter(Boolean).join(' · ') : ''
   const toolLabel = (tool) => tool.title || tool.name.replace(/[_-]+/g, ' ')
 
@@ -400,30 +445,9 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
           <Box sx={{ display: 'grid', gap: 2 }}>
             <Typography variant="body2" sx={{ fontSize: 15, lineHeight: 1.55 }}>
               {integrationMode
-                ? 'Connect an agent once. Then invite it onto any slate, or let it join every slate you own, with no new sign-in.'
-                : 'Agents work on this slate with you. Everyone here sees each one as a cursor, and its suggestions as ghost notes to keep or discard.'}
+                ? 'Pick an agent Slatebox lists, or paste the address of any MCP server. Connect it once, then invite it onto any slate or let it join every slate you own, with no new sign-in.'
+                : 'Pick an agent Slatebox lists, or paste the address of any MCP server. Agents work on this slate with you: everyone here sees each one as a cursor, and its suggestions as ghost notes to keep or discard.'}
             </Typography>
-            {!integrationMode && integrations.length > 0 && (
-              <Box sx={(t) => ({ ...section(t), display: 'grid', gap: 1 })} data-invite-integrations="">
-                <Typography component="div" sx={heading}>Your integrations</Typography>
-                {integrations.map((integration) => {
-                  const here = invited.some((c) => c.mine && c.status !== 'removed' && c.integrationId === integration.integrationId)
-                  const blocked = integration.status !== 'active'
-                  return (
-                    <Box key={integration.integrationId} sx={{ display: 'flex', alignItems: 'center', gap: 1 }} data-invite-integration={integration.name}>
-                      <Hexagon color={MARK} size={18} style={{}} />
-                      <Typography variant="body2" sx={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
-                        <b>{integration.name}</b> · {integration.host}{blocked ? ` · ${STATUS_WORDS[integration.status] || integration.status}` : ''}
-                      </Typography>
-                      {here
-                        ? <Typography variant="caption" color="text.secondary">✓ On this slate</Typography>
-                        : <Button size="small" variant="outlined" disabled={blocked || step === 'inviting'} data-invite-integration-go="" onClick={() => inviteIntegration(integration)}>Invite to this slate</Button>}
-                    </Box>
-                  )
-                })}
-                <Typography variant="caption" color="text.secondary" component="div">No new sign-in. It sees only what you ask, unless you change that on its chip. <Link to="/integrations">Manage integrations</Link></Typography>
-              </Box>
-            )}
             {setting?.canChange && (
               <Box sx={(t) => ({ ...section(t), display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' })} data-invite-outside-agents="">
                 <Typography variant="body2" sx={{ flex: 1, minWidth: 200 }}>Who can bring outside agents onto this slate</Typography>
@@ -441,10 +465,20 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                 <Button size="small" variant="contained" data-invite-connected-go="" disabled={connected.status !== 'active'} onClick={() => inviteIntegration(connected)}>Invite to this slate</Button>
               </Box>
             )}
-            <Box component="form" onSubmit={(e) => { e.preventDefault(); discover() }} sx={(t) => ({ ...section(t), display: 'flex', gap: 1, alignItems: 'center' })}>
-              <TextField size="small" fullWidth label="Paste an MCP address" placeholder="https://example.com/mcp" value={address}
-                onChange={(e) => setAddress(e.target.value)} inputProps={{ 'data-invite-address': '' }} />
-              <Button type="submit" variant="contained" onPointerEnter={prefetch} disabled={!address.trim()} sx={{ px: 2.5, flexShrink: 0 }}>Next</Button>
+            <Box sx={(t) => ({ borderBottom: '1px solid #e1e3d6', ...t.applyStyles('dark', { borderBottomColor: '#3a5244' }) })}>
+              <Tabs value={tab} onChange={(_event, next) => { setTab(next); setError('') }} aria-label="How to connect" variant="fullWidth"
+                sx={(t) => ({
+                  minHeight: 44,
+                  '& .MuiTab-root': { minHeight: 44, textTransform: 'none', fontSize: 15, fontWeight: 700, color: '#4a5d52' },
+                  '& .MuiTab-root.Mui-selected': { color: '#254b3b' },
+                  '& .MuiTabs-indicator': { height: 3, borderRadius: 3, bgcolor: '#3f7d58' },
+                  '& .MuiTab-root.Mui-focusVisible': { outline: '2px solid #254b3b', outlineOffset: -2 },
+                  ...t.applyStyles('dark', { '& .MuiTab-root': { color: '#b9cdb6' }, '& .MuiTab-root.Mui-selected': { color: '#e6f0e1' }, '& .MuiTabs-indicator': { bgcolor: '#a5c99a' }, '& .MuiTab-root.Mui-focusVisible': { outline: '2px solid #f2ce8b' } }),
+                })}>
+                {CONNECT_TABS.map((t) => (
+                  <Tab key={t.id} value={t.id} label={t.label} id={`connect-tab-${t.id}`} aria-controls={`connect-panel-${t.id}`} data-invite-tab={t.id} />
+                ))}
+              </Tabs>
             </Box>
             {error && <Problem text={error} />}
             {already && (
@@ -453,83 +487,135 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                 {onManage && <Button size="small" variant="outlined" data-invite-manage="" onClick={() => onManage(already.agentId)}>Manage</Button>}
               </Box>
             )}
-            {(gallery.cards || []).length > FILTER_FROM && (
-              <Box data-gallery-filter="" sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, alignItems: { xs: 'stretch', sm: 'center' } }}>
-                <Box role="group" aria-label="Show agents for" sx={{ display: 'flex', gap: 0.75, flexWrap: { xs: 'nowrap', sm: 'wrap' }, overflowX: { xs: 'auto', sm: 'visible' }, flex: 1, pb: { xs: 0.25, sm: 0 } }}>
-                  {[{ id: 'all', label: 'All' }, ...groupsIn(gallery.cards)].map((g) => {
-                    const on = filter.group === g.id
+            {tab === 'existing' && (
+              <Box role="tabpanel" id="connect-panel-existing" aria-labelledby="connect-tab-existing" data-invite-panel="existing" sx={{ display: 'grid', gap: 2 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5 }} data-invite-tab-line="existing">{CONNECT_TABS.find((t) => t.id === 'existing').line}</Typography>
+                {!integrationMode && integrations.length > 0 && (
+                  <Box sx={(t) => ({ ...section(t), display: 'grid', gap: 1 })} data-invite-integrations="">
+                    <Typography component="div" sx={heading}>Your integrations</Typography>
+                    {integrations.map((integration) => {
+                      const here = invited.some((c) => c.mine && c.status !== 'removed' && c.integrationId === integration.integrationId)
+                      const blocked = integration.status !== 'active'
+                      return (
+                        <Box key={integration.integrationId} sx={{ display: 'flex', alignItems: 'center', gap: 1 }} data-invite-integration={integration.name}>
+                          <Hexagon color={MARK} size={18} style={{}} />
+                          <Typography variant="body2" sx={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+                            <b>{integration.name}</b> · {integration.host}{blocked ? ` · ${STATUS_WORDS[integration.status] || integration.status}` : ''}
+                          </Typography>
+                          {here
+                            ? <Typography variant="caption" color="text.secondary">✓ On this slate</Typography>
+                            : <Button size="small" variant="outlined" disabled={blocked || step === 'inviting'} data-invite-integration-go="" onClick={() => inviteIntegration(integration)}>Invite to this slate</Button>}
+                        </Box>
+                      )
+                    })}
+                    <Typography variant="caption" color="text.secondary" component="div">No new sign-in. It sees only what you ask, unless you change that on its chip. <Link to="/integrations">Manage integrations</Link></Typography>
+                  </Box>
+                )}
+                {(gallery.cards || []).length > FILTER_FROM && (
+                  <Box data-gallery-filter="" sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, alignItems: { xs: 'stretch', sm: 'center' } }}>
+                    <Box role="group" aria-label="Show agents for" sx={{ display: 'flex', gap: 0.75, flexWrap: { xs: 'nowrap', sm: 'wrap' }, overflowX: { xs: 'auto', sm: 'visible' }, flex: 1, pb: { xs: 0.25, sm: 0 } }}>
+                      {[{ id: 'all', label: 'All' }, ...groupsIn(gallery.cards)].map((g) => {
+                        const on = filter.group === g.id
+                        return (
+                          <Chip key={g.id} label={g.label} size="small" clickable data-gallery-chip={g.id} aria-pressed={on}
+                            onClick={() => setFilter({ ...filter, group: g.id })}
+                            sx={(t) => ({
+                              flexShrink: 0, fontWeight: 650, border: '1px solid', borderColor: on ? '#3f7d58' : '#d6dccb', bgcolor: on ? '#3f7d58' : '#fffef8', color: on ? '#fff' : '#2c4a3a',
+                              '&:hover': { bgcolor: on ? '#356b4b' : '#eef4e8' },
+                              '&.Mui-focusVisible': { outline: '2px solid #254b3b', outlineOffset: 2 },
+                              ...t.applyStyles('dark', { borderColor: on ? '#a5c99a' : '#3a5244', bgcolor: on ? '#a5c99a' : '#23362d', color: on ? '#14261c' : '#d7e6d0', '&:hover': { bgcolor: on ? '#b6d6ab' : '#2b4337' }, '&.Mui-focusVisible': { outline: '2px solid #f2ce8b', outlineOffset: 2 } }),
+                            })} />
+                        )
+                      })}
+                    </Box>
+                    <TextField size="small" type="search" placeholder="Search agents" value={filter.query} onChange={(e) => setFilter({ ...filter, query: e.target.value })}
+                      sx={{ width: { xs: '100%', sm: 200 }, flexShrink: 0 }} inputProps={{ 'aria-label': 'Search agents', 'data-gallery-search': '', maxLength: 80 }} />
+                  </Box>
+                )}
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fill, minmax(200px, 1fr))' }, gap: 1.5 }}>
+                  {!gallery.cards && <Box data-gallery-loading="" sx={{ gridColumn: '1 / -1' }}><LinearProgress aria-label="Loading the gallery" /></Box>}
+                  {gallery.cards && !shownCards.length && (
+                    <Typography variant="body2" color="text.secondary" data-gallery-none="" role="status" sx={{ gridColumn: '1 / -1', py: 1 }}>None of the agents here match. Any MCP server works: <Button size="small" onClick={() => setTab('custom')} data-gallery-none-custom="" sx={{ p: 0, minWidth: 0, verticalAlign: 'baseline', textTransform: 'none', fontSize: 'inherit' }}>paste its address under Custom</Button>.</Typography>
+                  )}
+                  {shownCards.map((item) => {
+                    const state = cardState(item, invited, integrations)
+                    const next = connectedAction(state, integrationMode)
+                    const go = () => {
+                      if (next?.act === 'manage-agent') return onManage?.(state.here.agentId)
+                      if (next?.act === 'manage-integration') return onManageIntegration?.(state.linked.integrationId)
+                      if (next?.act === 'invite') return inviteIntegration(state.linked)
+                      setAddress(item.url)
+                      return discover(item.url)
+                    }
                     return (
-                      <Chip key={g.id} label={g.label} size="small" clickable data-gallery-chip={g.id} aria-pressed={on}
-                        onClick={() => setFilter({ ...filter, group: g.id })}
+                      <Box key={item.id} component="button" type="button" data-gallery-card={item.id} data-gallery-here={state.here ? '' : undefined} data-gallery-connected={next ? '' : undefined}
+                        aria-label={next ? `${item.name}: ${next.words.replace('✓ ', '').replace(' · ', '. ')}` : item.origin === 'community' ? `${item.name}, Community` : undefined}
+                        onClick={go} onPointerEnter={next ? undefined : prefetch}
                         sx={(t) => ({
-                          flexShrink: 0, fontWeight: 650, border: '1px solid', borderColor: on ? '#3f7d58' : '#d6dccb', bgcolor: on ? '#3f7d58' : '#fffef8', color: on ? '#fff' : '#2c4a3a',
-                          '&:hover': { bgcolor: on ? '#356b4b' : '#eef4e8' },
-                          '&.Mui-focusVisible': { outline: '2px solid #254b3b', outlineOffset: 2 },
-                          ...t.applyStyles('dark', { borderColor: on ? '#a5c99a' : '#3a5244', bgcolor: on ? '#a5c99a' : '#23362d', color: on ? '#14261c' : '#d7e6d0', '&:hover': { bgcolor: on ? '#b6d6ab' : '#2b4337' }, '&.Mui-focusVisible': { outline: '2px solid #f2ce8b', outlineOffset: 2 } }),
-                        })} />
+                          // Every card has the same surface; only a connected one has a green edge and its ✓ line.
+                          // Hover lifts any card; keyboard focus is an outline outside the edge, never green.
+                          ...surface(t), textAlign: 'left', p: 1.75, cursor: 'pointer', font: 'inherit', color: 'inherit', display: 'flex', flexDirection: 'column', gap: 0.75,
+                          transition: 'transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease',
+                          ...(next && { borderColor: '#2e7d32', boxShadow: 'inset 0 0 0 1px #2e7d32' }),
+                          '&:hover': { borderColor: next ? '#2e7d32' : '#7fa78a', boxShadow: `${next ? 'inset 0 0 0 1px #2e7d32, ' : ''}0 2px 4px rgba(32,61,50,0.08), 0 10px 24px rgba(32,61,50,0.10)`, transform: 'translateY(-1px)' },
+                          '&:focus-visible': { outline: '3px solid #254b3b', outlineOffset: 3 },
+                          '@media (prefers-reduced-motion: reduce)': { transition: 'none', '&:hover': { transform: 'none' } },
+                          ...t.applyStyles('dark', {
+                            ...(next && { borderColor: '#81c784', boxShadow: 'inset 0 0 0 1px #81c784' }),
+                            '&:hover': { borderColor: next ? '#81c784' : '#8fb39a', boxShadow: `${next ? 'inset 0 0 0 1px #81c784, ' : ''}0 10px 26px rgba(0,0,0,0.35)`, transform: 'translateY(-1px)' },
+                            '&:focus-visible': { outline: '3px solid #f2ce8b', outlineOffset: 3 },
+                          }),
+                        })}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                          <Box aria-hidden="true" sx={(t) => ({ width: 34, height: 34, borderRadius: '10px', display: 'grid', placeItems: 'center', flexShrink: 0, bgcolor: '#e6efdf', ...t.applyStyles('dark', { bgcolor: 'rgba(190,215,181,0.12)' }) })}>
+                            <Hexagon color={item.featured ? MARK : '#6f8d78'} size={20} style={{}} />
+                          </Box>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 750, lineHeight: 1.3 }}>{item.name}</Typography>
+                              {item.origin === 'community' && (
+                                <Box component="span" data-gallery-community="" title={item.sharedBy ? `Suggested by ${item.sharedBy} and reviewed by Slatebox` : 'Suggested by a Slatebox user and reviewed by Slatebox'}
+                                  sx={(t) => ({ fontSize: 11, fontWeight: 750, letterSpacing: '0.02em', lineHeight: 1.6, px: 0.75, borderRadius: 999, bgcolor: '#eef0fb', color: '#33417a', border: '1px solid #cdd3f0', ...t.applyStyles('dark', { bgcolor: 'rgba(170,184,255,0.14)', color: '#cdd6ff', borderColor: 'rgba(170,184,255,0.35)' }) })}>
+                                  Community
+                                </Box>
+                              )}
+                            </Box>
+                            <Typography variant="caption" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>{item.job} · {cardCost(item)}</Typography>
+                          </Box>
+                        </Box>
+                        {next && (
+                          <Typography variant="caption" component="div" data-gallery-on-slate={state.here ? '' : undefined} data-gallery-connected-words=""
+                            sx={(t) => ({ alignSelf: 'flex-start', px: 1, py: 0.25, borderRadius: 999, bgcolor: '#e3f0e1', color: '#1b5e20', fontWeight: 700, ...t.applyStyles('dark', { bgcolor: 'rgba(129,199,132,0.16)', color: '#a5d6a7' }) })}>
+                            {next.words}
+                          </Typography>
+                        )}
+                        <Typography variant="body2" sx={{ lineHeight: 1.45 }}>{item.lands}</Typography>
+                        {item.origin === 'community' && item.sharedBy && <Typography variant="caption" color="text.secondary" component="div">Suggested by {item.sharedBy}</Typography>}
+                        {cloud && gallery.canInvite === false && <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 'auto', pt: 0.25 }}>Needs Slatebox Pro or Business</Typography>}
+                      </Box>
                     )
                   })}
                 </Box>
-                <TextField size="small" type="search" placeholder="Search agents" value={filter.query} onChange={(e) => setFilter({ ...filter, query: e.target.value })}
-                  sx={{ width: { xs: '100%', sm: 200 }, flexShrink: 0 }} inputProps={{ 'aria-label': 'Search agents', 'data-gallery-search': '', maxLength: 80 }} />
+                <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0, lineHeight: 1.5 }} data-invite-footer="">Not listed here? Any MCP server works under Custom. Community cards were suggested by people using Slatebox and reviewed by Slatebox. Each agent&apos;s answers become suggestions on your slate.{cloud && gallery.canInvite === false ? ' Inviting agents is part of Slatebox Pro and Slatebox Business.' : ''}</Typography>
               </Box>
             )}
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fill, minmax(200px, 1fr))' }, gap: 1.5 }}>
-              {!gallery.cards && <Box data-gallery-loading="" sx={{ gridColumn: '1 / -1' }}><LinearProgress aria-label="Loading the gallery" /></Box>}
-              {gallery.cards && !shownCards.length && (
-                <Typography variant="body2" color="text.secondary" data-gallery-none="" role="status" sx={{ gridColumn: '1 / -1', py: 1 }}>No agent in the gallery matches. Any MCP server works: paste its address above.</Typography>
-              )}
-              {shownCards.map((item) => {
-                const state = cardState(item, invited, integrations)
-                const next = connectedAction(state, integrationMode)
-                const go = () => {
-                  if (next?.act === 'manage-agent') return onManage?.(state.here.agentId)
-                  if (next?.act === 'manage-integration') return onManageIntegration?.(state.linked.integrationId)
-                  if (next?.act === 'invite') return inviteIntegration(state.linked)
-                  setAddress(item.url)
-                  return discover(item.url)
-                }
-                return (
-                  <Box key={item.id} component="button" type="button" data-gallery-card={item.id} data-gallery-here={state.here ? '' : undefined} data-gallery-connected={next ? '' : undefined}
-                    aria-label={next ? `${item.name}: ${next.words.replace('✓ ', '').replace(' · ', '. ')}` : undefined}
-                    onClick={go} onPointerEnter={next ? undefined : prefetch}
-                    sx={(t) => ({
-                      // Every card has the same surface; only a connected one has a green edge and its ✓ line.
-                      // Hover lifts any card; keyboard focus is an outline outside the edge, never green.
-                      ...surface(t), textAlign: 'left', p: 1.75, cursor: 'pointer', font: 'inherit', color: 'inherit', display: 'flex', flexDirection: 'column', gap: 0.75,
-                      transition: 'transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease',
-                      ...(next && { borderColor: '#2e7d32', boxShadow: 'inset 0 0 0 1px #2e7d32' }),
-                      '&:hover': { borderColor: next ? '#2e7d32' : '#7fa78a', boxShadow: `${next ? 'inset 0 0 0 1px #2e7d32, ' : ''}0 2px 4px rgba(32,61,50,0.08), 0 10px 24px rgba(32,61,50,0.10)`, transform: 'translateY(-1px)' },
-                      '&:focus-visible': { outline: '3px solid #254b3b', outlineOffset: 3 },
-                      '@media (prefers-reduced-motion: reduce)': { transition: 'none', '&:hover': { transform: 'none' } },
-                      ...t.applyStyles('dark', {
-                        ...(next && { borderColor: '#81c784', boxShadow: 'inset 0 0 0 1px #81c784' }),
-                        '&:hover': { borderColor: next ? '#81c784' : '#8fb39a', boxShadow: `${next ? 'inset 0 0 0 1px #81c784, ' : ''}0 10px 26px rgba(0,0,0,0.35)`, transform: 'translateY(-1px)' },
-                        '&:focus-visible': { outline: '3px solid #f2ce8b', outlineOffset: 3 },
-                      }),
-                    })}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                      <Box aria-hidden="true" sx={(t) => ({ width: 34, height: 34, borderRadius: '10px', display: 'grid', placeItems: 'center', flexShrink: 0, bgcolor: '#e6efdf', ...t.applyStyles('dark', { bgcolor: 'rgba(190,215,181,0.12)' }) })}>
-                        <Hexagon color={item.featured ? MARK : '#6f8d78'} size={20} style={{}} />
-                      </Box>
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 750, lineHeight: 1.3 }}>{item.name}</Typography>
-                        <Typography variant="caption" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>{item.job} · {cardCost(item)}</Typography>
-                      </Box>
-                    </Box>
-                    {next && (
-                      <Typography variant="caption" component="div" data-gallery-on-slate={state.here ? '' : undefined} data-gallery-connected-words=""
-                        sx={(t) => ({ alignSelf: 'flex-start', px: 1, py: 0.25, borderRadius: 999, bgcolor: '#e3f0e1', color: '#1b5e20', fontWeight: 700, ...t.applyStyles('dark', { bgcolor: 'rgba(129,199,132,0.16)', color: '#a5d6a7' }) })}>
-                        {next.words}
-                      </Typography>
-                    )}
-                    <Typography variant="body2" sx={{ lineHeight: 1.45 }}>{item.lands}</Typography>
-                    {cloud && gallery.canInvite === false && <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 'auto', pt: 0.25 }}>Needs Slatebox Pro or Business</Typography>}
+            {tab === 'custom' && (
+              <Box role="tabpanel" id="connect-panel-custom" aria-labelledby="connect-tab-custom" data-invite-panel="custom" sx={{ display: 'grid', gap: 2 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5 }} data-invite-tab-line="custom">{CONNECT_TABS.find((t) => t.id === 'custom').line}</Typography>
+                <Box component="form" onSubmit={(e) => { e.preventDefault(); discover() }} sx={(t) => ({ ...section(t), display: 'grid', gap: 1.5 })} data-invite-custom="">
+                  <TextField size="small" fullWidth label="Paste an MCP address" placeholder="https://example.com/mcp" value={address} autoFocus
+                    onChange={(e) => setAddress(e.target.value)} inputProps={{ 'data-invite-address': '', inputMode: 'url', autoCapitalize: 'none', spellCheck: false }} />
+                  <TextField size="small" fullWidth label="Name on your slates (optional)" value={customName} onChange={(e) => setCustomName(e.target.value)}
+                    helperText="Left empty, Slatebox suggests one. You can change it before you connect." inputProps={{ maxLength: 32, 'data-invite-custom-name': '' }} />
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <Button type="submit" variant="contained" onPointerEnter={prefetch} disabled={!address.trim()} data-invite-check="" sx={{ px: 2.5, width: { xs: '100%', sm: 'auto' } }}>Check it</Button>
+                    <Typography variant="caption" color="text.secondary" sx={{ flex: 1, minWidth: 200 }}>Nothing is saved until you choose its tools and connect.</Typography>
                   </Box>
-                )
-              })}
-            </Box>
-            <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0, lineHeight: 1.5 }} data-invite-footer="">Any MCP server works: open ones straight away, others after you sign in on their own page or paste a key. Each agent&apos;s answers become suggestions on your slate.{cloud && gallery.canInvite === false ? ' Inviting agents is part of Slatebox Pro and Slatebox Business.' : ''}</Typography>
+                </Box>
+                {lookalikeHost(address.trim()) && <Lookalike />}
+                <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0, lineHeight: 1.5 }} data-invite-custom-footer="">Open servers connect straight away; others after you sign in on their own page or paste a key. Only public https addresses work. Once it works, you can suggest it for the Slatebox library, free.</Typography>
+              </Box>
+            )}
           </Box>
         )}
         {step === 'discovering' && (
@@ -596,6 +682,21 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
             <Found>Signed in to {found.host}. {reconnect?.name || 'Your agent'} is ready: ask it again.</Found>
           </Box>
         )}
+        {step === 'connected' && justConnected && (
+          <Box data-invite-done="" sx={{ display: 'grid', gap: 1.5 }}>
+            <Box sx={success} role="status">
+              <Found><b>{justConnected.name}</b> is connected. Invite it onto any slate from + Invite agent{justConnected.rule === 'my_slates' ? ', or let it join every slate you own (it will)' : ''}.</Found>
+            </Box>
+            <Box sx={(t) => ({ ...section(t), display: 'grid', gap: 1 })} data-invite-suggest="">
+              <Typography component="div" sx={heading}>Suggest it for the Slatebox library</Typography>
+              <Typography variant="body2" sx={{ lineHeight: 1.5 }}>
+                Others could use {justConnected.host || 'this server'} too. Suggest it and, once Slatebox reviews it, it is listed under Existing for everyone, marked Community. It is free, and your sign-in is never shared.
+              </Typography>
+              <Box><Button variant="outlined" data-invite-suggest-open="" onClick={() => setSuggesting(true)}>Suggest for the library</Button></Box>
+            </Box>
+            <SuggestIntegration open={suggesting} integration={justConnected} onClose={() => setSuggesting(false)} />
+          </Box>
+        )}
         {(step === 'consent' || step === 'inviting') && found && (
           <Box data-invite-consent="" sx={{ display: 'grid', gap: 1.5 }}>
             {found.alreadyHere?.lookAgain && <Box sx={section} data-invite-look-again=""><Typography variant="body2">{found.alreadyHere.text}</Typography></Box>}
@@ -609,6 +710,11 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
               <Found>{found.signedIn ? `Signed in${found.signedIn.kind === 'key' ? ' with your key' : ''}: it acts as you on ${found.host}, and only you can ask it` : 'No sign-in: anyone with this address can use this server'}</Found>
               <Found>Found {lookups.length} {lookups.length === 1 ? 'way' : 'ways'} to look things up{changes.length ? ` and ${changes.length} that change things elsewhere` : ''}</Found>
             </Box>
+            {found.reviewDrift && (
+              <Callout kind="warning" data-invite-review-drift="">
+                <Box component="span" sx={{ display: 'block' }}>Its tools changed since Slatebox reviewed it. Look at each one below before you allow it.</Box>
+              </Callout>
+            )}
             {found.lookalike && <Lookalike />}
             <Box sx={section}>
               <TextField size="small" fullWidth label="Name on your slate" value={name} onChange={(e) => setName(e.target.value)} inputProps={{ maxLength: 32, 'data-invite-name': '' }}
@@ -728,7 +834,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
             <Button onClick={() => { pending.current?.cancel(); onClose() }}>{step === 'waiting' ? 'Cancel' : 'Close'}</Button>
           </>
         ) : (
-          <Button onClick={onClose}>{step === 'reconnected' ? 'Done' : 'Close'}</Button>
+          <Button onClick={onClose} variant={step === 'connected' ? 'contained' : 'text'} data-invite-close="">{step === 'reconnected' || step === 'connected' ? 'Done' : 'Close'}</Button>
         )}
       </DialogActions>
     </Dialog>

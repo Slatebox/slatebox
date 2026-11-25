@@ -15,12 +15,27 @@ import { AccountTabs, FinePrint, SPACE } from '../common/AccountLayout'
 import AppPage from '../common/AppPage'
 import LibraryPreview from '../components/library/LibraryPreview'
 import libraryApi from '../../api/client/library'
-import { categoryLabel } from '../../api/common/library-model.mjs'
+import PropTypes from 'prop-types'
+import { INTEGRATION_AUTH_LABELS, categoryLabel } from '../../api/common/library-model.mjs'
 import { KIND_FILTERS, KindTitle, QUEUE_TABS, waitedFor } from '../components/library/libraryCopy.mjs'
 
 // The review queue (administrators only: /admin/library). Everything people send to the library
-// waits here: smart components, slates and presentations. Open one to review it on a canvas of
-// its own, refine it with AI, then approve and publish it, ask for changes, or turn it down.
+// waits here: smart components, slates, presentations and integrations. Open one to review it on a
+// canvas of its own (an integration on its own page, where Slatebox checks its server), refine it
+// with AI, then approve and publish it, ask for changes, or turn it down.
+/** A suggested integration's tile in the queue: its host and how it signs in, in place of a canvas still. */
+function IntegrationTile({ item }) {
+  const fields = item.pendingIntegration || item.integration || {}
+  return (
+    <Box data-testid="queue-integration" sx={{ height: 110, borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: 'background.default', p: 1.25, display: 'grid', alignContent: 'center', gap: 0.5, overflow: 'hidden' }}>
+      <Typography variant="overline" sx={{ lineHeight: 1.3 }}>MCP server</Typography>
+      <Typography variant="body2" sx={{ fontWeight: 650, overflowWrap: 'anywhere' }}>{fields.host}</Typography>
+      <Typography variant="caption" color="text.secondary">{INTEGRATION_AUTH_LABELS[fields.auth] || 'No sign-in'}{item.preview?.tools ? ` · ${item.preview.tools} tools` : ''}</Typography>
+    </Box>
+  )
+}
+IntegrationTile.propTypes = { item: PropTypes.object.isRequired }
+
 export default function LibraryReview() {
   const navigate = useNavigate()
   const [tab, setTab] = React.useState('waiting')
@@ -50,7 +65,7 @@ export default function LibraryReview() {
     setOwnItem(null)
     try {
       const opened = await libraryApi.review.open({ itemId: item.id, ...(selfReview && { selfReview: true }) })
-      navigate(`/canvas/${opened.reviewShareId}`)
+      navigate(opened.reviewShareId ? `/canvas/${opened.reviewShareId}` : `/admin/library/review/${item.id}`)
     } catch (error) {
       // Your own submission: another administrator reviews it, unless you are the only one.
       if (error?.error === 'self_review' && !selfReview) setOwnItem(item)
@@ -124,7 +139,7 @@ export default function LibraryReview() {
         {items.map((item) => (
           <Box component="li" key={item.id} data-testid="queue-row"
             sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '160px 1fr' }, gap: SPACE.group, p: SPACE.text, border: 1, borderColor: 'divider', borderRadius: 1 }}>
-            <LibraryPreview itemId={item.id} title={item.title} height={110} />
+            {item.kind === 'integration' ? <IntegrationTile item={item} /> : <LibraryPreview itemId={item.id} title={item.title} height={110} />}
             <Box sx={{ minWidth: 0, display: 'grid', gap: SPACE.hair, alignContent: 'start' }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 650, overflowWrap: 'anywhere' }}>{item.pendingMeta?.title || item.title}</Typography>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
@@ -149,7 +164,9 @@ export default function LibraryReview() {
                   </Button>
                 )}
                 {tab === 'published' && <>
-                  <Button size="small" component={RouterLink} to={`/library/${item.slug}`}>See it in the library</Button>
+                  {item.kind === 'integration'
+                    ? <Button size="small" component={RouterLink} to="/integrations">See it in Connect an integration</Button>
+                    : <Button size="small" component={RouterLink} to={`/library/${item.slug}`}>See it in the library</Button>}
                   <Button size="small" color="error" onClick={() => setUnpublishing(item)} disabled={busy !== null}>Unpublish</Button>
                 </>}
               </Box>

@@ -1,19 +1,22 @@
 // A reviewer's refinement of a library item: the local grammar that answers without AI (and so
 // costs nothing), and the check every proposal passes before it is shown or kept, whether it came
 // from that grammar or from the AI (refine-ai.mjs). Pure.
-import { CATEGORY_LABELS, LIBRARY_CATEGORIES, categoryLabel, categoryLockSentence, libraryError, readMeta } from '../../imports/api/common/library-model.mjs'
+import { CATEGORY_LABELS, INTEGRATION_CATEGORIES, INTEGRATION_CATEGORY_LABELS, LIBRARY_CATEGORIES, categoryLabel, categoryLockSentence, libraryError, readMeta } from '../../imports/api/common/library-model.mjs'
 
 const unquote = (text) => text.trim().replace(/^["'“‘](.*)["'”’]$/s, '$1').replace(/[.!]+$/, '').trim()
-const categoryNamed = (word) => {
+// An integration's categories are the agent gallery's (Work, Business, Research, Web and facts).
+const categoriesOf = (kind) => (kind === 'integration' ? INTEGRATION_CATEGORIES : LIBRARY_CATEGORIES)
+const categoryNamed = (word, kind) => {
   const plain = String(word || '').trim().toLowerCase().replace(/[.!"'“”]+/g, '')
-  return LIBRARY_CATEGORIES.find((id) => id === plain || CATEGORY_LABELS[id].toLowerCase() === plain) || null
+  const labels = kind === 'integration' ? INTEGRATION_CATEGORY_LABELS : CATEGORY_LABELS
+  return categoriesOf(kind).find((id) => id === plain || labels[id].toLowerCase() === plain) || null
 }
 
 /**
  * The local grammar: "rename it to X", "call it X", "title: X", "put it in Decide", "category: Plan",
  * "summary: …", "one line: …". → a proposal `{ reply, meta }`, or null when the message is not one of these.
  */
-export function localRefinement(message) {
+export function localRefinement(message, { kind = 'component' } = {}) {
   if (typeof message !== 'string') return null
   const text = message.trim()
   if (!text || text.length > 400) return null
@@ -25,8 +28,8 @@ export function localRefinement(message) {
   match = /^(?:please\s+)?(?:put|move|file)\s+(?:it|this)\s+(?:in|into|under)\s+(?:the\s+)?(.+?)(?:\s+category)?[.!]?$/i.exec(text) ||
     /^category\s*:\s*(.+)$/i.exec(text)
   if (match) {
-    const category = categoryNamed(match[1])
-    if (!category) return { reply: `The categories are ${LIBRARY_CATEGORIES.map(categoryLabel).join(', ')}.` }
+    const category = categoryNamed(match[1], kind)
+    if (!category) return { reply: `The categories are ${categoriesOf(kind).map(categoryLabel).join(', ')}.` }
     return { reply: `Put it in ${categoryLabel(category)}.`, meta: { category } }
   }
   match = /^(?:summary|one line|line)\s*:\s*(.+)$/is.exec(text)

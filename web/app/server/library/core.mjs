@@ -16,9 +16,11 @@
 //   notify({ item, type, message })  tells the author (in-app message, email); optional
 //   listingGate(workshop)      → the first phrase that does not parse on the board, or null; optional
 //   generateShareId(), newId(), now() (ms), appOrigin(), samples (slateboxjs/workshops/samples catalogSamples)
+//   integrations()             → the suggested-integration hooks (integration-hooks.mjs), or null where enterprise
+//                                code is not running: then no integration is taken, listed or opened
 import {
-  BUILTIN_AUTHOR, KIND_LABELS, LIBRARY_CATEGORIES, LIBRARY_KINDS, LIBRARY_LICENSE, LIBRARY_LIMITS, QUEUE_STATUSES, QUEUE_WAITING,
-  UNNAMED_AUTHOR, canReadItem, categoryLabel, categoryLockSentence, libraryError, readMessage, readMeta, reviewStateOf, slugify, transition,
+  BUILTIN_AUTHOR, INTEGRATION_CATEGORIES, KIND_LABELS, LIBRARY_CATEGORIES, LIBRARY_KINDS, LIBRARY_LICENSE, LIBRARY_LIMITS, LISTED_KINDS, QUEUE_STATUSES, QUEUE_WAITING,
+  UNNAMED_AUTHOR, canReadItem, categoryLabel, categoryLockSentence, libraryError, readIntegrationFields, readMessage, readMeta, reviewStateOf, slugify, transition,
 } from '../../imports/api/common/library-model.mjs'
 import { checkSize, contentHash, snapshotDeck, snapshotSlate, snapshotWorkshop } from './snapshot.mjs'
 import { checkProposal, localRefinement } from './refine.mjs'
@@ -59,6 +61,7 @@ const builtinRefusal = (item) => fail(409, 'builtin', item?.kind === 'component'
 /** What a list card shows of an item's content: its kind, its board's kind and how many notes or cards. */
 export function previewOf(content) {
   if (!content) return { kind: 'component', notes: 0 }
+  if (content.kind === 'integration') return { kind: 'integration', notes: 0, tools: content.probe?.tools?.length ?? 0 }
   if (content.kind === 'component') return { kind: 'component', boardKind: boardKindOf(content.workshop), notes: content.workshop?.cards?.length ?? 0 }
   const board = slateBoards(content.slate)[0]
   return { kind: content.kind, ...(board && { boardKind: boardKindOf(board.model.workshop) }), notes: content.slate?.nodes?.length ?? 0 }
@@ -76,6 +79,22 @@ const metaOf = (item) => ({
 // it is approved: the public keeps seeing what was published. The author and reviewers see both.
 const withPending = (item) => (item?.pendingMeta ? { ...item, ...item.pendingMeta } : item)
 const pendingSet = (item, meta) => (item.pendingMeta ? Object.fromEntries(Object.entries(meta).map(([field, value]) => ['pendingMeta.' + field, value])) : meta)
+
+// A suggested integration's tools as its author connected them, against what the reviewer's check found
+// (each by name and hash): what was added, removed or changed since.
+export function toolDrift(before = [], after = []) {
+  const was = new Map((before || []).map((tool) => [tool.name, tool.hash]))
+  const now = new Map((after || []).map((tool) => [tool.name, tool.hash]))
+  const added = [...now.keys()].filter((name) => !was.has(name))
+  const removed = [...was.keys()].filter((name) => !now.has(name))
+  const changed = [...now.keys()].filter((name) => was.has(name) && was.get(name) !== now.get(name))
+  return { added, removed, changed, same: !added.length && !removed.length && !changed.length }
+}
+
+// The tools a check found, as the library keeps them: names, groups and hashes only (never the server's words).
+const keptTools = (tools = []) => (Array.isArray(tools) ? tools : []).slice(0, 64).map((tool) => ({
+  name: String(tool?.name || '').slice(0, 128), group: tool?.group === 'change' ? 'change' : 'lookup', ...(tool?.destructive && { destructive: true }), hash: String(tool?.hash || '').slice(0, 128),
+})).filter((tool) => tool.name)
 
 function metaDiff(before = {}, after = {}) {
   const out = {}
@@ -109,6 +128,7 @@ export function createLibraryCore(deps) {
     copyPresentation = async () => {}, applyWorkshopOperations = null, refineWithAI = async () => ({ reply: '' }), notify = async () => {},
     listingGate = null, generateShareId, newId, now = Date.now, appOrigin = () => '', samples = {},
     countReviewers = async () => Number.POSITIVE_INFINITY,
+    integrations = () => null,
     // Whether people on a slate paused its agents (agents.control): an agent's call that changes that slate is refused,
     // as its slates.applyOperations is (423 agents_paused).
     agentsPaused = async () => false,
@@ -116,6 +136,14 @@ export function createLibraryCore(deps) {
   const at = () => new Date(now())
 
   const isReviewer = async (userId) => Boolean(userId && (await isLibraryReviewer(userId)))
+  const integrationsOff = () => fail(404, 'integrations_off', 'Integrations are not available on this server.')
+  const hooksOrRefuse = () => {
+    const hooks = integrations()
+    if (!hooks) throw integrationsOff()
+    return hooks
+  }
+  // A refusal from the code that reaches MCP servers keeps its status, code and sentence.
+  const asLibraryError = (error) => (error?.status && error?.code ? fail(error.status, error.code, error.message, error.details) : error)
   async function agentsGate(principal, slate) {
     if (principal?.kind === 'agent' && slate?._id && (await agentsPaused(slate._id)))
       throw fail(423, 'agents_paused', 'People on this slate paused its agents. Ask one of them to resume agents, then retry.')
@@ -131,6 +159,7 @@ export function createLibraryCore(deps) {
     const item = await findItem(ref)
     const reviewer = await isReviewer(principal?.userId)
     if (!canReadItem(item, { userId: principal?.userId, reviewer })) throw notFound()
+    if (item.kind === 'integration' && !integrations()) throw notFound()
     return { item, reviewer, privileged: reviewer || Boolean(principal?.userId && item.authorId === principal.userId) }
   }
   async function authoredItem(principal, ref) {
@@ -208,6 +237,17 @@ export function createLibraryCore(deps) {
       authorName: item.authorName, ...(item.publishedAt && { publishedAt: new Date(item.publishedAt).toISOString() }),
       counts: { copies: item.counts?.copies ?? 0, adds: item.counts?.adds ?? 0, branches: item.counts?.branches ?? 0 },
       provenance: item.provenance || {}, url: url(item), preview: item.preview || { kind: item.kind, notes: 0 },
+      ...(item.kind === 'integration' && item.integration && { integration: integrationShape(item.integration) }),
+    }
+  }
+  // What anyone may read of an integration once it is published (its author agreed): the address, its
+  // homepage, how it signs in, and the tools the reviewer checked (names and hashes). Never a sign-in.
+  function integrationShape(fields) {
+    return {
+      address: fields.address, host: fields.host, ...(fields.homepage && { homepage: fields.homepage }), auth: fields.auth || 'none',
+      ...(fields.reviewedTools && { reviewedTools: fields.reviewedTools.map(({ name, hash }) => ({ name, hash })) }),
+      ...(fields.reviewedAt && { reviewedAt: new Date(fields.reviewedAt).toISOString() }),
+      ...(fields.signIn !== undefined && { signIn: fields.signIn }),
     }
   }
   function detail(item, privileged) {
@@ -226,6 +266,9 @@ export function createLibraryCore(deps) {
         ...(item.sourceShareId && { sourceShareId: item.sourceShareId }),
         ...(item.reviewShareId && { reviewShareId: item.reviewShareId }),
         ...(item.lastMessage && { lastMessage: { ...item.lastMessage, at: new Date(item.lastMessage.at).toISOString() } }),
+        ...(item.pendingIntegration && { pendingIntegration: integrationShape(item.pendingIntegration) }),
+        ...(item.integration?.integrationId && { integrationId: item.integration.integrationId }),
+        ...(item.reviewProbe && { reviewProbe: item.reviewProbe }),
       }),
     }
   }
@@ -252,7 +295,9 @@ export function createLibraryCore(deps) {
   // ---------- reads ----------
   async function list(_principal, input = {}) {
     const selector = { status: 'published' }
-    if (input.kind) selector.kind = input.kind
+    // An integration is listed only when asked for by name, and only where integrations run.
+    if (input.kind === 'integration' && !integrations()) return { items: [], total: 0 }
+    selector.kind = input.kind || { $in: [...LISTED_KINDS] }
     if (input.category) selector.category = input.category
     if (input.origin) selector.origin = input.origin
     const q = typeof input.q === 'string' ? input.q.trim().slice(0, 100) : ''
@@ -292,7 +337,11 @@ export function createLibraryCore(deps) {
   }
 
   async function exportPage(_principal, input = {}) {
-    const { rows, next } = await page({ status: 'published' }, { _id: 1 }, input.cursor, LIBRARY_LIMITS.exportPage)
+    // kind: one kind (integration is exported only when named: a licensed install's catalog reads it,
+    // enterprise/server/cloud-library.mjs); without it, what the public gallery is built from.
+    if (input.kind === 'integration' && !integrations()) return { items: [] }
+    const selector = { status: 'published', kind: input.kind || { $in: [...LISTED_KINDS] } }
+    const { rows, next } = await page(selector, { _id: 1 }, input.cursor, LIBRARY_LIMITS.exportPage)
     const out = []
     for (const item of rows) {
       const version = await versionOf(item, item.publishedVersion)
@@ -343,6 +392,7 @@ export function createLibraryCore(deps) {
 
   async function fork(principal, input, { mode = 'save' } = {}) {
     const { item, privileged } = await readableItem(principal, input.itemId)
+    if (item.kind === 'integration') throw fail(400, 'invalid_request', 'An integration is connected from Connect an integration, not copied.', { field: 'itemId' })
     const version = await visibleVersion(item, privileged, input.version)
     // Kept on the copy and every later copy: the credit its licence asks for (whose it is, and where from).
     const origin = { itemId: item._id, version: version.n, kind: item.kind, title: item.title, ...(item.authorName && { authorName: item.authorName }) }
@@ -489,11 +539,42 @@ export function createLibraryCore(deps) {
 
   async function submit(principal, input) {
     if (principal.kind === 'guest') throw fail(403, 'sign_in_to_publish', 'Sign up to publish to the library (/signup). Your slates come with you.')
-    if (!LIBRARY_KINDS.includes(input.kind)) throw fail(400, 'invalid_request', 'kind is component, slate or presentation.', { field: 'kind' })
+    if (!LIBRARY_KINDS.includes(input.kind)) throw fail(400, 'invalid_request', 'kind is component, slate, presentation or integration.', { field: 'kind' })
     const note = readMessage(input.note, { required: false })
     const actor = await authorActor(principal)
     let item, content, created = false
-    if (input.kind === 'component') {
+    let integrationFields = null
+    if (input.kind === 'integration') {
+      // A custom MCP server the person connected and works now, suggested for everyone. The address is
+      // checked against the endpoint policy here and again by the reviewer's own check.
+      const hooks = hooksOrRefuse()
+      const fields = readIntegrationFields(input)
+      let found
+      try {
+        found = await hooks.forSubmit(principal, { integrationId: input.integrationId })
+      } catch (error) {
+        throw asLibraryError(error)
+      }
+      const listed = await items.findOne({ kind: 'integration', status: 'published', 'integration.address': found.address, authorId: { $ne: principal.userId } })
+      if (listed || (hooks.covered && (await hooks.covered(found.address)) && !(await items.findOne({ kind: 'integration', status: 'published', 'integration.address': found.address, authorId: principal.userId }))))
+        throw fail(409, 'already_listed', 'Connect an integration already lists this address, so there is nothing to suggest.')
+      content = {
+        kind: 'integration',
+        card: { url: found.address, ...(fields.homepage && { homepage: fields.homepage }), auth: fields.auth },
+        probe: { host: found.host, at: at().toISOString(), tools: keptTools(found.tools), signedInWith: found.signedInWith ?? null },
+      }
+      integrationFields = { integrationId: input.integrationId, address: found.address, host: found.host, ...(fields.homepage && { homepage: fields.homepage }), auth: fields.auth }
+      item = await items.findOne({ kind: 'integration', authorId: principal.userId, 'integration.address': found.address })
+      if (!item) {
+        const id = newId()
+        item = {
+          _id: id, kind: 'integration', origin: 'user', status: null, reviewStatus: null, slug: slugify(input.title || found.host, id), title: '', summary: '',
+          categoryLocked: false, synonyms: [], authorId: principal.userId, authorName: actor.name, provenance: {}, integration: integrationFields,
+          versionCount: 0, counts: { copies: 0, adds: 0, branches: 0 }, popularity: 0, license: LIBRARY_LICENSE, createdAt: at(), updatedAt: at(),
+        }
+        created = true
+      }
+    } else if (input.kind === 'component') {
       if (!input.itemId) throw fail(400, 'invalid_request', 'Name the smart component to submit (itemId, from library.saveDraft).', { field: 'itemId' })
       item = await authoredItem(principal, input.itemId)
       if (item.kind !== 'component') throw fail(400, 'invalid_request', 'That item is not a smart component.', { field: 'itemId' })
@@ -541,6 +622,7 @@ export function createLibraryCore(deps) {
     if (!meta.summary) throw fail(400, 'invalid_request', 'Give it a one-line summary.', { field: 'summary' })
     if (item.categoryLocked && given.category && given.category !== item.category) throw fail(409, 'category_locked', categoryLockSentence(item.category))
     if (item.kind === 'component' && !meta.category) throw fail(400, 'category_required', `Choose a category: ${LIBRARY_CATEGORIES.map(categoryLabel).join(', ')}.`, { field: 'category' })
+    if (item.kind === 'integration' && !meta.category) throw fail(400, 'category_required', `Choose a category: ${INTEGRATION_CATEGORIES.map(categoryLabel).join(', ')}.`, { field: 'category' })
     checkSize(content)
     // Today's allowance is taken atomically, just before anything is written: parallel submits can't beat it.
     await spend(principal, 'submit')
@@ -551,9 +633,11 @@ export function createLibraryCore(deps) {
       ...(updating ? { pendingMeta: meta } : meta), status: next.status, reviewStatus: next.reviewStatus, pendingVersion: version.n, versionCount: version.n,
       submittedAt: at(), updatedAt: at(), authorName: actor.name, ...lastMessage('author', note),
       ...(item.status !== 'published' && { preview: previewOf(content) }),
+      // A published integration keeps its public address details until the update is approved.
+      ...(integrationFields && (updating ? { pendingIntegration: integrationFields } : { integration: integrationFields })),
     }
     // Sent by its owner: no longer the untouched copy a migration made (the queue's "From Community slates").
-    await items.updateOne({ _id: item._id }, { $set: set, $unset: { draft: '', draftMeta: '', migrationPristine: '' } })
+    await items.updateOne({ _id: item._id }, { $set: set, $unset: { draft: '', draftMeta: '', migrationPristine: '', ...(integrationFields && { reviewProbe: '' }) } })
     await log(item, 'submitted', actor, { version: version.n, ...(note && { message: note }) })
     return { itemId: item._id, slug: item.slug, status: next.status, reviewStatus: next.reviewStatus, version: version.n }
   }
@@ -569,7 +653,7 @@ export function createLibraryCore(deps) {
       const pending = await versionOf(item, item.pendingVersion)
       if (pending && item.kind === 'component') set.draft = pending.content
     }
-    await items.updateOne({ _id: item._id }, { $set: set, $unset: { pendingVersion: '', pendingMeta: '' } })
+    await items.updateOne({ _id: item._id }, { $set: set, $unset: { pendingVersion: '', pendingMeta: '', pendingIntegration: '' } })
     await log(item, 'withdrawn', await authorActor(principal))
     return { itemId: item._id, status: next.status }
   }
@@ -629,6 +713,7 @@ export function createLibraryCore(deps) {
     const item = await findItem(ref)
     if (!item) throw notFound()
     if (item.origin === 'builtin') throw builtinRefusal(item)
+    if (item.kind === 'integration' && !integrations()) throw integrationsOff()
     return item
   }
   // A second person reviews what someone publishes: an administrator never opens, refines, edits or
@@ -657,6 +742,7 @@ export function createLibraryCore(deps) {
     const next = transition(item, 'review.open', 'reviewer')
     if (!next || !item.pendingVersion) throw refused(item, 'opened for review')
     const version = await versionOf(item, item.pendingVersion)
+    if (item.kind === 'integration') return openIntegration(principal, item, version, next, self)
     const existing = item.reviewShareId ? await slates.findOne({ shareId: item.reviewShareId }) : null
     let reviewShareId = existing?.shareId
     let archived = null
@@ -681,6 +767,32 @@ export function createLibraryCore(deps) {
     return { itemId: item._id, reviewShareId, status: next.status, reviewStatus: next.reviewStatus, version: version.n }
   }
 
+  // An integration has no canvas to review: opening it (again) runs the reviewer's own check of the
+  // server, anonymous, through the guarded fetch (integration-hooks.mjs probe), and keeps what it found.
+  async function openIntegration(principal, item, version, next, self) {
+    const hooks = hooksOrRefuse()
+    const fields = item.pendingIntegration || item.integration || {}
+    let found
+    try {
+      found = await hooks.probe(fields.address)
+    } catch (error) {
+      found = { reachable: false, host: fields.host, problem: String(error?.message || 'Slatebox could not reach it.').slice(0, 300) }
+    }
+    const reviewProbe = {
+      at: at().toISOString(), version: version.n, reachable: Boolean(found?.reachable), host: found?.host || fields.host || null, lookalike: Boolean(found?.lookalike),
+      signIn: found?.signIn ? { method: found.signIn.method || null, authHost: found.signIn.authHost || null, issuer: found.signIn.issuer || null } : null,
+      tools: keptTools(found?.tools), ...(found?.problem && { problem: String(found.problem).slice(0, 300) }),
+    }
+    // Behind a sign-in its tools are not listed to an anonymous check: nothing to compare then.
+    reviewProbe.drift = reviewProbe.reachable && !reviewProbe.signIn ? toolDrift(version.content?.probe?.tools, reviewProbe.tools) : null
+    await items.updateOne({ _id: item._id }, { $set: { status: next.status, reviewStatus: next.reviewStatus, reviewProbe, reviewerId: principal.userId, updatedAt: at() } })
+    const words = reviewProbe.reachable
+      ? `Checked ${reviewProbe.host}: ${reviewProbe.signIn ? `sign-in needed (${reviewProbe.signIn.authHost || reviewProbe.signIn.method})` : `${reviewProbe.tools.length} tools`}`
+      : `Checked ${reviewProbe.host || 'it'}: not reachable`
+    await log(item, 'review_opened', await reviewerActor(principal), { version: version.n, ...(self && { selfReview: true }), diff: { notes: words } })
+    return { itemId: item._id, status: next.status, reviewStatus: next.reviewStatus, version: version.n, reviewProbe }
+  }
+
   async function reviewSlate(item) {
     const slate = item.reviewShareId ? await slates.findOne({ shareId: item.reviewShareId }) : null
     if (!slate || slate.archivedDate || slate.library?.mode !== 'review') throw fail(409, 'open_first', 'Open it for review first (library.review.open).')
@@ -691,11 +803,12 @@ export function createLibraryCore(deps) {
     const item = await reviewItem(principal, input.itemId)
     await checkNotOwn(principal, item, input)
     if (reviewStateOf(item) !== 'in_review') throw refused(item, 'refined')
-    const slate = await reviewSlate(item)
+    // An integration is words only: there is no review canvas, and the AI never touches its address.
+    const slate = item.kind === 'integration' ? null : await reviewSlate(item)
     const board = item.kind === 'component' ? boardOn(slate, slate.library.boardId) : null
     const message = readMessage(input.message)
     const history = (input.history || []).slice(-LIBRARY_LIMITS.history)
-    const local = localRefinement(message)
+    const local = localRefinement(message, { kind: item.kind })
     // Keep names the preview it keeps (previewId): exactly that proposal is applied, stored with the item,
     // never a second AI answer. Without a previewId, save asks afresh (a direct call that previews nothing).
     let raw
@@ -784,10 +897,28 @@ export function createLibraryCore(deps) {
     const next = transition(item, 'review.approve', 'reviewer')
     if (!next) throw refused(item, 'approved')
     const message = readMessage(input.message, { required: false })
-    const slate = await reviewSlate(item)
+    const slate = item.kind === 'integration' ? null : await reviewSlate(item)
     const pending = item.pendingVersion ? await versionOf(item, item.pendingVersion) : null
     let content
-    if (item.kind === 'component') {
+    let integrationSet = null
+    if (item.kind === 'integration') {
+      // Never published unchecked: the reviewer's own check of this version must have reached the server.
+      const hooks = hooksOrRefuse()
+      const probe = item.reviewProbe
+      if (!probe || (pending && probe.version !== pending.n)) throw fail(409, 'open_first', 'Check it first: open it for review, so Slatebox reaches the server again.')
+      if (!probe.reachable) throw fail(409, 'probe_failed', 'Slatebox could not reach it when you checked. Check it again, or turn it down.')
+      const fields = item.pendingIntegration || item.integration
+      const other = await items.findOne({ kind: 'integration', status: 'published', 'integration.address': fields.address, _id: { $ne: item._id } })
+      if (other || (item.status !== 'published' && hooks.covered && (await hooks.covered(fields.address))))
+        throw fail(409, 'already_listed', 'Connect an integration already lists this address. Turn this one down.')
+      const reviewedTools = (probe.tools || []).map(({ name, hash }) => ({ name, hash }))
+      content = {
+        ...(pending?.content || { kind: 'integration' }),
+        card: { url: fields.address, ...(fields.homepage && { homepage: fields.homepage }), auth: fields.auth || 'none' },
+        reviewed: { at: probe.at, host: probe.host, signIn: probe.signIn, tools: reviewedTools },
+      }
+      integrationSet = { ...fields, reviewedTools, reviewedAt: new Date(probe.at), signIn: probe.signIn ? probe.signIn.method || 'oauth' : null }
+    } else if (item.kind === 'component') {
       const board = boardOn(slate, slate.library.boardId)
       if (!board) throw fail(409, 'no_board', 'The review copy has no board to publish.')
       content = { kind: 'component', workshop: snapshotWorkshop(board.model.workshop) }
@@ -810,11 +941,12 @@ export function createLibraryCore(deps) {
     const publishedCount = publishedCountOf(item) + 1
     const diff = { ...(pending && Object.keys(metaDiff(pending.meta, meta)).length && { meta: metaDiff(pending.meta, meta) }), ...contentDiff(pending?.content, content) }
     await items.updateOne({ _id: item._id }, {
-      $set: { ...meta, status: 'published', reviewStatus: null, publishedVersion: version.n, publishedCount, versionCount: version.n, publishedAt: at(), updatedAt: at(), preview: previewOf(content), ...lastMessage('reviewer', message) },
-      $unset: { pendingVersion: '', pendingMeta: '', migrationPristine: '' },
+      $set: { ...meta, status: 'published', reviewStatus: null, publishedVersion: version.n, publishedCount, versionCount: version.n, publishedAt: at(), updatedAt: at(), preview: previewOf(content), ...lastMessage('reviewer', message), ...(integrationSet && { integration: integrationSet }) },
+      $unset: { pendingVersion: '', pendingMeta: '', migrationPristine: '', ...(integrationSet && { pendingIntegration: '' }) },
     })
     await log(item, 'approved', await reviewerActor(principal), { version: version.n, ...(self && { selfReview: true }), ...(message && { message }), ...(Object.keys(diff).length && { diff }) })
     const published = await items.findOne({ _id: item._id })
+    if (integrationSet) await integrations()?.changed?.()
     await notify({ item: published, type: 'approved', message })
     return { itemId: item._id, status: 'published', publishedVersion: version.n, publishedCount, url: url(published) }
   }
@@ -825,8 +957,9 @@ export function createLibraryCore(deps) {
     if (!next) throw refused(item, verb)
     const message = readMessage(input.message)
     const set = { status: next.status, reviewStatus: next.reviewStatus, updatedAt: at(), ...lastMessage('reviewer', message) }
-    const unset = next.status === 'unpublished' ? { pendingVersion: '', pendingMeta: '' } : next.reviewStatus === 'rejected' && item.pendingMeta ? { pendingMeta: '' } : null
+    const unset = next.status === 'unpublished' ? { pendingVersion: '', pendingMeta: '', pendingIntegration: '' } : next.reviewStatus === 'rejected' && (item.pendingMeta || item.pendingIntegration) ? { pendingMeta: '', pendingIntegration: '' } : null
     await items.updateOne({ _id: item._id }, { $set: set, ...(unset && { $unset: unset }) })
+    if (item.kind === 'integration' && next.status === 'unpublished') await integrations()?.changed?.()
     await log(item, type, await reviewerActor(principal), { message, ...(item.pendingVersion && { version: item.pendingVersion }) })
     await notify({ item: { ...item, ...set }, type, message })
     return { itemId: item._id, status: next.status, reviewStatus: next.reviewStatus }

@@ -4,7 +4,7 @@
 const BACKGROUND = '#ffffff'
 
 export function previewSlateOf(content, { key = 'item', title = '' } = {}) {
-  if (!content) return null
+  if (!content || content.kind === 'integration') return null
   const shareId = 'library_' + String(key).replace(/[^A-Za-z0-9_]/g, '').slice(0, 40)
   if (content.kind === 'component') {
     const workshop = structuredClone(content.workshop)

@@ -52,7 +52,7 @@
 // to edit the slate.
 import { createHash, randomBytes } from 'node:crypto'
 import { sameAgentName } from '/imports/api/common/agent-mention.mjs'
-import { canonicalAddress, cardFor, DEAD_HOSTS, GALLERY, lookalikeHost, writesAddress } from '../common/gallery.mjs'
+import { canonicalAddress, cardFor, DEAD_HOSTS, GALLERY, lookalikeHost, retiredFor, writesAddress } from '../common/gallery.mjs'
 import { checkMcpUrl, McpFetchRefused } from './mcp-fetch.mjs'
 import { SignInNeeded } from './credentials.mjs'
 import { SignInProblem } from './oauth.mjs'
@@ -418,12 +418,17 @@ export function createConnectorService({
       for (const row of await integrations.find({ ownerId: principal.userId, address, status: 'needs_sign_in' })) await integrations.update(row._id, { status: 'active', auth: { kind: signedIn.kind, issuer: signedIn.issuer }, scopes: signedIn.scopes || [], updatedAt: new Date(now()) })
     }
     audit({ kind: 'discover', userId: principal.userId, host, tools: tools.length })
+    // A Community card lists the tools its reviewer checked: anything added or changed since is said
+    // before the person chooses (they still consent to each tool themselves).
+    const reviewed = Array.isArray(card?.reviewedTools) ? new Map(card.reviewedTools.map((tool) => [tool.name, tool.hash])) : null
+    const reviewDrift = reviewed ? tools.some((tool) => reviewed.get(tool.name) !== tool.hash) : false
     // Already one of this person's integrations: the page offers to invite it instead of connecting again.
     const integration = await integrations.findOne({ ownerId: principal.userId, address })
     return {
       ...head,
       ...(integration && { integration: { integrationId: integration._id, name: integration.name, status: integration.status } }),
       ...(signedIn && { signedIn: { kind: signedIn.kind } }),
+      ...(reviewDrift && { reviewDrift: true }),
       // Self-reported: shown as the server's claim, never used as the name on the slate.
       serverName: plainText(found.serverInfo?.title || found.serverInfo?.name || '', 60),
       suggestedName: slateName(card?.name || found.serverInfo?.title || found.serverInfo?.name || host.split('.').slice(-2, -1)[0] || 'Agent', sanitizeName) || 'Agent',
@@ -635,13 +640,64 @@ export function createConnectorService({
     return { connections: docs.map((doc) => publicConnection(doc, principal.userId, cards)), pro: isPro, canInvite: isPro }
   }
 
+  /**
+   * A connection its owner suggests for the library (library.submit kind integration): theirs, an MCP
+   * server that works now, at an address the endpoint policy allows and the gallery does not list.
+   * → what the library keeps of it: the address, its host and the tools they connected (names, groups
+   * and hashes; never descriptions or a token).
+   */
+  async function submissionOf(principal, { integrationId } = {}) {
+    if (!principal?.userId || principal.kind === 'guest' || principal.kind === 'visitor') refuse(403, 'sign_in_to_publish', 'Sign up to suggest an integration.')
+    const doc = typeof integrationId === 'string' ? await integrations.findOne({ _id: integrationId }) : null
+    if (!doc || doc.ownerId !== principal.userId) refuse(404, 'not_found', 'That integration is not one of yours.')
+    if ((doc.kind || 'mcp') !== 'mcp') refuse(400, 'invalid_request', 'Only an agent connected by its MCP address can be suggested.')
+    if (doc.status !== 'active') refuse(409, 'not_working', `${doc.name} is not working right now (${doc.status.replace(/_/g, ' ')}). Fix it on the Integrations page first.`)
+    const { address, host } = checkAddress(doc.address)
+    if (cardFor(address, await gallery())) refuse(409, 'already_listed', 'Connect an integration already lists this address, so there is nothing to suggest.')
+    if (retiredFor(address)) refuse(409, 'already_listed', 'Slatebox took this one out of the gallery on purpose.')
+    return {
+      address, host,
+      tools: (doc.tools || []).map(({ name, group, destructive, hash }) => ({ name, group, ...(destructive && { destructive: true }), hash })),
+      signedInWith: doc.auth?.kind || null,
+    }
+  }
+
+  /**
+   * A reviewer's check of a suggested address: an anonymous discovery through the guarded fetch (no
+   * one's token), and when it is behind a sign-in, whom that sign-in goes to. Never throws for the
+   * server's own failures: they come back as { reachable: false, problem } for the reviewer to read.
+   * The endpoint policy (https, public addresses only) refuses as it does for anyone.
+   */
+  async function reviewProbe(raw) {
+    const { address, host } = checkAddress(raw)
+    const out = { address, host, lookalike: lookalikeHost(address), reachable: false, signIn: null, tools: [] }
+    try {
+      const found = await session.discover(address, fetch, { token: null })
+      const tools = await toolsFrom(address, found.tools)
+      return { ...out, reachable: true, tools: tools.map(({ name, group, destructive, hash }) => ({ name, group, ...(destructive && { destructive: true }), hash })) }
+    } catch (error) {
+      const problem = fromProblem(error)
+      if (problem?.code !== 'needs_sign_in') return { ...out, problem: String(problem?.message || 'Slatebox could not reach it.').slice(0, 300) }
+    }
+    try {
+      const plan = await signInPlan(address)
+      return { ...out, reachable: true, signIn: { method: plan.method || 'oauth', authHost: plan.authHost || null, issuer: plan.issuer || plan.provider || null } }
+    } catch (error) {
+      return { ...out, reachable: true, signIn: { method: 'unknown', authHost: null, issuer: null }, problem: String(error?.message || 'Its sign-in could not be read.').slice(0, 300) }
+    }
+  }
+
   /** The gallery the invite dialog shows: the enabled cards in order, and whether this person may invite. */
   async function galleryList(principal) {
     // A vendor that needs an app registered ahead of time (no automatic registration) is hidden until it is.
     const cards = (await gallery()).filter((card) => !card.needsApp || Boolean(oauthApps?.[card.needsApp]?.clientId))
     const canInvite = principal?.userId && principal.kind !== 'guest' && principal.kind !== 'visitor' ? await pro(principal.userId) : false
     return {
-      cards: cards.map(({ id, name, url, job, lands, try: tryThis, featured, signIn, keyHint, cost, group }) => ({ id, name, url, job, lands, try: tryThis, featured: Boolean(featured), signIn: signIn || null, keyHint: keyHint || null, cost: cost || '', group: group || null })),
+      cards: cards.map(({ id, name, url, job, lands, try: tryThis, featured, signIn, keyHint, cost, group, origin, homepage, sharedBy }) => ({
+        id, name, url, job, lands, try: tryThis, featured: Boolean(featured), signIn: signIn || null, keyHint: keyHint || null, cost: cost || '', group: group || null,
+        // A card someone suggested and an administrator approved (the library's review queue): the dialog marks it Community.
+        ...(origin === 'community' && { origin, ...(homepage && { homepage }), ...(sharedBy && { sharedBy }) }),
+      })),
       canInvite,
     }
   }
@@ -1941,6 +1997,8 @@ export function createConnectorService({
     disconnect,
     call,
     gallery: galleryList,
+    submissionOf,
+    reviewProbe,
     integrationsList,
     integrationConnect,
     integrationReview,

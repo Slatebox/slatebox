@@ -1,10 +1,17 @@
 // The shapes the library.* actions share (server/library/core.mjs does the work).
-import { LIBRARY_CATEGORIES, LIBRARY_KINDS, LIBRARY_LIMITS, LIBRARY_STATUSES } from '../../imports/api/common/library-model.mjs'
+import { INTEGRATION_AUTH, INTEGRATION_CATEGORIES, INTEGRATION_LIMITS, LIBRARY_CATEGORIES, LIBRARY_KINDS, LIBRARY_LIMITS, LIBRARY_STATUSES } from '../../imports/api/common/library-model.mjs'
 import { problem } from './errors.mjs'
 
 export const itemRef = { type: 'string', minLength: 1, maxLength: 120, pattern: '^[A-Za-z0-9_-]+$', description: 'The item: its id or its slug (library.list items[].id or .slug).' }
 export const kindInput = { type: 'string', enum: [...LIBRARY_KINDS] }
-export const categoryInput = { type: 'string', enum: [...LIBRARY_CATEGORIES], description: 'One of the five categories: plan, decide, meetings, track, map.' }
+export const categoryInput = { type: 'string', enum: [...LIBRARY_CATEGORIES, ...INTEGRATION_CATEGORIES], description: 'One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web.' }
+// A suggested integration (kind integration): the person's connected MCP server, and what they say about it.
+export const integrationInputs = {
+  integrationId: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', description: 'kind integration: your connected integration to suggest (integrations.list).' },
+  homepage: { type: 'string', maxLength: INTEGRATION_LIMITS.homepage, description: 'kind integration: its homepage or docs (https).' },
+  auth: { type: 'string', enum: [...INTEGRATION_AUTH], description: 'kind integration: how it signs people in: none, oauth or key.' },
+  consent: { type: 'boolean', description: 'kind integration: the person agrees its address, name and description become public if approved.' },
+}
 export const versionInput = { type: 'integer', minimum: 1, description: 'A version number (item.publishedVersion by default).' }
 export const cursorInput = { type: 'string', maxLength: 12, pattern: '^[0-9]+$', description: 'The next value the previous page gave.' }
 export const messageInput = { type: 'string', minLength: 1, maxLength: LIBRARY_LIMITS.message }

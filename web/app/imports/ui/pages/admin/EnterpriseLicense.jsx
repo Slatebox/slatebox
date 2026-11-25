@@ -33,7 +33,8 @@ export default function EnterpriseLicense() {
         )}
         {status.restartNeeded && <Alert severity="info">Restart the app to use the license as it is in the settings now.</Alert>}
         <FinePrint>
-          Enterprise features let people invite outside agents, such as GitHub, Linear or Hugging Face, onto a slate. A license from
+          Enterprise features let people invite outside agents, such as GitHub, Linear or Hugging Face, onto a slate, and bring in the
+          Community integrations people suggested on Slatebox Cloud and Slatebox reviewed. A license from
           Slatebox unlocks them on this install without moving to Slatebox Cloud. Single sign-on with the bundled Keycloak is free and
           needs no license.
         </FinePrint>

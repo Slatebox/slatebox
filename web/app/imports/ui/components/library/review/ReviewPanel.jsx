@@ -18,8 +18,8 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import libraryApi from '../../../../api/client/library'
-import { categoryLabel, reviewStateOf } from '../../../../api/common/library-model.mjs'
-import { CATEGORY_CHIPS, KindTitle, REFINE_STARTERS, diffLines, eventLine } from '../libraryCopy.mjs'
+import { INTEGRATION_AUTH_LABELS, categoryLabel, reviewStateOf } from '../../../../api/common/library-model.mjs'
+import { KindTitle, REFINE_STARTERS, categoryChipsFor, diffLines, eventLine, probeLines } from '../libraryCopy.mjs'
 import { refineHistory, proposalChanges } from './refineTurns.mjs'
 import { useAtom } from 'jotai'
 import { conversationOpen } from '../../../jotai/atoms'
@@ -33,10 +33,13 @@ const STATE_WORDS = { submitted: 'Submitted', in_review: 'In review', changes_re
 // discard), the thread with its author, and the decision. Approve publishes what is on the canvas.
 // Docked on the left on a wide screen (Ask Slatebox keeps the right); below 1000px docked under the canvas, foldable.
 // Either way it takes its own room: the canvas shrinks around it, so it never covers a card or a card's bar.
-export default function ReviewPanel({ slate }) {
-  const wide = useMediaQuery('(min-width:1000px)')
+// A suggested integration has no canvas: the panel stands alone on its own page (/admin/library/review/:itemId,
+// `standalone`), with what Slatebox found reaching the server in place of the canvas, and "Check again".
+export default function ReviewPanel({ slate, itemId: givenItemId, standalone }) {
+  const wideScreen = useMediaQuery('(min-width:1000px)')
+  const wide = wideScreen || standalone
   const navigate = useNavigate()
-  const itemId = slate?.library?.itemId
+  const itemId = slate?.library?.itemId || givenItemId
   const [open, setOpen] = React.useState(true)
   // Below 1000px the canvas, Ask Slatebox and this panel share one column: one of the two panels open at a time, so the
   // canvas always keeps its room. Ask Slatebox opening folds this panel to its heading; this panel opening closes it.
@@ -68,6 +71,7 @@ export default function ReviewPanel({ slate }) {
   // Reviewing your own submission: refused unless this server has one administrator and you say so.
   const [selfReview, setSelfReview] = React.useState(false)
   const [selfAsk, setSelfAsk] = React.useState(false)
+  const [checking, setChecking] = React.useState(false)
   const asReviewer = (call, input) => call({ ...input, ...(selfReview && { selfReview: true }) }).catch((error) => {
     if (error?.error === 'self_review') setSelfAsk(true)
     throw error
@@ -146,6 +150,20 @@ export default function ReviewPanel({ slate }) {
     }
   }
 
+  // An integration: reach its server again (anonymously), and show what was found.
+  async function checkAgain() {
+    setChecking(true)
+    setProblem('')
+    try {
+      await asReviewer(libraryApi.review.open, { itemId })
+      setReload((n) => n + 1)
+    } catch (error) {
+      setProblem(error?.reason || 'It could not be checked.')
+    } finally {
+      setChecking(false)
+    }
+  }
+
   async function sendReply() {
     if (!reply.trim()) return
     try {
@@ -165,7 +183,7 @@ export default function ReviewPanel({ slate }) {
       const text = decisionText.trim()
       if (decision === 'approve') {
         const result = await asReviewer(libraryApi.review.approve, { itemId, ...(text && { message: text }) })
-        setDone({ kind: 'approve', url: `/library/${item.slug}`, version: result.publishedVersion ?? nextVersion })
+        setDone({ kind: 'approve', url: item.kind === 'integration' ? null : `/library/${item.slug}`, version: result.publishedVersion ?? nextVersion })
       } else if (decision === 'changes') {
         await libraryApi.review.requestChanges({ itemId, message: text })
         setDone({ kind: 'changes' })
@@ -203,9 +221,11 @@ export default function ReviewPanel({ slate }) {
         // Docked beside the canvas, never over it: the canvas page's row (or, below 1000px, its column) gives it its own
         // room and the canvas shrinks to what is left, as it does for Ask Slatebox. A selected card's bar stays whole.
         position: 'relative', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflow: 'hidden', minWidth: 0, minHeight: 0,
-        ...(wide
-          ? { order: -1, flex: '0 0 384px', width: 384, height: '100%', borderRight: 1, borderColor: 'divider' }
-          : { flex: 'none', width: '100%', maxHeight: open ? '46dvh' : 'none', borderTop: 1, borderColor: 'divider' }),
+        ...(standalone
+          ? { width: '100%', border: 1, borderColor: 'divider', borderRadius: 2 }
+          : wide
+            ? { order: -1, flex: '0 0 384px', width: 384, height: '100%', borderRight: 1, borderColor: 'divider' }
+            : { flex: 'none', width: '100%', maxHeight: open ? '46dvh' : 'none', borderTop: 1, borderColor: 'divider' }),
       }}>
       {header}
       {(wide || open) && (
@@ -232,7 +252,9 @@ export default function ReviewPanel({ slate }) {
 
           {done && (
             <Alert severity="success" data-testid="review-done">
-              {done.kind === 'approve' && <>Published{done.version ? ` as version ${done.version}` : ''}. <RouterLink to={done.url}>See it in the library</RouterLink>.</>}
+              {done.kind === 'approve' && (done.url
+                ? <>Published{done.version ? ` as version ${done.version}` : ''}. <RouterLink to={done.url}>See it in the library</RouterLink>.</>
+                : <>Published. It is listed under Existing in Connect an integration, marked Community. <RouterLink to="/integrations">See it</RouterLink>.</>)}
               {done.kind === 'changes' && 'Sent back to the author with your message.'}
               {done.kind === 'reject' && 'Not accepted. The author has your reason.'}
               {done.kind === 'unpublish' && 'Taken out of the library.'}
@@ -240,15 +262,17 @@ export default function ReviewPanel({ slate }) {
             </Alert>
           )}
 
+          {item?.kind === 'integration' && <IntegrationCheck item={item} reviewing={reviewing} checking={checking} onCheck={checkAgain} />}
+
           {meta && item && (
             <Box component="section" aria-label="Details" sx={{ display: 'grid', gap: 1 }}>
-              <TextField size="small" label="Title" value={meta.title} onChange={(e) => setMeta({ ...meta, title: e.target.value })} inputProps={{ maxLength: 80 }} disabled={!reviewing} />
+              <TextField size="small" label={item.kind === 'integration' ? 'Name on its card' : 'Title'} value={meta.title} onChange={(e) => setMeta({ ...meta, title: e.target.value })} inputProps={{ maxLength: item.kind === 'integration' ? 40 : 80 }} disabled={!reviewing} />
               <TextField size="small" label="One line" value={meta.summary} onChange={(e) => setMeta({ ...meta, summary: e.target.value })} inputProps={{ maxLength: 160 }} InputLabelProps={{ shrink: true }} disabled={!reviewing} multiline />
               {item.categoryLocked && item.category
                 ? <Typography variant="body2">Category: {categoryLabel(item.category)} (from {item.provenance?.branchedFrom?.title || 'its parent'}, locked)</Typography>
                 : (
                   <Box role="radiogroup" aria-label="Category" sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {CATEGORY_CHIPS.map((chip) => (
+                    {categoryChipsFor(item.kind).map((chip) => (
                       <Chip key={chip.id} size="small" label={chip.label} role="radio" aria-checked={meta.category === chip.id} disabled={!reviewing}
                         color={meta.category === chip.id ? 'primary' : 'default'} variant={meta.category === chip.id ? 'filled' : 'outlined'}
                         onClick={() => setMeta({ ...meta, category: meta.category === chip.id ? '' : chip.id })} />
@@ -259,7 +283,7 @@ export default function ReviewPanel({ slate }) {
                 <TextField size="small" label="Words people might search for" value={meta.synonyms} onChange={(e) => setMeta({ ...meta, synonyms: e.target.value })}
                   helperText="Separated by commas." disabled={!reviewing} />
               )}
-              <TextField size="small" label="Description" value={meta.description} onChange={(e) => setMeta({ ...meta, description: e.target.value })} multiline minRows={2} inputProps={{ maxLength: 2000 }} InputLabelProps={{ shrink: true }} disabled={!reviewing} />
+              {item.kind !== 'integration' && <TextField size="small" label="Description" value={meta.description} onChange={(e) => setMeta({ ...meta, description: e.target.value })} multiline minRows={2} inputProps={{ maxLength: 2000 }} InputLabelProps={{ shrink: true }} disabled={!reviewing} />}
               {reviewing && <Box><Button size="small" variant="outlined" onClick={saveMeta} disabled={savingMeta}>{savingMeta ? 'Saving…' : 'Save the details'}</Button></Box>}
             </Box>
           )}
@@ -268,7 +292,9 @@ export default function ReviewPanel({ slate }) {
           <Box component="section" aria-label="Refine with AI" sx={{ display: 'grid', gap: 1 }} data-testid="refine-chat">
             <Typography variant="subtitle2">Refine it</Typography>
             <Typography variant="caption" color="text.secondary">
-              Ask for a change: you see it first and keep it only if you want it. Change the notes and boards on the canvas directly.
+              {item?.kind === 'integration'
+                ? 'Ask for a change to its words: you see it first and keep it only if you want it. Its address never changes here.'
+                : 'Ask for a change: you see it first and keep it only if you want it. Change the notes and boards on the canvas directly.'}
             </Typography>
             {turns.map((turn, index) => (
               <RefineTurn key={index} turn={turn} last={index === turns.length - 1} onAgain={() => ask(turn.ask)} onKeep={() => keep(index)}
@@ -333,7 +359,9 @@ export default function ReviewPanel({ slate }) {
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1.5 }}>
-            {askedNow === 'approve' && 'What is on this canvas now is what people will get. The author is told.'}
+            {askedNow === 'approve' && (item?.kind === 'integration'
+              ? 'It is listed under Existing in Connect an integration for everyone, marked Community. Each person still signs in and chooses its tools themselves. The author is told.'
+              : 'What is on this canvas now is what people will get. The author is told.')}
             {askedNow === 'changes' && 'Say what to change. The author sees your message and can submit it again.'}
             {askedNow === 'reject' && 'Say why. The author sees your reason.'}
             {askedNow === 'unpublish' && 'Copies people already made stay theirs. Say why: the author is told.'}
@@ -398,5 +426,30 @@ RefineTurn.propTypes = {
   onAgain: PropTypes.func,
 }
 
-ReviewPanel.propTypes = { slate: PropTypes.object }
-ReviewPanel.defaultProps = { slate: null }
+/** A suggested integration's facts and the reviewer's own check of its server. */
+function IntegrationCheck({ item, reviewing, checking, onCheck }) {
+  const fields = item.pendingIntegration || item.integration || {}
+  const tone = { ok: 'success.main', info: 'text.secondary', warning: 'warning.main', error: 'error.main' }
+  return (
+    <Box component="section" aria-label="The server" data-testid="integration-check" sx={{ display: 'grid', gap: 0.75, border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+      <Typography variant="subtitle2">The server</Typography>
+      <Typography variant="body2" sx={{ overflowWrap: 'anywhere', fontFamily: 'monospace' }} data-testid="integration-address">{fields.address}</Typography>
+      <Typography variant="body2" color="text.secondary">
+        {INTEGRATION_AUTH_LABELS[fields.auth] || 'No sign-in'} (as the author says)
+        {fields.homepage && <> · <a href={fields.homepage} target="_blank" rel="noopener noreferrer nofollow">Homepage</a></>}
+      </Typography>
+      <Box role="status" aria-live="polite" sx={{ display: 'grid', gap: 0.25 }} data-testid="integration-probe">
+        {probeLines(item.reviewProbe, { auth: fields.auth }).map((line) => (
+          <Typography key={line.text} variant="body2" sx={{ color: tone[line.tone] }}>{line.tone === 'ok' ? '✓ ' : line.tone === 'error' || line.tone === 'warning' ? '! ' : ''}{line.text}</Typography>
+        ))}
+        {item.reviewProbe?.at && <Typography variant="caption" color="text.secondary">Checked {new Date(item.reviewProbe.at).toLocaleString()}, signed out, with every address check.</Typography>}
+      </Box>
+      <Typography variant="caption" color="text.secondary">Check that the name is fair to whoever runs it, that its sign-in goes where you expect, and that it is not a look-alike.</Typography>
+      {reviewing && <Box><Button size="small" variant="outlined" onClick={onCheck} disabled={checking} data-testid="integration-check-again">{checking ? 'Checking…' : 'Check again'}</Button></Box>}
+    </Box>
+  )
+}
+IntegrationCheck.propTypes = { item: PropTypes.object.isRequired, reviewing: PropTypes.bool, checking: PropTypes.bool, onCheck: PropTypes.func.isRequired }
+
+ReviewPanel.propTypes = { slate: PropTypes.object, itemId: PropTypes.string, standalone: PropTypes.bool }
+ReviewPanel.defaultProps = { slate: null, itemId: null, standalone: false }

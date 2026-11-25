@@ -76,9 +76,13 @@ function MineRow({ item, onChanged }) {
       setBusy(false)
     }
   }
+  // An integration is sent again from the connection it came from, with the words and agreement it was sent with.
+  const integration = item.pendingIntegration || item.integration
   const submitAgain = () => act(() => libraryApi.submit(item.kind === 'component'
     ? { kind: 'component', itemId: item.id }
-    : { kind: item.kind, shareId: item.sourceShareId }))
+    : item.kind === 'integration'
+      ? { kind: 'integration', integrationId: item.integrationId, ...(integration?.homepage && { homepage: integration.homepage }), auth: integration?.auth || 'none', consent: true }
+      : { kind: item.kind, shareId: item.sourceShareId }))
 
   return (
     <Box data-testid="mine-row" sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '140px 1fr' }, gap: SPACE.group, p: SPACE.text, border: 1, borderColor: 'divider', borderRadius: 1 }}>
@@ -102,7 +106,7 @@ function MineRow({ item, onChanged }) {
         {problem && <Alert severity="error">{problem}</Alert>}
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, pt: SPACE.hair }}>
           {item.sourceShareId && <Button size="small" component={RouterLink} to={`/canvas/${item.sourceShareId}`}>Open the slate</Button>}
-          {item.status === 'published' && <Button size="small" component={RouterLink} to={`/library/${item.slug}`}>See it in the library</Button>}
+          {item.status === 'published' && <Button size="small" component={RouterLink} to={item.kind === 'integration' ? '/integrations' : `/library/${item.slug}`}>{item.kind === 'integration' ? 'See it in Connect an integration' : 'See it in the library'}</Button>}
           {can.submit && (item.status !== 'draft' || item.kind === 'component') && <Button size="small" variant="contained" onClick={submitAgain} disabled={busy} data-testid="mine-submit">
             {item.status === 'published' ? 'Send the update' : item.status === 'draft' ? 'Submit for review' : 'Send it again'}
           </Button>}

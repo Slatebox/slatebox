@@ -5,7 +5,11 @@
 // edit what a card says and its recipe (enterprise/server/recipes.mjs). Every change is an aiAgents
 // document written through the AI control store, so it has an audit row and moves the generation.
 //   - The built-in cards (common/gallery.mjs) serve until a card is edited; a card's address never
-//     changes here (consent is to an address), and only built-in cards are listed (no new servers).
+//     changes here (consent is to an address). New servers arrive only as Community cards: a custom
+//     MCP server someone suggested and an administrator approved in the library's review queue
+//     (library kind integration, communityCard), here or on Slatebox Cloud for a licensed install
+//     (cloud-library.mjs). They follow the built-in ones; administrators turn them off, order them and
+//     edit their words like any card.
 //   - A recipe is checked (checkRecipe) before it is saved; at run time a recipe only ever calls a
 //     tool the inviter allowed. Its intents run lookups only; its writes only offer a change to the
 //     change planner, and every change is an action card a person approves (outside.mjs), unless
@@ -17,7 +21,8 @@
 import { defineAction } from '/server/actions/registry.mjs'
 import { requireAIControlAdmin } from '/server/actions/ai-control-get.mjs'
 import { guardControlWrite } from '/server/actions/ai-providers.mjs'
-import { GALLERY, NATIVE_CARDS, RETIRED, RETIRED_WORDS } from '../common/gallery.mjs'
+import { GALLERY, GROUPS, NATIVE_CARDS, RETIRED, RETIRED_WORDS, canonicalAddress, cardFor } from '../common/gallery.mjs'
+import { checkMcpUrl } from './mcp-fetch.mjs'
 import { checkRecipe } from './recipes.mjs'
 import { plainText } from './tools.mjs'
 import { PROMPT_IDS } from '/server/ai-control/prompts/index.mjs'
@@ -27,10 +32,79 @@ const docId = (id) => 'gallery:' + id
 // The planner's hint for a card (connectors.recipe.<id>, in Prompts), or null for a card with none yet.
 export const promptIdOf = (id) => (PROMPT_IDS.includes('connectors.recipe.' + id) ? 'connectors.recipe.' + id : null)
 
+const COMMUNITY_COST = Object.freeze({ none: 'Free', oauth: 'Sign in on its own page', key: 'Needs your key or token' })
+/** A Community card's id: a gallery id (^[a-z0-9]{1,40}$) made from its library item's id. */
+export const communityId = (itemId) => 'c' + String(itemId || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 39)
+
+/**
+ * The gallery card a published library integration is (this server's own, or one Slatebox Cloud
+ * exported to a licensed install), or null when anything in it fails the checks every card passes:
+ * a canonical https address the endpoint policy allows, plain words within the card limits with no
+ * web addresses, a known group. Its words are its author's and reviewer's, never the server's own.
+ */
+export function communityCard(item, { from = 'local', devOrigins = [] } = {}) {
+  if (!item || item.kind !== 'integration' || (item.status && item.status !== 'published')) return null
+  const fields = item.integration || {}
+  const url = canonicalAddress(fields.address)
+  if (!url) return null
+  try {
+    // The address as stored (canonicalAddress alone would quietly drop a user name or password).
+    checkMcpUrl(String(fields.address), { devOrigins })
+    checkMcpUrl(url, { devOrigins })
+  } catch {
+    return null
+  }
+  const name = plainText(item.title, EDITABLE.name)
+  const lands = plainText(item.summary, EDITABLE.lands)
+  const group = GROUPS.some((g) => g.id === item.category) ? item.category : null
+  if (!name || !lands || !group || [name, lands].some((text) => /\bhttps?:\/\//i.test(text))) return null
+  const auth = ['none', 'oauth', 'key'].includes(fields.auth) ? fields.auth : 'none'
+  let homepage = null
+  try {
+    const page = new URL(String(fields.homepage || ''))
+    if (page.protocol === 'https:' && !page.username && !page.password) homepage = page.href.slice(0, 300)
+  } catch {}
+  const id = communityId(item.id || item._id)
+  if (id.length < 2) return null
+  return {
+    id,
+    origin: 'community',
+    from,
+    itemId: String(item.id || item._id),
+    group,
+    name,
+    url,
+    job: GROUPS.find((g) => g.id === group).label,
+    lands,
+    featured: false,
+    cost: COMMUNITY_COST[auth],
+    signIn: auth === 'none' ? null : auth,
+    ...(auth === 'key' && { keyHint: 'Paste a key or token' }),
+    ...(homepage && { homepage }),
+    sharedBy: plainText(item.authorName, 60) || 'A Slatebox user',
+    reviewedTools: (Array.isArray(fields.reviewedTools) ? fields.reviewedTools : []).slice(0, 64)
+      .filter((tool) => typeof tool?.name === 'string' && typeof tool?.hash === 'string').map(({ name: tool, hash }) => ({ name: tool.slice(0, 128), hash: hash.slice(0, 128) })),
+    recipe: { rounds: 1, calls: 2, intents: [] },
+  }
+}
+
+/**
+ * Community cards to add after the built-in ones: the first card for each address wins (this
+ * server's own before Slatebox Cloud's), and none for an address a built-in card or alias lists.
+ */
+export function mergeCommunity(builtin = GALLERY, ...lists) {
+  const out = []
+  for (const card of lists.flat()) {
+    if (!card?.url || cardFor(card.url, builtin) || cardFor(card.url, out) || out.some((have) => have.id === card.id)) continue
+    out.push(card)
+  }
+  return out
+}
+
 /** The cards as served: the built-in ones with each saved edit on top, the enabled ones in order. */
-export function liveGallery(docs = [], builtin = GALLERY, { all = false } = {}) {
+export function liveGallery(docs = [], builtin = GALLERY, { all = false, extra = [] } = {}) {
   const byId = new Map(docs.filter((doc) => doc?.kind === 'outbound-connector' && typeof doc.galleryId === 'string').map((doc) => [doc.galleryId, doc]))
-  const cards = builtin.map((card, index) => {
+  const cards = [...builtin, ...mergeCommunity(builtin, extra)].map((card, index) => {
     const doc = byId.get(card.id)
     if (!doc) return { ...card, enabled: true, order: index, edited: false }
     // A saved word that is still a retired built-in default ("Reads only.") gives way to the card's current one.
@@ -75,14 +149,15 @@ export function checkCardEdit(id, changes = {}, builtin = GALLERY) {
 }
 
 /** The gallery operations over the aiAgents documents (find) and the AI control store (store.write). */
-export function createGalleryOps({ find, store, configured = null }) {
+export function createGalleryOps({ find, store, configured = null, community = async () => [] }) {
   const docs = async () => (await find()) || []
+  const extra = async () => (await community()) || []
   return {
     async live() {
-      return liveGallery(await docs())
+      return liveGallery(await docs(), GALLERY, { extra: await extra() })
     },
     async list() {
-      const cards = liveGallery(await docs(), GALLERY, { all: true })
+      const cards = liveGallery(await docs(), GALLERY, { all: true, extra: await extra() })
       return {
         cards: cards.map((card) => ({ ...card, promptId: promptIdOf(card.id) })),
         retired: RETIRED.map(({ id, name, url, why }) => ({ id, name, url, why })),
@@ -94,7 +169,8 @@ export function createGalleryOps({ find, store, configured = null }) {
     },
     async save({ actor, id, changes, reason = null }) {
       const native = NATIVE_CARDS.some((c) => c.id === id)
-      const builtin = native ? NATIVE_CARDS : GALLERY
+      // A Community card is edited like a built-in one (its address never changes either).
+      const builtin = native ? NATIVE_CARDS : [...GALLERY, ...mergeCommunity(GALLERY, await extra())]
       const set = checkCardEdit(id, changes, builtin)
       const current = (await docs()).find((doc) => doc._id === docId(id)) || { kind: 'outbound-connector', galleryId: id, order: builtin.findIndex((c) => c.id === id) }
       const { _id, updatedAt, updatedBy, ...kept } = current
@@ -102,7 +178,7 @@ export function createGalleryOps({ find, store, configured = null }) {
       return { id, card: liveGallery([written.after], builtin, { all: true }).find((c) => c.id === id), generation: written.generation }
     },
     async reorder({ actor, ids }) {
-      const known = GALLERY.map((card) => card.id)
+      const known = [...GALLERY, ...mergeCommunity(GALLERY, await extra())].map((card) => card.id)
       if (!Array.isArray(ids) || ids.length !== known.length || !known.every((id) => ids.includes(id))) throw Object.assign(new Error('Name every card once, in the new order.'), { status: 400, code: 'invalid_request' })
       const current = new Map((await docs()).map((doc) => [doc._id, doc]))
       let generation = null
@@ -121,8 +197,8 @@ const CARD_OUT = { type: 'object', properties: { id: { type: 'string' }, card: {
 const personOnly = () => 'Only a person changes the agent gallery.'
 
 /** The admin actions, over a getter for the aiAgents reader (set at server start); writes go through deps.aiControlStore. */
-export function galleryActions(finder, configured = null) {
-  const ops = (deps) => createGalleryOps({ find: finder(), store: deps.aiControlStore, configured })
+export function galleryActions(finder, configured = null, community = async () => []) {
+  const ops = (deps) => createGalleryOps({ find: finder(), store: deps.aiControlStore, configured, community })
   return [
     defineAction({
       id: 'ai.agents.gallery.list',
@@ -187,7 +263,7 @@ export function galleryActions(finder, configured = null) {
       mounts: { ddp: true },
       changesNoSlate: true,
       idempotency: 'optional',
-      input: { type: 'object', properties: { ids: { type: 'array', maxItems: 40, items: { type: 'string', pattern: '^[a-z0-9]{1,40}$' } } }, required: ['ids'], additionalProperties: false },
+      input: { type: 'object', properties: { ids: { type: 'array', maxItems: 240, items: { type: 'string', pattern: '^[a-z0-9]{1,40}$' } } }, required: ['ids'], additionalProperties: false },
       output: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string' } }, generation: { type: ['integer', 'null'] } } },
       handler: async (principal, input, { deps }) => {
         const actor = await guardControlWrite(principal, deps, { action: 'ai.agents.gallery.reorder', target: { kind: 'agent', id: 'gallery' }, doing: 'change the agent gallery', refusal: personOnly })

@@ -1,12 +1,25 @@
-// The shared library (smart components, slates and presentations): the pure model the server and
-// the browser share. Kinds, categories, statuses, the metadata limits, slugs and the one lifecycle
+// The shared library (smart components, slates, presentations and integrations): the pure model the
+// server and the browser share. An integration is a custom MCP server someone connected and suggested
+// for everyone: approved, it becomes a Community card in Connect an integration › Existing
+// (enterprise/: Slatebox as an MCP client). Only its address and the words people wrote travel, never
+// a sign-in or what the server says about itself. Kinds, categories, statuses, the metadata limits, slugs and the one lifecycle
 // table. No database and no Meteor here: server/library/core.mjs stores what this module checks.
 
-export const LIBRARY_KINDS = Object.freeze(['component', 'slate', 'presentation'])
+export const LIBRARY_KINDS = Object.freeze(['component', 'slate', 'presentation', 'integration'])
 // The engine catalogue's groups less "All", which is a filter, not a category (slateboxjs/catalog catalogGroups).
 export const LIBRARY_CATEGORIES = Object.freeze(['plan', 'decide', 'meetings', 'track', 'map'])
 export const CATEGORY_LABELS = Object.freeze({ plan: 'Plan', decide: 'Decide', meetings: 'Meetings', track: 'Track', map: 'Map' })
-export const KIND_LABELS = Object.freeze({ component: 'smart component', slate: 'slate', presentation: 'presentation' })
+export const KIND_LABELS = Object.freeze({ component: 'smart component', slate: 'slate', presentation: 'presentation', integration: 'integration' })
+// An integration's categories: the agent gallery's chips (enterprise/common/gallery.mjs GROUPS, same ids and words).
+export const INTEGRATION_CATEGORIES = Object.freeze(['work', 'business', 'research', 'web'])
+export const INTEGRATION_CATEGORY_LABELS = Object.freeze({ work: 'Work', business: 'Business', research: 'Research', web: 'Web and facts' })
+// How a suggested integration signs people in, as its author says (the reviewer's check reads the server itself).
+export const INTEGRATION_AUTH = Object.freeze(['none', 'oauth', 'key'])
+export const INTEGRATION_AUTH_LABELS = Object.freeze({ none: 'No sign-in', oauth: 'Sign in on its own page (OAuth)', key: 'API key or token' })
+export const INTEGRATION_CONSENT_LINE = 'If it is approved, its address, name and description are public: anyone using Slatebox can find and connect it. Your sign-in is never shared.'
+// The kinds the public library lists and exports unless one is asked for by name: an integration is a
+// card in Connect an integration, not something to open on a canvas.
+export const LISTED_KINDS = Object.freeze(['component', 'slate', 'presentation'])
 export const LIBRARY_STATUSES = Object.freeze(['draft', 'submitted', 'in_review', 'changes_requested', 'published', 'rejected', 'unpublished'])
 export const LIBRARY_ORIGINS = Object.freeze(['builtin', 'user'])
 // The license every published item is shared under. One constant: the owner can change it.
@@ -55,7 +68,7 @@ export function slugify(title, id = '') {
   return [words || 'item', tail].filter(Boolean).join('-')
 }
 
-export const categoryLabel = (category) => CATEGORY_LABELS[category] || category
+export const categoryLabel = (category) => CATEGORY_LABELS[category] || INTEGRATION_CATEGORY_LABELS[category] || category
 /** The sentence a branch that tries another category is answered with. */
 export const categoryLockSentence = (category) => `A branch stays in its parent's category, ${categoryLabel(category)}.`
 
@@ -81,8 +94,16 @@ export function readMeta(input = {}, { kind = 'component', partial = false } = {
   text('summary', LIBRARY_LIMITS.summary, { required: true })
   text('description', LIBRARY_LIMITS.description, { lines: true })
   if (input.category !== undefined && input.category !== null) {
-    if (!LIBRARY_CATEGORIES.includes(input.category)) throw bad('category', `A category is one of ${LIBRARY_CATEGORIES.map(categoryLabel).join(', ')}.`)
+    const categories = kind === 'integration' ? INTEGRATION_CATEGORIES : LIBRARY_CATEGORIES
+    if (!categories.includes(input.category)) throw bad('category', `A category is one of ${categories.map(categoryLabel).join(', ')}.`)
     out.category = input.category
+  }
+  // An integration's words become a card: no web addresses in its name or line (its homepage has its own field).
+  if (kind === 'integration') {
+    for (const field of ['title', 'summary']) {
+      if (out[field] && /\bhttps?:\/\/|\bwww\./i.test(out[field])) throw bad(field, 'Leave web addresses out of the name and description. Put its homepage in its own field.')
+    }
+    if (out.title && out.title.length > INTEGRATION_LIMITS.name) throw bad('title', `A name is at most ${INTEGRATION_LIMITS.name} characters.`)
   }
   if (input.synonyms !== undefined) {
     if (kind !== 'component') throw bad('synonyms', 'Only a smart component has search words.')
@@ -97,6 +118,32 @@ export function readMeta(input = {}, { kind = 'component', partial = false } = {
     out.synonyms = words
   }
   return out
+}
+
+export const INTEGRATION_LIMITS = Object.freeze({ name: 40, homepage: 300 })
+
+/**
+ * What a person says about the integration they suggest, beyond its name, line and category: its
+ * homepage or docs (https, no sign-in details in it), how it signs people in, and their agreement that
+ * its address and words become public once approved. → { homepage, auth }; throws a 400 naming the field.
+ */
+export function readIntegrationFields(input = {}) {
+  const bad = (field, message) => libraryError(400, 'invalid_request', message, { field })
+  if (input.consent !== true) throw libraryError(400, 'consent_required', 'Agree that its address and description become public if it is approved.', { field: 'consent' })
+  if (!input.integrationId || typeof input.integrationId !== 'string') throw bad('integrationId', 'Name the connected integration to suggest (integrationId, from integrations.list).')
+  const auth = input.auth ?? 'none'
+  if (!INTEGRATION_AUTH.includes(auth)) throw bad('auth', 'auth is none, oauth or key.')
+  let homepage = null
+  if (input.homepage !== undefined && input.homepage !== null && input.homepage !== '') {
+    if (typeof input.homepage !== 'string' || input.homepage.length > INTEGRATION_LIMITS.homepage) throw bad('homepage', `A homepage is a web address of at most ${INTEGRATION_LIMITS.homepage} characters.`)
+    let url
+    try { url = new URL(input.homepage.trim()) } catch { throw bad('homepage', 'The homepage is not a web address.') }
+    if (url.protocol !== 'https:') throw bad('homepage', 'The homepage starts with https://')
+    if (url.username || url.password) throw bad('homepage', 'Leave sign-in details out of the homepage.')
+    url.hash = ''
+    homepage = url.href
+  }
+  return { homepage, auth }
 }
 
 /** A thread message: plain text, 1 to 2,000 characters. */

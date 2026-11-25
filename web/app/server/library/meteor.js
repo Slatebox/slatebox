@@ -16,6 +16,7 @@ import { LibraryCounters } from './counters'
 import { migrateCommunity } from './migrate.mjs'
 import { createRefineAI } from './refine-ai.mjs'
 import { createLibraryNotifier } from './notify.mjs'
+import { libraryIntegrations } from './integration-hooks.mjs'
 import req from '../methods/ai/req'
 import { runAIAction } from '../metering/context.mjs'
 import { aiRefusal, canStartAI } from '../metering/meteor'
@@ -88,6 +89,8 @@ export function createAppLibrary(shared) {
     appOrigin: shared.appOrigin,
     samples: catalogSamples,
     // deps.suggestions is set once the agents' suggestion store starts (server/agents/suggestions-meteor.js).
+    // Suggested integrations: filled by enterprise code where it runs (integration-hooks.mjs), else none.
+    integrations: libraryIntegrations,
     agentsPaused: async (slateId) => Boolean(shared.suggestions && (await shared.suggestions.controlsOf(slateId))?.paused),
   })
 }

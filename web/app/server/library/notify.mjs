@@ -37,9 +37,11 @@ export function libraryNotice({ item, type, message, origin = '', firstName = nu
   const { text, kind, title, outcome } = line
   const base = String(origin || '').replace(/\/$/, '')
   const link = `${base}${MY_LIBRARY_PATH}`
-  const publicUrl = type === 'approved' && item.slug ? `${base}/library/${item.slug}` : null
+  // An integration has no library page: it is a Community card in Connect an integration.
+  const integration = item.kind === 'integration'
+  const publicUrl = type === 'approved' && item.slug && !integration ? `${base}/library/${item.slug}` : null
   const nextLine = type === 'approved'
-    ? 'Anyone can find it in the library now.'
+    ? (integration ? 'Anyone on Slatebox can find it in Connect an integration, marked Community.' : 'Anyone can find it in the library now.')
     : type === 'changes_requested' ? 'Change it, then submit it again from My library.' : 'See the whole thread in My library.'
   const mail = libraryDecision({
     // The subject keeps its old "Slatebox: " start, so inboxes that hide the sender and the
