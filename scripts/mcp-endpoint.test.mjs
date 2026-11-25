@@ -13,8 +13,9 @@ import {
   CallToolRequestSchema, GetPromptRequestSchema, ListPromptsRequestSchema, ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { listedTools, renderDeclarations, renderExecTool } from "../web/app/server/actions/client-render.mjs";
-import { mountMcp } from "../web/app/server/mcp/endpoint.mjs";
+import { buildClientManifest, listedTools, renderDeclarations, renderExecTool } from "../web/app/server/actions/client-render.mjs";
+import { createAppRegistry } from "../web/app/server/actions/index.mjs";
+import { SERVER_CARD_PATH, buildServerCard, mountMcp } from "../web/app/server/mcp/endpoint.mjs";
 import { EXEC_LIMITS } from "../web/app/server/exec/limits.mjs";
 import { makeExecWorld } from "./exec-test-world.mjs";
 
@@ -68,6 +69,51 @@ test("tools/list is exec and describe, byte-equal to the generated file, then on
   assert.equal(JSON.stringify(listed.tools), JSON.stringify(listedTools(renderExecTool(world.exec.manifest))));
   for (const tool of listed.tools) for (const hint of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"])
     assert.equal(typeof tool.annotations[hint], "boolean", `${tool.name}.${hint}`);
+});
+
+test("the server card answers without signing in, with what initialize and the list calls answer", async (t) => {
+  const { url, connect } = await setup(t, { resourceMetadata: `${ORIGIN}/.well-known/oauth-protected-resource/mcp` });
+  const at = new URL(SERVER_CARD_PATH, url);
+  const response = await fetch(at);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /^application\/json/);
+  assert.equal(response.headers.get("access-control-allow-origin"), "*");
+  const card = await response.json();
+  const client = await connect();
+  const info = client.getServerVersion();
+  assert.deepEqual(card.serverInfo, { name: info.name, title: info.title, description: info.description, websiteUrl: info.websiteUrl, version: info.version });
+  assert.equal(card.instructions, client.getInstructions());
+  assert.equal(JSON.stringify(card.tools), JSON.stringify((await client.listTools()).tools));
+  assert.deepEqual(card.prompts, (await client.listPrompts()).prompts);
+  assert.deepEqual(card.resources, (await client.listResources()).resources);
+  assert.deepEqual(card.resourceTemplates, (await client.listResourceTemplates()).resourceTemplates);
+  assert.deepEqual(card.transport, { type: "streamable-http", endpoint: `${ORIGIN}/mcp` });
+  assert.deepEqual(card.authentication, { required: true, schemes: ["oauth2", "bearer"], protectedResourceMetadata: `${ORIGIN}/.well-known/oauth-protected-resource/mcp` });
+  assert.equal(card.license, "MIT");
+  assert.equal(card.iconUrl, `${ORIGIN}/brand/slatebox.svg`);
+  // Names and schemas only: nothing a token reaches, and POST /mcp still asks for one.
+  assert.equal((await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).status, 401);
+});
+
+test("the server card follows typedTools: exec and describe only when typed tools are off", async (t) => {
+  const { url } = await setup(t, { typedTools: false });
+  const card = await (await fetch(new URL(SERVER_CARD_PATH, url))).json();
+  assert.deepEqual(card.tools.map((tool) => tool.name), ["exec", "describe"]);
+  assert.match(card.instructions, /Call describe to learn the typed Slatebox client, then exec/);
+});
+
+test("the app's server card comes from the action registry: 68 tools, 6 prompts, as generated", async () => {
+  const tools = renderExecTool(buildClientManifest(createAppRegistry()));
+  const card = buildServerCard({ tools, version: "1.0", appOrigin: ORIGIN });
+  const generated = JSON.parse(await readFile(new URL("../web/app/server/actions/generated/exec-tool.json", import.meta.url), "utf8"));
+  assert.equal(card.tools.length, 68);
+  assert.equal(card.prompts.length, 6);
+  assert.equal(card.resources.length, 2);
+  assert.equal(card.resourceTemplates.length, 2);
+  assert.equal(JSON.stringify(card.tools), JSON.stringify(listedTools(generated)));
+  assert.equal(card.description, generated.server.description);
+  for (const prompt of card.prompts) assert.equal("template" in prompt, false, prompt.name);
+  for (const template of card.resourceTemplates) assert.equal("method" in template, false, template.name);
 });
 
 test("typedTools false lists exec and describe only, with the exec-only instructions", async (t) => {

@@ -13,13 +13,41 @@
 // to ask for (the MCP authorization spec's scope challenge), the refusal still in the body; a
 // personal token has no sign-in to repeat, so it keeps the refusal in a 200 tool result.
 import { clientGuide, matchSlateResource, promptMessages, resourceExecArgs, servedPrompt, typedExecArgs, typedToolResult } from '../actions/agent-surface.mjs'
-import { describeClient, listedTemplates, listedTools, renderDeclarations } from '../actions/client-render.mjs'
+import { describeClient, listedPrompts, listedTemplates, listedTools, renderDeclarations } from '../actions/client-render.mjs'
 import { ActionError } from '../actions/errors.mjs'
 import { cleanClient } from '../agent-reach/usage-core.mjs'
 
 export const MCP_PATH = '/mcp'
 export const MCP_BODY_LIMIT = '128kb'
 export const isMcpPath = (path) => /^\/mcp\/?$/i.test(path)
+export const SERVER_CARD_PATH = '/.well-known/mcp/server-card.json'
+export const MCP_DOCS_URL = 'https://docs.slatebox.com/developers/slateboxapi/mcp/'
+
+// The MCP server card, GET /.well-known/mcp/server-card.json, for catalogs and scanners that
+// cannot sign in: what initialize, tools/list, prompts/list, resources/list and
+// resources/templates/list answer on /mcp, built from the same rendered tools (so from the
+// action registry), never a copy kept by hand. It lists names and schemas only; calling any of
+// them still needs a token.
+export function buildServerCard({ tools, version, appOrigin, resourceMetadata = null, typedTools = true }) {
+  const origin = appOrigin ? new URL(appOrigin).origin : ''
+  const metadata = resourceMetadata ? new URL(resourceMetadata, origin || undefined).href : null
+  return {
+    serverInfo: { name: 'slatebox', title: 'Slatebox', ...tools.server, version },
+    description: tools.server.description,
+    iconUrl: `${origin}/brand/slatebox.svg`,
+    documentationUrl: MCP_DOCS_URL,
+    repository: 'https://github.com/Slatebox/slatebox',
+    license: 'MIT',
+    transport: { type: 'streamable-http', endpoint: `${origin}${MCP_PATH}` },
+    authentication: { required: true, schemes: ['oauth2', 'bearer'], ...(metadata && { protectedResourceMetadata: metadata }) },
+    capabilities: { tools: {}, prompts: {}, resources: {} },
+    instructions: typedTools ? tools.instructions : tools.instructionsExecOnly,
+    tools: listedTools(tools, { typed: typedTools }),
+    prompts: listedPrompts(tools),
+    resources: tools.resources.map(({ uri, name, title, description, mimeType }) => ({ uri, name, title, description, mimeType })),
+    resourceTemplates: listedTemplates(tools),
+  }
+}
 
 const rpcError = (res, status, code, message, headers = {}) => {
   for (const [name, value] of Object.entries(headers)) res.setHeader(name, value)
@@ -288,9 +316,17 @@ export function createMcpHandler({
   }
 }
 
-// Mounts POST /mcp (and 405 for other methods) on an express app.
+// Mounts POST /mcp (and 405 for other methods) and GET the server card on an express app.
 export function mountMcp(app, { express, ...options }) {
   const handle = createMcpHandler(options)
+  const card = JSON.stringify(buildServerCard(options), null, 2)
+  app.get(SERVER_CARD_PATH, (_req, res) => {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.setHeader('Cache-Control', 'public, max-age=300')
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.status(200).send(card)
+  })
   const parse = express.json({ limit: MCP_BODY_LIMIT })
   app.all(MCP_PATH, parse, handle)
   app.use(MCP_PATH, (error, _req, res, next) => {
