@@ -1,5 +1,6 @@
 {
   "name": "slatebox",
+  "version": "0.2.2",
   "private": true,
   "license": "SEE LICENSE IN LICENSING.md",
   "workspaces": [
@@ -9,6 +10,9 @@
   ],
   "nohoist": [],
   "scripts": {
+    "release": "node scripts/release.mjs",
+    "changelog:preview": "node scripts/release.mjs app patch --dry-run",
+    "test:release": "node --test scripts/release.test.mjs scripts/read-release-version.test.mjs",
     "test:specs": "playwright test -c scripts/playwright.config.mjs",
     "test:port-container": "node scripts/test-port-container.mjs",
     "check:client-bundle": "node scripts/check-client-bundle.mjs",

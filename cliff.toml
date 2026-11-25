@@ -1,0 +1,72 @@
+# git-cliff configuration: changelog sections and release notes from Conventional Commits.
+# https://git-cliff.org/docs/configuration
+#
+# One config serves the three released artifacts. scripts/release.mjs passes the
+# per-artifact tag pattern and paths (see docs/releasing.md):
+#
+#   app + self-host image   tags vX.Y.Z               CHANGELOG.md
+#   npm slatebox            tags slatebox@X.Y.Z       packages/slatebox/CHANGELOG.md
+#   npm slatebox-mcp        tags slatebox-mcp@X.Y.Z   packages/slatebox-mcp/CHANGELOG.md
+#
+# Preview the next app section by hand:
+#   npx git-cliff@2 --unreleased --tag-pattern '^v[0-9]' \
+#     --exclude-path 'packages/slatebox/**' --exclude-path 'packages/slatebox-mcp/**' \
+#     --exclude-path 'packages/create-slatebox/**'
+#
+# Groups follow Keep a Changelog (https://keepachangelog.com/en/1.1.0/). The HTML
+# comments only order the groups; `striptags` removes them from the output.
+
+[changelog]
+header = ""
+body = """
+{% if version %}\
+## [{{ version | split(pat="@") | last | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+## [Unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim }}
+{% for commit in commits %}
+- {% if commit.breaking %}**Breaking:** {% endif %}\
+{% if commit.scope %}**{{ commit.scope }}:** {% endif %}\
+{{ commit.message | split(pat="\n") | first | trim }} \
+([{{ commit.id | truncate(length=8, end="") }}](https://github.com/Slatebox/slatebox/commit/{{ commit.id }}))\
+{% endfor %}
+{% endfor %}
+"""
+# Whitespace is controlled in the template (trailing backslashes), so releases stay one blank line apart.
+trim = false
+footer = ""
+
+[git]
+conventional_commits = true
+# Commits that are not Conventional Commits (old merge subjects, a few early
+# self-host commits) are left out of generated notes. New commits follow the
+# convention: see CONTRIBUTING.md.
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = true
+filter_commits = false
+topo_order = false
+sort_commits = "oldest"
+commit_preprocessors = [
+  # Drop a trailing "(#123)" GitHub adds to squashed pull request titles; the
+  # commit link already points at the change.
+  { pattern = '\s*\(#\d+\)$', replace = "" },
+]
+commit_parsers = [
+  { message = '^chore\(release\)', skip = true },
+  { message = '^release', skip = true },
+  { message = '^changelog', skip = true },
+  { message = '^Merge ', skip = true },
+  { message = '^(fix|feat)\(security\)', group = "<!-- 5 -->Security" },
+  { message = '^security', group = "<!-- 5 -->Security" },
+  { message = '^(feat|fix|refactor|polish)(\(.*\))?!?: (remove|removes|drop|drops|delete|deletes) ', group = "<!-- 3 -->Removed" },
+  { message = '^deprecate', group = "<!-- 2 -->Deprecated" },
+  { message = '^feat', group = "<!-- 0 -->Added" },
+  { message = '^fix', group = "<!-- 4 -->Fixed" },
+  { message = '^(perf|refactor|polish|revert)', group = "<!-- 1 -->Changed" },
+  { message = '^(docs|test|tests|chore|ci|build|style)', skip = true },
+  # Anything else (an unknown type) stays out of the notes.
+  { message = '.*', skip = true },
+]

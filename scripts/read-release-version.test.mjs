@@ -31,10 +31,10 @@ test('rejects changelogs without a semantic release heading', () => {
   assert.throws(() => readReleaseVersion('## [Unreleased]'), /No semantic/)
 })
 
-test('reads the current application release', async () => {
-  const changelog = await readFile(
-    new URL('../CHANGELOG.md', import.meta.url),
-    'utf8'
-  )
-  assert.equal(readReleaseVersion(changelog), '1.3.21')
+test('the newest changelog release is the app version in package.json', async () => {
+  // The ship script stamps image tags with this heading; scripts/release.mjs keeps
+  // it and the root package.json version in step.
+  const changelog = await readFile(new URL('../CHANGELOG.md', import.meta.url), 'utf8')
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
+  assert.equal(readReleaseVersion(changelog), pkg.version)
 })
