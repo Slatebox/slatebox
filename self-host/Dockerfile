@@ -2,7 +2,8 @@
 #
 # Slatebox in one image: the app, the collaboration relay, MongoDB and a front
 # proxy, supervised by one init. Keycloak, for single sign-on, is in the image
-# too and starts only with SLATEBOX_SSO=keycloak. Build it with ./build-image.sh, which stages
+# too and starts only with SLATEBOX_SSO=keycloak. cloudflared, for a team
+# address (https://<name>.slatebox.team), starts only with SLATEBOX_TUNNEL_TOKEN. Build it with ./build-image.sh, which stages
 # the three committed source trees into the context this file expects:
 #
 #   app/        web/app of the Slatebox app checkout (no settings*.json)
@@ -19,6 +20,9 @@ ARG METEOR_BASE=geoffreybooth/meteor-base:3.5
 ARG KEYCLOAK_VERSION=26.8.2
 # The Java runtime Keycloak 26.8 is built and tested on (21), from Eclipse Temurin's Ubuntu 24.04 image.
 ARG TEMURIN_JRE=21.0.13_9-jre-noble
+# cloudflared, from Cloudflare's GitHub release, pinned by version here and by each
+# architecture's sha256 below and in build/cloudflared.sha256 (a bump changes both files).
+ARG CLOUDFLARED_VERSION=2026.11.2
 
 # Meteor 3.5 bundles against Node 24.15.0. Every stage that runs or compiles
 # for the app takes its Node binary from this one image.
@@ -26,6 +30,24 @@ FROM node:${NODE_VERSION}-bookworm-slim AS node
 FROM mongo:${MONGO_VERSION} AS mongo
 FROM caddy:${CADDY_VERSION} AS caddy
 FROM quay.io/keycloak/keycloak:${KEYCLOAK_VERSION} AS keycloak-dist
+
+# --- cloudflared, for a team address -------------------------------------------
+# BuildKit checks each download against its checksum; the stage for the target
+# architecture is the one used. The verify stage checks it again against
+# build/cloudflared.sha256 and that it is the pinned version.
+FROM scratch AS cloudflared-amd64
+ARG CLOUDFLARED_VERSION
+ADD --checksum=sha256:56f13335143ec0e22772963290683a84a04114a35ec64cbc794a4d39ff9bb8cf \
+    https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64 /cloudflared
+FROM scratch AS cloudflared-arm64
+ARG CLOUDFLARED_VERSION
+ADD --checksum=sha256:04a7b7f08bce85d56b26ffe1fdbfbb21a074495a363d16f0783c40e25b5c5281 \
+    https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-arm64 /cloudflared
+FROM scratch AS cloudflared-license
+ARG CLOUDFLARED_VERSION
+ADD --checksum=sha256:58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd \
+    https://raw.githubusercontent.com/cloudflare/cloudflared/${CLOUDFLARED_VERSION}/LICENSE /cloudflared-LICENSE.txt
+FROM cloudflared-${TARGETARCH} AS cloudflared-download
 
 # --- Keycloak, built once for how Slatebox runs it -----------------------------
 # Build options are fixed here so the container starts it with --optimized:
@@ -81,6 +103,18 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates fontconfig fonts-liberation libcurl4t64 tini \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
+
+# --- cloudflared, checked once more on the runtime base -------------------------
+FROM base AS cloudflared
+ARG TARGETARCH
+ARG CLOUDFLARED_VERSION
+COPY self-host/build/cloudflared.sha256 /build/cloudflared.sha256
+COPY --from=cloudflared-download /cloudflared /out/cloudflared
+RUN expected="$(awk -v file="cloudflared-linux-${TARGETARCH}" '$2 == file { print $1 }' /build/cloudflared.sha256)" \
+ && test -n "$expected" \
+ && echo "$expected  /out/cloudflared" | sha256sum -c - \
+ && chmod 0755 /out/cloudflared \
+ && /out/cloudflared --version | grep -F "version ${CLOUDFLARED_VERSION} "
 
 # --- Server dependencies, compiled against the runtime's own libc -------------
 FROM base AS server-dependencies
@@ -184,6 +218,7 @@ ENV HOME=/run/slatebox
 
 COPY --from=mongo /usr/bin/mongod /usr/bin/mongodump /usr/bin/mongorestore /usr/local/bin/
 COPY --from=caddy /usr/bin/caddy /usr/local/bin/caddy
+COPY --from=cloudflared /out/cloudflared /opt/slatebox/bin/cloudflared
 COPY --from=fonts /out/ /usr/share/fonts/googlefonts/
 RUN fc-cache -f
 
@@ -195,6 +230,7 @@ COPY --from=server-dependencies /opt/slatebox/app/bundle /opt/slatebox/app/bundl
 COPY self-host/licenses/ /opt/slatebox/licenses/
 COPY --from=fonts /fonts.md /opt/slatebox/licenses/third-party/fonts.md
 COPY --from=mongodb-notices / /opt/slatebox/licenses/third-party/
+COPY --from=cloudflared-license / /opt/slatebox/licenses/third-party/
 COPY app-license/LICENSE.md /opt/slatebox/licenses/slatebox-app-LICENSE.md
 COPY engine/LICENSE /opt/slatebox/licenses/slateboxjs-LICENSE.txt
 COPY relay/LICENSE /opt/slatebox/licenses/slatebox-relay-LICENSE.txt
@@ -212,14 +248,15 @@ ARG NODE_VERSION
 ARG MONGO_VERSION
 ARG CADDY_VERSION
 ARG KEYCLOAK_VERSION
+ARG CLOUDFLARED_VERSION
 RUN test -n "$APP_REVISION" && test -n "$ENGINE_REVISION" && test -n "$RELAY_REVISION" \
- && printf '{"app":"%s","engine":"%s","relay":"%s","node":"%s","mongodb":"%s","caddy":"%s","keycloak":"%s"}\n' \
-      "$APP_REVISION" "$ENGINE_REVISION" "$RELAY_REVISION" "$NODE_VERSION" "$MONGO_VERSION" "$CADDY_VERSION" "$KEYCLOAK_VERSION" \
+ && printf '{"app":"%s","engine":"%s","relay":"%s","node":"%s","mongodb":"%s","caddy":"%s","keycloak":"%s","cloudflared":"%s"}\n' \
+      "$APP_REVISION" "$ENGINE_REVISION" "$RELAY_REVISION" "$NODE_VERSION" "$MONGO_VERSION" "$CADDY_VERSION" "$KEYCLOAK_VERSION" "$CLOUDFLARED_VERSION" \
       > /opt/slatebox/identity.json
 # The version label names the app revision; without it the image would show
 # the Ubuntu base image's version.
 LABEL org.opencontainers.image.title="Slatebox" \
-      org.opencontainers.image.description="Slatebox with its collaboration relay and database in one container, and Keycloak for optional single sign-on" \
+      org.opencontainers.image.description="Slatebox with its collaboration relay and database in one container, Keycloak for optional single sign-on, and cloudflared for an optional team address" \
       org.opencontainers.image.version="${APP_REVISION}" \
       org.opencontainers.image.revision="${APP_REVISION}" \
       com.slatebox.engine.revision="${ENGINE_REVISION}" \

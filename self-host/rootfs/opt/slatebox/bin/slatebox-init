@@ -7,8 +7,11 @@
 #   app      the Slatebox app, on loopback
 #   proxy    Caddy, the one published port in front of the app and the relay
 #   sso      Keycloak, on loopback under /auth; only with SLATEBOX_SSO=keycloak
+#   tunnel   cloudflared, outbound to Cloudflare for a team address; only with SLATEBOX_TUNNEL_TOKEN
 #
-# Every service is required. If one ends by itself, the others are stopped in
+# Every service is required, except the tunnel: if Cloudflare refuses it three times in five
+# minutes (a revoked token, a suspended address) Slatebox keeps serving this computer without it,
+# health reports "degraded", and the container is not restarted over and over. If one ends by itself, the others are stopped in
 # order and the container exits with status 1 so Docker's restart policy can
 # act. `docker stop` ends with status 0 after MongoDB has closed its files.
 set -Eeuo pipefail
@@ -20,6 +23,7 @@ readonly RUN=/run/slatebox
 
 declare -A SERVICE=()   # pid -> name, for the services that must stay up
 LOGGERS=()
+TUNNEL_ENDS=()          # when the tunnel ended by itself, in SECONDS
 signal=''
 ended=''
 status=0
@@ -138,7 +142,7 @@ shutdown() {
   trap '' TERM INT USR1 USR2
   say 'Stopping.'
   # The database's clients go first; they end at once.
-  stop_services ready sso-setup app relay
+  stop_services ready sso-setup tunnel app relay
   # Then the proxy, Keycloak and MongoDB side by side. The two databases are
   # waited for, so that they can close their files inside the time Docker
   # allows a stopping container.
@@ -194,6 +198,33 @@ start_sso() {
   start sso-setup slatebox -- node "$LIB/keycloak-init.mjs" 600
 }
 
+# cloudflared reads its token from a file only this account can read; it is never in an argument
+# or in any process's environment. DELAY seconds first when it is started again after an exit.
+start_tunnel() {
+  local delay=${1:-0}
+  [[ ${SLATEBOX_TUNNEL:-0} == 1 && ! -e $RUN/tunnel-failed ]] || return 0
+  : > "$RUN/tunnel.started"
+  start tunnel -- bash -c 'sleep "$1"; shift; exec "$@"' tunnel "$delay" \
+    "$ROOT/bin/cloudflared" tunnel --no-autoupdate --loglevel info --metrics 127.0.0.1:7085 --protocol auto \
+    run --token-file "$RUN/tunnel.token"
+}
+
+tunnel_ended() {
+  local code=$1 now=$SECONDS kept=() t
+  for t in "${TUNNEL_ENDS[@]}"; do
+    if ((now - t < 300)); then kept+=("$t"); fi
+  done
+  kept+=("$now")
+  TUNNEL_ENDS=("${kept[@]}")
+  if ((${#TUNNEL_ENDS[@]} >= 3)); then
+    : > "$RUN/tunnel-failed"
+    say "The team address connection was refused (the tunnel stopped three times in five minutes, last exit $code). Slatebox keeps running on this computer without it; run \"slatebox status\" on the host."
+  else
+    say "The secure tunnel stopped (exit $code). Starting it again."
+    start_tunnel 3
+  fi
+}
+
 start_app() {
   start relay -- with_env "$RUN/relay.env" "$ROOT/relay" node bin/server.js
   start app -- with_env "$RUN/app.env" "$ROOT/app/bundle" node main.js
@@ -235,6 +266,8 @@ supervise() {
         :
       elif [[ $name == ready && $status == 0 ]]; then
         say "Ready. Open $SLATEBOX_PUBLIC_URL"
+      elif [[ $name == tunnel ]]; then
+        tunnel_ended "$status"
       else
         if [[ $name == sso-setup ]]; then
           say 'Single sign-on could not be set up. Stopping the container.'
@@ -271,6 +304,9 @@ main() {
   step node "$LIB/configure.mjs" || exit 1
   # shellcheck disable=SC1091
   . "$RUN/state.env"
+  # configure.mjs put the tunnel token in a private file for cloudflared; no other process gets it.
+  unset SLATEBOX_TUNNEL_TOKEN
+  rm -f "$RUN/tunnel.started"
 
   if [[ $SLATEBOX_BUNDLED_MONGO == 1 ]]; then
     local probe=0
@@ -292,6 +328,8 @@ main() {
   # The proxy comes up first so a browser sees "Slatebox is starting" rather
   # than a refused connection while the app boots.
   start proxy -- caddy run --config "$RUN/Caddyfile" --adapter caddyfile
+  # The tunnel comes up beside the proxy: until the app answers, visitors see "Slatebox is starting".
+  start_tunnel
   # Keycloak boots beside the app; the realm is set up as soon as it answers.
   start_sso
   start_app

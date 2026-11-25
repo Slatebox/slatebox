@@ -54,7 +54,7 @@ test('license notices say which parts are MIT and which are not', async () => {
     './third-party/caddy-LICENSE.txt', './third-party/node-LICENSE.txt', './third-party/meteor-LICENSE.txt',
     './third-party/tini-LICENSE.txt', './third-party/fonts.md', './third-party/fonts-OFL-1.1.txt', './third-party/fonts-Apache-2.0.txt',
     './third-party/mongodb-server-third-party.md',
-    './third-party/mongodb-database-tools-THIRD-PARTY-NOTICES.txt',
+    './third-party/mongodb-database-tools-THIRD-PARTY-NOTICES.txt', './third-party/cloudflared-LICENSE.txt',
   ]) assert.ok(files.includes(file), `${file} is in the image`)
   // Every file NOTICE.md names under third-party/ is in the image.
   for (const named of new Set(notice.match(/third-party\/[\w.-]+/g))) {
@@ -190,4 +190,14 @@ test('only the programs Slatebox needs were taken from the MongoDB image', async
   assert.deepEqual(listing, ['caddy', 'mongod', 'mongodump', 'mongorestore', 'node', 'slatebox'])
   const versions = (await inside('node --version; mongod --version | head -1; caddy version; tini --version')).stdout
   assert.match(versions, /^v24\.15\.0\n.*v8\.0\.\d+\nv2\.\d+\.\d+ .*\ntini version/)
+})
+
+test('cloudflared is the pinned release, executable, and named in the identity', async () => {
+  const pinned = /^ARG CLOUDFLARED_VERSION=(\S+)$/m.exec(readFileSync(join(here, '../Dockerfile'), 'utf8'))[1]
+  const version = (await inside('/opt/slatebox/bin/cloudflared --version')).stdout
+  assert.match(version, new RegExp(`cloudflared version ${pinned.replace(/\./g, '\\.')} `))
+  assert.equal(JSON.parse((await inside('cat /opt/slatebox/identity.json')).stdout).cloudflared, pinned)
+  const arch = (await inside('uname -m')).stdout.trim() === 'aarch64' ? 'arm64' : 'amd64'
+  const listed = readFileSync(join(here, '../build/cloudflared.sha256'), 'utf8').split('\n').find(line => line.endsWith(`cloudflared-linux-${arch}`)).split(/\s+/)[0]
+  assert.equal((await inside('sha256sum /opt/slatebox/bin/cloudflared')).stdout.split(/\s+/)[0], listed)
 })

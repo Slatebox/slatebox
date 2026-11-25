@@ -8,11 +8,13 @@ export const SETTINGS = Object.freeze([
   'SLATEBOX_AI_KEY', 'SLATEBOX_AI_URL', 'SLATEBOX_AI_MODEL', 'SLATEBOX_AI_CONFIG',
   'SLATEBOX_AI_PROVIDERS', 'SLATEBOX_AI_DEFAULT', 'SLATEBOX_AI_OWN_PROVIDERS', 'SLATEBOX_AI_PRIVATE_ENDPOINTS',
   'SLATEBOX_SETTINGS', 'SLATEBOX_SSO', 'SLATEBOX_SSO_ONLY', 'SLATEBOX_SSO_ADMIN', 'SLATEBOX_KEY_ENCRYPTION_KEY',
+  // A Cloudflare Tunnel connector token: a team address (https://<name>.slatebox.team) or your own tunnel.
+  'SLATEBOX_TUNNEL_TOKEN',
 ])
 export const DATABASE_SETTINGS = Object.freeze(['MONGO_URL', 'MONGO_OPLOG_URL'])
 // One key variable per provider in SLATEBOX_AI_PROVIDERS (its keyEnv), never listed by name.
 export const PROVIDER_KEY = /^SLATEBOX_AI_KEY_[A-Z0-9_]{1,40}$/
-export const COMMANDS = Object.freeze(['backup', 'restore', 'password-link', 'health', 'version', 'sso', 'ai', 'settings'])
+export const COMMANDS = Object.freeze(['backup', 'restore', 'password-link', 'health', 'version', 'sso', 'ai', 'settings', 'tunnel'])
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (process.argv[2] !== '--json') {

@@ -8,6 +8,7 @@
 #   docker exec slatebox slatebox version
 #   docker exec slatebox slatebox sso [admin-password | scim-secret | events [N]]
 #   docker exec slatebox slatebox ai [check]
+#   docker exec slatebox slatebox tunnel [--json] [--wait N]
 #   docker run --rm --entrypoint /opt/slatebox/bin/slatebox IMAGE settings --json
 set -euo pipefail
 umask 077
@@ -138,6 +139,8 @@ case ${1:-} in
   password-link) shift; password_link "$@" ;;
   restore) restore ;;
   health) shift; exec node "$LIB/health.mjs" "$@" ;;
+  # The team-address tunnel: connected, connecting, or refused.
+  tunnel) shift; exec node "$LIB/health.mjs" --tunnel "$@" ;;
   version) cat "$ROOT/identity.json" ;;
   # What this image accepts, for an installer; needs no running Slatebox.
   settings) shift; exec node "$LIB/settings.mjs" "$@" ;;
@@ -167,6 +170,7 @@ Usage, from the Docker host:
   docker exec slatebox slatebox version
   docker exec slatebox slatebox sso [admin-password | scim-secret | events [N]]
   docker exec slatebox slatebox ai [check]
+  docker exec slatebox slatebox tunnel [--json] [--wait N]
   docker exec slatebox slatebox settings --json
 EOF
     exit 2

@@ -22,6 +22,13 @@ export const APP_PORT = 3000
 export const RELAY_PORT = 7072
 export const MONGO_PORT = 27017
 export const RELAY_PATH = '/live'
+// The team-address tunnel (cloudflared): its readiness and metrics on loopback, its token in a
+// file only the Slatebox account can read, and the marker of a tunnel that was refused.
+export const TUNNEL_METRICS = '127.0.0.1:7085'
+export const TUNNEL_TOKEN_FILE = '/run/slatebox/tunnel.token'
+export const TUNNEL_TOKEN_DATA_FILE = '/data/tunnel/token'
+export const TUNNEL_FAILED = '/run/slatebox/tunnel-failed'
+export const TUNNEL_STARTED = '/run/slatebox/tunnel.started'
 // Single sign-on (SLATEBOX_SSO=keycloak): Keycloak on loopback, served under SSO_PATH.
 export const KEYCLOAK_PORT = 7080
 export const KEYCLOAK_MANAGEMENT_PORT = 7083

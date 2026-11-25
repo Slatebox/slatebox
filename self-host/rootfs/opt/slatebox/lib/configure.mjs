@@ -1,11 +1,12 @@
 // Runs once at every container start, before any service. It reads the few
 // optional settings, creates the installation's secrets the first time, and
 // renders what each process needs. It never prints a secret.
-import { mkdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   APP_PORT, DATABASE, DB_DIR, FRONT_PORT, HOME, KEYCLOAK_DATA, KEYCLOAK_PORT, MONGO_KEY_FILE, MONGO_PORT, Plain, RELAY_PATH,
-  RELAY_PORT, RUN, SSO_PATH, TMP_DIR, DATA, ensureKeyEncryptionKey, ensureSecrets, envFile, fail, isKeyEncryptionKey, mongoUrl, writePrivate,
+  RELAY_PORT, RUN, SSO_PATH, TMP_DIR, DATA, TUNNEL_FAILED, TUNNEL_TOKEN_DATA_FILE, TUNNEL_TOKEN_FILE, ensureKeyEncryptionKey, ensureSecrets,
+  envFile, fail, isKeyEncryptionKey, mongoUrl, writePrivate,
 } from './common.mjs'
 import { appSettings as ssoAppSettings, issuerFor, keycloakEnv, ssoMode } from './sso.mjs'
 import { operatorAI } from './ai-config.mjs'
@@ -45,9 +46,33 @@ function publicAddress() {
   return url
 }
 
-function httpsMode(url) {
-  const mode = (setting('SLATEBOX_HTTPS') || 'auto').toLowerCase()
+// A Cloudflare Tunnel connector token (a team address, or your own tunnel): SLATEBOX_TUNNEL_TOKEN,
+// or the file /data/tunnel/token (a Kubernetes Secret mounted there). It is base64 of
+// {"a": account, "t": tunnel, "s": secret}; anything else is refused. It is never printed: only
+// the tunnel's id, which is not a secret, appears in the log.
+function tunnelToken() {
+  let value = setting('SLATEBOX_TUNNEL_TOKEN')
+  if (!value && existsSync(TUNNEL_TOKEN_DATA_FILE)) value = readFileSync(TUNNEL_TOKEN_DATA_FILE, 'utf8').trim() || undefined
+  if (!value) return null
+  let parsed = null
+  try { parsed = JSON.parse(Buffer.from(value, 'base64').toString('utf8')) } catch { /* refused below */ }
+  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(value) || !parsed?.a || !parsed?.t || !parsed?.s) {
+    throw new Plain(`SLATEBOX_TUNNEL_TOKEN is not a Cloudflare Tunnel token (received ${value.length} characters, not shown)`)
+  }
+  return { value, tunnelId: String(parsed.t) }
+}
+
+function httpsMode(url, tunnel) {
+  const given = setting('SLATEBOX_HTTPS')
+  const mode = (given || 'auto').toLowerCase()
   if (!['auto', 'off'].includes(mode)) throw new Plain('SLATEBOX_HTTPS must be auto or off')
+  if (tunnel) {
+    // Cloudflare ends HTTPS; Caddy serves plain HTTP to cloudflared on loopback and never asks
+    // for a certificate.
+    if (given && mode === 'auto') throw new Plain('SLATEBOX_HTTPS=auto cannot be used with SLATEBOX_TUNNEL_TOKEN: the tunnel ends HTTPS at Cloudflare. Leave SLATEBOX_HTTPS out or set it to off.')
+    if (url.protocol !== 'https:') throw new Plain(`With SLATEBOX_TUNNEL_TOKEN, SLATEBOX_URL is the tunnel's https:// address, for example https://acme.slatebox.team (received ${url.origin})`)
+    return false
+  }
   if (url.protocol !== 'https:' || mode === 'off') return false
   const local = /^(localhost|.*\.localhost|\[.*\]|\d+\.\d+\.\d+\.\d+)$/.test(url.hostname)
   if (url.port || local) {
@@ -118,7 +143,7 @@ function extraSettings() {
   return extra
 }
 
-function caddyfile({ url, builtInHttps, acmeCa, sso, ssoAdminOpen = true }) {
+function caddyfile({ url, builtInHttps, acmeCa, sso, ssoAdminOpen = true, tunnel = false }) {
   // The published port answers for the configured address and for the
   // container's own loopback checks. Any other address gets a page that says
   // which setting to change, instead of an app whose links and live editing
@@ -176,6 +201,9 @@ ${url.hostname} {${routes('\t')}${starting}
     `storage file_system ${join(DATA, 'caddy')}`,
     ...(builtInHttps ? [] : ['auto_https off']),
     ...(acmeCa ? [`acme_ca ${acmeCa}`] : []),
+    // Behind the tunnel every request comes from cloudflared on loopback, which forwards the
+    // visitor's address in X-Forwarded-For: keep it (and add ours) instead of replacing it.
+    ...(tunnel ? ['servers {\n\t\ttrusted_proxies static 127.0.0.1/32 ::1/128\n\t}'] : []),
   ]
   return `# Rendered at start by configure.mjs. Change the SLATEBOX_ settings instead of this file.
 {
@@ -207,7 +235,8 @@ function main() {
   }
 
   const url = publicAddress()
-  const builtInHttps = httpsMode(url)
+  const tunnel = tunnelToken()
+  const builtInHttps = httpsMode(url, tunnel)
   const acmeCa = setting('SLATEBOX_ACME_CA')
   if (acmeCa) parseUrl('SLATEBOX_ACME_CA', acmeCa, ['https:'])
   const wsUrl = `${url.protocol === 'https:' ? 'wss:' : 'ws:'}//${url.host}${RELAY_PATH}`
@@ -270,7 +299,9 @@ function main() {
     ROOT_URL: url.origin,
     PORT: APP_PORT,
     BIND_IP: '127.0.0.1',
-    HTTP_FORWARDED_COUNT: 1,
+    // The proxies in front of the app: Caddy, and with a tunnel also cloudflared (Caddy keeps the
+    // visitor's address it forwards), so the app reads the visitor's address, not a proxy's.
+    HTTP_FORWARDED_COUNT: tunnel ? 2 : 1,
     MONGO_URL: externalMongo || mongoUrl('app', secrets.mongoAppPassword),
     MONGO_OPLOG_URL: externalMongo
       ? externalOplog
@@ -292,13 +323,19 @@ function main() {
     API_KEYS: JSON.stringify([{ name: 'slatebox', publicKey: secrets.apiPublicKey, secretKey: secrets.apiSecretKey }]),
   }))
   if (sso.enabled) writePrivate(join(RUN, 'keycloak.env'), envFile(keycloakEnv({ url, secrets })))
-  writePrivate(join(RUN, 'Caddyfile'), caddyfile({ url, builtInHttps, acmeCa, sso: sso.enabled, ssoAdminOpen: sso.adminOpen }))
+  writePrivate(join(RUN, 'Caddyfile'), caddyfile({ url, builtInHttps, acmeCa, sso: sso.enabled, ssoAdminOpen: sso.adminOpen, tunnel: Boolean(tunnel) }))
+  // The token goes to cloudflared alone, in a file; slatebox-init removes it from every
+  // process's environment. app.env and relay.env never hold it.
+  if (tunnel) writePrivate(TUNNEL_TOKEN_FILE, tunnel.value)
+  else rmSync(TUNNEL_TOKEN_FILE, { force: true })
+  rmSync(TUNNEL_FAILED, { force: true })
   writePrivate(join(RUN, 'share/wrong-address.html'), wrongAddressPage(url))
   writePrivate(join(RUN, 'state.env'), envFile({
     SLATEBOX_PUBLIC_URL: url.origin,
     SLATEBOX_BUNDLED_MONGO: externalMongo ? 0 : 1,
     SLATEBOX_SSO: sso.enabled ? 'keycloak' : 'off',
     SLATEBOX_SSO_ADMIN: sso.adminOpen ? 'open' : 'closed',
+    SLATEBOX_TUNNEL: tunnel ? 1 : 0,
   }))
   if (!externalMongo) {
     writePrivate(MONGO_KEY_FILE, secrets.mongoKey + '\n', 0o400)
@@ -310,7 +347,8 @@ function main() {
   const say = line => process.stdout.write(`${line}\n`)
   say(`Slatebox (app ${identity.app}, engine ${identity.engine}, relay ${identity.relay})`)
   say(`Address:   ${url.origin}`)
-  say(`HTTPS:     ${builtInHttps ? `built in, certificates for ${url.hostname} (publish ports 80 and 443)` : url.protocol === 'https:' ? 'handled by your proxy' : 'off'}`)
+  say(`HTTPS:     ${builtInHttps ? `built in, certificates for ${url.hostname} (publish ports 80 and 443)` : tunnel ? 'at Cloudflare, through the secure tunnel' : url.protocol === 'https:' ? 'handled by your proxy' : 'off'}`)
+  say(`Tunnel:    ${tunnel ? `on, Cloudflare Tunnel ${tunnel.tunnelId} for ${url.host} (outbound only; no ports to open)` : 'off'}`)
   say(`Database:  ${externalMongo ? 'external (MONGO_URL)' : `bundled MongoDB ${identity.mongodb}, stored in ${DB_DIR}`}`)
   say(`Secrets:   ${created === 'all' ? 'created for this new installation' : created ? `kept, ${created} new` : 'kept from earlier starts'} (${join(DATA, 'secrets')})`)
   say(`Mail:      ${mailUrl ? `on, from ${mailFrom}` : 'off (set SLATEBOX_MAIL_URL to send invitations and sign-in mail)'}`)

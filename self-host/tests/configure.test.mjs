@@ -174,3 +174,77 @@ test('a self-hosted install: edition self-host (enterprise locked without a lice
     assert.equal(refused.secretFiles, 0, 'nothing written')
   }
 })
+
+// ------------------------------------------------------------------ team-address tunnel
+
+// A well-formed Cloudflare Tunnel token (base64 of {a, t, s}) with made-up values.
+const TUNNEL_SECRET = randomBytes(32).toString('base64')
+const TUNNEL_TOKEN = Buffer.from(JSON.stringify({ a: 'f'.repeat(32), t: '0b4e2f1c-1111-4222-8333-944455556666', s: TUNNEL_SECRET })).toString('base64')
+
+/** configure.mjs with a tunnel setting; returns the files cloudflared, Caddy, the app and the relay get. */
+async function configureTunnel(env) {
+  const envArgs = Object.entries(env).flatMap(([key, value]) => ['-e', `${key}=${value}`])
+  const show = file => `printf '%s' "$(cat ${file} 2>/dev/null)"; printf '${SEP}'`
+  const script = [
+    'node /opt/slatebox/lib/configure.mjs > /run/slatebox-test.log 2>&1; code=$?',
+    `printf '%s${SEP}' "$code"`,
+    `cat /run/slatebox-test.log; printf '${SEP}'`,
+    show('/run/slatebox/tunnel.token'),
+    `stat -c %a /run/slatebox/tunnel.token 2>/dev/null; printf '${SEP}'`,
+    show('/run/slatebox/app.env'),
+    show('/run/slatebox/relay.env'),
+    show('/run/slatebox/Caddyfile'),
+    show('/run/slatebox/state.env'),
+  ].join('; ')
+  const out = await ok(['run', '--rm', '--network', 'none', '--tmpfs', '/data:mode=1777', '--tmpfs', '/run:mode=1777',
+    '-v', `${LIB}:/opt/slatebox/lib:ro`, ...envArgs, '--entrypoint', 'sh', IMAGE, '-c', script])
+  const [code, log, token, tokenMode, app, relay, caddy, state] = out.split(SEP)
+  return { code: Number(code), log, token, tokenMode: tokenMode.trim(), app, relay, caddy, state }
+}
+
+test('a tunnel token: HTTPS off in Caddy, the visitor address kept, the token only in its 0600 file, never printed', async () => {
+  const run = await configureTunnel({ SLATEBOX_URL: 'https://acme.slatebox.team', SLATEBOX_TUNNEL_TOKEN: TUNNEL_TOKEN })
+  assert.equal(run.code, 0, run.log)
+  assert.equal(run.token, TUNNEL_TOKEN)
+  assert.equal(run.tokenMode, '600')
+  assert.match(run.log, /Tunnel: +on, Cloudflare Tunnel 0b4e2f1c-1111-4222-8333-944455556666 for acme\.slatebox\.team/)
+  assert.match(run.log, /HTTPS: +at Cloudflare, through the secure tunnel/)
+  for (const where of [run.log, run.app, run.relay, run.caddy, run.state]) {
+    assert.ok(!where.includes(TUNNEL_TOKEN) && !where.includes(TUNNEL_SECRET), 'the token is only in its own file')
+  }
+  assert.match(run.caddy, /auto_https off/)
+  assert.match(run.caddy, /trusted_proxies static 127\.0\.0\.1\/32 ::1\/128/)
+  assert.doesNotMatch(run.caddy, /^acme\.slatebox\.team \{/m, 'no certificate site')
+  assert.match(run.app, /^HTTP_FORWARDED_COUNT='2'$/m)
+  assert.match(run.app, /^ROOT_URL='https:\/\/acme\.slatebox\.team'$/m)
+  assert.match(run.app, /"wsUrl":"wss:\/\/acme\.slatebox\.team\/live"/)
+  assert.match(run.state, /^SLATEBOX_TUNNEL='1'$/m)
+})
+
+test('without a tunnel token nothing changes: no token file, one proxy hop, no trusted proxies', async () => {
+  const run = await configureTunnel({})
+  assert.equal(run.code, 0, run.log)
+  assert.equal(run.token, '')
+  assert.match(run.app, /^HTTP_FORWARDED_COUNT='1'$/m)
+  assert.doesNotMatch(run.caddy, /trusted_proxies/)
+  assert.match(run.state, /^SLATEBOX_TUNNEL='0'$/m)
+  assert.match(run.log, /Tunnel: +off/)
+})
+
+test('a tunnel with SLATEBOX_HTTPS=auto, or with an http:// address, is refused', async () => {
+  const auto = await configureTunnel({ SLATEBOX_URL: 'https://acme.slatebox.team', SLATEBOX_TUNNEL_TOKEN: TUNNEL_TOKEN, SLATEBOX_HTTPS: 'auto' })
+  assert.equal(auto.code, 1)
+  assert.match(auto.log, /SLATEBOX_HTTPS=auto cannot be used with SLATEBOX_TUNNEL_TOKEN/)
+  const plain = await configureTunnel({ SLATEBOX_URL: 'http://localhost:7070', SLATEBOX_TUNNEL_TOKEN: TUNNEL_TOKEN })
+  assert.equal(plain.code, 1)
+  assert.match(plain.log, /SLATEBOX_URL is the tunnel's https:\/\/ address/)
+  for (const run of [auto, plain]) assert.ok(!run.log.includes(TUNNEL_TOKEN))
+})
+
+test('a token that is not a Cloudflare Tunnel token is refused without printing it', async () => {
+  const bad = 'not-a-tunnel-token-' + randomBytes(12).toString('hex')
+  const run = await configureTunnel({ SLATEBOX_URL: 'https://acme.slatebox.team', SLATEBOX_TUNNEL_TOKEN: bad })
+  assert.equal(run.code, 1)
+  assert.match(run.log, /SLATEBOX_TUNNEL_TOKEN is not a Cloudflare Tunnel token \(received \d+ characters, not shown\)/)
+  assert.ok(!run.log.includes(bad))
+})

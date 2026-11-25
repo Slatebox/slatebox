@@ -7,6 +7,11 @@ database. Install Docker, run one command, open one address.
 docker run -d --name slatebox -p 7070:7070 -v slatebox-data:/data ghcr.io/slatebox/slatebox
 ```
 
+The image is being published at `ghcr.io/slatebox/slatebox`. Until it is, as
+version 0.2.0, that address serves 0.1.0, which runs everything here except a
+team address (`SLATEBOX_TUNNEL_TOKEN`); for that, build the image from this
+repository with `self-host/build-image.sh`.
+
 Open <http://localhost:7070>. A start usually takes well under a minute; until
 then the page says that Slatebox is starting and opens by itself when it is
 ready. `docker ps` shows the container as `healthy` once a slate can be opened.
@@ -62,6 +67,7 @@ Every setting is optional and is given with `-e NAME=value`.
 | `SLATEBOX_SSO` | `keycloak` turns on single sign-on with the Keycloak bundled in the image (off by default). People sign in with Entra ID, Okta, Google Workspace, SAML, OpenID Connect or LDAP through it. Keycloak's admin console is at `/auth/admin/` on the same address. |
 | `SLATEBOX_SSO_ONLY` | `true`, with `SLATEBOX_SSO=keycloak`: single sign-on is the only way in, no passwords and no guests. |
 | `SLATEBOX_SSO_ADMIN` | `closed`, with `SLATEBOX_SSO=keycloak`: Keycloak's admin console and master realm are not served on the published port (default `open`). |
+| `SLATEBOX_TUNNEL_TOKEN` | A Cloudflare Tunnel connector token. The container's cloudflared connects out to Cloudflare with it, which ends HTTPS for the `https://` `SLATEBOX_URL`: no ports to open, no certificates. `npx slatebox install --team-address <name>` gets one for `https://<name>.slatebox.team`; a tunnel in your own Cloudflare account works the same way. Built-in HTTPS is off with it. The token is passed to cloudflared in a private file, never to the app, and never written to the log. |
 
 A misspelled setting, or one in lower case, stops the container with the list
 of valid names, so a setting is never silently ignored.
