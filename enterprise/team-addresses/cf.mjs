@@ -14,6 +14,44 @@ const API = 'https://api.cloudflare.com/client/v4'
 export const TUNNEL_PREFIX = 'sbx-'
 export const DNS_COMMENT_PREFIX = 'slatebox-team-claim:'
 
+// Prod, test and dev share one Cloudflare account and one zone, so every tunnel name and record
+// comment carries the instance that made it: 'sbx-<instance>-ta_…' and
+// 'slatebox-team-claim:<instance>:ta_…'. A server only ever reaps what carries its own instance.
+// Names made before the marker ('sbx-ta_…', 'slatebox-team-claim:ta_…') are "legacy": they keep
+// working for the server whose database holds the claim and are never reaped as orphans by anyone.
+export const INSTANCE_SHAPE = /^[a-z][a-z0-9]{0,11}$/
+/** The instance marker: settings.cloudflare.teamClaims.instance, else public.env, else 'dev'. */
+export function instanceOf({ instance, env } = {}) {
+  if (typeof instance === 'string' && INSTANCE_SHAPE.test(instance)) return instance
+  if (typeof env === 'string' && INSTANCE_SHAPE.test(env)) return env
+  return 'dev'
+}
+export const tunnelNameFor = (instance, claimId) => `${TUNNEL_PREFIX}${instance}-${claimId}`
+export const legacyTunnelName = (claimId) => `${TUNNEL_PREFIX}${claimId}`
+export const dnsCommentFor = (instance, claimId) => `${DNS_COMMENT_PREFIX}${instance}:${claimId}`
+// A claim id is 'ta_' and lower-case letters and digits (claims.mjs CLAIM_ID); an instance never holds '_'.
+const MARKED_TUNNEL = /^([a-z][a-z0-9]{0,11})-(ta_[0-9a-z]+)$/
+const LEGACY_ID = /^ta_[0-9a-z]+$/
+/** → { instance, claimId } (instance null for a legacy name), or null when the name is not ours. */
+export function parseTunnelName(name) {
+  if (typeof name !== 'string' || !name.startsWith(TUNNEL_PREFIX)) return null
+  const rest = name.slice(TUNNEL_PREFIX.length)
+  const marked = rest.match(MARKED_TUNNEL)
+  if (marked) return { instance: marked[1], claimId: marked[2] }
+  if (LEGACY_ID.test(rest)) return { instance: null, claimId: rest }
+  return null
+}
+/** → { instance, claimId } (instance null for a legacy comment), or null when the comment is not ours. */
+export function parseDnsComment(comment) {
+  if (typeof comment !== 'string' || !comment.startsWith(DNS_COMMENT_PREFIX)) return null
+  const rest = comment.slice(DNS_COMMENT_PREFIX.length)
+  const at = rest.indexOf(':')
+  if (at === -1) return LEGACY_ID.test(rest) ? { instance: null, claimId: rest } : null
+  const instance = rest.slice(0, at)
+  const claimId = rest.slice(at + 1)
+  return INSTANCE_SHAPE.test(instance) && LEGACY_ID.test(claimId) ? { instance, claimId } : null
+}
+
 export class CloudflareError extends Error {
   constructor(message, { status = 0, retryable = false, errors = [], step } = {}) {
     super(message)

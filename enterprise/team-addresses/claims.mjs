@@ -8,7 +8,7 @@
 //
 // A claim (teamAddresses):
 //   { _id: 'ta_…', name, ownerId, status: pending|active|suspended|releasing|released|failed,
-//     cf: { tunnelId, tunnelName: 'sbx-<_id>', dnsRecordId, configVersion },
+//     cf: { tunnelId, tunnelName: 'sbx-<instance>-<_id>' (legacy 'sbx-<_id>'), dnsRecordId, configVersion },
 //     installCredential: { prefix, hash, createdAt, lastUsedAt, rotatedAt } (sha256 of sbxi_… only),
 //     idempotencyKey, createdAt, updatedAt, activatedAt, releasedAt, lastSeen: { at, connections, connectedAt },
 //     suspension: { at, by, reason, notice } | null, previousNames: [{ name, until, dnsRecordId }],
@@ -26,8 +26,8 @@
 //   - every step is audited, without tokens, credentials or Cloudflare response bodies.
 import { createHash, createHmac, randomBytes as nodeRandomBytes, timingSafeEqual } from 'node:crypto'
 import { hashApiToken } from '/server/api-token-core.mjs'
-import { CloudflareError, DNS_COMMENT_PREFIX, TUNNEL_PREFIX, tunnelTarget } from './cf.mjs'
-import { checkName, E2E_PREFIX, normalizeName, refusal, suggestionsFor, validShape } from './names.mjs'
+import { CloudflareError, dnsCommentFor, instanceOf, legacyTunnelName, tunnelNameFor, tunnelTarget } from './cf.mjs'
+import { checkName, E2E_PREFIX, NON_PROD_PREFIXES, namePrefixFor, normalizeName, refusal, suggestionsFor, validShape } from './names.mjs'
 
 export const DAY_MS = 86_400_000
 export const LIMITS = Object.freeze({
@@ -82,15 +82,19 @@ export class TeamAddressError extends Error {
 const refuse = (code, message, extra) => new TeamAddressError(code, message, extra)
 const UNAVAILABLE = (name) => refuse('unavailable', `${name} isn't available.`)
 // Reserved names are Slatebox's own (names.mjs, published): saying so gives nothing away.
-const RESERVED = (host, name) =>
+const RESERVED = (host, name, namePrefix = '') =>
   refuse(
     'unavailable',
     name.startsWith(E2E_PREFIX)
       ? `${host} is reserved: e2e-… names are kept for Slatebox's own end-to-end tests. Choose another name.`
-      : `${host} is reserved: names like www, admin, support and test are kept for Slatebox itself. Choose another name.`,
+      : namePrefix && !name.startsWith(namePrefix)
+        ? `${host} is reserved: on this ${namePrefix.slice(0, -1)} server, team addresses start with ${namePrefix}. Choose a name like ${namePrefix}${name}.`
+        : !namePrefix && NON_PROD_PREFIXES.some((prefix) => name.startsWith(prefix))
+          ? `${host} is reserved: ${NON_PROD_PREFIXES.map((prefix) => `${prefix}…`).join(', ')} names are kept for Slatebox's own test servers. Choose another name.`
+          : `${host} is reserved: names like www, admin, support and test are kept for Slatebox itself. Choose another name.`,
     { details: { reason: 'reserved' } }
   )
-const notAvailable = (host, name, checked) => (checked.reason === 'reserved' ? RESERVED(host, name) : UNAVAILABLE(host))
+const notAvailable = (host, name, checked, namePrefix = '') => (checked.reason === 'reserved' ? RESERVED(host, name, namePrefix) : UNAVAILABLE(host))
 const UPSTREAM = () => refuse('upstream_unavailable', 'The team address service could not finish right now. Nothing half-made was kept. Try again in a minute.', { retryAfter: 30 })
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 
@@ -134,7 +138,11 @@ export function publicClaim(doc, zoneName) {
 export function createTeamAddressService({ store, cf, config, findUser, notify = () => {}, log = () => {}, now = Date.now, randomBytes = nodeRandomBytes, limits = LIMITS }) {
   const settings = () => {
     const raw = config() || {}
+    const instance = instanceOf(raw)
     return {
+      instance,
+      // Non-prod instances claim in their own name space (test-…, dev-…) so they never take a prod name.
+      namePrefix: namePrefixFor(instance, raw.namePrefix),
       zoneName: typeof raw.zoneName === 'string' && raw.zoneName ? raw.zoneName : 'slatebox.team',
       origin: ORIGIN_SHAPE.test(raw.originService || '') ? raw.originService : ORIGIN_SERVICE,
       maxTunnels: Number.isInteger(raw.maxTunnels) && raw.maxTunnels > 0 ? raw.maxTunnels : limits.maxTunnels,
@@ -263,8 +271,9 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
     const host = hostOf(doc.name)
     doc.cf = doc.cf || {}
     if (!doc.cf.tunnelId) {
-      const tunnelName = `${TUNNEL_PREFIX}${doc._id}`
-      const found = (await cf.findTunnel(tunnelName)) || (await cf.createTunnel(tunnelName))
+      const tunnelName = tunnelNameFor(settings().instance, doc._id)
+      // A claim started before names carried the instance may have its legacy tunnel already.
+      const found = (await cf.findTunnel(tunnelName)) || (await cf.findTunnel(legacyTunnelName(doc._id))) || (await cf.createTunnel(tunnelName))
       if (!found?.id) throw new CloudflareError('Cloudflare made no tunnel', { status: 502 })
       doc.cf.tunnelId = found.id
       doc.cf.tunnelName = tunnelName
@@ -281,7 +290,7 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
         if (existing.content !== tunnelTarget(doc.cf.tunnelId)) throw Object.assign(new CloudflareError('A DNS record for this name points elsewhere', { status: 409 }), { conflict: true })
         recordId = existing.id
       } else {
-        recordId = (await cf.createCname({ name: host, content: tunnelTarget(doc.cf.tunnelId), comment: `${DNS_COMMENT_PREFIX}${doc._id}` }))?.id
+        recordId = (await cf.createCname({ name: host, content: tunnelTarget(doc.cf.tunnelId), comment: dnsCommentFor(settings().instance, doc._id) }))?.id
       }
       if (!recordId) throw new CloudflareError('Cloudflare made no DNS record', { status: 502 })
       doc.cf.dnsRecordId = recordId
@@ -408,14 +417,14 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
       if (user?._id) await limit(`check-account:${user._id}`, limits.checksPerDayPerAccount, DAY_MS, 'Too many checks today.')
       const s = settings()
       const extra = await blocklist()
-      const checked = checkName(input, extra, { e2e: Boolean(user?._id && s.e2eAccounts.includes(user._id)) })
+      const checked = checkName(input, extra, { e2e: Boolean(user?._id && s.e2eAccounts.includes(user._id)), namePrefix: s.namePrefix })
       if (checked.code === 'invalid_name') throw refuse('invalid_name', checked.message)
       const name = checked.name
       const available = checked.ok && (await free(name, user?._id ?? null))
       const body = { name, available }
       if (!available && user?._id) {
         const suggestions = []
-        for (const candidate of suggestionsFor(name, { extra })) {
+        for (const candidate of suggestionsFor(name, { extra, namePrefix: s.namePrefix })) {
           if (suggestions.length >= 3) break
           if (await free(candidate, user._id)) suggestions.push(candidate)
         }
@@ -429,7 +438,7 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
       const actor = { kind: 'user', id: user?._id }
       const owner = await account(user, { action: 'claim', name: input, ip, ua })
       const s = settings()
-      const checked = checkName(input, await blocklist(), { e2e: s.e2eAccounts.includes(owner._id) })
+      const checked = checkName(input, await blocklist(), { e2e: s.e2eAccounts.includes(owner._id), namePrefix: s.namePrefix })
       if (checked.code === 'invalid_name') throw refuse('invalid_name', checked.message)
       const name = checked.name
       const key = sha256([owner._id, name, `${clientKey || ''}`.slice(0, 200), `${idempotencyKey || ''}`.slice(0, 200)].join('|'))
@@ -461,7 +470,7 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
       await limit(`check-account:${owner._id}`, limits.checksPerDayPerAccount, DAY_MS, 'Too many checks today.')
       if (!checked.ok || !(await free(name, owner._id))) {
         await audit({ actor, action: 'claim', name, ok: false, error: { code: 'unavailable' }, ip, ua })
-        throw notAvailable(hostOf(name), name, checked)
+        throw notAvailable(hostOf(name), name, checked, s.namePrefix)
       }
       if ((await store.claims.countLive(owner._id)) >= limits.perAccount)
         throw refuse('limit_reached', `An account may hold ${limits.perAccount} team addresses. Release one first (slatebox address release).`)
@@ -521,13 +530,13 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
       if (doc.status === 'suspended') throw refuse('suspended', doc.suspension?.notice || 'This team address is suspended.')
       if (doc.status !== 'active') throw refuse('conflict', 'This team address is not active yet.')
       const s = settings()
-      const checked = checkName(input, await blocklist(), { e2e: s.e2eAccounts.includes(user._id) })
+      const checked = checkName(input, await blocklist(), { e2e: s.e2eAccounts.includes(user._id), namePrefix: s.namePrefix })
       if (checked.code === 'invalid_name') throw refuse('invalid_name', checked.message)
       const name = checked.name
       if (name === doc.name) return { claim: publicClaim(doc, s.zoneName) }
       if (!checked.ok || !(await free(name, user._id))) {
         await audit({ actor, action: 'rename', claim: doc, ok: false, error: { code: 'unavailable' }, ip, ua })
-        throw notAvailable(hostOf(name), name, checked)
+        throw notAvailable(hostOf(name), name, checked, s.namePrefix)
       }
       await limit(`renames:${doc._id}`, limits.renamesPer30Days, 30 * DAY_MS, `A team address may be renamed ${limits.renamesPer30Days} times in 30 days.`)
       // Moving back to a name still in its grace period takes that name out of previousNames, so
@@ -548,7 +557,7 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
         const host = hostOf(name)
         const existing = await cf.findCname(host)
         if (existing && existing.content !== tunnelTarget(doc.cf.tunnelId)) throw Object.assign(new CloudflareError('A DNS record for this name points elsewhere', { status: 409 }), { conflict: true })
-        const recordId = existing?.id || (await cf.createCname({ name: host, content: tunnelTarget(doc.cf.tunnelId), comment: `${DNS_COMMENT_PREFIX}${doc._id}` }))?.id
+        const recordId = existing?.id || (await cf.createCname({ name: host, content: tunnelTarget(doc.cf.tunnelId), comment: dnsCommentFor(settings().instance, doc._id) }))?.id
         next.cf.dnsRecordId = recordId
         await store.claims.update(doc._id, { 'cf.dnsRecordId': recordId, updatedAt: now() })
       } catch (error) {
@@ -672,7 +681,7 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
 
     async adminWhy(input) {
       const name = normalizeName(input)
-      const checked = checkName(name, await blocklist(), { e2e: true })
+      const checked = checkName(name, await blocklist(), { e2e: true, namePrefix: settings().namePrefix })
       if (checked.code === 'invalid_name') return { name, reason: 'invalid_name' }
       if (checked.reason) return { name, reason: checked.reason }
       if (await store.claims.liveByName(name)) return { name, reason: 'taken' }

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // After the real team-address run: does anything of it remain in Slatebox's Cloudflare account?
-// Lists (read-only) the tunnels named sbx-<claim id> and the DNS records for the e2e names, and
+// Lists (read-only) the tunnels named sbx-<instance>-<claim id> (or the legacy sbx-<claim id>) and
+// the DNS records for the e2e names, and
 // prints counts only. With --delete it removes what it found and still exits 1: anything left is
 // a bug in the release path, not something to tidy quietly.
 //
@@ -35,8 +36,11 @@ async function cf(method, path) {
 
 const found = []
 if (claimId !== '-') {
-  const tunnels = await cf('GET', `/accounts/${account}/cfd_tunnel?is_deleted=false&name=${encodeURIComponent(`sbx-${claimId}`)}`)
-  for (const tunnel of tunnels) found.push({ kind: 'tunnel', id: tunnel.id, label: tunnel.name })
+  // The claim service marks tunnel names with its instance (enterprise/team-addresses/cf.mjs).
+  for (const name of [`sbx-${claimId}`, ...['prod', 'test', 'dev', 'staging'].map(instance => `sbx-${instance}-${claimId}`)]) {
+    const tunnels = await cf('GET', `/accounts/${account}/cfd_tunnel?is_deleted=false&name=${encodeURIComponent(name)}`)
+    for (const tunnel of tunnels) found.push({ kind: 'tunnel', id: tunnel.id, label: tunnel.name })
+  }
 }
 for (const name of names) {
   const records = await cf('GET', `/zones/${zone}/dns_records?name=${encodeURIComponent(`${name}.slatebox.team`)}`)

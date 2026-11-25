@@ -26,6 +26,20 @@ export const RESERVED = Object.freeze(new Set([
 // e2e-<anything> is the end-to-end test's own prefix: only accounts the settings name may claim it.
 export const E2E_PREFIX = 'e2e-'
 
+// Prod, test and dev share the slatebox.team zone. A non-prod server claims only names that start
+// with its instance ('test-…', 'dev-…'), and prod refuses those name spaces, so a test claim can
+// never take, or collide with, a real one. e2e-… names (the end-to-end test's accounts) are
+// allowed on every instance.
+export const NON_PROD_PREFIXES = Object.freeze(['test-', 'dev-', 'staging-', 'stage-'])
+/**
+ * The name space an instance claims in: '' for prod, '<instance>-' otherwise. An explicit string
+ * setting wins ('' opts a non-prod server out; use only on a server with its own zone).
+ */
+export function namePrefixFor(instance, setting) {
+  if (typeof setting === 'string' && (setting === '' || /^[a-z][a-z0-9]{0,11}-$/.test(setting))) return setting
+  return instance === 'prod' ? '' : `${instance}-`
+}
+
 const FOLD = { 0: 'o', 1: 'l', 3: 'e', 4: 'a', 5: 's', 7: 't' }
 export const fold = (name) => name.replace(/-/g, '').replace(/[013457]/g, (digit) => FOLD[digit])
 // 1 reads as l and as i ("paypa1", "sh1t"): a name is checked under both.
@@ -43,12 +57,15 @@ export function validShape(name) {
  * Why a well-shaped name may not be claimed, or null when it may.
  * @param {string} name   normalized
  * @param {{ pattern: string, kind: 'exact'|'substring' }[]} [extra]  the runtime blocklist
- * @param {{ e2e?: boolean }} [options]  e2e: the caller may use the e2e- prefix
+ * @param {{ e2e?: boolean, namePrefix?: string }} [options]  e2e: the caller may use the e2e- prefix;
+ *   namePrefix: this server's name space ('' on prod, which then refuses the non-prod name spaces)
  * @returns {null | 'reserved' | 'brand' | 'offensive' | 'blocked'}
  */
-export function refusal(name, extra = [], { e2e = false } = {}) {
+export function refusal(name, extra = [], { e2e = false, namePrefix = '' } = {}) {
   if (RESERVED.has(name)) return 'reserved'
   if (name.startsWith(E2E_PREFIX) && !e2e) return 'reserved'
+  const e2eName = e2e && name.startsWith(E2E_PREFIX)
+  if (namePrefix ? !name.startsWith(namePrefix) && !e2eName : NON_PROD_PREFIXES.some((prefix) => name.startsWith(prefix))) return 'reserved'
   for (const folded of folds(name)) {
     const parts = name.split('-').flatMap(folds)
     if (BRAND_SUBSTRINGS.some((word) => folded.includes(word))) return 'brand'
@@ -77,8 +94,9 @@ export function checkName(input, extra = [], options = {}) {
 }
 
 /** Up to `count` names close to `name` that pass the rules (availability is the caller's check). */
-export function suggestionsFor(name, { extra = [], count = 6 } = {}) {
-  const base = normalizeName(name)?.replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^[^a-z]+/, '').replace(/-+$/, '').slice(0, 24) || 'team'
-  const candidates = [`${base}-team`, `${base}-hq`, `team-${base}`, `${base}-app`, `${base}-boards`, `our-${base}`, `${base}-works`, `${base}-crew`]
-  return candidates.filter((candidate) => validShape(candidate) && !refusal(candidate, extra)).slice(0, count)
+export function suggestionsFor(name, { extra = [], count = 6, namePrefix = '' } = {}) {
+  let base = normalizeName(name)?.replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^[^a-z]+/, '').replace(/-+$/, '').slice(0, 24) || 'team'
+  if (namePrefix && base.startsWith(namePrefix)) base = base.slice(namePrefix.length) || 'team'
+  const candidates = [`${base}-team`, `${base}-hq`, `team-${base}`, `${base}-app`, `${base}-boards`, `our-${base}`, `${base}-works`, `${base}-crew`].map((candidate) => `${namePrefix}${candidate}`)
+  return candidates.filter((candidate) => validShape(candidate) && !refusal(candidate, extra, { namePrefix })).slice(0, count)
 }

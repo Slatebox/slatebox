@@ -9,7 +9,8 @@
 // Settings (server-only, never under "public"):
 //   cloudflare.teamClaims.accountId     Cloudflare account that holds the tunnels
 //   cloudflare.teamClaims.zoneId        the slatebox.team zone
-//   cloudflare.teamClaims.token         API token: Cloudflare Tunnel Write (account), DNS Write + Zone Read (zone)
+//   cloudflare.teamClaims.token         API token: Cloudflare Tunnel Write (account), DNS Write + Zone Read +
+//                                       Zone Settings Read (zone; the reconciler's zone check reads settings)
 //   cloudflare.teamClaims.zoneName      default 'slatebox.team'
 //   cloudflare.teamClaims.maxTunnels    default 800 (new claims refused at the cap); alertTunnels default 600
 //   cloudflare.teamClaims.paused        true closes the service: every route answers 503 paused, the
@@ -19,6 +20,11 @@
 //   cloudflare.teamClaims.alertEmail    where operational alerts go (optional)
 //   cloudflare.teamClaims.e2eAccounts   user ids that may claim e2e-* names (the end-to-end test)
 //   cloudflare.teamClaims.reconcile     false switches the reconciler off on this server
+//   cloudflare.teamClaims.instance      'prod' | 'test' | 'dev' (default: public.env, else 'dev'): marks
+//                                       every tunnel name and record comment, so instances sharing the
+//                                       Cloudflare account and zone never reap each other's
+//   cloudflare.teamClaims.namePrefix    the name space this instance claims in (default '' on prod,
+//                                       '<instance>-' elsewhere: test claims test-… names only)
 /* eslint-disable no-console */
 import { Meteor } from 'meteor/meteor'
 import { Mongo } from 'meteor/mongo'
@@ -46,6 +52,8 @@ const Leases = new Mongo.Collection('teamAddressLeases')
 
 const RECONCILE_MS = 10 * 60 * 1000
 const claimsSettings = () => Meteor.settings.cloudflare?.teamClaims || {}
+// What the service reads: the claim settings, with public.env for the default instance marker.
+const serviceSettings = () => ({ ...claimsSettings(), env: Meteor.settings.public?.env })
 
 // Every secret this module knows, scrubbed from anything it logs.
 function scrub(line) {
@@ -118,7 +126,7 @@ export async function startTeamAddresses({ isUnlocked = () => true } = {}) {
     },
   })
   const findUser = (userId) => Meteor.users.findOneAsync(userId, { fields: { _id: 1, isAnonymous: 1, isDisabled: 1, emails: 1 } })
-  const service = createTeamAddressService({ store, cf, config: claimsSettings, findUser, notify, log })
+  const service = createTeamAddressService({ store, cf, config: serviceSettings, findUser, notify, log })
 
   // The owner of a device-code token from `npx slatebox install`: bound to this resource, with
   // the team-addresses scope. Personal tokens never carry that scope (it is not an action scope).
@@ -141,7 +149,8 @@ export async function startTeamAddresses({ isUnlocked = () => true } = {}) {
     await ensureIndexes(raw).catch((error) => console.error('[team-addresses] indexes', scrub(error?.message || error)))
     const s = claimsSettings()
     const fingerprint = (await import('node:crypto')).createHash('sha256').update(String(s.token)).digest('hex').slice(0, 8)
-    console.log(`[team-addresses] on: zone ${s.zoneName || 'slatebox.team'}, cloudflare token sha256:${fingerprint}…, new claims ${s.paused ? 'paused' : 'open'}`)
+    const { instance, namePrefix } = service.settings()
+    console.log(`[team-addresses] on: zone ${s.zoneName || 'slatebox.team'}, instance ${instance}${namePrefix ? ` (names ${namePrefix}…)` : ''}, cloudflare token sha256:${fingerprint}…, new claims ${s.paused ? 'paused' : 'open'}`)
     if (claimsSettings().reconcile !== false) {
       const reconcileCf = createCloudflare({ token: s.token, accountId: s.accountId, zoneId: s.zoneId, fetch: globalThis.fetch, paceMs: 250 })
       const reconciler = createReconciler({ store, cf: reconcileCf, service, log, notify })

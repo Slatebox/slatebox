@@ -8,11 +8,19 @@
 //   status     lastSeen from Cloudflare's own tunnel status (installs never phone home); more than
 //              one connector client on a tunnel tells the owner (a copied token)
 //   drift      an active claim's ingress and CNAME put back; a suspended one kept at 451
-//   orphans    sbx- tunnels and slatebox-team-claim: records with no live claim, older than an hour
+//   orphans    tunnels named sbx-<this instance>-… and records commented
+//              slatebox-team-claim:<this instance>:… with no live claim here, older than an hour.
+//              Another instance's names (prod and test share the account and zone) are never
+//              touched; legacy unmarked ones (sbx-ta_…) are never reaped by anyone: one with no live
+//              claim here is listed in report.legacy and logged for an administrator.
 //   reaping    never connected within 24 hours of the claim: released; idle 60 days: the owner is
 //              told; idle 90 days: released (the owner may claim it again within 30 days)
-//   zone       slatebox.team's settings checked (WebSockets on, SSL Full, Always Use HTTPS, TLS 1.2+)
-import { DNS_COMMENT_PREFIX, TUNNEL_PREFIX, tunnelTarget } from './cf.mjs'
+//   zone       slatebox.team's settings checked (WebSockets on, SSL Full, Always Use HTTPS, TLS 1.2+);
+//              reading them needs Zone Settings Read on the token
+//
+// A step that fails is kept in report.steps as { step, code, status } (Cloudflare's error codes
+// and HTTP status, never a body or a header) and named in the pass's log line.
+import { dnsCommentFor, parseDnsComment, parseTunnelName, tunnelTarget } from './cf.mjs'
 import { DAY_MS, SUSPENDED_INGRESS } from './claims.mjs'
 import { LIVE } from './store.mjs'
 
@@ -51,17 +59,27 @@ export function createReconciler({ store, cf, service, now = Date.now, log = () 
     return service.audit({ actor: system, action: 'reconcile_fix', claim, error: { code: what } })
   }
 
+  // The step's name and a code for the log: Cloudflare's error codes and status, else the error's
+  // own code or name. Never a message from a response body, never a header.
+  const codeOf = (error) => {
+    const cfCodes = Array.isArray(error?.errors) ? error.errors.map((entry) => entry.code).filter(Boolean) : []
+    if (cfCodes.length) return cfCodes.join('+')
+    if (error?.status) return `http_${error.status}`
+    return `${error?.code || error?.name || 'error'}`.replace(/[^A-Za-z0-9_.+-]/g, '').slice(0, 40) || 'error'
+  }
   async function step(report, label, fn) {
     try {
       await fn()
     } catch (error) {
       report.errors.push(`${label}: ${error?.message || error}`)
+      report.steps.push({ step: label, code: codeOf(error), ...(error?.status && { status: error.status }) })
     }
   }
 
   async function run() {
     const t = now()
-    const report = { fixed: [], reaped: [], noticed: [], zone: [], errors: [], live: 0 }
+    const report = { fixed: [], reaped: [], noticed: [], zone: [], errors: [], steps: [], legacy: [], live: 0 }
+    const instance = service.settings().instance
 
     // ---- finish what was left half-done --------------------------------------------------
     for (const doc of await store.claims.inStatuses(['releasing'])) await step(report, `release ${doc._id}`, () => service.release(doc, { actor: system }))
@@ -90,6 +108,7 @@ export function createReconciler({ store, cf, service, now = Date.now, log = () 
         if (!tunnel) {
           say(`claim ${doc._id} lost its tunnel`)
           report.errors.push(`claim ${doc._id}: tunnel missing at Cloudflare`)
+          report.steps.push({ step: `claim ${doc._id}`, code: 'tunnel_missing' })
           return
         }
         const connections = Array.isArray(tunnel.connections) ? tunnel.connections.length : 0
@@ -139,22 +158,30 @@ export function createReconciler({ store, cf, service, now = Date.now, log = () 
           }
           const record = await cf.findCname(hosts[0])
           if (!record) {
-            const made = await cf.createCname({ name: hosts[0], content: tunnelTarget(doc.cf.tunnelId), comment: `${DNS_COMMENT_PREFIX}${doc._id}` })
+            const made = await cf.createCname({ name: hosts[0], content: tunnelTarget(doc.cf.tunnelId), comment: dnsCommentFor(instance, doc._id) })
             await store.claims.update(doc._id, { 'cf.dnsRecordId': made?.id || null })
             await fixed(doc, 'dns_recreated', report)
           } else if (record.content !== tunnelTarget(doc.cf.tunnelId)) {
             report.errors.push(`claim ${doc._id}: its DNS record points elsewhere`)
+            report.steps.push({ step: `claim ${doc._id}`, code: 'dns_elsewhere' })
           }
         }
       })
     }
 
     // ---- orphans at Cloudflare ----------------------------------------------------------------
+    // Only names that carry this instance are ever deleted. Another instance's are skipped without
+    // a lookup; a legacy (unmarked) one is kept, and listed when no live claim here owns it.
     await step(report, 'orphan tunnels', async () => {
       for (const tunnel of await cf.listTunnels()) {
-        if (!tunnel?.name?.startsWith(TUNNEL_PREFIX) || age(tunnel.created_at, t) < REAP.orphanAgeMs) continue
-        const claim = await store.claims.get(tunnel.name.slice(TUNNEL_PREFIX.length))
+        const parsed = parseTunnelName(tunnel?.name)
+        if (!parsed || (parsed.instance !== null && parsed.instance !== instance) || age(tunnel.created_at, t) < REAP.orphanAgeMs) continue
+        const claim = await store.claims.get(parsed.claimId)
         if (claim && LIVE.includes(claim.status) && claim.cf?.tunnelId === tunnel.id) continue
+        if (parsed.instance === null) {
+          report.legacy.push(`tunnel ${tunnel.name} (${tunnel.id})`)
+          continue
+        }
         await cf.deleteConnections(tunnel.id)
         await cf.deleteTunnel(tunnel.id)
         await fixed(claim, 'orphan_tunnel_deleted', report)
@@ -162,10 +189,15 @@ export function createReconciler({ store, cf, service, now = Date.now, log = () 
     })
     await step(report, 'orphan records', async () => {
       for (const record of await cf.listDns()) {
-        if (!`${record?.comment || ''}`.startsWith(DNS_COMMENT_PREFIX) || age(record.created_on, t) < REAP.orphanAgeMs) continue
-        const claim = await store.claims.get(record.comment.slice(DNS_COMMENT_PREFIX.length))
+        const parsed = parseDnsComment(record?.comment)
+        if (!parsed || (parsed.instance !== null && parsed.instance !== instance) || age(record.created_on, t) < REAP.orphanAgeMs) continue
+        const claim = await store.claims.get(parsed.claimId)
         const ours = claim && LIVE.includes(claim.status) && (claim.cf?.dnsRecordId === record.id || (claim.previousNames || []).some((entry) => entry.dnsRecordId === record.id))
         if (ours) continue
+        if (parsed.instance === null) {
+          report.legacy.push(`record ${record.name} (${record.id})`)
+          continue
+        }
         await cf.deleteDns(record.id)
         await fixed(claim, 'orphan_record_deleted', report)
       }
@@ -182,7 +214,12 @@ export function createReconciler({ store, cf, service, now = Date.now, log = () 
     const settings = service.settings()
     if (report.live >= settings.alertTunnels) say(`alert: ${report.live} live claims (alert at ${settings.alertTunnels}, cap ${settings.maxTunnels})`)
     if (report.zone.length) say(`zone settings drifted: ${report.zone.join(', ')}`)
-    if (report.errors.length) say(`${report.errors.length} step(s) failed; the next pass tries again`)
+    if (report.steps.some((entry) => entry.step === 'zone' && entry.status === 403)) say('zone settings unreadable (403): the Cloudflare token needs Zone Settings Read on the zone')
+    if (report.legacy.length) say(`${report.legacy.length} unmarked team-address name(s) at Cloudflare with no live claim on this ${instance} server, kept (never reaped; an administrator decides): ${report.legacy.slice(0, 10).join(', ')}`)
+    if (report.errors.length) {
+      const failed = report.steps.slice(0, 10).map((entry) => `${entry.step} (${entry.code})`).join(', ')
+      say(`${report.errors.length} step(s) failed; the next pass tries again: ${failed}`)
+    }
     return report
   }
 

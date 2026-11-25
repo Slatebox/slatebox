@@ -9,7 +9,7 @@ import { test } from 'node:test'
 import express from 'express'
 import { createFakeCloudflare, FAKE } from './fake-cloudflare.mjs'
 import { checkName, fold, refusal, suggestionsFor, NAME_RULE } from '../enterprise/team-addresses/names.mjs'
-import { createCloudflare, CloudflareError } from '../enterprise/team-addresses/cf.mjs'
+import { createCloudflare, CloudflareError, dnsCommentFor, instanceOf, parseDnsComment, parseTunnelName, tunnelNameFor } from '../enterprise/team-addresses/cf.mjs'
 import { createTeamAddressService, ingressFor, LIMITS, ORIGIN_SERVICE, SUSPENDED_INGRESS, TeamAddressError } from '../enterprise/team-addresses/claims.mjs'
 import { memoryStore, mongoStore } from '../enterprise/team-addresses/store.mjs'
 import { createReconciler, REAP } from '../enterprise/team-addresses/reconcile.mjs'
@@ -20,10 +20,10 @@ import { createEnterpriseHost } from '../web/app/server/enterprise-loader.mjs'
 
 const DAY = 86_400_000
 
-function world({ users: extraUsers = {}, config: extraConfig = {}, limits } = {}) {
+function world({ users: extraUsers = {}, config: extraConfig = {}, limits, fake: sharedFake, clock: sharedClock } = {}) {
   let clock = Date.parse('2026-11-24T12:00:00Z')
-  const now = () => clock
-  const fake = createFakeCloudflare({ now })
+  const now = sharedClock ? sharedClock.now : () => clock
+  const fake = sharedFake || createFakeCloudflare({ now })
   const cf = createCloudflare({ ...FAKE, fetch: fake.fetch, sleep: async () => {}, random: () => 0, now })
   const store = memoryStore({ now })
   const users = {
@@ -34,7 +34,8 @@ function world({ users: extraUsers = {}, config: extraConfig = {}, limits } = {}
     e2e: { _id: 'e2e', emails: [{ address: 'e2e@example.com', verified: true }] },
     ...extraUsers,
   }
-  const config = { token: FAKE.token, accountId: FAKE.accountId, zoneId: FAKE.zoneId, zoneName: 'slatebox.team', e2eAccounts: ['e2e'], ...extraConfig }
+  // env is public.env as meteor.js passes it: these tests are the prod instance unless they say otherwise.
+  const config = { token: FAKE.token, accountId: FAKE.accountId, zoneId: FAKE.zoneId, zoneName: 'slatebox.team', e2eAccounts: ['e2e'], env: 'prod', ...extraConfig }
   const notices = []
   const logs = []
   const service = createTeamAddressService({
@@ -47,7 +48,7 @@ function world({ users: extraUsers = {}, config: extraConfig = {}, limits } = {}
     now,
     ...(limits && { limits: { ...LIMITS, ...limits } }),
   })
-  return { fake, cf, store, service, users, config, notices, logs, now, tick: (ms) => (clock += ms) }
+  return { fake, cf, store, service, users, config, notices, logs, now, tick: sharedClock ? sharedClock.tick : (ms) => (clock += ms) }
 }
 
 const user = (id) => ({ _id: id })
@@ -128,14 +129,14 @@ test('a claim makes the tunnel, its ingress, a proxied CNAME and a credential, a
   assert.equal(body.claim.status, 'active')
   assert.match(body.installCredential, /^sbxi_[0-9a-f]{8}_[A-Za-z0-9_-]{43}$/)
   const [tunnel] = w.fake.liveTunnels()
-  assert.equal(tunnel.name, `sbx-${body.claim.id}`, 'the tunnel is named after our id, never the customer name')
+  assert.equal(tunnel.name, `sbx-prod-${body.claim.id}`, 'the tunnel is named after this instance and our id, never the customer name')
   assert.equal(body.connectorToken, w.fake.tokenFor(tunnel))
   assert.deepEqual(tunnel.config, ingressFor(['acme.slatebox.team']))
   const [record] = w.fake.records.values()
   assert.equal(record.name, 'acme.slatebox.team')
   assert.equal(record.content, `${tunnel.id}.cfargotunnel.com`)
   assert.equal(record.proxied, true)
-  assert.equal(record.comment, `slatebox-team-claim:${body.claim.id}`)
+  assert.equal(record.comment, `slatebox-team-claim:prod:${body.claim.id}`)
   // Stored: never the connector token, never the credential itself.
   const stored = JSON.stringify([...w.store.claims.docs.values()])
   assert.ok(!stored.includes(body.connectorToken))
@@ -310,7 +311,7 @@ test('the install credential reaches its own claim only; token fetches are limit
   assert.equal(await w.service.authenticateInstall(body.installCredential.slice(0, -1) + (body.installCredential.endsWith('A') ? 'B' : 'A')), null)
   assert.equal(await w.service.authenticateInstall('sbx_abc_def'), null)
   assert.equal((await w.service.authenticateInstall(other.body.installCredential))._id, other.body.claim.id)
-  const tunnel = w.fake.liveTunnels().find((t) => t.name === `sbx-${claim._id}`)
+  const tunnel = w.fake.liveTunnels().find((t) => t.name === `sbx-prod-${claim._id}`)
   w.fake.connect(tunnel.id, 'install-1')
   w.fake.connect(tunnel.id, 'thief-1')
   const oldToken = w.fake.tokenFor(tunnel)
@@ -534,11 +535,11 @@ test('the reconciler deletes orphans, repairs drift, records status and reaps na
   const w = world()
   const kept = await w.service.claim({ user: user('ada'), name: 'kept-co', clientKey: 'k' })
   const idle = await w.service.claim({ user: user('sam'), name: 'idle-co', clientKey: 'k' })
-  const keptTunnel = w.fake.liveTunnels().find((t) => t.name === `sbx-${kept.body.claim.id}`)
+  const keptTunnel = w.fake.liveTunnels().find((t) => t.name === `sbx-prod-${kept.body.claim.id}`)
   w.fake.connect(keptTunnel.id, 'install-1')
-  // Orphans: a tunnel and a record with no live claim.
-  const orphan = await w.cf.createTunnel('sbx-ta_00000000000000000000')
-  await w.cf.createCname({ name: 'ghost.slatebox.team', content: `${orphan.id}.cfargotunnel.com`, comment: 'slatebox-team-claim:ta_00000000000000000000' })
+  // Orphans: a tunnel and a record of this instance with no live claim.
+  const orphan = await w.cf.createTunnel('sbx-prod-ta_00000000000000000000')
+  await w.cf.createCname({ name: 'ghost.slatebox.team', content: `${orphan.id}.cfargotunnel.com`, comment: 'slatebox-team-claim:prod:ta_00000000000000000000' })
   // Drift: someone edited the kept claim's ingress and removed its record.
   keptTunnel.config = { ingress: [{ hostname: 'kept-co.slatebox.team', service: 'http://10.0.0.5:22' }, { service: 'http_status:404' }] }
   for (const [id, record] of w.fake.records) if (record.name === 'kept-co.slatebox.team') w.fake.records.delete(id)
@@ -559,6 +560,138 @@ test('the reconciler deletes orphans, repairs drift, records status and reaps na
   assert.equal((await w.store.claims.get(idle.body.claim.id)).status, 'released')
   assert.equal((await w.store.claims.get(kept.body.claim.id)).status, 'active')
   assert.ok(w.store.audit.docs.some((entry) => entry.action === 'reap'))
+})
+
+// ---- instances sharing one Cloudflare account and zone (prod, test, dev) ----------------------------------
+
+function sharedWorlds() {
+  let clock = Date.parse('2026-11-24T12:00:00Z')
+  const shared = { now: () => clock, tick: (ms) => (clock += ms) }
+  const fake = createFakeCloudflare({ now: shared.now })
+  const prod = world({ fake, clock: shared })
+  const testing = world({ fake, clock: shared, config: { env: 'test' } })
+  return { fake, prod, testing, tick: shared.tick }
+}
+
+test('names carry the instance: settings instance first, then public.env, then dev; legacy names parse as instance null', () => {
+  assert.equal(instanceOf({ instance: 'test', env: 'prod' }), 'test')
+  assert.equal(instanceOf({ env: 'prod' }), 'prod')
+  assert.equal(instanceOf({ instance: 'Not Valid!', env: 'test' }), 'test')
+  assert.equal(instanceOf({}), 'dev')
+  assert.equal(tunnelNameFor('test', 'ta_abc'), 'sbx-test-ta_abc')
+  assert.equal(dnsCommentFor('prod', 'ta_abc'), 'slatebox-team-claim:prod:ta_abc')
+  assert.deepEqual(parseTunnelName('sbx-test-ta_abc123'), { instance: 'test', claimId: 'ta_abc123' })
+  assert.deepEqual(parseTunnelName('sbx-ta_abc123'), { instance: null, claimId: 'ta_abc123' })
+  assert.equal(parseTunnelName('sbx-retry'), null)
+  assert.equal(parseTunnelName('office-tunnel'), null)
+  assert.deepEqual(parseDnsComment('slatebox-team-claim:prod:ta_abc123'), { instance: 'prod', claimId: 'ta_abc123' })
+  assert.deepEqual(parseDnsComment('slatebox-team-claim:ta_abc123'), { instance: null, claimId: 'ta_abc123' })
+  assert.equal(parseDnsComment('slatebox-team-claim:'), null)
+  assert.equal(parseDnsComment('something else'), null)
+})
+
+test('two instances sharing one Cloudflare never reap each other\'s tunnels or records', async () => {
+  const { fake, prod, testing, tick } = sharedWorlds()
+  const live = await prod.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k' })
+  const liveTest = await testing.service.claim({ user: user('ada'), name: 'test-acme', clientKey: 'k' })
+  const prodTunnel = fake.liveTunnels().find((t) => t.name === `sbx-prod-${live.body.claim.id}`)
+  const testTunnel = fake.liveTunnels().find((t) => t.name === `sbx-test-${liveTest.body.claim.id}`)
+  assert.ok(prodTunnel && testTunnel, 'each instance names its own tunnel')
+  fake.connect(prodTunnel.id, 'install-prod')
+  fake.connect(testTunnel.id, 'install-test')
+  // Each instance also has an orphan of its own.
+  const prodOrphan = await prod.cf.createTunnel('sbx-prod-ta_11111111111111111111')
+  const testOrphan = await testing.cf.createTunnel('sbx-test-ta_22222222222222222222')
+  await prod.cf.createCname({ name: 'gone-prod.slatebox.team', content: `${prodOrphan.id}.cfargotunnel.com`, comment: 'slatebox-team-claim:prod:ta_11111111111111111111' })
+  await testing.cf.createCname({ name: 'test-gone.slatebox.team', content: `${testOrphan.id}.cfargotunnel.com`, comment: 'slatebox-team-claim:test:ta_22222222222222222222' })
+  tick(REAP.orphanAgeMs + 1000)
+  const prodReconciler = createReconciler({ store: prod.store, cf: prod.cf, service: prod.service, now: prod.now })
+  const testReconciler = createReconciler({ store: testing.store, cf: testing.cf, service: testing.service, now: testing.now })
+  for (let pass = 0; pass < 2; pass += 1) {
+    await prodReconciler.run()
+    await testReconciler.run()
+  }
+  const liveIds = new Set(fake.liveTunnels().map((t) => t.id))
+  assert.ok(liveIds.has(prodTunnel.id), 'test never reaps prod\'s live tunnel')
+  assert.ok(liveIds.has(testTunnel.id), 'prod never reaps test\'s live tunnel')
+  const names = new Set([...fake.records.values()].map((r) => r.name))
+  assert.ok(names.has('acme.slatebox.team') && names.has('test-acme.slatebox.team'), 'both live records stay')
+  assert.ok(!liveIds.has(prodOrphan.id) && !liveIds.has(testOrphan.id), 'each instance reaps its own orphan tunnel')
+  assert.ok(!names.has('gone-prod.slatebox.team') && !names.has('test-gone.slatebox.team'), 'each instance reaps its own orphan record')
+  // Neither instance ever sent a DELETE for the other's live names.
+  const deletes = fake.calls.filter((call) => call.method === 'DELETE').map((call) => call.path)
+  assert.ok(!deletes.some((path) => path.includes(prodTunnel.id) || path.includes(testTunnel.id)))
+  assert.equal((await prod.store.claims.get(live.body.claim.id)).status, 'active')
+  assert.equal((await testing.store.claims.get(liveTest.body.claim.id)).status, 'active')
+})
+
+test('unmarked legacy tunnels and records are never reaped: kept for the instance that owns them, logged elsewhere', async () => {
+  const { fake, prod, testing, tick } = sharedWorlds()
+  // A prod claim made before names carried the instance.
+  const owned = await prod.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k' })
+  const ownedTunnel = fake.liveTunnels().find((t) => t.name === `sbx-prod-${owned.body.claim.id}`)
+  ownedTunnel.name = `sbx-${owned.body.claim.id}`
+  for (const record of fake.records.values()) if (record.name === 'acme.slatebox.team') record.comment = `slatebox-team-claim:${owned.body.claim.id}`
+  fake.connect(ownedTunnel.id, 'install-1')
+  // A legacy tunnel and record that no database here knows.
+  const stray = await prod.cf.createTunnel('sbx-ta_33333333333333333333')
+  await prod.cf.createCname({ name: 'stray.slatebox.team', content: `${stray.id}.cfargotunnel.com`, comment: 'slatebox-team-claim:ta_33333333333333333333' })
+  tick(REAP.orphanAgeMs + 1000)
+  const prodLogs = []
+  const testLogs = []
+  const prodReport = await createReconciler({ store: prod.store, cf: prod.cf, service: prod.service, now: prod.now, log: (line) => prodLogs.push(line) }).run()
+  const testReport = await createReconciler({ store: testing.store, cf: testing.cf, service: testing.service, now: testing.now, log: (line) => testLogs.push(line) }).run()
+  const liveIds = new Set(fake.liveTunnels().map((t) => t.id))
+  assert.ok(liveIds.has(ownedTunnel.id), 'the owning instance keeps its legacy tunnel')
+  assert.ok(liveIds.has(stray.id), 'a legacy tunnel nobody owns is never reaped')
+  const names = new Set([...fake.records.values()].map((r) => r.name))
+  assert.ok(names.has('acme.slatebox.team') && names.has('stray.slatebox.team'), 'legacy records are never reaped')
+  assert.equal(fake.calls.filter((call) => call.method === 'DELETE').length, 0)
+  assert.equal((await prod.store.claims.get(owned.body.claim.id)).status, 'active', 'the legacy claim keeps working')
+  // Prod owns acme's legacy names, so only the stray ones are listed for an administrator.
+  assert.deepEqual(prodReport.legacy.map((entry) => entry.split(' ')[1]).sort(), ['sbx-ta_33333333333333333333', 'stray.slatebox.team'])
+  assert.equal(testReport.legacy.length, 4, 'test lists every legacy name it does not own, and deletes none')
+  assert.ok(prodLogs.some((line) => /2 unmarked team-address name\(s\).*never reaped/.test(line)))
+  assert.ok(testLogs.some((line) => /4 unmarked team-address name\(s\) at Cloudflare with no live claim on this test server/.test(line)))
+})
+
+test('a failed reconcile step is reported with its step name and Cloudflare code, never the token', async () => {
+  const w = world()
+  w.fake.fail('GET', /\/settings\/websockets$/, { status: 403, code: 10000, message: 'Authentication error' })
+  const logs = []
+  const report = await createReconciler({ store: w.store, cf: w.cf, service: w.service, now: w.now, log: (line) => logs.push(line) }).run()
+  assert.deepEqual(report.steps, [{ step: 'zone', code: '10000', status: 403 }])
+  const summary = logs.find((line) => /step\(s\) failed/.test(line))
+  assert.match(summary, /1 step\(s\) failed; the next pass tries again: zone \(10000\)/)
+  assert.ok(logs.some((line) => /needs Zone Settings Read/.test(line)))
+  assert.ok(!logs.join('\n').includes(FAKE.token))
+  // A network failure has no Cloudflare code: the step still names itself.
+  const v = world()
+  v.fake.fail('GET', /\/cfd_tunnel$/, { network: true, times: 10 })
+  const again = await createReconciler({ store: v.store, cf: v.cf, service: v.service, now: v.now }).run()
+  assert.deepEqual(again.steps.map((entry) => entry.step), ['orphan tunnels'])
+  assert.match(again.steps[0].code, /^[A-Za-z0-9_.+-]+$/)
+})
+
+test('a non-prod instance claims only in its own name space; prod refuses those name spaces', async () => {
+  const testing = world({ config: { env: 'test' } })
+  await rejectsWith(testing.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k' }), 'unavailable')
+  await assert.rejects(testing.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k2' }), /on this test server, team addresses start with test-/)
+  const made = await testing.service.claim({ user: user('ada'), name: 'test-acme', clientKey: 'k3' })
+  assert.equal(made.status, 201)
+  // The end-to-end account's e2e- names work on every instance.
+  assert.equal((await testing.service.claim({ user: user('e2e'), name: 'e2e-abcd1234', clientKey: 'k' })).status, 201)
+  const looked = await testing.service.availability({ name: 'beta-co', user: user('sam'), ip: '198.51.100.9' })
+  assert.equal(looked.available, false)
+  assert.ok(looked.suggestions.length > 0 && looked.suggestions.every((name) => name.startsWith('test-')), looked.suggestions.join(','))
+  const prod = world()
+  for (const name of ['test-acme', 'dev-acme']) {
+    await assert.rejects(prod.service.claim({ user: user('ada'), name, clientKey: name }), /names are kept for Slatebox's own test servers/)
+  }
+  assert.equal((await prod.service.claim({ user: user('ada'), name: 'testbed-co', clientKey: 'k' })).status, 201, 'only the prefix with its hyphen is held')
+  // An explicit namePrefix setting wins (a server with its own zone may opt out).
+  const own = world({ config: { env: 'dev', namePrefix: '' } })
+  assert.equal((await own.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k' })).status, 201)
 })
 
 test('the reconciler tells the owner when two connector clients serve one address, and flags zone drift', async () => {
