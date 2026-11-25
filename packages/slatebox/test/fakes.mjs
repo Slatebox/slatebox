@@ -37,6 +37,8 @@ export class FakeDocker {
     // Every launchctl call, and the agents it holds (label -> plist path).
     this.launchctl = []
     this.agents = new Map()
+    // What the image's `slatebox sso sessions --json` prints (with the 'sso-sessions' command).
+    this.ssoSessions = { ran: false, cap: 500, warning: null, line: 'no pass yet (at most 500 accounts per pass)' }
   }
 
   /** The first admin used the link: the image is set up. */
@@ -125,6 +127,11 @@ export class FakeDocker {
       const container = this.containers.get(name)
       if (!container) return fail('No such container')
       if (args.includes('health')) return container.health === 'healthy' ? ok() : fail('The app is not ready (HTTP 502 from /readyz).')
+      if (args.includes('sso') && args.includes('sessions')) {
+        // The app's last session check (an image from 0.2.2 on); an older image has no such command.
+        if (!this.commands.includes('sso-sessions')) return fail('Usage: slatebox sso [admin-password | scim-secret | events [N]]')
+        return ok(`${JSON.stringify(this.ssoSessions)}\n`)
+      }
       if (args.includes('tunnel')) return this.commands.includes('tunnel') ? ok('{"configured":true,"ready":true,"connections":4}\n') : fail('Usage, from the Docker host:', 2)
       if (args.includes('setup-link')) {
         // The image's one-time setup link: only while nobody is set up; each new link ends the last.

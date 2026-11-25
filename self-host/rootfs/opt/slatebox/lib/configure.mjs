@@ -305,7 +305,7 @@ function main() {
   // Single sign-on is either wired to the bundled Keycloak or off; SLATEBOX_SETTINGS cannot half-configure it.
   delete settings.sso
   if (settings.public) delete settings.public.sso
-  if (sso.enabled) mergeSettings(settings, ssoAppSettings({ url, secrets, only: sso.only }))
+  if (sso.enabled) mergeSettings(settings, ssoAppSettings({ url, secrets, only: sso.only, defaultRole: sso.defaultRole, domains: sso.domains }))
   if (mailFrom) settings.mailFrom = mailFrom
   settings.mailGun = { server: '', ...settings.mailGun }
   settings.selfHosted = { ...settings.selfHosted }
@@ -377,7 +377,7 @@ function main() {
   say(`Database:  ${externalMongo ? 'external (MONGO_URL)' : `bundled MongoDB ${identity.mongodb}, stored in ${DB_DIR}`}`)
   say(`Secrets:   ${created === 'all' ? 'created for this new installation' : created ? `kept, ${created} new` : 'kept from earlier starts'} (${join(DATA, 'secrets')})`)
   say(`Mail:      ${mailUrl ? `on, from ${mailFrom}` : 'off (set SLATEBOX_MAIL_URL to send invitations and sign-in mail)'}`)
-  say(`SSO:       ${sso.enabled ? `on, Keycloak ${identity.keycloak || ''} at ${url.origin}${SSO_PATH}/, issuer ${issuerFor(url)}${sso.only ? ', single sign-on only' : ''}${sso.adminOpen ? '' : ', admin console closed on this address'}`.replace('  ', ' ') : 'off (set SLATEBOX_SSO=keycloak to turn on single sign-on)'}`)
+  say(`SSO:       ${sso.enabled ? `on, Keycloak ${identity.keycloak || ''} at ${url.origin}${SSO_PATH}/, issuer ${issuerFor(url)}${sso.only ? ', single sign-on only' : ''}${sso.defaultRole === 'none' ? ', new people join a team only by invitation' : ', new people join the first team as members'}${sso.domains.length ? `, email domains ${sso.domains.join(', ')}` : ''}${sso.adminOpen ? '' : ', admin console closed on this address'}`.replace('  ', ' ') : 'off (set SLATEBOX_SSO=keycloak to turn on single sign-on)'}`)
   for (const line of ai.summary) say(line)
   const kekSource = {
     setting: 'the key from SLATEBOX_KEY_ENCRYPTION_KEY',

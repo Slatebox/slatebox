@@ -16,17 +16,19 @@
 import { Meteor } from 'meteor/meteor'
 import { WebApp } from 'meteor/webapp'
 import { Accounts } from 'meteor/accounts-base'
-import { APILinks, LoginLinks, SlateApiTokens } from '../../imports/api/common/models'
+import { APILinks, LoginLinks, SlateApiTokens, SystemSettings } from '../../imports/api/common/models'
+import { withTrustedFields } from '../common/accounts'
 import { STATE_COOKIE, SsoError, beginSignIn, completeSignIn, refreshSession } from './oidc.mjs'
 import {
-  decideAccount, linkModifier, newUserDocument, revokeCredentials, revokedModifier, sessionCheckQuery, ssoIdentity, ssoService,
+  SESSION_CHECK_CAP, SESSION_CHECK_ID, decideAccount, joinTeamUpdate, linkModifier, newUserDocument, revokeCredentials, revokedModifier,
+  sessionCheckQuery, sessionCheckRecord, ssoIdentity, ssoService, teamToJoin,
 } from './accounts.mjs'
 import {
   METHODS_CLOSED_UNDER_SSO_ONLY, SSO_ONLY_MESSAGE, closedPathUnderSsoOnly, loginRefusal, mayCreateUser, ssoSettings,
 } from './policy.mjs'
 import { createTicketStore } from './tickets.mjs'
 import { gateHandlers } from './gate.mjs'
-import { clearSetupCookie, completeSetupWith, pendingSsoSetup } from '../self-host-setup/meteor'
+import { clearSetupCookie, completeSetupWith, defaultTeamId, pendingSsoSetup } from '../self-host-setup/meteor'
 
 const tickets = createTicketStore()
 const credentials = { apiTokens: SlateApiTokens, loginLinks: LoginLinks, apiLinks: APILinks }
@@ -49,17 +51,28 @@ function redirect(res, location, cookie) {
   res.end()
 }
 
+// An account in no team yet joins the default team as a Member (no people claims, not the owner).
+// Anyone already in a team, the first admin and team owners included, keeps their team and roles.
+async function joinDefaultTeam(sso, user) {
+  const orgId = teamToJoin(user, { defaultRole: sso.defaultRole, defaultTeamId: await defaultTeamId(sso) })
+  if (!orgId) return
+  const { selector, modifier } = joinTeamUpdate(user._id, orgId)
+  if (await Meteor.users.updateAsync(selector, modifier)) log(`account ${user._id} joined the default team as a member`)
+}
+
 async function accountFor(sso, claims, refreshToken) {
   const identity = ssoIdentity(claims, sso.provider)
   const bySubject = await Meteor.users.findOneAsync({ 'services.sso.issuer': sso.provider, 'services.sso.subject': identity.subject })
   const byEmail = !bySubject && identity.email ? await Accounts.findUserByEmail(identity.email) : undefined
   const byEmailApiTokens = byEmail ? await SlateApiTokens.find({ userId: byEmail._id, revokedAt: null }).countAsync() : 0
-  const decision = decideAccount(identity, { bySubject, byEmail, byEmailApiTokens })
+  const decision = decideAccount(identity, { bySubject, byEmail, byEmailApiTokens, domains: sso.domains })
   if (decision.action === 'refuse') throw new SsoError('account', decision.reason)
   if (decision.action === 'create') {
-    const doc = newUserDocument(identity, refreshToken)
-    const userId = await Accounts.insertUserDoc({ profile: doc.profile }, doc)
-    log(`account ${userId} created at first sign-in`)
+    // Null while the setup link makes the first admin: completeSetupWith gives that account its own team.
+    const orgId = teamToJoin({}, { defaultRole: sso.defaultRole, defaultTeamId: await defaultTeamId(sso) })
+    const doc = newUserDocument(identity, refreshToken, Date.now(), { orgId })
+    const userId = await withTrustedFields(orgId ? { orgId } : {}, () => Accounts.insertUserDoc({ profile: doc.profile }, doc))
+    log(`account ${userId} created at first sign-in${orgId ? ', a member of the default team' : ''}`)
     return userId
   }
   if (decision.action === 'link') {
@@ -68,12 +81,16 @@ async function accountFor(sso, claims, refreshToken) {
     await Meteor.users.updateAsync({ _id: byEmail._id }, linkModifier(byEmail, identity, refreshToken))
     await revokeCredentials(credentials, byEmail._id)
     log(`account ${byEmail._id} linked to its single sign-on identity; its password, sessions and API tokens ended`)
+    // An invitation keeps the team it was made for; an account in no team joins the default one.
+    await joinDefaultTeam(sso, byEmail)
     return byEmail._id
   }
   const set = { 'services.sso': ssoService(identity, refreshToken) }
   const index = (bySubject.emails || []).findIndex(entry => entry.address?.toLowerCase() === identity.email)
   if (index >= 0) set[`emails.${index}.verified`] = true
   await Meteor.users.updateAsync({ _id: bySubject._id }, { $set: set })
+  // An account made at first sign-in before accounts joined the default team gets there now.
+  await joinDefaultTeam(sso, bySubject)
   return bySubject._id
 }
 
@@ -172,22 +189,38 @@ function ssoOnlyOnTheServer() {
   })
 }
 
-// Each SSO user with a Slatebox session is checked at most every checkSeconds.
+let lastOverCapLog = 0
+
+// Each SSO user with a Slatebox session is checked at most every checkSeconds, SESSION_CHECK_CAP
+// per pass (oldest check first). The pass is recorded (counts only) for `slatebox status`.
 async function checkSessions(sso) {
+  const query = sessionCheckQuery(Date.now(), sso.checkSeconds)
+  const due = await Meteor.users.find(query).countAsync()
   const users = await Meteor.users.find(
-    sessionCheckQuery(Date.now(), sso.checkSeconds),
-    { fields: { _id: 1, 'services.sso.refreshToken': 1 }, sort: { 'services.sso.checkedAt': 1 }, limit: 500 },
+    query,
+    { fields: { _id: 1, 'services.sso.refreshToken': 1 }, sort: { 'services.sso.checkedAt': 1 }, limit: SESSION_CHECK_CAP },
   ).fetchAsync()
+  let revoked = 0
   for (const user of users) {
     const outcome = await refreshSession({ config: sso, refreshToken: user.services.sso.refreshToken })
     if (outcome.status === 'active') {
       await Meteor.users.updateAsync({ _id: user._id }, { $set: { 'services.sso.refreshToken': outcome.refreshToken, 'services.sso.checkedAt': new Date() } })
     } else if (outcome.status === 'revoked') {
+      revoked += 1
       await Meteor.users.updateAsync({ _id: user._id }, revokedModifier())
       await revokeCredentials(credentials, user._id)
       log(`account ${user._id} signed out: the identity provider refused its session; its API tokens are revoked`)
     }
   }
+  if (due > SESSION_CHECK_CAP && Date.now() - lastOverCapLog > 3600_000) {
+    lastOverCapLog = Date.now()
+    log(`session check: ${due} accounts were due, ${SESSION_CHECK_CAP} are checked per pass; the rest wait for a later pass (see slatebox status)`)
+  }
+  await SystemSettings.rawCollection().updateOne(
+    { _id: SESSION_CHECK_ID },
+    sessionCheckRecord({ due, checked: users.length, revoked, checkSeconds: sso.checkSeconds }),
+    { upsert: true },
+  )
 }
 
 function sessionChecks(sso) {
@@ -210,5 +243,5 @@ if (sso) {
       await Meteor.users.updateAsync({ _id: user._id }, { $unset: { 'services.sso.revokedAt': '' } })
     }
   })
-  log(`on, issuer ${sso.issuer}${sso.only ? ', single sign-on only' : ''}`)
+  log(`on, issuer ${sso.issuer}${sso.only ? ', single sign-on only' : ''}${sso.defaultRole === 'none' ? ', new accounts join a team only by invitation' : ''}${sso.domains.length ? `, ${sso.domains.length} allowed email domain${sso.domains.length === 1 ? '' : 's'}` : ''}`)
 }

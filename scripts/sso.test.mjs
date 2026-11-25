@@ -433,3 +433,171 @@ test('M2: SSO only refuses guests, password reset, and the public pages the serv
     assert.equal(policy.closedPathUnderSsoOnly(path), false, path)
   }
 })
+
+// ---- SSO slice 1: accounts join the default team; allowed domains; refresh token never published ----
+
+const imageSso = await import(fileURLToPath(new URL('../self-host/rootfs/opt/slatebox/lib/sso.mjs', import.meta.url)))
+const settingsFor = (sso) => policy.ssoSettings({ sso: { enabled: true, issuer: config.issuer, clientId: 'slatebox', clientSecret: 's',
+  authorizationEndpoint: config.authorizationEndpoint, tokenEndpoint: config.tokenEndpoint, redirectUri: config.redirectUri, stateKey: KEY, ...sso } })
+
+test('slice 1: a new SSO account is a Member of the default team: the team set, no claims, not the owner', () => {
+  const identity = accounts.ssoIdentity(goodClaims('n'), config.issuer)
+  const doc = accounts.newUserDocument(identity, 'rt-1', NOW, { orgId: 'team-1' })
+  assert.equal(doc.orgId, 'team-1')
+  assert.equal(doc.isOrgOwner, undefined, 'never the owner')
+  assert.equal(accounts.newUserDocument(identity, 'rt-1', NOW).orgId, undefined, 'no team: none set')
+  // Who joins: only an account in no team, and only when the server lets people in as Members.
+  const fresh = {}
+  assert.equal(accounts.teamToJoin(fresh, { defaultRole: 'member', defaultTeamId: 'team-1' }), 'team-1')
+  assert.equal(accounts.teamToJoin({ _id: 'u', orgId: '' }, { defaultRole: 'member', defaultTeamId: 'team-1' }), 'team-1')
+  assert.equal(accounts.teamToJoin(fresh, { defaultRole: 'none', defaultTeamId: 'team-1' }), null, 'invite-first: nobody joins')
+  assert.equal(accounts.teamToJoin(fresh, { defaultRole: 'member', defaultTeamId: null }), null, 'no default team (before setup): nobody joins')
+  assert.equal(accounts.teamToJoin({ isAnonymous: true }, { defaultRole: 'member', defaultTeamId: 'team-1' }), null, 'never a guest')
+  // An invitation keeps the team that invited them; the first admin and owners keep theirs, with every role.
+  assert.equal(accounts.teamToJoin({ orgId: 'invited-team' }, { defaultRole: 'member', defaultTeamId: 'team-1' }), null)
+  assert.equal(accounts.teamToJoin({ orgId: 'team-1', isOrgOwner: true }, { defaultRole: 'member', defaultTeamId: 'team-1' }), null)
+  // The update matches only while the account has no team, so it can never move or demote anyone.
+  const { selector, modifier } = accounts.joinTeamUpdate('u1', 'team-1')
+  assert.deepEqual(selector, { _id: 'u1', isAnonymous: { $ne: true }, orgId: { $in: [null, ''] } })
+  assert.deepEqual(modifier, { $set: { orgId: 'team-1' } }, 'the team only: no owner flag, no claims')
+})
+
+test('slice 1: settings: Member by default, invite-first on request, allowed domains validated', () => {
+  const on = settingsFor({})
+  assert.equal(on.defaultRole, 'member')
+  assert.deepEqual(on.domains, [])
+  assert.equal(on.defaultTeamId, null)
+  assert.equal(settingsFor({ defaultRole: 'none' }).defaultRole, 'none')
+  assert.throws(() => settingsFor({ defaultRole: 'admin' }), /sso\.defaultRole must be member or none/)
+  assert.deepEqual(settingsFor({ domains: ['Example.com', 'example.com', 'corp.example.org'] }).domains, ['example.com', 'corp.example.org'])
+  assert.throws(() => settingsFor({ domains: 'example.com' }), /sso\.domains/)
+  assert.throws(() => settingsFor({ domains: ['@example.com'] }), /sso\.domains/)
+  assert.equal(settingsFor({ defaultTeamId: 'team-9' }).defaultTeamId, 'team-9')
+})
+
+test('slice 1: with allowed domains, an address outside them gets no account, no link and no sign-in', () => {
+  const domains = ['example.com']
+  const identity = accounts.ssoIdentity(goodClaims('n'), config.issuer)
+  assert.equal(accounts.decideAccount(identity, { domains }).action, 'create')
+  const outsider = accounts.ssoIdentity(goodClaims('n', { email: 'eve@example.com.evil.test' }), config.issuer)
+  assert.deepEqual(accounts.decideAccount(outsider, { domains }), { action: 'refuse', reason: accounts.OUTSIDE_DOMAINS })
+  const linked = { _id: 'u1', services: { sso: { issuer: config.issuer, subject: 'kc-user-1' } } }
+  assert.equal(accounts.decideAccount(outsider, { bySubject: linked, domains }).action, 'refuse', 'not even a linked account')
+  const password = { _id: 'u2', emails: [{ address: 'eve@example.com.evil.test', verified: true }], services: { password: { bcrypt: 'x' } } }
+  assert.equal(accounts.decideAccount(outsider, { byEmail: password, domains }).action, 'refuse')
+  // A subdomain is not the domain; no domains set means every verified address.
+  assert.equal(accounts.emailDomainAllowed('a@sub.example.com', domains), false)
+  assert.equal(accounts.emailDomainAllowed('a@EXAMPLE.com', domains), true)
+  assert.equal(accounts.emailDomainAllowed('a@anything.test', []), true)
+  assert.equal(accounts.emailDomainAllowed('a@anything.test', undefined), true)
+})
+
+test('slice 1: the session check records counts only, and marks a pass with more accounts due than it checks', () => {
+  assert.equal(accounts.SESSION_CHECK_CAP, 500)
+  assert.equal(accounts.SESSION_CHECK_ID, imageSso.SESSION_CHECK_ID, 'the app writes the record the image reads')
+  assert.equal(accounts.SESSION_CHECK_CAP, imageSso.SESSION_CHECK_CAP)
+  const under = accounts.sessionCheckRecord({ due: 41, checked: 41, revoked: 1, checkSeconds: 60, now: NOW })
+  assert.deepEqual(under, { $set: { at: new Date(NOW), due: 41, checked: 41, revoked: 1, cap: 500, checkSeconds: 60 } })
+  const over = accounts.sessionCheckRecord({ due: 730, checked: 500, revoked: 0, checkSeconds: 60, now: NOW })
+  assert.deepEqual(over.$set.overCapAt, new Date(NOW))
+  assert.doesNotMatch(JSON.stringify([under, over]), /refreshToken|@|subject/)
+  // The index.js pass uses the cap and writes the record.
+  const index = read('server/sso/index.js')
+  assert.match(index, /limit: SESSION_CHECK_CAP/)
+  assert.match(index, /sessionCheckRecord\(/)
+})
+
+test('slice 1: the image summarizes the last pass for slatebox status, with a warning past the cap or when it stopped', () => {
+  assert.deepEqual(imageSso.sessionCheckSummary(null, NOW), { ran: false, cap: 500, warning: null, line: 'no pass yet (at most 500 accounts per pass)' })
+  const fine = imageSso.sessionCheckSummary({ at: new Date(NOW - 12_000), due: 41, checked: 41, revoked: 0, cap: 500, checkSeconds: 60 }, NOW)
+  assert.equal(fine.line, 'every 60 s, last pass 12 s ago: 41 due, 41 checked, 0 signed out (at most 500 accounts per pass)')
+  assert.equal(fine.warning, null)
+  assert.equal(fine.overCap, false)
+  const over = imageSso.sessionCheckSummary({ at: new Date(NOW - 5_000), due: 730, checked: 500, revoked: 2, cap: 500, checkSeconds: 60, overCapAt: new Date(NOW - 3600_000) }, NOW)
+  assert.equal(over.overCap, true)
+  assert.match(over.warning, /More single sign-on accounts were due for the session check than one pass checks \(500\)/)
+  // Over the cap more than a day ago: no longer a warning.
+  const old = imageSso.sessionCheckSummary({ at: new Date(NOW - 5_000), due: 10, checked: 10, revoked: 0, cap: 500, checkSeconds: 60, overCapAt: new Date(NOW - 25 * 3600_000) }, NOW)
+  assert.equal(old.warning, null)
+  const stopped = imageSso.sessionCheckSummary({ at: new Date(NOW - 20 * 60_000), due: 0, checked: 0, revoked: 0, cap: 500, checkSeconds: 60 }, NOW)
+  assert.equal(stopped.stale, true)
+  assert.match(stopped.warning, /last ran 20 minutes ago/)
+})
+
+test('slice 1: the image setting SLATEBOX_SSO_DEFAULT_ROLE (member by default) and SLATEBOX_SSO_DOMAINS reach the app', () => {
+  const setting = env => name => env[name]
+  const on = imageSso.ssoMode(setting({ SLATEBOX_SSO: 'keycloak' }))
+  assert.equal(on.defaultRole, 'member')
+  assert.deepEqual(on.domains, [])
+  const strict = imageSso.ssoMode(setting({ SLATEBOX_SSO: 'keycloak', SLATEBOX_SSO_DEFAULT_ROLE: 'None', SLATEBOX_SSO_DOMAINS: ' Example.com, example.org ,example.com' }))
+  assert.equal(strict.defaultRole, 'none')
+  assert.deepEqual(strict.domains, ['example.com', 'example.org'])
+  assert.throws(() => imageSso.ssoMode(setting({ SLATEBOX_SSO: 'keycloak', SLATEBOX_SSO_DEFAULT_ROLE: 'admin' })), /SLATEBOX_SSO_DEFAULT_ROLE must be member or none/)
+  assert.throws(() => imageSso.ssoMode(setting({ SLATEBOX_SSO_DEFAULT_ROLE: 'none' })), /also needs SLATEBOX_SSO=keycloak/)
+  assert.throws(() => imageSso.ssoMode(setting({ SLATEBOX_SSO: 'keycloak', SLATEBOX_SSO_DOMAINS: 'example.com,not a domain' })), /"not a domain" is not a domain name/)
+  assert.throws(() => imageSso.ssoMode(setting({ SLATEBOX_SSO_DOMAINS: 'example.com' })), /also needs SLATEBOX_SSO=keycloak/)
+  const url = new URL('https://boards.example.com')
+  const secrets = { ssoClientSecret: 'c', ssoStateKey: 's' }
+  const app = imageSso.appSettings({ url, secrets, only: false, defaultRole: strict.defaultRole, domains: strict.domains })
+  assert.equal(app.sso.defaultRole, 'none')
+  assert.deepEqual(app.sso.domains, ['example.com', 'example.org'])
+  // What the image renders, the app accepts.
+  assert.equal(policy.ssoSettings({ sso: { ...app.sso } }).defaultRole, 'none')
+  assert.equal(imageSso.appSettings({ url, secrets, only: false }).sso.defaultRole, 'member')
+  assert.equal('domains' in imageSso.appSettings({ url, secrets, only: false }).sso, false)
+  assert.equal('defaultRole' in app.public.sso, false, 'nothing new reaches browsers')
+})
+
+// The refresh token (services.sso.refreshToken) is an offline credential at Keycloak: no
+// publication may ever send it. Every cursor of users a publication can return whitelists its
+// fields (inclusion only) and none names services; nothing adds documents to the users collection
+// by hand; the logged-in user's default fields are Meteor's (profile, username, emails).
+test('slice 1: no publication returns services.sso.refreshToken', async () => {
+  const { readdirSync, statSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const root = fileURLToPath(new URL('../', import.meta.url))
+  const files = []
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      if (name === 'node_modules' || name.startsWith('.')) continue
+      const path = join(dir, name)
+      if (statSync(path).isDirectory()) walk(path)
+      else if (/\.(m?js|jsx|ts)$/.test(name)) files.push(path)
+    }
+  }
+  for (const dir of ['web/app/server', 'web/app/imports', 'enterprise/server']) walk(join(root, dir))
+  const balanced = (text, open) => {
+    let depth = 0
+    for (let i = open; i < text.length; i++) {
+      if (text[i] === '(') depth++
+      else if (text[i] === ')' && --depth === 0) return i
+    }
+    return -1
+  }
+  let cursors = 0
+  const publishing = files.filter(file => /Meteor\.publish\(|makePublication\(/.test(readFileSync(file, 'utf8')))
+  assert.ok(publishing.some(file => file.endsWith('server/publications.js')), 'the scan finds the publications')
+  for (const file of publishing) {
+    const text = readFileSync(file, 'utf8')
+    assert.doesNotMatch(text, /\.added\(\s*['"]users['"]/, `${file} adds user documents by hand`)
+    for (const match of text.matchAll(/Meteor\.users(?:\.rawCollection\(\))?\.find\(/g)) {
+      const open = match.index + match[0].length - 1
+      const close = balanced(text, open)
+      const args = text.slice(open, close + 1)
+      // A server-side read (counted, fetched, iterated), not a cursor handed to a subscriber.
+      if (/^\s*\.(countAsync|fetchAsync|forEachAsync|mapAsync|toArray|count|fetch)\(/.test(text.slice(close + 1))) continue
+      cursors++
+      const where = `${file.slice(root.length)}: ${args.replace(/\s+/g, ' ').slice(0, 120)}`
+      const fields = /(?:fields|projection)\s*:\s*\{([^}]*)\}/.exec(args)
+      assert.ok(fields, `a users cursor in a publication file without a field whitelist: ${where}`)
+      assert.doesNotMatch(fields[1], /services/, `a publication names services: ${where}`)
+      assert.doesNotMatch(fields[1], /:\s*(0|false)\b/, `an exclusion projection would publish services: ${where}`)
+    }
+  }
+  assert.ok(cursors >= 3, `the scan finds the users publications (${cursors})`)
+  // Meteor's default fields for the signed-in user stay as they are (profile, username, emails).
+  for (const file of files) assert.doesNotMatch(readFileSync(file, 'utf8'), /defaultFieldSelector|setDefaultPublishFields/, file)
+  assert.doesNotMatch(readFileSync(join(root, 'web/app/.meteor/packages'), 'utf8'), /^autopublish/m)
+  // And the client never asks for it.
+  assert.doesNotMatch(read('imports/ui/sso/sso.jsx'), /refreshToken/)
+})

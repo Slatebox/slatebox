@@ -14,7 +14,9 @@ export const KEYCLOAK_DB_USER = 'keycloak'
 export const keycloakDbUrl = () => `jdbc:h2:file:${join(KEYCLOAK_DATA, 'h2/keycloakdb')};NON_KEYWORDS=VALUE;AUTO_SERVER=TRUE`
 const JAVA_HOME = '/opt/java/openjdk'
 
-/** SLATEBOX_SSO, SLATEBOX_SSO_ONLY and SLATEBOX_SSO_ADMIN, validated. */
+const DOMAIN = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
+
+/** SLATEBOX_SSO, SLATEBOX_SSO_ONLY, SLATEBOX_SSO_ADMIN, SLATEBOX_SSO_DEFAULT_ROLE and SLATEBOX_SSO_DOMAINS, validated. */
 export function ssoMode(setting) {
   const mode = (setting('SLATEBOX_SSO') || 'off').toLowerCase()
   if (!['off', 'keycloak'].includes(mode)) throw new Plain('SLATEBOX_SSO must be off or keycloak')
@@ -28,19 +30,33 @@ export function ssoMode(setting) {
   const admin = (adminValue || 'open').toLowerCase()
   if (!['open', 'closed'].includes(admin)) throw new Plain('SLATEBOX_SSO_ADMIN must be open or closed')
   if (adminValue && mode === 'off') throw new Plain('SLATEBOX_SSO_ADMIN also needs SLATEBOX_SSO=keycloak')
-  return { enabled: mode === 'keycloak', only, adminOpen: admin === 'open' }
+  // Who joins without an invitation: everyone single sign-on lets in, as a Member of the setup
+  // team (member, the default), or nobody until a team admin invites them (none).
+  const roleValue = setting('SLATEBOX_SSO_DEFAULT_ROLE')
+  const defaultRole = (roleValue || 'member').toLowerCase()
+  if (!['member', 'none'].includes(defaultRole)) throw new Plain('SLATEBOX_SSO_DEFAULT_ROLE must be member or none')
+  if (roleValue && mode === 'off') throw new Plain('SLATEBOX_SSO_DEFAULT_ROLE also needs SLATEBOX_SSO=keycloak')
+  // Allowed email domains, comma-separated: an address outside them does not get in.
+  const domainsValue = setting('SLATEBOX_SSO_DOMAINS')
+  const domains = [...new Set(String(domainsValue || '').split(',').map(domain => domain.trim().toLowerCase()).filter(Boolean))]
+  const bad = domains.find(domain => !DOMAIN.test(domain))
+  if (bad) throw new Plain(`SLATEBOX_SSO_DOMAINS: "${bad}" is not a domain name (for example example.com,example.org)`)
+  if (domainsValue && mode === 'off') throw new Plain('SLATEBOX_SSO_DOMAINS also needs SLATEBOX_SSO=keycloak')
+  return { enabled: mode === 'keycloak', only, adminOpen: admin === 'open', defaultRole, domains }
 }
 
 export const issuerFor = url => `${url.origin}${SSO_PATH}/realms/${SSO_REALM}`
 const internal = `http://127.0.0.1:${KEYCLOAK_PORT}${SSO_PATH}`
 
 /** The app's settings: server side (sso) and what browsers see (public.sso). */
-export function appSettings({ url, secrets, only }) {
+export function appSettings({ url, secrets, only, defaultRole = 'member', domains = [] }) {
   const issuer = issuerFor(url)
   return {
     sso: {
       enabled: true,
       only,
+      defaultRole,
+      ...(domains.length ? { domains } : {}),
       // Accounts stay linked when SLATEBOX_URL (and with it the issuer) changes.
       provider: 'bundled-keycloak',
       issuer,
@@ -196,4 +212,37 @@ export function realm() {
     adminEventsDetailsEnabled: false,
     scimApiEnabled: true,
   }
+}
+
+// The app's session check (web/app/server/sso/index.js) refreshes each SSO account's session at
+// Keycloak every checkSeconds, at most SESSION_CHECK_CAP accounts per pass, and records each pass
+// (counts only) in the systemSettings document SESSION_CHECK_ID.
+export const SESSION_CHECK_ID = 'ssoSessionCheck'
+export const SESSION_CHECK_CAP = 500
+const DAY_MS = 24 * 3600 * 1000
+
+/**
+ * What `slatebox sso sessions` and the installer's `slatebox status` show of the last pass, with a
+ * warning when, in the last 24 hours, more accounts were due than one pass checks, or when the
+ * check has stopped running.
+ */
+export function sessionCheckSummary(doc, now = Date.now()) {
+  const cap = Number.isInteger(doc?.cap) ? doc.cap : SESSION_CHECK_CAP
+  if (!(doc?.at instanceof Date)) return { ran: false, cap, warning: null, line: `no pass yet (at most ${cap} accounts per pass)` }
+  const checkSeconds = Number.isInteger(doc.checkSeconds) ? doc.checkSeconds : 60
+  const ageSeconds = Math.max(0, Math.round((now - doc.at.getTime()) / 1000))
+  const overCapAt = doc.overCapAt instanceof Date && now - doc.overCapAt.getTime() < DAY_MS ? doc.overCapAt : null
+  const stale = ageSeconds > Math.max(300, checkSeconds * 5)
+  const summary = {
+    ran: true, at: doc.at.toISOString(), ageSeconds, checkSeconds, cap,
+    due: doc.due ?? 0, checked: doc.checked ?? 0, revoked: doc.revoked ?? 0,
+    overCap: Boolean(overCapAt), overCapAt: overCapAt ? overCapAt.toISOString() : null, stale,
+  }
+  summary.line = `every ${checkSeconds} s, last pass ${ageSeconds} s ago: ${summary.due} due, ${summary.checked} checked, ${summary.revoked} signed out (at most ${cap} accounts per pass)`
+  summary.warning = stale
+    ? `The single sign-on session check last ran ${Math.round(ageSeconds / 60)} minutes ago. People removed at the identity provider keep their sessions until it runs again: check the [app] lines in the logs.`
+    : overCapAt
+      ? `More single sign-on accounts were due for the session check than one pass checks (${cap}), last at ${overCapAt.toISOString()}. Someone removed at the identity provider can keep access for longer than ${checkSeconds} s.`
+      : null
+  return summary
 }

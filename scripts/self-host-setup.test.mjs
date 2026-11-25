@@ -253,3 +253,25 @@ test('the container lists setup-link among its commands, so an installer knows i
   assert.match(bin, /setup-link\) shift; setup_link "\$@" ;;/)
   assert.equal(image.ALREADY_SET_UP, 3)
 })
+
+test('setup records the first team, which single sign-on accounts join; a server set up earlier falls back to the first admin\'s team', async () => {
+  const done = core.completedModifier('u1', { via: 'sso', teamId: 'team-1', now: NOW })
+  assert.deepEqual(done.$set, { completedAt: new Date(NOW), adminUserId: 'u1', via: 'sso', teamId: 'team-1' })
+  const teamOf = async id => ({ u1: 'team-of-u1' })[id]
+  assert.equal(await core.defaultTeamFrom(undefined, teamOf), null, 'before setup: none')
+  assert.equal(await core.defaultTeamFrom({ tokenHash: 'h' }, teamOf), null, 'a link not used yet: none')
+  assert.equal(await core.defaultTeamFrom({ completedAt: new Date(NOW), adminUserId: 'u1', teamId: 'team-1' }, teamOf), 'team-1')
+  assert.equal(await core.defaultTeamFrom({ completedAt: new Date(NOW), adminUserId: 'u1' }, teamOf), 'team-of-u1', 'set up before teams were recorded')
+  assert.equal(await core.defaultTeamFrom({ completedAt: new Date(NOW), adminUserId: 'gone' }, teamOf), null)
+  assert.equal(await core.defaultTeamFrom({ completedAt: new Date(NOW), via: 'existing-accounts' }, teamOf), null)
+  // The setup link's first account keeps making (and owning) the first team, and the team is recorded.
+  const meteor = read('web/app/server/self-host-setup/meteor.js')
+  assert.match(meteor, /const teamId = user\.orgId \|\| await createTeamFor\(user, teamName \|\| 'Our team'\)/)
+  assert.match(meteor, /completedModifier\(userId, \{ via, teamId \}\)/)
+  // No default team while setup waits: the first SSO account through the link gets its own team,
+  // and becomes the server administrator and the team's owner.
+  assert.match(meteor, /export async function defaultTeamId\(sso\) \{\n {2}if \(applies && await setupRequired\(\)\) return null/)
+  const sso = read('web/app/server/sso/index.js')
+  assert.match(sso, /withTrustedFields\(orgId \? \{ orgId \} : \{\}, \(\) => Accounts\.insertUserDoc\(/)
+  assert.match(sso, /teamToJoin\(\{\}, \{ defaultRole: sso\.defaultRole, defaultTeamId: await defaultTeamId\(sso\) \}\)/)
+})

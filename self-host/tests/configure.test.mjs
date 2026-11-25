@@ -175,6 +175,32 @@ test('a self-hosted install: edition self-host (enterprise locked without a lice
   }
 })
 
+test('single sign-on: everyone it lets in joins the first team as a member by default; SLATEBOX_SSO_DEFAULT_ROLE=none and SLATEBOX_SSO_DOMAINS reach the app', async () => {
+  const on = await configure({ SLATEBOX_SSO: 'keycloak' })
+  assert.equal(on.code, 0, on.log)
+  assert.equal(appSettings(on).sso.defaultRole, 'member')
+  assert.equal(appSettings(on).sso.domains, undefined)
+  assert.match(on.log, /SSO: +on, .*new people join the first team as members/)
+  const strict = await configure({ SLATEBOX_SSO: 'keycloak', SLATEBOX_SSO_DEFAULT_ROLE: 'none', SLATEBOX_SSO_DOMAINS: 'Example.com,example.org' })
+  assert.equal(strict.code, 0, strict.log)
+  assert.equal(appSettings(strict).sso.defaultRole, 'none')
+  assert.deepEqual(appSettings(strict).sso.domains, ['example.com', 'example.org'])
+  assert.equal(appSettings(strict).public.sso.defaultRole, undefined, 'browsers get nothing new')
+  assert.match(strict.log, /new people join a team only by invitation, email domains example\.com, example\.org/)
+  for (const [env, message] of [
+    [{ SLATEBOX_SSO: 'keycloak', SLATEBOX_SSO_DEFAULT_ROLE: 'owner' }, /SLATEBOX_SSO_DEFAULT_ROLE must be member or none/],
+    [{ SLATEBOX_SSO_DEFAULT_ROLE: 'none' }, /SLATEBOX_SSO_DEFAULT_ROLE also needs SLATEBOX_SSO=keycloak/],
+    [{ SLATEBOX_SSO: 'keycloak', SLATEBOX_SSO_DOMAINS: 'example.com;example.org' }, /SLATEBOX_SSO_DOMAINS: "example\.com;example\.org" is not a domain name/],
+  ]) {
+    const refused = await configure(env)
+    assert.notEqual(refused.code, 0, JSON.stringify(env))
+    assert.match(refused.log, message)
+    assert.equal(refused.secretFiles, 0, 'nothing written')
+  }
+  const listed = JSON.parse(await ok(['run', '--rm', '--network', 'none', '-v', `${LIB}:/opt/slatebox/lib:ro`, '--entrypoint', 'node', IMAGE, '/opt/slatebox/lib/settings.mjs', '--json']))
+  for (const name of ['SLATEBOX_SSO_DEFAULT_ROLE', 'SLATEBOX_SSO_DOMAINS']) assert.ok(listed.settings.includes(name), name)
+})
+
 // ------------------------------------------------------------------ team-address tunnel
 
 // A well-formed Cloudflare Tunnel token (base64 of {a, t, s}) with made-up values.

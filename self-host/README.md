@@ -24,7 +24,10 @@ The link works once and expires in 24 hours; running the command again prints a
 new one and ends the last. Until then <http://localhost:7070> says "This
 Slatebox isn't set up yet". After that, people sign up and are invited as usual.
 With `SLATEBOX_SSO=keycloak`, the link's page also offers single sign-on: the
-first account to sign in through it becomes the administrator.
+first account to sign in through it becomes the administrator. After that,
+everyone your identity provider lets in joins that first team as a member,
+unless they were invited to a team (`SLATEBOX_SSO_DEFAULT_ROLE=none` makes
+joining by invitation only).
 
 Everything Slatebox stores is in the `slatebox-data` volume: your slates and
 accounts, and the secrets generated for this installation on its first start.
@@ -78,6 +81,8 @@ Every setting is optional and is given with `-e NAME=value`.
 | `SLATEBOX_SSO` | `keycloak` turns on single sign-on with the Keycloak bundled in the image (off by default). People sign in with Entra ID, Okta, Google Workspace, SAML, OpenID Connect or LDAP through it. Keycloak's admin console is at `/auth/admin/` on the same address. |
 | `SLATEBOX_SSO_ONLY` | `true`, with `SLATEBOX_SSO=keycloak`: single sign-on is the only way in, no passwords and no guests. |
 | `SLATEBOX_SSO_ADMIN` | `closed`, with `SLATEBOX_SSO=keycloak`: Keycloak's admin console and master realm are not served on the published port (default `open`). |
+| `SLATEBOX_SSO_DEFAULT_ROLE` | With `SLATEBOX_SSO=keycloak`: `member` (default), everyone single sign-on lets in joins the first team as a member; `none`, people join a team only when a team admin invites them. Invited people always join the team that invited them. |
+| `SLATEBOX_SSO_DOMAINS` | With `SLATEBOX_SSO=keycloak`: comma-separated email domains, for example `example.com,example.org`. Single sign-on refuses any address outside them. |
 | `SLATEBOX_TUNNEL_TOKEN` | A Cloudflare Tunnel connector token. The container's cloudflared connects out to Cloudflare with it, which ends HTTPS for the `https://` `SLATEBOX_URL`: no ports to open, no certificates. `npx slatebox install --team-address <name>` gets one for `https://<name>.slatebox.team`; a tunnel in your own Cloudflare account works the same way. Built-in HTTPS is off with it. The token is passed to cloudflared in a private file, never to the app, and never written to the log. |
 
 A misspelled setting, or one in lower case, stops the container with the list
@@ -176,6 +181,7 @@ docker exec slatebox slatebox password-link person@example.com # a one-time link
 docker exec slatebox slatebox sso                              # with SLATEBOX_SSO=keycloak: admin console, issuer, SCIM
 docker exec slatebox slatebox sso admin-password               # Keycloak's first admin password (never in the log)
 docker exec slatebox slatebox sso events 50                    # recent sign-in events
+docker exec slatebox slatebox sso sessions                     # the last session check (at most 500 accounts per pass)
 docker exec slatebox slatebox ai check                         # test the AI connections set here
 ```
 

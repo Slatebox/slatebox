@@ -4,7 +4,7 @@
 // sign-in events, "SSO only", a restart, and SSO staying off by default.
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
-import { cleanup, docker, freePort, healthy, ready, logs, ok, remove, setupLink, start, waitFor } from './lib.mjs'
+import { FIRST_ADMIN, cleanup, docker, freePort, healthy, ready, logs, ok, remove, setupLink, start, waitFor } from './lib.mjs'
 import { closeChrome, createSlate, notes, person, writeNote } from './slate.mjs'
 
 const REALM = 'slatebox'
@@ -70,6 +70,17 @@ async function database(id, script) {
     await client.connect()
     const db = client.db('slatebox')
     try { console.log(JSON.stringify(await (async () => { ${script} })())) } finally { await client.close() }`])
+}
+
+/** Where the account with this address stands: its team's name, owner or not, its claims in that team, server admin or not. */
+async function standing(id, email) {
+  return JSON.parse(await database(id, `
+    const user = await db.collection('users').findOne({ 'emails.address': ${JSON.stringify(email)} })
+    if (!user) return null
+    const org = user.orgId ? await db.collection('organizations').findOne({ _id: user.orgId }) : null
+    const claims = user.orgId ? (await db.collection('permissions').find({ userId: user._id, orgId: user.orgId }).toArray()).map(p => p.claimId).sort() : []
+    return { team: org?.name ?? null, owner: user.isOrgOwner === true, claims,
+      serverAdmin: (await db.collection('permissions').countDocuments({ userId: user._id, claimId: 'uberMensch' })) > 0 }`))
 }
 
 /** A SCIM client as the company's identity provider runs one: client credentials, then /scim/v2. */
@@ -155,6 +166,14 @@ test('a person made in Keycloak signs in with SSO, gets an account and a slate; 
     await ada.page.waitForURL(url => url.origin === box.url && !url.pathname.startsWith('/sso'), { timeout: 60_000 })
     const user = await waitFor(() => signedInUser(ada.page), { timeout: 60, what: 'the Slatebox session' })
     assert.deepEqual({ ...user, id: undefined }, { id: undefined, email: 'ada.sso@example.test', verified: true, anonymous: false, firstName: 'Ada' })
+    // Uninvited, she joins the team the setup link's first admin made, as a Member: no claims, not
+    // the owner. The first admin keeps every role.
+    const firstAdmin = await standing(box.id, FIRST_ADMIN.email)
+    assert.deepEqual(await standing(box.id, 'ada.sso@example.test'), { team: FIRST_ADMIN.team, owner: false, claims: [], serverAdmin: false })
+    assert.equal(firstAdmin.team, FIRST_ADMIN.team)
+    assert.equal(firstAdmin.owner, true)
+    assert.equal(firstAdmin.serverAdmin, true)
+    assert.ok(firstAdmin.claims.includes('admin'), 'the first admin is still the team admin')
 
     // A slate of her own, saved.
     const slate = await createSlate(ada.page, `${box.url}/new`)
@@ -192,7 +211,7 @@ test('a person made in Keycloak signs in with SSO, gets an account and a slate; 
     // Nothing she typed, and not her address, reached the container log.
     const log = await logs(box.id)
     for (const text of ['ada.sso@example.test', 'ada keycloak password 1', 'Written after single sign-on']) assert.ok(!log.includes(text), `${text} in the log`)
-    assert.match(log, /\[app\] sso: account \w+ created at first sign-in/)
+    assert.match(log, /\[app\] sso: account \w+ created at first sign-in, a member of the default team/)
     assert.match(log, /\[app\] sso: account \w+ signed out: the identity provider refused its session; its API tokens are revoked/)
   } finally {
     await ada.close()
@@ -347,6 +366,22 @@ test('sign-in events are kept in Keycloak and listed by slatebox sso events', as
   assert.ok(lines.some(event => event.type === 'LOGIN_ERROR' && event.error === 'user_disabled'), 'the refused sign-in of a disabled user')
 })
 
+test('slatebox sso sessions shows the last session check and its cap of 500 accounts per pass (counts only)', async () => {
+  const summary = await waitFor(async () => {
+    const value = JSON.parse(await exec(box.id, 'sso', 'sessions', '--json'))
+    return value.ran && value
+  }, { timeout: 90, what: 'a recorded session-check pass' })
+  assert.equal(summary.cap, 500)
+  assert.equal(summary.checkSeconds, 60)
+  assert.ok(summary.ageSeconds < 120, `the last pass is recent (${summary.ageSeconds} s)`)
+  assert.equal(summary.overCap, false)
+  assert.equal(summary.warning, null)
+  assert.ok(summary.due >= summary.checked && summary.checked <= 500)
+  assert.match(await exec(box.id, 'sso', 'sessions'), /^Session check: +every 60 s, last pass \d+ s ago: \d+ due, \d+ checked, \d+ signed out \(at most 500 accounts per pass\)$/)
+  const stored = JSON.parse(await database(box.id, "return db.collection('systemSettings').findOne({ _id: 'ssoSessionCheck' })"))
+  assert.deepEqual(Object.keys(stored).filter(key => !['_id', 'at', 'due', 'checked', 'revoked', 'cap', 'checkSeconds', 'overCapAt'].includes(key)), [], 'counts only')
+})
+
 test('a restart keeps the realm, its people and its secrets', async () => {
   const before = await ok(['exec', box.id, 'cat', '/data/secrets/secrets.json'])
   await ok(['restart', box.id])
@@ -394,7 +429,7 @@ test('a backup carries Keycloak: restored into a new installation, the same peop
 test('a new address keeps SCIM working; with SLATEBOX_SSO_ADMIN=closed the admin console is not on the published port', async () => {
   // The same volume, recreated at another address (a new SLATEBOX_URL), with the console closed.
   await remove(box.id)
-  const moved = await start({ data: box.data, port: await freePort(), env: { SLATEBOX_SSO: 'keycloak', SLATEBOX_SSO_ADMIN: 'closed' } })
+  const moved = await start({ data: box.data, port: await freePort(), env: { SLATEBOX_SSO: 'keycloak', SLATEBOX_SSO_ADMIN: 'closed', SLATEBOX_SSO_DEFAULT_ROLE: 'none' } })
   await healthy(moved.id)
   const scim = await scimClient(moved, moved.id)
   assert.ok((await scim('GET', '/Users?filter=' + encodeURIComponent('userName eq "bob"'))).totalResults >= 1, 'SCIM answers at the new address')
@@ -410,6 +445,30 @@ test('a new address keeps SCIM working; with SLATEBOX_SSO_ADMIN=closed the admin
   } finally {
     await bo.close()
   }
+  // With SLATEBOX_SSO_DEFAULT_ROLE=none (invite-first, the behavior before accounts joined the
+  // first team), a new person gets an account in no team. People already in the team stay.
+  assert.match(await logs(moved.id), /SSO: +on, .*new people join a team only by invitation/)
+  const kc = await exec(moved.id, 'sso', 'admin-password')
+  // The console is closed on the published port: reach the admin API inside the container.
+  const token = JSON.parse(await ok(['exec', moved.id, 'node', '-e', `
+    fetch('http://127.0.0.1:7080/auth/realms/master/protocol/openid-connect/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'password', client_id: 'admin-cli', username: 'admin', password: ${JSON.stringify(kc)} }) })
+      .then(r => r.json()).then(j => console.log(JSON.stringify(j.access_token)))`]))
+  await ok(['exec', moved.id, 'node', '-e', `
+    fetch('http://127.0.0.1:7080/auth/admin/realms/${REALM}/users', { method: 'POST', headers: { authorization: 'Bearer ' + ${JSON.stringify(token)}, 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'gus', email: 'gus@example.test', firstName: 'Gus', lastName: 'Invite', enabled: true, emailVerified: true,
+        credentials: [{ type: 'password', value: 'gus keycloak password 1', temporary: false }] }) })
+      .then(r => { if (!r.ok) { console.error(r.status); process.exit(1) } })`])
+  const gus = await person()
+  try {
+    await ssoSignIn(gus.page, moved.url, 'gus', 'gus keycloak password 1')
+    assert.equal((await waitFor(() => signedInUser(gus.page), { timeout: 60, what: 'the SSO session of a new person' })).email, 'gus@example.test')
+  } finally {
+    await gus.close()
+  }
+  assert.deepEqual(await standing(moved.id, 'gus@example.test'), { team: null, owner: false, claims: [], serverAdmin: false })
+  assert.equal((await standing(moved.id, 'ada.sso@example.test')).team, FIRST_ADMIN.team, 'a member stays a member')
+  assert.equal((await standing(moved.id, FIRST_ADMIN.email)).owner, true)
 })
 
 test('SSO only: the first sign-in through the setup link makes the server administrator', async () => {
@@ -453,17 +512,44 @@ test('SSO only: the first sign-in through the setup link makes the server admini
   } finally {
     await dee.close()
   }
-  // The second person through single sign-on is an ordinary account.
+  // The second person through single sign-on is an ordinary account: a Member of Dee's team.
   const eli = await person()
   try {
     await ssoSignIn(eli.page, strict.url, 'eli', 'eli keycloak password 1')
     assert.equal((await waitFor(() => signedInUser(eli.page), { timeout: 60, what: 'the second SSO session' })).email, 'eli@example.test')
-    assert.equal(await database(strict.id, `
-      const user = await db.collection('users').findOne({ 'emails.address': 'eli@example.test' })
-      return db.collection('permissions').countDocuments({ userId: user._id, claimId: 'uberMensch' })`), '0')
+    assert.deepEqual(await standing(strict.id, 'eli@example.test'), { team: 'Dee team', owner: false, claims: [], serverAdmin: false })
   } finally {
     await eli.close()
   }
+  // Dee signs in again: still the server administrator and the team's owner and admin.
+  const deeAgain = await person()
+  try {
+    await ssoSignIn(deeAgain.page, strict.url, 'dee', 'dee keycloak password 1')
+    await waitFor(() => signedInUser(deeAgain.page), { timeout: 60, what: 'Dee signing in again' })
+  } finally {
+    await deeAgain.close()
+  }
+  const deeStanding = await standing(strict.id, 'dee@example.test')
+  assert.equal(deeStanding.team, 'Dee team')
+  assert.equal(deeStanding.owner, true)
+  assert.equal(deeStanding.serverAdmin, true)
+  assert.ok(deeStanding.claims.includes('admin'))
+  // An invitation to another team takes precedence: Fay was invited to "Other team" (the account
+  // an invitation makes: her address, unverified, no password), and stays there.
+  await database(strict.id, `
+    await db.collection('organizations').insertOne({ _id: 'other-team', name: 'Other team', createdOn: Date.now() })
+    await db.collection('users').insertOne({ _id: 'invited-fay', createdAt: new Date(), orgId: 'other-team', emails: [{ address: 'fay@example.test', verified: false }],
+      profile: { firstName: 'Fay', lastName: 'Invited' }, services: {} })
+    return 1`)
+  await makeUser(call, { username: 'fay', email: 'fay@example.test', password: 'fay keycloak password 1' })
+  const fay = await person()
+  try {
+    await ssoSignIn(fay.page, strict.url, 'fay', 'fay keycloak password 1')
+    assert.equal((await waitFor(() => signedInUser(fay.page), { timeout: 60, what: 'the invited person\'s SSO session' })).id, 'invited-fay', 'the invitation is linked')
+  } finally {
+    await fay.close()
+  }
+  assert.deepEqual(await standing(strict.id, 'fay@example.test'), { team: 'Other team', owner: false, claims: [], serverAdmin: false })
 })
 
 test('SSO only: no guest, no password, every page leads to "Sign in with SSO"', async () => {

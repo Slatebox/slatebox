@@ -63,9 +63,27 @@ export function claimFilter(token, now = Date.now()) {
   }
 }
 
-/** The update that marks setup done: the hash goes, so the link can never be used again. */
-export function completedModifier(userId, { via, now = Date.now() }) {
-  return { $set: { completedAt: new Date(now), adminUserId: userId, via }, $unset: { tokenHash: '', expiresAt: '', claimedAt: '', teamName: '' } }
+/**
+ * The update that marks setup done: the hash goes, so the link can never be used again. teamId is
+ * the first team, the one single sign-on accounts join by default.
+ */
+export function completedModifier(userId, { via, teamId, now = Date.now() }) {
+  return {
+    $set: { completedAt: new Date(now), adminUserId: userId, via, ...(teamId ? { teamId } : {}) },
+    $unset: { tokenHash: '', expiresAt: '', claimedAt: '', teamName: '' },
+  }
+}
+
+/**
+ * The team single sign-on accounts join by default, from the finished setup record: the team it
+ * recorded, else (a server set up before teams were recorded) the first admin's team, read with
+ * teamOf(userId). Null before setup, and on a server set up from accounts older than setup links.
+ */
+export async function defaultTeamFrom(doc, teamOf) {
+  if (!doc?.completedAt) return null
+  if (typeof doc.teamId === 'string' && doc.teamId) return doc.teamId
+  if (typeof doc.adminUserId === 'string' && doc.adminUserId) return (await teamOf(doc.adminUserId)) || null
+  return null
 }
 
 // Paths that are never a page: health, the setup itself, live data, the API, sign-in round trips,

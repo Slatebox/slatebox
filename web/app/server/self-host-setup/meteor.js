@@ -15,13 +15,13 @@ import { Meteor } from 'meteor/meteor'
 import { WebApp } from 'meteor/webapp'
 import { Accounts } from 'meteor/accounts-base'
 import CONSTANTS from '../../imports/api/common/constants'
-import { Permissions, SystemSettings } from '../../imports/api/common/models'
+import { Organizations, Permissions, SystemSettings } from '../../imports/api/common/models'
 import { createTeamFor } from '../methods/organizations'
 import { guestLoginToken } from '../common/accounts'
 import { ssoSettings } from '../sso/policy.mjs'
 import { markSetUp, setupAppliesHere, setupRequired } from './state.js'
 import {
-  NOT_SET_UP_MESSAGE, SETUP_COOKIE, SETUP_ID, claimFilter, completedModifier, cookieValue, formErrors, gatedRequest, linkProblemPage,
+  NOT_SET_UP_MESSAGE, SETUP_COOKIE, SETUP_ID, claimFilter, completedModifier, cookieValue, defaultTeamFrom, formErrors, gatedRequest, linkProblemPage,
   linkState, notSetUpPage, pageHeaders, parseForm, parseSetupPath, setupCookie, setupFormPage, signedInPage, suggestedTeam,
 } from './core.mjs'
 
@@ -53,11 +53,24 @@ export async function completeSetupWith(token, makeAccount, { teamName, via }) {
     await Permissions.insertAsync({ userId, claimId: CONSTANTS.claims.uberMensch._id })
   }
   const user = await Meteor.users.findOneAsync({ _id: userId }, { fields: { orgId: 1, isEducationCertified: 1 } })
-  if (!user.orgId) await createTeamFor(user, teamName || 'Our team')
-  await SystemSettings.rawCollection().updateOne({ _id: SETUP_ID }, completedModifier(userId, { via }))
+  const teamId = user.orgId || await createTeamFor(user, teamName || 'Our team')
+  await SystemSettings.rawCollection().updateOne({ _id: SETUP_ID }, completedModifier(userId, { via, teamId }))
   markSetUp()
   console.log(`[setup] the first administrator was created (${via}); sign-up now follows this server's normal rules`)
   return userId
+}
+
+/**
+ * The team single sign-on accounts join as Members: Meteor.settings.sso.defaultTeamId when an
+ * operator set one, else the setup team (core.mjs defaultTeamFrom). Null while setup is not done
+ * (the first sign-in through the setup link makes its own team) and when that team is gone.
+ */
+export async function defaultTeamId(sso) {
+  if (applies && await setupRequired()) return null
+  const teamId = sso?.defaultTeamId || (applies ? await defaultTeamFrom(await readDoc(), async (id) => (
+    await Meteor.users.findOneAsync({ _id: id }, { fields: { orgId: 1 } }))?.orgId) : null)
+  if (!teamId) return null
+  return (await Organizations.findOneAsync({ _id: teamId }, { fields: { _id: 1 } })) ? teamId : null
 }
 
 /** The setup link a browser carried through a single sign-on round trip, when it is still good. */

@@ -7,7 +7,7 @@
 #   docker exec slatebox slatebox password-link person@example.com
 #   docker exec slatebox slatebox health
 #   docker exec slatebox slatebox version
-#   docker exec slatebox slatebox sso [admin-password | scim-secret | events [N]]
+#   docker exec slatebox slatebox sso [admin-password | scim-secret | events [N] | sessions [--json]]
 #   docker exec slatebox slatebox ai [check]
 #   docker exec slatebox slatebox tunnel [--json] [--wait N]
 #   docker run --rm --entrypoint /opt/slatebox/bin/slatebox IMAGE settings --json
@@ -168,6 +168,8 @@ case ${1:-} in
   sso)
     shift
     [[ -f $RUN/state.env ]] || die 'Slatebox is still starting. Try again in a moment.'
+    # The session check is recorded in the app's database: read with the app's connection.
+    if [[ ${1:-} == sessions ]]; then with_app_env sso-cli.mjs "$@"; exit; fi
     exec node "$LIB/sso-cli.mjs" "$@"
     ;;
   *)
@@ -179,7 +181,7 @@ Usage, from the Docker host:
   docker exec slatebox slatebox password-link person@example.com
   docker exec slatebox slatebox health
   docker exec slatebox slatebox version
-  docker exec slatebox slatebox sso [admin-password | scim-secret | events [N]]
+  docker exec slatebox slatebox sso [admin-password | scim-secret | events [N] | sessions [--json]]
   docker exec slatebox slatebox ai [check]
   docker exec slatebox slatebox tunnel [--json] [--wait N]
   docker exec slatebox slatebox settings --json

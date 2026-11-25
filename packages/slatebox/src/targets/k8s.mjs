@@ -12,6 +12,7 @@ import { installDir, recordText, writeRecord } from '../record.mjs'
 import { MANAGER, names, renderK8s, renderSecret } from '../render/k8s.mjs'
 import { settingsFor } from '../render/settings.mjs'
 import { secretValues } from '../secret-values.mjs'
+import { ssoSessionState } from '../sso-status.mjs'
 import { firstAdmin, makeSetupLink, setupState, stillWaiting } from '../setup-link.mjs'
 import { checkTeamAddress, ensureTeamAddress, TUNNEL_TOKEN } from './address.mjs'
 import { stringifyAll } from '../yaml.mjs'
@@ -347,6 +348,8 @@ export async function statusK8s(ctx, record) {
   const version = ready ? await k(['exec', '-n', record.k8s.namespace, n.pod, '-c', 'slatebox', '--', SLATEBOX, 'version']) : null
   const backups = ready && record.backups.to !== 'off' ? await k(['exec', '-n', record.k8s.namespace, n.pod, '-c', 'backups', '--', 'sh', '-c', 'ls -1t /backups | head -1']) : null
   const setup = ready ? await setupState(args => k(['exec', '-n', record.k8s.namespace, n.pod, '-c', 'slatebox', '--', SLATEBOX, ...args])) : null
+  const ssoSessions = ready && record.sso.enabled ? await ssoSessionState(args => k(['exec', '-n', record.k8s.namespace, n.pod, '-c', 'slatebox', '--', SLATEBOX, ...args])) : null
+  if (ssoSessions?.warning) ctx.out.warn(ssoSessions.warning)
   return {
     name: record.name, target: 'k8s', where: `context ${record.k8s.context}, namespace ${record.k8s.namespace}`, address: record.address.url,
     running: Boolean(info), health: ready ? 'healthy' : info ? info.status.phase : 'missing',
@@ -354,6 +357,7 @@ export async function statusK8s(ctx, record) {
     ai: record.ai.mode === 'none' ? 'off' : record.ai.providers.map(provider => provider.id).join(', '),
     sso: record.sso.enabled ? 'on' : 'off', lastBackup: backups?.stdout.trim() || null,
     setup: setup ? (setup.setUp ? 'done' : 'waiting for the first admin') : null,
+    ...(ssoSessions ? { ssoSessions } : {}),
   }
 }
 

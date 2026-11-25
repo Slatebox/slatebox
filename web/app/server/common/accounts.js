@@ -12,6 +12,11 @@ export function createTrustedUser(options, fields = {}) {
   return trusted.withValue(fields, () => Accounts.createUserAsync(options))
 }
 
+/** Run make() with the fields only the server may set (the team), e.g. around Accounts.insertUserDoc. */
+export function withTrustedFields(fields, make) {
+  return trusted.withValue(fields, make)
+}
+
 export function onCreateUser(suggested, user) {
   if (isSharedGuestPassword(suggested.password)) throw new Meteor.Error(403, 'Choose another password.')
   const fields = trusted.get() || {}

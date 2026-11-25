@@ -8,6 +8,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { EXIT, InstallError } from '../errors.mjs'
 import { firstAdmin, makeSetupLink, setupState, stillWaiting } from '../setup-link.mjs'
+import { ssoSessionState } from '../sso-status.mjs'
 import { checkArch, checkCpu, DEFAULT_IMAGE, FALLBACK_CAPABILITIES, inspectImage, isPinnedImage, knownCapabilities, normalArch, pinImage, probeImage, refreshTag, resolveImage } from '../image.mjs'
 import { emptyPlan } from '../plan.mjs'
 import { installDir, recordText, writeRecord } from '../record.mjs'
@@ -777,6 +778,8 @@ export async function statusDocker(ctx, record) {
     }
     const tunnel = record.address?.team && state?.Running ? await tunnelState(host, record.name) : null
     const setup = state?.Running ? await setupState(args => host.docker(['exec', record.name, SLATEBOX, ...args])) : null
+    const ssoSessions = state?.Running && record.sso.enabled ? await ssoSessionState(args => host.docker(['exec', record.name, SLATEBOX, ...args])) : null
+    if (ssoSessions?.warning) ctx.out.warn(ssoSessions.warning)
     const age = backupLate(record, lastBackup)
     if (age?.late) ctx.out.warn(`The last backup is ${age.ageHours} hours old, older than the schedule "${record.backups.schedule}" allows. See ${join(host.dir, 'backup.log')}${host.kind === 'ssh' ? ` on ${host.where}` : ''}.`)
     return {
@@ -788,6 +791,7 @@ export async function statusDocker(ctx, record) {
       lastBackup, backupLate: age ? age.late : null,
       ...(record.address?.team ? { tunnel } : {}),
       setup: setup ? (setup.setUp ? 'done' : 'waiting for the first admin') : null,
+      ...(ssoSessions ? { ssoSessions } : {}),
     }
   } finally {
     await host.close?.()

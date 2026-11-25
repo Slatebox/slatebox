@@ -181,6 +181,8 @@ Every setting is optional.
 | `SLATEBOX_SSO` | `off` (default) or `keycloak`: single sign-on through the bundled Keycloak (below). |
 | `SLATEBOX_SSO_ONLY` | `true` with `SLATEBOX_SSO=keycloak`: no passwords and no guests. |
 | `SLATEBOX_SSO_ADMIN` | `open` (default) or `closed` with `SLATEBOX_SSO=keycloak`: `closed` answers 404 for `/auth/admin` and `/auth/realms/master` on the published port. |
+| `SLATEBOX_SSO_DEFAULT_ROLE` | `member` (default) or `none` with `SLATEBOX_SSO=keycloak`: whether a person single sign-on lets in joins the first team as a Member, or only by invitation (below). |
+| `SLATEBOX_SSO_DOMAINS` | Comma-separated email domains with `SLATEBOX_SSO=keycloak`, for example `example.com,example.org`: single sign-on refuses any address outside them. Unset, every address the identity provider verified is allowed. |
 
 The app's settings are generated at every start: `public.env = selfhost`,
 `edition = self-host` (enterprise code stays locked until an on-prem license
@@ -347,12 +349,23 @@ with the verifier (no login CSRF with someone else's ticket). Accounts: the one
 linked to the Keycloak subject; else the account with the same email, when the
 provider verified it and Slatebox verified it too (or the account has no
 password, session or API token yet, such as an invitation), which is linked;
-else a new one. Linking removes the password and ends the account's sessions,
+else a new one. A new account joins the first team (the one the setup link's
+first admin made, recorded at setup) as a Member, with no people claims; an
+account in no team that signs in or is linked joins it too; anyone already in a
+team, invitations included, keeps that team and every role in it, so the first
+admin and team owners are never changed. `SLATEBOX_SSO_DEFAULT_ROLE=none` keeps
+the invite-first behavior instead: an account from SSO joins a team only by
+invitation. With `SLATEBOX_SSO_DOMAINS`, an identity whose address is outside
+those domains is refused (no account, no link, no sign-in). Linking removes the password and ends the account's sessions,
 API tokens and sign-in links. Links are kept under the provider name
 `bundled-keycloak`, so a new `SLATEBOX_URL` keeps them. It asks for
 `offline_access` and keeps the refresh token in `services.sso`; every 60
 seconds (checked every 30) it refreshes it for each SSO account, with a session
-or not. A refused refresh (`invalid_grant`: user disabled, deleted, deactivated
+or not, at most 500 accounts per pass (oldest check first). Each pass is
+recorded as counts only (`systemSettings` `ssoSessionCheck`): `slatebox sso
+sessions` and the installer's `slatebox status` show it, and warn when, in the
+last 24 hours, more accounts were due than one pass checks, or when the check
+has stopped. The refresh token is never in a publication. A refused refresh (`invalid_grant`: user disabled, deleted, deactivated
 over SCIM, offline session revoked) removes all of that user's Meteor sessions,
 revokes their API tokens and sign-in links, and marks the account revoked until
 its next SSO sign-in; API tokens of revoked, disabled or deleted accounts are
