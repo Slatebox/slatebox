@@ -1,0 +1,99 @@
+# Turns a pushed release tag into a GitHub Release. It never builds, publishes or deploys
+# anything: tags are created by scripts/release.mjs on the build box and pushed together
+# with main by the `ship` script (`ship --release <artifact>:<bump>`); see docs/releasing.md.
+#
+#   vX.Y.Z               Slatebox (app and self-host image)   notes from CHANGELOG.md
+#   slatebox@X.Y.Z       npm slatebox (installer and CLI)      packages/slatebox/CHANGELOG.md
+#   slatebox-mcp@X.Y.Z   npm slatebox-mcp (MCP server)         packages/slatebox-mcp/CHANGELOG.md
+#
+# Run it by hand (workflow_dispatch) to refresh a release's notes, for example once the
+# self-host image for an app version has been published and its digest can be recorded.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+      - 'slatebox@[0-9]+.[0-9]+.[0-9]+*'
+      - 'slatebox-mcp@[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag (vX.Y.Z, slatebox@X.Y.Z or slatebox-mcp@X.Y.Z)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  github-release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # A pushed tag reads the changelog of its own release commit. A manual run reads the
+      # default branch, which also covers tags that predate this workflow.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.repository.default_branch || github.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+
+      - name: Notes from the changelog
+        run: |
+          git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || { echo "::error::No tag $TAG"; exit 1; }
+          node scripts/release.mjs notes "$TAG" > "$RUNNER_TEMP/notes.md"
+
+      - name: Self-host image digest (app releases)
+        if: startsWith(env.TAG, 'v')
+        run: |
+          version="${TAG#v}"
+          token=$(curl -fsS "https://ghcr.io/token?scope=repository:slatebox/slatebox:pull" | jq -r .token || true)
+          digest=$(curl -fsSI -H "Authorization: Bearer $token" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
+            "https://ghcr.io/v2/slatebox/slatebox/manifests/$version" 2>/dev/null \
+            | tr -d '\r' | awk 'tolower($1)=="docker-content-digest:" {print $2}' || true)
+          {
+            echo
+            echo "## Self-host image"
+            echo
+            if [ -n "$digest" ]; then
+              echo "\`ghcr.io/slatebox/slatebox:$version\` (linux/amd64 and linux/arm64), index \`$digest\`:"
+              echo
+              echo '```sh'
+              echo "docker pull ghcr.io/slatebox/slatebox:$version@$digest"
+              echo '```'
+            else
+              echo "The image \`ghcr.io/slatebox/slatebox:$version\` is not published yet. This release's notes are updated with its digest when it is."
+            fi
+          } >> "$RUNNER_TEMP/notes.md"
+
+      - name: Create or update the release
+        run: |
+          case "$TAG" in
+            slatebox-mcp@*) title="slatebox-mcp ${TAG#slatebox-mcp@}" ;;
+            slatebox@*)     title="slatebox ${TAG#slatebox@} (installer and CLI)" ;;
+            v*)             title="Slatebox ${TAG#v}" ;;
+          esac
+          flags=()
+          case "$TAG" in *-*) flags+=(--prerelease) ;; esac
+          # "Latest" on the repository means the newest stable app release; package
+          # releases never take it.
+          newest_app=$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          if [ "$TAG" = "$newest_app" ]; then flags+=(--latest); else flags+=(--latest=false); fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$title" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}"
+          else
+            gh release create "$TAG" --verify-tag --title "$title" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}"
+          fi

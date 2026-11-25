@@ -1,0 +1,171 @@
+# Checks for pull requests and for main. INFORMATIONAL ONLY.
+#
+# Slatebox's shipping policy (AGENTS.md) has no CI gate, no PR review gate and no merge
+# queue: maintainers land changes with the one `ship` script on the build box, which runs
+# its own preflight (targeted tests, gitleaks on the tree, build and smoke start) and
+# refuses to push if any step fails; the full suite runs after the ship. Nothing in this
+# workflow is, or should be made, a required status check. A red run here is a signal to
+# look before shipping, never a block.
+name: CI (informational)
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      installer: ${{ steps.filter.outputs.installer }}
+      mcp: ${{ steps.filter.outputs.mcp }}
+      selfhost: ${{ steps.filter.outputs.selfhost }}
+      app: ${{ steps.filter.outputs.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            installer:
+              - 'packages/slatebox/**'
+              - 'packages/create-slatebox/**'
+              - 'packages/slatebox-mcp/**'
+              - 'package-lock.json'
+            mcp:
+              - 'packages/slatebox-mcp/**'
+              - 'package-lock.json'
+            selfhost:
+              - 'self-host/**'
+              - 'scripts/sso*.mjs'
+              - 'scripts/self-host-setup*.mjs'
+            app:
+              - 'web/app/**'
+
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The same scan the ship's public-tree gate runs: the working tree, with the
+      # repository's .gitleaks.toml allowlist.
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            dir /repo --config /repo/.gitleaks.toml --redact --no-banner --exit-code 1
+
+  workflows:
+    name: Workflow lint (actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: actionlint
+        run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.7 -color
+
+  release-tooling:
+    name: Release tooling and changelog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+      - name: Release script and changelog tests
+        run: npm run test:release
+
+  installer:
+    name: Installer (slatebox)
+    needs: changes
+    if: needs.changes.outputs.installer == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - name: Install the package workspaces
+        run: npm ci --ignore-scripts --no-audit --no-fund --workspace slatebox --workspace slatebox-mcp
+      - name: Installer tests
+        run: npm run test:installer
+
+  mcp:
+    name: MCP server (slatebox-mcp)
+    needs: changes
+    if: needs.changes.outputs.mcp == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - name: Install the package workspace
+        run: npm ci --ignore-scripts --no-audit --no-fund --workspace slatebox-mcp
+      # tools-against-app.integration.test.js loads the app and the engine, which this
+      # job does not install; the ship's preflight runs it.
+      - name: MCP tests
+        working-directory: packages/slatebox-mcp
+        run: |
+          tests=()
+          for f in test/*.test.js; do
+            [[ "$f" == *tools-against-app* ]] || tests+=("$f")
+          done
+          node --test "${tests[@]}"
+
+  self-host:
+    name: Self-host image scripts
+    needs: changes
+    if: needs.changes.outputs.selfhost == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+      - name: Self-host tests
+        run: npm run test:self-host
+
+  app-lint:
+    name: App lint (changed files)
+    needs: changes
+    if: needs.changes.outputs.app == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+      # Lints only the JavaScript files this pull request changes, with the app's own
+      # ESLint config. The lint tools install on their own (the Meteor app and its
+      # dependencies are not installed, so rules that resolve imports are off).
+      - name: ESLint on changed files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          mapfile -t files < <(git diff --name-only --diff-filter=ACMR "$BASE_SHA"...HEAD -- 'web/app/**/*.js' 'web/app/**/*.jsx' 'web/app/**/*.mjs')
+          if [ ${#files[@]} -eq 0 ]; then echo "No app JavaScript changed."; exit 0; fi
+          tools="$RUNNER_TEMP/eslint"
+          mkdir -p "$tools" && cp web/app/.eslintrc.js "$tools/.eslintrc.js"
+          npm install --prefix "$tools" --no-audit --no-fund --ignore-scripts \
+            eslint@8 eslint-config-airbnb@19 eslint-config-prettier@9 eslint-plugin-import@2 \
+            eslint-plugin-jsx-a11y@6 eslint-plugin-react@7 eslint-plugin-react-hooks@4
+          "$tools/node_modules/.bin/eslint" --no-eslintrc -c "$tools/.eslintrc.js" \
+            --resolve-plugins-relative-to "$tools" \
+            --rule 'import/no-unresolved: off' --rule 'import/extensions: off' \
+            --rule 'import/no-extraneous-dependencies: off' \
+            "${files[@]}"

@@ -1,0 +1,81 @@
+# Repository labels. Edit here, not in the GitHub UI: .github/workflows/labels.yml applies
+# this file when it changes on main (labels missing here are left alone, never deleted).
+# Colors are hex without "#".
+
+# Kind
+- name: bug
+  color: d73a4a
+  description: Something isn't working
+- name: enhancement
+  color: a2eeef
+  description: New feature or request
+- name: documentation
+  color: 0075ca
+  description: Improvements or additions to documentation
+- name: security
+  color: b60205
+  description: Security hardening (report vulnerabilities privately, see SECURITY.md)
+- name: performance
+  color: fbca04
+  description: Faster or lighter
+- name: breaking-change
+  color: b60205
+  description: Needs a major version (or a minor before 1.0)
+- name: dependencies
+  color: 0366d6
+  description: A dependency update
+- name: github-actions
+  color: 000000
+  description: A GitHub Actions update
+
+# Area
+- name: "area: app"
+  color: c5def5
+  description: The Slatebox app (web/app)
+- name: "area: self-host"
+  color: c5def5
+  description: The one-container image and self-hosting (self-host/)
+- name: "area: installer"
+  color: c5def5
+  description: The npx slatebox installer and CLI (packages/slatebox)
+- name: "area: mcp"
+  color: c5def5
+  description: The MCP server and API clients (packages/slatebox-mcp)
+- name: "area: agents"
+  color: c5def5
+  description: Agents on the canvas, exec and the agent API
+- name: "area: docs"
+  color: c5def5
+  description: docs.slatebox.com and the guides in docs/
+- name: "area: enterprise"
+  color: c5def5
+  description: Code under enterprise/ (Slatebox Enterprise License)
+
+# Status and triage
+- name: needs-triage
+  color: ededed
+  description: Waiting for a maintainer to look
+- name: needs-repro
+  color: ededed
+  description: Needs steps that reproduce it
+- name: good first issue
+  color: 7057ff
+  description: Good for newcomers
+- name: help wanted
+  color: "008672"
+  description: Extra attention is needed
+- name: question
+  color: d876e3
+  description: Further information is requested (questions belong in Discussions)
+- name: duplicate
+  color: cfd3d7
+  description: This issue or pull request already exists
+- name: invalid
+  color: e4e669
+  description: This doesn't seem right
+- name: wontfix
+  color: ffffff
+  description: This will not be worked on
+- name: ignore-for-release
+  color: ededed
+  description: Left out of generated release notes

@@ -1,0 +1,65 @@
+# Dependabot version updates: weekly, grouped, few pull requests. Security updates are
+# switched on in the repository settings and are not grouped. Dependabot pull requests
+# land like any other: a maintainer ships them (CONTRIBUTING.md, "How changes ship").
+version: 2
+updates:
+  # The npm workspaces at the root: packages/slatebox (installer), packages/slatebox-mcp
+  # and the root tooling.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      packages-minor-and-patch:
+        update-types: [minor, patch]
+
+  # The Meteor app's own npm dependencies (web/app has its own lock file).
+  - package-ecosystem: npm
+    directory: /web/app
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: [dependencies, "area: app"]
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      # The canvas engine is built from its own repository for every ship (AGENTS.md).
+      - dependency-name: slateboxjs
+    groups:
+      app-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [github-actions]
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # The hosted app image. The self-host image pins its bases with build arguments in
+  # self-host/Dockerfile, which Dependabot cannot update; those move by hand.
+  - package-ecosystem: docker
+    directory: /web
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies]
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+    groups:
+      images:
+        patterns: ["*"]

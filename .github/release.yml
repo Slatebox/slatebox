@@ -1,22 +1,36 @@
+# Categories for GitHub's "Generate release notes" button. The Release workflow writes each
+# release's notes from the changelog instead (see docs/releasing.md); this file only shapes
+# notes someone generates by hand, by pull request label.
 changelog:
   exclude:
     labels:
       - ignore-for-release
-    authors:
-      - octocat
+      - duplicate
+      - invalid
+      - wontfix
   categories:
-    - title: Breaking Changes 🛠
+    - title: Breaking changes
       labels:
-        - Semver-Major
         - breaking-change
-    - title: New Features 🎉
+    - title: Added
       labels:
-        - Semver-Minor
         - enhancement
-    - title: Bug Fixes 🐛
+    - title: Fixed
       labels:
-        - Semver-Patch
         - bug
-    - title: Other Changes
+    - title: Security
+      labels:
+        - security
+    - title: Performance
+      labels:
+        - performance
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Dependencies
+      labels:
+        - dependencies
+        - github-actions
+    - title: Other changes
       labels:
         - "*"
