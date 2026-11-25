@@ -1,9 +1,10 @@
 # Checks for pull requests and for main. INFORMATIONAL ONLY.
 #
 # Slatebox's shipping policy (AGENTS.md) has no CI gate, no PR review gate and no merge
-# queue: maintainers land changes with the one `ship` script on the build box, which runs
-# its own preflight (targeted tests, gitleaks on the tree, build and smoke start) and
-# refuses to push if any step fails; the full suite runs after the ship. Nothing in this
+# queue: a maintainer runs the targeted tests for a change, then lands it with the one
+# `ship` script on the build box, which checks the tree is rebased and clean, runs gitleaks
+# on it, builds and checks the image, and refuses to push if any of that fails; after the
+# push it deploys and checks the live app, and the full suite runs in the background. Nothing in this
 # workflow is, or should be made, a required status check. A red run here is a signal to
 # look before shipping, never a block.
 name: CI (informational)
@@ -35,7 +36,7 @@ jobs:
       app: ${{ steps.filter.outputs.app }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad  # v3.0.4
         id: filter
         with:
           filters: |
@@ -115,15 +116,10 @@ jobs:
       - name: Install the package workspace
         run: npm ci --ignore-scripts --no-audit --no-fund --workspace slatebox-mcp
       # tools-against-app.integration.test.js loads the app and the engine, which this
-      # job does not install; the ship's preflight runs it.
+      # job does not install; maintainers run it (npm run test:mcp) with both installed,
+      # and the post-ship full suite runs it.
       - name: MCP tests
-        working-directory: packages/slatebox-mcp
-        run: |
-          tests=()
-          for f in test/*.test.js; do
-            [[ "$f" == *tools-against-app* ]] || tests+=("$f")
-          done
-          node --test "${tests[@]}"
+        run: npm run test:mcp:unit
 
   self-host:
     name: Self-host image scripts

@@ -27,6 +27,7 @@
     "test:ai-chat-contract": "node --test scripts/ai-chat-component-contract.test.mjs scripts/ai-template-policy.test.mjs",
     "test:agent-reach": "node --test scripts/agent-pick-eval.test.mjs scripts/agent-reach.test.mjs",
     "test:mcp": "npm test --workspace slatebox-mcp",
+    "test:mcp:unit": "cd packages/slatebox-mcp && node --test $(ls test/*.test.js | grep -v tools-against-app)",
     "test:installer": "npm test --prefix packages/slatebox && node --test scripts/bin-ownership.test.mjs",
     "test:server-access": "node --test scripts/server-access.test.mjs scripts/server-egress.test.mjs",
     "test:server-access:live": "node --test --test-concurrency=1 scripts/server-access.live.test.mjs",
