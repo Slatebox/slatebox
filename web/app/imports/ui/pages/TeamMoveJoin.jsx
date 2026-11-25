@@ -51,7 +51,8 @@ export default function TeamMoveJoin() {
       <AccountSection title="You joined the team" data-testid="join-done">
         <Typography>{done.teamName ? `You are in ${done.teamName} now.` : 'You are in the team now.'} Your slates and comments from the old server are yours here.</Typography>
         <AccountActions>
-          <Button variant="contained" component={RouterLink} to="/">Open Slatebox</Button>
+          {/* A full load: the open session picks up its new team at once. */}
+          <Button variant="contained" component="a" href="/">Open Slatebox</Button>
         </AccountActions>
       </AccountSection>
     )
