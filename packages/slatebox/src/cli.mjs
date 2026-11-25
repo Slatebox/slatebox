@@ -541,7 +541,7 @@ async function dispatch(ctx, positionals, flags) {
         await rotateTeamAddress(ctx, current)
         ctx.out.step('address', 'ok', 'New tunnel secret: every connector holding the old token was dropped')
         const done = await reapply(ctx, current)
-        return finish(ctx, { ...done, rotated: true }, ['', `${done.address} is connected with the new token.`])
+        return finish(ctx, { ...done, rotated: true }, ['', `${done.address} now uses the new tunnel token.`])
       }
       throw new InstallError(EXIT.USAGE, 'Usage: slatebox address [status | release | rotate]')
     }
@@ -565,7 +565,7 @@ async function dispatch(ctx, positionals, flags) {
 
 function teamLine(status) {
   const team = status.teamAddress
-  const connections = status.tunnel?.ready ? `, ${status.tunnel.connections} connection${status.tunnel.connections === 1 ? '' : 's'}` : status.tunnel ? ', tunnel not connected' : ''
+  const connections = status.tunnel?.ready ? `, ${status.tunnel.connections} connection${status.tunnel.connections === 1 ? '' : 's'}` : status.tunnel?.state === 'failed' ? ', tunnel refused by Cloudflare' : status.tunnel ? ', tunnel not connected' : ''
   return `https://${team.host} (${team.status}${connections})${team.suspension?.notice ? `: ${team.suspension.notice}` : ''}`
 }
 

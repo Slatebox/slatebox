@@ -224,6 +224,11 @@ export async function tunnelState(host, name, wait = 0) {
 async function teamHealth(ctx, host, answers) {
   const tunnel = await tunnelState(host, answers.name, 60)
   if (tunnel?.ready) ctx.out.step('tunnel', 'ok', `Secure tunnel connected (${tunnel.connections} connection${tunnel.connections === 1 ? '' : 's'})`)
+  // A refused tunnel stays down until it gets a new token: no point probing the address.
+  if (tunnel?.state === 'failed') {
+    return { ok: true, warning: `Slatebox is healthy on this computer, but Cloudflare refused its secure tunnel (a revoked token or a suspended address), so ${answers.address.url} does not reach it. See slatebox status and slatebox logs --service tunnel; slatebox address rotate gets a new token.` }
+  }
+
   const url = `${answers.address.url}/readyz`
   const attempts = ctx.teamHealthAttempts ?? 30
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -236,7 +241,7 @@ async function teamHealth(ctx, host, answers) {
     } catch { /* retry */ }
     if (attempt < attempts - 1) await new Promise(resolve => setTimeout(resolve, ctx.teamHealthDelay ?? 2000))
   }
-  const why = tunnel?.ready ? `${answers.address.url} does not answer from here yet` : `the secure tunnel has not connected yet${tunnel?.error ? ` (${tunnel.error})` : ''}`
+  const why = tunnel?.ready ? `${answers.address.url} does not answer from here yet` : 'the secure tunnel has not connected yet'
   return { ok: true, warning: `Slatebox is healthy on this computer, but ${why}. It keeps trying by itself; check with slatebox status and slatebox logs --service tunnel.` }
 }
 
@@ -558,6 +563,8 @@ async function rollback(ctx, host, answers, { fresh, previous, preUpgrade, why }
 }
 
 async function firstAccount(ctx, host, answers, caps) {
+  // With a team address the closing text says it, with why it matters on a public address.
+  if (!answers.adminEmail && answers.address.team) return
   if (!answers.adminEmail) {
     ctx.out.say(`\nOpen ${answers.address.url} and create the first account.`)
     return

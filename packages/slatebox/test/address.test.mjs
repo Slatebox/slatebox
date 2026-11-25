@@ -389,3 +389,22 @@ test('the interview asks where the team opens Slatebox, and asks again for a nam
   assert.equal([...cloud.claims.values()][0].name, 'acme')
   assert.match(result.stdout, /Slatebox is running at {2}https:\/\/acme\.slatebox\.team/)
 })
+
+test('a tunnel Cloudflare refused: the install succeeds with a warning that says so, and status names it', async () => {
+  const { run, docker } = setup({ cloud: { taken: [] } })
+  const original = docker.run
+  const refused = async (cmd, args, options) => args.includes('tunnel')
+    ? { code: 1, stdout: '{"configured":true,"ready":false,"connections":0,"state":"failed","error":"refused"}\n', stderr: '' }
+    : original(cmd, args, options)
+  const install = await run(['install', '--team-address', 'acme', ...BASE, '--yes', '--json'], { run: refused, fetch: async () => { throw new TypeError('fetch failed') } })
+  // The claim needs the Cloud; this run has none, so it stops before anything (exit 4) ...
+  assert.equal(install.code, 4)
+  // ... and with the Cloud, the refused tunnel is a warning, not a failure.
+  const ok = await run(['install', '--team-address', 'acme', ...BASE, '--yes', '--json'], { run: refused })
+  assert.equal(ok.code, 0, ok.stderr)
+  const warning = ok.events.find(event => event.event === 'step' && event.id === 'health' && event.status === 'warn')
+  assert.match(warning.detail, /Cloudflare refused its secure tunnel/)
+  assert.doesNotMatch(warning.detail, /keeps trying/)
+  const status = await run(['status', '--agent', 'no'], { run: refused })
+  assert.match(status.stdout, /Team address https:\/\/acme\.slatebox\.team \(active, tunnel refused by Cloudflare\)/)
+})
