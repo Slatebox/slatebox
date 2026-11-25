@@ -35,7 +35,12 @@ export default function Library() {
   const [error, setError] = useState(null)
   const asked = useRef(0)
 
-  useEffect(() => { document.title = 'Library · Slatebox' }, [])
+  // The tab says Library while it is open, and gets its title back when the person leaves (a slate sets none of its own).
+  useEffect(() => {
+    const before = document.title
+    document.title = 'Library · Slatebox'
+    return () => { document.title = before }
+  }, [])
   useEffect(() => { libraryApi.stats().then(setStats, () => setStats(null)) }, [])
 
   const setFilters = useCallback((change) => {

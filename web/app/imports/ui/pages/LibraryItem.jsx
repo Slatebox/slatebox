@@ -47,6 +47,12 @@ export default function LibraryItem() {
   const [moves, setMoves] = useState([])
   const copyAsked = useRef(readCopyRequest(location.search).copy)
 
+  // The item's title is the tab's while the page is open; leaving (to a copy, say) gives the tab its title back.
+  useEffect(() => {
+    const before = document.title
+    return () => { document.title = before }
+  }, [])
+
   useEffect(() => {
     let gone = false
     setAnswer(null)
