@@ -17,6 +17,7 @@ import { installDir } from '../record.mjs'
 
 export const TUNNEL_TOKEN = 'SLATEBOX_TUNNEL_TOKEN'
 const PENDING_FILE = 'claim.json'
+const E2E_PREFIX = 'e2e-'
 
 function client(ctx, base) {
   ctx.cloud ??= cloudClient(ctx, base || cloudBase(ctx))
@@ -64,6 +65,9 @@ export async function checkTeamAddress(ctx, answers) {
     return { name, host: teamHost(name), creds, claim: false }
   }
   const cloud = client(ctx)
+  // e2e-<anything> belongs to the end-to-end test's accounts, which the Cloud knows only after
+  // the sign-in: a signed-out check always says no, so the claim itself is the check.
+  if (name.startsWith(E2E_PREFIX)) return { name, host: teamHost(name), creds: null, claim: true }
   ctx.out.step('address', 'start', `Checking ${teamHost(name)}`)
   let answer
   try { answer = await cloud.availability(name) } catch (error) { throw cloudFailure(error, name) }

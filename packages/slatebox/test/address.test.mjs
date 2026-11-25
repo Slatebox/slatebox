@@ -110,6 +110,15 @@ test('a taken or reserved name: exit 3 with suggestions, the same answer for bot
   assert.ok(!existsSync(join(home, 'installs', 'slatebox', 'secrets.env')))
 })
 
+test('an e2e- name skips the signed-out check (the Cloud allows it only after sign-in) and the claim decides', async () => {
+  const { cloud, run } = setup({ cloud: { taken: ['e2e-1234abcd'] } })
+  const result = await run(['install', '--team-address', 'e2e-1234abcd', ...BASE, '--yes', '--json'])
+  assert.equal(cloud.cloudRequests('/api/v1/team-addresses/availability').length, 0, 'no signed-out check')
+  assert.equal(cloud.cloudRequests('/oauth/device_authorization').length, 1, 'signed in')
+  assert.equal(result.code, 3)
+  assert.equal(result.events.at(-1).id, 'address-unavailable')
+})
+
 test('a name that breaks the rule is exit 2 with the rule, before any network call', async () => {
   const { cloud, run } = setup()
   for (const name of ['Acme_1', 'ab', 'xn--acme', 'acme-', '1acme', 'a'.repeat(33)]) {
