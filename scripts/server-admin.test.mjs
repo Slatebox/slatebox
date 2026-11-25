@@ -327,12 +327,12 @@ function localIo(overrides = {}) {
   }
 }
 
-function dashboard({ payments = () => ({ on: false, mode: null }), stripe, io = localIo(), meterOn = () => true, clock } = {}) {
+function dashboard({ payments = () => ({ on: false, mode: null }), stripe, io = localIo(), meterOn = () => true, selfHosted, clock } = {}) {
   let at = NOW
   const now = clock || (() => at)
   const made = createAdminDashboard({
     isAdmin: isInstanceAdmin, payments, stripe: stripe || (() => { throw new Error('Stripe must not be asked') }),
-    plans: () => PLANS, io, meterOn, proAllowanceMicros: 3_750_000, now,
+    plans: () => PLANS, io, meterOn, proAllowanceMicros: 3_750_000, now, ...(selfHosted && { selfHosted }),
   })
   return { ...made, tick: (ms) => { at += ms } }
 }
@@ -353,6 +353,27 @@ test('payments off: no Stripe call, and the page says so', async () => {
   assert.deepEqual(out.payments, { ok: true, on: false, words: PAYMENTS_OFF_WORDS })
   assert.equal(PAYMENTS_OFF_WORDS, 'Payments are off on this server')
   assert.equal(out.library.waiting, 3)
+})
+
+test('a self-hosted server: no payments card and no plans card (payments are never part of one); Stripe and plan counts are not read', async () => {
+  let planReads = 0
+  const out = await dashboard({
+    selfHosted: () => true,
+    payments: () => { throw new Error('payments must not be asked on a self-hosted server') },
+    io: localIo({ plans: async () => { planReads += 1; return { pro: { active: 1 } } } }),
+    meterOn: () => false,
+  }).dashboard('tim')
+  assert.equal(out.selfHosted, true)
+  assert.equal('payments' in out, false)
+  assert.equal('plans' in out, false)
+  assert.equal(planReads, 0)
+  assert.equal(out.people.members, 40)
+  assert.equal(out.library.waiting, 3)
+  assert.doesNotMatch(JSON.stringify(out), /stripe|payment|Pro|Business/i)
+  // the page draws the plans card only when the server sent one, and words the usage card without the meter
+  const page = readFileSync(new URL('../web/app/imports/ui/pages/admin/AdminOverview.jsx', import.meta.url), 'utf8')
+  assert.match(page, /\{!data\.selfHosted && <Card title="Plans"/)
+  assert.doesNotMatch(page, /The meter is off/)
 })
 
 test('payments on: Stripe cards in the key\'s mode; a client that cannot be made shows on the payments card only', async () => {

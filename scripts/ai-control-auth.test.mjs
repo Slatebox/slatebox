@@ -678,3 +678,24 @@ test('no button holds a button: the + menu\'s note buttons and boards rows sit i
   assert.equal(holding.length, 2, 'the note buttons and the boards rows')
   for (const chunk of holding) assert.match(chunk, /fab: \{ component: 'div', role: 'group'/)
 })
+
+test('an unpriced model: Slatebox Cloud says it charges at the highest rate; a self-hosted server, which charges nobody, says its spend is counted', async () => {
+  const { warningsOf, UNPRICED_WORDS } = await import('../web/app/server/ai-control/facade.mjs')
+  const { unpricedCaption } = await import('../web/app/imports/ui/pages/admin/ai/catalog-view.mjs')
+  // warningsOf reads only the snapshot's models, bindings and keys
+  const snapshot = { providers: {}, keys: {}, bindings: {}, models: { 'stub:stub-model': { _id: 'stub:stub-model', provider: 'stub', model: 'stub-model', label: 'Stub model', status: 'enabled' } } }
+  const unpriced = (charges) => warningsOf(snapshot, { isPriced: () => false, charges }).find((w) => w.kind === 'unpriced')
+  const cloud = unpriced(true)
+  assert.equal(cloud.problem, 'Stub model has no price. Until you add one, Slatebox charges it at its highest rate.')
+  assert.equal(unpricedCaption([cloud]), 'Charged at the highest rate until you add a price')
+  const self = unpriced(false)
+  assert.equal(self.problem, 'Stub model has no price. Until you add one, its spend here is counted at its highest rate.')
+  assert.equal(unpricedCaption([self]), 'Spend counted at the highest rate until you add a price')
+  assert.doesNotMatch(self.problem + self.caption, /charg/i)
+  assert.equal(UNPRICED_WORDS.counted.caption, self.caption)
+  // the server passes whether it charges: hosted (Slatebox Cloud) yes, a self-hosted server no
+  const index = readFileSync(new URL('../web/app/server/ai-control/index.mjs', import.meta.url), 'utf8')
+  assert.match(index, /charges: hosted,/)
+  const models = readFileSync(new URL('../web/app/imports/ui/pages/admin/ai/Models.jsx', import.meta.url), 'utf8')
+  assert.doesNotMatch(models, />Charged at the highest rate/)
+})

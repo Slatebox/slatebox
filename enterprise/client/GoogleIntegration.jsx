@@ -29,6 +29,7 @@ const errorText = (error) => {
   return error?.reason || error?.message || 'That did not work. Try again.'
 }
 const cloud = () => enterpriseState(Meteor.settings).via === 'cloud'
+export const GOOGLE_NOT_SET_UP = 'Google is not set up on this server yet.'
 const PAY_REASON = 'Save slates to Google Drive, export them to Google Docs and bring your files in.'
 
 // One answer from google.status per page view, shared by every Google control on it.
@@ -82,7 +83,7 @@ export default function GoogleIntegration({ integrations = [], pro = true, onPay
       <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 0.75, mb: 0 }} data-google-scope="">
         Slatebox asks Google only for the files it makes and the files you pick. It cannot see the rest of your Drive.
       </Typography>
-      {!status.configured && <Typography variant="body2" sx={{ mt: 1 }}>Google is not set up on this server yet.</Typography>}
+      {!status.configured && <Typography variant="body2" sx={{ mt: 1 }}>{GOOGLE_NOT_SET_UP}</Typography>}
       {row && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mt: 1.25 }}>
           <Typography variant="body2" sx={{ flex: 1, minWidth: 200 }}>
@@ -121,6 +122,12 @@ function useGoogleAction() {
   const run = async (fn, { tab = null } = {}) => {
     const drop = () => tab && !tab.closed && tab.close()
     if (!status?.enabled) return drop()
+    // No Google client on this server (Integrations says "Google is not set up on this server yet"):
+    // nothing to connect to, so say that instead of Google's own "Missing required parameter client_id".
+    if (!status.configured) {
+      drop()
+      return say(GOOGLE_NOT_SET_UP, undefined, 'warning')
+    }
     if (cloud() && status.pro === false) {
       drop()
       return openPay({ action: 'pro', from: 'google', reason: PAY_REASON, retry: () => refresh() })
@@ -158,7 +165,8 @@ export function GoogleExport({ onExport }) {
     if (!status?.connected || !slate?.shareId) return
     Meteor.callAsync('google.lastDoc', { shareId: slate.shareId }).then((answer) => setLast(answer?.url ? answer : null)).catch(() => {})
   }, [status?.connected, slate?.shareId])
-  if (!status?.enabled || !slate?.shareId) return null
+  // Shown only where Google can be used: on, and set up on this server (a client id and secret).
+  if (!status?.enabled || !status?.configured || !slate?.shareId) return null
   const png = () => new Promise((resolve) => onExport('png', { base64: true }, resolve))
   const show = (tab, url) => {
     if (tab && !tab.closed) tab.location.replace(url)

@@ -496,3 +496,16 @@ test('a Doc is read with only the fields that become notes; a sheet\'s quoted ce
   assert.match(decodeURIComponent(get.query), /fields=title,body\(content\(paragraph\(elements\(textRun\(content,textStyle\(link\(url\)\)\)\),paragraphStyle\(namedStyleType\)\)\)\)/)
   assert.deepEqual(groupsFromCsv('Item,Note\n"Paint, white","Two coats\nthen dry"\n"Say ""hi""",x\n')[0].notes.map((n) => n.text), ['Paint, white · Two coats then dry', 'Say "hi" · x'])
 })
+
+test('Google not set up on this server (no client id and secret): the export panel offers no Google buttons, and a Google action says it is not set up instead of Google\'s "Missing required parameter client_id"', async () => {
+  const { readFileSync } = await import('node:fs')
+  const source = readFileSync(new URL('../enterprise/client/GoogleIntegration.jsx', import.meta.url), 'utf8')
+  const exportPanel = source.slice(source.indexOf('export function GoogleExport'), source.indexOf('export function GoogleImport'))
+  assert.match(exportPanel, /if \(!status\?\.enabled \|\| !status\?\.configured \|\| !slate\?\.shareId\) return null/)
+  const action = source.slice(source.indexOf('function useGoogleAction'), source.indexOf('export function GoogleExport'))
+  assert.ok(action.indexOf('if (!status.configured)') > 0 && action.indexOf('if (!status.configured)') < action.indexOf('connectGoogle(status.clientId)'), 'checked before Google is asked')
+  assert.match(source, /export const GOOGLE_NOT_SET_UP = 'Google is not set up on this server yet\.'/)
+  // without a client id and secret the server's configuration says no client
+  assert.equal(googleConfiguration({}, { vaultKey: 'k' }).client, false)
+  assert.equal(googleConfiguration({ clientId: 'id', clientSecret: 's' }, { vaultKey: 'k' }).client, true)
+})

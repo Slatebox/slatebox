@@ -115,6 +115,8 @@ export const aiControl = createAIControl({
   isPriced,
   // a settings-file key kept for this boot answers too (the import's alert says why)
   keyed: (provider) => keyStore.fromSettings().includes(provider),
+  // a self-hosted server charges nobody, so an unpriced model's warning says its spend is counted
+  charges: hosted,
 })
 
 /** Bindings: one choice per part of Slatebox (bindings.mjs), for the ai.bindings.* actions. */

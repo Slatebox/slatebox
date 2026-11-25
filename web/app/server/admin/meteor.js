@@ -19,6 +19,7 @@ import { businessPriceIds } from '../business-billing.mjs'
 import { createAdminDashboard } from './dashboard-core.mjs'
 import { agentSummary } from '../agent-reach/usage-core.mjs'
 import { agentUsageIo } from '../agent-reach/usage-meteor'
+import { selfHosted } from '../../imports/api/common/own-keys.mjs'
 
 const DAY = 86_400_000
 const raw = (collection) => collection.rawCollection()
@@ -105,6 +106,7 @@ const admin = createAdminDashboard({
   io,
   meterOn: () => meterOn(),
   proAllowanceMicros: PRO_CREDITS.creditCostMicrosPerMonth,
+  selfHosted: () => selfHosted(Meteor.settings),
 })
 
 export const adminStatus = (userId) => admin.status(userId)

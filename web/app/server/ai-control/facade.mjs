@@ -32,12 +32,20 @@ const publicRoute = (route) => {
  * active key. isPriced(model) → whether the model has a price anywhere; keyed(provider) → whether
  * a key a request can use exists outside the snapshot (a settings-file key kept for this boot).
  */
-export function warningsOf(snapshot, { isPriced = () => true, keyed = () => false } = {}) {
+export const UNPRICED_WORDS = Object.freeze({
+  // Slatebox Cloud charges people for what an unpriced model costs at its dearest rate.
+  charged: { problem: (name) => `${name} has no price. Until you add one, Slatebox charges it at its highest rate.`, caption: 'Charged at the highest rate until you add a price' },
+  // A self-hosted server charges nobody: the price only counts its spend in AI control.
+  counted: { problem: (name) => `${name} has no price. Until you add one, its spend here is counted at its highest rate.`, caption: 'Spend counted at the highest rate until you add a price' },
+})
+
+export function warningsOf(snapshot, { isPriced = () => true, keyed = () => false, charges = true } = {}) {
+  const words = charges ? UNPRICED_WORDS.charged : UNPRICED_WORDS.counted
   const out = []
   for (const model of Object.values(snapshot.models || {})) {
     if (model.status === 'disabled') continue
     const own = model.prices && ((Number.isFinite(model.prices.inputPerM) && Number.isFinite(model.prices.outputPerM)) || Number.isFinite(model.prices.imageEach))
-    if (!own && !isPriced(model.model)) out.push({ kind: 'unpriced', id: model._id, problem: `${model.label || model.model} has no price. Until you add one, Slatebox charges it at its highest rate.` })
+    if (!own && !isPriced(model.model)) out.push({ kind: 'unpriced', id: model._id, problem: words.problem(model.label || model.model), caption: words.caption })
   }
   const used = new Map()
   const note = (route) => {
@@ -56,10 +64,11 @@ export function warningsOf(snapshot, { isPriced = () => true, keyed = () => fals
  *   holder          snapshot.mjs createSnapshotHolder
  *   choiceHolders(userId) → a person's own AI (ai-settings-core.mjs choiceHolders)
  *   codePrompts?    { [promptId]: { body, variables } } built-in prompt text
- *   isPriced?, keyed?(provider), extraHealth?() → more health entries (the key import's)
+ *   isPriced?, keyed?(provider), charges? (false on a self-hosted server: nobody is charged there),
+ *   extraHealth?() → more health entries (the key import's)
  * }
  */
-export function createAIControl({ holder, choiceHolders = async () => ({ ownProviders: false }), codePrompts = {}, isPriced = () => true, keyed = () => false, extraHealth = () => [] }) {
+export function createAIControl({ holder, choiceHolders = async () => ({ ownProviders: false }), codePrompts = {}, isPriced = () => true, keyed = () => false, charges = true, extraHealth = () => [] }) {
   // Problems found while serving (a published prompt that would not render), newest last; shown
   // with the snapshot's own health. Per pod, in memory, bounded.
   const runtimeHealth = []
@@ -128,7 +137,7 @@ export function createAIControl({ holder, choiceHolders = async () => ({ ownProv
       agents: Object.values(snap.agents),
       prompts: Object.values(snap.prompts).map((p) => ({ id: p._id, surface: p.surface ?? null, kind: p.kind ?? null, title: p.title ?? null, labels: p.labels ?? { published: null } })),
       health: health(),
-      warnings: warningsOf(snap, { isPriced, keyed }),
+      warnings: warningsOf(snap, { isPriced, keyed, charges }),
     }
   }
 
@@ -156,7 +165,7 @@ export function createAIControl({ holder, choiceHolders = async () => ({ ownProv
     effective,
     get,
     health,
-    warnings: () => warningsOf(holder.current(), { isPriced, keyed }),
+    warnings: () => warningsOf(holder.current(), { isPriced, keyed, charges }),
     render: renderPrompt,
     snapshot: () => holder.current(),
     refresh: (options) => holder.refresh(options),

@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import { startMcpTestServers } from './mcp-test-servers.mjs'
-import { checkMcpUrl, createMcpFetch, McpFetchRefused, publicOnlyLookup } from '../enterprise/server/mcp-fetch.mjs'
+import { checkMcpUrl, createMcpFetch, McpFetchRefused, PRIVATE, publicOnlyLookup } from '../enterprise/server/mcp-fetch.mjs'
 import { callTool, discover } from '../enterprise/server/mcp-session.mjs'
 import { normalizeTools, reconcile, toolsEnvelope, toolHash, DESCRIPTION_CHARS } from '../enterprise/server/tools.mjs'
 import { quarantine, safeLink } from '../enterprise/server/results.mjs'
@@ -59,6 +59,9 @@ test('only public https addresses pass the address check', () => {
     ['https://100.64.0.1/', 'private_address'],
     ['not a url', 'bad_address'],
   ]) assert.throws(() => checkMcpUrl(raw), (e) => e instanceof McpFetchRefused && e.code === code, raw)
+  // The refusal is read on Slatebox Cloud and on self-hosted installs: it names neither.
+  assert.throws(() => checkMcpUrl('https://10.0.0.1/mcp'), (e) => e.message === 'Slatebox can\'t connect agents on private network addresses. Use the agent\'s public https address.')
+  assert.doesNotMatch(PRIVATE, /Cloud/)
   assert.equal(checkMcpUrl('https://mcp.excalidraw.com/mcp').dev, false)
   assert.equal(checkMcpUrl('http://127.0.0.1:9/x', { devOrigins: ['http://127.0.0.1:9'] }).dev, true)
 })

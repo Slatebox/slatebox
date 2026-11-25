@@ -226,8 +226,10 @@ export async function localSummary({ io, now = Date.now(), month, meterOn = fals
  * The admin.status and admin.dashboard methods' logic.
  * isAdmin(userId) → boolean (the uberMensch row). payments() → { on, mode } (mode 'live' | 'test' | null).
  * stripe() → the Stripe client (called only when payments are on). plans() → see classifyPrice.
+ * selfHosted() → true on a self-hosted install: payments are never part of one, so the overview has
+ * no payments card and no plans card there (and Stripe and the plan counts are never read).
  */
-export function createAdminDashboard({ isAdmin, payments, stripe, plans, io, meterOn = () => false, proAllowanceMicros = 0, now = Date.now, ttlMs = DASHBOARD_TTL_MS, refreshGapMs = REFRESH_GAP_MS }) {
+export function createAdminDashboard({ isAdmin, payments, stripe, plans, io, meterOn = () => false, proAllowanceMicros = 0, selfHosted = () => false, now = Date.now, ttlMs = DASHBOARD_TTL_MS, refreshGapMs = REFRESH_GAP_MS }) {
   let cached = null
   let pending = null
 
@@ -238,6 +240,10 @@ export function createAdminDashboard({ isAdmin, payments, stripe, plans, io, met
   async function build() {
     const at = now()
     const month = new Date(at).toISOString().slice(0, 7)
+    if (selfHosted()) {
+      const { plans: _plans, ...local } = await localSummary({ io: { ...io, plans: async () => null }, now: at, month, meterOn: meterOn(), proAllowanceMicros })
+      return { generatedAt: new Date(at).toISOString(), selfHosted: true, ...local }
+    }
     const pay = payments() || {}
     const stripeCards = pay.on
       ? card(async () => stripeSummary({ stripe: stripe(), plans: plans(), mode: pay.mode === 'test' ? 'test' : 'live', now: at }))

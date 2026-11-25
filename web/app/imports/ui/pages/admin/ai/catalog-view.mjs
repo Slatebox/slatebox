@@ -96,6 +96,8 @@ export const numberOrNull = (text) => (String(text ?? '').trim() === '' ? null :
 
 /** The model ids that are unpriced, from ai.control.get's warnings. */
 export const unpricedIds = (warnings = []) => new Set(warnings.filter((w) => w.kind === 'unpriced').map((w) => w.id))
+/** The caption under an unpriced model (the server says whether this server charges for it). */
+export const unpricedCaption = (warnings = []) => warnings.find((w) => w.kind === 'unpriced')?.caption || 'Charged at the highest rate until you add a price'
 
 /** What a model can do, in words ("tools, vision"). */
 export const capsText = (caps = {}) => ['tools', 'vision', 'images', 'json', 'reasoning'].filter((c) => caps[c]).join(', ') || '—'

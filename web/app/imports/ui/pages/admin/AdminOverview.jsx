@@ -155,7 +155,7 @@ Payments.defaultProps = { payments: null }
 
 function Usage({ data }) {
   if (data?.ok !== false && data && !data.meterOn) {
-    return <Card title="Agent usage this month" data={data}><Typography variant="body2" color="text.secondary">The meter is off on this server, so agent and call use is not recorded.</Typography></Card>
+    return <Card title="Agent usage this month" data={data}><Typography variant="body2" color="text.secondary">Agent and call use is not recorded on this server.</Typography></Card>
   }
   const granted = data?.granted || {}
   const spent = data?.spent || {}
@@ -268,14 +268,14 @@ export default function AdminOverview() {
                   <Row label="Sign-ups, last 30 days" value={count(data.people?.signups30)} />
                 </Box>
               </Card>
-              <Card title="Plans" data={data.plans}>
+              {!data.selfHosted && <Card title="Plans" data={data.plans}>
                 <Pair><Big value={count(data.plans?.pro?.active)} label="Pro people" /><Big value={count(data.plans?.business?.teams)} label="Business teams" /></Pair>
                 <Box sx={{ mt: 1 }}>
                   <Row label="Pro trialing" value={count(data.plans?.pro?.trialing)} />
                   <Row label="Pro past due" value={count(data.plans?.pro?.pastDue)} />
                   <Row label="Business members" value={count(data.plans?.business?.members)} />
                 </Box>
-              </Card>
+              </Card>}
               <Card title="Library" data={data.library}
                 action={<Link component={RouterLink} to="/admin/library" underline="hover" variant="body2" sx={{ fontWeight: 600 }}>Review queue</Link>}>
                 <Big value={count(data.library?.waiting)} label="waiting for review" />

@@ -21,7 +21,7 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { ReasonDialog } from './ReasonDialog'
-import { capsText, checkResultText, modelFormDefaults, numberOrNull, priceText, unpricedIds } from './catalog-view.mjs'
+import { capsText, checkResultText, modelFormDefaults, numberOrNull, priceText, unpricedCaption, unpricedIds } from './catalog-view.mjs'
 
 // Admin › AI control › Models: the models each provider serves, what they can do and what they cost
 // per million tokens. Metering charges these prices from the next call. Test sends one short
@@ -156,6 +156,7 @@ export default function Models() {
   const providers = snap.providers.filter((p) => !p.aux && p.status !== 'archived')
   const labelOf = (id) => providers.find((p) => p.id === id)?.label || id
   const unpriced = unpricedIds(snap.warnings)
+  const unpricedWords = unpricedCaption(snap.warnings)
   const models = [...snap.models].sort((a, b) => labelOf(a.provider).localeCompare(labelOf(b.provider)) || a.model.localeCompare(b.model))
   return (
     <Box>
@@ -186,7 +187,7 @@ export default function Models() {
                 <TableCell>{capsText(m.capabilities)}</TableCell>
                 <TableCell>
                   {priceText(m)}
-                  {unpriced.has(m._id) && <Typography variant="caption" color="warning.main" display="block">Charged at the highest rate until you add a price</Typography>}
+                  {unpriced.has(m._id) && <Typography variant="caption" color="warning.main" display="block">{unpricedWords}</Typography>}
                   {tests[m._id] && <Alert severity={tests[m._id].ok ? 'success' : 'warning'} sx={{ mt: 0.5, py: 0 }}>{tests[m._id].text}</Alert>}
                 </TableCell>
                 <TableCell align="right">

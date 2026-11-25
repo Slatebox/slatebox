@@ -47,7 +47,8 @@ const refuse = (code, message) => {
   throw new McpFetchRefused(code, message)
 }
 
-const PRIVATE = 'Slatebox Cloud can\'t connect to private network addresses.'
+// Said on Slatebox Cloud and on a self-hosted install alike, so it names neither.
+export const PRIVATE = 'Slatebox can\'t connect agents on private network addresses. Use the agent\'s public https address.'
 
 export const publicIp = (address) => isPublicAddress(address) && addressKind(address) === 'public'
 
