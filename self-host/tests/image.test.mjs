@@ -194,10 +194,10 @@ test('only the programs Slatebox needs were taken from the MongoDB image', async
 
 test('cloudflared is the pinned release, executable, and named in the identity', async () => {
   const pinned = /^ARG CLOUDFLARED_VERSION=(\S+)$/m.exec(readFileSync(join(here, '../Dockerfile'), 'utf8'))[1]
-  const version = (await inside('/opt/slatebox/bin/cloudflared --version')).stdout
+  const version = (await inside('/opt/cloudflared/bin/cloudflared --version')).stdout
   assert.match(version, new RegExp(`cloudflared version ${pinned.replace(/\./g, '\\.')} `))
   assert.equal(JSON.parse((await inside('cat /opt/slatebox/identity.json')).stdout).cloudflared, pinned)
   const arch = (await inside('uname -m')).stdout.trim() === 'aarch64' ? 'arm64' : 'amd64'
   const listed = readFileSync(join(here, '../build/cloudflared.sha256'), 'utf8').split('\n').find(line => line.endsWith(`cloudflared-linux-${arch}`)).split(/\s+/)[0]
-  assert.equal((await inside('sha256sum /opt/slatebox/bin/cloudflared')).stdout.split(/\s+/)[0], listed)
+  assert.equal((await inside('sha256sum /opt/cloudflared/bin/cloudflared')).stdout.split(/\s+/)[0], listed)
 })

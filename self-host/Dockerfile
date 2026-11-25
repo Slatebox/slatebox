@@ -218,7 +218,8 @@ ENV HOME=/run/slatebox
 
 COPY --from=mongo /usr/bin/mongod /usr/bin/mongodump /usr/bin/mongorestore /usr/local/bin/
 COPY --from=caddy /usr/bin/caddy /usr/local/bin/caddy
-COPY --from=cloudflared /out/cloudflared /opt/slatebox/bin/cloudflared
+# A third-party program, kept beside Keycloak and Java rather than in Slatebox's own /opt/slatebox.
+COPY --from=cloudflared /out/cloudflared /opt/cloudflared/bin/cloudflared
 COPY --from=fonts /out/ /usr/share/fonts/googlefonts/
 RUN fc-cache -f
 

@@ -203,8 +203,10 @@ export async function teamStatus(ctx, record) {
   if (!creds) return { name: record.address.team, host: teamHost(record.address.team), status: 'no credential on this computer' }
   ctx.redactor.add(creds.installCredential)
   try {
-    const self = await client(ctx, creds.cloudUrl).self(creds.installCredential)
-    return { name: self.name || creds.name, host: self.host || creds.host, status: self.status, suspension: self.suspension || null }
+    const answer = await client(ctx, creds.cloudUrl).self(creds.installCredential)
+    // {claim: {id, name, host, status, suspension?}} (a flat claim is read the same way).
+    const self = answer?.claim || answer || {}
+    return { name: self.name || creds.name, host: self.host || creds.host, status: self.status || 'unknown', suspension: self.suspension || null }
   } catch (error) {
     if (error instanceof InstallError) return { name: creds.name, host: creds.host, status: 'unknown (Slatebox Cloud not reachable)' }
     if (error instanceof CloudError && error.code === 'suspended') return { name: creds.name, host: creds.host, status: 'suspended', suspension: { notice: error.notice || error.message } }

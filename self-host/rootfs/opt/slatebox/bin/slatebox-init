@@ -205,7 +205,7 @@ start_tunnel() {
   [[ ${SLATEBOX_TUNNEL:-0} == 1 && ! -e $RUN/tunnel-failed ]] || return 0
   : > "$RUN/tunnel.started"
   start tunnel -- bash -c 'sleep "$1"; shift; exec "$@"' tunnel "$delay" \
-    "$ROOT/bin/cloudflared" tunnel --no-autoupdate --loglevel info --metrics 127.0.0.1:7085 --protocol auto \
+    /opt/cloudflared/bin/cloudflared tunnel --no-autoupdate --loglevel info --metrics 127.0.0.1:7085 --protocol auto \
     run --token-file "$RUN/tunnel.token"
 }
 

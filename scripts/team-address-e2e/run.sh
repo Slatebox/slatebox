@@ -90,7 +90,7 @@ new=$(secret SLATEBOX_TUNNEL_TOKEN)
 check test -n "$new" -a "$old" != "$new"
 check wait_answers "$NAME"
 oldfile=$(mktemp); chmod 600 "$oldfile"; printf '%s' "$old" > "$oldfile"; unset old new
-docker run -d --name sbx-e2e-old-token --entrypoint /opt/slatebox/bin/cloudflared -v "$oldfile:/tok:ro" "$IMAGE" tunnel --no-autoupdate --loglevel info run --token-file /tok >/dev/null
+docker run -d --name sbx-e2e-old-token --entrypoint /opt/cloudflared/bin/cloudflared -v "$oldfile:/tok:ro" "$IMAGE" tunnel --no-autoupdate --loglevel info run --token-file /tok >/dev/null
 sleep 30
 registered=$(docker logs sbx-e2e-old-token 2>&1 | grep -c 'Registered tunnel connection' || true)
 echo "   connections the OLD token registered after rotation: $registered"

@@ -1,5 +1,5 @@
 // The team-address tunnel in a running container. cloudflared is replaced by a stand-in (mounted
-// over /opt/slatebox/bin/cloudflared) so nothing reaches Cloudflare: one that stays connected,
+// over /opt/cloudflared/bin/cloudflared) so nothing reaches Cloudflare: one that stays connected,
 // with a ready endpoint like cloudflared's, and one that Cloudflare "refuses" (it exits at once).
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
@@ -30,7 +30,7 @@ exec node -e "require('http').createServer((q,s)=>{s.writeHead(200,{'content-typ
 const REFUSED = standIn('echo "ERR Unauthorized: Invalid tunnel secret" >&2; exit 1')
 
 test('with a token: cloudflared runs with the token file, connections are reported, and no other process or log line has the token', async () => {
-  const box = await start({ env, args: ['-v', `${CONNECTED}:/opt/slatebox/bin/cloudflared:ro`] })
+  const box = await start({ env, args: ['-v', `${CONNECTED}:/opt/cloudflared/bin/cloudflared:ro`] })
   await healthy(box.id)
   const args = await ok(['exec', box.id, 'cat', '/run/slatebox/cloudflared.args'])
   assert.match(args, /tunnel --no-autoupdate --loglevel info --metrics 127\.0\.0\.1:7085 --protocol auto run --token-file \/run\/slatebox\/tunnel\.token/)
@@ -46,7 +46,7 @@ test('with a token: cloudflared runs with the token file, connections are report
 })
 
 test('a refused tunnel: three exits, then Slatebox keeps serving without it and health says degraded, not unhealthy', async () => {
-  const box = await start({ env, args: ['-v', `${REFUSED}:/opt/slatebox/bin/cloudflared:ro`] })
+  const box = await start({ env, args: ['-v', `${REFUSED}:/opt/cloudflared/bin/cloudflared:ro`] })
   await waitFor(async () => (await logs(box.id)).includes('The team address connection was refused'), { timeout: 600, what: 'the tunnel to be given up' })
   await healthy(box.id)
   const health = await docker(['exec', box.id, '/opt/slatebox/bin/slatebox', 'health', '--json'])
@@ -64,6 +64,6 @@ test('no token: no tunnel process at all, as before', async () => {
   const processes = await ok(['exec', box.id, 'sh', '-c', 'cat /proc/[0-9]*/comm 2>/dev/null | sort -u'])
   assert.doesNotMatch(processes, /cloudflared/)
   assert.equal(JSON.parse(await ok(['exec', box.id, '/opt/slatebox/bin/slatebox', 'health', '--json'])).tunnel.configured, false)
-  const version = await ok(['run', '--rm', '--network', 'none', '--entrypoint', '/opt/slatebox/bin/cloudflared', IMAGE, '--version'])
+  const version = await ok(['run', '--rm', '--network', 'none', '--entrypoint', '/opt/cloudflared/bin/cloudflared', IMAGE, '--version'])
   assert.match(version, /cloudflared version \d{4}\.\d+\.\d+ /)
 })

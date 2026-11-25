@@ -211,7 +211,7 @@ export class FakeCloud {
     const self = bearer === this.credential && !this.revoked ? [...this.claims.values()].find(claim => claim.status === 'active') : null
     if (api.startsWith('/self')) {
       if (!self) return json(401, { error: { code: 'unauthorized', message: 'unknown install credential' } })
-      if (route === 'GET /api/v1/team-addresses/self') return json(200, this.view(self))
+      if (route === 'GET /api/v1/team-addresses/self') return json(200, { claim: this.view(self) })
       if (route === 'POST /api/v1/team-addresses/self/connector-token') {
         if (body?.rotate) this.token = ROTATED
         return json(200, { connectorToken: this.token }, { 'cache-control': 'no-store' })
@@ -233,7 +233,7 @@ export class FakeCloud {
       if (match[2] === '/install-credential') {
         this.credential = 'sbxi_ef56gh78_fake-new-install-credential-0123456789'
         this.revoked = false
-        return json(200, { installCredential: this.credential })
+        return json(201, { claim: this.view(claim), installCredential: this.credential, connectorToken: this.token })
       }
     }
     return json(404, { error: { code: 'not_found', message: `fake cloud does not know ${route}` } })

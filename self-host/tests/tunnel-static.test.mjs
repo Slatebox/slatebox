@@ -25,7 +25,7 @@ test('cloudflared is pinned by version, and each architecture by the same sha256
   assert.match(dockerfile, /FROM cloudflared-\$\{TARGETARCH\} AS cloudflared-download/)
   assert.match(dockerfile, /sha256sum -c -/, 'checked again against build/cloudflared.sha256 for the target architecture')
   assert.match(dockerfile, /cloudflared --version \| grep -F "version \$\{CLOUDFLARED_VERSION\} "/, 'and it is the pinned version')
-  assert.match(dockerfile, /COPY --from=cloudflared \/out\/cloudflared \/opt\/slatebox\/bin\/cloudflared/)
+  assert.match(dockerfile, /COPY --from=cloudflared \/out\/cloudflared \/opt\/cloudflared\/bin\/cloudflared/)
   assert.match(read('licenses/NOTICE.md'), /cloudflared.*Apache License 2\.0.*third-party\/cloudflared-LICENSE\.txt/)
 })
 
@@ -40,7 +40,7 @@ test('the token goes to cloudflared by file only, and leaves the environment bef
   for (const service of ['start mongo --', 'start proxy --', 'start_tunnel\n', 'start_sso\n  start_app']) {
     assert.ok(init.indexOf(service, init.indexOf('main() {')) > unset, `${service.trim()} starts after the token left the environment`)
   }
-  const run = /"\$ROOT\/bin\/cloudflared" tunnel [^\n]*\\\n\s+run --token-file "\$RUN\/tunnel\.token"/.exec(init)
+  const run = /\/opt\/cloudflared\/bin\/cloudflared tunnel [^\n]*\\\n\s+run --token-file "\$RUN\/tunnel\.token"/.exec(init)
   assert.ok(run, 'cloudflared reads the token from the private file')
   assert.doesNotMatch(init, /--token[ =]"?\$|TUNNEL_TOKEN=/, 'never as an argument or a variable')
   assert.match(init, /--no-autoupdate/, 'the pinned binary never replaces itself')
