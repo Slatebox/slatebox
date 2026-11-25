@@ -20,7 +20,11 @@ shipped early. The next release is 2.0.0, which is above both lines.
 
 ## [Unreleased]
 
-### Added
+## [2.0.0] - 2026-11-25
+
+### Highlights
+
+#### Added
 
 - Six presentations built by Slatebox in the library (Launch day war room, The 41-minute checkout
   outage, Q3 investor update, Why trials stall, 2027: three bets, Your first month), one in each of
@@ -123,7 +127,7 @@ shipped early. The next release is 2.0.0, which is above both lines.
   card and back, and moving a card's line end onto another note or card keeps the line. A card's
   line has no free end: let go on empty canvas, the end goes back and the canvas says why.
 
-### Changed
+#### Changed
 
 - The slate is the presentation. A slate wears a style (`options.style`, one property that replaces the
   old themes): "Wear this style" in Present's style picker, or in Slate settings → Slate style, puts the
@@ -148,7 +152,7 @@ shipped early. The next release is 2.0.0, which is above both lines.
   no longer has `publication`: a workshop slate is published like any slate.
   `set_presentation_order` is unchanged.
 
-### Removed
+#### Removed
 
 - Themes: the Themes panel, the theme library (`/themes`), theme generator slates, the "Create with
   theme?" AI preference, theme approval and the `themeId` creation link parameter. A slate that was
@@ -161,7 +165,7 @@ shipped early. The next release is 2.0.0, which is above both lines.
   open and draw as before, with their own colors; restyle a slate through chat or a presentation
   style.
 
-### Fixed
+#### Fixed
 
 - A copy of a library presentation keeps its look: Present plays the copied deck instead of planning
   the slate again in another style.
@@ -171,6 +175,25 @@ shipped early. The next release is 2.0.0, which is above both lines.
 - A slate made from a brief of steps is named after its first note, not after a whole row of steps.
 - A run another page or an agent saved, drawn on this canvas, became this person's undo step (their undo
   took the agent's work away for everyone).
+
+### Added
+
+- **present:** the slate is the presentation: a slate wears a style, Present only plays it ([c30139b4](https://github.com/Slatebox/slatebox/commit/c30139b432834f898f808a9bc28108acd430b3dd))
+- **first-run:** the first slate's plans, builder and firstSlate.create ([4540c8cb](https://github.com/Slatebox/slatebox/commit/4540c8cbad0fa864c8ee2c272a31821d1bf3457a))
+- **first-run:** Create slate asks what the first slate should do ([9ca5c8b2](https://github.com/Slatebox/slatebox/commit/9ca5c8b20bd9ec0642a061a2e56679a0303a7285))
+- **first-run:** Ask Slatebox opens on the board's three starters; Make it yours; Share invites ([b57c2988](https://github.com/Slatebox/slatebox/commit/b57c298892e2a7fb9cd37d54e7f0b441b19e5978))
+
+### Changed
+
+- **slates:** one createWorkshopSlate helper for every made-once private slate ([acc9a78a](https://github.com/Slatebox/slatebox/commit/acc9a78ac600cc0251a25a2dce66d2f6e3dd8ce0))
+
+### Fixed
+
+- **present:** a copy plays its worn deck; the Slate style panel wears on the live engine ([56d02cac](https://github.com/Slatebox/slatebox/commit/56d02cac373af6ceb0913d41f494ed2d5f1d96eb))
+- **style:** canvas and player agree, captions sit like the posters, agents and old decks wear styles natively ([ac0168a3](https://github.com/Slatebox/slatebox/commit/ac0168a395757aef09ef0d4de3d67d35a4fee8d3))
+- **style:** a worn slate's plain notes are stored as tall as the engine draws their words ([8420c960](https://github.com/Slatebox/slatebox/commit/8420c960fd7d29daf03ff6abb5316cde45e46578))
+- **style:** an uppercase caption is stored as tall as the engine wraps it (capitals run wide) ([3c8ad418](https://github.com/Slatebox/slatebox/commit/3c8ad418b05d592a23a8ce006eadc79251cf4ba6))
+- **first-run:** useful boards from their words, no slate from Back, live Make it yours ([d1650336](https://github.com/Slatebox/slatebox/commit/d1650336e5d8c12949a8e7703b9756bbccef81a2))
 
 ## [0.2.2] - 2026-11-25
 
@@ -1362,7 +1385,8 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 
 - Removed unused imports and fixed import naming conflict in `Main.jsx`.
 
-[Unreleased]: https://github.com/Slatebox/slatebox/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/Slatebox/slatebox/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/Slatebox/slatebox/compare/v0.2.2...v2.0.0
 [0.2.2]: https://github.com/Slatebox/slatebox/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Slatebox/slatebox/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Slatebox/slatebox/compare/v0.1.0...v0.2.0
