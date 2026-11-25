@@ -4,8 +4,10 @@
 // Team addresses (https://<name>.slatebox.team for a self-hosted Slatebox): Slatebox Cloud only.
 // Registered by enterprise/server/index.js wherever enterprise code is unlocked, but nothing here
 // answers unless this server is Slatebox Cloud by its signed Cloud key (context.via 'cloud', and
-// cloudLicensed() checked again on every call) AND settings.cloudflare.teamClaims is present. A
-// licensed on-prem install (via 'license') answers 404 on every route and refuses every method.
+// cloudLicensed() checked again on every call) AND settings.cloudflare.teamClaims is present and
+// not paused. On Slatebox Cloud without those settings, or with paused: true, every route answers
+// 503 paused ("not open right now") and nothing calls Cloudflare. A licensed on-prem install
+// (via 'license') answers 404 on every route and refuses every method.
 //   routes   /api/v1/team-addresses/* (routes.mjs): plain routes, never actions or MCP tools
 //   methods  teamAddresses.admin.* (admin.mjs): Admin tools › Team addresses, administrators only
 //   startup  meteor.js: the collections, the Cloudflare client, the reconciler (every 10 minutes)
@@ -16,8 +18,11 @@ export function registerTeamAddresses(api, context, { load = () => import('./met
   let started = null
   // Cloud by key, the settings present, and started: anything else is the same 404.
   const gate = () => context?.via === 'cloud' && Boolean(started) && started.gate()
+  // Cloud, but the settings are missing or paused: closed, with a plain message, before the gate.
+  const closed = () => context?.via === 'cloud' && Boolean(started) && Boolean(started.closed?.())
   for (const route of teamAddressRoutes({
     gate,
+    closed,
     service: () => started.service,
     authenticateUser: (req) => started.authenticateUser(req),
     address: (req) => (started ? started.address(req) : req.socket?.remoteAddress),

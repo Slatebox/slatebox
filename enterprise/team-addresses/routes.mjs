@@ -9,8 +9,10 @@
 //                   resource) from `npx slatebox install` (web/app/server/oauth/device.mjs)
 //   install routes  Bearer: the install credential sbxi_<prefix>_<secret>, for its own claim only
 //
-// gate() is checked on every request: off Slatebox Cloud (no Cloud key, an on-prem license) or
-// without the Cloudflare settings, every route answers the same 404 as an unknown /api/v1 route.
+// closed() and gate() are checked on every request. On Slatebox Cloud with the Cloudflare settings
+// missing or paused (settings.cloudflare.teamClaims absent, incomplete or paused: true), every route
+// answers 503 paused with a plain message and nothing reaches Cloudflare. Off Slatebox Cloud (no
+// Cloud key, an on-prem license), every route answers the same 404 as an unknown /api/v1 route.
 // Every answer is Cache-Control: no-store; errors are {error:{code,message}} like the rest of /api/v1.
 import { CLAIM_ID, TeamAddressError } from './claims.mjs'
 
@@ -28,6 +30,8 @@ const fail = (res, status, code, message, retryAfter) => {
   send(res, status, { error: { code, message, ...(retryAfter !== undefined && { retryAfter }) } })
 }
 const unknownRoute = (res) => fail(res, 404, 'unknown_route', 'There is no such API route. See /api/v1/openapi.json.')
+export const CLOSED_MESSAGE = 'Team addresses are not open on Slatebox Cloud right now. Nothing was changed. Use --domain or --local meanwhile.'
+const closedRoute = (res) => fail(res, 503, 'paused', CLOSED_MESSAGE, 3600)
 
 const bearer = (req) => {
   const header = req.headers?.authorization || ''
@@ -68,16 +72,18 @@ export function readJson(req, limit = BODY_LIMIT) {
 /**
  * @param {object} options
  * @param {() => boolean} options.gate                  Cloud key + settings, checked live
+ * @param {() => boolean} [options.closed]              Slatebox Cloud, but the settings are missing or paused
  * @param {() => object} options.service                the claim service (claims.mjs)
  * @param {(req) => Promise<{ _id: string }|null>} options.authenticateUser
  * @param {(req) => string|undefined} [options.address]  the caller's own address
  * @param {(line: string) => void} [options.log]
  * @returns {{ method: string, path: string, handler: Function }[]}
  */
-export function teamAddressRoutes({ gate, service, authenticateUser, address = (req) => req.socket?.remoteAddress, log = () => {} }) {
+export function teamAddressRoutes({ gate, closed = () => false, service, authenticateUser, address = (req) => req.socket?.remoteAddress, log = () => {} }) {
   const context = (req) => ({ ip: address(req), ua: req.headers?.['user-agent'] })
 
   const wrap = (fn) => async (req, res) => {
+    if (closed()) return closedRoute(res)
     if (!gate()) return unknownRoute(res)
     try {
       const { status = 200, body } = await fn(req, res)

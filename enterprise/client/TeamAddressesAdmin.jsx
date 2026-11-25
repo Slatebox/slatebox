@@ -70,7 +70,7 @@ export default function TeamAddressesAdmin() {
       <AccountSection title="Team addresses" data-testid="team-addresses-admin">
         <Typography variant="body2">
           {data.live} live of {data.maxTunnels} at most. New claims are {data.paused ? 'paused' : 'open'}
-          {data.pausedBySettings ? ' (paused in the server settings)' : ''}.
+          {data.pausedBySettings ? ' (closed in the server settings: nothing calls Cloudflare)' : ''}.
         </Typography>
         <Stack direction="row" spacing={1} sx={{ my: 1 }} flexWrap="wrap" useFlexGap>
           <TextField size="small" label="Find a name, id or owner id" value={q} onChange={(event) => setQ(event.target.value)}

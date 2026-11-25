@@ -593,10 +593,11 @@ test('idle 60 days: the owner is told; idle 90 days: released', async () => {
 
 // ---- HTTP routes --------------------------------------------------------------------------------------------
 
-async function serve(w, { gate = () => true, tokens = { 'sbo_ada': 'ada', 'sbo_sam': 'sam' } } = {}) {
+async function serve(w, { gate = () => true, closed = undefined, tokens = { 'sbo_ada': 'ada', 'sbo_sam': 'sam' } } = {}) {
   const app = express()
   const routes = teamAddressRoutes({
     gate,
+    ...(closed && { closed }),
     service: () => w.service,
     authenticateUser: async (req) => {
       const id = tokens[`${req.headers.authorization}`.replace(/^Bearer /, '')]
@@ -620,7 +621,7 @@ async function serve(w, { gate = () => true, tokens = { 'sbo_ada': 'ada', 'sbo_s
   return { call, close: () => new Promise((resolve) => server.close(resolve)) }
 }
 
-test('off Slatebox Cloud (or without settings) every route answers the same 404 as an unknown API route', async () => {
+test('off Slatebox Cloud every route answers the same 404 as an unknown API route', async () => {
   const w = world()
   const http = await serve(w, { gate: () => false })
   try {
@@ -630,6 +631,30 @@ test('off Slatebox Cloud (or without settings) every route answers the same 404 
       assert.equal(answer.status, 404, `${method} ${path}`)
       assert.deepEqual(answer.body, unknown.body)
     }
+    assert.equal(w.store.claims.docs.size, 0)
+  } finally {
+    await http.close()
+  }
+})
+
+test('on Slatebox Cloud with the settings missing or paused, every route is closed with a plain 503 and nothing reaches Cloudflare', async () => {
+  const w = world()
+  const calls = []
+  const service = w.service
+  w.service = new Proxy(service, { get(target, key) { calls.push(key); return target[key] } })
+  const before = w.fake.calls.length
+  const http = await serve(w, { gate: () => true, closed: () => true })
+  try {
+    for (const [method, path] of [['GET', `${BASE}/availability?name=acme`], ['POST', BASE], ['GET', BASE], ['GET', `${BASE}/self`], ['POST', `${BASE}/self/connector-token`], ['POST', `${BASE}/self/rename-complete`], ['DELETE', `${BASE}/self`], ['POST', `${BASE}/ta_aaaaaaaaaaaaaaaaaaaa/rename`], ['DELETE', `${BASE}/ta_aaaaaaaaaaaaaaaaaaaa`], ['POST', `${BASE}/ta_aaaaaaaaaaaaaaaaaaaa/install-credential`]]) {
+      const answer = await http.call(method, path, { token: 'sbo_ada', body: method === 'POST' ? { name: 'acme' } : undefined })
+      assert.equal(answer.status, 503, `${method} ${path}`)
+      assert.equal(answer.body.error.code, 'paused', 'the CLI already explains paused in plain words')
+      assert.match(answer.body.error.message, /not open on Slatebox Cloud right now\. Nothing was changed\./)
+      assert.equal(answer.headers.get('retry-after'), '3600')
+      assert.equal(answer.headers.get('cache-control'), 'no-store')
+    }
+    assert.deepEqual(calls, [], 'the claim service is never reached while closed')
+    assert.equal(w.fake.calls.length, before, 'nothing calls Cloudflare')
     assert.equal(w.store.claims.docs.size, 0)
   } finally {
     await http.close()
@@ -698,6 +723,17 @@ test('registered everywhere enterprise runs, started only on Cloud; on-prem answ
     for (const fn of host.startups) await fn()
     assert.equal(loaded, via === 'cloud' ? 1 : 0)
   }
+  // Cloud, started, but the settings are missing or paused: closed with a plain 503; on-prem stays 404.
+  for (const via of ['license', 'cloud']) {
+    const host = createEnterpriseHost()
+    registerTeamAddresses(host.api, { via, isUnlocked: () => true }, { load: async () => ({ startTeamAddresses: async () => ({ gate: () => false, closed: () => true }) }), log: () => {} })
+    for (const fn of host.startups) await fn()
+    const route = host.routes.find((entry) => entry.method === 'POST' && entry.path === BASE)
+    const res = { headers: {}, setHeader(k, v) { this.headers[k] = v }, end(body) { this.body = JSON.parse(body) } }
+    await route.handler({ method: 'POST', headers: {}, query: {} }, res)
+    assert.equal(res.statusCode, via === 'cloud' ? 503 : 404, via)
+    assert.equal(res.body.error.code, via === 'cloud' ? 'paused' : 'unknown_route')
+  }
 })
 
 test('admin methods: administrators only, Cloud only, and each change is audited', async () => {
@@ -729,4 +765,15 @@ test('the Cloudflare settings are server-only and off in the example settings', 
   assert.equal(example.cloudflare.teamClaims.token, '')
   assert.equal(example.cloudflare.teamClaims.paused, true)
   assert.equal(teamClaimsConfigured(example), false)
+})
+
+test('the Meteor side: settings paused or missing closes the service, and the Cloudflare client and the reconciler check it first', async () => {
+  const { readFileSync } = await import('node:fs')
+  const source = readFileSync(new URL('../enterprise/team-addresses/meteor.js', import.meta.url), 'utf8')
+  assert.match(source, /const open = \(\) => gate\(\) && claimsSettings\(\)\.paused !== true/)
+  assert.match(source, /const closed = \(\) => isUnlocked\(\) && cloudOn\(\) && !open\(\)/)
+  // The lazy Cloudflare client refuses before it is made; the reconciler skips its pass.
+  assert.match(source, /get\(_target, key\) \{\s*if \(!open\(\)\) throw new TeamAddressError\('paused'/)
+  assert.match(source, /if \(running \|\| !open\(\)\) return/)
+  assert.match(source, /return \{ gate, closed, /)
 })

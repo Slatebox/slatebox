@@ -12,7 +12,9 @@
 //   cloudflare.teamClaims.token         API token: Cloudflare Tunnel Write (account), DNS Write + Zone Read (zone)
 //   cloudflare.teamClaims.zoneName      default 'slatebox.team'
 //   cloudflare.teamClaims.maxTunnels    default 800 (new claims refused at the cap); alertTunnels default 600
-//   cloudflare.teamClaims.paused        true stops NEW claims (live ones keep working)
+//   cloudflare.teamClaims.paused        true closes the service: every route answers 503 paused, the
+//                                       reconciler does not run and nothing calls Cloudflare (the
+//                                       admin switch in Admin tools pauses NEW claims only)
 //   cloudflare.teamClaims.auditPepper   key for the address hashes in the audit (optional)
 //   cloudflare.teamClaims.alertEmail    where operational alerts go (optional)
 //   cloudflare.teamClaims.e2eAccounts   user ids that may claim e2e-* names (the end-to-end test)
@@ -29,7 +31,8 @@ import { cloudOn } from '/server/cloud-lock-meteor'
 import { device } from '/server/oauth/meteor.js'
 import { TEAM_ADDRESSES_SCOPE, teamClaimsConfigured } from '/server/oauth/device.mjs'
 import { createCloudflare } from './cf.mjs'
-import { createTeamAddressService } from './claims.mjs'
+import { TeamAddressError, createTeamAddressService } from './claims.mjs'
+import { CLOSED_MESSAGE } from './routes.mjs'
 import { createReconciler } from './reconcile.mjs'
 import { ensureIndexes, mongoStore } from './store.mjs'
 
@@ -87,6 +90,10 @@ async function takeLease(name, holder, ms) {
 
 export async function startTeamAddresses({ isUnlocked = () => true } = {}) {
   const gate = () => isUnlocked() && cloudOn() && teamClaimsConfigured(Meteor.settings)
+  // Open: configured and not paused by settings. Anything else on Slatebox Cloud is closed: no
+  // route answers past a 503, the reconciler skips its pass, and the Cloudflare client refuses.
+  const open = () => gate() && claimsSettings().paused !== true
+  const closed = () => isUnlocked() && cloudOn() && !open()
   const forwardedCount = Number.parseInt(process.env.HTTP_FORWARDED_COUNT, 10) || 0
   const address = (req) => clientAddress(req, forwardedCount)
   const raw = {
@@ -102,6 +109,7 @@ export async function startTeamAddresses({ isUnlocked = () => true } = {}) {
   let client = null
   const cf = new Proxy({}, {
     get(_target, key) {
+      if (!open()) throw new TeamAddressError('paused', CLOSED_MESSAGE, { retryAfter: 3600 })
       if (!client) {
         const s = claimsSettings()
         client = createCloudflare({ token: s.token, accountId: s.accountId, zoneId: s.zoneId, fetch: globalThis.fetch })
@@ -125,7 +133,9 @@ export async function startTeamAddresses({ isUnlocked = () => true } = {}) {
     return user?.emails?.[0]?.address || null
   }
 
-  if (gate()) {
+  if (gate() && !open()) {
+    console.log('[team-addresses] closed: settings.cloudflare.teamClaims.paused is true; every route answers 503 and nothing calls Cloudflare')
+  } else if (gate()) {
     await ensureIndexes(raw).catch((error) => console.error('[team-addresses] indexes', scrub(error?.message || error)))
     const s = claimsSettings()
     const fingerprint = (await import('node:crypto')).createHash('sha256').update(String(s.token)).digest('hex').slice(0, 8)
@@ -136,7 +146,7 @@ export async function startTeamAddresses({ isUnlocked = () => true } = {}) {
       const holder = `${process.pid}-${Math.random().toString(36).slice(2)}`
       let running = false
       const pass = async () => {
-        if (running || !gate()) return
+        if (running || !open()) return
         running = true
         try {
           if (await takeLease('reconcile', holder, RECONCILE_MS * 2)) {
@@ -154,8 +164,8 @@ export async function startTeamAddresses({ isUnlocked = () => true } = {}) {
       Meteor.setTimeout(pass, 60_000)
     }
   } else if (cloudOn()) {
-    console.log('[team-addresses] off: settings.cloudflare.teamClaims is not set on this server')
+    console.log('[team-addresses] closed: settings.cloudflare.teamClaims is not set on this server; every route answers 503 and nothing calls Cloudflare')
   }
 
-  return { gate, service, authenticateUser, address, isAdmin, describeOwner }
+  return { gate, closed, service, authenticateUser, address, isAdmin, describeOwner }
 }
