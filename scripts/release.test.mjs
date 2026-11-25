@@ -74,3 +74,19 @@ test('an empty Unreleased section takes the generated notes only', () => {
   assert.equal(sectionBody('', '### Fixed\n\n- x'), '### Fixed\n\n- x')
   assert.match(sectionBody('', ''), /No user-facing changes/)
 })
+
+test('a package changelog edit alone is not a package change', () => {
+  assert.ok(ARTIFACTS.slatebox.excludePaths.includes('packages/slatebox/CHANGELOG.md'))
+  assert.ok(ARTIFACTS['slatebox-mcp'].excludePaths.includes('packages/slatebox-mcp/CHANGELOG.md'))
+  for (const a of Object.values(ARTIFACTS)) {
+    for (const p of a.excludePaths) assert.ok(!p.endsWith('/**') || !a.includePaths.includes(p), `${p} is both included and excluded`)
+  }
+})
+
+test('a slatebox-mcp release moves the installer\'s exact pin; a slatebox release moves create-slatebox', () => {
+  const [mcp] = ARTIFACTS['slatebox-mcp'].companions
+  assert.deepEqual([mcp.file, mcp.pin, mcp.lockPath], ['packages/slatebox/package.json', ['dependencies', 'slatebox-mcp'], 'packages/slatebox'])
+  assert.ok(!mcp.bumpPatch, 'the installer keeps its own version line')
+  const [create] = ARTIFACTS.slatebox.companions
+  assert.deepEqual([create.file, create.pin, create.bumpPatch], ['packages/create-slatebox/package.json', ['dependencies', 'slatebox'], true])
+})

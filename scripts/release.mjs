@@ -47,7 +47,8 @@ export const ARTIFACTS = {
     versionFiles: [{ file: 'packages/slatebox/package.json', keys: [['version']] }],
     lockKeys: [['packages', 'packages/slatebox', 'version']],
     includePaths: ['packages/slatebox/**', 'packages/create-slatebox/**'],
-    excludePaths: [],
+    // A commit that only edits the changelog (an [Unreleased] note) is not a package change.
+    excludePaths: ['packages/slatebox/CHANGELOG.md'],
     // create-slatebox follows slatebox: its pin moves to the new version and its
     // own patch version goes up (it is not published to npm yet).
     companions: [{ file: 'packages/create-slatebox/package.json', pin: ['dependencies', 'slatebox'], bumpPatch: true,
@@ -65,7 +66,12 @@ export const ARTIFACTS = {
     ],
     lockKeys: [['packages', 'packages/slatebox-mcp', 'version']],
     includePaths: ['packages/slatebox-mcp/**'],
-    excludePaths: [],
+    excludePaths: ['packages/slatebox-mcp/CHANGELOG.md'],
+    // The installer runs one exact slatebox-mcp (packages/slatebox/test/publish-pin.test.mjs), so its
+    // pin and lock entry move with every slatebox-mcp release. The installer's own version does
+    // not: `npx slatebox mcp` serves the new MCP server once slatebox is released too
+    // (`--release slatebox-mcp:<bump> --release slatebox:patch` in one ship; docs/releasing.md).
+    companions: [{ file: 'packages/slatebox/package.json', pin: ['dependencies', 'slatebox-mcp'], lockPath: 'packages/slatebox' }],
     latest: false,
   },
 }
@@ -295,7 +301,7 @@ function release(name, spec, opts) {
   if (lock) for (const keys of artifact.lockKeys) setIn(lock, keys, version)
   for (const c of artifact.companions || []) {
     const json = readJson(c.file)
-    setIn(json, c.pin, version)
+    if (!setIn(json, c.pin, version)) throw new Error(`${c.file}: no ${c.pin.join('.')} to update`)
     if (c.bumpPatch) {
       json.version = nextVersion(json.version, 'patch')
       if (lock) setIn(lock, ['packages', c.lockPath, 'version'], json.version)

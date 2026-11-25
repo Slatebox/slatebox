@@ -10,8 +10,12 @@ changelog, and all three follow [Semantic Versioning 2.0](https://semver.org/spe
 | **slatebox-mcp**: the MCP server and its local CLI | npm [`slatebox-mcp`](https://www.npmjs.com/package/slatebox-mcp), the MCP registry (`server.json`) | `packages/slatebox-mcp/package.json` and `server.json` | `slatebox-mcp@X.Y.Z` | [packages/slatebox-mcp/CHANGELOG.md](../packages/slatebox-mcp/CHANGELOG.md) |
 
 `packages/create-slatebox` follows `slatebox`: the release script moves its pin and its patch
-version with every `slatebox` release. The canvas engine, SlateboxJS, is versioned in its own
-repository.
+version with every `slatebox` release. The installer runs one exact `slatebox-mcp`, so every
+`slatebox-mcp` release also moves the `slatebox-mcp` pin in `packages/slatebox/package.json` (and
+its lock entry). The installer's own version does not move with it: `npx slatebox mcp` serves the
+new MCP server only once `slatebox` is released as well, so release the two together
+(`--release slatebox-mcp:<bump> --release slatebox:patch`, the MCP server first). The canvas
+engine, SlateboxJS, is versioned in its own repository.
 
 ## What a version number means
 
@@ -81,13 +85,28 @@ before anything is built:
    - runs git-cliff over the commits since the artifact's previous tag,
    - writes the new changelog section (Highlights from `[Unreleased]`, then the generated groups)
      and the compare links,
-   - updates the version files (and `package-lock.json`; `server.json` for the MCP server; the
-     `create-slatebox` pin for the installer),
+   - updates the version files (and `package-lock.json`; `server.json` and the installer's
+     `slatebox-mcp` pin for the MCP server; the `create-slatebox` pin for the installer),
    - commits `chore(release): <tag>` and creates the annotated tag, whose message is the notes.
 2. The ship builds and checks that commit as usual, so the shipped identity is the release commit.
 3. The ship pushes `main` and the new tags together, atomically. If any step before the push fails,
    the ship deletes the tags and drops the release commit, so nothing is left behind and a rerun
-   starts clean.
+   starts clean. The cleanup names the dropped commit and any image tags already pushed for it
+   (they point at a commit on no branch; nothing deploys them).
+
+Release commits and tags made by a ship that was killed (so its cleanup never ran) are caught at
+the start of the next ship: it refuses while `community/main..main` holds a `chore(release)`
+commit or a local release tag is not on GitHub, and prints the command that removes them.
+
+**Retrying after the push.** Once the push has succeeded the release is on `main`: the version
+files already carry the new version and the tag is on GitHub. If a later step fails (deploy,
+rollout, smoke), fix forward and rerun the ship **without** `--release`. A rerun with the same
+`--release` for a tag that is already on GitHub at `HEAD` is treated as done and skipped; any
+other repeat is refused, because the version is no longer above the current one.
+
+**Push protection.** GitHub's secret-scanning push protection can reject the push (`GH013`). The
+ship prints GitHub's message and stops, with nothing on `main`. Remove the secret and ship again,
+or, for a false positive, use the bypass link GitHub prints. Never force-push.
 
 Then `.github/workflows/release.yml` turns each pushed tag into a GitHub Release with the
 changelog section as its notes. For an app tag it adds the self-host image's digest when
