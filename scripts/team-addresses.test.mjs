@@ -11,7 +11,7 @@ import { createFakeCloudflare, FAKE } from './fake-cloudflare.mjs'
 import { checkName, fold, refusal, suggestionsFor, NAME_RULE } from '../enterprise/team-addresses/names.mjs'
 import { createCloudflare, CloudflareError } from '../enterprise/team-addresses/cf.mjs'
 import { createTeamAddressService, ingressFor, LIMITS, ORIGIN_SERVICE, SUSPENDED_INGRESS, TeamAddressError } from '../enterprise/team-addresses/claims.mjs'
-import { memoryStore } from '../enterprise/team-addresses/store.mjs'
+import { memoryStore, mongoStore } from '../enterprise/team-addresses/store.mjs'
 import { createReconciler, REAP } from '../enterprise/team-addresses/reconcile.mjs'
 import { teamAddressRoutes, BASE } from '../enterprise/team-addresses/routes.mjs'
 import { adminMethods, ADMIN_METHODS } from '../enterprise/team-addresses/admin.mjs'
@@ -411,6 +411,81 @@ test('a takedown answers 451 at the edge, refuses tokens with the notice, keeps 
   assert.equal((await w.service.adminWhy('acme')).reason, 'taken_down')
   const actions = w.store.audit.docs.map((entry) => entry.action)
   for (const action of ['claim', 'activate', 'suspend', 'unsuspend', 'release']) assert.ok(actions.includes(action), action)
+})
+
+test('a suspended address released by its owner or its install stays held from everyone, the owner too', async () => {
+  for (const how of ['owner', 'install']) {
+    const w = world()
+    const { body } = await w.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k' })
+    await w.service.suspend({ admin: 'root', id: body.claim.id, reason: 'phishing', notice: 'Suspended.' })
+    if (how === 'owner') await w.service.releaseByOwner({ user: user('ada'), id: body.claim.id })
+    else await w.service.releaseSelf({ claim: await w.service.authenticateInstall(body.installCredential) })
+    assert.equal((await w.store.claims.get(body.claim.id)).status, 'released', how)
+    // The owner cannot take the name straight back on a fresh tunnel, and neither can anyone else.
+    await rejectsWith(w.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k2' }), 'unavailable')
+    await rejectsWith(w.service.claim({ user: user('sam'), name: 'acme', clientKey: 'k' }), 'unavailable')
+    assert.equal((await w.service.adminWhy('acme')).reason, 'taken_down', how)
+    w.tick(31 * DAY)
+    await rejectsWith(w.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k3' }), 'unavailable')
+  }
+})
+
+test('a suspended release Cloudflare cannot finish keeps the takedown hold when the reconciler completes it', async () => {
+  const w = world()
+  const { body } = await w.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k' })
+  await w.service.suspend({ admin: 'root', id: body.claim.id, reason: 'phishing', notice: 'Suspended.' })
+  w.fake.fail('DELETE', /dns_records/, { status: 503, times: 4 })
+  assert.equal((await w.service.releaseByOwner({ user: user('ada'), id: body.claim.id })).status, 202)
+  await createReconciler({ store: w.store, cf: w.cf, service: w.service, now: w.now }).run()
+  assert.equal((await w.store.claims.get(body.claim.id)).status, 'released')
+  await rejectsWith(w.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k2' }), 'unavailable')
+})
+
+test('renaming back to a name still in its grace period keeps that name\'s DNS record when the rename finishes', async () => {
+  const w = world()
+  const { body } = await w.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k' })
+  await w.service.rename({ user: user('ada'), id: body.claim.id, name: 'acme-new' })
+  const back = await w.service.rename({ user: user('ada'), id: body.claim.id, name: 'acme' })
+  assert.equal(back.claim.host, 'acme.slatebox.team')
+  const doc = await w.store.claims.get(body.claim.id)
+  assert.deepEqual(doc.previousNames.map((entry) => entry.name), ['acme-new'])
+  assert.deepEqual(w.fake.liveTunnels()[0].config.ingress.map((rule) => rule.hostname || rule.service), ['acme.slatebox.team', 'acme-new.slatebox.team', 'http_status:404'])
+  await w.service.renameComplete({ claim: await w.service.authenticateInstall(body.installCredential) })
+  assert.deepEqual([...w.fake.records.values()].map((r) => r.name), ['acme.slatebox.team'])
+  assert.equal((await w.store.claims.get(body.claim.id)).cf.dnsRecordId, [...w.fake.records.values()][0].id)
+  assert.deepEqual(w.fake.liveTunnels()[0].config, ingressFor(['acme.slatebox.team']))
+})
+
+test('a replayed claim hands out the connector token under the same hourly limit', async () => {
+  const w = world()
+  const first = await w.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k', idempotencyKey: 'i' })
+  assert.equal(first.status, 201)
+  for (let i = 1; i < LIMITS.tokenFetchesPerHour + 1; i += 1) assert.equal((await w.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k', idempotencyKey: 'i' })).status, 200)
+  await rejectsWith(w.service.claim({ user: user('ada'), name: 'acme', clientKey: 'k', idempotencyKey: 'i' }), 'rate_limited')
+})
+
+test('the MongoDB store removes a blocklist entry by the id it returned', async () => {
+  // A collection that compares _id strictly, like MongoDB (an ObjectId never equals its string).
+  const rows = []
+  let n = 0
+  const blocklist = {
+    insertOne: async (doc) => {
+      const row = { _id: doc._id ?? { oid: (n += 1) }, ...doc }
+      rows.push(row)
+      return { insertedId: row._id }
+    },
+    deleteOne: async ({ _id }) => {
+      const at = rows.findIndex((row) => row._id === _id)
+      if (at >= 0) rows.splice(at, 1)
+      return { deletedCount: at >= 0 ? 1 : 0 }
+    },
+    find: () => ({ toArray: async () => rows }),
+  }
+  const store = mongoStore({ claims: {}, tombstones: {}, audit: {}, blocklist, flags: {}, counters: {} })
+  const id = await store.blocklist.add({ pattern: 'evil', kind: 'exact' })
+  assert.equal(typeof id, 'string')
+  assert.equal(await store.blocklist.remove(id), true)
+  assert.equal(rows.length, 0)
 })
 
 // ---- audit ------------------------------------------------------------------------------------------------

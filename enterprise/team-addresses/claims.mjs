@@ -328,8 +328,11 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
   // hold: who may claim the name again before `until` (the owner, or nobody after a takedown).
   async function release(doc, { actor, ip, ua, hold }) {
     if (['released', 'failed'].includes(doc.status)) return { status: doc.status }
-    await store.claims.update(doc._id, { status: 'releasing', updatedAt: now(), ...(hold && { releaseHold: hold }) })
-    const holdWith = hold || doc.releaseHold || { ownerId: doc.ownerId, until: now() + HOLD_MS }
+    // A suspended address released by its owner or its install keeps the takedown's hold: held
+    // from everyone, the owner too, for a year. Otherwise the owner could release it and claim the
+    // same name straight back on a fresh, unsuspended tunnel.
+    const holdWith = hold || doc.releaseHold || (doc.status === 'suspended' ? { ownerId: null, until: now() + TAKEDOWN_HOLD_MS } : { ownerId: doc.ownerId, until: now() + HOLD_MS })
+    await store.claims.update(doc._id, { status: 'releasing', updatedAt: now(), releaseHold: holdWith })
     try {
       for (const id of [doc.cf?.dnsRecordId, ...(doc.previousNames || []).map((entry) => entry.dnsRecordId)].filter(Boolean)) await cf.deleteDns(id)
       if (doc.cf?.tunnelId) {
@@ -416,6 +419,8 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
       const existing = await store.claims.byKey(owner._id, key)
       if (existing) {
         if (existing.status === 'active') {
+          // A replay hands out the token again: the same hourly limit as /self/connector-token.
+          await limit(`token:${existing._id}`, limits.tokenFetchesPerHour, 3_600_000, 'Too many token requests for this team address. Try again within the hour.')
           const connectorToken = await cf.tunnelToken(existing.cf.tunnelId).catch(() => {
             throw UPSTREAM()
           })
@@ -505,7 +510,9 @@ export function createTeamAddressService({ store, cf, config, findUser, notify =
         throw UNAVAILABLE(hostOf(name))
       }
       await limit(`renames:${doc._id}`, limits.renamesPer30Days, 30 * DAY_MS, `A team address may be renamed ${limits.renamesPer30Days} times in 30 days.`)
-      const previous = [...(doc.previousNames || []), { name: doc.name, until: now() + RENAME_GRACE_MS, dnsRecordId: doc.cf.dnsRecordId || null }]
+      // Moving back to a name still in its grace period takes that name out of previousNames, so
+      // finishing the rename never deletes the record the claim now answers on.
+      const previous = [...(doc.previousNames || []).filter((entry) => entry.name !== name), { name: doc.name, until: now() + RENAME_GRACE_MS, dnsRecordId: doc.cf.dnsRecordId || null }]
       try {
         const ok = await store.claims.update(doc._id, { name, previousNames: previous, 'cf.dnsRecordId': null, updatedAt: now() }, { status: 'active' })
         if (!ok) throw refuse('conflict', 'This team address changed meanwhile. Try again.')

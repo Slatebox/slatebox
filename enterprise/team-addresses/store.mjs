@@ -14,6 +14,7 @@
 //   teamAddressAudit       append-only: { at, actor, action, claimId, name, ok, error?, ipHash, uaShort }
 //   teamAddressBlocklist   administrators' extra names: { _id, pattern, kind, reason, by, at }
 //   teamAddressFlags       { _id: 'paused', value, by, at }
+import { randomBytes } from 'node:crypto'
 import { createWindowCounter, memoryWindowCounter } from '/server/oauth/device.mjs'
 
 export const LIVE = Object.freeze(['pending', 'active', 'suspended', 'releasing'])
@@ -174,9 +175,12 @@ export function mongoStore(collections, { now = Date.now } = {}) {
     },
     blocklist: {
       list: () => blocklist.find({}).toArray(),
+      // A string _id, so the id the admin view sends back to remove() matches (an ObjectId never
+      // equals its string form).
       async add(entry) {
-        const { insertedId } = await blocklist.insertOne({ ...entry })
-        return String(insertedId)
+        const _id = `block-${randomBytes(9).toString('hex')}`
+        await blocklist.insertOne({ ...entry, _id })
+        return _id
       },
       remove: async (id) => (await blocklist.deleteOne({ _id: id })).deletedCount > 0,
     },
