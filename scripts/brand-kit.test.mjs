@@ -13,6 +13,7 @@ import {
 } from '../web/app/imports/ui/components/brand/brandKit.mjs'
 import { noteAt, presetNoteStyle } from '../web/app/imports/ui/common/noteStyle.mjs'
 import { DEFAULT_PRESET_QUERY, currentLogo, defaultPreset, logoDocs } from '../web/app/imports/api/common/brandSettings.mjs'
+import { presetContainerStyle } from '../web/app/imports/api/common/slateBackground.mjs'
 
 const app = (path) => readFileSync(new URL(`../web/app/${path}`, import.meta.url), 'utf8')
 
@@ -130,9 +131,15 @@ test('backgrounds are written the way createSlate reads them', () => {
   assert.deepEqual(g.gradientConfig.gradientColors, ['#336699', '#4477aa', '#5588bb'])
   assert.equal(effectiveStyle({ background: g }).background, '#336699')
   assert.equal(backgroundValue('none', '#fff'), null)
+  // createSlate reads a preset's background through slateBackground.mjs (so do My slates' pictures).
   const create = app('imports/api/client/createSlate.js')
-  assert.match(create, /presetBg\.colorValue/)
-  assert.match(create, /presetBg\.gradientConfig\.gradientColors/)
+  assert.match(create, /presetContainerStyle\(defaultPreset\?\.value\)/)
+  const fromGradient = presetContainerStyle({ background: g })
+  assert.equal(fromGradient.backgroundColorAsGradient, true)
+  assert.deepEqual(fromGradient.backgroundGradientColors, ['#336699', '#4477aa', '#5588bb'])
+  const fromColor = presetContainerStyle({ background: backgroundValue('color', '#EEE') })
+  assert.equal(fromColor.backgroundColor, '#eeeeee')
+  assert.equal(fromColor.backgroundColorAsGradient, false)
 })
 
 test('contrast: AA is judged at the size the text is drawn, and the badge and the warnings agree', () => {

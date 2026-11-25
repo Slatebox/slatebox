@@ -12,6 +12,8 @@ import promisify from '../../api/client/promisify'
 import { drawSlateBoards } from './workshop/boardRender'
 import useCanvasTheme from '../common/useCanvasTheme'
 import { stillPicture } from './stillPicture.mjs'
+import { shownContainerStyle } from '../../api/common/slateBackground.mjs'
+import teamSlateStyle from '../../api/client/teamSlateStyle'
 
 /** Whether a saved slate holds a board (its first in creative, any further in boards). */
 const holdsBoards = (ss) => ss?.creative?.model?.kind === 'workshop' || Object.values(ss?.boards ?? {}).some((b) => b?.model?.kind === 'workshop')
@@ -26,9 +28,11 @@ export default function SnapSlate({
   index,
 }) {
   const [isVisible, setVisible] = React.useState(null)
-  // A slate's picture follows the app's mode, as its canvas does (canvasTheme.mjs).
+  // A slate's picture follows the app's mode, as its canvas does (canvasTheme.mjs), judged on the
+  // background it is drawn on (a slate stored without one is drawn on the team's style).
   const box = React.useRef(null)
-  useCanvasTheme(box, () => slate?.options?.containerStyle)
+  const shown = React.useRef(slate?.options?.containerStyle)
+  useCanvasTheme(box, () => shown.current)
 
   async function create(ss) {
     const snap = await new Slatebox.slate(
@@ -214,11 +218,20 @@ export default function SnapSlate({
   // A thumbnail (not the preview you can pan) is a still picture: none of the canvas's controls are said on it.
   useEffect(() => (allowDrag ? undefined : stillPicture(box.current)), [])
   useEffect(() => {
+    gone.current = false
     if (slate) {
       const copy = JSON.parse(JSON.stringify(slate))
       copy.nodes = Array.isArray(copy.nodes) ? copy.nodes : []
-      copy.options = { ...copy.options, containerStyle: { backgroundColor: '#ffffff', ...copy.options?.containerStyle } }
-      create(copy)
+      // The background its canvas opens on (slateBackground.mjs): its own, else the team's style, else white.
+      // Only a slate stored without one waits for the team's style (asked once for the page).
+      const stored = copy.options?.containerStyle
+      const style = stored && typeof stored === 'object' ? Promise.resolve(null) : teamSlateStyle()
+      style.then((team) => {
+        if (gone.current) return
+        shown.current = shownContainerStyle(stored, team)
+        copy.options = { ...copy.options, containerStyle: shown.current }
+        create(copy)
+      })
     }
     return () => {
       gone.current = true

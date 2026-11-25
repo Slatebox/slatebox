@@ -9,6 +9,7 @@ import defaultShapes from '../../ui/components/node/defaultShapes'
 import { presetNoteStyle } from '../../ui/common/noteStyle.mjs'
 import { DEFAULT_PRESET_QUERY, defaultPreset as teamStyle } from '../common/brandSettings.mjs'
 import { loadSlateFaces } from '../../ui/components/presentations/slateFaces.mjs'
+import { backgroundColors, presetContainerStyle } from '../common/slateBackground.mjs'
 
 async function createSlate(
   slateBase,
@@ -74,85 +75,14 @@ async function createSlate(
     // New slates are private for everyone.
   }
 
-  // Default background colors and style. White is the background nobody chose: in dark mode the
-  // canvas shows it as the dark canvas (ui/common/canvasTheme.mjs), and it is saved as white.
-  let bgColors = ['#ffffff', '#f0f0f0', '#e1e1e1', '#d2d2d2', '#c3c3c3']
-  let containerStyle = {
-    width: 'auto',
-    height: 'auto',
-    backgroundColor: bgColors[0],
-    backgroundImage: null,
-    backgroundSize: 'cover',
-    backgroundEffect: null,
-    prevBackgroundColor: 'transparent',
-    backgroundColorAsGradient: false,
-    backgroundGradientType: 'radial',
-    backgroundGradientColors: bgColors,
-    backgroundGradientStrategy: 'shades',
-  }
+  // The slate's background: the team's style (the brand kit's default preset), else white, the
+  // background nobody chose (in dark mode the canvas shows it as the dark canvas, ui/common/canvasTheme.mjs;
+  // it is saved as white). A stored slate's own containerStyle replaces it when the slate is loaded; one
+  // stored without any stays on this, and its card on My slates is drawn on the same (slateBackground.mjs).
+  let containerStyle = presetContainerStyle(defaultPreset?.value)
+  let bgColors = backgroundColors(containerStyle)
 
-  // Apply default preset background if available
-  if (defaultPreset?.value?.background) {
-    const presetBg = defaultPreset.value.background
-    containerStyle = {
-      ...containerStyle,
-      backgroundColor: presetBg.colorValue || containerStyle.backgroundColor,
-      backgroundImage:
-        presetBg.backgroundImage || containerStyle.backgroundImage,
-      backgroundSize:
-        presetBg.backgroundSize || containerStyle.backgroundSize,
-      backgroundEffect:
-        presetBg.backgroundEffect || containerStyle.backgroundEffect,
-      backgroundColorAsGradient:
-        presetBg.backgroundColorAsGradient != null
-          ? presetBg.backgroundColorAsGradient
-          : containerStyle.backgroundColorAsGradient,
-      backgroundGradientType:
-        presetBg.gradientConfig?.gradientType ||
-        containerStyle.backgroundGradientType,
-      // backgroundGradientColors: // Handled below
-      //   presetBg.gradientConfig?.gradientColors ||
-      //   containerStyle.backgroundGradientColors,
-      backgroundGradientStrategy:
-        presetBg.gradientConfig?.gradientStrategy ||
-        containerStyle.backgroundGradientStrategy,
-    }
-
-    if (presetBg.activeType === 'gradient' && presetBg.gradientConfig) {
-      // --- MODIFIED GRADIENT LOGIC --- START ---
-      if (
-        Array.isArray(presetBg.gradientConfig.gradientColors) &&
-        presetBg.gradientConfig.gradientColors.length > 0
-      ) {
-        // Use pre-calculated colors
-        bgColors = presetBg.gradientConfig.gradientColors
-        containerStyle.backgroundColor =
-          presetBg.gradientConfig.baseColorValue ||
-          containerStyle.backgroundColor
-        containerStyle.backgroundGradientColors = bgColors
-        containerStyle.backgroundColorAsGradient = true // Ensure gradient is active
-      } else {
-        // Fallback to solid base color if pre-calculated colors are missing
-        console.warn(
-          'createSlate: Default preset uses gradient, but pre-calculated gradientColors are missing. Using solid base color.'
-        )
-        bgColors = [
-          presetBg.gradientConfig.baseColorValue ||
-            containerStyle.backgroundColor,
-        ] // Use only base color
-        containerStyle.backgroundColor = bgColors[0]
-        containerStyle.backgroundColorAsGradient = false
-        containerStyle.backgroundGradientColors = [] // Clear gradient colors
-      }
-      // --- MODIFIED GRADIENT LOGIC --- END ---
-    } else if (presetBg.activeType === 'color' && presetBg.colorValue) {
-      // Handle single color background
-      bgColors = [presetBg.colorValue] // Use only the single color
-      containerStyle.backgroundColor = presetBg.colorValue
-      containerStyle.backgroundColorAsGradient = false
-      containerStyle.backgroundGradientColors = []
-    }
-  } else if (currentAIContext?.aid) {
+  if (!defaultPreset?.value?.background && currentAIContext?.aid) {
     // Fallback for AI context if no preset (kept original logic)
     bgColors = (
       await Meteor.callAsync(CONSTANTS.methods.colors.buildColorPalette, {

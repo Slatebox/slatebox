@@ -13,6 +13,7 @@ import {
 } from '../web/app/imports/ui/common/canvasTheme.mjs'
 import { JSDOM } from 'jsdom'
 import { presetNoteStyle } from '../web/app/imports/ui/common/noteStyle.mjs'
+import { backgroundColors, presetContainerStyle } from '../web/app/imports/api/common/slateBackground.mjs'
 
 const app = (path) => readFileSync(new URL('../web/app/' + path, import.meta.url), 'utf8')
 const ui = (path) => app('imports/ui/' + path)
@@ -130,7 +131,11 @@ test('note text meets AA in both modes: the default note, and the old default sh
   assert.deepEqual([plain.backgroundColor, plain.foregroundColor], [DEFAULT_NOTE.backgroundColor, DEFAULT_NOTE.foregroundColor])
   assert.doesNotMatch(create, /#699bc3|rgba\(255, 255, 255, 0\.87\)/)
   // The stored background stays white: it is what "follows the theme" means, and exports stay as they were.
-  assert.match(create, /let bgColors = \['#ffffff'/)
+  // (createSlate reads it from slateBackground.mjs, as My slates' pictures do.)
+  assert.match(create, /let containerStyle = presetContainerStyle\(defaultPreset\?\.value\)/)
+  assert.equal(presetContainerStyle(null).backgroundColor, '#ffffff')
+  assert.equal(presetContainerStyle(null).backgroundColorAsGradient, false)
+  assert.equal(backgroundColors(presetContainerStyle(null))[0], '#ffffff')
 })
 
 test('every surface that draws a slate follows the same rule', () => {
