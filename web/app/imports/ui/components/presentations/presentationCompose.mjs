@@ -627,7 +627,9 @@ function wrappedLines(text, w, width) {
  */
 export function engineTextHeight(text, size, width, font = 'Inter', weight = 'normal') {
   if (!String(text || '').trim() || !(size > 0)) return 0
-  const lines = wrappedLines(text, Math.max(24, width - 14), (str) => estimateWidth(str, size, font, weight))
+  // Capitals run wider than the average letter the estimate is made from (an uppercase caption).
+  const wide = (str) => estimateWidth(str, size, font, weight) * (1 + 0.35 * ((str.match(/[A-Z]/g) || []).length / Math.max(1, str.length)))
+  const lines = wrappedLines(text, Math.max(24, width - 14), wide)
   return Math.ceil(lines * size * 1.3) + 14
 }
 
