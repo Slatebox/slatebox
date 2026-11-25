@@ -367,7 +367,7 @@ async function applyTarget(ctx, answers, options) {
 }
 
 function closing(ctx, done) {
-  if (done.nothingToChange) return [`Nothing to change: ${done.name} is running at ${done.address}.${done.teamAddress ? ' (slatebox upgrade gets a newer image.)' : ''}`]
+  if (done.nothingToChange) return [`Nothing to change: ${done.name} is running at ${done.address}.${done.teamAddress ? ' (slatebox upgrade gets a newer image.)' : ''}`, ...setupLines(ctx, done.name)]
   if (done.target === 'export') return [`Wrote ${done.files.length} files to ${done.dir}. Nothing was applied.`]
   const lines = ['', `Slatebox is running at  ${done.address}`, ...setupLines(ctx, done.name)]
   if (done.teamAddress) {

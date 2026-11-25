@@ -106,6 +106,22 @@ test('status says the server waits for its first admin, and stops saying it once
   assert.equal((await run(['status', '--json'])).events.at(-1).setup, 'done')
 })
 
+test('a re-run that changes nothing still says the server waits for its first admin, without ending the link the person holds', async () => {
+  const { docker, run } = box()
+  assert.equal((await run(['install', ...LOCAL, '--yes'], { tty: true, input: '\n\n\n' })).code, 0)
+  assert.equal(tokens(docker).length, 1)
+  const again = await run(['install', ...LOCAL, '--yes'], { tty: true, input: '\n\n\n' })
+  assert.equal(again.code, 0, again.stderr)
+  assert.match(again.stdout, /Nothing to change: slatebox is running at /)
+  assert.match(again.stdout, /Nobody can sign up until the first admin exists\. Get the one-time setup link at a terminal:\n {2}slatebox setup-link\n/)
+  assert.equal(tokens(docker).length, 1, 'no new link: it would end the one from the first run')
+  docker.setUp()
+  const set = await run(['install', ...LOCAL, '--yes'], { tty: true, input: '\n\n\n' })
+  assert.equal(set.code, 0, set.stderr)
+  assert.match(set.stdout, /Nothing to change/)
+  assert.doesNotMatch(everything(set), /setup link|first admin/i)
+})
+
 test('an image without setup links (before 0.2.0) keeps the old first-account advice', async () => {
   const { docker, run } = box({ commands: [] })
   const result = await run(['install', ...LOCAL, '--yes'])

@@ -12,7 +12,7 @@ import { installDir, recordText, writeRecord } from '../record.mjs'
 import { MANAGER, names, renderK8s, renderSecret } from '../render/k8s.mjs'
 import { settingsFor } from '../render/settings.mjs'
 import { secretValues } from '../secret-values.mjs'
-import { firstAdmin, makeSetupLink, setupState } from '../setup-link.mjs'
+import { firstAdmin, makeSetupLink, setupState, stillWaiting } from '../setup-link.mjs'
 import { checkTeamAddress, ensureTeamAddress, TUNNEL_TOKEN } from './address.mjs'
 import { stringifyAll } from '../yaml.mjs'
 
@@ -250,6 +250,7 @@ export async function applyK8s(ctx, answers, { record, planOnly = false, imageRe
   if (nothing) {
     nextRecord.lastHealthy = new Date().toISOString()
     ctx.recordFile = writeRecord(ctx.home, nextRecord)
+    await stillWaiting(ctx, args => k(['exec', '-n', answers.k8s.namespace, n.pod, '-c', 'slatebox', '--', SLATEBOX, ...args]))
     return {
       address: answers.address.url, name: answers.name, target: 'k8s', version: null, imageDigest: image.pinned,
       installRecord: ctx.recordFile, secretsFile: nextRecord.secretsLocation, nothingToChange: true, keyGenerated: false, fresh: false,

@@ -6,7 +6,7 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { EXIT, InstallError } from '../errors.mjs'
-import { firstAdmin, makeSetupLink, setupState } from '../setup-link.mjs'
+import { firstAdmin, makeSetupLink, setupState, stillWaiting } from '../setup-link.mjs'
 import { checkArch, checkCpu, DEFAULT_IMAGE, FALLBACK_CAPABILITIES, inspectImage, normalArch, pinImage, probeImage, refreshTag, resolveImage } from '../image.mjs'
 import { emptyPlan } from '../plan.mjs'
 import { installDir, recordText, writeRecord } from '../record.mjs'
@@ -464,6 +464,7 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
   if (planOnly) return { planned: true, plan }
   if (nothing) {
     await saveRecord(ctx, host, answers, image, settings, caps, record, true)
+    if (caps.commands.includes('setup-link')) await stillWaiting(ctx, args => host.docker(['exec', answers.name, SLATEBOX, ...args]))
     return done(ctx, host, answers, image, { nothing: true })
   }
   await ctx.confirm(plan)
@@ -487,6 +488,7 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
     imageChanged = changedFrom()
     if (existing.container.exists && !imageChanged && previousImage === image.id && !changes.some(change => !change.startsWith('the image '))) {
       await saveRecord(ctx, host, answers, image, settings, caps, record, true)
+      if (caps.commands.includes('setup-link')) await stillWaiting(ctx, args => host.docker(['exec', answers.name, SLATEBOX, ...args]))
       return done(ctx, host, answers, image, { nothing: true })
     }
   }

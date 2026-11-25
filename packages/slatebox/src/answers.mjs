@@ -195,7 +195,7 @@ export const QUESTIONS = {
     flag: '--target',
   },
   'ssh.host': { question: 'Server (user@host or a name from ~/.ssh/config)', flag: '--host' },
-  adminEmail: { question: 'Admin email (the first account, and the HTTPS certificate contact)', flag: '--admin-email' },
+  adminEmail: { question: 'Admin email (the HTTPS certificate contact; the first account comes from the setup link)', flag: '--admin-email' },
   'ai.mode': {
     question: 'AI for drafts and the canvas assistant. Slatebox works with any provider, and none is chosen for you.',
     choices: AI_CHOICES,

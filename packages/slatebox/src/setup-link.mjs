@@ -58,6 +58,16 @@ export async function firstAdmin(ctx, exec) {
   return true
 }
 
+/**
+ * A run that changed nothing (a re-run, an upgrade with no newer image) on a server still waiting
+ * for its first admin: say how to get a link, but make none, since a new link would silently end
+ * the one the person may already hold (the same rule as `slatebox status`).
+ */
+export async function stillWaiting(ctx, exec) {
+  const state = await setupState(exec)
+  if (state && !state.setUp) ctx.setupLink = { pending: true }
+}
+
 const command = name => `slatebox setup-link${name === 'slatebox' ? '' : ` --name ${name}`}`
 
 /**
