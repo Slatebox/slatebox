@@ -31,9 +31,10 @@ moved to emeritus status, and can return by asking.
 ## How changes land
 
 `main` is the only long-lived branch and is always deployable. Changes reach it through one script,
-`ship`, run by a maintainer on the build box. It refuses a branch that is behind `main`, runs the
-targeted checks, fast-forwards and pushes `main`, deploys and checks the result; if a step fails,
-nothing reaches `main`. Nobody pushes to `main` by hand or with the merge button.
+`ship`, run by a maintainer on the build box after the maintainer has run the targeted checks for
+the change (tests for the changed files, lint). The script refuses a branch that is behind `main`,
+scans the tree for secrets, builds and checks the image, fast-forwards and pushes `main`, deploys
+and checks the live app; if a step before the push fails, nothing reaches `main`. Nobody pushes to `main` by hand or with the merge button.
 
 Review happens on pull requests, but there is no required review, required check or merge queue:
 the ship script's checks are the gate, and the full suite runs after each ship. A red suite is

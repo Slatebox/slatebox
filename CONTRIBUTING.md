@@ -98,11 +98,16 @@ Run the tests for what you changed before you open a pull request. Most suites a
 | You changed | Run |
 | --- | --- |
 | The installer (`packages/slatebox`) | `npm run test:installer` |
-| The MCP server (`packages/slatebox-mcp`) | `npm run test:mcp` |
+| The MCP server (`packages/slatebox-mcp`) | `npm run test:mcp:unit` |
 | The self-host image (`self-host`) | `npm run test:self-host` |
 | Slate operations, the API, exec | `npm run test:slate-operations`, `npm run test:exec` |
 | Release tooling or a changelog | `npm run test:release` |
 | Something risky in the app | `npm run test:port-container` (builds the image, runs a two-client suite) |
+
+`npm run test:mcp` runs the MCP server's whole suite, including
+`tools-against-app.integration.test.js`, which loads the app's server code and the engine: run it
+once the app's dependencies (`web/app`, `meteor npm install`) and the engine (the sibling
+`slateboxjs-v2` build) are installed, as in the setup above.
 
 A failing test is fixed in the code, or in the test only when the test itself is wrong. Never
 loosen a test to make it pass.
@@ -153,10 +158,12 @@ written for the people who use Slatebox:
 Slatebox ships from `main` with one script, run by a maintainer on the build box. There is no merge
 queue and no required check on GitHub. The script is the gate:
 
-1. A maintainer reviews your pull request, then lands it with `ship`: it takes your branch rebased
-   on the current `main`, runs the targeted checks (tests for the changed files, the secret scan on
-   the tree, a build and a smoke start), fast-forwards `main`, pushes, deploys and checks that the
-   app answers. If any step fails, nothing reaches `main`.
+1. A maintainer reviews your pull request and runs the targeted checks for it (the tests for the
+   changed files, lint), then lands it with `ship`. The script refuses a branch that is not rebased
+   on the current `main` or has uncommitted changes, scans the tree for secrets, builds the engine
+   and the app image, checks the image's pages and the self-host image built from the same tree,
+   fast-forwards and pushes `main`, deploys, and checks the live app in a browser. If any step
+   before the push fails, nothing reaches `main`.
 2. If your commits land unchanged, GitHub marks the pull request as merged. If they were rebased
    or squashed on the way, the maintainer closes the pull request with a link to the commit that
    landed.
