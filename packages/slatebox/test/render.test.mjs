@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import { LEGACY_SETTINGS } from '../src/ai/settings-adapter.mjs'
 import { collect, resolveAnswers } from '../src/answers.mjs'
 import { renderCompose } from '../src/render/compose.mjs'
+import { containerRun, SPEC_LABEL } from '../src/render/container.mjs'
 import { settingsFor } from '../src/render/settings.mjs'
 import { renderK8s, renderSecret } from '../src/render/k8s.mjs'
 import { parse } from '../src/yaml.mjs'
@@ -39,7 +40,7 @@ test('settings passthrough is JSON in SLATEBOX_SETTINGS', () => {
   assert.equal(out.env.SLATEBOX_SETTINGS, '{"daily":{"enabled":true}}')
 })
 
-test('compose, this computer: one service, the chosen port, a named volume, env files, restart policy', () => {
+test('compose export: one service, the chosen port, a named volume, env files, restart policy; Compose pulls the image', () => {
   const compose = parse(renderCompose(answersFor({}), { image: IMAGE }))
   assert.deepEqual(compose, {
     name: 'slatebox',
@@ -48,7 +49,6 @@ test('compose, this computer: one service, the chosen port, a named volume, env 
         image: IMAGE,
         container_name: 'slatebox',
         restart: 'unless-stopped',
-        pull_policy: 'never',
         ports: ['127.0.0.1:7071:7070'],
         volumes: ['data:/data'],
         env_file: ['slatebox.env', 'secrets.env'],
@@ -67,6 +67,34 @@ test('compose, a server with a domain: ports 80 and 443; an endpoint on the host
   assert.equal(service.container_name, 'team')
   assert.deepEqual(service.extra_hosts, ['host.docker.internal:host-gateway'])
   assert.deepEqual(compose.volumes, { data: { name: 'team-data' } })
+})
+
+test('docker run, this computer: the name, restart policy, loopback port, named volume, both env files, labels, never a pull', () => {
+  const { args, spec } = containerRun(answersFor({}), { image: IMAGE, dir: '/home/me/.slatebox/installs/slatebox', settingsText: 'A=1\n', secretsText: 'K=2\n' })
+  assert.deepEqual(args, [
+    'run', '--detach', '--name', 'slatebox', '--restart', 'unless-stopped', '--pull', 'never',
+    '--publish', '127.0.0.1:7071:7070',
+    '--volume', 'slatebox-data:/data',
+    '--env-file', '/home/me/.slatebox/installs/slatebox/slatebox.env', '--env-file', '/home/me/.slatebox/installs/slatebox/secrets.env',
+    '--label', 'com.slatebox.install=slatebox', '--label', 'app.kubernetes.io/managed-by=slatebox-installer',
+    '--label', `${SPEC_LABEL}=${spec}`,
+    IMAGE,
+  ])
+  assert.ok(!args.some(arg => /K=2|A=1/.test(arg)), 'no setting or secret in the arguments, only the files')
+})
+
+test('docker run, a server with a domain: ports 80 and 443, host-gateway; the spec label changes with anything the container is made from', () => {
+  const answers = answersFor({ target: 'ssh', host: 'root@203.0.113.5', domain: 'boards.example.com', 'admin-email': 'ops@example.com', name: 'team' })
+  const base = { image: IMAGE, dir: '/opt/slatebox', hostGateway: true, settingsText: 'A=1\n', secretsText: 'K=2\n' }
+  const { args, spec } = containerRun(answers, base)
+  assert.deepEqual(args.flatMap((arg, i) => (arg === '--publish' ? [args[i + 1]] : [])), ['80:80', '443:443'])
+  assert.ok(args.includes('host.docker.internal:host-gateway'))
+  assert.equal(args[args.indexOf('--name') + 1], 'team')
+  assert.equal(args[args.indexOf('--volume') + 1], 'team-data:/data')
+  assert.equal(containerRun(answers, base).spec, spec, 'the same answers give the same spec')
+  for (const change of [{ image: `${IMAGE}x` }, { hostGateway: false }, { settingsText: 'A=2\n' }, { secretsText: 'K=3\n' }]) {
+    assert.notEqual(containerRun(answers, { ...base, ...change }).spec, spec, JSON.stringify(change))
+  }
 })
 
 const k8sAnswers = extra => answersFor({ target: 'k8s', 'admin-email': 'ops@example.com', 'k8s-context': 'kind-sbx', namespace: 'boards', ...extra })

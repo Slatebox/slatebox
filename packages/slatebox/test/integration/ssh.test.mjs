@@ -1,6 +1,6 @@
 // A Linux server over SSH, played by throwaway Ubuntu 24.04 containers running
 // sshd. One has no Docker (the installer must stop and change nothing). The
-// other has the Docker CLI and compose plugin and talks to this machine's
+// other has the Docker CLI (no Compose: the installer uses plain docker run) and talks to this machine's
 // Docker daemon through its socket, so what it starts is real; the install
 // runs as a non-root user with passwordless sudo.
 //
@@ -20,7 +20,7 @@ let images, home, keys, withDocker, noDocker, sshPort, sshPortBare, appPort, ssh
 function sshdImage(tag, { docker: withDockerCli }) {
   const dir = mkdtempSync(join(tmpdir(), 'sbxi-sshd-'))
   writeFileSync(join(dir, 'key.pub'), readFileSync(join(keys, 'id_ed25519.pub')))
-  const packages = ['openssh-server', 'iproute2', 'ca-certificates', 'sudo', ...(withDockerCli ? ['docker.io', 'docker-compose-v2'] : [])]
+  const packages = ['openssh-server', 'iproute2', 'ca-certificates', 'sudo', ...(withDockerCli ? ['docker.io'] : [])]
   ok(['build', '-q', '-t', tag, '-f', '-', dir], {
     input: `FROM ubuntu:24.04
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ${packages.join(' ')} && rm -rf /var/lib/apt/lists/* && mkdir -p /run/sshd
@@ -83,12 +83,12 @@ test('install over SSH as a sudo user: files 0600 under /opt/slatebox, healthy, 
   assert.equal(done.address, `http://127.0.0.1:${appPort}`)
   assert.equal(done.secretsFile, `deploy@127.0.0.1:/opt/slatebox/secrets.env`)
   assert.equal((await (await fetch(`${done.address}/readyz`)).json()).ok, true)
-  const listing = docker(['exec', withDocker, 'stat', '-c', '%a %U %n', '/opt/slatebox/secrets.env', '/opt/slatebox/compose.yaml', '/opt/slatebox/install.yaml', '/opt/slatebox/backup.sh']).stdout
+  const listing = docker(['exec', withDocker, 'stat', '-c', '%a %U %n', '/opt/slatebox/secrets.env', '/opt/slatebox/slatebox.env', '/opt/slatebox/install.yaml', '/opt/slatebox/backup.sh']).stdout
   assert.match(listing, /^600 root \/opt\/slatebox\/secrets\.env$/m)
   assert.match(listing, /^700 root \/opt\/slatebox\/backup\.sh$/m)
   const cron = docker(['exec', withDocker, 'cat', `/etc/cron.d/slatebox-${name}-backup`]).stdout
   assert.match(cron, /^0 3 \* \* \* root \/bin\/sh \/opt\/slatebox\/backup\.sh/m)
-  const key = /SLATEBOX_KEY_ENCRYPTION_KEY='([^']+)'/.exec(docker(['exec', withDocker, 'cat', '/opt/slatebox/secrets.env']).stdout)[1]
+  const key = /^SLATEBOX_KEY_ENCRYPTION_KEY=(\S+)$/m.exec(docker(['exec', withDocker, 'cat', '/opt/slatebox/secrets.env']).stdout)[1]
   assert.ok(!result.stdout.includes(key) && !result.stderr.includes(key))
   assert.ok(!readFileSync(join(home, 'installs', name, 'install.yaml'), 'utf8').includes(key))
   assert.equal(docker(['inspect', '--format', '{{.State.Health.Status}}', name]).stdout.trim(), 'healthy')

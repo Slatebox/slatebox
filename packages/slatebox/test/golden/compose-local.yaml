@@ -1,13 +1,11 @@
 # Written by the slatebox installer for the install "slatebox".
-# Change it with `npx slatebox install --name slatebox ...` (or `slatebox ai ...`) rather than by hand:
-# the installer keeps its answers in install.yaml and writes this file again.
+# Start it with `docker compose up -d --wait` next to slatebox.env and secrets.env.
 name: slatebox
 services:
   slatebox:
     image: ghcr.io/slatebox/slatebox@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
     container_name: slatebox
     restart: unless-stopped
-    pull_policy: never
     ports:
     - 127.0.0.1:7070:7070
     volumes:

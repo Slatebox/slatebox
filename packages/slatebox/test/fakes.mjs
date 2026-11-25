@@ -14,7 +14,7 @@ export const ID = tag => `sha256:${Buffer.from(tag).toString('hex').padEnd(64, '
 const USAGE = 'Usage, from the Docker host:\n  docker exec slatebox slatebox backup > x\n  docker exec slatebox slatebox health\n'
 
 export class FakeDocker {
-  constructor({ settings = LEGACY_SETTINGS, broken = [], serverArch = 'amd64', commands = [], setUp = false } = {}) {
+  constructor({ settings = LEGACY_SETTINGS, broken = [], serverArch = 'amd64', commands = [], setUp = false, provider = null } = {}) {
     this.calls = []
     this.images = new Map()
     this.arch = new Map()
@@ -39,6 +39,19 @@ export class FakeDocker {
     this.agents = new Map()
     // What the image's `slatebox sso sessions --json` prints (with the 'sso-sessions' command).
     this.ssoSessions = { ran: false, cap: 500, warning: null, line: 'no pass yet (at most 500 accounts per pass)' }
+    // Which Docker this pretends to be: 'colima', 'orbstack', 'desktop' or null (a plain engine).
+    this.provider = provider
+  }
+
+  /** The `docker run --detach` calls that made the install's container (not the image probes). */
+  starts(name = 'slatebox') {
+    return this.calls.filter(call => call.cmd === 'docker' && call.args[0] === 'run' && call.args.includes('--detach') && call.args[call.args.indexOf('--name') + 1] === name)
+  }
+
+  /** The value of a flag in the last docker run of a container (all values for a repeated flag). */
+  runFlag(flag, name = 'slatebox') {
+    const args = this.containers.get(name)?.args || []
+    return args.flatMap((arg, i) => (arg === flag ? [args[i + 1]] : []))
   }
 
   /** The first admin used the link: the image is set up. */
@@ -79,7 +92,9 @@ export class FakeDocker {
     if (cmd !== 'docker') return fail(`${cmd} is not installed`, 127)
     const [verb, ...rest] = args
     if (verb === 'version') return ok(rest.includes('{{.Server.Arch}}') ? `${this.serverArch}\n` : '29.4.0\n')
-    if (verb === 'compose' && rest[0] === 'version') return ok('2.40.0\n')
+    if (verb === 'compose') return fail("docker: 'compose' is not a docker command.")
+    if (verb === 'info') return ok({ colima: 'Ubuntu 24.04.1 LTS\tcolima\n', orbstack: 'OrbStack\torbstack\n', desktop: 'Docker Desktop\tdocker-desktop\n' }[this.provider] || 'Ubuntu 24.04\tbuildbox\n')
+    if (verb === 'context' && rest[0] === 'inspect') return ok(this.provider === 'colima' ? 'unix:///Users/me/.colima/default/docker.sock\n' : 'unix:///var/run/docker.sock\n')
     if (verb === 'image' && rest[0] === 'inspect') {
       const ref = rest.at(-1)
       if (!this.images.has(ref)) return fail(`No such image: ${ref}`)
@@ -95,6 +110,19 @@ export class FakeDocker {
     }
     if (verb === 'load') return ok('Loaded image: archived:1\n')
     if (verb === 'volume' && rest[0] === 'inspect') return this.volumes.has(rest.at(-1)) ? ok('{}') : fail(`no such volume: ${rest.at(-1)}`)
+    if (verb === 'run' && args.includes('--detach')) {
+      // The install's container: docker run --detach --name <name> ... <image>.
+      const name = args[args.indexOf('--name') + 1]
+      if (this.containers.has(name)) return fail(`Conflict. The container name "/${name}" is already in use`, 125)
+      const image = args.at(-1)
+      const id = this.images.get(image) || image
+      const labels = Object.fromEntries(args.flatMap((arg, i) => (arg === '--label' ? [args[i + 1].split('=')] : [])))
+      const broken = this.broken.has(id)
+      this.containers.set(name, { running: true, health: broken ? 'unhealthy' : 'healthy', image: id, setUp: this.alreadySetUp, labels, args })
+      const volume = args[args.indexOf('--volume') + 1].split(':')[0]
+      this.volumes.add(volume)
+      return ok(`${'c'.repeat(64)}\n`)
+    }
     if (verb === 'run') {
       if (args.includes('settings')) return { code: 2, stdout: '', stderr: USAGE + this.commands.map(command => `  docker exec slatebox slatebox ${command}\n`).join('') }
       if (args.includes('/opt/slatebox/lib/configure.mjs')) return fail(`Unknown setting SLATEBOX_INSTALLER_PROBE. The settings are: ${this.settings.join(', ')} (in capitals).`)
@@ -104,23 +132,19 @@ export class FakeDocker {
     if (verb === 'inspect') {
       const container = this.containers.get(rest.at(-1))
       if (!container) return fail('No such object')
-      if (rest.includes('{{json .State}}')) return ok(JSON.stringify({ Running: container.running, Status: 'running', Health: { Status: container.health } }))
-      return ok(JSON.stringify({ State: { Running: container.running, Health: { Status: container.health } }, Image: container.image }))
+      const state = { Running: container.running, Status: container.running ? 'running' : 'exited', ExitCode: container.running ? 0 : 1, ...(container.running ? { Health: { Status: container.health } } : {}) }
+      if (rest.includes('{{json .State}}')) return ok(JSON.stringify(state))
+      return ok(JSON.stringify({ State: state, Image: container.image, Config: { Labels: container.labels || {} } }))
     }
-    if (verb === 'compose') {
-      const dir = rest[rest.indexOf('--project-directory') + 1]
-      const name = rest[rest.indexOf('-p') + 1]
-      const action = rest.find(arg => ['up', 'down', 'stop'].includes(arg))
-      if (action === 'up') {
-        const { readFileSync } = await import('node:fs')
-        const image = /image: (\S+)/.exec(readFileSync(join(dir, 'compose.yaml'), 'utf8'))[1]
-        const broken = this.broken.has(image)
-        this.containers.set(name, { running: true, health: broken ? 'unhealthy' : 'healthy', image, setUp: this.alreadySetUp })
-        this.volumes.add(`${name}-data`)
-        return broken ? fail('container slatebox is unhealthy') : ok()
-      }
-      if (action === 'down') { this.containers.delete(name); return ok() }
-      if (action === 'stop') { const c = this.containers.get(name); if (c) c.running = false; return ok() }
+    if (verb === 'stop') { const c = this.containers.get(rest.at(-1)); if (!c) return fail(`No such container: ${rest.at(-1)}`); c.running = false; return ok() }
+    if (verb === 'start') { const c = this.containers.get(rest.at(-1)); if (!c) return fail(`No such container: ${rest.at(-1)}`); c.running = true; return ok() }
+    if (verb === 'rename') {
+      const [from, to] = rest
+      if (!this.containers.has(from)) return fail(`No such container: ${from}`)
+      if (this.containers.has(to)) return fail(`Conflict. The container name "/${to}" is already in use`)
+      this.containers.set(to, this.containers.get(from))
+      this.containers.delete(from)
+      return ok()
     }
     if (verb === 'exec') {
       const name = rest.find(arg => !arg.startsWith('-'))
@@ -151,7 +175,7 @@ export class FakeDocker {
       if (args.includes('node')) return ok('{"users":2,"slates":5,"files":1}\n')
     }
     if (verb === 'volume' && rest[0] === 'rm') { this.volumes.delete(rest[1]); return ok() }
-    if (verb === 'rm') { this.containers.delete(rest.at(-1)); return ok() }
+    if (verb === 'rm') return this.containers.delete(rest.at(-1)) ? ok() : fail(`Error response from daemon: No such container: ${rest.at(-1)}`)
     return fail(`fake docker does not know: ${args.join(' ')}`)
   }
 

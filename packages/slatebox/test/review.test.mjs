@@ -18,7 +18,8 @@ import { cli, FakeDocker, ID, sandbox } from './fakes.mjs'
 
 const IMAGE = 'slatebox-test:1'
 const BASE = ['--image', IMAGE, '--ai', 'none', '--port', '17431', '--backups', 'off']
-const ups = docker => docker.count(call => call.cmd === 'docker' && call.args[0] === 'compose' && call.args.includes('up'))
+// Each time the install's container was made (docker run --detach); Compose is never run.
+const ups = docker => docker.starts().length
 
 function setup(options) {
   const docker = new FakeDocker(options)
@@ -279,7 +280,7 @@ test('8: upgrade pulls the install\'s own tag again (a cached tag is not "up to 
   assert.equal(result.code, 0, result.stderr)
   assert.deepEqual(docker.calls.filter(call => call.args[0] === 'pull').map(call => call.args[1]), [ref])
   assert.equal(result.events.at(-1).imageDigest, ID('stable-2'))
-  assert.equal(parse(readFileSync(join(home, 'installs', 'slatebox', 'compose.yaml'), 'utf8')).services.slatebox.image, ID('stable-2'))
+  assert.equal(docker.containers.get('slatebox').image, ID('stable-2'))
 })
 
 test('8: when the tag cannot be pulled, upgrade says so and keeps the local copy', async () => {

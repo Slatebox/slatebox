@@ -40,6 +40,18 @@ export async function chooseContext(ctx, answers, { explicit }) {
   return context
 }
 
+/**
+ * Before the remaining questions: kubectl is installed and the cluster answers. The access
+ * checks (which need the namespace and the route) run again with the full answers before anything is applied.
+ */
+export async function preflightCluster(ctx, partial) {
+  const context = await chooseContext(ctx, { k8s: { context: partial.k8s?.context ?? null } }, { explicit: true })
+  const version = await kube(ctx, context)(['version', '-o', 'json'], { timeout: 30_000 })
+  if (version.code !== 0) throw new InstallError(EXIT.PRECONDITION, `The cluster of context "${context}" does not answer: ${lastLine(version.stderr)}. Nothing was changed.`)
+  ctx.out.step('preflight', 'ok', `Kubernetes context "${context}" answers`)
+  return { context }
+}
+
 const RESOURCES = answers => [
   ['configmaps', ''], ['secrets', ''], ['services', ''], ['persistentvolumeclaims', ''], ['statefulsets', 'apps'],
   ...(answers.k8s.route === 'ingress' ? [['ingresses', 'networking.k8s.io']] : []),

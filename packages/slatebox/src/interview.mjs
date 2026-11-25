@@ -88,6 +88,8 @@ export async function interview(ctx, partial) {
       if (at > 0) { a.ssh.user = spec.slice(0, at); a.ssh.host = spec.slice(at + 1) } else a.ssh.host = spec
     }
   }
+  // Check what the chosen target needs now, before the rest of the questions (preflightTarget).
+  if (ctx.preflight) await ctx.preflight(a)
   if (a.target === 'export') {
     a.export ||= {}
     if (!has(a.export, 'format')) a.export.format = await p.choose('Which files?', [

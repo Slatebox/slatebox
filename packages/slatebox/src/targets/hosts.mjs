@@ -41,7 +41,7 @@ export function which(name, path = process.env.PATH || '') {
 
 // The files an install writes into its folder; deleting data removes these and nothing else.
 export const MARKER = '.slatebox-install'
-export const INSTALL_FILES = ['compose.yaml', 'slatebox.env', 'secrets.env', 'secrets.kept.env', 'backup.sh', 'backup.log', 'install.yaml', MARKER]
+export const INSTALL_FILES = ['slatebox.env', 'secrets.env', 'secrets.kept.env', 'backup.sh', 'backup.log', 'install.yaml', MARKER]
 const BACKUP_FILES = ['slatebox-*.gz', 'pre-upgrade-*.gz', '*.gz.part']
 
 export async function firstFreePort(from = 7070, tries = 100) {
@@ -57,7 +57,6 @@ export function localHost(ctx, { dir, name }) {
     dir,
     name,
     docker,
-    compose: (args, options) => docker(['compose', '--project-directory', dir, '-f', join(dir, 'compose.yaml'), '-p', name, ...args], options),
     async readFile(path) {
       return existsSync(path) ? readFileSync(path, 'utf8') : null
     },
@@ -119,8 +118,7 @@ export function sshHost(ctx, ssh, { name, home }) {
     sudo: '',
     remote: (command, options) => ctx.run('ssh', [...base, command], options),
     docker: (args, options) => host.remote(`${host.sudo}docker ${args.map(shq).join(' ')}`, options),
-    // The directory is root's (mode 0700): compose reads it under sudo, never through a cd as the login user.
-    compose: (args, options) => host.remote(`${host.sudo}docker compose --project-directory ${shq(ssh.dir)} -f ${shq(join(ssh.dir, 'compose.yaml'))} -p ${shq(name)} ${args.map(shq).join(' ')}`, options),
+    // The directory is root's (mode 0700): docker reads the env files in it under sudo, never as the login user.
     /** The file's text; null only when it does not exist. Any other failure is an error, never "no file". */
     async readFile(path) {
       const script = `if [ -e ${shq(path)} ]; then cat ${shq(path)}; else exit 3; fi`
@@ -175,7 +173,6 @@ d=$(command -v docker 2>/dev/null || true)
 echo "docker_path=$d"
 if [ -n "$d" ]; then
   echo "docker_server=$($S docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
-  echo "compose=$($S docker compose version --short 2>/dev/null || true)"
 fi
 echo "systemd=$([ -d /run/systemd/system ] && echo yes || echo no)"
 echo "cron=$([ -d /etc/cron.d ] && echo yes || echo no)"

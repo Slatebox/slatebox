@@ -20,9 +20,9 @@ import { installDir, listRecords, readRecord, slateboxHome, writeRecord } from '
 import { makeRunner } from './runner.mjs'
 import { Redactor } from './secrets.mjs'
 import { finishRename, releaseTeamAddress, renameTeamAddress, rotateTeamAddress, teamStatus } from './targets/address.mjs'
-import { applyDocker, backupDocker, defaultLocalPort, execNode, LOG_SERVICES, logsDocker, readSecretDocker, restoreDocker, setupLinkDocker, statusDocker, uninstallDocker } from './targets/docker.mjs'
+import { applyDocker, backupDocker, defaultLocalPort, preflightTarget, execNode, LOG_SERVICES, logsDocker, readSecretDocker, restoreDocker, setupLinkDocker, statusDocker, uninstallDocker } from './targets/docker.mjs'
 import { exportFiles } from './targets/export.mjs'
-import { applyK8s, backupK8s, execNodeK8s, readSecretK8s, restoreK8s, setupLinkK8s, statusK8s, uninstallK8s } from './targets/k8s.mjs'
+import { applyK8s, backupK8s, execNodeK8s, preflightCluster, readSecretK8s, restoreK8s, setupLinkK8s, statusK8s, uninstallK8s } from './targets/k8s.mjs'
 import { setupLines } from './setup-link.mjs'
 import { exportTeamFile, importTeamFile, inviteMovedPeople, moveTeam } from './move.mjs'
 import { parse as parseYaml } from './yaml.mjs'
@@ -287,7 +287,7 @@ export async function main(argv, io = {}) {
     cliFlags: parsed.values, platform: io.platform, cwd: io.cwd,
     openBrowser: io.openBrowser, sleep: io.sleep, deviceLabel: io.deviceLabel, spawn: io.spawn,
     teamHealthAttempts: io.teamHealthAttempts, teamHealthDelay: io.teamHealthDelay,
-    uid: io.uid, schedulerTimeout: io.schedulerTimeout,
+    uid: io.uid, schedulerTimeout: io.schedulerTimeout, statfs: io.statfs, healthPoll: io.healthPoll,
   }
   if (interactive) ctx.prompt = createPrompt({ input: io.stdin, output: io.stderr })
 
@@ -378,6 +378,7 @@ async function prepareAnswers(ctx, flags, positionals) {
     const kube = await ctx.run('kubectl', ['config', 'current-context']).catch(() => null)
     ctx.currentContext = kube?.code === 0 ? kube.stdout.trim() : null
     ctx.freePort = partial.address?.port ?? await defaultLocalPort()
+    ctx.preflight = answers => (answers.target === 'k8s' ? preflightCluster(ctx, answers) : preflightTarget(ctx, answers))
     partial = await interview(ctx, partial)
   }
   const freePort = (partial.target ?? 'local') === 'local' && partial.address?.port === undefined && !partial.address?.url ? await defaultLocalPort() : undefined
@@ -499,7 +500,7 @@ async function dispatch(ctx, positionals, flags) {
       if (record.address?.team) status.teamAddress = await teamStatus(ctx, record)
       ctx.out.event({ event: 'done', ...status })
       if (!ctx.json) {
-        for (const [label, value] of Object.entries({ Name: status.name, Where: status.where, Address: status.address, ...(status.teamAddress ? { 'Team address': teamLine(status) } : {}), Health: status.health, ...(status.setup === 'waiting for the first admin' ? { Setup: `waiting for the first admin: ${record.name === 'slatebox' ? 'slatebox setup-link' : `slatebox setup-link --name ${record.name}`} prints a one-time link` } : {}), Version: status.version ? `app ${status.version.app}, engine ${status.version.engine}` : '-', Image: status.imageDigest, AI: status.ai, SSO: status.sso, ...(status.ssoSessions ? { 'SSO check': status.ssoSessions.line } : {}), 'Last backup': status.lastBackup || 'none yet' })) {
+        for (const [label, value] of Object.entries({ Name: status.name, Where: status.where, ...(status.docker ? { Docker: status.docker } : {}), Address: status.address, ...(status.teamAddress ? { 'Team address': teamLine(status) } : {}), Health: status.health, ...(status.setup === 'waiting for the first admin' ? { Setup: `waiting for the first admin: ${record.name === 'slatebox' ? 'slatebox setup-link' : `slatebox setup-link --name ${record.name}`} prints a one-time link` } : {}), Version: status.version ? `app ${status.version.app}, engine ${status.version.engine}` : '-', Image: status.imageDigest, AI: status.ai, SSO: status.sso, ...(status.ssoSessions ? { 'SSO check': status.ssoSessions.line } : {}), 'Last backup': status.lastBackup || 'none yet' })) {
           ctx.out.say(`${label.padEnd(12)} ${value}`)
         }
         if (status.tunnel?.connectors > 1) ctx.out.warn(`The tunnel has ${status.tunnel.connectors} connectors. If you did not start a second copy of this install, someone may hold its tunnel token: slatebox address rotate`)

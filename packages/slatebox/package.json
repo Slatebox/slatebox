@@ -1,6 +1,6 @@
 {
   "name": "slatebox",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Run your own Slatebox with one command: npx slatebox install. Gives it a free team address (https://<name>.slatebox.team) with no DNS, ports or certificates, or uses your own domain; installs on Docker here, a server over SSH, Kubernetes, or writes the files. Also runs agent scripts against any Slatebox (slatebox exec).",
   "keywords": [
     "slatebox",

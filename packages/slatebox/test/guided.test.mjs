@@ -11,7 +11,8 @@ import { cli, FakeDocker, sandbox } from './fakes.mjs'
 
 const IMAGE = 'slatebox-test:guided'
 const BASE = ['--image', IMAGE, '--ai', 'none', '--backups', 'off']
-const ups = docker => docker.count(call => call.cmd === 'docker' && call.args[0] === 'compose' && call.args.includes('up'))
+// Each time the install's container was made (docker run --detach); Compose is never run.
+const ups = docker => docker.starts().length
 
 function setup(options) {
   const docker = new FakeDocker(options)

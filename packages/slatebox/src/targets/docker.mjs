@@ -1,18 +1,24 @@
 // Install, change, upgrade and run Slatebox on a Docker host: this computer
-// (the default) or a Linux server over SSH. One flow for both:
+// (the default) or a Linux server over SSH. Slatebox is one container, started
+// with plain `docker run` (no Compose). One flow for both:
 //
 //   preflight -> image -> plan -> confirm -> secrets -> files -> start -> health
 //   -> (rollback on failure) -> first account -> backup schedule -> record
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+//
+// A change or upgrade sets the running container aside (stopped, renamed
+// <name>-previous) and starts the new one on the same data volume; if the new
+// one does not become healthy, the previous one is put back.
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { EXIT, InstallError } from '../errors.mjs'
 import { firstAdmin, makeSetupLink, setupState, stillWaiting } from '../setup-link.mjs'
 import { ssoSessionState } from '../sso-status.mjs'
 import { checkArch, checkCpu, DEFAULT_IMAGE, FALLBACK_CAPABILITIES, inspectImage, isPinnedImage, knownCapabilities, normalArch, pinImage, probeImage, refreshTag, resolveImage } from '../image.mjs'
+import { SSH_HOST, SSH_USER } from '../answers.mjs'
 import { emptyPlan } from '../plan.mjs'
 import { installDir, recordText, writeRecord } from '../record.mjs'
-import { COMPOSE_FILE, hostPort, ports, renderCompose, SECRETS_FILE, SETTINGS_FILE } from '../render/compose.mjs'
+import { containerRun, hostPort, ports, previousName, SECRETS_FILE, SETTINGS_FILE, SPEC_LABEL } from '../render/container.mjs'
 import { settingsFor } from '../render/settings.mjs'
 import { shq } from '../runner.mjs'
 import { secretValues } from '../secret-values.mjs'
@@ -65,9 +71,9 @@ export function dockerMissing(ctx) {
   const lines = ['Docker is not installed on this computer, and Slatebox runs in one Docker container. Nothing was changed.']
   const platform = ctx.platform || process.platform
   if (which('podman', ctx.env.PATH)) {
-    lines.push('Podman is installed: turn on its Docker compatibility so the docker command works (the podman-docker package on Linux, or Docker compatibility in Podman Desktop), make sure `docker compose version` answers, then run this again.')
+    lines.push('Podman is installed: turn on its Docker compatibility so the docker command works (the podman-docker package on Linux, or Docker compatibility in Podman Desktop), then run this again.')
   } else if (platform === 'darwin') {
-    lines.push('Install Docker Desktop (https://docs.docker.com/desktop/setup/install/mac-install/) or OrbStack (https://orbstack.dev), start it, then run this again.')
+    lines.push('Install Docker Desktop (https://docs.docker.com/desktop/setup/install/mac-install/), OrbStack (https://orbstack.dev) or Colima (brew install colima docker && colima start), start it, then run this again.')
   } else if (platform === 'linux') {
     lines.push('Install Docker Engine (https://docs.docker.com/engine/install/), for example: curl -fsSL https://get.docker.com | sudo sh. Then run this again.')
   } else {
@@ -77,18 +83,54 @@ export function dockerMissing(ctx) {
   return lines.join(' ')
 }
 
+/** Which Docker answers, in the words people know it by; null when it cannot tell. */
+export function dockerProvider({ os = '', name = '', endpoint = '' } = {}) {
+  if (/^colima(-|$)/.test(name) || endpoint.includes('/.colima/')) return 'Colima'
+  if (/orbstack/i.test(os) || endpoint.includes('/.orbstack/')) return 'OrbStack'
+  if (/docker desktop/i.test(os) || endpoint.includes('/.docker/run/') || endpoint.includes('docker_engine')) return 'Docker Desktop'
+  if (/rancher/i.test(os) || endpoint.includes('/.rd/')) return 'Rancher Desktop'
+  if (/podman/i.test(endpoint) || /podman/i.test(os)) return 'Podman'
+  return null
+}
+
+// Slatebox images exist for these processors (Docker's names).
+const ARCHES = ['amd64', 'arm64']
+export const MIN_DISK_GB = 5
+
+/** Free space, in GB, on the disk that holds path (or its nearest existing parent); null if it cannot be told. */
+export function freeGb(ctx, path) {
+  let dir = path
+  while (dir && !existsSync(dir) && dirname(dir) !== dir) dir = dirname(dir)
+  try {
+    const stats = (ctx.statfs || statfsSync)(dir)
+    return (Number(stats.bavail) * Number(stats.bsize)) / 1024 ** 3
+  } catch { return null }
+}
+
 async function preflightLocal(ctx, host) {
   const version = await host.docker(['version', '--format', '{{.Server.Version}}'])
   if (version.code === 127) throw new InstallError(EXIT.PRECONDITION, dockerMissing(ctx), { docker: 'missing', podman: Boolean(which('podman', ctx.env.PATH)) })
   if (version.code !== 0) {
-    throw new InstallError(EXIT.PRECONDITION, `Docker is not running on this computer (${lastLine(version.stderr) || 'docker version failed'}). Start Docker Desktop, OrbStack, Podman or the Docker service, then run this again.`, { docker: 'stopped' })
+    throw new InstallError(EXIT.PRECONDITION, `Docker is not running on this computer (${lastLine(version.stderr) || 'docker version failed'}). Start Docker Desktop, OrbStack, Colima (colima start), Podman or the Docker service, then run this again.`, { docker: 'stopped' })
   }
-  const compose = await host.docker(['compose', 'version', '--short'])
-  if (compose.code !== 0) throw new InstallError(EXIT.PRECONDITION, 'Docker Compose v2 (`docker compose`) is missing. Install the compose plugin, then run this again.')
   const arch = await host.docker(['version', '--format', '{{.Server.Arch}}'])
+  const serverArch = arch.code === 0 ? arch.stdout.trim() : null
+  if (serverArch && !ARCHES.includes(normalArch(serverArch))) {
+    throw new InstallError(EXIT.PRECONDITION, `Docker on this computer runs ${serverArch} containers; Slatebox runs on 64-bit Intel/AMD (amd64) or ARM (arm64).`, { arch: serverArch })
+  }
+  const info = await host.docker(['info', '--format', '{{.OperatingSystem}}\t{{.Name}}'])
+  const [os = '', name = ''] = info.code === 0 ? info.stdout.trim().split('\t') : []
+  const context = await host.docker(['context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'])
+  const runtime = dockerProvider({ os, name, endpoint: context.code === 0 ? context.stdout.trim() : String(ctx.env.DOCKER_HOST || '') })
+  const free = freeGb(ctx, host.dir)
+  if (free !== null && free < MIN_DISK_GB) {
+    throw new InstallError(EXIT.PRECONDITION, `This computer has ${free.toFixed(1)} GB free where Slatebox keeps its files (${host.dir}); Slatebox needs at least ${MIN_DISK_GB} GB. Free some space, then run this again.`, { diskGb: Number(free.toFixed(1)) })
+  }
   // cron runs with PATH=/usr/bin:/bin; Docker Desktop and OrbStack live elsewhere.
-  return { docker: version.stdout.trim(), compose: compose.stdout.trim(), arch: arch.code === 0 ? arch.stdout.trim() : null, docker_path: which('docker', ctx.env.PATH), aws_path: which('aws', ctx.env.PATH) }
+  return { docker: version.stdout.trim(), runtime, arch: serverArch, docker_path: which('docker', ctx.env.PATH), aws_path: which('aws', ctx.env.PATH) }
 }
+
+const dockerLine = facts => `Docker ${facts.docker || facts.docker_server || '(to be installed)'}${facts.runtime ? ` (${facts.runtime})` : ''}`
 
 async function checkPorts(host, answers, facts, existing) {
   if (existing.container.exists) return // the install already holds its ports
@@ -116,8 +158,7 @@ async function hostKeyHelp(ctx, ssh, where) {
     `connect once yourself and accept the key: ${login}\nRun the installer again afterwards.`
 }
 
-async function preflightSsh(ctx, host, answers) {
-  const publish = ports(answers).map(hostPort)
+async function preflightSsh(ctx, host, answers, publish = ports(answers).map(hostPort)) {
   const result = await host.remote('sh -s', { input: remotePreflightScript(publish), timeout: 60_000 })
   if (result.code !== 0 && /Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED/i.test(result.stderr)) {
     if (/HAS CHANGED/i.test(result.stderr)) throw new InstallError(EXIT.PRECONDITION, `The host key of ${host.where} has CHANGED since you last connected. That can mean someone is in the middle. Nothing was changed; find out why before you remove the old key (ssh-keygen -R ${answers.ssh.host}).`)
@@ -145,22 +186,61 @@ async function preflightSsh(ctx, host, answers) {
       `Docker is not ${facts.docker_path ? 'running' : 'installed'} on ${host.where}. Nothing was changed. To let the installer install Docker Engine from get.docker.com, run again with --install-docker.`,
       { needs: 'install-docker' })
   }
-  if (!facts.needsDocker && !facts.compose) throw new InstallError(EXIT.PRECONDITION, `Docker Compose v2 is missing on ${host.where}. Install docker-compose-plugin, then run again.`)
   const diskGb = Number(facts.disk_kb || 0) / 1024 / 1024
-  if (facts.disk_kb && diskGb < 5) throw new InstallError(EXIT.PRECONDITION, `${host.where} has ${diskGb.toFixed(1)} GB free; Slatebox needs at least 5 GB.`)
+  if (facts.disk_kb && diskGb < MIN_DISK_GB) throw new InstallError(EXIT.PRECONDITION, `${host.where} has ${diskGb.toFixed(1)} GB free; Slatebox needs at least ${MIN_DISK_GB} GB.`)
   return facts
+}
+
+/**
+ * Everything the chosen target needs, checked as soon as the target is known and
+ * before the remaining questions: nobody answers ten questions and then learns
+ * that Docker is not running. The install checks again (with the port) before it
+ * changes anything. Returns what was found, or null when there is nothing to check yet.
+ */
+export async function preflightTarget(ctx, partial) {
+  const target = partial.target ?? 'local'
+  const name = partial.name || 'slatebox'
+  if (target === 'export' || target === 'k8s') return null
+  refuseWindows(ctx)
+  if (target === 'local') {
+    const facts = await preflightLocal(ctx, localHost(ctx, { dir: installDir(ctx.home, name), name }))
+    ctx.out.step('preflight', 'ok', `This computer: ${dockerLine(facts)}, ${facts.arch || 'unknown processor'}`)
+    return facts
+  }
+  const s = partial.ssh || {}
+  const ssh = {
+    host: s.host ?? null, user: s.user ?? 'root', port: s.port ?? 22, identity: s.identity ?? null,
+    sudo: s.sudo ?? 'auto', installDocker: Boolean(s.installDocker), dir: s.dir ?? '/opt/slatebox', options: s.options ?? [],
+  }
+  // Only what the answers check would accept goes to ssh; the rest is reported by that check.
+  if (!ssh.host || !SSH_HOST.test(ssh.host) || !SSH_USER.test(ssh.user) || ssh.options.length || !Number.isInteger(ssh.port)) return null
+  const host = sshHost(ctx, ssh, { name, home: ctx.home })
+  try {
+    const facts = await preflightSsh(ctx, host, { ssh }, [])
+    ctx.out.step('preflight', 'ok', `${host.where}: ${dockerLine(facts)}, ${facts.arch}`)
+    return facts
+  } finally {
+    await host.close?.()
+  }
 }
 
 // ------------------------------------------------------------------ state
 
+async function inspectContainer(host, name) {
+  const inspected = await host.docker(['inspect', '--format', '{{json .}}', name])
+  if (inspected.code !== 0) return { exists: false }
+  const info = JSON.parse(inspected.stdout)
+  return { exists: true, running: info.State?.Running, health: info.State?.Health?.Status, image: info.Image, spec: info.Config?.Labels?.[SPEC_LABEL] ?? null }
+}
+
 async function existingState(host, answers) {
   const files = {}
-  for (const file of [COMPOSE_FILE, SETTINGS_FILE, SECRETS_FILE, KEPT_FILE, BACKUP_SCRIPT]) files[file] = await host.readFile(join(host.dir, file))
-  let container = { exists: false }
-  const inspected = await host.docker(['inspect', '--format', '{{json .}}', answers.name])
-  if (inspected.code === 0) {
-    const info = JSON.parse(inspected.stdout)
-    container = { exists: true, running: info.State?.Running, health: info.State?.Health?.Status, image: info.Image }
+  for (const file of [SETTINGS_FILE, SECRETS_FILE, KEPT_FILE, BACKUP_SCRIPT]) files[file] = await host.readFile(join(host.dir, file))
+  let container = await inspectContainer(host, answers.name)
+  if (!container.exists) {
+    // A change that was cut off while its container was set aside: put that one back first.
+    const aside = await inspectContainer(host, previousName(answers.name))
+    if (aside.exists && (await host.docker(['rename', previousName(answers.name), answers.name])).code === 0) container = aside
   }
   // The data volume outlives the container and this computer's files (uninstall keeps it).
   const volume = (await host.docker(['volume', 'inspect', `${answers.name}-data`])).code === 0
@@ -186,9 +266,44 @@ function guardKey(ctx, host, answers, stored, secrets, existing) {
 
 // ------------------------------------------------------------------ health
 
-async function start(host, timeout) {
-  const up = await host.compose(['up', '-d', '--wait', '--wait-timeout', String(timeout)], { timeout: (timeout + 120) * 1000 })
-  return up.code === 0 ? { ok: true } : { ok: false, why: lastLine(up.stderr) || 'docker compose up failed' }
+/**
+ * Wait until the container is healthy by its image's HEALTHCHECK (or running, for an image
+ * without one). A container that stops, keeps restarting or turns unhealthy fails at once.
+ */
+export async function waitHealthy(ctx, host, name, timeout) {
+  const until = Date.now() + timeout * 1000
+  for (;;) {
+    const inspected = await host.docker(['inspect', '--format', '{{json .State}}', name])
+    const state = inspected.code === 0 ? JSON.parse(inspected.stdout) : null
+    if (!state) return { ok: false, why: `the container ${name} is gone` }
+    const health = state.Health?.Status
+    if (state.Running && !state.Restarting && (health === 'healthy' || !health)) return { ok: true }
+    if (state.Restarting || state.Status === 'restarting') return { ok: false, why: `the container ${name} keeps restarting (exit code ${state.ExitCode ?? 'unknown'})` }
+    if (!state.Running && ['exited', 'dead', 'created'].includes(state.Status)) return { ok: false, why: `the container ${name} stopped (exit code ${state.ExitCode ?? 'unknown'})` }
+    if (health === 'unhealthy') return { ok: false, why: `container ${name} is unhealthy` }
+    if (Date.now() >= until) return { ok: false, why: `the container ${name} was not healthy within ${timeout}s` }
+    await new Promise(resolve => setTimeout(resolve, ctx.healthPoll ?? 3000))
+  }
+}
+
+/** docker run the install's container (anything left under its name is removed first) and wait for it. */
+async function start(ctx, host, answers, run) {
+  await host.docker(['rm', '--force', answers.name])
+  const created = await host.docker(run.args, { timeout: 10 * 60_000 })
+  if (created.code !== 0) return { ok: false, why: lastLine(created.stderr) || 'docker run failed' }
+  return waitHealthy(ctx, host, answers.name, ctx.healthTimeout)
+}
+
+/** Stop the current container and keep it as <name>-previous until the new one is healthy. */
+async function setAside(host, answers) {
+  const aside = previousName(answers.name)
+  await host.docker(['rm', '--force', aside])
+  const stopped = await host.docker(['stop', '--time', '30', answers.name], { timeout: 120_000 })
+  const renamed = stopped.code === 0 ? await host.docker(['rename', answers.name, aside]) : stopped
+  if (renamed.code !== 0) {
+    await host.docker(['start', answers.name])
+    throw new InstallError(EXIT.PRECONDITION, `The running container could not be set aside for the new one (${lastLine(renamed.stderr) || 'docker stop/rename failed'}), so nothing was changed.`)
+  }
 }
 
 async function health(ctx, host, answers) {
@@ -248,8 +363,8 @@ async function teamHealth(ctx, host, answers) {
   return { ok: true, warning: `Slatebox is healthy on this computer, but ${why}. It keeps trying by itself; check with slatebox status and slatebox logs --service tunnel.` }
 }
 
-async function startAndCheck(ctx, host, answers) {
-  const started = await start(host, ctx.healthTimeout)
+async function startAndCheck(ctx, host, answers, run) {
+  const started = await start(ctx, host, answers, run)
   if (!started.ok) return started
   return health(ctx, host, answers)
 }
@@ -452,7 +567,7 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
     ? { files: {}, container: { exists: false }, volume: false }
     : await existingState(host, answers)
   await checkPorts(host, answers, facts, existing)
-  out.step('preflight', 'ok', `${host.where}: Docker ${facts.docker || facts.docker_server || '(to be installed)'}`)
+  out.step('preflight', 'ok', `${host.where}: ${dockerLine(facts)}`)
   // Docker first, then the name: nobody claims a name on a machine that cannot run Slatebox.
   const team = answers.address.team ? await checkTeamAddress(ctx, answers) : null
 
@@ -483,12 +598,11 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
   }
 
   const stored = { ...parseEnvFile(existing.files[KEPT_FILE] || ''), ...parseEnvFile(existing.files[SECRETS_FILE] || '') }
-  let settings, composeText, settingsText, scriptText, secretsText, generated, kept
+  let settings, run, settingsText, scriptText, secretsText, generated, kept
   const render = async () => {
     settings = settingsFor(answers, caps, { deferred: !imageReady })
     guardKey(ctx, host, answers, stored, settings.secrets, existing)
-    composeText = renderCompose(answers, { image: image.pinned, hostGateway: settings.hostGateway })
-    settingsText = envFileText(settings.env, `Settings for the Slatebox "${answers.name}", written by the slatebox installer. No secrets.`)
+    settingsText = envFileText(settings.env, `Settings for the Slatebox "${answers.name}", written by the slatebox installer. No secrets.`, { format: 'docker' })
     scriptText = answers.backups.to === 'off' ? null : backupScript(ctx, host, answers, facts)
     // The key encryption key is made once and then kept; referenced keys are read now. Before
     // the plan is approved, a team address that is still to be claimed has no token: the plan
@@ -497,7 +611,8 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
     const secrets = await secretValues(pending ? { ...ctx, tunnelToken: PENDING_TOKEN } : ctx, settings.secrets, stored)
     generated = secrets.generated
     kept = Object.fromEntries(Object.entries(stored).filter(([name]) => !(name in secrets.values) && name === KEK))
-    secretsText = envFileText(secrets.values, `Secrets for the Slatebox "${answers.name}". Keep a copy of SLATEBOX_KEY_ENCRYPTION_KEY with your backups.`)
+    secretsText = envFileText(secrets.values, `Secrets for the Slatebox "${answers.name}". Keep a copy of SLATEBOX_KEY_ENCRYPTION_KEY with your backups.`, { format: 'docker' })
+    run = containerRun(answers, { image: image.pinned, dir: host.dir, hostGateway: settings.hostGateway, settingsText, secretsText })
   }
   await render()
   const previousImage = existing.container.image
@@ -506,16 +621,17 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
   const secretsPath = join(host.dir, SECRETS_FILE)
 
   const changes = []
-  if (!existing.container.exists) changes.push(existing.files[COMPOSE_FILE] ? 'start the stopped install again' : existing.volume ? `create the container on the existing data volume ${answers.name}-data` : 'create the container and its data volume')
+  if (!existing.container.exists) changes.push(existing.files[SETTINGS_FILE] ? 'start the stopped install again' : existing.volume ? `create the container on the existing data volume ${answers.name}-data` : 'create the container and its data volume')
   if (imageChanged) changes.push(`new image (${previousImage.slice(7, 19)} -> ${image.id.slice(7, 19)})`)
   if (!imageReady && existing.container.exists) changes.push(`the image ${archive ? `from ${archive}` : wanted}, if it differs from the running one`)
-  if (existing.files[COMPOSE_FILE] !== null && existing.files[COMPOSE_FILE] !== undefined && existing.files[COMPOSE_FILE] !== composeText) changes.push(`${COMPOSE_FILE} changes`)
   if (existing.files[SETTINGS_FILE] !== null && existing.files[SETTINGS_FILE] !== undefined && existing.files[SETTINGS_FILE] !== settingsText) changes.push(`${SETTINGS_FILE} changes`)
   if (existing.container.exists && !existing.container.running) changes.push('start the stopped container')
   if (existing.files[SECRETS_FILE] && existing.files[SECRETS_FILE] !== secretsText) changes.push(`${SECRETS_FILE} changes (a key was added, removed or changed)`)
+  // The container's label says what it was made from; anything else (ports, options) shows here.
+  if (imageReady && existing.container.exists && existing.container.spec !== run.spec && !changes.length && !imageChanged) changes.push('the container is made again (its ports or options change)')
   if ((existing.files[BACKUP_SCRIPT] ?? null) !== scriptText) changes.push(scriptText ? 'backup schedule' : 'remove the backup schedule')
 
-  const fresh = !existing.files[COMPOSE_FILE] && !existing.container.exists
+  const fresh = !existing.files[SETTINGS_FILE] && !existing.container.exists
   const nothing = imageReady && !fresh && !changes.length && existing.container.running && existing.container.health === 'healthy'
   const action = nothing ? 'nothing' : fresh ? 'install' : imageChanged || (!imageReady && refresh) ? 'upgrade' : 'change'
   const plan = emptyPlan({
@@ -537,7 +653,7 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
   if (!nothing) {
     plan.files.push(
       { path: secretsPath, note: existing.files[SECRETS_FILE] ? 'kept; only changed keys are rewritten' : `new: SLATEBOX_KEY_ENCRYPTION_KEY${ctx.flags['new-encryption-key'] && existing.volume ? ' (a NEW key: keys saved with the old one become unreadable)' : ''} and any keys you referenced` },
-      { path: join(host.dir, SETTINGS_FILE) }, { path: join(host.dir, COMPOSE_FILE) },
+      { path: join(host.dir, SETTINGS_FILE) },
       ...(scriptText ? [{ path: join(host.dir, BACKUP_SCRIPT), note: `${answers.backups.schedule}, keeps ${answers.backups.keep}, into ${answers.backups.to.startsWith('s3://') ? answers.backups.to : backupsDir(host, answers)}` }] : []),
       { path: join(host.dir, 'install.yaml'), note: 'the install record, no secrets' },
     )
@@ -545,7 +661,8 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
     if ((imageChanged || (!imageReady && existing.container.exists)) && !existing.container.running) {
       plan.warnings.push(`The container is not running, so no backup can be taken before the ${imageChanged ? 'upgrade' : 'change'}: if it fails there is no copy to roll the data back to. Take one yourself first if you have an older backup to restore from (slatebox restore <file>).`)
     }
-    plan.commands.push(`docker compose -p ${answers.name} up -d --wait`, `docker exec ${answers.name} slatebox health --deep`)
+    if (existing.container.exists) plan.commands.push(`docker stop ${answers.name} && docker rename ${answers.name} ${previousName(answers.name)} (kept until the new container is healthy, put back if it is not)`)
+    plan.commands.push(`docker run --detach --name ${answers.name} --restart unless-stopped ${ports(answers).map(port => `--publish ${port}`).join(' ')} --volume ${answers.name}-data:/data --env-file ${SETTINGS_FILE} --env-file ${SECRETS_FILE} ${image.pinned}`, `docker exec ${answers.name} slatebox health --deep`)
     if (scriptText) {
       if (usesLaunchd(ctx, host, answers)) {
         plan.files.push({ path: launchAgentPath(ctx, answers.name), note: `the launchd agent that runs ${BACKUP_SCRIPT} (${answers.backups.schedule})` })
@@ -578,7 +695,7 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
   ctx.emitPlan(plan)
   if (planOnly) return { planned: true, plan }
   if (nothing) {
-    await saveRecord(ctx, host, answers, image, settings, caps, record, true)
+    await saveRecord(ctx, host, answers, image, settings, caps, record, true, null, facts)
     if (caps.commands.includes('setup-link')) await stillWaiting(ctx, args => host.docker(['exec', answers.name, SLATEBOX, ...args]))
     return done(ctx, host, answers, image, { nothing: true })
   }
@@ -598,8 +715,8 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
     await ready()
     await render()
     imageChanged = changedFrom()
-    if (existing.container.exists && !imageChanged && previousImage === image.id && !changes.some(change => !change.startsWith('the image '))) {
-      await saveRecord(ctx, host, answers, image, settings, caps, record, true)
+    if (existing.container.exists && !imageChanged && previousImage === image.id && existing.container.spec === run.spec && !changes.some(change => !change.startsWith('the image '))) {
+      await saveRecord(ctx, host, answers, image, settings, caps, record, true, null, facts)
       if (caps.commands.includes('setup-link')) await stillWaiting(ctx, args => host.docker(['exec', answers.name, SLATEBOX, ...args]))
       return done(ctx, host, answers, image, { nothing: true })
     }
@@ -627,13 +744,15 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
   await host.writeFile(secretsPath, secretsText, 0o600)
   if (Object.keys(kept).length) await host.writeFile(join(host.dir, KEPT_FILE), envFileText(kept, 'Kept from an earlier image that accepted them.'), 0o600)
   await host.writeFile(join(host.dir, SETTINGS_FILE), settingsText, 0o600)
-  await host.writeFile(join(host.dir, COMPOSE_FILE), composeText, 0o600)
   if (scriptText) await host.writeFile(join(host.dir, BACKUP_SCRIPT), scriptText, 0o700)
   out.step('files', 'ok', `Wrote ${host.dir}`)
 
+  const asideNow = existing.container.exists
+  if (asideNow) await setAside(host, answers)
   out.step('start', 'start', `Starting Slatebox and waiting until it is healthy (up to ${ctx.healthTimeout}s)`)
-  const result = await startAndCheck(ctx, host, answers)
-  if (!result.ok) await rollback(ctx, host, answers, { fresh, previous, preUpgrade, why: result.why })
+  const result = await startAndCheck(ctx, host, answers, run)
+  if (!result.ok) await rollback(ctx, host, answers, { aside: asideNow, previous, preUpgrade, why: result.why })
+  if (asideNow) await host.docker(['rm', '--force', previousName(answers.name)])
   if (result.warning) out.step('health', 'warn', result.warning)
   out.step('start', 'ok', answers.address.team ? `Slatebox is healthy on ${host.where}` : `Slatebox is healthy at ${answers.address.url}`)
 
@@ -652,24 +771,29 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
       out.step('backups', 'warn', `The backup schedule could not be set up (${error.message}). Run ${join(host.dir, BACKUP_SCRIPT)} from your own scheduler.`)
     }
   }
-  await saveRecord(ctx, host, answers, image, settings, caps, record, false, previousImage)
+  await saveRecord(ctx, host, answers, image, settings, caps, record, false, previousImage, facts)
   return done(ctx, host, answers, image, { generated, fresh })
 }
 
-async function rollback(ctx, host, answers, { fresh, previous, preUpgrade, why }) {
+async function rollback(ctx, host, answers, { aside, previous, preUpgrade, why }) {
   const { out } = ctx
   out.step('start', 'fail', `Slatebox did not become healthy: ${why}`)
-  if (fresh) {
-    await host.compose(['stop'])
+  for (const file of [SECRETS_FILE, SETTINGS_FILE, BACKUP_SCRIPT]) {
+    if (previous[file]) await host.writeFile(join(host.dir, file), previous[file], file === BACKUP_SCRIPT ? 0o700 : 0o600)
+  }
+  if (!aside) {
+    // Nothing ran before (a first install, or a stopped one started again): stop it, keep everything.
+    await host.docker(['stop', answers.name])
     throw new InstallError(EXIT.ROLLED_BACK, `Slatebox did not become healthy (${why}). It is stopped; its files and data volume are kept. See \`docker logs ${answers.name}\`${host.kind === 'ssh' ? ` on ${host.where}` : ''}, then run the installer again or \`slatebox uninstall --name ${answers.name}\`.`, {
       commands: [`docker logs ${answers.name}`, `npx slatebox uninstall --name ${answers.name}`],
     })
   }
-  out.step('rollback', 'start', 'Putting the previous version back')
-  for (const file of [SECRETS_FILE, SETTINGS_FILE, COMPOSE_FILE, BACKUP_SCRIPT]) {
-    if (previous[file]) await host.writeFile(join(host.dir, file), previous[file], file === BACKUP_SCRIPT ? 0o700 : 0o600)
-  }
-  let back = await startAndCheck(ctx, host, answers)
+  out.step('rollback', 'start', 'Putting the previous container back')
+  await host.docker(['rm', '--force', answers.name])
+  const renamed = await host.docker(['rename', previousName(answers.name), answers.name])
+  const started = renamed.code === 0 ? await host.docker(['start', answers.name]) : renamed
+  let back = started.code !== 0 ? { ok: false, why: lastLine(started.stderr) || 'docker start failed' } : await waitHealthy(ctx, host, answers.name, ctx.healthTimeout)
+  if (back.ok) back = await health(ctx, host, answers)
   if (back.ok && preUpgrade) {
     // The new version may have changed the database before it failed: put back the copy taken just before.
     out.step('rollback', 'start', `Restoring the backup taken before the upgrade (${preUpgrade})`)
@@ -677,7 +801,8 @@ async function rollback(ctx, host, answers, { fresh, previous, preUpgrade, why }
     back = restored.code === 0 ? await health(ctx, host, answers) : { ok: false, why: lastLine(restored.stderr) }
   }
   const manual = [
-    `cd ${shq(host.dir)} && docker compose -p ${answers.name} up -d`,
+    ...(renamed.code === 0 ? [] : [`docker rm -f ${answers.name}`, `docker rename ${previousName(answers.name)} ${answers.name}`]),
+    `docker start ${answers.name}`,
     ...(preUpgrade ? [`docker exec -i ${answers.name} slatebox restore < ${shq(preUpgrade)}`] : []),
     `docker logs ${answers.name}`,
   ]
@@ -711,7 +836,7 @@ async function firstAccount(ctx, host, answers, caps) {
   ctx.out.say(`If anyone loses their password later: ${host.kind === 'ssh' ? `ssh ${host.where} ` : ''}docker exec ${answers.name} slatebox password-link <email>`)
 }
 
-async function saveRecord(ctx, host, answers, image, settings, caps, record, unchanged, previousImage) {
+async function saveRecord(ctx, host, answers, image, settings, caps, record, unchanged, previousImage, facts) {
   const now = new Date().toISOString()
   const next = {
     ...answers,
@@ -723,6 +848,8 @@ async function saveRecord(ctx, host, answers, image, settings, caps, record, unc
     previousImageDigest: unchanged ? (record?.previousImageDigest ?? null) : (previousImage && previousImage !== image.id ? previousImage : record?.previousImageDigest ?? null),
     secretRefs: settings.secrets,
     secretsLocation: `${host.kind === 'ssh' ? `${host.where}:` : ''}${join(host.dir, SECRETS_FILE)}`,
+    // How it runs: one container, plain docker run, on this Docker (Colima, OrbStack, Docker Desktop, ...).
+    dockerRuntime: { runs: 'docker run', docker: facts?.docker || facts?.docker_server || null, provider: facts?.runtime || null },
     lastHealthy: now,
     installedAt: record?.installedAt || now,
     state: 'installed',
@@ -786,6 +913,7 @@ export async function statusDocker(ctx, record) {
       name: record.name, target: record.target, where: host.where, address: record.address.url,
       running: Boolean(state?.Running), health: state?.Health?.Status || (state ? state.Status : 'missing'),
       version: version?.code === 0 ? JSON.parse(version.stdout) : null, imageDigest: record.imageDigest,
+      docker: record.dockerRuntime ? [record.dockerRuntime.docker, record.dockerRuntime.provider && `(${record.dockerRuntime.provider})`].filter(Boolean).join(' ') || null : null,
       ai: record.ai.mode === 'none' ? 'off' : record.ai.providers.map(provider => provider.id).join(', '),
       sso: record.sso.enabled ? (record.sso.only ? 'on (only)' : 'on') : 'off',
       lastBackup, backupLate: age ? age.late : null,
@@ -850,9 +978,9 @@ export function uninstallDocker(ctx, record, { deleteData }) {
         throw new InstallError(EXIT.PRECONDITION, `${host.dir} on ${host.where} has no ${MARKER} naming "${record.name}", so the installer will not delete anything in it. Nothing was changed. Remove the container, the volume ${record.name}-data and the files yourself if this really is the install.`)
       }
     }
-    const down = await host.compose(['down'])
-    if (down.code !== 0 && !/no such file|not found|no configuration/i.test(down.stderr)) {
-      await host.docker(['rm', '-f', record.name])
+    for (const container of [record.name, previousName(record.name)]) {
+      const removed = await host.docker(['rm', '--force', container])
+      if (removed.code !== 0 && !/no such container/i.test(removed.stderr)) throw new InstallError(EXIT.PRECONDITION, `The container ${container} could not be removed: ${lastLine(removed.stderr)}`)
     }
     const removed = { ...record, backups: { ...record.backups, to: 'off' } }
     try { await scheduleBackups(ctx, host, removed, { systemd: 'yes' }) } catch { /* nothing scheduled */ }

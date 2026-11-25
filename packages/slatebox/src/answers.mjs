@@ -170,7 +170,7 @@ export function collect({ record, env = {}, file, flags = {} }) {
 
 // What an install record adds beyond the answers is not an answer.
 function stripRecord(record) {
-  const { installedVersion, imageDigest, previousImageDigest, imageRef, lastHealthy, secretsLocation, state, installedAt, capabilities, ...answers } = record
+  const { installedVersion, imageDigest, previousImageDigest, imageRef, lastHealthy, secretsLocation, state, installedAt, capabilities, dockerRuntime, ...answers } = record
   return answers
 }
 
@@ -223,8 +223,8 @@ const CRON_FIELD = /^[0-9A-Za-z*,/-]+$/
 const IMAGE_REF = /^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/
 // What ssh gets from an answers file. Never a ProxyCommand, LocalCommand or
 // anything else that runs a program here, and never host-key checking off.
-const SSH_HOST = /^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9_][A-Za-z0-9_.:-]*)$/
-const SSH_USER = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/
+export const SSH_HOST = /^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9_][A-Za-z0-9_.:-]*)$/
+export const SSH_USER = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/
 const SSH_DIR = /^\/[A-Za-z0-9._/-]+$/
 const SSH_OPTIONS = {
   ConnectTimeout: /^[0-9]{1,4}$/,

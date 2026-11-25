@@ -1,5 +1,5 @@
 // Secrets: the key encryption key the installer generates, references to keys
-// the admin supplies (env:NAME, file:/path, prompt), env files compose reads
+// the admin supplies (env:NAME, file:/path, prompt), env files Docker reads
 // literally, and the redaction filter every line of output passes through.
 import { randomBytes } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
@@ -55,10 +55,13 @@ export async function resolveRef(ref, { env = process.env, ask } = {}) {
 }
 
 // ------------------------------------------------------------ env files
-// Values are single-quoted, which Docker Compose reads literally (no $
-// interpolation, no escapes). A value compose cannot hold that way is refused.
+// Two shapes, both read literally (no $ interpolation, no escapes):
+//   docker  NAME=value, what `docker run --env-file` reads (the installed container);
+//   compose NAME='value', what Docker Compose reads (the exported files).
+// A value with a single quote or a line break is refused in both, so that
+// parseEnvFile reads either shape back unchanged.
 
-export function envFileText(values, header = '') {
+export function envFileText(values, header = '', { format = 'compose' } = {}) {
   const lines = header ? header.split('\n').map(line => `# ${line}`) : []
   for (const [name, value] of Object.entries(values)) {
     if (value === undefined || value === null) continue
@@ -66,7 +69,10 @@ export function envFileText(values, header = '') {
     if (text.includes("'") || /[\r\n]/.test(text)) {
       throw new InstallError(2, `${name} contains a single quote or a line break, which an env file cannot hold literally. Percent-encode it (a quote is %27 in a URL).`)
     }
-    lines.push(`${name}='${text}'`)
+    if (format === 'docker' && (text !== text.trim() || /^".*"$/.test(text))) {
+      throw new InstallError(2, `${name} starts or ends with a space, or is wrapped in double quotes, which an env file cannot hold unchanged. Remove them.`)
+    }
+    lines.push(format === 'docker' ? `${name}=${text}` : `${name}='${text}'`)
   }
   return lines.join('\n') + '\n'
 }

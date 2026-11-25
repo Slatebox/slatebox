@@ -16,7 +16,12 @@ server administrator and the owner of the first team). The link works once and
 expires in 24 hours; `slatebox setup-link` prints a new one at a terminal and
 ends the last. `npx slatebox --dry-run` asks the same questions and
 prints the plan without changing anything. You need Node.js 22.13 or newer, and
-Docker (or Podman with its Docker compatibility on) on whatever runs Slatebox.
+Docker (Docker Desktop, OrbStack, Colima, Docker Engine, or Podman with its Docker
+compatibility on) on whatever runs Slatebox. Docker Compose is not needed: Slatebox
+is one container, and the installer runs it with plain `docker run`. As soon as you
+choose where Slatebox runs, the installer checks what that needs (Docker running, the
+processor, disk space; for a server, SSH, sudo and Docker there; for Kubernetes,
+kubectl and the cluster) and says what is missing before it asks anything else.
 Plain `npx slatebox` lists the commands.
 
 ### A team address

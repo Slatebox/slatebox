@@ -16,7 +16,8 @@ function setup(options) {
   return { docker, home: sandbox() }
 }
 
-const ups = docker => docker.count(call => call.cmd === 'docker' && call.args[0] === 'compose' && call.args.includes('up'))
+// Each time the install's container was made (docker run --detach); Compose is never run.
+const ups = docker => docker.starts().length
 const everyLineIsJson = result => result.events.every(event => !event.unparsed)
 
 test('agent mode never prompts: a missing answer is exit 3 with the question, its choices and its flag', async () => {
@@ -85,8 +86,9 @@ test('install: secrets file 0600 with a generated key, a record without secrets,
   }
   assert.match(result.stderr, /Back it up with your password manager now/)
   assert.equal(ups(docker), 1)
-  const compose = parse(readFileSync(join(dir, 'compose.yaml'), 'utf8'))
-  assert.equal(compose.services.slatebox.image, ID(IMAGE))
+  assert.equal(docker.containers.get('slatebox').image, ID(IMAGE))
+  assert.ok(!existsSync(join(dir, 'compose.yaml')), 'no compose file: the container is started with plain docker run')
+  assert.equal(docker.count(call => call.args[0] === 'compose'), 0, 'Compose is never run')
 })
 
 test('a second install with the same answers changes nothing and keeps the key', async () => {
@@ -150,7 +152,7 @@ test('a multi-provider image gets one JSON list and a key variable per provider'
   assert.equal(JSON.parse(settings.SLATEBOX_AI_PROVIDERS)[1].baseUrl, 'http://host.docker.internal:11434/v1')
   assert.equal(settings.SLATEBOX_AI_DEFAULT, 'local')
   assert.equal(parseEnvFile(readFileSync(join(dir, 'secrets.env'), 'utf8')).SLATEBOX_AI_KEY_OPENAI, 'sk-test-0123456789')
-  assert.deepEqual(parse(readFileSync(join(dir, 'compose.yaml'), 'utf8')).services.slatebox.extra_hosts, ['host.docker.internal:host-gateway'])
+  assert.deepEqual(docker.runFlag('--add-host'), ['host.docker.internal:host-gateway'])
 })
 
 test('upgrade to an image that never gets healthy: backup first, previous version back, its backup restored, exit 5', async () => {
@@ -160,7 +162,8 @@ test('upgrade to an image that never gets healthy: backup first, previous versio
   const result = await cli(['upgrade', '--to', 'slatebox-test:broken', '--yes', '--json'], { run: docker.run, home })
   assert.equal(result.code, 5, result.stderr)
   const dir = join(home, 'installs', 'slatebox')
-  assert.equal(parse(readFileSync(join(dir, 'compose.yaml'), 'utf8')).services.slatebox.image, ID(IMAGE), 'the previous image is back')
+  assert.equal(docker.containers.get('slatebox').image, ID(IMAGE), 'the previous container is back')
+  assert.ok(!docker.containers.has('slatebox-previous'), 'nothing is left set aside')
   const backup = docker.calls.findIndex(call => call.args.includes('backup'))
   const restore = docker.calls.findIndex(call => call.args.includes('restore'))
   assert.ok(backup > 0 && restore > backup, 'backed up before, restored after')

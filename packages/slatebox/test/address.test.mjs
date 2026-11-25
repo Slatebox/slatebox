@@ -31,7 +31,8 @@ function setup({ cloud: cloudOptions, docker: dockerOptions } = {}) {
 }
 
 const mode = path => statSync(path).mode & 0o777
-const ups = docker => docker.count(call => call.cmd === 'docker' && call.args[0] === 'compose' && call.args.includes('up'))
+// Each time the install's container was made (docker run --detach); Compose is never run.
+const ups = docker => docker.starts().length
 
 function noSecretIn(result, label = '') {
   const text = result.stdout + result.stderr
@@ -65,14 +66,12 @@ test('happy path: sign in, claim, 0600 credential and token, URL and HTTPS off, 
   assert.equal(mode(join(dir, 'credentials.json')), 0o600)
   assert.equal(mode(dir), 0o700)
   assert.equal(mode(join(dir, 'secrets.env')), 0o600)
-  assert.match(readFileSync(join(dir, 'secrets.env'), 'utf8'), new RegExp(`^SLATEBOX_TUNNEL_TOKEN='${TUNNEL}'$`, 'm'))
+  assert.match(readFileSync(join(dir, 'secrets.env'), 'utf8'), new RegExp(`^SLATEBOX_TUNNEL_TOKEN=${TUNNEL}$`, 'm'))
   const settings = readFileSync(join(dir, 'slatebox.env'), 'utf8')
-  assert.match(settings, /^SLATEBOX_URL='https:\/\/acme\.slatebox\.team'$/m)
-  assert.match(settings, /^SLATEBOX_HTTPS='off'$/m)
+  assert.match(settings, /^SLATEBOX_URL=https:\/\/acme\.slatebox\.team$/m)
+  assert.match(settings, /^SLATEBOX_HTTPS=off$/m)
   assert.ok(!settings.includes(TUNNEL), 'no token in the settings file')
-  const compose = readFileSync(join(dir, 'compose.yaml'), 'utf8')
-  assert.match(compose, /ports:\n {4}- 127\.0\.0\.1:17480:7070\n/)
-  assert.ok(!/443|:80:/.test(compose), 'no public port')
+  assert.deepEqual(docker.runFlag('--publish'), ['127.0.0.1:17480:7070'], 'the loopback port only, no public port')
   const record = readFileSync(join(dir, 'install.yaml'), 'utf8')
   assert.match(record, /team: acme/)
   for (const secret of SECRETS) assert.ok(!record.includes(secret), 'the record holds no secret')
@@ -144,7 +143,7 @@ test('offline: exit 4, says how to install without an address, nothing written',
   assert.match(error.message, /Nothing was changed/)
   assert.match(error.message, /npx slatebox install --local/)
   assert.equal(ups(docker), 0)
-  assert.ok(!existsSync(join(home, 'installs', 'slatebox', 'compose.yaml')))
+  assert.ok(!existsSync(join(home, 'installs', 'slatebox', 'slatebox.env')))
 })
 
 test('no Docker: exit 4 before any sign-in, so no name is claimed on a machine that cannot run it', async () => {
@@ -205,7 +204,7 @@ test('a lost token is fetched again with the install credential, without a sign-
   assert.equal(cloud.cloudRequests('/oauth').length, signIns, 'no new sign-in')
   const [fetch] = cloud.cloudRequests('/api/v1/team-addresses/self/connector-token')
   assert.equal(fetch.headers.authorization, `Bearer ${CREDENTIAL}`)
-  assert.match(readFileSync(join(dir, 'secrets.env'), 'utf8'), new RegExp(`SLATEBOX_TUNNEL_TOKEN='${TUNNEL}'`))
+  assert.match(readFileSync(join(dir, 'secrets.env'), 'utf8'), new RegExp(`^SLATEBOX_TUNNEL_TOKEN=${TUNNEL}$`, 'm'))
 })
 
 test('a revoked credential with a lost token: sign in, mint a new credential, fetch the token', async () => {
@@ -252,7 +251,7 @@ test('address rotate: a new secret, the new token written, the container recreat
   noSecretIn(result, 'rotate')
   const [rotate] = cloud.cloudRequests('/api/v1/team-addresses/self/connector-token')
   assert.deepEqual(rotate.body, { rotate: true })
-  assert.match(readFileSync(join(dir, 'secrets.env'), 'utf8'), new RegExp(`SLATEBOX_TUNNEL_TOKEN='${ROTATED}'`))
+  assert.match(readFileSync(join(dir, 'secrets.env'), 'utf8'), new RegExp(`^SLATEBOX_TUNNEL_TOKEN=${ROTATED}$`, 'm'))
   assert.equal(ups(docker), upsBefore + 1)
 })
 
@@ -265,7 +264,7 @@ test('rename: sign in, move, recreate at the new URL, then tell Cloud the move i
   noSecretIn(result, 'rename')
   assert.equal(cloud.cloudRequests('/api/v1/team-addresses/ta_1/rename').length, 1)
   assert.equal(cloud.cloudRequests('/api/v1/team-addresses/self/rename-complete').length, 1)
-  assert.match(readFileSync(join(dir, 'slatebox.env'), 'utf8'), /^SLATEBOX_URL='https:\/\/acme-boards\.slatebox\.team'$/m)
+  assert.match(readFileSync(join(dir, 'slatebox.env'), 'utf8'), /^SLATEBOX_URL=https:\/\/acme-boards\.slatebox\.team$/m)
   assert.equal(JSON.parse(readFileSync(join(dir, 'credentials.json'), 'utf8')).name, 'acme-boards')
   assert.match(readFileSync(join(dir, 'install.yaml'), 'utf8'), /team: acme-boards/)
   assert.equal(result.events.at(-1).address, 'https://acme-boards.slatebox.team')

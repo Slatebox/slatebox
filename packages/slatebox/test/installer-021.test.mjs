@@ -82,7 +82,7 @@ test('1: offline, the download fails with a plain reason, and nothing is claimed
   assert.equal(result.events.at(-1).offline, true)
   assert.equal(cloud.claims.size, 0)
   assert.equal(cloud.cloudRequests('/oauth/device_authorization').length, 0, 'no sign-in was started')
-  assert.ok(!existsSync(join(dir, 'compose.yaml')))
+  assert.ok(!existsSync(join(dir, 'slatebox.env')))
 })
 
 test('1: an image that turns out not to support a team address is refused after the download, before any claim', async () => {
