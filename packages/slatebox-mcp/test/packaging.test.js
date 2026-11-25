@@ -28,9 +28,9 @@ const KEYWORDS = [
 const REPOSITORY = "https://github.com/Slatebox/slatebox";
 const HOMEPAGE = "https://docs.slatebox.com/developers/slateboxapi/mcp/";
 
-test("the npm manifest carries the listing fields for a 0.3.x release", () => {
-  assert.match(manifest.version, /^0\.3\.\d+$/);
-  assert.notEqual(manifest.version, "0.3.0", "0.3.0 is the archive without typed tools; a release with them needs a new version");
+test("the npm manifest carries the listing fields for a 0.4.x release", () => {
+  // 0.4.0 gave the `slatebox` command to the slatebox package; a 0.3.x version would reinstate the clash.
+  assert.match(manifest.version, /^0\.4\.\d+$/);
   assert.equal(manifest.mcpName, "com.slatebox/slatebox");
   assert.equal(manifest.description, DESCRIPTION);
   assert.deepEqual(manifest.keywords, KEYWORDS);
@@ -39,7 +39,28 @@ test("the npm manifest carries the listing fields for a 0.3.x release", () => {
   assert.deepEqual(manifest.bugs, { url: REPOSITORY + "/issues" });
   assert.equal(manifest.license, "MIT");
   assert.equal(manifest.name, "slatebox-mcp");
-  assert.deepEqual(manifest.bin, { "slatebox-mcp": "src/cli.js", slatebox: "src/slatebox.js" });
+  assert.deepEqual(manifest.bin, { "slatebox-mcp": "src/cli.js" });
+  // The `slatebox` command belongs to the npm package slatebox. Two packages naming one command
+  // make npm refuse (or silently overwrite) the second install.
+  assert.equal(Object.hasOwn(manifest.bin, "slatebox"), false, "slatebox-mcp must not name the slatebox command");
+});
+
+test("./commands and ./mcp are exported for the slatebox command to run in its own process", async () => {
+  assert.equal(manifest.exports["./commands"], "./src/commands.js");
+  assert.equal(manifest.exports["./mcp"], "./src/mcp.js");
+  const commands = await import("slatebox-mcp/commands");
+  assert.equal(typeof commands.run, "function");
+  const mcp = await import("slatebox-mcp/mcp");
+  assert.equal(typeof mcp.startMcp, "function");
+  // help needs no token and no network, and returns its exit code instead of exiting.
+  let out = "";
+  const code = await commands.run(["exec", "--help"], { env: {}, stdout: { write: (t) => { out += t; } }, stderr: { write: () => {} } });
+  assert.equal(code, 0);
+  assert.match(out, /slatebox exec FILE/);
+  let err = "";
+  const bad = await commands.run(["nope"], { env: {}, stdout: { write: () => {} }, stderr: { write: (t) => { err += t; } } });
+  assert.equal(bad, 2);
+  assert.match(err, /Choose exec, describe or help/);
 });
 
 test("server.json is valid for the MCP Registry and matches the package", () => {
@@ -118,7 +139,7 @@ test("npm pack would publish exactly the public files the release archive holds"
   for (const path of packed) assert.doesNotMatch(path, /^(test|fixtures)\/|server\.schema/);
   const modes = Object.fromEntries(listed[0].files.map((f) => [f.path, f.mode]));
   assert.equal(modes["src/cli.js"] & 0o111, 0o111, "slatebox-mcp is executable");
-  assert.equal(modes["src/slatebox.js"] & 0o111, 0o111, "slatebox is executable");
+  assert.equal(modes["src/slatebox.js"], undefined, "the old slatebox executable is gone");
 });
 
 

@@ -1,5 +1,4 @@
-#!/usr/bin/env node
-// slatebox-mcp: the MCP server: exec and describe, one typed tool per client method, prompts
+// The MCP server: exec and describe, one typed tool per client method, prompts
 // and resources.
 //   stdio (default)                 for agent hosts that start a command
 //   --http [--port N]               loopback Streamable HTTP at http://127.0.0.1:N/mcp
@@ -23,29 +22,38 @@ function tokenRequired() {
   return Object.assign(new Error("No Slatebox token: set SLATEBOX_API_TOKEN to a personal access token from your Slatebox and restart this server. The prompts work without one."), { code: "sign_in_required", status: 401 });
 }
 
-async function main() {
+/**
+ * Start the MCP server (stdio, or loopback HTTP with --http). `slatebox-mcp` and `slatebox mcp`
+ * both call this. It resolves once the server is connected; the process then lives as long as the
+ * transport does.
+ * @param {string[]} argv options after the command name
+ * @param {{env?: object, stderr?: any}} [io]
+ */
+export async function startMcp(argv = [], io = {}) {
+  const env = io.env ?? process.env;
+  const stderr = io.stderr ?? process.stderr;
   let values;
   try {
-    ({ values } = parseArgs({ args: process.argv.slice(2), options: {
+    ({ values } = parseArgs({ args: argv, options: {
       http: { type: "boolean" }, port: { type: "string" }, host: { type: "string" }, "base-url": { type: "string" },
       "typed-tools": { type: "string" },
     } }));
   } catch {
     throw new UsageError("Usage: slatebox-mcp [--base-url ORIGIN] [--typed-tools on|off] [--http [--port N]]");
   }
-  const typedOption = values["typed-tools"] ?? process.env.SLATEBOX_MCP_TYPED_TOOLS;
+  const typedOption = values["typed-tools"] ?? env.SLATEBOX_MCP_TYPED_TOOLS;
   if (typedOption !== undefined && typedOption !== "" && !/^(on|off|true|false|1|0|yes|no)$/i.test(String(typedOption).trim()))
     throw new UsageError("--typed-tools (or SLATEBOX_MCP_TYPED_TOOLS) is on or off.");
   const typedTools = typedToolsEnabled(typedOption);
-  const token = process.env.SLATEBOX_API_TOKEN;
-  const baseUrl = apiOrigin(values["base-url"] || process.env.SLATEBOX_BASE_URL || DEFAULT_ORIGIN);
+  const token = env.SLATEBOX_API_TOKEN;
+  const baseUrl = apiOrigin(values["base-url"] || env.SLATEBOX_BASE_URL || DEFAULT_ORIGIN);
   const generated = defaultGenerated();
   if (!token) {
     // No Slatebox yet: the prompts and the client docs still work;
     // every tool answers that it needs a token. The HTTP server always needs one: it is the bearer.
     if (values.http) throw new UsageError("Set SLATEBOX_API_TOKEN to a personal access token.");
     if (values.port !== undefined || values.host !== undefined) throw new UsageError("--port and --host go with --http.");
-    process.stderr.write("SLATEBOX_API_TOKEN is not set: the prompts and the client docs work; the tools need a personal access token.\n");
+    stderr.write("SLATEBOX_API_TOKEN is not set: the prompts and the client docs work; the tools need a personal access token.\n");
     const exec = async () => { throw tokenRequired(); };
     await createSlateboxMcpServer({ exec, generated, typedTools }).connect(new StdioServerTransport());
     return;
@@ -62,10 +70,6 @@ async function main() {
   const port = values.port === undefined ? DEFAULT_HTTP_PORT : Number(values.port);
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new UsageError("--port is a port number.");
   const listening = await startHttp({ host: values.host ?? "127.0.0.1", port, token, createServerForRequest });
-  process.stderr.write(`Slatebox MCP listening at ${listening.url} (loopback only; send your Slatebox token as the bearer token)\n`);
+  stderr.write(`Slatebox MCP listening at ${listening.url} (loopback only; send your Slatebox token as the bearer token)\n`);
 }
 
-main().catch((error) => {
-  process.stderr.write(`Slatebox MCP could not start: ${error.message}\n`);
-  process.exitCode = error instanceof UsageError ? 2 : 1;
-});

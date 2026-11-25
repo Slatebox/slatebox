@@ -679,7 +679,7 @@ test("the CLI runs a script locally and, with --remote, in the app's sealed runn
   t.after(() => world.close());
   const call = await world.serve(t);
   const { token } = await world.mint();
-  const bin = fileURLToPath(new URL("../src/slatebox.js", import.meta.url));
+  const bin = fileURLToPath(new URL("../src/cli.js", import.meta.url));
   const cli = (args) => new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [bin, ...args], { env: { PATH: process.env.PATH, SLATEBOX_API_TOKEN: token, SLATEBOX_BASE_URL: call.base } });
     let out = "", err = "";

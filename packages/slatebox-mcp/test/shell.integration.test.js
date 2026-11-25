@@ -1,4 +1,6 @@
-// The real `slatebox` executable against a local HTTP server.
+// The real `slatebox` executable against a local HTTP server. Since 0.4.0 that command is the
+// npm package slatebox's (packages/slatebox), which runs this package's ./commands in process;
+// `slatebox-mcp exec|describe` runs the same code and is checked at the end.
 // Restated (exec): the per-action commands (create, read, share, unshare, branch, outcome,
 // order, move, preview, apply) are gone by the owner's decision; each is now a script run by
 // `slatebox exec`. What the old tests asserted about requests (route, body, mode, retry key,
@@ -15,13 +17,14 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
-const command = fileURLToPath(new URL("../" + manifest.bin.slatebox, import.meta.url));
+const command = fileURLToPath(new URL("../../slatebox/bin/slatebox.mjs", import.meta.url));
+const mcpCommand = fileURLToPath(new URL("../" + manifest.bin["slatebox-mcp"], import.meta.url));
 const token = "sbx_fake_command_fixture";
 const plan = { message: "Place a note", operations: [{ kind: "add_nodes", count: 1, shape: "triangle" }] };
 
-function run(args, { origin, input = "", credential = token } = {}) {
+function run(args, { origin, input = "", credential = token, bin = command } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [command, ...args], { env: {
+    const child = spawn(process.execPath, [bin, ...args], { env: {
       PATH: process.env.PATH, SLATEBOX_API_TOKEN: credential, SLATEBOX_BASE_URL: origin || "http://127.0.0.1:1",
     } });
     let out = "", err = "";
@@ -169,7 +172,8 @@ test("--remote sends the script to POST /api/v1/exec and prints the server's res
 
 test("help and describe work without credentials; bad usage fails locally and sends nothing", async (t) => {
   const { received, origin } = await fakeSlatebox(t, reader);
-  const help = await run(["--help"], { credential: "" });
+  // `slatebox --help` is the whole command's help; exec's own is `slatebox exec --help`.
+  const help = await run(["exec", "--help"], { credential: "" });
   assert.equal(help.code, 0);
   assert.match(help.out, /slatebox exec FILE \| - \| -e CODE/);
   assert.match(help.out, /there is no sandbox/);
@@ -193,5 +197,20 @@ test("help and describe work without credentials; bad usage fails locally and se
   const unsigned = await run(["exec", "-e", "return 1"], { origin, credential: "" });
   assert.equal(unsigned.code, 2);
   assert.match(unsigned.err, /SLATEBOX_API_TOKEN/);
+  assert.equal(received.length, 0);
+});
+
+test("slatebox-mcp exec and describe are the same commands, named for slatebox-mcp", async (t) => {
+  const { received, origin } = await fakeSlatebox(t, reader);
+  const help = await run(["exec", "--help"], { credential: "", bin: mcpCommand });
+  assert.equal(help.code, 0, help.err);
+  assert.match(help.out, /slatebox-mcp exec and slatebox-mcp describe are the same commands/);
+  const listing = await run(["describe"], { credential: "", bin: mcpCommand });
+  assert.equal(listing.code, 0, listing.err);
+  assert.match(listing.out, /^slates\.get\s+Read a slate$/m);
+  const unsigned = await run(["exec", "-e", "return 1"], { origin, credential: "", bin: mcpCommand });
+  assert.equal(unsigned.code, 2);
+  assert.match(unsigned.err, /^slatebox-mcp: Set SLATEBOX_API_TOKEN/m);
+  assert.match(unsigned.err, /Run slatebox-mcp exec --help for usage/);
   assert.equal(received.length, 0);
 });

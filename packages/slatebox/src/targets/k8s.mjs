@@ -12,6 +12,7 @@ import { installDir, recordText, writeRecord } from '../record.mjs'
 import { MANAGER, names, renderK8s, renderSecret } from '../render/k8s.mjs'
 import { settingsFor } from '../render/settings.mjs'
 import { secretValues } from '../secret-values.mjs'
+import { checkTeamAddress, ensureTeamAddress, TUNNEL_TOKEN } from './address.mjs'
 import { stringifyAll } from '../yaml.mjs'
 
 const SLATEBOX = '/opt/slatebox/bin/slatebox'
@@ -150,6 +151,16 @@ async function rollout(ctx, k, answers) {
   if (status.code !== 0) return { ok: false, why: lastLine(status.stderr) || 'rollout did not finish' }
   const deep = await k(['exec', '-n', answers.k8s.namespace, n.pod, '-c', 'slatebox', '--', SLATEBOX, 'health', '--deep', '--wait', '60'], { timeout: 120_000 })
   if (deep.code !== 0) return { ok: false, why: lastLine(deep.stderr) || 'slatebox health failed' }
+  if (answers.address.team) {
+    for (let attempt = 0; attempt < (ctx.teamHealthAttempts ?? 30); attempt++) {
+      try {
+        const response = await ctx.fetch(`${answers.address.url}/readyz`, { signal: AbortSignal.timeout(8000) })
+        if (response.ok) return { ok: true }
+      } catch { /* retry */ }
+      await new Promise(resolve => setTimeout(resolve, ctx.teamHealthDelay ?? 2000))
+    }
+    return { ok: true, warning: `Slatebox is healthy in the cluster, but ${answers.address.url} does not answer from here yet: the secure tunnel keeps trying by itself (kubectl logs ${n.pod} -c slatebox | grep tunnel).` }
+  }
   if (answers.k8s.route !== 'none') {
     try {
       const response = await ctx.fetch(`${answers.address.url}/readyz`, { signal: AbortSignal.timeout(8000) })
@@ -172,6 +183,7 @@ export async function applyK8s(ctx, answers, { record, planOnly = false, imageRe
   out.step('preflight', 'start', `Checking kube context "${context}"`)
   const facts = await preflight(ctx, k, answers, context)
   out.step('preflight', 'ok', `Context "${context}", namespace ${answers.k8s.namespace}${facts.nsExists ? '' : ' (new)'}`)
+  const team = answers.address.team ? await checkTeamAddress(ctx, answers) : null
 
   const warnings = []
   const image = await clusterImage(ctx, imageRef || answers.image, { refresh })
@@ -187,7 +199,22 @@ export async function applyK8s(ctx, answers, { record, planOnly = false, imageRe
       throw new InstallError(EXIT.PRECONDITION, `Slatebox "${answers.name}" already has ${previous ? 'a StatefulSet' : 'a data volume'} in ${answers.k8s.namespace}, but its Secret ${names(answers).secret} holds no SLATEBOX_KEY_ENCRYPTION_KEY. A new key would make every AI and call key people saved unreadable. Nothing was changed. Put the Secret back from your backup, or add --new-encryption-key to start over with a new key.`, { needs: 'encryption-key' })
     }
   }
-  const { values, generated } = await secretValues(ctx, settings.secrets, stored)
+  // The Secret is part of the server-side diff, so a team address still to be claimed is claimed
+  // (after its own yes) before the plan; a plan-only run shows a stand-in and claims nothing.
+  let secretCtx = ctx
+  if (team && !stored[TUNNEL_TOKEN]) {
+    if (planOnly) secretCtx = { ...ctx, tunnelToken: 'pending-team-address-claim' }
+    else {
+      if (team.claim) {
+        const claimPlan = emptyPlan({ action: 'claim', target: 'k8s', name: answers.name, where: 'Slatebox Cloud', address: answers.address.url,
+          notes: [`You sign in to Slatebox in your browser to claim ${team.host}. Its tunnel token goes into the Secret ${names(answers).secret}; the install credential stays on this computer (mode 0600).`] })
+        ctx.emitPlan(claimPlan)
+        await ctx.confirm(claimPlan)
+      }
+      await ensureTeamAddress(ctx, answers, team, stored)
+    }
+  }
+  const { values, generated } = await secretValues(secretCtx, settings.secrets, stored)
   const secretsHash = createHash('sha256').update(JSON.stringify(values)).digest('hex')
   const imageChanged = Boolean(previous && previous !== image.pinned)
 

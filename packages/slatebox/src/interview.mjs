@@ -4,6 +4,21 @@
 import { AI_CHOICES, QUESTIONS, SIZES } from './answers.mjs'
 import { PRESETS } from './ai/settings-adapter.mjs'
 import { looksLikeKey } from './secrets.mjs'
+import { teamAddressProblem, teamHost } from './cloud.mjs'
+import { availability } from './targets/address.mjs'
+
+/** Ask for a team address until one is free. Taken, reserved and blocked names get the same answer. */
+export async function askTeamAddress(ctx, p) {
+  for (;;) {
+    const name = (await p.text('Team address', { validate: v => teamAddressProblem(v.toLowerCase()) })).toLowerCase()
+    const answer = await availability(ctx, name)
+    if (answer.available) {
+      ctx.stderr.write(`[ok] ${teamHost(name)} is available\n`)
+      return name
+    }
+    ctx.stderr.write(`[!!] ${teamHost(name)} isn't available.${answer.suggestions.length ? `\n     Free right now: ${answer.suggestions.join(', ')}` : ''}\n`)
+  }
+}
 
 const EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/
 const CLOUD = ['openai', 'anthropic', 'deepinfra', 'openrouter', 'groq', 'together', 'mistral']
@@ -84,7 +99,21 @@ export async function interview(ctx, partial) {
 
   // Address
   a.address ||= {}
-  if (!has(a.address, 'url') && !has(a.address, 'domain')) {
+  if (!has(a.address, 'url') && !has(a.address, 'domain') && a.address.team === undefined && !has(a.address, 'port') && (a.target === 'local' || a.target === 'ssh')) {
+    const where = await p.choose('Where should your team open Slatebox?', [
+      { value: 'team', label: 'A free team address, https://<name>.slatebox.team  (recommended: no DNS, ports or certificates)' },
+      { value: 'domain', label: 'My own domain (I point DNS at this server, or I run a proxy)' },
+      { value: 'local', label: a.target === 'local' ? `Only this computer, http://localhost:${ctx.freePort}` : `Plain http://${a.ssh?.host || '<server>'}:7070, no HTTPS` },
+    ], { default: 'team' })
+    if (where === 'team') a.address.team = await askTeamAddress(ctx, p)
+    else if (where === 'domain') a.address.domain = await p.text('Domain name, pointed at this server (for example boards.example.com)')
+    else {
+      a.address.team = null
+      if (a.target === 'local') a.address.port = ctx.freePort
+      else a.address.port = 7070
+    }
+  }
+  if (!has(a.address, 'url') && !has(a.address, 'domain') && !a.address.team && !(a.address.team === null && has(a.address, 'port'))) {
     if (a.target === 'local' && !has(a.address, 'port')) {
       const port = await p.text('Port on this computer', { default: String(ctx.freePort), validate: v => (/^\d+$/.test(v) && Number(v) < 65536 ? null : 'A port number') })
       a.address.port = Number(port)

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { DEFAULT_IMAGE, DEFAULT_REPOSITORY, PINNED_DIGEST, PINNED_TAG } from '../src/image.mjs'
 import { clusterImage } from '../src/targets/k8s.mjs'
-import { SLATE_PACKAGE } from '../src/cli.mjs'
+import { readFileSync } from 'node:fs'
 
 const publishing = process.env.SLATEBOX_PUBLISH === '1' || process.env.NODE_ENV === 'production' ||
   process.env.npm_lifecycle_event === 'prepublishOnly' || process.env.npm_lifecycle_event === 'prepack'
@@ -32,6 +32,13 @@ test('Kubernetes runs the default image by its digest, without asking this compu
   if (PINNED_DIGEST) assert.equal((await clusterImage(ctx, undefined)).pinned, DEFAULT_IMAGE)
 })
 
+// Restated (one command, 0.2.0): slatebox-mcp is a dependency now, run in process, instead of
+// an npx fetch at first use. The same claim, in its new place: one exact version, never a range,
+// and the version of the slatebox-mcp in this repository.
 test('the slate commands come from one exact slatebox-mcp version, never a range fetched unasked', () => {
-  assert.match(SLATE_PACKAGE, /^slatebox-mcp@\d+\.\d+\.\d+$/)
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  const mcp = JSON.parse(readFileSync(new URL('../../slatebox-mcp/package.json', import.meta.url), 'utf8'))
+  assert.match(manifest.dependencies['slatebox-mcp'], /^\d+\.\d+\.\d+$/)
+  assert.equal(manifest.dependencies['slatebox-mcp'], mcp.version)
+  assert.deepEqual(Object.keys(manifest.dependencies), ['slatebox-mcp'], 'the installer has no other dependency')
 })

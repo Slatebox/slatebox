@@ -15,6 +15,8 @@ import { shq } from '../runner.mjs'
 import { secretValues } from '../secret-values.mjs'
 import { envFileText, parseEnvFile } from '../secrets.mjs'
 import { firstFreePort, localHost, MARKER, parseKeyValues, portFree, remotePreflightScript, sshHost, which } from './hosts.mjs'
+import { checkTeamAddress, ensureTeamAddress, TUNNEL_TOKEN } from './address.mjs'
+import { credentialsPath } from '../cloud.mjs'
 
 const SLATEBOX = '/opt/slatebox/bin/slatebox'
 const KEPT_FILE = 'secrets.kept.env'
@@ -33,6 +35,7 @@ export const backupsDir = (host, answers) =>
     : answers.backups.to
 
 const KEK = 'SLATEBOX_KEY_ENCRYPTION_KEY'
+const PENDING_TOKEN = 'pending-team-address-claim'
 
 /** Native Windows has no sh, crontab or file modes; Docker Desktop's WSL 2 integration is the way there. */
 export function refuseWindows(ctx) {
@@ -188,6 +191,7 @@ async function start(host, timeout) {
 async function health(ctx, host, answers) {
   const deep = await host.docker(['exec', answers.name, SLATEBOX, 'health', '--deep', '--wait', '60'], { timeout: 120_000 })
   if (deep.code !== 0) return { ok: false, why: lastLine(deep.stderr) || 'slatebox health failed' }
+  if (answers.address.team) return teamHealth(ctx, host, answers)
   // From outside, the way a browser asks.
   const url = `${answers.address.url}/readyz`
   let outside = false
@@ -204,6 +208,36 @@ async function health(ctx, host, answers) {
     return { ok: true, warning: `${why} Check DNS, the firewall and that ports ${ports(answers).map(p => p.split(':')[0]).join('/')} are open.` }
   }
   return { ok: true }
+}
+
+/** The tunnel's connections, from inside the container; null when the image cannot say. */
+export async function tunnelState(host, name, wait = 0) {
+  const result = await host.docker(['exec', name, SLATEBOX, 'tunnel', '--json', ...(wait ? ['--wait', String(wait)] : [])], { timeout: (wait + 30) * 1000 })
+  try { return JSON.parse(lastLine(result.stdout)) } catch { return null }
+}
+
+/**
+ * A team address is healthy when the container's cloudflared holds connections and the address
+ * answers from here through Cloudflare. A tunnel that is slow to come up is a warning, not a
+ * rollback: Slatebox itself is healthy, and the tunnel keeps trying on its own.
+ */
+async function teamHealth(ctx, host, answers) {
+  const tunnel = await tunnelState(host, answers.name, 60)
+  if (tunnel?.ready) ctx.out.step('tunnel', 'ok', `Secure tunnel connected (${tunnel.connections} connection${tunnel.connections === 1 ? '' : 's'})`)
+  const url = `${answers.address.url}/readyz`
+  const attempts = ctx.teamHealthAttempts ?? 30
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const response = await ctx.fetch(url, { signal: AbortSignal.timeout(8000) })
+      if (response.ok && (await response.json().catch(() => null))?.ok === true) {
+        ctx.out.step('address', 'ok', `${answers.address.url} answers`)
+        return { ok: true }
+      }
+    } catch { /* retry */ }
+    if (attempt < attempts - 1) await new Promise(resolve => setTimeout(resolve, ctx.teamHealthDelay ?? 2000))
+  }
+  const why = tunnel?.ready ? `${answers.address.url} does not answer from here yet` : `the secure tunnel has not connected yet${tunnel?.error ? ` (${tunnel.error})` : ''}`
+  return { ok: true, warning: `Slatebox is healthy on this computer, but ${why}. It keeps trying by itself; check with slatebox status and slatebox logs --service tunnel.` }
 }
 
 async function startAndCheck(ctx, host, answers) {
@@ -308,6 +342,8 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
     : await existingState(host, answers)
   await checkPorts(host, answers, facts, existing)
   out.step('preflight', 'ok', `${host.where}: Docker ${facts.docker || facts.docker_server || '(to be installed)'}`)
+  // Docker first, then the name: nobody claims a name on a machine that cannot run Slatebox.
+  const team = answers.address.team ? await checkTeamAddress(ctx, answers) : null
 
   // The image. Before a yes, only what is already on the host is looked at:
   // nothing is pulled or loaded (an upgrade fetches its tag first, because
@@ -340,8 +376,11 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
     composeText = renderCompose(answers, { image: image.pinned, hostGateway: settings.hostGateway })
     settingsText = envFileText(settings.env, `Settings for the Slatebox "${answers.name}", written by the slatebox installer. No secrets.`)
     scriptText = answers.backups.to === 'off' ? null : backupScript(host, answers, facts)
-    // The key encryption key is made once and then kept; referenced keys are read now.
-    const secrets = await secretValues(ctx, settings.secrets, stored)
+    // The key encryption key is made once and then kept; referenced keys are read now. Before
+    // the plan is approved, a team address that is still to be claimed has no token: the plan
+    // shows a stand-in, and nothing is written until the claim has brought the real one.
+    const pending = team && !ctx.tunnelToken && !stored[TUNNEL_TOKEN]
+    const secrets = await secretValues(pending ? { ...ctx, tunnelToken: PENDING_TOKEN } : ctx, settings.secrets, stored)
     generated = secrets.generated
     kept = Object.fromEntries(Object.entries(stored).filter(([name]) => !(name in secrets.values) && name === KEK))
     secretsText = envFileText(secrets.values, `Secrets for the Slatebox "${answers.name}". Keep a copy of SLATEBOX_KEY_ENCRYPTION_KEY with your backups.`)
@@ -406,6 +445,14 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
       plan.warnings.push(`A firewall (${facts.ufw === 'active' ? 'ufw' : 'firewalld'}) is on. Allow ${ports(answers).map(hostPort).join(', ')}/tcp yourself; the installer does not change firewall rules.`)
     }
   }
+  if (team) {
+    if (team.claim) {
+      plan.notes.unshift(`After you confirm, you sign in to Slatebox in your browser to claim ${team.host} for your account. Slatebox Cloud then sets up its secure tunnel and sends this install the tunnel token.`)
+      plan.files.push({ path: credentialsPath(ctx.home, answers.name), note: 'the team-address credential (mode 0600); it stays on this computer' })
+    } else if (!stored[TUNNEL_TOKEN] && !nothing) {
+      plan.notes.unshift(`The tunnel token for ${team.host} is fetched again from Slatebox Cloud with this computer's install credential.`)
+    }
+  }
   if (nothing) plan.notes.push('The running install already matches these answers.')
   ctx.emitPlan(plan)
   if (planOnly) return { planned: true, plan }
@@ -421,6 +468,11 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
     const check = await host.docker(['version', '--format', '{{.Server.Version}}'])
     if (installed.code !== 0 || check.code !== 0) throw new InstallError(EXIT.PRECONDITION, `Docker could not be installed or started on ${host.where}: ${lastLine(installed.stderr || check.stderr)}`)
     out.step('docker', 'ok', `Docker ${check.stdout.trim()} on ${host.where}`)
+  }
+  if (team && !ctx.tunnelToken && !stored[TUNNEL_TOKEN]) {
+    // The claim is kept if anything after this fails: the next run reuses it.
+    await ensureTeamAddress(ctx, answers, team, stored)
+    await render()
   }
   if (!imageReady) {
     image = await resolveImage(host.docker, { ref: imageRef || answers.image, archive, loadArchive: host.loadArchive, step: out.step.bind(out) })
@@ -443,6 +495,7 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
     out.step('backup', 'ok', `Backed up to ${preUpgrade}`)
   }
 
+  if (secretsText.includes(PENDING_TOKEN)) throw new Error('internal: the team address has no tunnel token yet')
   const previous = { ...existing.files }
   out.step('files', 'start', `Writing ${host.dir}`)
   await host.writeFile(join(host.dir, MARKER), `${answers.name}\n`, 0o600)
@@ -457,7 +510,7 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
   const result = await startAndCheck(ctx, host, answers)
   if (!result.ok) await rollback(ctx, host, answers, { fresh, previous, preUpgrade, why: result.why })
   if (result.warning) out.step('health', 'warn', result.warning)
-  out.step('start', 'ok', `Slatebox is healthy at ${answers.address.url}`)
+  out.step('start', 'ok', answers.address.team ? `Slatebox is healthy on ${host.where}` : `Slatebox is healthy at ${answers.address.url}`)
 
   if (fresh) await firstAccount(ctx, host, answers, caps)
   if (scriptText || previous[BACKUP_SCRIPT]) {
@@ -555,6 +608,7 @@ function done(ctx, host, answers, image, { nothing = false, generated = [], fres
     address: answers.address.url, name: answers.name, target: answers.target, version: image.labels?.['org.opencontainers.image.version'] || null,
     imageDigest: image.pinned, installRecord: ctx.recordFile, secretsFile, nothingToChange: nothing,
     keyGenerated: generated.includes('SLATEBOX_KEY_ENCRYPTION_KEY'), fresh,
+    ...(answers.address.team ? { teamAddress: answers.address.url, localAddress: `http://localhost:${answers.address.port}` } : {}),
   }
 }
 
@@ -591,6 +645,7 @@ export async function statusDocker(ctx, record) {
       // File names carry the UTC time they were taken, so the newest sorts last.
       lastBackup = existsSync(dir) ? readdirSync(dir).filter(file => /^slatebox-\d{8}-\d{6}\.gz$/.test(file)).sort().pop() || null : null
     }
+    const tunnel = record.address?.team && state?.Running ? await tunnelState(host, record.name) : null
     const age = backupLate(record, lastBackup)
     if (age?.late) ctx.out.warn(`The last backup is ${age.ageHours} hours old, older than the schedule "${record.backups.schedule}" allows. See ${join(host.dir, 'backup.log')}${host.kind === 'ssh' ? ` on ${host.where}` : ''}.`)
     return {
@@ -600,6 +655,7 @@ export async function statusDocker(ctx, record) {
       ai: record.ai.mode === 'none' ? 'off' : record.ai.providers.map(provider => provider.id).join(', '),
       sso: record.sso.enabled ? (record.sso.only ? 'on (only)' : 'on') : 'off',
       lastBackup, backupLate: age ? age.late : null,
+      ...(record.address?.team ? { tunnel } : {}),
     }
   } finally {
     await host.close?.()
@@ -672,6 +728,44 @@ export function uninstallDocker(ctx, record, { deleteData }) {
       return { dataDeleted: true }
     }
     return { dataDeleted: false, volume: `${record.name}-data`, secretsFile: join(host.dir, SECRETS_FILE) }
+  })
+}
+
+// The services' log lines carry their name: [app], [relay], [mongo], [proxy], [tunnel], [sso], [slatebox].
+export const LOG_SERVICES = ['app', 'relay', 'mongo', 'proxy', 'tunnel', 'sso', 'slatebox']
+
+/** docker logs for the install, optionally only one service's lines, optionally following. */
+export function logsDocker(ctx, record, { follow = false, service, since } = {}) {
+  return withHost(ctx, record, async host => {
+    const args = ['logs', ...(since ? ['--since', since] : []), ...(follow ? ['--follow'] : ['--tail', '500']), record.name]
+    const keep = line => !service || line.startsWith(`[${service}] `) || (service === 'sso' && line.startsWith('[sso-setup] '))
+    const write = text => {
+      for (const line of text.split('\n')) if (line && keep(line)) ctx.stdout.write(`${ctx.redactor.redact(line)}\n`)
+    }
+    if (follow) {
+      if (host.kind !== 'local') throw new InstallError(EXIT.USAGE, `Following logs on ${host.where}: ssh ${host.where} ${host.sudo || ''}docker logs -f ${record.name}`)
+      // Streamed as it comes, each line through the redactor, until Ctrl-C.
+      const { spawn } = await import('node:child_process')
+      return new Promise(resolve => {
+        const child = (ctx.spawn || spawn)('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+        let rest = ''
+        const onData = chunk => {
+          const text = rest + chunk
+          const cut = text.lastIndexOf('\n')
+          rest = cut < 0 ? text : text.slice(cut + 1)
+          if (cut >= 0) write(text.slice(0, cut))
+        }
+        child.stdout.on('data', onData)
+        child.stderr.on('data', onData)
+        child.on('error', () => resolve({ lines: false }))
+        child.on('close', () => { if (rest) write(rest); resolve({ lines: true }) })
+      })
+    }
+    const result = await host.docker(args, { timeout: 120_000 })
+    if (result.code !== 0) throw new InstallError(EXIT.PRECONDITION, `docker logs failed: ${lastLine(result.stderr)}`)
+    // docker logs puts the container's stdout and stderr on its own two streams.
+    write(`${result.stdout}${result.stderr}`)
+    return { lines: true }
   })
 }
 

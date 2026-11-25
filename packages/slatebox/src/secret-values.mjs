@@ -19,7 +19,12 @@ export async function secretValues(ctx, wanted, stored = {}) {
   const generated = []
   const missing = []
   for (const [name, ref] of Object.entries(wanted)) {
-    if (ref === 'generate') {
+    if (ref === 'tunnel') {
+      // The team address's tunnel token: fetched from Slatebox Cloud for this run, or the one stored.
+      const value = ctx.tunnelToken ?? stored[name]
+      if (value) values[name] = value
+      else missing.push({ field: name, question: 'the team address has no tunnel token yet: run slatebox install to sign in and fetch it', flag: '--team-address <name>', default: null })
+    } else if (ref === 'generate') {
       if (stored[name]) values[name] = stored[name]
       else {
         values[name] = generateKek()

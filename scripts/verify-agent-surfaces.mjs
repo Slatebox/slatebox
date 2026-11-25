@@ -52,7 +52,7 @@ async function request(token,op,key,preview=false) {
   return {status:response.status,value:await response.json()}
 }
 async function shell(token,args,input) {
-  const child=spawn(process.execPath,[binary('slatebox.js'),...args],{env:env(token),stdio:['pipe','pipe','pipe']})
+  const child=spawn(process.execPath,[binary('cli.js'),...args],{env:env(token),stdio:['pipe','pipe','pipe']})
   let out=''
   child.stdout.on('data',chunk=>out+=chunk)
   child.stderr.resume()

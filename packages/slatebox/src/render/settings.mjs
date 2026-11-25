@@ -25,6 +25,13 @@ export function settingsFor(answers, caps) {
   env.SLATEBOX_URL = answers.address.url
   // Behind an Ingress or a Gateway, HTTPS ends at the edge.
   if (k8s && answers.k8s?.route !== 'none' && answers.address.url?.startsWith('https:')) env.SLATEBOX_HTTPS = 'off'
+  // A team address: Cloudflare ends HTTPS and the container's cloudflared connects out with the
+  // tunnel token, which is a secret like any other (never in slatebox.env or a ConfigMap).
+  if (answers.address.team) {
+    require('SLATEBOX_TUNNEL_TOKEN', 'a team address (https://<name>.slatebox.team)')
+    env.SLATEBOX_HTTPS = 'off'
+    notes.push(`${answers.address.url} reaches Slatebox through an outbound Cloudflare Tunnel from the container: no DNS, no open ports, no certificates. Only 127.0.0.1 is published here.`)
+  }
   if (answers.acmeCa) { require('SLATEBOX_ACME_CA', 'a custom certificate authority'); env.SLATEBOX_ACME_CA = answers.acmeCa }
 
   if (answers.mail?.urlFrom) {
@@ -53,6 +60,7 @@ export function settingsFor(answers, caps) {
   if (known.has('SLATEBOX_KEY_ENCRYPTION_KEY')) secrets.SLATEBOX_KEY_ENCRYPTION_KEY = 'generate'
   else warnings.push('This image does not accept SLATEBOX_KEY_ENCRYPTION_KEY, so people cannot save their own AI and call keys on it. A newer image can.')
   Object.assign(secrets, ai.secrets)
+  if (answers.address.team) secrets.SLATEBOX_TUNNEL_TOKEN = 'tunnel'
   if (answers.mail?.urlFrom) secrets.SLATEBOX_MAIL_URL = answers.mail.urlFrom
 
   return { env, secrets, warnings, notes, hostGateway: ai.hostGateway }

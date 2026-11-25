@@ -93,6 +93,7 @@ export class FakeDocker {
       const container = this.containers.get(name)
       if (!container) return fail('No such container')
       if (args.includes('health')) return container.health === 'healthy' ? ok() : fail('The app is not ready (HTTP 502 from /readyz).')
+      if (args.includes('tunnel')) return this.commands.includes('tunnel') ? ok('{"configured":true,"ready":true,"connections":4}\n') : fail('Usage, from the Docker host:', 2)
       if (args.includes('backup')) {
         if (options.outputFile) writeFileSync(options.outputFile, 'BACKUP')
         return ok()
@@ -116,7 +117,7 @@ export function sandbox() {
 }
 
 /** Run the CLI in process. Returns { code, stdout, stderr, events }. */
-export async function cli(argv, { run, env = {}, home, fetch, tty = false, input = '', platform, cwd } = {}) {
+export async function cli(argv, { run, env = {}, home, fetch, tty = false, input = '', platform, cwd, io = {} } = {}) {
   const stdout = new PassThrough(), stderr = new PassThrough()
   const stdin = new PassThrough()
   stdin.isTTY = tty
@@ -130,9 +131,113 @@ export async function cli(argv, { run, env = {}, home, fetch, tty = false, input
     env: { HOME: home, PATH: process.env.PATH, ...env, SLATEBOX_INSTALL_HOME: home },
     stdin, stdout, stderr, run, platform, cwd,
     fetch: fetch || (async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) })),
+    ...io,
   })
   const events = out.split('\n').filter(Boolean).map(line => {
     try { return JSON.parse(line) } catch { return { unparsed: line } }
   })
   return { code, stdout: out, stderr: err, events }
+}
+
+// ------------------------------------------------------------------ Slatebox Cloud
+
+export const TUNNEL = 'eyJhIjoiYWNjdCIsInQiOiJ0dW5uZWwtaWQiLCJzIjoic2VjcmV0LXNlY3JldC1zZWNyZXQifQ=='
+export const ROTATED = 'eyJhIjoiYWNjdCIsInQiOiJ0dW5uZWwtaWQiLCJzIjoibmV3LXNlY3JldC1uZXctc2VjcmV0In0='
+export const CREDENTIAL = 'sbxi_ab12cd34_fake-install-credential-0123456789'
+export const ACCESS = 'sbxo_access_token_for_team_addresses_0123456789'
+export const DEVICE = 'device-code-0123456789abcdefghijklmnop'
+
+/**
+ * Slatebox Cloud's team-address API and device sign-in (spec sections 2 and 4.4), as a fetch
+ * function. Addresses answer /readyz once claimed, as if the tunnel were up. Every request is
+ * recorded; `offline` makes every Cloud request fail as if DNS did not resolve.
+ */
+export class FakeCloud {
+  constructor({ base = 'http://127.0.0.1:3999', taken = [], pendingPolls = 1, offline = false } = {}) {
+    this.base = base
+    this.taken = new Set(taken)
+    this.pendingPolls = pendingPolls
+    this.offline = offline
+    this.requests = []
+    this.claims = new Map()
+    this.credential = CREDENTIAL
+    this.token = TUNNEL
+    this.revoked = false
+    this.deny = false
+  }
+
+  cloudRequests(path) { return this.requests.filter(request => !path || request.path.startsWith(path)) }
+
+  fetch = async (url, init = {}) => {
+    const u = new URL(url)
+    const json = (status, body, headers = {}) => ({ ok: status < 300, status, headers: { get: name => headers[name.toLowerCase()] ?? null }, text: async () => JSON.stringify(body), json: async () => body })
+    if (u.origin !== this.base) {
+      // A claimed address answers through its "tunnel".
+      const claimed = [...this.claims.values()].some(claim => `https://${claim.name}.slatebox.team` === u.origin && claim.status === 'active')
+      if (claimed && u.pathname === '/readyz') return json(200, { ok: true })
+      // This computer's own published port answers, as with the default fake fetch.
+      if (u.hostname === 'localhost' && u.pathname === '/readyz') return json(200, { ok: true })
+      throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } })
+    }
+    if (this.offline) throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } })
+    const headers = Object.fromEntries(Object.entries(init.headers || {}).map(([k, v]) => [k.toLowerCase(), v]))
+    const body = init.body ? (headers['content-type']?.includes('json') ? JSON.parse(init.body) : Object.fromEntries(new URLSearchParams(init.body))) : null
+    this.requests.push({ method: init.method || 'GET', path: u.pathname + u.search, headers, body })
+    const bearer = headers.authorization?.replace(/^Bearer /, '')
+    const route = `${init.method || 'GET'} ${u.pathname}`
+    if (route === 'POST /oauth/device_authorization') {
+      return json(200, { device_code: DEVICE, user_code: 'WDJB-MJHT', verification_uri: `${this.base}/device`, verification_uri_complete: `${this.base}/device?code=WDJB-MJHT`, expires_in: 600, interval: 5 })
+    }
+    if (route === 'POST /oauth/token') {
+      if (this.deny) return json(400, { error: 'access_denied' })
+      if (this.pendingPolls-- > 0) return json(400, { error: 'authorization_pending' })
+      return json(200, { access_token: ACCESS, token_type: 'Bearer', expires_in: 900, scope: 'team-addresses' })
+    }
+    const api = u.pathname.replace(/^\/api\/v1\/team-addresses/, '')
+    if (route.startsWith('GET /api/v1/team-addresses/availability')) {
+      const name = u.searchParams.get('name')
+      const free = !this.taken.has(name) && ![...this.claims.values()].some(claim => claim.name === name && claim.status === 'active')
+      return json(200, { name, available: free, ...(free ? {} : { suggestions: [`${name}-team`, `team-${name}`] }) })
+    }
+    if (route === 'POST /api/v1/team-addresses') {
+      if (bearer !== ACCESS) return json(401, { error: { code: 'unauthorized', message: 'sign in' } })
+      if (this.taken.has(body.name)) return json(409, { error: { code: 'unavailable', message: 'unavailable' } })
+      const existing = [...this.claims.values()].find(claim => claim.idempotencyKey === headers['idempotency-key'])
+      if (existing) return json(201, { claim: this.view(existing), installCredential: null, connectorToken: this.token })
+      const claim = { id: `ta_${this.claims.size + 1}`, name: body.name, status: 'active', idempotencyKey: headers['idempotency-key'], label: body.label, clientKey: body.clientKey }
+      this.claims.set(claim.id, claim)
+      return json(201, { claim: this.view(claim), installCredential: this.credential, connectorToken: this.token, count: this.claims.size, limit: 3 })
+    }
+    const self = bearer === this.credential && !this.revoked ? [...this.claims.values()].find(claim => claim.status === 'active') : null
+    if (api.startsWith('/self')) {
+      if (!self) return json(401, { error: { code: 'unauthorized', message: 'unknown install credential' } })
+      if (route === 'GET /api/v1/team-addresses/self') return json(200, this.view(self))
+      if (route === 'POST /api/v1/team-addresses/self/connector-token') {
+        if (body?.rotate) this.token = ROTATED
+        return json(200, { connectorToken: this.token }, { 'cache-control': 'no-store' })
+      }
+      if (route === 'POST /api/v1/team-addresses/self/rename-complete') { delete self.previousName; return json(200, { ok: true }) }
+      if (route === 'DELETE /api/v1/team-addresses/self') { self.status = 'released'; return json(200, { ok: true }) }
+    }
+    const match = /^\/(ta_\d+)(\/rename|\/install-credential)?$/.exec(api)
+    if (match) {
+      if (bearer !== ACCESS) return json(401, { error: { code: 'unauthorized', message: 'sign in' } })
+      const claim = this.claims.get(match[1])
+      if (!claim) return json(404, { error: { code: 'not_found', message: 'no such claim' } })
+      if (match[2] === '/rename') {
+        if (this.taken.has(body.name)) return json(409, { error: { code: 'unavailable', message: 'unavailable' } })
+        claim.previousName = claim.name
+        claim.name = body.name
+        return json(200, { claim: this.view(claim) })
+      }
+      if (match[2] === '/install-credential') {
+        this.credential = 'sbxi_ef56gh78_fake-new-install-credential-0123456789'
+        this.revoked = false
+        return json(200, { installCredential: this.credential })
+      }
+    }
+    return json(404, { error: { code: 'not_found', message: `fake cloud does not know ${route}` } })
+  }
+
+  view(claim) { return { id: claim.id, name: claim.name, host: `${claim.name}.slatebox.team`, status: claim.status } }
 }

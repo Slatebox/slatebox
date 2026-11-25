@@ -12,13 +12,15 @@ import tarfile
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 PACKAGE = "packages/slatebox-mcp"
-# This is the entire public distribution, including its two executable sources.
+# This is the entire public distribution, including its one executable source. The `slatebox`
+# command belongs to the npm package slatebox, which imports ./commands and ./mcp from here.
 PUBLIC_FILES = {
     "package.json": 0o644,
     "LICENSE.md": 0o644,
     "README.md": 0o644,
     "src/cli.js": 0o755,
-    "src/slatebox.js": 0o755,
+    "src/commands.js": 0o644,
+    "src/mcp.js": 0o644,
     "src/server.js": 0o644,
     "src/http-server.js": 0o644,
     "src/describe.js": 0o644,
@@ -70,8 +72,8 @@ def main():
                     manifest = json.loads(data)
                     if manifest["name"] != "slatebox-mcp" or not re.fullmatch(r"\d+\.\d+\.\d+", manifest["version"]):
                         raise SystemExit("Unexpected package name or release version")
-                    if manifest["bin"] != {"slatebox": "src/slatebox.js", "slatebox-mcp": "src/cli.js"}:
-                        raise SystemExit("Expected the CLI and MCP executable paths")
+                    if manifest["bin"] != {"slatebox-mcp": "src/cli.js"}:
+                        raise SystemExit("Expected only the slatebox-mcp executable (the slatebox command is the slatebox package's)")
                 if name == "LICENSE.md" and data != git("show", f"{revision}:LICENSE.md"):
                     raise SystemExit("The packaged license differs from the app license")
                 info = tarfile.TarInfo("package/" + name)

@@ -17,7 +17,7 @@
     "node": ">=22.13"
   },
   "dependencies": {
-    "slatebox": "0.1.0"
+    "slatebox": "0.2.0"
   },
   "license": "MIT"
 }

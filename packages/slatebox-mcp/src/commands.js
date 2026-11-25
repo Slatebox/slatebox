@@ -1,5 +1,6 @@
-#!/usr/bin/env node
-// slatebox: run a script against your Slatebox, or learn the client it uses.
+// The exec and describe commands: run a script against your Slatebox, or learn the client it
+// uses. `run(argv, io)` returns the exit code, so the `slatebox` command (npm package slatebox)
+// runs them in its own process, and `slatebox-mcp exec|describe` runs them here.
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
@@ -13,7 +14,9 @@ const help = `Usage:
   slatebox exec FILE | - | -e CODE  [--intent TEXT] [--preview] [--confirm ID]
                                     [--idempotency-key KEY] [--remote] [--json] [--base-url ORIGIN]
   slatebox describe [QUERY] [--method NAME ...] [--json]
-  slatebox help
+  slatebox exec --help
+
+(slatebox-mcp exec and slatebox-mcp describe are the same commands.)
 
 exec runs a JavaScript or TypeScript script. The global \`slatebox\` is a typed client for
 what your token may do: slatebox.slates.get({ shareId }), and so on. Top-level await and
@@ -97,7 +100,7 @@ function readCode(source) {
 const shellQuote = (text) => (/^[A-Za-z0-9_./:=@%+-]+$/.test(text) ? text : `'${text.replaceAll("'", `'\\''`)}'`);
 
 /** The same command with --confirm and --idempotency-key set: what a person runs to confirm. */
-function confirmCommand(argv, id, key) {
+function confirmCommand(name, argv, id, key) {
   const kept = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -105,29 +108,28 @@ function confirmCommand(argv, id, key) {
     if (arg.startsWith("--confirm=") || arg.startsWith("--idempotency-key=")) continue;
     kept.push(arg);
   }
-  return ["slatebox", ...kept, "--confirm", id, "--idempotency-key", key].map(shellQuote).join(" ");
+  return [name, ...kept, "--confirm", id, "--idempotency-key", key].map(shellQuote).join(" ");
 }
 
-async function ask(question) {
-  const rl = createInterface({ input: process.stdin, output: process.stderr });
+async function ask(io, question) {
+  const rl = createInterface({ input: io.stdin, output: io.stderr });
   try { return (await rl.question(question)).trim().toLowerCase(); } finally { rl.close(); }
 }
 
-async function main() {
-  const argv = process.argv.slice(2);
+async function main(argv, io) {
   const args = parse(argv);
-  if (args.command === "help") { process.stdout.write(help); return 0; }
+  if (args.command === "help") { io.stdout.write(help); return 0; }
   const generated = defaultGenerated();
   if (args.command === "describe") {
     const out = await describe({ query: args.query, methods: args.methods }, { generated });
-    if (args.json) process.stdout.write(JSON.stringify(out, null, 2) + "\n");
-    else if (out.methods.some((m) => m.dts)) process.stdout.write(out.methods.map((m) => m.dts).join("\n\n") + "\n\n" + out.types + "\n");
-    else process.stdout.write(out.methods.map((m) => `${m.name.padEnd(28)} ${m.title}`).join("\n") + "\n");
+    if (args.json) io.stdout.write(JSON.stringify(out, null, 2) + "\n");
+    else if (out.methods.some((m) => m.dts)) io.stdout.write(out.methods.map((m) => m.dts).join("\n\n") + "\n\n" + out.types + "\n");
+    else io.stdout.write(out.methods.map((m) => `${m.name.padEnd(28)} ${m.title}`).join("\n") + "\n");
     return 0;
   }
-  const token = process.env.SLATEBOX_API_TOKEN;
+  const token = io.env.SLATEBOX_API_TOKEN;
   if (!token) throw new UsageError("Set SLATEBOX_API_TOKEN to a personal access token.");
-  const baseUrl = apiOrigin(args.baseUrl ?? process.env.SLATEBOX_BASE_URL ?? DEFAULT_ORIGIN);
+  const baseUrl = apiOrigin(args.baseUrl ?? io.env.SLATEBOX_BASE_URL ?? DEFAULT_ORIGIN);
   const code = readCode(args.source);
   const intent = args.intent ?? `slatebox exec ${args.source.inline !== undefined ? "-e" : args.source.file}`.slice(0, 200);
   const run = (extra = {}) => {
@@ -137,42 +139,56 @@ async function main() {
   let result = await run();
   if (result.status === "confirmation_required") {
     const { id, reasons } = result.confirmation;
-    process.stderr.write(summaryLine(result) + "\n");
+    io.stderr.write(summaryLine(result) + "\n");
     for (const reason of reasons)
-      process.stderr.write(`  call ${reason.n}: ${reason.rule}${reason.shareId ? " on " + reason.shareId : ""}${reason.count !== undefined ? ` (${reason.count})` : ""}\n`);
-    if (process.stdin.isTTY && process.stderr.isTTY && args.source.file !== "-") {
-      if ((await ask("Save anyway? [y/N] ")) === "y") result = await run({ confirm: id, idempotencyKey: result.idempotencyKey });
+      io.stderr.write(`  call ${reason.n}: ${reason.rule}${reason.shareId ? " on " + reason.shareId : ""}${reason.count !== undefined ? ` (${reason.count})` : ""}\n`);
+    if (io.stdin?.isTTY && io.stderr?.isTTY && args.source.file !== "-") {
+      if ((await ask(io, "Save anyway? [y/N] ")) === "y") result = await run({ confirm: id, idempotencyKey: result.idempotencyKey });
     } else {
-      process.stderr.write("To save, run:\n  " + confirmCommand(argv, id, result.idempotencyKey) + "\n");
-      if (args.source.file === "-") process.stderr.write("  with the same script on standard input.\n");
-      if (args.json) process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+      io.stderr.write("To save, run:\n  " + confirmCommand(io.name, argv, id, result.idempotencyKey) + "\n");
+      if (args.source.file === "-") io.stderr.write("  with the same script on standard input.\n");
+      if (args.json) io.stdout.write(JSON.stringify(result, null, 2) + "\n");
       return 6;
     }
   }
   if (args.json) {
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    io.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } else {
-    process.stderr.write(summaryLine(result) + "\n");
-    if (result.status === "completed") process.stdout.write(JSON.stringify(result.result ?? null, null, 2) + "\n");
-    else if (result.logs?.length) process.stderr.write(result.logs.join("\n") + "\n");
+    io.stderr.write(summaryLine(result) + "\n");
+    if (result.status === "completed") io.stdout.write(JSON.stringify(result.result ?? null, null, 2) + "\n");
+    else if (result.logs?.length) io.stderr.write(result.logs.join("\n") + "\n");
   }
   return { completed: 0, failed: 7, confirmation_required: 6 }[result.status] ?? 1;
 }
 
-const token = process.env.SLATEBOX_API_TOKEN;
-const redact = (text) => (token ? text.replaceAll(token, "[redacted]") : text);
-// A script or an untrusted endpoint could echo the token; it never reaches the terminal.
-for (const stream of [process.stdout, process.stderr]) {
-  const write = stream.write.bind(stream);
-  stream.write = (chunk, ...rest) => write(typeof chunk === "string" ? redact(chunk) : chunk, ...rest);
+/**
+ * Run `exec`, `describe` or `help`.
+ * @param {string[]} argv the words after the command name, e.g. ["exec", "-e", "return 1"]
+ * @param {{env?: object, stdin?: any, stdout?: any, stderr?: any, name?: string}} [io]
+ * @returns {Promise<number>} the exit code
+ */
+export async function run(argv, io = {}) {
+  const env = io.env ?? process.env;
+  const token = env.SLATEBOX_API_TOKEN;
+  const redact = (text) => (token ? text.replaceAll(token, "[redacted]") : text);
+  // A script or an untrusted endpoint could echo the token; it never reaches the terminal.
+  const guard = (stream) => ({
+    isTTY: stream.isTTY,
+    write: (chunk, ...rest) => stream.write(typeof chunk === "string" ? redact(chunk) : chunk, ...rest),
+  });
+  const name = io.name ?? "slatebox";
+  const streams = { name, env, stdin: io.stdin ?? process.stdin, stdout: guard(io.stdout ?? process.stdout), stderr: guard(io.stderr ?? process.stderr) };
+  try {
+    return await main(argv, streams);
+  } catch (error) {
+    const api = error instanceof SlateboxError;
+    const status = api ? `HTTP ${error.status} ${error.code}: ` : "";
+    streams.stderr.write(`${name}: ${status}${error.message}\n`);
+    if (api && error.details !== undefined) streams.stderr.write(JSON.stringify(error.details, null, 2) + "\n");
+    const usage = error instanceof UsageError || error instanceof ExecInputError;
+    if (usage) streams.stderr.write(`Run ${name} exec --help for usage.\n`);
+    return usage ? 2 : api ? exitFor(error.status) : 1;
+  }
 }
 
-main().then((code) => { process.exitCode = code; }, (error) => {
-  const api = error instanceof SlateboxError;
-  const status = api ? `HTTP ${error.status} ${error.code}: ` : "";
-  process.stderr.write(`slatebox: ${status}${error.message}\n`);
-  if (api && error.details !== undefined) process.stderr.write(JSON.stringify(error.details, null, 2) + "\n");
-  const usage = error instanceof UsageError || error instanceof ExecInputError;
-  if (usage) process.stderr.write("Run slatebox help for usage.\n");
-  process.exitCode = usage ? 2 : api ? exitFor(error.status) : 1;
-});
+export { help };

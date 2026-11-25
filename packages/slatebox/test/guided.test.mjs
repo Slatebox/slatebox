@@ -36,7 +36,7 @@ function pathWith(...programs) {
   return dir
 }
 
-test('plain `slatebox` is the install: an agent gets the same questions as `slatebox install`', async () => {
+test('flags with no command are the install: an agent gets the same questions as `slatebox install`', async () => {
   const { docker, home } = setup()
   const bare = await cli(['--image', IMAGE], { run: docker.run, home, env: { AI_AGENT: '1' } })
   const install = await cli(['install', '--image', IMAGE], { run: docker.run, home, env: { AI_AGENT: '1' } })
@@ -45,8 +45,12 @@ test('plain `slatebox` is the install: an agent gets the same questions as `slat
   assert.equal(docker.calls.length, 0, 'nothing was run')
 })
 
-test('help leads with npx slatebox and --dry-run', async () => {
-  assert.match(HELP, /npx slatebox {2,}/)
+// Restated (one command, 0.2.0): help leads with `npx slatebox install`; plain `npx slatebox`
+// lists the commands instead of installing (see cli.test.mjs).
+test('help leads with npx slatebox install and --dry-run', async () => {
+  assert.match(HELP, /^ {2}npx slatebox install {2,}/m)
+  assert.doesNotMatch(HELP, /^ {2}npx slatebox {2,}/m, 'bare npx slatebox is not described as the install')
+  assert.match(HELP, /--team-address <name>/)
   assert.match(HELP, /--dry-run/)
   const { docker, home } = setup()
   const result = await cli(['--help'], { run: docker.run, home })

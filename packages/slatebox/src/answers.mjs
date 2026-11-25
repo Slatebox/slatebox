@@ -5,6 +5,7 @@
 import { isAbsolute, join, normalize, resolve as resolvePath } from 'node:path'
 import { isRef, looksLikeKey } from './secrets.mjs'
 import { normalizeProvider, PROVIDER_KINDS } from './ai/settings-adapter.mjs'
+import { teamAddressProblem, teamUrl } from './cloud.mjs'
 
 export const TARGETS = ['local', 'ssh', 'k8s', 'export']
 export const SIZES = Object.freeze({
@@ -24,10 +25,10 @@ export const ANSWER_FLAGS = {
   'mail-url-from': 'string', 'mail-from': 'string', backups: 'string', 'backup-schedule': 'string', 'backup-keep': 'string',
   size: 'string', 'k8s-context': 'string', namespace: 'string', route: 'string', 'ingress-class': 'string',
   'gateway-ref': 'string', 'tls-issuer': 'string', 'storage-class': 'string', format: 'string', out: 'string',
-  image: 'string', name: 'string', 'acme-ca': 'string', settings: 'string',
+  image: 'string', name: 'string', 'acme-ca': 'string', settings: 'string', 'team-address': 'string', local: 'boolean',
 }
 // Global flags that also have an environment form.
-const GLOBAL_ENV_FLAGS = { answers: 'string', json: 'boolean', agent: 'string', 'image-archive': 'string', home: 'string', debug: 'boolean', 'health-timeout': 'string' }
+const GLOBAL_ENV_FLAGS = { answers: 'string', json: 'boolean', agent: 'string', 'image-archive': 'string', home: 'string', debug: 'boolean', 'health-timeout': 'string', 'cloud-url': 'string' }
 
 const isObject = value => value && typeof value === 'object' && !Array.isArray(value)
 
@@ -110,6 +111,12 @@ export function answersFromFlags(flags) {
   set('ssh.options', flags['ssh-option'])
   set('address.url', flags.url)
   set('address.domain', flags.domain)
+  set('address.team', flags['team-address'])
+  // One address at a time: a flag for one kind replaces what an earlier install had of the others.
+  if (flags['team-address']) { set('address.url', flags.url ?? null); set('address.domain', flags.domain ?? null) }
+  if (flags.domain || flags.url) set('address.team', flags['team-address'] ?? null)
+  // --local: this computer only, and no team address even if an earlier install had one.
+  if (flags.local) { set('address.team', null); set('address.url', null); set('address.domain', null) }
   set('address.listen', flags.listen)
   if (flags.port !== undefined) set('address.port', Number(flags.port))
   set('adminEmail', flags['admin-email'])
@@ -329,14 +336,31 @@ export function resolveAnswers(partial, ctx = {}) {
   const k8s = a.target === 'k8s' || Boolean(a.k8s)
   if (given.domain && given.url) err('address.url', 'give a domain or a URL, not both')
   let url = given.domain ? `https://${given.domain}` : given.url
-  if (k8s) {
+  // A team address: https://<name>.slatebox.team through an outbound tunnel from the container.
+  // Nothing is published beyond 127.0.0.1 and Slatebox's own HTTPS stays off.
+  const team = given.team ?? null
+  if (team !== null) {
+    const problem = teamAddressProblem(team)
+    if (problem) err('address.team', problem)
+    if (given.domain || (given.url && given.url !== teamUrl(team))) err('address.team', 'give a team address, a domain or a URL, not more than one')
+    if (a.target === 'export') err('address.team', 'a team address is claimed when Slatebox is installed; for files only use --domain, or install with --target local, ssh or k8s')
+    if (k8s && a.k8s.route !== 'none') err('address.team', 'a team address needs no route: leave --route out (traffic arrives through the tunnel)')
+    if (!problem) url = teamUrl(team)
+  }
+  if (team !== null && !k8s) {
+    const port = given.port ?? (a.target === 'local' ? (ctx.freePort ?? DEFAULT_PORT) : DEFAULT_PORT)
+    if (!Number.isInteger(port) || port < 1 || port > 65535) err('address.port', 'a port number')
+    const listen = given.listen ?? '127.0.0.1'
+    if (!['127.0.0.1', '::1'].includes(listen)) err('address.listen', 'with a team address Slatebox is published on 127.0.0.1 only (traffic arrives through the tunnel)')
+    a.address = { url: url ?? null, port, listen, team }
+  } else if (k8s) {
     if (a.k8s.route === 'none') {
       url ??= `http://localhost:${DEFAULT_PORT}`
     } else if (!url || !httpUrl(url) || httpUrl(url).protocol !== 'https:') {
       err('address.url', `a route (${a.k8s.route}) needs the host name people will use, given as --domain`)
       url = null
     }
-    a.address = { url }
+    a.address = team !== null ? { url, team } : { url }
   } else {
     let port = given.port
     if (url && httpUrl(url)?.protocol === 'https:') {

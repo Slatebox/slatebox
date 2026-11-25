@@ -21,7 +21,8 @@ import { parse, stringify, stringifyAll } from '../src/yaml.mjs'
 
 const GOLDEN = fileURLToPath(new URL('./golden/', import.meta.url))
 const IMAGE = 'ghcr.io/slatebox/slatebox@sha256:' + '0123456789abcdef'.repeat(4)
-const caps = { settings: [...LEGACY_SETTINGS], commands: [] }
+// The 0.2.0 image also accepts the team address's tunnel token.
+const caps = { settings: [...LEGACY_SETTINGS, 'SLATEBOX_TUNNEL_TOKEN'], commands: [] }
 const tool = name => (spawnSync(name, ['--help'], { stdio: 'ignore' }).error ? null : name)
 const KUBECONFORM = process.env.KUBECONFORM || tool('kubeconform')
 const HELM = tool('helm')
@@ -41,6 +42,8 @@ const K8S_PRESETS = {
     'ingress-class': 'nginx', 'tls-issuer': 'ClusterIssuer/letsencrypt', size: 'team', sso: true,
     'ai-provider': ['id=local,kind=openai-compatible,url=http://ollama.ai.svc:11434/v1,model=qwen3:8b'],
   },
+  // A team address in a cluster: no route; the pod's cloudflared connects out with the token from the Secret.
+  'k8s-tunnel': { target: 'k8s', 'admin-email': 'ops@example.com', ai: 'none', 'team-address': 'acme' },
   'k8s-gateway': {
     target: 'k8s', 'admin-email': 'ops@example.com', route: 'gateway', domain: 'boards.example.com', 'gateway-ref': 'infra/public',
     'storage-class': 'fast', backups: 'off', ai: 'none', 'mail-url-from': 'env:SMTP_URL', 'mail-from': 'Slatebox <b@example.com>',
@@ -48,6 +51,8 @@ const K8S_PRESETS = {
 }
 const COMPOSE_PRESETS = {
   'compose-local': { ai: 'none', port: '7070' },
+  // A team address: published on 127.0.0.1 only, Slatebox's own HTTPS off, the token in secrets.env.
+  'compose-tunnel': { ai: 'none', port: '7070', 'team-address': 'acme' },
   'compose-domain': { target: 'ssh', host: 'root@203.0.113.5', domain: 'boards.example.com', 'admin-email': 'ops@example.com', 'ai-provider': ['kind=deepinfra,key=env:DI'] },
 }
 

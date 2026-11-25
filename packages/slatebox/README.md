@@ -3,15 +3,47 @@
 Run your own Slatebox with one command, on the machine of your choice:
 
 ```sh
-npx slatebox
+npx slatebox install
 ```
 
-It asks a few short questions (Enter takes the default), shows a plan of
+Pick a team address and sign in; Slatebox runs at `https://<name>.slatebox.team`
+with no DNS, ports or certificates. Or choose your own domain, or this computer
+only. It asks a few short questions (Enter takes the default), shows a plan of
 everything it will write, run and create, and installs once you say yes. Then
-it prints the address and how to set the admin password. `npx slatebox
---dry-run` asks the same questions and prints the plan without changing
-anything. You need Node.js 22.13 or newer, and Docker (or Podman with its
-Docker compatibility on) on whatever runs Slatebox.
+it prints the address. `npx slatebox --dry-run` asks the same questions and
+prints the plan without changing anything. You need Node.js 22.13 or newer, and
+Docker (or Podman with its Docker compatibility on) on whatever runs Slatebox.
+Plain `npx slatebox` lists the commands.
+
+### A team address
+
+```sh
+npx slatebox install --team-address acme --yes
+```
+
+`acme.slatebox.team` is claimed for your Slatebox account when you approve a
+short code in your browser (like `gh auth login`). The container then connects
+out to Cloudflare through a secure tunnel, which carries HTTPS and live
+editing: nothing is opened on your machine or router, and the container starts
+again when the machine does. Names are 3 to 32 characters (a-z, 0-9, hyphens).
+An account holds up to 3. Your address is public; your slates are not.
+
+The install keeps one credential for the address, on this computer only:
+`~/.slatebox/installs/<name>/credentials.json` (mode 0600). It can fetch the
+tunnel token again and give the address back, and nothing else.
+
+```sh
+slatebox status                 # includes the address and the tunnel's connections
+slatebox rename acme-boards     # move to https://acme-boards.slatebox.team (sign-in)
+slatebox address rotate         # a new tunnel token; any copy of the old one stops working
+slatebox address release        # give the address back; Slatebox keeps running on this computer
+slatebox uninstall              # also gives the address back, unless --keep-address
+```
+
+A released name is held for your account for 30 days. Slatebox Cloud releases
+an address that never connected within 24 hours, and one unused for 90 days.
+To leave the team address for your own domain, run
+`npx slatebox install --domain boards.example.com`.
 
 Slatebox is one container: the app, the live collaboration relay, MongoDB and
 Keycloak for single sign-on (off until you turn it on). It is free, and single
@@ -19,8 +51,8 @@ sign-on is free.
 
 | Where | How |
 | --- | --- |
-| This computer | `npx slatebox` (the default). Picks a free port from 7070 and prints the address. |
-| A Linux server | `npx slatebox install ssh root@203.0.113.5 --domain boards.example.com`. With a domain, HTTPS certificates are obtained and renewed automatically (point DNS at the server, open ports 80 and 443); without one, `http://<server>:7070`. Docker is installed only if you add `--install-docker`. |
+| This computer | `npx slatebox install` (the default). A team address, your own domain, or `--local` for `http://localhost` on a free port from 7070. |
+| A Linux server | `npx slatebox install ssh root@203.0.113.5 --team-address acme`, or `--domain boards.example.com`. With a domain, HTTPS certificates are obtained and renewed automatically (point DNS at the server, open ports 80 and 443); without one, `http://<server>:7070`. Docker is installed only if you add `--install-docker`. |
 | Kubernetes | `npx slatebox install k8s --route ingress --domain boards.example.com --tls-issuer ClusterIssuer/letsencrypt`. Uses kubectl and your current context (a context whose name looks like production must be named with `--k8s-context`). One StatefulSet with a volume, a Service, an optional Ingress or Gateway API HTTPRoute, a Secret, and a backups sidecar. |
 | Files only | `npx slatebox install export --format compose\|manifests\|helm --out ./slatebox-deploy` for GitOps. Nothing is applied. |
 
@@ -85,12 +117,13 @@ With `--json`, stdout is one JSON event per line (`plan`, `step`, `done`,
 
 ```sh
 slatebox status                       # address, health, version, AI, SSO, last backup
+slatebox logs [-f] [--service tunnel] # the container's log, every line redacted
 slatebox upgrade                      # back up, upgrade, check health, roll back (with the backup) on failure
 slatebox backup [--to ./backups]      # a complete backup now
 slatebox restore slatebox-backup.gz
 slatebox secrets path                 # where SLATEBOX_KEY_ENCRYPTION_KEY and your keys are kept
 slatebox secrets reveal SLATEBOX_KEY_ENCRYPTION_KEY   # to a terminal only, never with --json
-slatebox uninstall                    # keeps data; --delete-data --confirm <name> removes it
+slatebox uninstall                    # keeps data; --delete-data --confirm <name> removes it (alias: remove)
 slatebox installs                     # every install this computer made (--name picks one)
 ```
 
@@ -126,14 +159,17 @@ installer never makes a new one.
   command lines (`ps` can read those); they travel on standard input or in
   0600 files.
 - Re-running with the same answers changes nothing.
-- Nothing phones home. The installer contacts the image registry, and only
-  with your consent get.docker.com; Slatebox itself contacts the certificate
-  authority when you give a domain, and the AI endpoints you configure.
+- Nothing phones home. The installer contacts the image registry, Slatebox
+  Cloud only when you ask for a team address, and only with your consent
+  get.docker.com; Slatebox itself contacts Cloudflare's tunnel when it has a
+  team address, the certificate authority when you give a domain, and the AI
+  endpoints you configure.
 
 ## Which image
 
 Each release of this package installs one public image,
-`ghcr.io/slatebox/slatebox`, by its digest (this release: `0.1.0`). It needs
+`ghcr.io/slatebox/slatebox`, by its digest (this release: `0.2.0`, which adds
+the team-address tunnel). It needs
 no registry login. To install a local build instead, give `--image <name>`
 (or `--image-archive slatebox.tar` for a server).
 
@@ -148,5 +184,8 @@ address answers.
 
 ## Slates
 
-`slatebox exec` and `slatebox describe` (scripts against a Slatebox) come from
-the slatebox-mcp package; this command fetches it the first time you use one.
+`slatebox exec`, `slatebox describe` and `slatebox mcp` (scripts and agents
+against any Slatebox) come from the slatebox-mcp package, which this package
+installs with it. If you installed slatebox-mcp 0.3 globally, which also named
+a `slatebox` command, replace it with:
+`npm rm -g slatebox-mcp && npm i -g slatebox slatebox-mcp`.

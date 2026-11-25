@@ -50,3 +50,10 @@ condition = "AND"
 paths = ['''(^|/)packages/slatebox/test/.+\.test\.mjs$''']
 regexTarget = "secret"
 regexes = ['''0123456789''', '''^id_ed25519\.pub$''']
+
+[[allowlists]]
+description = "Installer test fixtures: the stand-in for Slatebox Cloud (packages/slatebox/test/fakes.mjs) holds made-up team-address install credentials built from the digits 0123456789 ('sbxi_ab12cd34_fake-install-credential-0123456789'). They check the credential is stored 0600 and never printed; no Slatebox Cloud ever issued them."
+condition = "AND"
+paths = ['''(^|/)packages/slatebox/test/fakes\.mjs$''']
+regexTarget = "secret"
+regexes = ['''^sbxi_[a-z0-9]{8}_fake-[a-z-]+-0123456789$''']

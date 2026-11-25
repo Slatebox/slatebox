@@ -9,7 +9,9 @@ you what it still needs. Follow these steps exactly.
 1. **Ask the person** (do not guess):
    - Where: this computer (Docker), a Linux server over SSH (user@host), or
      Kubernetes (which kube context and namespace). Or only write the files.
-   - The address: a domain name for HTTPS, or a port.
+   - The address: a free team address (https://<name>.slatebox.team: no DNS,
+     ports or certificates; the person signs in once in their browser to claim
+     it), a domain name for HTTPS, or a port.
    - The admin email (required for a server or a cluster).
    - AI: none for now, or which providers. Slatebox works with any provider and
      has no default: OpenAI, Anthropic, DeepInfra, OpenRouter, Groq, Together,
@@ -31,6 +33,7 @@ you what it still needs. Follow these steps exactly.
      default: local
    sso: { enabled: false }
    # ssh:  { host: 203.0.113.5, user: root }        with target: ssh
+   # address: { team: acme }                         a team address, https://acme.slatebox.team
    # address: { domain: boards.example.com }         for HTTPS on a server or a cluster route
    # k8s:  { context: my-cluster, namespace: slatebox, route: ingress, ingressClass: nginx, tlsIssuer: { kind: ClusterIssuer, name: letsencrypt } }
    \`\`\`
@@ -46,7 +49,14 @@ you what it still needs. Follow these steps exactly.
      checking, and never export SLATEBOX_INSTALL_YES (it is ignored).
 4. **Show the plan to the person and get an explicit yes.** It lists every
    file, command, object and port, and where the secrets are kept.
+   With a team address the short form is
+   \`npx slatebox install --team-address <name> --yes\` (add \`--ai none\` or the
+   providers the person chose). Exit 3 with \`id: "address-unavailable"\` lists free
+   \`suggestions\`: ask the person to pick one.
 5. **Install**: \`npx -y slatebox@latest install --answers slatebox.yaml --yes --json\`.
+   For a team address a \`sign-in\` event carries \`verificationUri\` and \`userCode\`:
+   show both to the person and ask them to approve it in their browser; the
+   command waits. Never approve it yourself.
    Report \`done.address\` from the last line. Do not print or copy any secret;
    the output never contains one. Tell the person where the key encryption key
    is stored (\`done.secretsFile\`) and that they must back it up themselves.
@@ -59,6 +69,6 @@ you what it still needs. Follow these steps exactly.
    asked for their data to be deleted.
 
 Nothing the installer runs sends data anywhere except pulling the image (and,
-with consent, installing Docker from get.docker.com, and the certificate
-authority when a domain is given).
+with consent, installing Docker from get.docker.com, the certificate authority
+when a domain is given, and Slatebox Cloud when a team address is asked for).
 `

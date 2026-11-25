@@ -1,7 +1,7 @@
 {
   "name": "slatebox",
-  "version": "0.1.0",
-  "description": "Install your own Slatebox with one command: npx slatebox. Runs on the machine of your choice (Docker on this computer, a server over SSH, Kubernetes, or files only), asks a few questions, shows a plan, and starts the one-container Slatebox.",
+  "version": "0.2.0",
+  "description": "Run your own Slatebox with one command: npx slatebox install. Gives it a free team address (https://<name>.slatebox.team) with no DNS, ports or certificates, or uses your own domain; installs on Docker here, a server over SSH, Kubernetes, or writes the files. Also runs agent scripts against any Slatebox (slatebox exec).",
   "keywords": [
     "slatebox",
     "self-host",
@@ -39,5 +39,8 @@
   },
   "engines": {
     "node": ">=22.13"
+  },
+  "dependencies": {
+    "slatebox-mcp": "0.4.0"
   }
 }

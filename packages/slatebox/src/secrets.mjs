@@ -10,7 +10,7 @@ export function generateKek() {
   return randomBytes(32).toString('base64')
 }
 
-export const REF = /^(env:[A-Za-z_][A-Za-z0-9_]*|file:.+|prompt|none|stored)$/
+export const REF = /^(env:[A-Za-z_][A-Za-z0-9_]*|file:.+|prompt|none|stored|tunnel)$/
 
 // Prefixes that API keys and tokens start with (and AWS access key IDs).
 const KEY_PREFIX = /^(gsk_|ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|glpat|hf_|r8_|xox[abprs]|sk_|rk_|pk_live|pk_test|nvapi|AKIA[0-9A-Z]{12}|ASIA[0-9A-Z]{12})/
@@ -39,7 +39,7 @@ export function isRef(value) {
  */
 export async function resolveRef(ref, { env = process.env, ask } = {}) {
   if (!isRef(ref)) throw new InstallError(2, 'A key must be given as a reference (env:NAME, file:/path or prompt), never as its value.')
-  if (ref === 'none' || ref === 'stored') return undefined
+  if (ref === 'none' || ref === 'stored' || ref === 'tunnel') return undefined
   if (ref === 'prompt') return ask ? ask() : undefined
   if (ref.startsWith('env:')) {
     const value = env[ref.slice(4)]
@@ -88,6 +88,9 @@ export function parseEnvFile(text) {
 // ------------------------------------------------------------ redaction
 
 const MIN_SECRET = 6
+// Shapes that are secrets whatever their value: a team-address install credential, and a
+// Cloudflare tunnel connector token (base64 of {"a":…,"t":…,"s":…}).
+export const SECRET_SHAPES = [/sbxi_[A-Za-z0-9]+_[A-Za-z0-9_-]+/g, /eyJhIjoi[A-Za-z0-9+/_-]{16,}={0,2}/g]
 
 /** Every secret the installer has seen is replaced by *** in anything it prints or logs. */
 export class Redactor {
@@ -110,6 +113,7 @@ export class Redactor {
 
   redact(text) {
     let out = String(text)
+    for (const shape of SECRET_SHAPES) out = out.replace(shape, '***')
     // Longest first, so a value that contains another is removed whole.
     for (const value of [...this.values].sort((a, b) => b.length - a.length)) {
       if (out.includes(value)) out = out.split(value).join('***')

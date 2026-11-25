@@ -10,8 +10,10 @@ import { EXIT, InstallError } from './errors.mjs'
  * build instead (self-host/build-image.sh).
  */
 export const DEFAULT_REPOSITORY = 'ghcr.io/slatebox/slatebox'
-export const PINNED_TAG = '0.1.0'
-export const PINNED_DIGEST = 'sha256:94f761bd8153ca9b9d9ef1ecd4af9faddf318427f7495c3af8492bb2a1d22d4f'
+// 0.2.0 adds the team-address tunnel (cloudflared). Until it is published the pin is the tag;
+// `npm publish` refuses to run until PINNED_DIGEST holds the published index digest.
+export const PINNED_TAG = '0.2.0'
+export const PINNED_DIGEST = null
 export const DEFAULT_IMAGE = PINNED_DIGEST ? `${DEFAULT_REPOSITORY}@${PINNED_DIGEST}` : `${DEFAULT_REPOSITORY}:${PINNED_TAG}`
 
 /** Does this reference name a registry (so a digest reference can be pulled elsewhere)? */
