@@ -1,13 +1,11 @@
 import React, { useState } from 'react'
 import PropTypes from 'prop-types'
-import { useAtomValue } from 'jotai'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import ButtonBase from '@mui/material/ButtonBase'
 import Typography from '@mui/material/Typography'
 import { STYLE_CHIPS } from '../presentations/presentationStyles.mjs'
 import { takeOffStyle, wearStyle, wornStyle } from '../presentations/presentationBake.mjs'
-import { currentSlate } from '../../jotai/atoms'
 
 /**
  * Draw a styled (or unstyled) slate as one step of this person's own undo: the engine replaces the
@@ -27,10 +25,10 @@ export async function replaceSlateAsOwnStep(slate, doc, action) {
  * click and the slate wears a style (its background, its notes' outlines, fills, fonts and colors,
  * its lines and the style's decoration, all real and editable on the canvas); Undo takes it back.
  * A presentation's title cards and captions come from Present's style picker, which wears the same
- * style with the deck's words. The Custom colors below set the background by hand.
+ * style with the deck's words. The Custom colors below set the background by hand. `slate` is the
+ * live engine the drawer holds (the shared slate atom keeps only a JSON copy, which cannot wear anything).
  */
-export default function SlateStyle({ children = null }) {
-  const slate = useAtomValue(currentSlate)
+export default function SlateStyle({ slate = null, children = null }) {
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState('')
   let worn = null
@@ -93,5 +91,6 @@ export default function SlateStyle({ children = null }) {
 }
 
 SlateStyle.propTypes = {
+  slate: PropTypes.shape({ exportJSON: PropTypes.func }),
   children: PropTypes.node,
 }

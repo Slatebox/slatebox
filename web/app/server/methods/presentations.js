@@ -452,6 +452,9 @@ async function loadPresentation({ slate, selectVersion }) {
     // Its look: the art direction and style the presenter composes it in.
     direction: existingPresentation.direction ?? null,
     style: existingPresentation.style ?? null,
+    // A worn style's deck (version 5): the camera over the slate's own notes and art. Without it
+    // Present would compose the direction again over the styled slate, art and all.
+    deck: existingPresentation.deck ?? null,
   }
 }
 

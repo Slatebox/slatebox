@@ -130,7 +130,7 @@ export default function SlateDrawer({
         </AccordionSummary>
         <AccordionDetails sx={{ margin: (theme) => theme.spacing(1) }}>
         {/* The slate's style (it replaces the old themes), with custom colors and backgrounds under it. */}
-        <SlateStyle>
+        <SlateStyle slate={slate}>
           <SlateColors slate={slate} onChange={updateSlate} />
           {Meteor.settings.public.pixabayAPIKey && <SlateBackgrounds slate={slate} onChange={updateSlate} />}
         </SlateStyle>

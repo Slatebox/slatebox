@@ -194,3 +194,21 @@ test('every face a style draws in is served by the app itself (no font host), un
   for (const dir of ['anton', 'space-grotesk', 'fraunces', 'inter', 'ibm-plex-mono', 'abril-fatface', 'pt-sans']) assert.match(read(`public/fonts/${dir}/OFL.txt`), /SIL Open Font License|OFL/, dir)
   assert.doesNotMatch(css, /googleapis|gstatic/)
 })
+
+test('the owner of a copy plays the worn deck: the kept deck Present loads carries its version 5 steps', () => {
+  // Found in the browser (Make it yours, then Present): without the deck, PresentSlate's styledDeck composed the
+  // direction again over the styled slate, art and all, and framed the whole slate on every step.
+  const source = read('server/methods/presentations.js')
+  const load = source.slice(source.indexOf('async function loadPresentation'), source.indexOf('method[CONSTANTS.methods.presentations.load]'))
+  assert.match(load, /deck: existingPresentation\.deck \?\? null/)
+  assert.match(read('imports/ui/components/PresentSlate.jsx'), /if \(isBakedDeck\(saved\?\.deck\)\) return \{ viewpoints: saved\.deck\.steps/)
+})
+
+test('the Slate style panel wears the style on the live engine, not on the JSON copy the currentSlate atom keeps', () => {
+  // Found in the browser: the atom holds exportJSON's plain object, so every chip failed with
+  // "slate.exportJSON is not a function" and nothing was worn.
+  const panel = read('imports/ui/components/slate/SlateStyle.jsx')
+  assert.doesNotMatch(panel, /currentSlate/)
+  assert.match(panel, /export default function SlateStyle\(\{ slate = null/)
+  assert.match(read('imports/ui/components/SlateDrawer.jsx'), /<SlateStyle slate=\{slate\}>/)
+})
