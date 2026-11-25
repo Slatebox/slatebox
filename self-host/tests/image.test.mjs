@@ -77,8 +77,13 @@ test('license notices say which parts are MIT and which are not', async () => {
     assert.match(ofl, /Copyright/, `${family}/OFL.txt names the copyright`)
     assert.match(ofl, /SIL OPEN FONT LICENSE Version 1\.1/i, `${family}/OFL.txt is the OFL 1.1`)
   }
-  const heads = (await inside('cd /opt/slatebox/licenses && head -c 200 slatebox-app-LICENSE.md slateboxjs-LICENSE.txt third-party/mongodb-server-SSPL.txt')).stdout
-  assert.match(heads, /MIT License[\s\S]*MIT License[\s\S]*Server Side Public License/)
+  // The app's license is the repository's LICENSE.md as committed: the enterprise/ carve-out first,
+  // then the MIT License for everything else (so its MIT heading is past the first 200 bytes).
+  const appLicense = (await inside('cat /opt/slatebox/licenses/slatebox-app-LICENSE.md')).stdout
+  assert.equal(appLicense, readFileSync(join(here, '../../LICENSE.md'), 'utf8'), 'the image carries the app\'s LICENSE.md unchanged')
+  assert.match(appLicense, /"enterprise\/" directory[\s\S]*Slatebox Enterprise License[\s\S]*\nMIT License\n/)
+  const heads = (await inside('cd /opt/slatebox/licenses && head -c 200 slateboxjs-LICENSE.txt third-party/mongodb-server-SSPL.txt')).stdout
+  assert.match(heads, /MIT License[\s\S]*Server Side Public License/)
 })
 
 // The app serves its own interface and note fonts at /fonts/ (web/app/public/fonts, linked from

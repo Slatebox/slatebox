@@ -119,15 +119,18 @@ test('a session of edits, chat, a workshop and account mail leaves no content or
       // The slate's conversation, typed where a person types it. First a flow,
       // which the app draws by itself; then a workshop, which the AI drafts.
       const ask = async text => {
-        const message = ada.page.getByLabel('Message Slatebox')
+        // The text box, not the form around it (both carry the name "Message Slatebox").
+        const message = ada.page.getByRole('textbox', { name: 'Message Slatebox' })
         // The conversation stays open once a person has opened it.
         if (!await message.isVisible()) await ada.page.getByRole('button', { name: 'Ask Slatebox' }).click()
         await message.fill(text)
         await message.press('Enter')
-        // Keeping reloads the slate.
+        // Keeping draws the kept change on this page (no reload); the slate is then opened afresh,
+        // so what follows reads what the server saved.
         const keep = ada.page.getByRole('button', { name: 'Keep changes' })
         await keep.waitFor({ timeout: 60_000 })
-        await Promise.all([ada.page.waitForEvent('load', { timeout: 60_000 }), keep.click()])
+        await keep.click()
+        await keep.waitFor({ state: 'detached', timeout: 60_000 })
         await openSlate(ada.page, slateUrl)
       }
       await ask(content.chat)

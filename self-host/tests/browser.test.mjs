@@ -80,7 +80,7 @@ test('a page view sends nothing to any other address, and the interface fonts co
     await visitor.page.waitForLoadState('networkidle', { timeout: 60_000 }).catch(() => {})
     const elsewhere = visitor.requests.filter(url => !url.startsWith(box.url + '/') && !url.startsWith('data:') && !url.startsWith('blob:'))
     assert.deepEqual([...new Set(elsewhere.map(url => new URL(url).origin))], [], 'requests to other addresses')
-    assert.ok(visitor.requests.some(url => url === `${box.url}/_fonts/fonts.css`), 'the font stylesheet is requested from the instance')
+    assert.ok(visitor.requests.some(url => url === `${box.url}/fonts/fonts.css`), 'the font stylesheet is requested from the instance')
     // The browser has the interface font itself, not a fallback.
     const loaded = await visitor.page.evaluate(async () => {
       await document.fonts.ready
@@ -108,17 +108,17 @@ test('the instance offers no plans, quotas or cloud links it cannot provide', as
       const shown = await member.page.locator('body').innerText()
       for (const hosted of [/Upgrade/i, /AI slates\/mo/i, /Free -/i]) assert.doesNotMatch(shown, hosted, `on ${member.page.url()}`)
     }
-    // The profile menu, in the home page's header.
-    await member.page.locator('#userLoginProfile').click()
-    const menu = await member.page.locator('#profile-menu [role=menuitem]').allInnerTexts()
-    assert.ok(menu.some(item => /Logout/.test(item)), `the profile menu opened: ${menu.join(', ')}`)
-    for (const item of menu) assert.doesNotMatch(item, /Upgrade|Billing|Plans and pricing|Support/, 'a hosted-service menu item')
+    // The account menu, in the home page's header (components/AccountMenu.jsx).
+    await member.page.getByRole('button', { name: /^Account, / }).first().click()
+    const menu = await member.page.getByRole('menu').getByRole('menuitem').allInnerTexts()
+    assert.ok(menu.some(item => /Sign out/.test(item)), `the account menu opened: ${menu.join(', ')}`)
+    for (const item of menu) assert.doesNotMatch(item, /Upgrade|Billing|Plans and pricing|Support|Credits/, 'a hosted-service menu item')
     await member.page.keyboard.press('Escape')
     await openSlate(member.page, slateUrl)
-    // AI drafting has no monthly allowance to run out of.
-    const usage = await call(member.page, 'users.getAIUsage')
-    assert.equal(usage.thresholdMet, false)
-    assert.equal(usage.monthly, null)
+    // AI drafting has no monthly allowance to run out of: the hosted service's allowance method
+    // (users.getAIUsage) is not part of this app at all, so asking for it is an unknown method.
+    const usage = await member.page.evaluate(() => window.Meteor.callAsync('users.getAIUsage').then(result => ({ result }), error => ({ error: error.error, reason: error.reason })))
+    assert.deepEqual(usage, { error: 404, reason: "Method 'users.getAIUsage' not found" })
 
 
     // Board settings: images download, but no cloud link and no Pixabay search without their keys.

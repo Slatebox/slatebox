@@ -124,7 +124,7 @@ test('without an AI key, drafting says who can turn it on', async () => {
     await registered(guest.page, box.url, 'ada@example.test')
     assert.deepEqual(await call(guest.page, 'workshops.account'), { result: { canGenerate: false } })
     assert.deepEqual(await call(guest.page, 'workshops.draft', 'Decide which launch tasks we do this week', 'lanes'), {
-      error: 'plan-required', reason: 'Ask your administrator to enable workshop generation for this instance.',
+      error: 'ai-unavailable', reason: 'Ask your administrator to enable workshop generation for this instance.',
     })
   } finally {
     await guest.close()
@@ -206,10 +206,13 @@ test('SLATEBOX_AI_KEY alone turns drafting on with the default provider', async 
 })
 
 test('without a Daily key, a call says that calls are unavailable; SLATEBOX_SETTINGS supplies the key', async () => {
-  const join = async address => {
+  // Only a signed-in person who may edit starts a call (a guest is told to sign in), so the
+  // provider is reached by the slate's owner once the account is saved.
+  const join = async (address, { signIn = false } = {}) => {
     const guest = await person()
     try {
       const shareId = new URL(await createSlate(guest.page, address)).pathname.split('/')[2]
+      if (signIn) assert.ok(!(await call(guest.page, 'users.identify', { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.test', password: 'first password 42' })).error, 'the account is saved')
       return await call(guest.page, 'daily.join', { shareId })
     } finally {
       await guest.close()
@@ -237,7 +240,7 @@ test('without a Daily key, a call says that calls are unavailable; SLATEBOX_SETT
   assert.equal(runtime.PUBLIC_SETTINGS.baseUrl, on.url)
   assert.equal(runtime.PUBLIC_SETTINGS.wsUrl, on.url.replace(/^http/, 'ws') + '/live')
   assert.equal(runtime.PUBLIC_SETTINGS.env, 'selfhost')
-  assert.deepEqual(await join(on.url), { error: 'huddle-unavailable', reason: 'The call could not be opened. Please try again.' })
+  assert.deepEqual(await join(on.url, { signIn: true }), { error: 'huddle-unavailable', reason: 'The call could not be opened. Please try again.' })
   assert.ok(!(await logs(on.id)).includes('test-daily-key'), 'the key is not logged')
 })
 
