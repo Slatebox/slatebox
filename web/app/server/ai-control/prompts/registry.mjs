@@ -1,11 +1,9 @@
 // The prompt registry: every model-facing text Slatebox's own AI paths send, as a template with
 // declared variables (render.mjs), kept in code as version 0 (spec 1.6: "Version 0 is the code").
 // A call site asks for its text by id (promptText); the text comes from, highest first:
-//   1. a version a published server binding pins for the prompt's slot (`shape.system@3`),
-//   2. the prompt's published version in the database (aiPrompts labels.published),
-//   3. version 0, the code text below.
-// With the DB layer switched off (settings ai.control.dbLayer 'off', or at runtime) only version 0
-// is used: index.mjs gives no source, or a snapshot with no documents.
+//   1. the prompt's published version in the database (aiPrompts labels.published),
+//   2. version 0, the code text below.
+// Without a source (tests, or before index.mjs set one) only version 0 is used.
 //
 // A published version that does not render (a value of the wrong type, a required one missing)
 // is never shown to anyone: the code text is rendered instead and the fallback is reported (spec

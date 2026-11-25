@@ -1,13 +1,10 @@
 import {
-  DEEPINFRA_CHAT_ENDPOINT,
-  DEFAULT_DEEPINFRA_MODEL,
   flattenDeepInfraContent,
   getDeepInfraToolArguments,
   normalizeDeepInfraMessages,
   toDeepInfraToolChoice,
   toDeepInfraTools,
 } from './deepinfra.mjs'
-import { aiProviders } from '../../config/index.cjs'
 
 export const AI_PROVIDERS = Object.freeze({
   anthropic: 'anthropic',
@@ -15,25 +12,8 @@ export const AI_PROVIDERS = Object.freeze({
   openai: 'openai',
 })
 
-// The built-in providers' addresses and default models are data (server/config/ai-providers.json).
-const PROVIDER_ENDPOINTS = Object.freeze({
-  [AI_PROVIDERS.anthropic]: aiProviders.anthropic.endpoint,
-  [AI_PROVIDERS.deepinfra]: DEEPINFRA_CHAT_ENDPOINT,
-  [AI_PROVIDERS.openai]: aiProviders.openai.endpoint,
-})
-
-export function resolveAIProvider({ provider, engine } = {}) {
-  if (provider) {
-    if (Object.values(AI_PROVIDERS).includes(provider)) return provider
-    throw new Error(`Unsupported AI provider: ${provider}`)
-  }
-  // Engine-name inference ("contains claude -> anthropic") is retired: it
-  // silently routed every legacy seed still naming claude models to the
-  // dead Anthropic key. Provider must be explicit now; unnamed defaults land
-  // on the keyless openai branch and fail loudly at the key check.
-  return AI_PROVIDERS.openai
-}
-
+// The wire shapes a request's body and answer take. Which provider and model answer, and with
+// which key, comes from Admin → AI control (ai-settings-core.mjs resolveFor), never from here.
 export function isRetryableProviderFailure(status, message = '') {
   // Transient serving-side failures worth retrying against the SAME provider
   // before falling back to another model (DeepInfra cold-start/template flakes,
@@ -45,18 +25,6 @@ export function isRetryableProviderFailure(status, message = '') {
 }
 
 /**
- * Fallback eligibility policy (ladder-cost control, iter56):
- * Re-issuing the FULL prompt against the fallback model recovers transient
- * infra failures (timeout/provider_error) but mostly re-burns calls when the
- * primary already failed SHAPE validation twice — telemetry showed whole
- * 3-attempt fallback chains duplicating the same dead ladder. Shape-exhausted
- * aborts carry fallbackBlocked and degrade to the caller's no-tool path.
- */
-export function shouldFallbackToModel(primaryResponse) {
-  return Boolean(primaryResponse?.abort) && primaryResponse?.fallbackBlocked !== true
-}
-
-/**
  * Which features keep the fallback model after SHAPE exhaustion (iter59,
  * live-audit evidence): generation/vision fallbacks demonstrably recovered
  * content (audit shares 383b6a/feaf46/f50c74/d8a1dd). Welcome-layer shapes
@@ -64,9 +32,8 @@ export function shouldFallbackToModel(primaryResponse) {
  * Oct 22–Nov 5 window — every FB chain on those duplicated a dead ladder.
  * Default for unknown features is BLOCK (cost-safe).
  */
-// As data (AI control spec 2.1): the failure classes a built-in fallback model is tried for, the
-// code default `on` list of a binding's fallback entry. infra = 5xx, 429, timeout; shape = answers
-// that never took the shape the feature needs. An administrator's binding may set its own.
+// The failure classes after which another model may still help: infra = 5xx, 429, timeout; shape =
+// answers that never took the shape the feature needs.
 export const CODE_FALLBACK_ON = Object.freeze({
   generation: Object.freeze(['infra', 'shape']),
   vision: Object.freeze(['infra', 'shape']),
@@ -77,35 +44,6 @@ export function codeFallbackOn(feature) {
 }
 export function keepsFallbackAfterShapeExhaustion(feature) {
   return codeFallbackOn(feature).includes('shape')
-}
-
-export function resolveAIModel({
-  provider,
-  engine,
-  settings = {},
-  env = {},
-} = {}) {
-  if (provider === AI_PROVIDERS.deepinfra) {
-    return (
-      engine ||
-      settings.deepinfra?.model ||
-      env.DEEPINFRA_MODEL ||
-      DEFAULT_DEEPINFRA_MODEL
-    )
-  }
-  return engine || settings.openai?.model || aiProviders.openai.model
-}
-
-export function getProviderApiKey({ provider, settings = {}, env = {} } = {}) {
-  if (provider === AI_PROVIDERS.anthropic) return settings.anthropic?.apiKey
-  if (provider === AI_PROVIDERS.deepinfra) {
-    return settings.deepinfra?.apiKey || env.API_KEY_DEEP_INFRA
-  }
-  return settings.openai?.apiKey
-}
-
-export function getProviderEndpoint(provider) {
-  return PROVIDER_ENDPOINTS[provider] || PROVIDER_ENDPOINTS.openai
 }
 
 export function resolveAIRequestTimeout({ requested, settings = {} } = {}) {
@@ -142,27 +80,6 @@ export function buildProviderTelemetry({
     invalidPayloadLength,
     fallbackFromProvider,
     fallbackReason: fallbackReason?.slice?.(0, 500),
-  }
-}
-
-export function buildProviderHeaders({ provider, apiKey } = {}) {
-  const headers = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  }
-
-  if (provider === AI_PROVIDERS.anthropic) {
-    return {
-      ...headers,
-      'x-api-key': `${apiKey}`,
-      'anthropic-version': '2023-06-01',
-      'anthropic-beta': 'output-128k-2025-02-19',
-    }
-  }
-
-  return {
-    ...headers,
-    Authorization: `Bearer ${apiKey}`,
   }
 }
 
@@ -203,9 +120,9 @@ export function buildProviderBody({
     body.user = userId
   }
 
-  // a chosen connection's own output cap
+  // a connection's own output cap
   if (maxTokens) body.max_tokens = maxTokens
-  // an administrator's binding (AI control) may set the sampling temperature
+  // a call site's sampling temperature
   if (Number.isFinite(temperature)) body.temperature = temperature
 
   if (functions?.length) {

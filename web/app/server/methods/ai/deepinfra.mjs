@@ -1,9 +1,5 @@
-// DeepInfra's address and default model are data (server/config/ai-providers.json).
-import { aiProviders } from '../../config/index.cjs'
-
-export const DEEPINFRA_CHAT_ENDPOINT = aiProviders.deepinfra.endpoint
-
-export const DEFAULT_DEEPINFRA_MODEL = aiProviders.deepinfra.model
+// The OpenAI-compatible message and tool shapes DeepInfra (and every OpenAI-compatible endpoint)
+// takes. Which address, model and key a request uses comes from Admin → AI control.
 
 export function flattenDeepInfraContent(content) {
   if (content == null) return ''

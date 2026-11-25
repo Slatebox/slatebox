@@ -1,13 +1,13 @@
 // What an administrator does with AI control beyond reading the snapshot: read the audit trail,
-// see how each surface was used over the last day (from aiAudit, one row per model call), and
-// reset (spec 2.4: return the server's choices to the settings file and built-in defaults, or
-// switch the DB layer off at runtime). Pure apart from the injected collections and services;
-// index.mjs gives it the Meteor ones, the tests give it in-memory ones.
+// see how each part was used over the last day (from aiAudit, one row per model call), reset (every
+// part back to the default, prompts back to their built-in text) and turn AI off for everyone.
+// Pure apart from the injected collections and services; index.mjs gives it the Meteor ones, the
+// tests give it in-memory ones.
 import { surfaceForRequest } from './catalogue.mjs'
 import { STATE_ID } from './store.mjs'
 import { ModelError } from './models.mjs'
 
-export const RESET_TARGETS = Object.freeze(['use', 'binding', 'bindings', 'prompt', 'prompts', 'dbLayer', 'all'])
+export const RESET_TARGETS = Object.freeze(['binding', 'bindings', 'prompt', 'prompts', 'all'])
 export const GLOBAL_MESSAGE_MAX = 300
 export const AUDIT_PAGE = 50
 export const AUDIT_PAGE_MAX = 200
@@ -23,7 +23,6 @@ const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  *   store         store.mjs createControlStore (write, record, refused, state)
  *   audit         the aiControlAudit collection (find → cursor with sort/limit/toArray)
  *   aiAudit?      the aiAudit collection (aggregate → cursor with toArray)
- *   aiSettings?   ai-settings-core.mjs (resetServerUse)
  *   costOf?({ model, usage }) → { costMicros } (metering/prices.mjs aiCostMicros)
  *   bindings?     bindings.mjs createBindingOps (heads, remove) for the binding targets
  *   namesOf?(userIds) → { [userId]: name } the people's names, for the Changes tab (an account
@@ -31,7 +30,7 @@ const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  *   now?()        → ms
  * }
  */
-export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null, costOf = () => ({ costMicros: 0 }), bindings = null, prompts = null, namesOf = null, now = Date.now }) {
+export function createAdminOps({ store, audit, aiAudit = null, costOf = () => ({ costMicros: 0 }), bindings = null, prompts = null, namesOf = null, now = Date.now }) {
   // Each row's actor with the person's name (actor.name): an account that is gone reads "a deleted
   // account", and a row with no account (the server's own) keeps no name. Only administrators read
   // the list, so the names never reach anyone else.
@@ -111,70 +110,47 @@ export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null
 
   /**
    * ai.control.reset. target:
-   *   use      clears what an administrator chose in the app for the server's features (keys:
-   *            only those), so the settings file and built-in AI answer again;
-   *   binding  removes the published server binding of one surface (surface): it follows what it
-   *            follows again, then the settings file and built-in AI; its versions stay;
-   *   bindings removes every published server binding;
-   *   prompt   returns one prompt (promptId) to its built-in text, and drops a server binding's pin
-   *            of a version of it; prompts does so for every prompt (versions stay);
-   *   dbLayer  switches the DB layer off at runtime (aiControlState.dbLayer 'off'): every AI
-   *            control document is ignored until it is switched on again;
+   *   binding  removes one part's binding (surface): it uses the default again;
+   *   bindings removes every part's binding, the default's too (then the built-in default, Meta
+   *            Muse Ember, answers everything not turned off by the switch for everyone);
+   *   prompt   returns one prompt (promptId) to its built-in text; prompts does so for every prompt
+   *            (their versions stay);
    *   all      every one of the above.
-   * A reason is required. → { target, cleared: [keys], removed: [binding ids], prompts: [ids],
-   *   unpinned?: [binding ids] (prompt, prompts, all), dbLayer: 'on' | 'off' }
+   * A reason is required. → { target, removed: [surfaces], prompts: [ids] }
    */
-  async function reset({ userId, actor, target, keys = null, surface = null, promptId = null, reason }) {
+  async function reset({ actor, target, surface = null, promptId = null, reason }) {
     if (!RESET_TARGETS.includes(target)) throw new Error(`target is ${RESET_TARGETS.join(', ')}`)
-    let cleared = []
     const removed = []
-    if (target === 'use' || target === 'all') {
-      if (!aiSettings) throw new Error('ai-control admin: needs aiSettings to reset choices')
-      ;({ cleared } = await aiSettings.resetServerUse(userId, { keys, reason, actor }))
-    }
     if (target === 'binding' || target === 'bindings' || target === 'all') {
       if (!bindings) throw new Error('ai-control admin: needs the binding store to reset bindings')
-      const surfaces = target === 'binding' ? [surface] : (await bindings.heads()).map((doc) => doc.surface)
+      const surfaces = target === 'binding' ? [surface] : bindings.heads().map((doc) => doc.surface)
       for (const id of surfaces) {
         const out = await bindings.remove({ actor, surface: id, reason })
-        if (out.removed) removed.push(out.bindingId)
+        if (out.removed) removed.push(out.surface)
       }
     }
-    // prompts back to their built-in text (version 0); their versions stay
-    // and a server binding's pin of one of them goes too, or it would keep sending the pinned version
     let promptsReset = []
-    let unpinned = null
     if (target === 'prompt' || target === 'prompts' || target === 'all') {
       if (!prompts) throw new Error('ai-control admin: needs the prompt store to reset prompts')
       ;({ reset: promptsReset } = await prompts.reset({ actor, id: target === 'prompt' ? promptId : null, reason }))
-      unpinned = target === 'all' || !bindings?.unpinPrompts ? [] : await bindings.unpinPrompts({ actor, ids: target === 'prompt' ? [promptId] : null, reason })
     }
-    let { dbLayer } = await store.state()
-    if (target === 'dbLayer' || target === 'all') {
-      const state = await store.state()
-      const { _id: _ignored, updatedAt: _at, updatedBy: _by, ...rest } = state
-      await store.write({ kind: 'state', id: STATE_ID, doc: { aiEnabled: true, ...rest, dbLayer: 'off' }, action: 'ai.control.reset', actor, reason, target: { kind: 'state', id: 'dbLayer' } })
-      dbLayer = 'off'
-    }
-    return { target, cleared, removed, prompts: promptsReset, ...(unpinned && { unpinned }), dbLayer: dbLayer === 'off' ? 'off' : 'on' }
+    return { target, removed, prompts: promptsReset }
   }
 
   /**
    * ai.control.setGlobal: AI on or off for everyone on this server, with the message people see
-   * while it is off, and AI control's own documents on or off at runtime (dbLayer). Admin pages and
-   * actions never depend on it. → the global state { aiEnabled, aiDisabledMessage, dbLayer, generation }
+   * while it is off. Admin pages and actions never depend on it. → { aiEnabled, aiDisabledMessage, generation }
    */
-  async function setGlobal({ actor, aiEnabled, message, dbLayer, reason }) {
+  async function setGlobal({ actor, aiEnabled, message, reason }) {
     const state = await store.state()
-    const { _id: _ignored, updatedAt: _at, updatedBy: _by, ...rest } = state
-    const next = { aiEnabled: true, dbLayer: 'on', ...rest }
+    const { _id: _ignored, updatedAt: _at, updatedBy: _by, dbLayer: _layer, ...rest } = state
+    const next = { aiEnabled: true, ...rest }
     if (aiEnabled !== undefined) next.aiEnabled = aiEnabled
     if (message !== undefined) next.aiDisabledMessage = message === null ? null : String(message).trim() || null
-    if (dbLayer !== undefined) next.dbLayer = dbLayer
     if (next.aiEnabled === false && !next.aiDisabledMessage) throw new ModelError('Write the message people see while AI is off.')
     if (next.aiDisabledMessage && (next.aiDisabledMessage.length > GLOBAL_MESSAGE_MAX || /[\r\n]/.test(next.aiDisabledMessage))) throw new ModelError(`The message is one line of at most ${GLOBAL_MESSAGE_MAX} characters.`)
     const result = await store.write({ kind: 'state', id: STATE_ID, doc: next, action: 'ai.control.setGlobal', actor, reason, target: { kind: 'state', id: 'global' } })
-    return { aiEnabled: next.aiEnabled !== false, aiDisabledMessage: next.aiDisabledMessage ?? null, dbLayer: next.dbLayer === 'off' ? 'off' : 'on', generation: result.generation }
+    return { aiEnabled: next.aiEnabled !== false, aiDisabledMessage: next.aiDisabledMessage ?? null, generation: result.generation }
   }
 
   return { listAudit, usage, reset, setGlobal }
@@ -183,10 +159,10 @@ export function createAdminOps({ store, audit, aiAudit = null, aiSettings = null
 // ---------- what a signed-in page may know (ai.surfaces.status) ----------
 
 /**
- * For one person, whether each AI surface in this build and AI as a whole is on, and the message
- * to show when not: no models, prompts or connections. Public (every signed-in page reads it) so
- * the app can hide or explain a control an administrator turned off.
- * bind(surface) → a resolveBinding result (only enabled and disabledMessage are read).
+ * Whether each AI surface in this build and AI as a whole is on, and the message to show when not:
+ * no models, prompts or keys. Public (every signed-in page reads it) so the app can hide or explain
+ * a control an administrator turned off.
+ * bind(surface) → a resolveModel result (only enabled and disabledMessage are read).
  * → { aiEnabled, message, surfaces: { [id]: { enabled, message } } }
  */
 export async function surfacesStatus({ surfaces, snapshot, bind }) {
@@ -207,7 +183,7 @@ export async function surfacesStatus({ surfaces, snapshot, bind }) {
 
 /**
  * One shared ai.surfaces.status for every subscriber (the status is the same for everyone: it reads
- * only the global switch and the server bindings). One timer runs while anyone subscribes; the
+ * only the global switch and the bindings). One timer runs while anyone subscribes; the
  * status is computed once per generation, not once per subscriber.
  * deps: { compute() → status, generation() → number, every(fn, ms) → handle, cancel(handle), pollMs }
  * → { subscribe(onChange) → Promise<{ current, stop() }>, size() }

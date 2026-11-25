@@ -5,8 +5,8 @@
 const isPlain = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)
 const isRedacted = (value) => isPlain(value) && value.redacted === true
 
-// Flattens a document to { 'path': value }. A list of named things (connections) is keyed by
-// name, so a change to one connection reads as that connection's change.
+// Flattens a document to { 'path': value }. A list of named things (a person's connections) is
+// keyed by name, so a change to one connection reads as that connection's change.
 export function flatten(value, prefix = '', out = {}) {
   if (isRedacted(value) || (!isPlain(value) && !Array.isArray(value))) {
     if (prefix) out[prefix] = value
@@ -81,20 +81,26 @@ export function auditCsv(rows) {
 }
 
 const ACTIONS = {
-  'ai.update': 'Changed AI settings',
+  'ai.update': 'Changed own AI settings',
   'ai.check': 'Tested a connection',
   'ai.control.reset': 'Reset AI control',
   'ai.control.setGlobal': 'Switched AI for everyone',
-  'ai.providers.save': 'Saved a provider',
+  'ai.providers.add': 'Added a provider',
+  'ai.providers.save': 'Changed a provider',
   'ai.providers.archive': 'Archived a provider',
-  'ai.connections.save': 'Saved server connections',
-  'ai.connections.remove': 'Removed server connections',
+  'ai.keys.add': 'Added a key',
+  'ai.keys.import': 'Moved a key from the settings file',
+  'ai.keys.activate': 'Switched to a key',
+  'ai.keys.rotate': 'Replaced a key',
+  'ai.keys.revoke': 'Revoked a key',
+  'ai.keys.remove': 'Deleted a key',
+  'ai.keys.test': 'Tested a key',
   'ai.models.save': 'Saved models',
-  'ai.bindings.saveDraft': 'Saved a binding draft',
-  'ai.bindings.publish': 'Published a binding',
-  'ai.bindings.rollback': 'Rolled back a binding',
-  'ai.bindings.sync': 'Published a binding from AI settings',
-  'ai.bindings.migrate': 'Moved an AI settings choice to a binding',
+  'ai.models.remove': 'Removed a model',
+  'ai.models.test': 'Tested a model',
+  'ai.bindings.set': 'Changed which model a part uses',
+  'ai.bindings.remove': 'Returned a part to the default',
+  'ai.bindings.history': 'Kept the history of earlier bindings',
   'ai.prompts.saveDraft': 'Saved a prompt draft',
   'ai.prompts.test': 'Test-ran a prompt',
   'ai.prompts.publish': 'Published a prompt',
@@ -104,17 +110,19 @@ const ACTIONS = {
 }
 
 /**
- * What one audit row did, in words. A publish writes two rows (the version, then the live binding):
- * the version row reads "version N saved", the other "version N live", so they no longer look alike.
+ * What one audit row did, in words: a binding's row says what the part uses now ("Meta (Muse) ·
+ * muse-ember-1.0", "Use the default", "Turned off"); a key's row says which key, never the key.
  */
 export function actionText(row = {}) {
   const base = ACTIONS[row.action] || row.action || 'A change'
-  if (String(row.action || '').startsWith('ai.prompts.') && row.outcome !== 'refused') return promptText(base, row)
-  if (!String(row.action || '').startsWith('ai.bindings.') || row.outcome === 'refused') return base
-  if (!row.after) return `${base}: removed`
-  const doc = row.after
-  if (doc.bindingId) return `${base}: version ${doc.version} saved${doc.status === 'draft' ? ' as a draft' : ''}`
-  return `${base}: version ${doc.version} live`
+  if (row.outcome === 'refused') return base
+  if (String(row.action || '').startsWith('ai.prompts.')) return promptText(base, row)
+  if (row.action === 'ai.bindings.set' || row.action === 'ai.bindings.remove') {
+    if (!row.after) return `${base}: use the default`
+    return `${base}: ${row.after.use === 'off' ? 'turned off' : row.after.model}`
+  }
+  if (String(row.action || '').startsWith('ai.keys.') && row.after?.keyFingerprint) return `${base}: ${row.after.keyFingerprint}${row.after.status ? ` (${row.after.status})` : ''}`
+  return base
 }
 
 // A prompt's rows: a version saved, a test run, or the label moved (version 0 is the built-in text).
@@ -131,8 +139,8 @@ function promptText(base, row) {
 }
 
 // What a reset target, a state row and the other kinds of change are, in words.
-const RESETS = { use: 'the server\'s AI choices', binding: 'one binding', bindings: 'every binding', prompt: 'one prompt', prompts: 'every prompt', dbLayer: 'AI control\'s own settings', all: 'everything in AI control' }
-const STATES = { global: 'AI for everyone', dbLayer: 'AI control\'s own settings' }
+const RESETS = { binding: 'one part back to the default', bindings: 'every part back to the default', prompt: 'one prompt', prompts: 'every prompt', all: 'everything in AI control' }
+const STATES = { global: 'AI for everyone' }
 const list = (id) => String(id || '').split(',').filter(Boolean).join(', ')
 
 /**
@@ -149,11 +157,11 @@ export function targetText(target = {}, titles = {}) {
   if (kind === 'state') return STATES[id] || 'AI control'
   if (kind === 'reset') return `Reset: ${RESETS[id] || id}`
   if (kind === 'aiSettings') {
-    if (id === 'server') return 'The server\'s AI settings'
+    if (id === 'server') return 'Own AI for everyone'
     return String(id).startsWith('team:') ? 'A team\'s AI settings' : 'A person\'s own AI settings'
   }
   if (kind === 'providers') return `Provider ${id}`
-  if (kind === 'connection' || kind === 'connections') return `Server connection${String(id).includes(',') ? 's' : ''} ${list(id)}`
+  if (kind === 'key') return `Key of ${id}`
   if (kind === 'models') return `Model list: ${list(id)}`
   if (kind === 'intention') return 'A persona'
   if (kind === 'prompt' || kind === 'prompts' || kind === 'promptVersions') return `Prompt ${String(id || '').split('@')[0]}`

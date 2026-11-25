@@ -21,7 +21,7 @@ import TableRow from '@mui/material/TableRow'
 import Tabs from '@mui/material/Tabs'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { ReasonDialog } from './BindingEditor'
+import { ReasonDialog } from './ReasonDialog'
 import PromptDiff from './PromptDiff'
 import PromptTest from './PromptTest'
 import { KIND_LABELS, liveText, sourceText, statusText, undeclaredNames } from './prompts-view.mjs'
@@ -156,9 +156,6 @@ function PublishDialog({ prompt, row, rollback = false, onClose, onDone }) {
     <Dialog open onClose={onClose} maxWidth="lg" fullWidth aria-labelledby="prompt-publish-title">
       <DialogTitle id="prompt-publish-title">{rollback ? `Serve version ${row.version} of ${prompt.title} again` : `Publish version ${row.version} of ${prompt.title}`}</DialogTitle>
       <DialogContent>
-        {prompt.pinned && prompt.pinned.version !== row.version && (
-          <Alert severity="warning" sx={{ mb: 2 }}>The {prompt.pinned.binding.split('|')[0]} binding pins version {prompt.pinned.version} of this prompt, so that version is sent until the binding's prompt is set to "Always use the published version".</Alert>
-        )}
         <Typography variant="body2" mb={1}>What changes against the text served now ({sourceText(prompt.live).toLowerCase()}):</Typography>
         <PromptDiff before={prompt.live.body} after={row.body} beforeLabel={`Now: ${sourceText(prompt.live)}`} afterLabel={`Version ${row.version}`} suggestion={suggestion} />
         <Typography variant="body2" mt={2}>{rollback ? 'Serving it again' : 'Publishing'} first runs the lint, then {prompt.evalCases.length} checks with this part's samples on its binding's model (charged to you).</Typography>
@@ -358,7 +355,7 @@ export default function PromptEditor({ id, titles, onClose, onChanged }) {
         open={rolling !== null}
         title={`Return ${prompt.title} to the built-in text`}
         action="Return to the built-in text"
-        body={<Typography variant="body2">Every server uses the text Slatebox ships with within seconds{prompt.pinned ? `, except where the ${prompt.pinned.binding.split('|')[0]} binding pins version ${prompt.pinned.version}` : ''}. Saved versions stay.</Typography>}
+        body={<Typography variant="body2">Every server uses the text Slatebox ships with within seconds. Saved versions stay.</Typography>}
         onClose={() => setRolling(null)}
         onConfirm={async (reason) => {
           const out = await Meteor.callAsync('ai.prompts.rollback', { id, toVersion: 0, reason })

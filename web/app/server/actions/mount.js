@@ -39,7 +39,7 @@ import { mountMermaidFiles } from './mermaid-file.mjs'
 import { createMeteorExec, ensureExecCollections } from '../exec/meteor'
 import { gatedRegistry } from '../exec/system.mjs'
 import { aiSettings } from '../methods/ai/ai-settings'
-import { aiBindings, aiCatalog, aiControl, aiControlOps, aiControlStore, aiControlWriteLimit, aiPrompts, isAIControlAdmin } from '../ai-control/index.mjs'
+import { aiBindings, aiCatalog, aiControl, aiControlOps, aiControlStore, aiControlWriteLimit, aiKeys, aiPrompts, isAIControlAdmin } from '../ai-control/index.mjs'
 import { presence } from '../presence/meteor'
 import { mountTeamExport, teamTransfer } from '../team-export/meteor'
 import { shapeService } from '../shapes/meteor'
@@ -136,6 +136,8 @@ export const deps = {
     aiControlStore,
     // ai.providers.*, ai.models.* (ai-control/models.mjs); AI control writes per administrator
     aiCatalog,
+    // ai.keys.*: the providers' keys, kept in the backend (ai-control/keys.mjs)
+    aiKeys,
     aiControlWriteLimit,
     // ai.bindings.* (ai-control/bindings.mjs)
     aiBindings,

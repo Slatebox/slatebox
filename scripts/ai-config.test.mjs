@@ -1,143 +1,23 @@
-// AI models and providers are configuration, not code (owner, 2026-11-22): an operator connects
-// any provider in the settings file with its key in the environment (apiKeyEnv), says per
-// connection how it takes a forced tool call (toolChoice), and prices a new model in settings
-// (metering.prices). The built-in feature defaults live in a JSON file shipped with the app.
+// AI models, providers and keys are configuration in the backend, not code and not the settings
+// file (owner, 2026-11-24): an administrator adds providers, models with their prices and keys in
+// Admin → AI control. What stays in code is the wire: how each provider takes a forced tool call
+// (toolChoice), and the price table an administrator's price overrides. The settings file keeps
+// only operator switches and prices (metering.prices).
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
-import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { normalizeConnection, operatorConfig, CONNECTION_TYPES, publicConnection, resolveAIChoice, choiceFeatureFor, USE_FALLBACK, USE_KEYS } from '../web/app/server/methods/ai/connections.mjs'
-import { createAISettings } from '../web/app/server/methods/ai/ai-settings-core.mjs'
+import { normalizeConnection, CONNECTION_TYPES } from '../web/app/server/methods/ai/connections.mjs'
 import { connectionRequest } from '../web/app/server/methods/ai/connection-request.mjs'
 import { localWorkshopRequest } from '../web/app/server/methods/ai/workshop-provider.mjs'
-import { loadMasterKey } from '../web/app/server/metering/vault.mjs'
-import { DEFAULT_AI_FEATURES, resolveAIFeatureConfig, resolveSurfaceFeatureConfig } from '../web/app/server/methods/ai/feature-config.mjs'
-import { SURFACES } from '../web/app/server/ai-control/catalogue.mjs'
 import { AI_PRICES, aiPrice, aiCostMicros, activePrices, configurePrices, mergePrices } from '../web/app/server/metering/prices.mjs'
+import { aiControlWorld } from './ai-control-kit.mjs'
 
 const app = new URL('../web/app/', import.meta.url)
-const META = { type: 'openai-compatible', baseUrl: 'https://api.meta.ai/v1', model: 'muse-ember-1.0', apiKeyEnv: 'META_API_KEY', toolChoice: 'auto' }
-const GEMINI = { type: 'openai-compatible', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-3.8-flash', apiKeyEnv: 'GEMINI_API_KEY', toolChoice: 'required' }
+const META = { type: 'openai-compatible', baseUrl: 'https://api.meta.ai/v1', model: 'muse-ember-1.0', toolChoice: 'auto' }
 const SECRET = 'meta-secret-value-0123456789'
 
-function memoryStore() {
-  const keys = [], uses = new Map()
-  const match = (owner) => (doc) => doc.ownerType === owner.type && doc.ownerId === owner.id
-  return {
-    keys, uses,
-    async listConnections(owner) { return keys.filter(match(owner)).map((doc) => ({ ...doc })) },
-    async saveConnection(owner, doc) { keys.push({ ...doc, ownerType: owner.type, ownerId: owner.id }) },
-    async removeConnection() {},
-    async getUse(owner) { return uses.get(`${owner.type}:${owner.id}`) || null },
-    async setUse(owner, value) { uses.set(`${owner.type}:${owner.id}`, value) },
-  }
-}
-
-function service({ settings, env = {}, checkWith } = {}) {
-  const checked = []
-  const people = { ana: { _id: 'ana', orgId: 'team1' }, root: { _id: 'root' } }
-  const ai = createAISettings({
-    store: memoryStore(), settings, hosted: false, env,
-    master: loadMasterKey({ SLATEBOX_KEY_ENCRYPTION_KEY: randomBytes(32).toString('base64') }),
-    loadUser: async (id) => people[id] || null,
-    isAdmin: async (id) => id === 'root',
-    isTeamAdmin: async (user) => user._id === 'ana',
-    check: checkWith || (async (connection, rules) => { checked.push({ connection, rules }); return { ok: true, reachable: true, models: [], modelListed: null, tools: 'yes', message: 'ok' } }),
-  })
-  return { ai, checked }
-}
-
-const selfhost = (ai) => ({ public: { env: 'selfhost' }, ai })
-
-// ---------- 1. keys from the environment ----------
-
-test('a settings-file connection may name the environment variable that holds its key', () => {
-  const config = operatorConfig(selfhost({ connections: { 'meta-muse': META, gemini: GEMINI }, use: { presentation: 'meta-muse' } }))
-  const meta = config.connections.find((c) => c.name === 'meta-muse')
-  assert.equal(meta.apiKeyEnv, 'META_API_KEY')
-  assert.equal(meta.apiKey, undefined, 'the key is read at request time, never at start')
-  assert.equal(config.use.presentation, 'server:meta-muse')
-  // a preset that needs a key takes it from the environment too
-  const deepinfra = operatorConfig(selfhost({ connections: { di: { type: 'deepinfra', apiKeyEnv: 'API_KEY_DEEP_INFRA' } } })).connections[0]
-  assert.equal(deepinfra.apiKeyEnv, 'API_KEY_DEEP_INFRA')
-})
-
-test('apiKeyEnv is the operator\'s alone, a plain variable name, and never beside a key', () => {
-  for (const level of ['person', 'team', 'server']) {
-    assert.throws(() => normalizeConnection({ name: 'x', ...META }, { hosted: false, level }), { name: 'ConnectionError', message: /settings file/ }, level)
-  }
-  for (const bad of ['meta_api_key', '1META', 'A', 'META-KEY', 'META KEY', 'X'.repeat(65), 42, '']) {
-    assert.throws(() => normalizeConnection({ name: 'x', ...META, apiKeyEnv: bad }, { hosted: false, level: 'file' }), { name: 'ConnectionError' }, String(bad))
-  }
-  assert.throws(() => normalizeConnection({ name: 'x', ...META, apiKey: 'k' }, { hosted: false, level: 'file' }), { name: 'ConnectionError', message: /apiKey or apiKeyEnv/ })
-  assert.throws(() => operatorConfig(selfhost({ connections: { m: { ...META, apiKeyEnv: 'lower' } } })), /settings ai\.connections\.m/)
-})
-
-test('the key is read from the environment for each request, and only for the operator\'s connection', async () => {
-  const env = { META_API_KEY: SECRET }
-  const { ai } = service({ settings: selfhost({ connections: { 'meta-muse': META }, use: { presentation: 'meta-muse' } }), env })
-  const resolved = await ai.resolveFor({ userId: 'ana', feature: 'presentation' })
-  assert.equal(resolved.ref, 'server:meta-muse')
-  assert.equal(resolved.connection.apiKey, SECRET)
-  assert.equal(resolved.error, undefined)
-  const request = connectionRequest(resolved.connection)
-  assert.equal(request.apiKey, SECRET)
-  assert.equal(request.toolChoice, 'auto')
-  // a rotated key is used by the next request without a restart
-  env.META_API_KEY = 'rotated-key-0123456789'
-  assert.equal((await ai.resolveFor({ userId: 'ana', feature: 'presentation' })).connection.apiKey, 'rotated-key-0123456789')
-  // a feature the operator did not route there never sees the key
-  assert.equal((await ai.resolveFor({ userId: 'ana', feature: 'generation' })).connection, null)
-})
-
-test('a missing or empty variable is a clear configuration error that names the variable, never a value', async () => {
-  for (const env of [{}, { META_API_KEY: '' }, { META_API_KEY: '   ' }]) {
-    const { ai } = service({ settings: selfhost({ connections: { 'meta-muse': META }, use: { presentation: 'meta-muse' } }), env: { ...env, OTHER: SECRET } })
-    const resolved = await ai.resolveFor({ userId: 'ana', feature: 'presentation' })
-    assert.match(resolved.error, /META_API_KEY/)
-    assert.match(resolved.error, /not set/)
-    assert.equal(resolved.connection.apiKey, undefined)
-    assert.doesNotMatch(JSON.stringify(resolved), new RegExp(SECRET))
-  }
-  // req.js turns a resolved error into a configuration_error abort and never sends the request
-  const req = readFileSync(new URL('server/methods/ai/req.js', app), 'utf8')
-  assert.match(req, /if \(chosen\?\.gap \|\| chosen\?\.error[\s\S]{0,800}'configuration_error'[\s\S]{0,200}abort: true/)
-})
-
-test('the key and its variable never reach a person, an administrator, a publication or telemetry', async () => {
-  const env = { META_API_KEY: SECRET }
-  const { ai } = service({ settings: selfhost({ connections: { 'meta-muse': META }, use: { default: 'meta-muse' } }), env })
-  for (const who of ['ana', 'root']) {
-    const view = JSON.stringify(await ai.view(who))
-    assert.doesNotMatch(view, new RegExp(SECRET), who)
-    assert.doesNotMatch(view, /META_API_KEY|apiKeyEnv/, who)
-  }
-  const shown = publicConnection({ ...operatorConfig(selfhost({ connections: { m: META } })).connections[0], apiKey: SECRET })
-  assert.doesNotMatch(JSON.stringify(shown), new RegExp(`${SECRET}|apiKeyEnv|META_API_KEY`))
-  // an administrator cannot save one from the app, and the action schema does not take it
-  await assert.rejects(ai.update('root', { level: 'server', connections: [{ name: 'sneak', ...META }] }), { code: 'invalid_request' })
-  const { connectionInput } = await import('../web/app/server/actions/ai-schemas.mjs')
-  assert.equal(connectionInput.properties.apiKeyEnv, undefined)
-  assert.equal(connectionInput.additionalProperties, false)
-  // telemetry records the type and model of a chosen connection, never its key or variable
-  const req = readFileSync(new URL('server/methods/ai/req.js', app), 'utf8')
-  assert.doesNotMatch(req, /apiKeyEnv/)
-})
-
-test('Test connection on the operator\'s connection uses the key from the environment, at its own address only', async () => {
-  const env = { META_API_KEY: SECRET }
-  const { ai, checked } = service({ settings: selfhost({ connections: { 'meta-muse': META } }), env })
-  await ai.check('root', { level: 'server', name: 'meta-muse' })
-  assert.equal(checked.at(-1).connection.apiKey, SECRET)
-  await ai.check('root', { level: 'server', connection: { name: 'meta-muse', type: 'openai-compatible', baseUrl: 'https://attacker.example/v1', model: 'm' } })
-  assert.equal(checked.at(-1).connection.apiKey, undefined)
-  // with the variable unset the check is refused with the variable named
-  const unset = service({ settings: selfhost({ connections: { 'meta-muse': META } }), env: {} })
-  await assert.rejects(unset.ai.check('root', { level: 'server', name: 'meta-muse' }), (error) => error.code === 'invalid_request' && /META_API_KEY/.test(error.message))
-})
-
-// ---------- 2. how a connection takes a forced tool call ----------
+// ---------- 1. tool choice per provider ----------
 
 const tool = { name: 'plan_presentation', description: 'Plan it', parameters: { type: 'object', properties: {} } }
 const forced = { system: 'Plan.', prompts: [{ role: 'user', content: 'go' }], functions: [tool], functionCall: { name: tool.name } }
@@ -145,17 +25,18 @@ const free = { ...forced, functionCall: undefined }
 
 test('toolChoice is auto, named or required; the default stays as it was', () => {
   for (const toolChoice of ['auto', 'named', 'required']) {
-    assert.equal(normalizeConnection({ name: 'x', ...META, apiKeyEnv: undefined, toolChoice }, { hosted: false, level: 'server' }).toolChoice, toolChoice)
+    assert.equal(normalizeConnection({ name: 'x', ...META, apiKey: 'k', toolChoice }, { hosted: false, level: 'person' }).toolChoice, toolChoice)
   }
-  assert.throws(() => normalizeConnection({ name: 'x', ...META, apiKeyEnv: undefined, toolChoice: 'any' }, { hosted: false, level: 'server' }), /auto, named or required/)
+  assert.throws(() => normalizeConnection({ name: 'x', ...META, apiKey: 'k', toolChoice: 'any' }, { hosted: false, level: 'person' }), /auto, named or required/)
   const base = { name: 'x', type: 'openai-compatible', baseUrl: 'https://h.example/v1', model: 'm', capabilities: {} }
   assert.equal(connectionRequest(base).toolChoice, 'auto')
   assert.equal(connectionRequest({ ...base, toolChoice: 'required' }).toolChoice, 'required')
   assert.equal(connectionRequest({ ...base, toolChoice: 'named' }).toolChoice, 'named')
   assert.equal(connectionRequest({ ...base, type: 'openai', baseUrl: CONNECTION_TYPES.openai.baseUrl }).toolChoice, 'named')
-  // no provider is named in code: the translation is keyed on the setting alone
-  assert.deepEqual(Object.keys(CONNECTION_TYPES).sort(), ['anthropic', 'deepinfra', 'openai', 'openai-compatible'])
-  for (const path of ['server/methods/ai/connection-request.mjs', 'server/methods/ai/workshop-provider.mjs', 'server/methods/ai/sdk-chat.cjs', 'server/methods/ai/connections.mjs']) {
+  // the named presets carry their own tool choice; the translation is keyed on the setting alone
+  assert.equal(connectionRequest({ ...base, type: 'meta', baseUrl: CONNECTION_TYPES.meta.baseUrl }).toolChoice, 'auto')
+  assert.equal(connectionRequest({ ...base, type: 'deepinfra', baseUrl: CONNECTION_TYPES.deepinfra.baseUrl }).toolChoice, 'named')
+  for (const path of ['server/methods/ai/connection-request.mjs', 'server/methods/ai/workshop-provider.mjs', 'server/methods/ai/sdk-chat.cjs', 'server/methods/ai/connections.mjs', 'server/methods/ai/req.js', 'server/methods/ai/provider.mjs']) {
     assert.doesNotMatch(readFileSync(new URL(path, app), 'utf8'), /gemini|meta\.ai|muse-/i, path)
   }
 })
@@ -210,107 +91,33 @@ test('through the AI SDK, each setting reaches the wire; an auto-only endpoint (
   assert.equal(open.seen.at(-1).body.tool_choice, 'auto')
 })
 
-// ---------- 3. built-in defaults as data ----------
+// ---------- 2. which model a plan is priced at ----------
 
-test('the built-in feature defaults are a JSON file shipped with the app', () => {
-  const file = JSON.parse(readFileSync(new URL('server/config/ai-defaults.json', app), 'utf8'))
-  const strip = (value) => (value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).filter(([k]) => !k.startsWith('_')).map(([k, v]) => [k, strip(v)])) : value)
-  assert.deepEqual(JSON.parse(JSON.stringify(DEFAULT_AI_FEATURES)), strip(file))
-  assert.ok(Object.isFrozen(DEFAULT_AI_FEATURES) && Object.isFrozen(DEFAULT_AI_FEATURES.presentation.fallback))
-  assert.match(file.presentation._comment, /59 s/)
-  assert.match(file.presentation._comment, /429/)
-  assert.match(file.presentation._comment, /3\.8.{1,4}5\.8 s/)
-  assert.match(file.presentation._comment, /2026-11-22/)
-  // the code keeps no model names of its own
-  assert.doesNotMatch(readFileSync(new URL('server/methods/ai/feature-config.mjs', app), 'utf8'), /Qwen|DeepSeek|gemini|engine: '/)
-})
-
-test('presentation plans on DeepInfra gemini-3.5-flash with gemini-3.7-flash behind it; every other feature is unchanged', () => {
-  assert.deepEqual(resolveAIFeatureConfig('presentation'), {
-    provider: 'deepinfra', engine: 'google/gemini-3.5-flash', fallback: { provider: 'deepinfra', engine: 'google/gemini-3.7-flash' }, feature: 'presentation',
-  })
-  for (const feature of ['layout', 'vision', 'welcome', 'generation']) {
-    assert.deepEqual(resolveAIFeatureConfig(feature), {
-      provider: 'deepinfra', engine: 'Qwen/Qwen3-235B-A22B-Instruct-2507', fallback: { provider: 'deepinfra', engine: 'deepseek-ai/DeepSeek-V3.1-Terminus' }, feature,
-    }, feature)
-  }
-  assert.equal(resolveAIFeatureConfig('presentation', { ai: { features: { presentation: { engine: 'x/y' } } } }).engine, 'x/y')
-})
-
-test('every catalogue surface with a model has a built-in one: board, canvas, agent, library and connectors take the drafting model', () => {
-  const drafting = resolveAIFeatureConfig('generation', {})
-  for (const id of ['workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors']) {
-    const config = resolveSurfaceFeatureConfig(id, {})
-    assert.equal(config.provider, drafting.provider, id)
-    assert.equal(config.engine, drafting.engine, id)
-  }
-  // connectors once fell through to a feature block that does not exist (no provider, no model)
-  assert.equal(resolveAIFeatureConfig('connectors', {}).engine, undefined)
-  assert.equal(resolveSurfaceFeatureConfig('chat.route', {}).engine, resolveAIFeatureConfig('welcome', {}).engine)
-  // the operator's settings.ai.features block still overrides the surface's built-in model
-  const settings = { ai: { features: { generation: { provider: 'deepinfra', engine: 'operator/model' } } } }
-  assert.equal(resolveSurfaceFeatureConfig('agent.slatebox', settings).engine, 'operator/model')
-  for (const s of SURFACES) {
-    if (!s.builtinFrom || s.builtinFrom === 'stability') continue
-    assert.ok(resolveSurfaceFeatureConfig(s.id, {}).engine, s.id)
-  }
-  assert.throws(() => resolveSurfaceFeatureConfig('images.search', {}), /no built-in model/)
-})
-
-test('settings.ai.features still overrides; another provider does not inherit a default fallback of a different provider', () => {
-  const same = resolveAIFeatureConfig('layout', { ai: { features: { layout: { provider: 'deepinfra', engine: 'candidate' } } } })
-  assert.deepEqual(same.fallback, { provider: 'deepinfra', engine: 'deepseek-ai/DeepSeek-V3.1-Terminus' })
-  const other = resolveAIFeatureConfig('presentation', { ai: { features: { presentation: { provider: 'openai', engine: 'gpt-4o-mini' } } } })
-  assert.equal(other.fallback, undefined)
-  assert.equal(other.provider, 'openai')
-  const named = resolveAIFeatureConfig('presentation', { ai: { features: { presentation: { provider: 'openai', engine: 'a', fallback: { provider: 'openai', engine: 'b' } } } } })
-  assert.deepEqual(named.fallback, { provider: 'openai', engine: 'b' })
-  // a resolved config never carries a comment from the file
-  assert.equal('_comment' in resolveAIFeatureConfig('presentation'), false)
-})
-
-test('a presentation plan is estimated at the model of the connection ai.use picks, the built-in defaults only without one', async () => {
+test('a presentation plan is estimated at the model its route names: the part\'s model in Admin → AI control', async () => {
   const { planEstimateMicros, planModels } = await import('../web/app/server/methods/presentationRequest.mjs')
-  const feature = resolveAIFeatureConfig('presentation')
   const chars = 10_000
-  // production: presentations go to the operator's Meta connection
-  const { ai } = service({ settings: selfhost({ connections: { 'meta-muse': META }, use: { presentation: 'meta-muse' } }), env: { META_API_KEY: SECRET } })
-  const chosen = await ai.resolveFor({ userId: 'ana', feature: 'presentation', request: { tools: true } })
-  assert.equal(chosen.ref, 'server:meta-muse')
-  assert.deepEqual(planModels({ feature, chosen }), ['muse-ember-1.0'])
-  const viaMeta = planEstimateMicros(chars, planModels({ feature, chosen }).map(aiPrice))
-  assert.equal(viaMeta, planEstimateMicros(chars, [aiPrice('muse-ember-1.0')]))
+  const w = await aiControlWorld()
+  await w.catalog.addProvider({ actor: w.actor, input: { preset: 'meta' }, models: ['muse-ember-1.0'] })
+  await w.keyStore.add({ actor: w.actor, provider: 'meta', apiKey: SECRET })
+  const chosen = await w.aiSettings.resolveFor({ userId: 'ana', feature: 'presentation', request: { tools: true } })
+  assert.equal(chosen.ref, 'server:meta')
+  assert.deepEqual(planModels({ chosen }), ['muse-ember-1.0'])
+  const viaMeta = planEstimateMicros(chars, planModels({ chosen }).map((m) => aiPrice(m)))
   assert.equal(viaMeta, 7001, 'a 10k-character plan on muse-ember-1.0 ($0.30 / $1.50): 3,334 tokens in, a full plan out')
-  // the built-in AI (no ai.use for presentations) is priced at the defaults and their fallback
-  const builtIn = await service({ settings: selfhost({ connections: { 'meta-muse': META }, use: { generation: 'meta-muse' } }), env: { META_API_KEY: SECRET } }).ai.resolveFor({ userId: 'ana', feature: 'presentation', request: { tools: true } })
-  assert.equal(builtIn.connection, null)
-  assert.deepEqual(planModels({ feature, chosen: builtIn }), ['google/gemini-3.5-flash', 'google/gemini-3.7-flash'])
-  assert.deepEqual(planModels({ feature, chosen: null }), ['google/gemini-3.5-flash', 'google/gemini-3.7-flash'])
-  assert.equal(planEstimateMicros(chars, planModels({ feature, chosen: null }).map(aiPrice)), 41001, 'the built-in default, gemini-3.5-flash ($1.50 / $9.00)')
-  // a DeepInfra key without a model of its own follows the feature's model, as req.js sends it
-  assert.deepEqual(planModels({ feature, chosen: { connection: { type: 'deepinfra', apiKey: 'k' } } }), ['google/gemini-3.5-flash', 'google/gemini-3.7-flash'])
-  // presentations.analyze prices its plan this way: the resolved connection, then the defaults
+  // a route that cannot be used (no key) names no model: priced at the dearest rate, never as cheap
+  assert.deepEqual(planModels({ chosen: { connection: null, error: 'no key' } }), [null])
+  assert.equal(aiPrice(null).model, 'anthropic/claude-sonnet-4-6')
   const method = readFileSync(new URL('server/methods/presentations.js', app), 'utf8')
-  assert.match(method, /resolveRequestConnection\(\{ feature: 'presentation'[\s\S]{0,300}planEstimateMicros\([\s\S]{0,200}planModels\(\{ feature, chosen \}\)\.map\(aiPrice\)/)
-  assert.doesNotMatch(method, /\[feature\.engine, feature\.fallback\?\.engine\]/)
+  assert.match(method, /resolveRequestConnection\(\{ feature: 'presentation'[\s\S]{0,300}planEstimateMicros\([\s\S]{0,200}planModels\(\{ chosen \}\)/)
 })
 
-test('the built-in providers\' addresses and default models are data too; no model name is left in their code', async () => {
+test('no provider address, model name or key is left in the request code; the image service\'s address is data', () => {
   const file = JSON.parse(readFileSync(new URL('server/config/ai-providers.json', app), 'utf8'))
-  const { DEEPINFRA_CHAT_ENDPOINT, DEFAULT_DEEPINFRA_MODEL } = await import('../web/app/server/methods/ai/deepinfra.mjs')
-  const { getProviderEndpoint, resolveAIModel } = await import('../web/app/server/methods/ai/provider.mjs')
-  assert.equal(DEEPINFRA_CHAT_ENDPOINT, file.deepinfra.endpoint)
-  assert.equal(DEFAULT_DEEPINFRA_MODEL, file.deepinfra.model)
-  for (const provider of ['anthropic', 'deepinfra', 'openai']) assert.equal(getProviderEndpoint(provider), file[provider].endpoint, provider)
-  assert.equal(resolveAIModel({ provider: 'deepinfra' }), file.deepinfra.model)
-  assert.equal(resolveAIModel({ provider: 'deepinfra', settings: { deepinfra: { model: 'm/settings' } } }), 'm/settings')
-  assert.equal(resolveAIModel({ provider: 'openai' }), file.openai.model)
-  assert.equal(resolveAIModel({ provider: 'openai', settings: { openai: { model: 'o-settings' } } }), 'o-settings')
-  assert.equal(resolveAIModel({ provider: 'openai', engine: 'named', settings: { openai: { model: 'o-settings' } } }), 'named')
+  assert.deepEqual(Object.keys(file).filter((k) => !k.startsWith('_')), ['stabilityai'])
   const code = (path) => readFileSync(new URL(path, app), 'utf8')
   assert.doesNotMatch(code('server/methods/ai/deepinfra.mjs'), /DeepSeek|Qwen|api\.deepinfra\.com/)
-  assert.doesNotMatch(code('server/methods/ai/provider.mjs'), /gpt-4o|https:\/\//)
-  assert.doesNotMatch(code('server/methods/stabilityai.js'), /'https:\/\/api\.stability\.ai\/v1\/generation|stable-diffusion-v1-6/)
+  assert.doesNotMatch(code('server/methods/ai/provider.mjs'), /gpt-4o|https:\/\/|getProviderApiKey|resolveAIModel/)
+  assert.doesNotMatch(code('server/methods/stabilityai.js'), /'https:\/\/api\.stability\.ai\/v1\/generation|stable-diffusion-v1-6|settings\.stabilityai\?\.apiKey/)
   assert.match(code('server/methods/stabilityai.js'), /Meteor\.settings\.stabilityai\?\.endpoint \|\| aiProviders\.stabilityai\.endpoint/)
   // the kinds of slate the welcome flow makes name no model: the server picks it
   assert.doesNotMatch(code('server/bootstrap/all.js'), /Qwen|DeepSeek/)
@@ -392,28 +199,4 @@ test('a new installation\'s instance.env lists GEMINI_API_KEY and META_API_KEY a
   assert.match(env, /^GEMINI_API_KEY=''$/m)
   assert.match(env, /^META_API_KEY=''$/m)
   assert.match(env, /^# .*apiKeyEnv/m)
-})
-
-test('library refinement has its own use key: use.library, else use.chat, else use.default, else the built-in AI', () => {
-  assert.ok(USE_KEYS.includes('library'))
-  assert.equal(choiceFeatureFor('library-refine'), 'library')
-  assert.deepEqual(USE_FALLBACK, { library: 'chat' })
-  const connections = [{ name: 'chatbox', type: 'openai-compatible', baseUrl: 'http://10.0.0.2/v1', model: 'c' },
-    { name: 'libbox', type: 'openai-compatible', baseUrl: 'http://10.0.0.3/v1', model: 'l' },
-    { name: 'defbox', type: 'openai-compatible', baseUrl: 'http://10.0.0.4/v1', model: 'd' }]
-  const pick = (use) => resolveAIChoice({ feature: 'library', server: { connections, use }, ownProviders: false }).ref
-  assert.equal(pick({ library: 'server:libbox', chat: 'server:chatbox', default: 'server:defbox' }), 'server:libbox')
-  assert.equal(pick({ chat: 'server:chatbox', default: 'server:defbox' }), 'server:chatbox')
-  assert.equal(pick({ default: 'server:defbox' }), 'server:defbox')
-  assert.equal(pick({}), 'builtin')
-  // The fallback is library's alone: another feature never borrows the conversation choice this way.
-  assert.equal(resolveAIChoice({ feature: 'shape', server: { connections, use: { chat: 'server:chatbox' } }, ownProviders: false }).ref, 'builtin')
-  // The operator's settings file may name use.library like any other feature.
-  assert.equal(operatorConfig(selfhost({ connections: { libbox: { type: 'openai-compatible', baseUrl: 'http://10.0.0.3/v1', model: 'l' } }, use: { library: 'libbox' } })).use.library, 'server:libbox')
-  // Built-in defaults: a copy of generation's provider, model and fallback; no model is named in code.
-  const { _comment, ...library } = JSON.parse(readFileSync(new URL('server/config/ai-defaults.json', app), 'utf8')).library
-  const { _comment: _g, ...generation } = JSON.parse(readFileSync(new URL('server/config/ai-defaults.json', app), 'utf8')).generation
-  assert.deepEqual(library, generation)
-  assert.match(_comment, /settings\.ai\.use\.chat/)
-  assert.deepEqual(resolveAIFeatureConfig('library', {}), { ...DEFAULT_AI_FEATURES.library, feature: 'library' })
 })

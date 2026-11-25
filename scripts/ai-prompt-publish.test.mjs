@@ -21,7 +21,6 @@ import { fixtureFor, FIXTURES } from '../web/app/server/ai-control/fixtures/inde
 import { evalsFor, EVALS } from '../web/app/server/ai-control/evals/index.mjs'
 import { generateShapes } from '../web/app/server/shapes/shape-core.mjs'
 import { createBindingOps } from '../web/app/server/ai-control/bindings.mjs'
-import { resolveBinding } from '../web/app/server/ai-control/resolve.mjs'
 import { CODE_SLOTS, promptsKey } from '../web/app/server/ai-control/prompts/index.mjs'
 import { needsPlan, PLAN_VERSION } from '../web/app/imports/ui/components/presentations/presentationPlan.mjs'
 
@@ -76,7 +75,7 @@ function stubModel() {
 }
 
 function world({ testsPerHour = 30 } = {}) {
-  const collections = { prompts: memoryCollection(), promptVersions: memoryCollection(), bindings: memoryCollection(), bindingVersions: memoryCollection(), state: memoryCollection(), audit: memoryCollection() }
+  const collections = { prompts: memoryCollection(), promptVersions: memoryCollection(), bindings: memoryCollection(), state: memoryCollection(), audit: memoryCollection() }
   let snapshot = null
   const health = []
   const control = createAIControl({ holder: { ready: async () => snapshot, current: () => snapshot, refresh: async () => snapshot }, choiceHolders: async () => ({}) })
@@ -85,7 +84,7 @@ function world({ testsPerHour = 30 } = {}) {
       state: collections.state.docs.get('global') || { generation: 0 },
       prompts: structuredClone([...collections.prompts.docs.values()]), promptVersions: structuredClone([...collections.promptVersions.docs.values()]),
       bindings: structuredClone([...collections.bindings.docs.values()]),
-    }, { codePromptIds: PROMPT_IDS })
+    })
     prompts.setSource((id) => promptFor(snapshot, prompts.byId[id], CODE_PROMPTS), {
       onFallback: ({ id, version, error }) => { health.push({ id, version }); control.noteHealth({ kind: 'prompt', id, problem: `Version ${version} could not be rendered (${error.message}); the built-in text was used.` }) },
     })
@@ -99,7 +98,7 @@ function world({ testsPerHour = 30 } = {}) {
     fixtureFor, evalsFor, request: model.request, costOf: ({ usage }) => ({ costMicros: usage.inputTokens + usage.outputTokens }),
     snapshot: () => snapshot, health: () => control.health(), testLimit: createWriteLimit({ count: testsPerHour, windowMs: 60 * 60 * 1000 }),
   })
-  const bindings = createBindingOps({ store, bindings: collections.bindings, versions: collections.bindingVersions, snapshot: () => snapshot, connections: async () => [], codePromptIds: () => PROMPT_IDS })
+  const bindings = createBindingOps({ store, snapshot: () => snapshot })
   return { collections, ops, bindings, model, store, health, control, snapshot: () => snapshot }
 }
 
@@ -294,7 +293,6 @@ test('the editor\'s helpers: a side-by-side diff with changed words marked, an a
   assert.deepEqual(flags.map((f) => f.why), [['an AI control or token action', 'an instruction'], ['a link']])
   assert.deepEqual(view.undeclaredNames('Draw {{count}} in {{#colour}}x{{/colour}}.', CODE_PROMPTS['shape.system'].variables), ['colour'])
   assert.equal(view.sourceText({ version: 0, source: 'code' }), 'Built in')
-  assert.equal(view.sourceText({ version: 3, source: 'pinned' }), 'Version 3, pinned by a binding')
   assert.equal(view.statusText({ version: 2, status: 'draft', origin: 'ai-proposal' }, { published: 1 }), 'Suggestion')
 })
 
@@ -348,60 +346,6 @@ test('a published suggestion keeps who suggested it, also when a person edited i
   // the editor's publish dialog flags it as a suggestion either way
   const view = await import('../web/app/imports/ui/pages/admin/ai/prompts-view.mjs')
   assert.match(view.liveText({ version: 3 }, 'Shape instructions'), /^Version 3 of Shape instructions is live/)
-})
-
-test('a binding pin: publish and rollback name it, and ai.control.reset target prompt / prompts drops it', async () => {
-  const w = world()
-  const v1 = (await w.ops.saveDraft({ actor: person, id: 'shape.system', body: 'Draw {{count}} outlines, simply.' })).version
-  await w.ops.publish({ actor: person, id: 'shape.system', version: v1, reason: 'one' })
-  await w.bindings.publish({ actor: person, surface: 'shape', input: { surface: 'shape', prompts: { system: 'shape.system@1' } }, reason: 'pin it' })
-  const v2 = (await w.ops.saveDraft({ actor: person, id: 'shape.system', body: withSentence })).version
-  const out = await w.ops.publish({ actor: person, id: 'shape.system', version: v2, reason: 'two' })
-  assert.deepEqual(out.pinned, { binding: 'shape|server', version: 1 })
-  assert.equal(promptText('shape.system', { count: 2 }), 'Draw 2 outlines, simply.', 'the pin is still what is sent')
-  const view = await import('../web/app/imports/ui/pages/admin/ai/prompts-view.mjs')
-  assert.match(view.liveText(out, 'Shape instructions'), /is published, but the shape binding pins version 1, so that is still sent/)
-  const listed = (await w.ops.list()).surfaces.find((s) => s.surface === 'shape').prompts.find((p) => p.id === 'shape.system')
-  assert.deepEqual({ published: listed.published, live: listed.live, pinned: listed.pinned }, { published: 2, live: { version: 1, source: 'pinned' }, pinned: { binding: 'shape|server', version: 1 } })
-  assert.deepEqual((await w.ops.get({ id: 'shape.system' })).pinned, { binding: 'shape|server', version: 1 })
-
-  // break-glass: the prompts reset leaves no pinned version sending
-  const admin = createAdminOps({ store: w.store, audit: w.collections.audit, prompts: w.ops, bindings: w.bindings })
-  const reset = await admin.reset({ userId: 'root', actor: person, target: 'prompt', promptId: 'shape.system', reason: 'incident' })
-  assert.deepEqual({ prompts: reset.prompts, unpinned: reset.unpinned }, { prompts: ['shape.system'], unpinned: ['shape|server'] })
-  assert.equal(promptText('shape.system', { count: 2 }), prompts.code('shape.system', { count: 2 }))
-  assert.equal(w.collections.bindings.docs.get('shape|server'), undefined, 'a binding left with nothing is removed')
-  assert.ok(rows(w, 'ai.control.reset').some((r) => r.target.kind === 'binding' && r.reason === 'incident'))
-
-  // a binding that sets more keeps the rest; target prompts drops every pin
-  await w.ops.publish({ actor: person, id: 'shape.system', version: v1, reason: 'again' })
-  await w.bindings.publish({ actor: person, surface: 'shape', input: { surface: 'shape', params: { temperature: 0.3 }, prompts: { system: 'shape.system@1' } }, reason: 'pin with params' })
-  const all = await admin.reset({ userId: 'root', actor: person, target: 'prompts', reason: 'incident 2' })
-  assert.deepEqual(all.unpinned, ['shape|server'])
-  const head = w.collections.bindings.docs.get('shape|server')
-  assert.deepEqual({ prompts: head.prompts, params: head.params }, { prompts: undefined, params: { temperature: 0.3 } })
-  assert.equal(promptText('shape.system', { count: 2 }), prompts.code('shape.system', { count: 2 }))
-})
-
-test('a binding pins only the slot\'s own prompt; the effective view shows what the call site sends', async () => {
-  const w = world()
-  await w.ops.saveDraft({ actor: person, id: 'exec.chat.retry', body: CODE_PROMPTS['exec.chat.retry'].body + ' Be brief.' })
-  await assert.rejects(w.bindings.publish({ actor: person, surface: 'library', input: { surface: 'library', prompts: { retry: 'exec.chat.retry@1' } }, reason: 'x' }), /prompt slot retry takes library\.refine\.retry/)
-  await assert.rejects(w.bindings.saveDraft({ actor: person, input: { surface: 'library', prompts: { nope: 'library.refine.retry' } } }), /has no prompt slot nope/)
-  // a stored binding that pins another prompt's id is skipped by the snapshot, named in health
-  const snap = buildSnapshot({ bindings: [{ _id: 'library|server', surface: 'library', scope: { level: 'server' }, status: 'published', prompts: { retry: 'exec.chat.retry' } }] }, { codePromptIds: PROMPT_IDS })
-  assert.match(snap.health.find((h) => h.id === 'library|server').problem, /prompt slot retry takes library\.refine\.retry/)
-  // workshop.draft follows workshop, and both have a retry slot: workshop's pin is not workshop.draft's
-  const v = { _id: 'workshop.chat.retry@1', promptId: 'workshop.chat.retry', version: 1, body: 'Try again.', variables: {}, status: 'published' }
-  const followed = buildSnapshot({
-    prompts: [{ _id: 'workshop.chat.retry', surface: 'workshop', kind: 'retry', labels: { published: 1 } }], promptVersions: [v],
-    bindings: [{ _id: 'workshop|server', surface: 'workshop', scope: { level: 'server' }, status: 'published', prompts: { retry: 'workshop.chat.retry@1' } }],
-  }, { codePromptIds: PROMPT_IDS })
-  const draft = resolveBinding(followed, { surface: 'workshop.draft', codePrompts: CODE_PROMPTS, codeSlots: CODE_SLOTS })
-  assert.deepEqual({ id: draft.prompts.retry.id, version: draft.prompts.retry.version }, { id: 'workshop.draft.retry', version: 0 })
-  assert.equal(promptFor(followed, prompts.byId['workshop.draft.retry'], CODE_PROMPTS), null, 'and the call site sends the built-in text')
-  const own = resolveBinding(followed, { surface: 'workshop', codePrompts: CODE_PROMPTS, codeSlots: CODE_SLOTS })
-  assert.deepEqual({ id: own.prompts.retry.id, version: own.prompts.retry.version }, { id: 'workshop.chat.retry', version: 1 })
 })
 
 test('every test run is audited: one that failed at the provider, one over the hourly limit, one the lint refused', async () => {

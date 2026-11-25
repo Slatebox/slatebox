@@ -1,6 +1,6 @@
 // The Meteor side of custom shapes: the two stores, the model request for the AI feature
-// `shape` (its connection chosen by settings.ai.use.shape, its built-in model by
-// server/config/ai-defaults.json, never named here), the meter, and the methods the canvas calls.
+// `shape` (its model chosen in Admin → AI control, never named here), the meter, and the methods
+// the canvas calls.
 // Agents reach the same service through the actions (server/actions/shapes.mjs, deps.shapes).
 import { Meteor } from 'meteor/meteor'
 import { Mongo } from 'meteor/mongo'
@@ -11,7 +11,6 @@ import OAuth from 'oauth'
 import req from '../methods/ai/req'
 import { runAIAction } from '../metering/context.mjs'
 import { actionEstimateMicros } from '../metering/prices.mjs'
-import { resolveAIFeatureConfig } from '../methods/ai/feature-config.mjs'
 import { resolveRequestConnection } from '../methods/ai/ai-settings'
 import { GENERATION_TTL_MS, SHAPE_FEATURE, ShapeProblem } from './shape-core.mjs'
 import { createShapeService } from './shape-service.mjs'
@@ -44,7 +43,7 @@ async function modelFor(principal) {
   // turned off by an administrator: no cached drawing either (req.js answers with their message)
   if (chosen?.disabled) return 'disabled'
   if (chosen?.connection) return `${chosen.ref || 'connection'}:${chosen.connection.model || ''}`
-  return resolveAIFeatureConfig(SHAPE_FEATURE, Meteor.settings).engine || 'builtin'
+  return 'none'
 }
 
 // The Noun Project's icon search (settings.nounProject: key and secret; apiOrigin only to point it
@@ -89,7 +88,7 @@ export const shapeService = createShapeService({
   // strict-JSON retries. The chosen connection never falls back (req.js). The person is named
   // explicitly: agents, exec and HTTP calls run outside any Meteor method.
   request: (options, principal) =>
-    req({ ...resolveAIFeatureConfig(SHAPE_FEATURE, Meteor.settings), ...options, allowPlainText: true, userId: principal?.userId, maxTokens: 6000 }),
+    req({ feature: SHAPE_FEATURE, ...options, allowPlainText: true, userId: principal?.userId, maxTokens: 6000 }),
   run: (fn, principal) => runAIAction({ feature: SHAPE_FEATURE, kind: 'ai', estimateMicros: actionEstimateMicros('shape'), userId: principal.userId }, fn),
 })
 

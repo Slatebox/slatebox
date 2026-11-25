@@ -1,17 +1,16 @@
 // The surface catalogue: every place Slatebox asks a model or exposes an agent, in one list.
 // A surface has a stable id (never renamed, only archived), a plain-English title, and `follows`:
 // whose choice applies while nothing is set for it. Everything else that names AI features is
-// derived from this list: the features people choose (connections.mjs AI_FEATURES, USE_KEYS), the
-// request features each call site sends to req(), the action schema (ai-schemas.mjs useInput) and
-// the meter's estimates and ceilings (metering/prices.mjs). A new surface is one row here.
+// derived from this list: the parts an administrator binds to a model (bindings.mjs), the features
+// people choose for their own AI (connections.mjs AI_FEATURES, USE_KEYS), the request features each
+// call site sends to req(), and the meter's estimates and ceilings (metering/prices.mjs). A new
+// surface is one row here.
 //
 // Row fields:
 //   id              slug, ^[a-z0-9][a-z0-9.-]{0,47}$ (a dot marks a part of a parent surface)
 //   title           plain English, sentence case
 //   follows         the surface whose choice applies while this one is unset; null for the root
 //   needs           what a model must do for it: tools | vision | images
-//   builtinFrom     which block of server/config/ai-defaults.json supplies its built-in model
-//                   ('stability' is the built-in image service, stabilityai.js)
 //   requestFeatures the `feature` names call sites pass to req() for it
 //   meterFeatures   the `feature` names runAIAction meters it under; estimate and ceiling (µ$) apply
 //                   to each of them
@@ -25,7 +24,6 @@
 
 const ID = /^[a-z0-9][a-z0-9.-]{0,47}$/
 const NEEDS = ['tools', 'vision', 'images']
-const BUILTIN_SOURCES = ['presentation', 'layout', 'vision', 'welcome', 'generation', 'shape', 'library', 'stability']
 
 function defineSurfaces(rows) {
   const byId = new Map()
@@ -39,7 +37,6 @@ function defineSurfaces(rows) {
     if (row.ownRow && (row.follows == null || row.follows === 'default')) throw new Error(`ai-control catalogue: ${row.id} has its own row only when it follows a surface other than default`)
     if (row.builtinOnly && row.follows != null) throw new Error(`ai-control catalogue: built-in-only ${row.id} follows nothing`)
     for (const need of row.needs || []) if (!NEEDS.includes(need)) throw new Error(`ai-control catalogue: ${row.id} needs ${need}`)
-    if (row.builtinFrom != null && !BUILTIN_SOURCES.includes(row.builtinFrom)) throw new Error(`ai-control catalogue: ${row.id} takes its built-in model from ${row.builtinFrom}`)
     for (const feature of row.requestFeatures || []) {
       if (requestOwner.has(feature)) throw new Error(`ai-control catalogue: request feature ${feature} belongs to ${requestOwner.get(feature)} and ${row.id}`)
       requestOwner.set(feature, row.id)
@@ -53,7 +50,6 @@ function defineSurfaces(rows) {
       title: row.title,
       follows: row.follows ?? null,
       needs: Object.freeze([...(row.needs || [])]),
-      builtinFrom: row.builtinFrom ?? null,
       requestFeatures: Object.freeze([...(row.requestFeatures || [])]),
       meterFeatures: Object.freeze([...(row.meterFeatures || [])]),
       estimate: row.estimate ?? null,
@@ -74,27 +70,27 @@ function defineSurfaces(rows) {
 // first, in this order (Conversation and edits, Drafts and layouts, ...).
 export const SURFACES = defineSurfaces([
   { id: 'default', title: 'Everything not set below', follows: null },
-  { id: 'chat', title: 'Conversation and edits', follows: 'default', needs: ['tools'], builtinFrom: 'welcome', requestFeatures: ['welcome', 'chat'], meterFeatures: ['welcome'], estimate: 2000, ceiling: 50000 },
-  { id: 'chat.route', title: 'Deciding whether a message is an edit or a question', follows: 'chat', needs: ['tools'], builtinFrom: 'welcome', requestFeatures: ['welcome-route'] },
-  { id: 'generation', title: 'Drafts and layouts', follows: 'default', needs: ['tools'], builtinFrom: 'generation', requestFeatures: ['generation', 'layout'], meterFeatures: ['generation'], estimate: 30000, ceiling: 200000 },
+  { id: 'chat', title: 'Conversation and edits', follows: 'default', needs: ['tools'], requestFeatures: ['welcome', 'chat'], meterFeatures: ['welcome'], estimate: 2000, ceiling: 50000 },
+  { id: 'chat.route', title: 'Deciding whether a message is an edit or a question', follows: 'chat', needs: ['tools'], requestFeatures: ['welcome-route'] },
+  { id: 'generation', title: 'Drafts and layouts', follows: 'default', needs: ['tools'], requestFeatures: ['generation', 'layout'], meterFeatures: ['generation'], estimate: 30000, ceiling: 200000 },
   // Its own request feature arrives with the server-side ad-hoc prompts; until then it follows Drafting.
-  { id: 'generation.notes', title: 'Rewriting, shortening and expanding a note', follows: 'generation', needs: [], builtinFrom: 'generation' },
-  { id: 'presentation', title: 'Presentation planning', follows: 'default', needs: ['tools'], builtinFrom: 'presentation', requestFeatures: ['presentation'], meterFeatures: ['presentation'], estimate: 10000, ceiling: 200000 },
-  { id: 'vision', title: 'Reading images and diagrams', follows: 'default', needs: ['vision'], builtinFrom: 'vision', requestFeatures: ['vision'], meterFeatures: ['vision'], ceiling: 200000 },
-  { id: 'images', title: 'Generating images', follows: 'default', needs: ['images'], builtinFrom: 'stability', requestFeatures: ['image-generation', 'images'], meterFeatures: ['image-generation'], estimate: 30000 },
+  { id: 'generation.notes', title: 'Rewriting, shortening and expanding a note', follows: 'generation', needs: [] },
+  { id: 'presentation', title: 'Presentation planning', follows: 'default', needs: ['tools'], requestFeatures: ['presentation'], meterFeatures: ['presentation'], estimate: 10000, ceiling: 200000 },
+  { id: 'vision', title: 'Reading images and diagrams', follows: 'default', needs: ['vision'], requestFeatures: ['vision'], meterFeatures: ['vision'], ceiling: 200000 },
+  { id: 'images', title: 'Generating images', follows: 'default', needs: ['images'], requestFeatures: ['image-generation', 'images'], meterFeatures: ['image-generation'], estimate: 30000 },
   { id: 'images.search', title: 'Finding pictures on the web', builtinOnly: true, requestFeatures: ['image-search'], meterFeatures: ['image-search'], estimate: 5000 },
-  { id: 'shape', title: 'Drawing custom shapes', follows: 'default', needs: ['tools'], builtinFrom: 'shape', requestFeatures: ['shape'], meterFeatures: ['shape'], estimate: 8000, ceiling: 60000 },
-  { id: 'workshop', title: 'Lane and map board conversation', follows: 'chat', needs: ['tools'], builtinFrom: 'generation', requestFeatures: ['lane-chat', 'map-chat'], meterFeatures: ['lane-chat', 'map-chat'], estimate: 3000, ceiling: 50000 },
+  { id: 'shape', title: 'Drawing custom shapes', follows: 'default', needs: ['tools'], requestFeatures: ['shape'], meterFeatures: ['shape'], estimate: 8000, ceiling: 60000 },
+  { id: 'workshop', title: 'Lane and map board conversation', follows: 'chat', needs: ['tools'], requestFeatures: ['lane-chat', 'map-chat'], meterFeatures: ['lane-chat', 'map-chat'], estimate: 3000, ceiling: 50000 },
   // Board drafting owns the `workshop` meter key; the canvas conversation and the agent meter under it too.
-  { id: 'workshop.draft', title: 'Drafting a new board or its rules', follows: 'workshop', needs: ['tools'], builtinFrom: 'generation', requestFeatures: ['workshop'], meterFeatures: ['workshop'], estimate: 5000 },
-  { id: 'canvas', title: 'Canvas conversation (drawing chat)', follows: 'chat', needs: ['tools'], builtinFrom: 'generation', requestFeatures: ['canvas'] },
-  { id: 'agent.slatebox', title: 'The Slatebox agent (tasks, ask_agent, @mentions)', follows: 'canvas', needs: ['tools'], builtinFrom: 'generation', requestFeatures: ['agent'] },
-  // Library refinement (server/library/refine-ai.mjs) has a row on the settings page of its own and its
-  // own built-in block in ai-defaults.json (a copy of generation's); unset, it follows the conversation.
+  { id: 'workshop.draft', title: 'Drafting a new board or its rules', follows: 'workshop', needs: ['tools'], requestFeatures: ['workshop'], meterFeatures: ['workshop'], estimate: 5000 },
+  { id: 'canvas', title: 'Canvas conversation (drawing chat)', follows: 'chat', needs: ['tools'], requestFeatures: ['canvas'] },
+  { id: 'agent.slatebox', title: 'The Slatebox agent (tasks, ask_agent, @mentions)', follows: 'canvas', needs: ['tools'], requestFeatures: ['agent'] },
+  // Library refinement (server/library/refine-ai.mjs) has a row on the settings page of its own;
+  // unset, it follows the conversation.
   // Library and connectors meter as they did when they landed: no estimate or ceiling of their own, so
   // the meter's workshop estimate and default ceiling apply (5,000 and 50,000 µ$).
-  { id: 'library', title: 'Library review and refinement', follows: 'chat', ownRow: true, needs: ['tools'], builtinFrom: 'library', requestFeatures: ['library-refine'], meterFeatures: ['library-refine'] },
-  { id: 'connectors', title: 'Outside agents: planning and laying out results', follows: 'chat', needs: ['tools'], builtinFrom: 'generation', requestFeatures: ['connectors'], meterFeatures: ['connectors'], edition: 'cloud' },
+  { id: 'library', title: 'Library review and refinement', follows: 'chat', ownRow: true, needs: ['tools'], requestFeatures: ['library-refine'], meterFeatures: ['library-refine'] },
+  { id: 'connectors', title: 'Outside agents: planning and laying out results', follows: 'chat', needs: ['tools'], requestFeatures: ['connectors'], meterFeatures: ['connectors'], edition: 'cloud' },
   // Prompt test runs and eval gates name their model per call; the row keeps them out of `chat`.
   { id: 'admin.test', title: 'Admin test runs', follows: null, useKey: false, estimate: 30000, ceiling: 200000 },
 ])
@@ -115,8 +111,8 @@ export const REQUEST_FEATURES = Object.freeze(Object.fromEntries(
   SURFACES.filter((s) => !s.builtinOnly).flatMap((s) => s.requestFeatures.map((f) => [f, s.id])),
 ))
 
-// The surfaces a `use` object may name (every stored aiChoices.use and settings.ai.use keeps working:
-// the original keys default, chat, generation, presentation, vision, images and shape are rows here).
+// The surfaces a person's or team's own `use` object may name (the original keys default, chat,
+// generation, presentation, vision, images and shape are rows here).
 export const USE_SURFACES = Object.freeze(SURFACES.filter((s) => s.useKey))
 
 /** The surface itself, its parent, and so on up to the root (`default`). */
@@ -138,15 +134,6 @@ export function rootSurface(id) {
   if (i <= 0) return chain[0] ?? id
   const own = chain.slice(0, i).find((at) => surface(at).ownRow)
   return own ?? chain[i - 1]
-}
-
-/** Which block of ai-defaults.json supplies a surface's built-in model, inherited through `follows`. */
-export function builtinFeatureFor(id) {
-  for (const at of followChain(id)) {
-    const from = surface(at)?.builtinFrom
-    if (from) return from
-  }
-  return null
 }
 
 const warned = new Set()

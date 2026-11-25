@@ -71,6 +71,10 @@ export async function generateImagesFor(user, opts) {
     const chosen = await imagesFromChoice(user, opts)
     if (chosen) return chosen
     return runAIAction({ feature: 'image-generation', kind: 'imageGeneration' }, async () => {
+    // the Stability key an administrator added in Admin → AI control (sealed, opened for each
+    // picture); no key is read from the settings file
+    const key = await auxCredential('stability')
+    if (!key?.apiKey) throw new Meteor.Error('images-unavailable', 'Generating images is not set up on this server. An administrator adds a Stability key in Admin → AI control.')
     // A generated image has a fixed price, charged when the request is sent.
     await chargeFixed({ ref: `image_${Random.id()}`, kind: 'imageGeneration', costMicros: FIXED_PRICES.imageGeneration, model: 'stability' })
     const body = {
@@ -81,39 +85,15 @@ export async function generateImagesFor(user, opts) {
       text: p,
       weight: 1,
     }))
-    // a Stability key an administrator connected in AI control (sealed, read for each picture) wins
-    // over the settings file's
-    const fromApp = await auxCredential('stability')
     const imgOpts = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `${fromApp?.apiKey || Meteor.settings.stabilityai?.apiKey}`,
+        Authorization: key.apiKey,
       },
       redirect: 'error',
     }
     imgOpts.body = JSON.stringify(body)
-
-    // console.log('going to get engines', {
-    //   method: 'GET',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //     Authorization: `${Meteor.settings.stabilityai.apiKey}`,
-    //   },
-    // })
-
-    // const engines = await (
-    //   await fetch(`https://api.stability.ai/v1/engines/list`, {
-    //     method: 'GET',
-    //     headers: {
-    //       'content-type': 'application/json',
-    //       accept: 'application/json',
-    //       authorization: `${Meteor.settings.stabilityai.apiKey}`,
-    //     },
-    //   })
-    // ).json()
-
-    // console.log('engines are ', JSON.stringify(engines))
 
     // stable-diffusion-512-v2-1
     // console.log('calling stability ai for image', imgOpts)

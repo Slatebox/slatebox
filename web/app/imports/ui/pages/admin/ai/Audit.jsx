@@ -14,18 +14,19 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { actionText, actorText, auditCsv, diffRows, targetText } from './audit-diff.mjs'
 
-// Every change to the AI configuration (ai.audit.list), newest first: AI control's own changes,
-// AI settings at every level and persona saves. A row opens to what changed; keys show only as
+// Every change to the AI configuration (ai.audit.list), newest first: providers, keys, models,
+// bindings, prompts and people's own AI. A row opens to what changed; keys show only as
 // which key they are. Kept 400 days.
 const mono = { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.75rem' }
 const AREAS = [
   { value: '', label: 'Every change' },
-  { value: 'ai.update', label: 'AI settings (connections and choices)' },
-  { value: 'ai.control.', label: 'AI control' },
+  { value: 'ai.control.', label: 'AI for everyone and resets' },
   { value: 'ai.providers.', label: 'Providers' },
-  { value: 'ai.connections.', label: 'Server connections and keys' },
+  { value: 'ai.keys.', label: 'Keys' },
   { value: 'ai.models.', label: 'Models and prices' },
-  { value: 'ai.bindings.', label: 'Bindings (models, fallbacks, on and off per part)' },
+  { value: 'ai.bindings.', label: 'Which model each part uses' },
+  { value: 'ai.prompts.', label: 'Prompts' },
+  { value: 'ai.update', label: 'People\'s and teams\' own AI' },
 ]
 const failure = (err, fallback) => err?.reason || err?.message || fallback
 

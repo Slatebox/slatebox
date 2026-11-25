@@ -18,7 +18,6 @@ import { createLibraryNotifier } from './notify.mjs'
 import req from '../methods/ai/req'
 import { runAIAction } from '../metering/context.mjs'
 import { aiRefusal, canStartAI } from '../metering/meteor'
-import { resolveAIFeatureConfig } from '../methods/ai/feature-config.mjs'
 import { emailLogoUrl } from '../email/setup'
 import { firstNameOf } from '../email/templates.mjs'
 
@@ -36,15 +35,14 @@ async function loadUser(userId) {
   return { _id: user._id, orgId: user.orgId, isAnonymous: Boolean(user.isAnonymous), name }
 }
 
-// The refine chat of the review panel: the library use key (settings.ai.use.library, then use.chat),
-// counted like any chat turn. One per server: its memory lets Keep apply the proposal it previewed.
+// The refine chat of the review panel: the library part's model in Admin → AI control (it follows
+// Conversation and edits while nothing is set), counted like any chat turn. One per server: its memory lets Keep apply the proposal it previewed.
 const refineWithAI = createRefineAI({
   request: (opts) => req(opts),
   meter: (opts, fn) => runAIAction(opts, fn),
   canUseAI: async (userId) => canStartAI(userId && (await Meteor.users.findOneAsync(userId)), 'library'),
   // The meter's own reason (Pro, balance, today's amount used), said instead of "not set up".
   refusal: async (userId) => aiRefusal(userId && (await Meteor.users.findOneAsync(userId)), 'library'),
-  config: () => resolveAIFeatureConfig('library', Meteor.settings),
 })
 
 // The author hears about every decision: in the bell's list, and by email when the server sends mail.

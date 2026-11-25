@@ -125,14 +125,13 @@ const LibraryEvents = new Mongo.Collection('libraryEvents')
 
 export { LibraryItems, LibraryVersions, LibraryEvents }
 
-// AI control (server/ai-control): providers, models, bindings, agents and prompts an administrator
-// manages at runtime, the global switch, and the append-only audit trail of every change. Created
-// empty: until something is published the settings file and the built-in defaults apply. Never
-// published to clients; server/ai-control/store.mjs is the only writer.
+// AI control (server/ai-control): providers, models, the one choice per part of Slatebox, agents
+// and prompts an administrator manages at runtime, the global switch, and the append-only audit
+// trail of every change. The providers' keys are in providerKeys (kind 'key'). Never published to
+// clients; server/ai-control/store.mjs is the only writer (keys.mjs for keys).
 const AIProviders = new Mongo.Collection('aiProviders')
 const AIModels = new Mongo.Collection('aiModels')
 const AIBindings = new Mongo.Collection('aiBindings')
-const AIBindingVersions = new Mongo.Collection('aiBindingVersions')
 const AIAgents = new Mongo.Collection('aiAgents')
 const AIPrompts = new Mongo.Collection('aiPrompts')
 const AIPromptVersions = new Mongo.Collection('aiPromptVersions')
@@ -140,5 +139,5 @@ const AIControlState = new Mongo.Collection('aiControlState')
 const AIControlAudit = new Mongo.Collection('aiControlAudit')
 
 export {
-  AIProviders, AIModels, AIBindings, AIBindingVersions, AIAgents, AIPrompts, AIPromptVersions, AIControlState, AIControlAudit,
+  AIProviders, AIModels, AIBindings, AIAgents, AIPrompts, AIPromptVersions, AIControlState, AIControlAudit,
 }

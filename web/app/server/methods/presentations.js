@@ -25,7 +25,6 @@ import { FIXED_PRICES, actionCeilingMicros, aiPrice } from '../metering/prices.m
 import { workshopScenes } from '../../imports/ui/components/presentations/workshopScenes.mjs'
 import req from './ai/req'
 import { keepActionOpen, runAIAction } from '../metering/context.mjs'
-import { resolveAIFeatureConfig } from './ai/feature-config.mjs'
 import { resolveRequestConnection } from './ai/ai-settings'
 import {
   LICENCE_FILTER, MAX_DECK_IMAGES, MAX_DECK_IMAGES_PER_DAY, deckRecord, imageEstimateMicros, ogCardReady, pictureChange, shareCardChange, pictureTime, playerSlateCopy,
@@ -526,14 +525,13 @@ async function analyzePresentation(args, user, stored, layout, counted, { brief 
   const earlier = history.filter((row) => row.prompt).map((row) => row.prompt)
   const promptsToSend = refining ? [...(earlier.length ? earlier : [initPrompt]), refinePrompt] : [initPrompt]
 
-  const feature = resolveAIFeatureConfig('presentation', Meteor.settings)
-  // Priced at the model that will serve the plan: the connection settings.ai.use picks for this
-  // person, or the built-in default and its fallback when none does. A connection that cannot be
-  // resolved is priced as the built-in AI; req.js resolves it again and says what is wrong.
+  // Priced at the model that will serve the plan: the presentation part's model in Admin → AI
+  // control, or the person's own connection. A route that cannot be resolved is priced at the
+  // dearest rate; req.js resolves it again and says what is wrong.
   const chosen = await resolveRequestConnection({ feature: 'presentation', request: { tools: true }, userId: user._id }).catch(() => null)
   const estimateMicros = planEstimateMicros(
     systemPrompt.length + JSON.stringify(promptsToSend).length,
-    planModels({ feature, chosen }).map(aiPrice)
+    planModels({ chosen }).map((model) => aiPrice(model, chosen?.scope === 'server' ? { provider: chosen.provider } : null))
   )
   const tooLong = estimateMicros > actionCeilingMicros('presentation')
   if (tooLong && refining) {
@@ -547,10 +545,9 @@ async function analyzePresentation(args, user, stored, layout, counted, { brief 
     prompts: promptsToSend,
     functions: planFunctions(),
     function_call: { name: 'createPresentation' },
-    ...feature,
+    feature: 'presentation',
     // Named, so a plan made outside a Meteor method (presentations.create) is the person's too.
     userId: user._id,
-    fallback: undefined,
     maxTokens: PLAN_OUTPUT_TOKENS,
   }
   const planned = await planWithAI({

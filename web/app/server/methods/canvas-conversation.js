@@ -24,7 +24,6 @@ import { resolvePresentationSlate } from './creative-slates'
 import { sharedSaveConditions } from './native-slate-save.mjs'
 import { slateSaveCore } from '../slate-save'
 import { rememberInvitedEdit } from './joined-slates'
-import { resolveAIFeatureConfig } from './ai/feature-config.mjs'
 import req from './ai/req'
 import { surfaceOffFor } from './ai/ai-settings'
 import { runAIAction } from '../metering/context.mjs'
@@ -84,11 +83,10 @@ async function resolve(shareId, uid) {
 // through it too, under its own request feature (agent: the agent.slatebox surface, which follows
 // the canvas conversation and then chat until an administrator chooses a model for it).
 export function modelFor(shareId, feature = 'canvas') {
-  // req chooses the model: the person's, their team's or the operator's connection, or the built-in AI
-  const config = resolveAIFeatureConfig('generation', Meteor.settings)
+  // req chooses the model: the part's in Admin → AI control, or a person's own connection
   return async ({ system, prompts, tool }) => {
     const turn = await req({
-      provider: config.provider, engine: config.engine, feature, sdkChat: true, shareId,
+      feature, sdkChat: true, shareId,
       system, prompts, functions: [tool], function_call: { name: tool.name }, allowPlainText: true,
       maxResponseValidationRetries: 1,
       validateResponse: ({ message, toolCall }) => {

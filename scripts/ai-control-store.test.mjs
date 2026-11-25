@@ -97,12 +97,17 @@ test('no key, cipher or key-looking value reaches the audit trail; the fingerpri
     { model: 'Qwen/Qwen3-235B-A22B-Instruct-2507', body: 'Draw {{count}} shapes.', n: 3, at: new Date(0) })
 })
 
-test('publish, rollback, remove, reset and rotate need a reason; actors and actions are checked', async () => {
+test('publish, rollback, remove, revoke, archive and reset need a reason; a key rotation, a key add and a binding change do not; actors and actions are checked', async () => {
   const { store } = setup()
   const base = { kind: 'prompts', id: 'shape.system', doc: { labels: { published: 2 } }, actor: ADMIN }
-  for (const action of ['ai.prompts.publish', 'ai.prompts.rollback', 'ai.connections.remove', 'ai.control.reset', 'ai.connections.rotate', 'ai.control.setGlobal']) {
+  for (const action of ['ai.prompts.publish', 'ai.prompts.rollback', 'ai.models.remove', 'ai.control.reset', 'ai.providers.archive', 'ai.control.setGlobal']) {
     await assert.rejects(store.write({ ...base, action }), (error) => error instanceof ControlStoreError && /needs a reason/.test(error.message), action)
   }
+  for (const action of ['ai.keys.revoke', 'ai.keys.remove']) {
+    await assert.rejects(store.record({ action, actor: ADMIN, target: { kind: 'key', id: 'meta' } }), (error) => error instanceof ControlStoreError && /needs a reason/.test(error.message), action)
+  }
+  for (const action of ['ai.keys.add', 'ai.keys.rotate', 'ai.keys.activate', 'ai.keys.import']) await store.record({ action, actor: ADMIN, target: { kind: 'key', id: 'meta' } })
+  await store.write({ ...base, kind: 'bindings', id: 'shape', doc: { surface: 'shape', use: 'off' }, action: 'ai.bindings.set' })
   await store.write({ ...base, action: 'ai.prompts.saveDraft' })
   await assert.rejects(store.write({ ...base, action: 'ai.prompts.publish', reason: 'x'.repeat(501) }), /at most 500/)
   await assert.rejects(store.write({ ...base, action: 'slates.delete', reason: 'r' }), /ai\.<area>\.<verb>/)
@@ -128,9 +133,9 @@ test('refused changes are recorded; the audit trail has no way to be changed', a
 
 test('the global state keeps its generation moving forward', async () => {
   const { collections, store } = setup()
-  assert.deepEqual(await store.state(), { _id: STATE_ID, generation: 0, aiEnabled: true, dbLayer: 'on' })
+  assert.deepEqual(await store.state(), { _id: STATE_ID, generation: 0, aiEnabled: true })
   await store.write({ kind: 'prompts', id: 'p', doc: {}, action: 'ai.prompts.saveDraft', actor: ADMIN })
-  const off = await store.write({ kind: 'state', id: STATE_ID, doc: { aiEnabled: false, aiDisabledMessage: 'Paused.', generation: 0, dbLayer: 'on' }, action: 'ai.control.setGlobal', actor: ADMIN, reason: 'incident' })
+  const off = await store.write({ kind: 'state', id: STATE_ID, doc: { aiEnabled: false, aiDisabledMessage: 'Paused.', generation: 0 }, action: 'ai.control.setGlobal', actor: ADMIN, reason: 'incident' })
   assert.equal(off.generation, 2)
   assert.equal(collections.state.docs.get(STATE_ID).generation, 2)
   assert.equal(collections.state.docs.get(STATE_ID).aiEnabled, false)

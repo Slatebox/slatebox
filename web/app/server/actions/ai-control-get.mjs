@@ -16,7 +16,7 @@ export const aiControlGet = defineAction({
   id: 'ai.control.get',
   title: 'AI control',
   description:
-    'Returns the AI control snapshot: every surface and what it follows, providers, server connections (never keys), models, published bindings, agents, prompt heads, the global switch, and health (documents skipped because they failed their checks). Administrators only.',
+    'Returns the AI control snapshot: every part of Slatebox and what it follows, the providers (what each is, its address) and which have an active key (a fingerprint, never the key), the provider presets, the models with their prices, the bindings, the default model, agents, prompt heads, the global switch, and health. Administrators only.',
   toolset: 'admin',
   kind: 'read',
   scope: 'ai:admin:read',
@@ -24,7 +24,7 @@ export const aiControlGet = defineAction({
   mounts: { ddp: true, http: { method: 'GET', path: '/ai/control', operationId: 'getAIControl' } },
   tool: { name: 'get_ai_control', title: 'Read AI control', description: 'Read which AI answers each part of Slatebox on this server, where each choice comes from, and any problems. Administrators only; keys are never returned.' },
   input: { type: 'object', properties: {}, additionalProperties: false },
-  output: { type: 'object', properties: { generation: { type: 'integer' }, dbLayer: { type: 'string' }, surfaces: { type: 'array' }, health: { type: 'array' } } },
+  output: { type: 'object', properties: { generation: { type: 'integer' }, surfaces: { type: 'array' }, providers: { type: 'array' }, models: { type: 'array' }, health: { type: 'array' } } },
   handler: async (principal, _input, { deps }) => {
     await requireAIControlAdmin(principal, deps)
     return deps.aiControl.get()
@@ -35,22 +35,22 @@ export const aiControlEffective = defineAction({
   id: 'ai.control.effective',
   title: 'Effective AI binding',
   description:
-    'Shows the binding each surface (or one) resolves to for a person (userId; none = someone not signed in), with the source of each field: a published binding, an AI settings choice, the settings file or the built-in default. usage true adds each surface\'s calls, failed calls and spend over the last 24 hours. Administrators only.',
+    'Shows which model each part of Slatebox (or one) answers with for a person (userId; none = someone not signed in): the provider and model, and where that comes from (its own choice, the part it follows, the default, the built-in default, or the person\'s own AI on a self-hosted server). usage true adds each part\'s calls, failed calls and spend over the last 24 hours. Administrators only.',
   toolset: 'admin',
   kind: 'read',
   scope: 'ai:admin:read',
   principals: ['person', 'agent'],
   mounts: { ddp: true, http: { method: 'GET', path: '/ai/control/effective', operationId: 'getAIControlEffective' } },
-  tool: { name: 'get_ai_control_effective', title: 'Read effective AI bindings', description: 'Read which model, prompts and limits each part of Slatebox uses for one person, and where each comes from. Administrators only.' },
+  tool: { name: 'get_ai_control_effective', title: 'Read effective AI bindings', description: 'Read which model each part of Slatebox uses for one person, and where it comes from. Administrators only.' },
   input: {
     type: 'object',
-    properties: { surface: SURFACE, userId: ID, plan: { type: 'string', pattern: '^[a-z0-9-]{1,32}$' }, usage: { type: 'boolean' } },
+    properties: { surface: SURFACE, userId: ID, usage: { type: 'boolean' } },
     additionalProperties: false,
   },
   output: { type: 'object', properties: { generation: { type: 'integer' }, surfaces: { type: 'array' }, usage: { type: 'object' } } },
   handler: async (principal, input, { deps }) => {
     await requireAIControlAdmin(principal, deps)
-    const view = await deps.aiControl.effective({ surface: input.surface ?? null, userId: input.userId ?? null, plan: input.plan ?? null })
+    const view = await deps.aiControl.effective({ surface: input.surface ?? null, userId: input.userId ?? null })
     if (!input.usage) return view
     return { ...view, usage: await deps.aiControlOps.usage({ hours: 24 }) }
   },
@@ -60,7 +60,7 @@ export const aiControlHealth = defineAction({
   id: 'ai.control.health',
   title: 'AI control health',
   description:
-    'Lists AI control problems: documents skipped because they failed their checks (that surface falls back to the settings file and built-in defaults), and published prompts that fell back to their built-in text. warnings lists models with no price (charged at the dearest rate) and connections whose last test failed. An empty list means nothing is wrong. Administrators only.',
+    'Lists AI control problems: documents skipped because they failed their checks (that part uses the default), keys the settings file still holds that could not be moved to the backend, and published prompts that fell back to their built-in text. warnings lists models with no price (charged at the dearest rate) and providers in use with no active key. An empty list means nothing is wrong. Administrators only.',
   toolset: 'admin',
   kind: 'read',
   scope: 'ai:admin:read',
@@ -68,11 +68,11 @@ export const aiControlHealth = defineAction({
   mounts: { ddp: true, http: { method: 'GET', path: '/ai/control/health', operationId: 'getAIControlHealth' } },
   tool: { name: 'get_ai_control_health', title: 'Read AI control problems', description: 'Read the problems with this server\'s AI set-up: settings that were skipped and prompts that fell back to built-in text. Administrators only.' },
   input: { type: 'object', properties: {}, additionalProperties: false },
-  output: { type: 'object', properties: { generation: { type: 'integer' }, dbLayer: { type: 'string' }, health: { type: 'array' }, warnings: { type: 'array' } } },
+  output: { type: 'object', properties: { generation: { type: 'integer' }, health: { type: 'array' }, warnings: { type: 'array' } } },
   handler: async (principal, _input, { deps }) => {
     await requireAIControlAdmin(principal, deps)
     const snap = deps.aiControl.snapshot()
-    return { generation: snap.generation, dbLayer: snap.dbLayer, source: snap.source, health: deps.aiControl.health(), warnings: deps.aiControl.warnings?.() ?? [] }
+    return { generation: snap.generation, source: snap.source, health: deps.aiControl.health(), warnings: deps.aiControl.warnings?.() ?? [] }
   },
 })
 

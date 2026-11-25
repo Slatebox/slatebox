@@ -13,210 +13,53 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
-import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { checkResultText, connectionFormDefaults, keyText, lastCheckText, parseHeaders, providerFormDefaults } from './catalog-view.mjs'
+import { ReasonDialog } from './ReasonDialog'
+import { checkResultText, keyAddedText, keyFormDefaults, keyStatusText, lastTestText, lastUsedText, parseHeaders, priceText, providerFormDefaults, providerSubtitle } from './catalog-view.mjs'
 
-// Admin › AI control › Providers and keys: the providers Slatebox can talk to (the built-in ones and
-// those an administrator added), and under each the server's connections with which key they use.
-// Keys are write-only: the field is always empty and no action returns a key.
+// Admin › AI control › Providers and keys: every model provider this server talks to (Meta (Muse),
+// DeepInfra, …), its keys, and the services beside the models. Keys live only in the backend,
+// encrypted with the server's key-encryption key: a key field is always empty, and no action returns
+// a key, only which key it is (its fingerprint), when it was added, last tested and last used.
 const mono = { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.75rem' }
 const failure = (err, fallback) => err?.reason || err?.message || fallback
-const PROTOCOLS = [
-  { value: 'openai-chat', label: 'OpenAI-compatible chat (Gemini, Meta, Mistral, OpenRouter, Groq, Ollama, vLLM…)' },
-  { value: 'anthropic-messages', label: 'Anthropic Messages' },
-  { value: 'openai-images', label: 'OpenAI-compatible pictures' },
-]
-const CAPS = ['tools', 'vision', 'json', 'images', 'reasoning']
-const GRACE = [{ value: 0, label: 'Stop the old key now' }, { value: 1, label: 'Keep the old key 1 hour' }, { value: 24, label: 'Keep the old key 24 hours' }]
+// the Test results shown under each row, by id
+const NO_TESTS = {}
 
-// A saved connection as it is sent back unchanged (a save replaces the whole connection), so a
-// rotation or turning it off keeps its address, model, capabilities and limits.
-const keep = (c) => ({
-  name: c.name, type: c.provider, ...(c.model && { model: c.model }),
-  ...(!c.aux && c.baseUrl && { baseUrl: c.baseUrl }), ...(!c.aux && { capabilities: c.capabilities || {} }),
-  ...(c.maxTokens && { maxTokens: c.maxTokens }), ...(c.toolChoice && { toolChoice: c.toolChoice }),
-})
-
-function Reason({ value, onChange, label = 'Why (kept in the change history)' }) {
-  return <TextField label={label} value={value} onChange={(e) => onChange(e.target.value)} fullWidth multiline minRows={2} inputProps={{ maxLength: 500 }} sx={{ mt: 2 }} />
-}
-
-function AddConnection({ open, onClose, onDone, providers, hosted }) {
-  // the form starts filled (its first render reads every field), and again each time it opens
-  const [form, setForm] = useState(() => connectionFormDefaults(open))
+function AddProvider({ open, presets, onClose, onDone }) {
+  const [form, setForm] = useState(() => providerFormDefaults(presets))
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     if (open) {
-      setForm(connectionFormDefaults(open))
+      setForm(providerFormDefaults(presets))
       setError('')
     }
   }, [open])
   if (!open) return null
-  const provider = providers.find((p) => p.id === form.provider) || {}
-  const locked = Boolean(provider.baseUrl && provider.baseUrlLocked)
-  const set = (key) => (e) => setForm({ ...form, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
-  const save = async () => {
-    setBusy(true)
-    setError('')
-    const connection = {
-      name: form.name.trim(), type: form.provider,
-      ...(!locked && form.baseUrl.trim() && { baseUrl: form.baseUrl.trim() }),
-      ...(form.model.trim() && { model: form.model.trim() }),
-      ...(!provider.aux && { capabilities: { tools: form.tools, vision: form.vision, images: form.images } }),
-      ...(form.fromEnv ? { keyRef: { kind: 'env', name: form.envName.trim() } } : form.apiKey ? { apiKey: form.apiKey } : {}),
-    }
-    try {
-      await Meteor.callAsync('ai.connections.save', { connections: [connection] })
-      onDone(`Saved ${connection.name}.`)
-    } catch (err) {
-      setError(failure(err, 'The connection was not saved.'))
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth aria-labelledby="add-connection-title">
-      <DialogTitle id="add-connection-title">Add a connection</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
-          <TextField select label="Provider" value={form.provider} onChange={set('provider')}>
-            {providers.filter((p) => p.status !== 'archived').map((p) => <MenuItem key={p.id} value={p.id}>{p.label}</MenuItem>)}
-          </TextField>
-          <TextField label="Name" value={form.name} onChange={set('name')} helperText="Lowercase letters, digits and dashes, for example gemini-main." />
-          <TextField label="Address" value={locked ? provider.baseUrl : form.baseUrl} onChange={set('baseUrl')} disabled={locked}
-            helperText={locked ? 'This provider has its own address.' : 'The address up to /v1.'} placeholder={provider.baseUrl || 'https://…/v1'} />
-          <TextField label={provider.modelLabel || 'Model'} value={form.model} onChange={set('model')} />
-          {!form.fromEnv && (
-            <TextField label={provider.keyLabel || 'Key'} type="password" autoComplete="new-password" value={form.apiKey} onChange={set('apiKey')}
-              helperText="Stored encrypted. Slatebox never shows it again." />
-          )}
-          {!hosted && !provider.aux && (
-            <FormControlLabel control={<Checkbox checked={form.fromEnv} onChange={set('fromEnv')} />} label="Read the key from an environment variable" />
-          )}
-          {form.fromEnv && <TextField label="Environment variable" value={form.envName} onChange={set('envName')} helperText="A name starting SLATEBOX_AI_KEY_, read for each request." />}
-          {!provider.aux && (
-            <Box>
-              <Typography variant="body2" color="text.secondary">What the model can do</Typography>
-              {['tools', 'vision', 'images'].map((cap) => <FormControlLabel key={cap} control={<Checkbox checked={form[cap]} onChange={set(cap)} />} label={{ tools: 'Calls tools', vision: 'Reads pictures', images: 'Makes pictures' }[cap]} />)}
-            </Box>
-          )}
-        </Stack>
-        {error && <Alert severity="warning" sx={{ mt: 2 }}>{error}</Alert>}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" disabled={busy || !form.name.trim()} onClick={save}>Save connection</Button>
-      </DialogActions>
-    </Dialog>
-  )
-}
-
-function RotateKey({ connection, onClose, onDone }) {
-  const [apiKey, setApiKey] = useState('')
-  const [grace, setGrace] = useState(1)
-  const [reason, setReason] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  if (!connection) return null
-  const save = async () => {
-    setBusy(true)
-    setError('')
-    try {
-      const out = await Meteor.callAsync('ai.connections.save', {
-        connections: [{ ...keep(connection), apiKey, ...(grace && connection.hasKey ? { rotate: { graceHours: grace } } : {}) }],
-        ...(reason.trim() && { reason: reason.trim() }),
-      })
-      const after = out.fingerprints?.[connection.name]
-      onDone(`Rotated the key of ${connection.name}: ${connection.keyFingerprint ? `…${connection.keyFingerprint.split('…').pop()}` : 'none'} → ${after ? `…${after.split('…').pop()}` : 'saved'}.`)
-    } catch (err) {
-      setError(failure(err, 'The key was not rotated.'))
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth aria-labelledby="rotate-title">
-      <DialogTitle id="rotate-title">Rotate the key of {connection.name}</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2" sx={{ mb: 2 }}>{keyText(connection)}.</Typography>
-        <TextField label="New key" type="password" autoComplete="new-password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} fullWidth autoFocus />
-        <TextField select label="The old key" value={grace} onChange={(e) => setGrace(Number(e.target.value))} fullWidth sx={{ mt: 2 }}>
-          {GRACE.map((g) => <MenuItem key={g.value} value={g.value}>{g.label}</MenuItem>)}
-        </TextField>
-        <Reason value={reason} onChange={setReason} />
-        {error && <Alert severity="warning" sx={{ mt: 2 }}>{error}</Alert>}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" disabled={busy || !apiKey} onClick={save}>Rotate key</Button>
-      </DialogActions>
-    </Dialog>
-  )
-}
-
-function RemoveConnection({ connection, onClose, onDone }) {
-  const [reason, setReason] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  if (!connection) return null
-  const run = async () => {
-    setBusy(true)
-    setError('')
-    try {
-      const out = await Meteor.callAsync('ai.connections.remove', { names: [connection.name], reason: reason.trim() })
-      onDone(`Removed ${connection.name}${out.clearedChoices.length ? ` and the choices that named it (${out.clearedChoices.join(', ')})` : ''}.`)
-    } catch (err) {
-      setError(failure(err, 'The connection was not removed.'))
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth aria-labelledby="remove-connection-title">
-      <DialogTitle id="remove-connection-title">Remove {connection.name} and its key</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2">Features that use it go back to the settings file or the built-in AI. The saved key is deleted.</Typography>
-        <Reason value={reason} onChange={setReason} />
-        {error && <Alert severity="warning" sx={{ mt: 2 }}>{error}</Alert>}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Keep it</Button>
-        <Button color="error" variant="contained" disabled={busy || !reason.trim()} onClick={run}>Remove connection and key</Button>
-      </DialogActions>
-    </Dialog>
-  )
-}
-
-function AddProvider({ open, onClose, onDone }) {
-  const [form, setForm] = useState(providerFormDefaults)
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  useEffect(() => {
-    if (open) {
-      setForm(providerFormDefaults())
-      setError('')
-    }
-  }, [open])
-  if (!open) return null
-  const set = (key) => (e) => setForm({ ...form, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
+  const preset = presets.find((p) => p.id === form.preset) || {}
+  const other = preset.baseUrlLocked === false
+  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value })
+  const choose = (e) => setForm(providerFormDefaults(presets, e.target.value))
+  const toggleModel = (model) => setForm({ ...form, models: form.models.includes(model) ? form.models.filter((m) => m !== model) : [...form.models, model] })
   const save = async () => {
     setBusy(true)
     setError('')
     try {
       const provider = {
-        id: form.id.trim(), label: form.label.trim(), protocol: form.protocol,
-        ...(form.baseUrl.trim() ? { baseUrl: form.baseUrl.trim(), baseUrlLocked: form.baseUrlLocked } : { baseUrl: null }),
-        ...(form.protocol !== 'anthropic-messages' && { auth: { style: form.authStyle, ...(['header', 'query'].includes(form.authStyle) && { name: form.authName.trim() }) } }),
-        extraHeaders: parseHeaders(form.headers),
-        defaultCapabilities: form.caps,
+        preset: form.preset, ...(form.label.trim() && { label: form.label.trim() }), ...(form.id.trim() && { id: form.id.trim() }),
+        ...(other && { baseUrl: form.baseUrl.trim(), extraHeaders: parseHeaders(form.headers) }),
       }
-      await Meteor.callAsync('ai.providers.save', { provider })
-      onDone(`Added the provider ${provider.label}.`)
+      const added = await Meteor.callAsync('ai.providers.add', { provider, models: form.models })
+      let tested = null
+      if (form.apiKey) {
+        const key = await Meteor.callAsync('ai.keys.add', { provider: added.provider.id, apiKey: form.apiKey })
+        tested = await Meteor.callAsync('ai.keys.test', { id: key.id }).catch(() => null)
+      }
+      onDone(`Added ${added.provider.label}${form.apiKey ? ` with its key${tested ? `: ${checkResultText(tested)}` : ''}` : '. Add its key to use it'}.`)
     } catch (err) {
-      setError(failure(err, 'The provider was not saved.'))
+      setError(failure(err, 'The provider was not added.'))
     } finally {
       setBusy(false)
     }
@@ -226,164 +69,273 @@ function AddProvider({ open, onClose, onDone }) {
       <DialogTitle id="add-provider-title">Add a provider</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
-          <TextField label="Id" value={form.id} onChange={set('id')} helperText="Lowercase letters, digits and dashes, for example gemini." />
-          <TextField label="Label" value={form.label} onChange={set('label')} />
-          <TextField select label="Wire protocol" value={form.protocol} onChange={set('protocol')}>
-            {PROTOCOLS.map((p) => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
+          <TextField select label="Provider" value={form.preset} onChange={choose}>
+            {presets.map((p) => <MenuItem key={p.id} value={p.id}>{p.label}</MenuItem>)}
           </TextField>
-          <TextField label="Address" value={form.baseUrl} onChange={set('baseUrl')} placeholder="https://…/v1" helperText="Leave empty to let each connection give its own." />
-          {form.baseUrl.trim() && <FormControlLabel control={<Switch checked={form.baseUrlLocked} onChange={set('baseUrlLocked')} />} label="Connections keep this address" />}
-          {form.protocol !== 'anthropic-messages' && (
-            <Stack direction="row" spacing={2}>
-              <TextField select label="How the key is sent" value={form.authStyle} onChange={set('authStyle')} sx={{ minWidth: 220 }}>
-                <MenuItem value="bearer">Authorization: Bearer</MenuItem>
-                <MenuItem value="header">A header</MenuItem>
-                <MenuItem value="query">A query parameter</MenuItem>
-                <MenuItem value="none">No key</MenuItem>
-              </TextField>
-              {['header', 'query'].includes(form.authStyle) && <TextField label={form.authStyle === 'header' ? 'Header name' : 'Parameter name'} value={form.authName} onChange={set('authName')} />}
-            </Stack>
+          <TextField label="Name shown" value={form.label} onChange={set('label')} />
+          {other && <TextField label="Id" value={form.id} onChange={set('id')} helperText="Lowercase letters, digits and dashes, for example our-models." />}
+          <TextField
+            label="Address" value={other ? form.baseUrl : preset.baseUrl || ''} onChange={set('baseUrl')} disabled={!other}
+            placeholder="https://…/v1" helperText={other ? 'Any address that speaks the OpenAI API, up to /v1.' : 'Fixed for this provider.'}
+          />
+          {other && <TextField label="Extra headers (nothing secret)" value={form.headers} onChange={set('headers')} multiline minRows={2} placeholder="x-client: slatebox" />}
+          <TextField label="Key" type="password" autoComplete="new-password" value={form.apiKey} onChange={set('apiKey')} helperText="Stored encrypted on this server. Slatebox never shows it again. It is tested after saving." />
+          {(preset.models || []).length > 0 && (
+            <Box>
+              <Typography variant="body2" color="text.secondary">Models to add</Typography>
+              {preset.models.map((m) => (
+                <FormControlLabel key={m.model} control={<Checkbox checked={form.models.includes(m.model)} onChange={() => toggleModel(m.model)} />}
+                  label={<span>{m.label} <span style={mono}>{m.model}</span> · {priceText(m)}</span>} />
+              ))}
+            </Box>
           )}
-          <TextField label="Extra headers (nothing secret)" value={form.headers} onChange={set('headers')} multiline minRows={2} placeholder="x-client: slatebox" />
-          <Box>
-            <Typography variant="body2" color="text.secondary">What its models can usually do</Typography>
-            {CAPS.map((cap) => (
-              <FormControlLabel key={cap} control={<Checkbox checked={Boolean(form.caps[cap])} onChange={(e) => setForm({ ...form, caps: { ...form.caps, [cap]: e.target.checked } })} />} label={cap} />
-            ))}
-          </Box>
         </Stack>
         {error && <Alert severity="warning" sx={{ mt: 2 }}>{error}</Alert>}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" disabled={busy || !form.id.trim() || !form.label.trim()} onClick={save}>Save provider</Button>
+        <Button variant="contained" disabled={busy || (other && (!form.baseUrl.trim() || !form.id.trim()))} onClick={save}>Save</Button>
       </DialogActions>
     </Dialog>
   )
 }
 
-function ConnectionRow({ connection, onTest, onRotate, onToggle, onRemove, tested }) {
-  const off = connection.status === 'disabled'
+// Add a key (a provider with none), or replace the active one ("cycle"): paste, test, switch. The
+// old key is revoked at once when the switch is made; a key that fails its test is never switched to.
+function KeyDialog({ open, onClose, onDone }) {
+  const [form, setForm] = useState(keyFormDefaults)
+  const [tested, setTested] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    if (open) {
+      setForm(keyFormDefaults())
+      setTested(null)
+      setError('')
+    }
+  }, [open])
+  if (!open) return null
+  const { provider, active } = open
+  const replacing = Boolean(active)
+  const needsModel = Boolean(provider.modelLabel)
+  const set = (key) => (e) => {
+    setForm({ ...form, [key]: e.target.value })
+    if (key === 'apiKey') setTested(null)
+  }
+  const test = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      setTested(await Meteor.callAsync('ai.keys.test', { provider: provider.id, apiKey: form.apiKey, ...(form.model.trim() && { model: form.model.trim() }) }))
+    } catch (err) {
+      setError(failure(err, 'The test did not run.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const save = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      const extra = { ...(form.model.trim() && { model: form.model.trim() }), ...(form.label.trim() && { label: form.label.trim() }) }
+      if (replacing) {
+        const out = await Meteor.callAsync('ai.keys.rotate', { provider: provider.id, apiKey: form.apiKey, ...extra })
+        if (!out.activated) {
+          setTested(out.test)
+          setError('The new key did not pass its test, so the old key stays active. The new key is saved as standby.')
+          return
+        }
+        onDone(`${provider.label} now uses ${out.key.keyFingerprint}.${out.revoked ? ` The old key (${out.revoked.keyFingerprint}) is revoked.` : ''}`)
+      } else {
+        const key = await Meteor.callAsync('ai.keys.add', { provider: provider.id, apiKey: form.apiKey, ...extra })
+        onDone(`Saved ${provider.label}'s key ${key.keyFingerprint}.`)
+      }
+    } catch (err) {
+      setError(failure(err, 'The key was not saved.'))
+    } finally {
+      setBusy(false)
+    }
+  }
   return (
-    <Box data-testid={`connection-${connection.name}`} sx={{ py: 1.25, borderTop: 1, borderColor: 'divider', opacity: off ? 0.6 : 1 }}>
-      <Box display="flex" alignItems="baseline" gap={1} flexWrap="wrap">
-        <Typography variant="subtitle2">{connection.name}</Typography>
-        {connection.model && <Typography component="span" sx={mono} color="text.secondary">{connection.model}</Typography>}
-        {off && <Chip size="small" label="Turned off" />}
-        {connection.editable === false && <Chip size="small" variant="outlined" label="Settings file" />}
-      </Box>
-      <Typography variant="body2" color="text.secondary">{keyText(connection)} · {lastCheckText(connection)}</Typography>
-      {connection.previousKeyUntil && <Typography variant="body2" color="text.secondary">The previous key keeps working until {new Date(connection.previousKeyUntil).toLocaleString()}.</Typography>}
-      {tested && <Alert severity={tested.ok ? 'success' : 'warning'} sx={{ mt: 1, py: 0 }}>{tested.text}</Alert>}
-      {connection.editable === false ? (
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Set in the settings file. Change it there.</Typography>
-      ) : (
-        <Stack direction="row" spacing={1} sx={{ mt: 0.5 }} flexWrap="wrap">
-          <Button size="small" onClick={() => onTest(connection)}>Test</Button>
-          <Button size="small" onClick={() => onRotate(connection)}>{connection.hasKey ? 'Rotate key' : 'Add a key'}</Button>
-          <Button size="small" onClick={() => onToggle(connection)}>{off ? 'Turn on' : 'Turn off'}</Button>
-          <Button size="small" color="error" onClick={() => onRemove(connection)}>Remove…</Button>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth aria-labelledby="key-dialog-title">
+      <DialogTitle id="key-dialog-title">{replacing ? `Replace ${provider.label}'s key` : `Add ${provider.label}'s key`}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <Typography variant="body2">1. Paste the new key</Typography>
+          <TextField label={provider.keyLabel || 'Key'} type="password" autoComplete="new-password" value={form.apiKey} onChange={set('apiKey')} autoFocus />
+          {needsModel && <TextField label={provider.modelLabel} value={form.model} onChange={set('model')} />}
+          <Box>
+            <Typography variant="body2">2. Test it</Typography>
+            <Button size="small" variant="outlined" sx={{ mt: 1 }} disabled={busy || !form.apiKey} onClick={test}>Test new key</Button>
+            {tested && <Alert severity={tested.ok ? 'success' : 'warning'} sx={{ mt: 1, py: 0 }}>{checkResultText(tested)}</Alert>}
+          </Box>
+          {replacing && (
+            <Typography variant="body2">
+              3. Switch to the new key: the old key (<span style={mono}>{active.keyFingerprint}</span>) is revoked at once.
+            </Typography>
+          )}
         </Stack>
-      )}
+        {error && <Alert severity="warning" sx={{ mt: 2 }}>{error}</Alert>}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" disabled={busy || !form.apiKey || (replacing && !tested?.ok)} onClick={save}>{replacing ? 'Switch to the new key' : 'Save key'}</Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+function KeyRow({ k, tested, onTest, onActivate, onRevoke, onDelete }) {
+  const revoked = k.status === 'revoked'
+  return (
+    <Box data-testid={`key-${k.id}`} sx={{ py: 1, borderTop: 1, borderColor: 'divider', opacity: revoked ? 0.65 : 1 }}>
+      <Box display="flex" alignItems="baseline" gap={1} flexWrap="wrap">
+        <Chip size="small" color={k.status === 'active' ? 'success' : 'default'} label={keyStatusText(k)} />
+        <Typography component="span" sx={mono}>{k.keyFingerprint}</Typography>
+        <Typography component="span" variant="body2" color="text.secondary">{keyAddedText(k)}</Typography>
+        {!revoked && <Typography component="span" variant="body2" color="text.secondary">· {lastUsedText(k)}</Typography>}
+      </Box>
+      {!revoked && <Typography variant="body2" color="text.secondary">{lastTestText(k)}</Typography>}
+      {tested && <Alert severity={tested.ok ? 'success' : 'warning'} sx={{ mt: 1, py: 0 }}>{tested.text}</Alert>}
+      <Stack direction="row" spacing={1} sx={{ mt: 0.5 }} flexWrap="wrap">
+        {!revoked && <Button size="small" onClick={() => onTest(k)}>Test</Button>}
+        {k.status === 'standby' && <Button size="small" onClick={() => onActivate(k)}>Switch to this key</Button>}
+        {!revoked && <Button size="small" color="error" onClick={() => onRevoke(k)}>Revoke…</Button>}
+        {k.status !== 'active' && <Button size="small" onClick={() => onDelete(k)}>Delete…</Button>}
+      </Stack>
     </Box>
   )
 }
 
 export default function Providers() {
-  const [providers, setProviders] = useState(null)
-  const [connections, setConnections] = useState([])
-  const [hosted, setHosted] = useState(true)
+  const [snap, setSnap] = useState(null)
+  const [keys, setKeys] = useState([])
   const [keysAvailable, setKeysAvailable] = useState(true)
+  const [usedBy, setUsedBy] = useState({})
   const [error, setError] = useState('')
   const [note, setNote] = useState(null)
-  const [adding, setAdding] = useState(null)
-  const [addingProvider, setAddingProvider] = useState(false)
-  const [rotating, setRotating] = useState(null)
-  const [removing, setRemoving] = useState(null)
-  const [tests, setTests] = useState({})
+  const [adding, setAdding] = useState(false)
+  const [keying, setKeying] = useState(null)
+  const [confirming, setConfirming] = useState(null)
+  const [tests, setTests] = useState(NO_TESTS)
 
   const load = async () => {
     try {
-      const [snap, listed] = await Promise.all([Meteor.callAsync('ai.control.get', {}), Meteor.callAsync('ai.connections.list', {})])
-      setProviders(snap.providers)
-      setConnections(listed.connections)
-      setHosted(listed.hosted)
+      const [control, listed, bindings] = await Promise.all([
+        Meteor.callAsync('ai.control.get', {}), Meteor.callAsync('ai.keys.list', {}), Meteor.callAsync('ai.bindings.list', {}),
+      ])
+      setSnap(control)
+      setKeys(listed.keys)
       setKeysAvailable(listed.keysAvailable)
+      // which parts of Slatebox each provider answers, for the revoke warning
+      const parts = {}
+      for (const row of bindings.surfaces) {
+        const provider = row.resolved?.route?.provider
+        if (provider && row.resolved.enabled) (parts[provider] ||= []).push(row.title)
+      }
+      setUsedBy(parts)
       setError('')
     } catch (err) {
       setError(failure(err, 'The providers could not be read.'))
     }
   }
   useEffect(() => { load() }, [])
-  const done = (text) => {
-    setAdding(null)
-    setAddingProvider(false)
-    setRotating(null)
-    setRemoving(null)
-    setNote({ severity: 'success', text })
+  const done = (text, severity = 'success') => {
+    setAdding(false)
+    setKeying(null)
+    setConfirming(null)
+    setNote({ severity, text })
     load()
   }
-  const test = async (connection) => {
-    setTests({ ...tests, [connection.name]: { ok: true, text: 'Testing…' } })
+  const test = async (k) => {
+    setTests((t) => ({ ...t, [k.id]: { ok: true, text: 'Testing…' } }))
     try {
-      const result = await Meteor.callAsync('ai.check', { level: 'server', name: connection.name })
-      setTests((t) => ({ ...t, [connection.name]: { ok: result.ok, text: checkResultText(result, connection) } }))
+      const result = await Meteor.callAsync('ai.keys.test', { id: k.id })
+      setTests((t) => ({ ...t, [k.id]: { ok: result.ok, text: checkResultText(result) } }))
       load()
     } catch (err) {
-      setTests((t) => ({ ...t, [connection.name]: { ok: false, text: failure(err, 'The test did not run.') } }))
+      setTests((t) => ({ ...t, [k.id]: { ok: false, text: failure(err, 'The test did not run.') } }))
     }
   }
-  const toggle = async (connection) => {
+  const activate = async (k) => {
     try {
-      await Meteor.callAsync('ai.connections.save', { connections: [{ ...keep(connection), status: connection.status === 'disabled' ? 'active' : 'disabled' }] })
-      done(`${connection.name} is ${connection.status === 'disabled' ? 'on' : 'off'}.`)
+      const out = await Meteor.callAsync('ai.keys.activate', { id: k.id })
+      done(`Switched to ${out.key.keyFingerprint}.${out.revoked ? ` The old key (${out.revoked.keyFingerprint}) is revoked.` : ''}`)
     } catch (err) {
-      setNote({ severity: 'warning', text: failure(err, 'The connection was not changed.') })
+      setNote({ severity: 'warning', text: failure(err, 'The key was not switched.') })
     }
   }
 
   if (error) return <Alert severity="warning">{error}</Alert>
-  if (!providers) return <Typography color="text.secondary">Reading providers…</Typography>
-  const byProvider = (id) => connections.filter((c) => c.provider === id || c.type === id)
-  const models = providers.filter((p) => !p.aux)
-  const services = providers.filter((p) => p.aux)
-  const card = (p) => (
-    <Paper key={p.id} variant="outlined" sx={{ p: 2 }} data-testid={`provider-${p.id}`}>
-      <Box display="flex" alignItems="baseline" gap={1} flexWrap="wrap">
-        <Typography variant="subtitle1" component="h3">{p.label}</Typography>
-        <Typography component="span" sx={mono} color="text.secondary">{p.id}</Typography>
-        {p.builtin && <Chip size="small" label="Built in" />}
-      </Box>
-      <Typography variant="body2" color="text.secondary">
-        {p.protocol}{p.baseUrl ? ` · ${p.baseUrl}${p.baseUrlLocked ? '' : ' (connections may change it)'}` : ' · each connection gives its address'}
-        {p.auth?.style === 'header' && p.auth.name ? ` · key in ${p.auth.name}` : ''}{p.auth?.style === 'query' ? ` · key in ?${p.auth.name}` : ''}
-      </Typography>
-      {byProvider(p.id).map((c) => (
-        <ConnectionRow key={c.name} connection={c} tested={tests[c.name]} onTest={test} onRotate={setRotating} onToggle={toggle} onRemove={setRemoving} />
-      ))}
-      <Button size="small" sx={{ mt: 1 }} onClick={() => setAdding({ provider: p.id })}>Add a connection</Button>
-    </Paper>
-  )
+  if (!snap) return <Typography color="text.secondary">Reading providers…</Typography>
+  const labelOf = (id) => snap.providers.find((p) => p.id === id)?.label || id
+  const imports = (snap.health || []).filter((h) => h.kind === 'keys-import')
+  const leftovers = (snap.health || []).filter((h) => h.kind === 'keys-settings')
+  const modelProviders = snap.providers.filter((p) => !p.aux && p.status !== 'archived')
+  const services = snap.providers.filter((p) => p.aux)
+  const keysOf = (id) => keys.filter((k) => k.provider === id)
+
+  const card = (p) => {
+    const own = keysOf(p.id)
+    const active = own.find((k) => k.status === 'active')
+    const models = snap.models.filter((m) => m.provider === p.id).map((m) => m.label || m.model)
+    return (
+      <Paper key={p.id} variant="outlined" sx={{ p: 2 }} data-testid={`provider-${p.id}`}>
+        <Box display="flex" alignItems="baseline" gap={1} flexWrap="wrap">
+          <Typography variant="subtitle1" component="h3">{p.label}</Typography>
+          <Typography component="span" variant="caption" color="text.secondary">{providerSubtitle(p)}</Typography>
+        </Box>
+        {!active && <Typography variant="body2" color="warning.main" sx={{ mt: 0.5 }}>No active key: the parts that use {p.label} do not answer until you add one.</Typography>}
+        {own.map((k) => (
+          <KeyRow key={k.id} k={k} tested={tests[k.id]} onTest={test} onActivate={activate}
+            onRevoke={(key) => setConfirming({ kind: 'revoke', key, provider: p })}
+            onDelete={(key) => setConfirming({ kind: 'delete', key, provider: p })} />
+        ))}
+        {!p.aux && <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Models: {models.length ? models.join(', ') : 'none yet (add them on the Models tab)'}</Typography>}
+        <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+          <Button size="small" variant="outlined" disabled={!keysAvailable} onClick={() => setKeying({ provider: p, active })}>{active ? 'Replace key…' : 'Add a key'}</Button>
+          {!p.aux && <Button size="small" color="error" onClick={() => setConfirming({ kind: 'archive', provider: p })}>Archive…</Button>}
+        </Stack>
+      </Paper>
+    )
+  }
 
   return (
     <Box>
       {note && <Alert severity={note.severity} sx={{ mb: 2 }} onClose={() => setNote(null)}>{note.text}</Alert>}
-      {!keysAvailable && <Alert severity="warning" sx={{ mb: 2 }}>This server has no key-encryption key, so it cannot save keys. Connections without a key, or with a key from an environment variable, still work.</Alert>}
+      {imports.map((h) => <Alert key={h.id} severity="error" sx={{ mb: 2 }} data-testid="keys-import-alert">{h.problem}</Alert>)}
+      {leftovers.map((h) => <Alert key={h.id} severity="warning" sx={{ mb: 2 }}>{h.problem}</Alert>)}
+      {!keysAvailable && <Alert severity="error" sx={{ mb: 2 }}>This server has no key-encryption key, so it cannot store keys. Set SLATEBOX_KEY_ENCRYPTION_KEY and restart.</Alert>}
       <Box display="flex" alignItems="baseline" gap={2} flexWrap="wrap" mb={1}>
-        <Typography variant="h6" component="h2">Models</Typography>
-        <Button variant="outlined" size="small" onClick={() => setAdding({})}>Add connection</Button>
-        <Button size="small" onClick={() => setAddingProvider(true)}>Add provider…</Button>
+        <Typography variant="h6" component="h2">Providers and keys</Typography>
+        <Button variant="outlined" size="small" onClick={() => setAdding(true)}>Add a provider</Button>
       </Box>
-      <Stack spacing={2}>{models.map(card)}</Stack>
-      <Typography variant="h6" component="h2" sx={{ mt: 4, mb: 1 }}>Services beside the models</Typography>
-      <Typography variant="body2" color="text.secondary" mb={1}>
-        Picture search, icons, call transcription and generated pictures. A key saved here is used from the next request, instead of the settings file&apos;s.
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Keys are stored encrypted on this server. Slatebox never shows a key again after you save it.
       </Typography>
+      <Stack spacing={2}>{modelProviders.map(card)}</Stack>
+      <Typography variant="h6" component="h2" sx={{ mt: 4, mb: 1 }}>Services beside the models</Typography>
+      <Typography variant="body2" color="text.secondary" mb={1}>Generated pictures, picture search, icons and call transcription.</Typography>
       <Stack spacing={2}>{services.map(card)}</Stack>
-      <AddConnection open={adding} onClose={() => setAdding(null)} onDone={done} providers={providers} hosted={hosted} />
-      <AddProvider open={addingProvider} onClose={() => setAddingProvider(false)} onDone={done} />
-      <RotateKey connection={rotating} onClose={() => setRotating(null)} onDone={done} />
-      <RemoveConnection connection={removing} onClose={() => setRemoving(null)} onDone={done} />
+      <AddProvider open={adding} presets={snap.presets || []} onClose={() => setAdding(false)} onDone={done} />
+      <KeyDialog open={keying} onClose={() => setKeying(null)} onDone={done} />
+      <ReasonDialog
+        open={Boolean(confirming)}
+        danger
+        title={confirming?.kind === 'revoke' ? `Revoke ${confirming.provider.label}'s key ${confirming.key.keyFingerprint}?`
+          : confirming?.kind === 'delete' ? `Delete the record of ${confirming.key.keyFingerprint}?` : confirming ? `Archive ${confirming.provider.label}?` : ''}
+        body={confirming?.kind === 'revoke' && confirming.key.status === 'active'
+          ? <Typography variant="body2">{(usedBy[confirming.provider.id] || []).length ? `${usedBy[confirming.provider.id].join(', ')} use this provider; they stop answering until you add a key.` : 'Nothing uses this provider right now.'} The key is wiped; its record stays.</Typography>
+          : confirming?.kind === 'archive' ? <Typography variant="body2">A provider a part of Slatebox uses cannot be archived: change it on the Bindings tab first.</Typography> : null}
+        action={confirming?.kind === 'revoke' ? 'Revoke' : confirming?.kind === 'delete' ? 'Delete' : 'Archive'}
+        onClose={() => setConfirming(null)}
+        onConfirm={async (reason) => {
+          if (confirming.kind === 'revoke') await Meteor.callAsync('ai.keys.revoke', { id: confirming.key.id, reason })
+          else if (confirming.kind === 'delete') await Meteor.callAsync('ai.keys.remove', { id: confirming.key.id, reason })
+          else await Meteor.callAsync('ai.providers.archive', { id: confirming.provider.id, reason })
+          done(confirming.kind === 'revoke' ? `Revoked ${labelOf(confirming.provider.id)}'s key ${confirming.key.keyFingerprint}.` : confirming.kind === 'delete' ? 'Deleted the key\'s record.' : `Archived ${confirming.provider.label}.`)
+        }}
+      />
     </Box>
   )
 }

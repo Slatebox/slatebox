@@ -10,7 +10,6 @@ export const COLLECTIONS = Object.freeze({
   providers: 'aiProviders',
   models: 'aiModels',
   bindings: 'aiBindings',
-  bindingVersions: 'aiBindingVersions',
   agents: 'aiAgents',
   prompts: 'aiPrompts',
   promptVersions: 'aiPromptVersions',
@@ -21,7 +20,7 @@ export const STATE_ID = 'global'
 export const AUDIT_DAYS = 400
 const VIA = ['ddp', 'http', 'exec', 'mcp', 'cli', 'system']
 // Changes that cannot be undone by saving again need a reason in the audit trail.
-const NEEDS_REASON = /\.(publish|rollback|remove|archive|reset|rotate|setGlobal)$/
+const NEEDS_REASON = /\.(publish|rollback|remove|archive|reset|revoke|setGlobal)$/
 const SECRET_FIELD = /^(apiKey|key|cipher|previousCipher|plaintext|authorization|secret|clientSecret|token|password)$/i
 // Values that look like a key whatever field they are in (spec 6.2).
 const SECRET_VALUE = /^(sk-[A-Za-z0-9_-]{8,}|sk-ant-[A-Za-z0-9_-]{8,}|AIza[0-9A-Za-z_-]{20,}|[A-Za-z0-9+/=_-]{40,})$/
@@ -82,7 +81,7 @@ export function createControlStore({ collections, newId, now = () => new Date(),
     const at = now()
     const result = await collections.state.findOneAndUpdate(
       { _id: STATE_ID },
-      { $inc: { generation: 1 }, $set: { lastPublishAt: at, lastPublishBy: actor.userId }, $setOnInsert: { aiEnabled: true, dbLayer: 'on' } },
+      { $inc: { generation: 1 }, $set: { lastPublishAt: at, lastPublishBy: actor.userId }, $setOnInsert: { aiEnabled: true } },
       { upsert: true, returnDocument: 'after', ...(session && { session }) },
     )
     // driver 6 returns the document, driver 4/5 { value }
@@ -104,7 +103,7 @@ export function createControlStore({ collections, newId, now = () => new Date(),
 
   /**
    * Writes one document (doc) or removes it (doc null), with its audit row.
-   * change: { kind (a COLLECTIONS key other than audit), id, doc|null, action ('ai.bindings.publish'),
+   * change: { kind (a COLLECTIONS key other than audit), id, doc|null, action ('ai.bindings.set'),
    *           actor { userId, principal, via, tokenId? }, reason?, evalRun?, create? (insert only:
    *           a ControlStoreError code conflict when the id exists) }
    * → { generation, before, after, auditId }
@@ -190,8 +189,8 @@ export function createControlStore({ collections, newId, now = () => new Date(),
     return auditRow({ action, actor: who, target: { kind: target.kind, id: target.id }, before, after, reason: why })
   }
 
-  /** The global state document (generation, AI on/off, dbLayer). */
-  const state = async () => (await collections.state.findOne({ _id: STATE_ID })) || { _id: STATE_ID, generation: 0, aiEnabled: true, dbLayer: 'on' }
+  /** The global state document (generation, AI on/off). */
+  const state = async () => (await collections.state.findOne({ _id: STATE_ID })) || { _id: STATE_ID, generation: 0, aiEnabled: true }
 
   return { write, record, refused, state, bump: (actor) => bump(checkActor(actor), null) }
 }
@@ -203,9 +202,8 @@ export async function ensureAIControlIndexes(collections, { auditDays = AUDIT_DA
   await collections.audit.createIndex({ 'target.id': 1, at: -1 })
   await collections.audit.createIndex({ action: 1, at: -1 })
   await collections.bindings.createIndex({ surface: 1 })
-  await collections.bindingVersions.createIndex({ bindingId: 1, version: -1 }, { unique: true })
   await collections.promptVersions.createIndex({ promptId: 1, version: -1 }, { unique: true })
-  await collections.models.createIndex({ connection: 1 })
+  await collections.models.createIndex({ provider: 1 })
   await collections.prompts.createIndex({ surface: 1 })
 }
 

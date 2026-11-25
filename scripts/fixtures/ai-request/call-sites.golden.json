@@ -1,12 +1,6 @@
 {
   "laneChat": {
     "request": {
-      "provider": "deepinfra",
-      "engine": "Qwen/Qwen3-235B-A22B-Instruct-2507",
-      "fallback": {
-        "provider": "deepinfra",
-        "engine": "deepseek-ai/DeepSeek-V3.1-Terminus"
-      },
       "feature": "workshop",
       "sdkChat": true,
       "shareId": "share1",
@@ -84,12 +78,6 @@
   },
   "mapChat": {
     "request": {
-      "provider": "deepinfra",
-      "engine": "Qwen/Qwen3-235B-A22B-Instruct-2507",
-      "fallback": {
-        "provider": "deepinfra",
-        "engine": "deepseek-ai/DeepSeek-V3.1-Terminus"
-      },
       "feature": "workshop",
       "sdkChat": true,
       "shareId": "share1",
@@ -577,8 +565,6 @@
   },
   "draft:lanes": {
     "request": {
-      "provider": "deepinfra",
-      "engine": "Qwen/Qwen3-235B-A22B-Instruct-2507",
       "feature": "workshop",
       "prompts": [
         {
@@ -747,8 +733,6 @@
   },
   "draft:map": {
     "request": {
-      "provider": "deepinfra",
-      "engine": "Qwen/Qwen3-235B-A22B-Instruct-2507",
       "feature": "workshop",
       "prompts": [
         {
@@ -884,8 +868,6 @@
   },
   "draft:release-plan": {
     "request": {
-      "provider": "deepinfra",
-      "engine": "Qwen/Qwen3-235B-A22B-Instruct-2507",
       "feature": "workshop",
       "prompts": [
         {
@@ -994,8 +976,6 @@
   },
   "draft:revision": {
     "request": {
-      "provider": "deepinfra",
-      "engine": "Qwen/Qwen3-235B-A22B-Instruct-2507",
       "feature": "workshop",
       "prompts": [
         {
@@ -1070,8 +1050,6 @@
   },
   "canvas": {
     "request": {
-      "provider": "deepinfra",
-      "engine": "Qwen/Qwen3-235B-A22B-Instruct-2507",
       "feature": "workshop",
       "sdkChat": true,
       "shareId": "share1",
@@ -1115,8 +1093,6 @@
   },
   "agent": {
     "request": {
-      "provider": "deepinfra",
-      "engine": "Qwen/Qwen3-235B-A22B-Instruct-2507",
       "feature": "workshop",
       "sdkChat": true,
       "shareId": null,

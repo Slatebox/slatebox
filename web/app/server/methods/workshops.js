@@ -11,7 +11,6 @@ import CONSTANTS from '../../imports/api/common/constants'
 import { Slates } from '../../imports/api/common/models'
 import { runAIAction } from '../metering/context.mjs'
 import { canStartAI } from '../metering/meteor'
-import { resolveAIFeatureConfig } from './ai/feature-config.mjs'
 import req from './ai/req'
 import { surfaceOffFor } from './ai/ai-settings'
 import { prepareConstraintProposal } from '../../imports/api/common/workshop-constraints.mjs'
@@ -70,8 +69,7 @@ async function chatTurn(input, map) {
   let selection
   try { selection = (map ? mapObjectSelection : laneObjectSelection)(workshop, input.selection) }
   catch (error) { throw new Meteor.Error('invalid-selection', error.message) }
-  // req chooses the model: the person's, their team's or the operator's connection, or the built-in AI
-  const config = resolveAIFeatureConfig('generation', Meteor.settings)
+  // req chooses the model: the part's in Admin → AI control, or a person's own connection
   const now = Date.now()
   const acquired = await Meteor.users.updateAsync({ _id: user._id, $or: [
     { mapChatAvailableAt: { $exists: false } }, { mapChatAvailableAt: { $lte: now } },
@@ -80,7 +78,7 @@ async function chatTurn(input, map) {
   try {
     const turn = await req({
       // the board conversation's own surface (ai-control/catalogue.mjs: workshop, which follows chat)
-      ...config, sdkChat: true, feature: map ? 'map-chat' : 'lane-chat', shareId,
+      feature: map ? 'map-chat' : 'lane-chat', sdkChat: true, shareId,
       system: map ? mapChatInstructions() : laneInstructions(),
       prompts: [...history, { role: 'user', content: JSON.stringify({ [map ? 'currentMap' : 'currentWorkshop']: workshop, ...(waited && { waited }), ...(selection && {selection}), message }) }],
       functions: [tool], allowPlainText: true, maxResponseValidationRetries: 1,
@@ -148,7 +146,6 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
   }, { $set: { workshopDraftAvailableAt: now + 60000 } })
   if (!acquired) throw new Meteor.Error('busy', 'Please wait a minute before requesting another draft.')
 
-  const config = resolveAIFeatureConfig('generation', Meteor.settings)
   // the instructions, tools and retries are prompts an administrator can edit (ai-control/prompts/workshop.mjs)
   const special = base ? {
     tool: constraintTool(format), instructions: constraintInstructions(), error: 'invalidConstraintProposal',
@@ -160,7 +157,7 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
   const tool = special?.tool || { ...authorTool, description: promptText('tool.draft_workshop') }
   const parse = special?.parse || validateWorkshop
   const plan = await req({
-    provider: config.provider, engine: config.engine, feature: 'workshop',
+    feature: 'workshop',
     prompts: [{ role: 'user', content: base ? JSON.stringify({ currentWorkshop: base, requestedChange: brief.trim() }) : brief.trim() }],
     system: special?.instructions || promptText('workshop.draft.system'),
     functions: [tool], function_call: { name: tool.name },

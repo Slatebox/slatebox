@@ -1,41 +1,67 @@
-// What the Providers and keys and Models tabs say, without React (so it is tested under node):
-// a connection's key in words, its last test, a model's prices and whether it is unpriced, and the
-// forms' text fields turned into the actions' input.
+// What the Providers and keys and Models tabs say, without React (so it is tested under node): a
+// key in words (which key, never the key), its last test and last use, a provider's address and
+// what it speaks, a model's prices, and the forms as they open.
 
 const day = (value) => {
   const at = value ? new Date(value) : null
-  return at && !Number.isNaN(at.getTime()) ? at.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : null
+  return at && !Number.isNaN(at.getTime()) ? at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : null
 }
-const tail = (fingerprint) => (typeof fingerprint === 'string' && fingerprint.includes('…') ? `…${fingerprint.split('…').pop()}` : null)
-
-/** A connection's key in words: never the key, only which key it is and where it lives. */
-export function keyText(connection) {
-  const ref = connection?.keyRef?.kind
-  if (ref === 'env') return connection.hasKey ? `Key read from ${connection.keyRef.name}` : `Key read from ${connection.keyRef.name}, which is not set on this server`
-  if (ref === 'file') return 'Key in the settings file'
-  if (!connection?.hasKey) return 'No key saved'
-  const which = tail(connection.keyFingerprint)
-  const added = day(connection.keyRotatedAt)
-  return `A key is saved${which ? ` (${which}${added ? `, added ${added}` : ''})` : ''}`
+const ago = (value, now = Date.now()) => {
+  const at = value ? new Date(value).getTime() : NaN
+  if (Number.isNaN(at)) return null
+  const minutes = Math.max(0, Math.round((now - at) / 60000))
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 48) return `${hours} h ago`
+  return day(value)
 }
 
-/** The last Test connection in words. */
-export function lastCheckText(connection) {
-  const check = connection?.lastCheck
-  if (!check) return 'Not tested yet'
-  const when = day(check.at)
-  if (check.ok) return `Worked${typeof check.latencyMs === 'number' ? ` in ${check.latencyMs} ms` : ''}${when ? ` on ${when}` : ''}`
-  return `Failed${when ? ` on ${when}` : ''}: ${check.error || 'no answer'}`
+const PROTOCOL = { 'openai-chat': 'speaks the OpenAI API', 'anthropic-messages': 'speaks the Anthropic API', 'openai-images': 'speaks the OpenAI images API' }
+
+/** A provider's subtitle: "api.meta.ai/v1 · speaks the OpenAI API". */
+export function providerSubtitle(provider = {}) {
+  let where = provider.baseUrl || ''
+  try {
+    const url = new URL(provider.baseUrl)
+    where = `${url.host}${url.pathname.replace(/\/+$/, '')}`
+  } catch {}
+  const speaks = PROTOCOL[provider.protocol]
+  return [where, speaks].filter(Boolean).join(' · ')
 }
 
-/** A Test connection result in one sentence ("Answered in 820 ms, tools work, pictures: not claimed"). */
-export function checkResultText(result, connection = {}) {
+const STATUS = { active: 'Active key', standby: 'Standby', revoked: 'Revoked' }
+/** A key's status in words. */
+export const keyStatusText = (key) => STATUS[key?.status] || 'Key'
+
+/** Who added a key and when ("added Nov 24, 2026 from the settings file"). */
+export function keyAddedText(key = {}) {
+  const when = day(key.createdAt)
+  const how = key.source === 'settings-import' ? 'from the settings file' : key.source === 'env-import' ? 'from an environment variable' : key.source === 'connection-import' ? 'from an earlier connection' : null
+  const parts = [when && `added ${when}`, how].filter(Boolean)
+  if (key.status === 'revoked' && key.revokedAt) parts.push(`revoked ${day(key.revokedAt)}`)
+  return parts.join(' ')
+}
+
+/** A key's last test in words. */
+export function lastTestText(key = {}) {
+  const t = key.lastTest
+  if (!t) return 'Not tested yet'
+  const when = day(t.at)
+  if (t.ok) return `Last tested ${when || ''}: worked${typeof t.latencyMs === 'number' ? ` in ${t.latencyMs} ms` : ''}`.replace(' :', ':')
+  return `Last tested ${when || ''}: failed (${t.error || 'no answer'})`.replace(' :', ':')
+}
+
+/** When a key was last used for a request. */
+export const lastUsedText = (key = {}, now = Date.now()) => (key.lastUsedAt ? `last used ${ago(key.lastUsedAt, now)}` : 'not used yet')
+
+/** A Test result in one sentence ("Answered in 820 ms, tools work"). */
+export function checkResultText(result) {
   if (!result) return ''
   if (!result.ok) return result.message || 'The test failed.'
-  const parts = [`Answered${typeof result.latencyMs === 'number' ? ` in ${result.latencyMs} ms` : ''}`]
+  const parts = [`Works${typeof result.latencyMs === 'number' ? ` (${result.latencyMs} ms)` : ''}`]
   if (result.tools === 'yes') parts.push('tools work')
   else if (result.tools === 'no') parts.push('tools do not work')
-  if (connection.capabilities) parts.push(`pictures: ${connection.capabilities.vision === true ? 'claimed' : 'not claimed'}`)
   return parts.join(', ')
 }
 
@@ -44,12 +70,12 @@ const dollars = (value) => (typeof value === 'number' ? `$${value}` : '–')
 export function priceText(model) {
   const p = model?.prices
   if (!p) return 'Unpriced'
-  if (typeof p.inputPerM === 'number' && typeof p.outputPerM === 'number') return `${dollars(p.inputPerM)} in · ${dollars(p.outputPerM)} out per million`
+  if (typeof p.inputPerM === 'number' && typeof p.outputPerM === 'number') return `${dollars(p.inputPerM)} / ${dollars(p.outputPerM)} per M`
   if (typeof p.imageEach === 'number') return `${dollars(p.imageEach)} per picture`
   return 'Unpriced'
 }
 
-/** Whether a model row has a price (the server also accepts a table or settings-file price: warnings say which are unpriced). */
+/** Whether a model row has a price of its own. */
 export const hasOwnPrice = (model) => priceText(model) !== 'Unpriced'
 
 /** "name: value" lines to an extraHeaders object; throws with a plain message for a bad line. */
@@ -71,26 +97,36 @@ export const numberOrNull = (text) => (String(text ?? '').trim() === '' ? null :
 /** The model ids that are unpriced, from ai.control.get's warnings. */
 export const unpricedIds = (warnings = []) => new Set(warnings.filter((w) => w.kind === 'unpriced').map((w) => w.id))
 
-// The Add a connection and Add provider forms as they open. Every field the dialogs read on their
-// first render is here (a form that started empty and was filled after the first render blanked
-// the page: form.name.trim() of undefined).
-export function connectionFormDefaults(open = null) {
-  return { provider: (open && open.provider) || 'openai-compatible', name: '', baseUrl: '', model: '', apiKey: '', fromEnv: false, envName: 'SLATEBOX_AI_KEY_', tools: true, vision: false, images: false }
+/** What a model can do, in words ("tools, vision"). */
+export const capsText = (caps = {}) => ['tools', 'vision', 'images', 'json', 'reasoning'].filter((c) => caps[c]).join(', ') || '—'
+
+/**
+ * The Add a provider form as it opens: every field its first render reads is set (a form that
+ * started empty and was filled after the first render blanked the page). presets: ai.control.get's.
+ */
+export function providerFormDefaults(presets = [], presetId = 'meta') {
+  const preset = presets.find((p) => p.id === presetId) || presets[0] || { id: presetId, label: '', baseUrl: '', models: [] }
+  return {
+    preset: preset.id, label: preset.label || '', id: preset.id === 'other' ? '' : preset.id, baseUrl: preset.baseUrlLocked === false ? '' : preset.baseUrl || '',
+    apiKey: '', models: (preset.models || []).slice(0, 1).map((m) => m.model), headers: '',
+  }
 }
-export function providerFormDefaults() {
-  return { id: '', label: '', protocol: 'openai-chat', baseUrl: '', baseUrlLocked: true, authStyle: 'bearer', authName: '', headers: '', caps: { tools: true } }
+
+/** The Add a key / Replace key form as it opens. */
+export function keyFormDefaults() {
+  return { apiKey: '', model: '', label: '' }
 }
 
 /**
- * The Add a model / Change form as it opens (open: { model?, connection?, modelName? } or null
- * while closed). Every field a Select or text field reads is set from the first render, so no
- * field turns from uncontrolled to controlled when the dialog fills.
+ * The Add a model / Change form as it opens (open: { model?, provider? } or null while closed).
+ * Every field a Select or text field reads is set from the first render.
  */
-export function modelFormDefaults(open = null, connections = [], builtin = []) {
+export function modelFormDefaults(open = null, providers = []) {
   const m = open?.model || {}
   return {
-    connection: m.connection || open?.connection || connections[0] || builtin[0] || '', model: m.model || open?.modelName || '', label: m.label || '',
-    caps: m.capabilities || { tools: true }, maxContext: m.maxContext ?? '', maxOutput: m.maxOutput ?? '',
-    inputPerM: m.prices?.inputPerM ?? '', outputPerM: m.prices?.outputPerM ?? '', status: m.status || 'enabled', existing: Boolean(open?.model),
+    provider: m.provider || open?.provider || providers[0]?.id || '', model: m.model || '', label: m.label || '',
+    caps: m.capabilities || { tools: true }, maxOutput: m.maxOutput ?? '',
+    inputPerM: m.prices?.inputPerM ?? '', outputPerM: m.prices?.outputPerM ?? '', imageEach: m.prices?.imageEach ?? '',
+    status: m.status || 'enabled', existing: Boolean(open?.model),
   }
 }

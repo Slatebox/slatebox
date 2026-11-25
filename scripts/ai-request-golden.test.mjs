@@ -3,7 +3,9 @@
 // lane-chat and map-chat, board drafting keeps workshop, the canvas conversation sends canvas and
 // the Slatebox agent sends agent. The goldens were captured from d8105c12 with
 // `node scripts/ai-request-golden.mjs <that tree>/web/app`. Every one of those features still
-// reaches the conversation choice, and every meter feature is unchanged.
+// reaches the conversation choice, and every meter feature is unchanged. The per-call provider,
+// model and fallback were taken out of the goldens when the built-in model table went (2026-11-24):
+// which model answers is chosen in Admin → AI control, never at the call site.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'

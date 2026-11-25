@@ -2,13 +2,12 @@
 // clearer one-line summary") and gets a proposal back, never a change. The core (core.mjs refine)
 // checks the proposal, shows it as a diff, and applies it only when the reviewer keeps it.
 //
-//   createRefineAI({ request, meter, canUseAI, refusal, config }) → refineWithAI
+//   createRefineAI({ request, meter, canUseAI, refusal }) → refineWithAI
 //   refineWithAI({ item, board, message, history, principal }) → { reply, meta?, edits?, check?, ai? }
 //
-// `request` is req (server/methods/ai/req.js) in the app: it picks the connection
-// settings.ai.use.library names, which falls back to use.chat, then use.default
-// (connections.mjs USE_FALLBACK), with built-in defaults under "library" in ai-defaults.json. No model
-// is named here. `meter` is runAIAction({ feature: 'library-refine', userId }), so every turn is
+// `request` is req (server/methods/ai/req.js) in the app: it picks the library part's model in
+// Admin → AI control, which follows Conversation and edits, then the default, while nothing is set.
+// No model is named here. `meter` is runAIAction({ feature: 'library-refine', userId }), so every turn is
 // counted like a chat turn. `ai` in the answer is what the event log keeps: the connection's ref,
 // never a key.
 //
@@ -184,14 +183,14 @@ const meterRefusal = (error) => (error && typeof error.error === 'string' && typ
 
 // `refusal(userId)` → { code, message, pay? } | null: why this person can't use AI now, in the meter's own
 // words (Pro, balance, today's amount used, AI off). Without one, or with no reason, the server has no AI.
-export function createRefineAI({ request, meter = (_opts, fn) => fn(), canUseAI = async () => true, refusal = async () => null, config = () => ({}) }) {
+export function createRefineAI({ request, meter = (_opts, fn) => fn(), canUseAI = async () => true, refusal = async () => null }) {
   return async function refineWithAI({ item, board, message, history = [], principal }) {
     const userId = principal?.userId ?? null
     if (!(await canUseAI(userId))) throw unavailable(await refusal(userId).catch(() => null))
     const tool = refineTool(item, board)
     const system = refinePrompt(item, board)
     const turn = await meter({ feature: 'library-refine', userId }, () => request({
-      ...config(), sdkChat: true, feature: 'library-refine', userId,
+      sdkChat: true, feature: 'library-refine', userId,
       system,
       prompts: [...historyTurns(history), { role: 'user', content: refineRequest({ item, board, message }) }],
       functions: [tool], function_call: { name: REFINE_TOOL_NAME }, maxResponseValidationRetries: 1,

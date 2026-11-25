@@ -170,88 +170,45 @@ declare namespace slatebox.ai.audit {
 }
 
 declare namespace slatebox.ai.bindings {
-  /** AI bindings. Lists every part of Slatebox that can be bound on this server, with its published binding (model chain, parameters, tools, limits, on/off), its versions newest first with author and note, and why a binding was skipped if it no longer passes its checks. Administrators only. @scope ai:admin:read */
+  /** AI bindings. Lists every part of Slatebox that can be bound, with its choice (a model, use the default, or turned off) and what it resolves to now (provider, model and where that comes from). Administrators only. @scope ai:admin:read */
   function list(input: Record<string, unknown>): Promise<{
     generation?: number;
     surfaces?: Array<Record<string, unknown>>;
+    skipped?: Array<Record<string, unknown>>;
     [key: string]: unknown;
   }>;
 }
 
 declare namespace slatebox.ai.bindings {
-  /** Save AI binding draft. Saves a draft binding for one part of Slatebox: its model chain (primary, then fallbacks with the failures each is tried for), parameters, allowed tools, limits and on/off. Changes nothing live: a person publishes it. An agent's draft is marked as a suggestion. Administrators only. @scope ai:admin */
-  function saveDraft(input: {
-    binding: {
-      /** The part of Slatebox, for example agent.slatebox or shape. */
+  /** Set AI bindings. Sets which model each named part of Slatebox uses: use model (a model id from the Models list, <provider>:<model>), default (the default model), or off (that part answers "turned off by your administrator"). A model that cannot do what the part needs is refused. Only the rows that change are written, each with its own line in the change history; note is optional. Every server picks it up within seconds. Administrators only. @scope ai:admin @confirm @idempotent */
+  function set(input: {
+    /** (1–14 items) */
+    changes: Array<{
+      /** The part of Slatebox, for example shape or agent.slatebox; default is everything not set. */
       surface: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors";
-      /** Only server in this build. */
-      scope?: {
-        level: "server";
-      };
-      /** false turns this part off for everyone; people see disabledMessage. */
-      enabled?: boolean;
-      /** What people see while it is off. (at most 300 characters) */
-      disabledMessage?: string | null;
-      /** The primary model, then fallbacks. Each entry names a model from the model list (model) or a connection with its own model (connection: server:<name>, or builtin for the built-in AI). Empty: follow what it follows. (at most 5 items) */
-      chain?: Array<{
-        /** (at most 260 characters) */
-        model?: string;
-        /** (at most 60 characters) */
-        connection?: string;
-        /** A fallback is tried when the previous model failed this way: infra (5xx, 429, timeout), shape (answers it could not use), context (too long), any. */
-        on?: Array<"infra" | "shape" | "context" | "any">;
-      }>;
-      /** When the chain keeps failing on a server: fallback uses the settings file and built-in AI for 10 minutes; report keeps the chain and says so. Unset: fallback only for a chain of two or more that lists the built-in AI. */
-      onTrip?: "fallback" | "report" | null;
-      /** timeoutMs, maxTokens (only lowers the call site's), infraRetries, shapeRetries, temperature. null or absent: the built-in value. */
-      params?: {
-        /** (1000 to 600000) */
-        timeoutMs?: number | null;
-        /** (1 to 1000000) */
-        maxTokens?: number | null;
-        /** (0 to 10) */
-        infraRetries?: number | null;
-        /** (1 to 10) */
-        shapeRetries?: number | null;
-        /** (0 to 2) */
-        temperature?: number | null;
-      };
-      /** slot: prompt id, or id@version to pin one. */
-      prompts?: Record<string, string>;
-      /** allow: the only tools sent and accepted back; mode forced, auto or none (none only where the part needs no tools). */
-      tools?: {
-        mode?: "forced" | "auto" | "none" | null;
-        /** (at most 30 items) */
-        allow?: string[] | null;
-      };
-      /** Micro-dollars per request; can only lower the built-in values. */
-      limits?: {
-        /** (at least 1) */
-        estimate?: number | null;
-        /** (at least 1) */
-        ceiling?: number | null;
-      };
-    };
-    /** A short note kept with the version. (at most 200 characters) */
+      use: "default" | "model" | "off";
+      /** With use model: <provider>:<model>. (at most 260 characters) */
+      model?: string;
+    }>;
+    /** Optional, kept in the change history. (at most 500 characters) */
     note?: string;
   }): Promise<({
-    bindingId?: string;
-    version?: number;
-    status?: string;
+    changed?: string[];
+    generation?: number | null;
     [key: string]: unknown;
   }) & { mode: "save" }>;
 }
 
 declare namespace slatebox.ai {
-  /** Test AI. Tests a saved connection (name) or one not yet saved (connection): whether Slatebox can reach it, whether it accepts the key, which models it lists where it lists them, whether the model answers and whether it calls tools (which conversation, drafts and presentations need). Saves nothing. A saved key is only sent to the address it was saved for. A token needs ai:admin as well for level team or server. On a self-hosted server a model on the host is at host.docker.internal, not localhost. @scope ai:settings @openWorld @idempotent */
+  /** Test AI. Tests your own or your team's saved connection (name) or one not yet saved (connection), on a self-hosted server: whether Slatebox can reach it, whether it accepts the key, which models it lists, whether the model answers and whether it calls tools (which conversation, drafts and presentations need). Saves nothing. A saved key is only sent to the address it was saved for. A token needs ai:admin as well for level team. The server's keys are tested with ai.keys.test. A model on the host is at host.docker.internal, not localhost. @scope ai:settings @openWorld @idempotent */
   function check(input: {
-    /** me (yours), team (team admins) or server (administrators). */
-    level?: "me" | "team" | "server";
+    /** me (yours) or team (team admins). */
+    level?: "me" | "team";
     name?: string;
     connection?: {
       /** Your name for it, for example desk-model. */
       name: string;
-      /** The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), openai, anthropic, deepinfra, or one an administrator added (ai.control.get lists them). */
+      /** The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added. */
       type: string;
       /** For openai-compatible: the address up to /v1, for example http://host.docker.internal:11434/v1. (at most 500 characters) */
       baseUrl?: string;
@@ -282,68 +239,11 @@ declare namespace slatebox.ai {
   }) & { mode: "save" }>;
 }
 
-declare namespace slatebox.ai.connections {
-  /** AI connections. Lists the server's AI connections: the settings file's (read-only) and the ones saved in the app, including the services beside the models (Stability, Google picture search, Noun Project, Deepgram). For each: its provider, address, model, where its key lives (sealed, an environment variable, the settings file or none), which key it is (a fingerprint, never the key), its last test and whether it is turned off. Administrators only. @scope ai:admin:read */
-  function list(input: Record<string, unknown>): Promise<{
-    connections?: Array<Record<string, unknown>>;
-    keysAvailable?: boolean;
-    [key: string]: unknown;
-  }>;
-}
-
-declare namespace slatebox.ai.connections {
-  /** Save AI connections. Adds or changes server connections: a provider, address, model and key. A key is sealed with the server's key and never returned; keyRef env reads it from an environment variable named SLATEBOX_AI_KEY_… for each request; rotate {graceHours} keeps the old key working for 1 or 24 hours. status disabled keeps a connection but sends nothing to it. Also connects the services beside the models (stability, google-cse with its search engine ID as model, nounproject as key:secret, deepgram). Only a person sends a key, names an environment variable or changes an address or provider; an agent may save a keyless connection to a provider with a fixed address. Administrators only. @scope ai:admin @destructive @confirm @idempotent */
-  function save(input: {
-    /** (1–20 items) */
-    connections: Array<{
-      /** The connection's name, for example gemini-main. */
-      name: string;
-      /** The provider: openai-compatible, openai, anthropic, deepinfra, one an administrator added, or a service beside the models (stability, google-cse, nounproject, deepgram). */
-      type: string;
-      /** For a provider without a fixed address: the address up to /v1. (at most 500 characters) */
-      baseUrl?: string;
-      /** The model it serves. For google-cse, the search engine ID (cx). (at most 200 characters) */
-      model?: string;
-      /** Stored encrypted with the server's key and never shown again. Leave it out to keep the saved key. For nounproject: key:secret. (at most 400 characters) */
-      apiKey?: string;
-      /** env: read the key from an environment variable named SLATEBOX_AI_KEY_… (or one the settings file allows) for each request; none: no key. Sending apiKey seals the key instead. */
-      keyRef?: {
-        kind: "env" | "none";
-        name?: string;
-      };
-      /** With a new apiKey: the old key keeps working for this many hours, in case the provider has not taken the new one yet. */
-      rotate?: {
-        graceHours: 0 | 1 | 24;
-      };
-      /** What the model can do, where you know it. Unset means try it; making images needs images: true. */
-      capabilities?: {
-        tools?: boolean;
-        vision?: boolean;
-        json?: boolean;
-        images?: boolean;
-        reasoning?: boolean;
-      };
-      /** (256 to 200000) */
-      maxTokens?: number;
-      toolChoice?: "auto" | "named" | "required";
-      /** disabled: kept, but nothing is sent to it. */
-      status?: "active" | "disabled";
-    }>;
-    /** Why, for the change history. (1–500 characters) */
-    reason?: string;
-  }): Promise<({
-    connections?: string[];
-    fingerprints?: Record<string, unknown>;
-    [key: string]: unknown;
-  }) & { mode: "save" }>;
-}
-
 declare namespace slatebox.ai.control {
-  /** Effective AI binding. Shows the binding each surface (or one) resolves to for a person (userId; none = someone not signed in), with the source of each field: a published binding, an AI settings choice, the settings file or the built-in default. usage true adds each surface's calls, failed calls and spend over the last 24 hours. Administrators only. @scope ai:admin:read */
+  /** Effective AI binding. Shows which model each part of Slatebox (or one) answers with for a person (userId; none = someone not signed in): the provider and model, and where that comes from (its own choice, the part it follows, the default, the built-in default, or the person's own AI on a self-hosted server). usage true adds each part's calls, failed calls and spend over the last 24 hours. Administrators only. @scope ai:admin:read */
   function effective(input: {
     surface?: string;
     userId?: string;
-    plan?: string;
     usage?: boolean;
   }): Promise<{
     generation?: number;
@@ -354,21 +254,21 @@ declare namespace slatebox.ai.control {
 }
 
 declare namespace slatebox.ai.control {
-  /** AI control. Returns the AI control snapshot: every surface and what it follows, providers, server connections (never keys), models, published bindings, agents, prompt heads, the global switch, and health (documents skipped because they failed their checks). Administrators only. @scope ai:admin:read */
+  /** AI control. Returns the AI control snapshot: every part of Slatebox and what it follows, the providers (what each is, its address) and which have an active key (a fingerprint, never the key), the provider presets, the models with their prices, the bindings, the default model, agents, prompt heads, the global switch, and health. Administrators only. @scope ai:admin:read */
   function get(input: Record<string, unknown>): Promise<{
     generation?: number;
-    dbLayer?: string;
     surfaces?: unknown[];
+    providers?: unknown[];
+    models?: unknown[];
     health?: unknown[];
     [key: string]: unknown;
   }>;
 }
 
 declare namespace slatebox.ai.control {
-  /** AI control health. Lists AI control problems: documents skipped because they failed their checks (that surface falls back to the settings file and built-in defaults), and published prompts that fell back to their built-in text. warnings lists models with no price (charged at the dearest rate) and connections whose last test failed. An empty list means nothing is wrong. Administrators only. @scope ai:admin:read */
+  /** AI control health. Lists AI control problems: documents skipped because they failed their checks (that part uses the default), keys the settings file still holds that could not be moved to the backend, and published prompts that fell back to their built-in text. warnings lists models with no price (charged at the dearest rate) and providers in use with no active key. An empty list means nothing is wrong. Administrators only. @scope ai:admin:read */
   function health(input: Record<string, unknown>): Promise<{
     generation?: number;
-    dbLayer?: string;
     health?: unknown[];
     warnings?: unknown[];
     [key: string]: unknown;
@@ -376,24 +276,19 @@ declare namespace slatebox.ai.control {
 }
 
 declare namespace slatebox.ai.control {
-  /** Reset AI control. Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); prompt returns one prompt (promptId) to its built-in text and drops a binding's pin of a version of it, prompts every prompt (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only. @scope ai:admin @destructive @confirm @idempotent */
+  /** Reset AI control. Returns AI configuration to its defaults. target binding removes one part's choice (surface), so it uses the default model again; bindings removes every part's choice and the default's, so the built-in default (Meta Muse Ember) answers everything; prompt returns one prompt (promptId) to its built-in text, prompts every prompt (their versions stay); all does every one. Providers, models and keys stay. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only. @scope ai:admin @destructive @confirm @idempotent */
   function reset(input: {
-    target: "use" | "binding" | "bindings" | "prompt" | "prompts" | "dbLayer" | "all";
+    target: "binding" | "bindings" | "prompt" | "prompts" | "all";
     /** For target binding: the part of Slatebox. */
     surface?: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors";
     /** For target prompt: the prompt. */
     promptId?: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa";
-    /** For target use: only these feature choices. (1–15 items) */
-    keys?: Array<"default" | "chat" | "chat.route" | "generation" | "generation.notes" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors">;
     /** (1–500 characters) */
     reason: string;
   }): Promise<({
     target?: string;
-    cleared?: string[];
     removed?: string[];
     prompts?: string[];
-    unpinned?: string[];
-    dbLayer?: string;
     [key: string]: unknown;
   }) & { mode: "save" }>;
 }
@@ -416,12 +311,48 @@ declare namespace slatebox.ai {
   }>;
 }
 
-declare namespace slatebox.ai.models {
-  /** Find AI models. Lists the models a server connection reports (GET <address>/models, OpenAI-compatible providers only), to fill in the model registry. Writes nothing; the key goes only to the connection's own address, with no redirects. Administrators only. @scope ai:admin:read @openWorld */
-  function discover(input: {
-    connection: string;
+declare namespace slatebox.ai.keys {
+  /** AI keys. Lists the server's provider keys (or one provider's): which key each is (a fingerprint), whether it is active, standby or revoked, who added it and when, and when it was last tested and last used. Never a key. Administrators only. @scope ai:admin:read */
+  function list(input: {
+    /** A model provider's id (for example meta or deepinfra), or a service beside the models (stability, google-cse, nounproject, deepgram). */
+    provider?: string;
   }): Promise<{
-    connection?: string;
+    keys?: Array<Record<string, unknown>>;
+    keysAvailable?: boolean;
+    fromSettings?: string[];
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.ai.keys {
+  /** Test AI key. Tests a saved key (id) or one not yet saved (provider and apiKey): whether the provider is reached, takes the key, and its model answers and calls tools. A saved key keeps the outcome (last tested). Saves nothing else. The key goes only to the provider's own address. An unsaved key is a person's test. Administrators only. @scope ai:admin @openWorld @idempotent */
+  function test(input: {
+    /** A key's id, from ai.keys.list. */
+    id?: string;
+    /** A model provider's id (for example meta or deepinfra), or a service beside the models (stability, google-cse, nounproject, deepgram). */
+    provider?: string;
+    /** Stored encrypted with the server's key-encryption key and never shown again. For nounproject: key:secret. (1–400 characters) */
+    apiKey?: string;
+    /** For google-cse, the search engine ID (cx). For a key test, the model asked (the provider's first model by default). (at most 200 characters) */
+    model?: string;
+  }): Promise<({
+    ok?: boolean;
+    reachable?: boolean;
+    tools?: string;
+    message?: string;
+    latencyMs?: number;
+    /** A key as anyone may read it: id, provider, status (active, standby, revoked), keyFingerprint, label, source, createdAt/By, activatedAt, revokedAt/By, lastTest, lastUsedAt. Never the key. */
+    key?: Record<string, unknown>;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.ai.models {
+  /** Find AI models. Lists the models a provider reports (GET <address>/models, OpenAI-compatible providers), with its active key, to fill in the models. Writes nothing; the key goes only to the provider's own address, with no redirects. Administrators only. @scope ai:admin:read @openWorld */
+  function discover(input: {
+    provider: string;
+  }): Promise<{
+    provider?: string;
     ok?: boolean;
     models?: Array<Record<string, unknown>>;
     message?: string;
@@ -430,17 +361,17 @@ declare namespace slatebox.ai.models {
 }
 
 declare namespace slatebox.ai.models {
-  /** Save AI models. Adds or changes models: the connection that serves each (server:<name> or builtin:<provider>), what it can do (tools, vision, json, images, reasoning), its context and output limits, and its prices in dollars per million input and output tokens (or per image). Metering charges these prices from the next call; a model with no price is charged at the dearest known rate and shown as unpriced. status disabled keeps a model out of bindings. Administrators only. @scope ai:admin @confirm @idempotent */
+  /** Save AI models. Adds or changes models: the provider that serves each, its id and name, what it can do (tools, vision, json, images, reasoning), its longest answer, and its prices in dollars per million input and output tokens (or per image). Metering charges these prices from the next call; a model with no price is charged at the dearest known rate and shown as unpriced. status disabled keeps a model out of the parts of Slatebox. Administrators only. @scope ai:admin @confirm @idempotent */
   function save(input: {
     /** (1–50 items) */
     models: Array<{
-      /** server:<connection> or builtin:deepinfra|openai|anthropic|stabilityai. */
-      connection: string;
-      /** (1–200 characters) */
+      /** The provider that serves it (ai.control.get lists them). */
+      provider: string;
+      /** The id the provider serves, for example muse-ember-1.0. (1–200 characters) */
       model: string;
-      /** (at most 80 characters) */
+      /** The name shown, for example Muse Ember. (at most 80 characters) */
       label?: string | null;
-      /** What the model can do. A binding refuses a model whose flags miss what its surface needs. */
+      /** What the model can do. A part of Slatebox refuses a model whose flags miss what it needs. */
       capabilities?: {
         tools?: boolean;
         vision?: boolean;
@@ -448,8 +379,6 @@ declare namespace slatebox.ai.models {
         images?: boolean;
         reasoning?: boolean;
       };
-      /** (at least 1) */
-      maxContext?: number | null;
       /** (at least 1) */
       maxOutput?: number | null;
       prices?: {
@@ -468,6 +397,20 @@ declare namespace slatebox.ai.models {
   }): Promise<({
     models?: Array<Record<string, unknown>>;
     generation?: number | null;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.ai.models {
+  /** Test AI model. Sends one short request to a model with its provider's active key: whether it answers and calls tools. Writes nothing. Administrators only. @scope ai:admin @openWorld @idempotent */
+  function test(input: {
+    /** A model's id: <provider>:<model>, for example meta:muse-ember-1.0. (3–260 characters) */
+    id: string;
+  }): Promise<({
+    id?: string;
+    ok?: boolean;
+    tools?: string;
+    message?: string;
     [key: string]: unknown;
   }) & { mode: "save" }>;
 }
@@ -565,52 +508,74 @@ declare namespace slatebox.ai.prompts {
 }
 
 declare namespace slatebox.ai.providers {
-  /** Save AI provider. Adds or changes a provider template: its wire protocol (openai-chat, anthropic-messages or openai-images), address, how the key is sent (bearer, a header, a query parameter or none), extra headers (nothing secret) and what its models can usually do. Built-in providers cannot be changed. Changing an address removes the keys of the connections that use it, after dropKeys true; a key is never sent to a new address. Only a person sets an address, key style or headers. Administrators only. @scope ai:admin @confirm @idempotent */
-  function save(input: {
+  /** Add AI provider. Adds a model provider from a preset: meta (Meta Muse, https://api.meta.ai/v1), openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, or other with its own OpenAI-compatible address. A named preset keeps its own address and key style. models: the preset's suggested model ids to add with their prices. Add its key with ai.keys.add. Only a person adds an Other provider (it chooses where keys go). Administrators only. @scope ai:admin @confirm */
+  function add(input: {
     provider: {
-      /** The provider's id, for example gemini. Built-in ids cannot be used. */
-      id: string;
-      /** (1–80 characters) */
-      label: string;
-      /** The wire protocol it speaks. Gemini, Meta, Mistral, OpenRouter, Groq, Together, Ollama and vLLM speak openai-chat. */
-      protocol: "openai-chat" | "anthropic-messages" | "openai-images";
-      /** The address up to /v1. null: each connection gives its own. (at most 500 characters) */
-      baseUrl?: string | null;
-      /** Connections of this provider keep its address (default true when an address is given). */
-      baseUrlLocked?: boolean;
-      /** How the key is sent: bearer (Authorization: Bearer), header { name }, query { name } or none. */
+      /** What the provider is: meta (Muse), openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, or other (any OpenAI-compatible address). */
+      preset: "meta" | "openai" | "anthropic" | "deepinfra" | "together" | "groq" | "fireworks" | "openrouter" | "mistral" | "xai" | "gemini" | "other";
+      /** Its id here; the preset's by default (meta, deepinfra, ...). */
+      id?: string;
+      /** The name shown; the preset's by default. (1–80 characters) */
+      label?: string;
+      /** For other only: the address up to /v1. Named presets keep their own address. (at most 500 characters) */
+      baseUrl?: string;
+      /** For other only: bearer (Authorization: Bearer), header { name } or none. */
       auth?: {
-        style: "bearer" | "header" | "query" | "none";
+        style: "bearer" | "header" | "none";
         /** (at most 64 characters) */
         name?: string;
       };
-      /** Headers sent with every request. Nothing secret: names that look like credentials are refused. */
+      /** For other only: how it takes a forced tool call. */
+      toolChoice?: "auto" | "named" | "required";
+      /** For other only: headers sent with every request. Nothing secret. */
       extraHeaders?: Record<string, string>;
-      keyRequired?: boolean;
-      modelOptional?: boolean;
-      /** What its models can usually do; a connection or model may say otherwise. */
-      defaultCapabilities?: {
-        tools?: boolean;
-        vision?: boolean;
-        json?: boolean;
-        images?: boolean;
-        reasoning?: boolean;
-      };
     };
-    /** Go ahead with an address change that removes connections' keys. */
-    dropKeys?: boolean;
+    /** Suggested model ids of the preset to add too. (at most 20 items) */
+    models?: string[];
     /** Why, for the change history. (1–500 characters) */
     reason?: string;
   }): Promise<({
     provider?: Record<string, unknown>;
-    droppedKeys?: string[];
+    models?: Array<Record<string, unknown>>;
+    generation?: number | null;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.ai.providers {
+  /** Change AI provider. Changes a provider's name, or an Other provider's address, key style, tool choice and extra headers (nothing secret). A new address or key style revokes the provider's keys, after revokeKeys true: a key is never sent to a new address. Only a person changes where keys go. Administrators only. @scope ai:admin @confirm @idempotent */
+  function save(input: {
+    provider: {
+      id: string;
+      /** (1–80 characters) */
+      label?: string;
+      /** Other providers only. A new address revokes the provider's keys (send revokeKeys true). (at most 500 characters) */
+      baseUrl?: string;
+      /** For other only: bearer (Authorization: Bearer), header { name } or none. */
+      auth?: {
+        style: "bearer" | "header" | "none";
+        /** (at most 64 characters) */
+        name?: string;
+      };
+      /** For other only: how it takes a forced tool call. */
+      toolChoice?: "auto" | "named" | "required";
+      /** For other only: headers sent with every request. Nothing secret. */
+      extraHeaders?: Record<string, string>;
+    };
+    /** Go ahead with a change that revokes the provider's keys. */
+    revokeKeys?: boolean;
+    /** Why, for the change history. (1–500 characters) */
+    reason?: string;
+  }): Promise<({
+    provider?: Record<string, unknown>;
+    revokedKeys?: string[];
     generation?: number | null;
     [key: string]: unknown;
   }) & { mode: "save" }>;
 }
 
 declare namespace slatebox.ai {
-  /** Set AI. Adds or changes AI connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins), server this server's (administrators; ownProviders on or off lets people use their own). Mix freely: a choice names me:<name>, team:<name>, server:<name> or builtin. Keys are stored encrypted and never returned, and a run's record keeps its code with the apiKey replaced. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI (levels me and team) is for self-hosted Slatebox: Slatebox Cloud refuses it, as AI there comes with Slatebox Pro credits and top-ups. @scope ai:settings @destructive @confirm @idempotent */
+  /** Set AI. Your own or your team's AI on a self-hosted server: adds or changes connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins); level server only turns own AI on or off for everyone (ownProviders, administrators). A choice names me:<name>, team:<name>, or builtin for this server's model (set in Admin → AI control). Keys are stored encrypted and never returned. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Slatebox Cloud refuses own AI, as AI there comes with Slatebox Pro credits and top-ups. @scope ai:settings @destructive @confirm @idempotent */
   function update(input: {
     /** me (yours), team (team admins) or server (administrators). */
     level: "me" | "team" | "server";
@@ -618,7 +583,7 @@ declare namespace slatebox.ai {
     connections?: Array<{
       /** Your name for it, for example desk-model. */
       name: string;
-      /** The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), openai, anthropic, deepinfra, or one an administrator added (ai.control.get lists them). */
+      /** The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added. */
       type: string;
       /** For openai-compatible: the address up to /v1, for example http://host.docker.internal:11434/v1. (at most 500 characters) */
       baseUrl?: string;
@@ -641,35 +606,35 @@ declare namespace slatebox.ai {
     remove?: string[];
     /** Which connection each feature uses. An unset feature follows the one it belongs to (workshop follows chat), and default serves every feature not named. */
     use?: {
-      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       default?: string | null;
-      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       chat?: string | null;
-      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       "chat.route"?: string | null;
-      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       generation?: string | null;
-      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       "generation.notes"?: string | null;
-      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       presentation?: string | null;
-      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       vision?: string | null;
-      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       images?: string | null;
-      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       shape?: string | null;
-      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       workshop?: string | null;
-      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       "workshop.draft"?: string | null;
-      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       canvas?: string | null;
-      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       "agent.slatebox"?: string | null;
-      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       library?: string | null;
-      /** me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear. (at most 48 characters) */
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       connectors?: string | null;
     };
     ownProviders?: "on" | "off";

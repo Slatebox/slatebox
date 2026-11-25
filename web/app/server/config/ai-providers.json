@@ -1,16 +1,5 @@
 {
-  "_comment": "The built-in providers' addresses and the model each uses when a request names none. Data, not code: an operator overrides the DeepInfra model in settings.deepinfra.model or DEEPINFRA_MODEL, the OpenAI model in settings.openai.model, and the image address in settings.stabilityai.endpoint; any other provider is a connection in settings.ai.connections. Keys starting with _ are notes and are not read.",
-  "anthropic": {
-    "endpoint": "https://api.anthropic.com/v1/messages"
-  },
-  "deepinfra": {
-    "endpoint": "https://api.deepinfra.com/v1/openai/chat/completions",
-    "model": "deepseek-ai/DeepSeek-V3"
-  },
-  "openai": {
-    "endpoint": "https://api.openai.com/v1/chat/completions",
-    "model": "gpt-4o-mini"
-  },
+  "_comment": "The built-in image service's address (the Stability AI text-to-image endpoint generated pictures use while nothing is set for them in Admin \u2192 AI control). Model providers, their addresses, models and keys live in Admin \u2192 AI control, not here. Keys starting with _ are notes and are not read.",
   "stabilityai": {
     "_comment": "Stable Diffusion 1.6 text-to-image, the built-in image generation when no connection is chosen for images.",
     "endpoint": "https://api.stability.ai/v1/generation/stable-diffusion-v1-6/text-to-image"

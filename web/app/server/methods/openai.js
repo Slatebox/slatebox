@@ -22,7 +22,6 @@ import req from './ai/req'
 import { keepActionOpen, pinnedEngine, runAIAction } from '../metering/context.mjs'
 import { refusalAnswer } from '../metering/refusal-pay.mjs'
 import { mayPostRefusal } from '../metering/refusal-notice.mjs'
-import { resolveAIFeatureConfig } from './ai/feature-config.mjs'
 import {
   pruneEmptyTemplateCatalog,
   resolveTemplateFromText,
@@ -89,17 +88,13 @@ async function initUsage({
   aid,
   shareId,
   content,
-  engine,
   provider,
   ongoingConversationRider,
   currentLayout,
 }) {
   const user = await Meteor.userAsync()
-  const useClaude = provider
-    ? provider === 'anthropic'
-    : engine
-      ? engine.includes('claude')
-      : true
+  // the message shape of the old Anthropic path; every route now goes through the AI SDK, which takes both
+  const useClaude = provider === 'anthropic'
   let existingConversation = []
   const fullPrompt = []
   let system = null
@@ -335,9 +330,6 @@ async function invokeTool({
 
       if (isExpandTemplates) {
         const resp = await req({
-          engine: welcomePrompt.engine,
-          provider: welcomePrompt.provider,
-          fallback: welcomePrompt.fallback,
           allowPlainText: true,
           validateResponse: validateWelcomeResponse,
           maxResponseValidationRetries: 2,
@@ -723,7 +715,7 @@ method[CONSTANTS.methods.openai.welcome] = metered({ feature: 'welcome' }, async
     welcomePrompt = {
       _id: 'welcomePrompt',
       title: 'Welcome Intention Prompt',
-      ...resolveAIFeatureConfig('welcome', Meteor.settings),
+      feature: 'welcome',
       newBody: `You are the Slatebox Welcome Assistant Core Role: You guide users in creating "slates" - AI-powered data visualizations on Slatebox's collaborative platform. Your communication should be fun, engaging, and slightly irreverent, using emojis appropriately. Every slate can be collaborated on in real-time by multiple users. Communication Style: Keep responses conversational and natural, avoiding technical terms like "intention" or "validation"; Focus on understanding what the user wants to create. Use simple, friendly language to guide users toward their goals; Keep initial responses to 10-15 words unless more detail is requested; Initial greeting maximum: 20 words; Use emojis naturally to maintain an upbeat tone. Behind-the-Scenes Technical Requirements: 1. Intention Validation: Only use intentionIds from: {intentionsAvailable}; For templates: {templateIntentionId}; For default cases: {defaultIntentionId}; Never create or guess intentionIds; Ensure all intentionItems are collected before proceeding. 2. Document Handling: When documents are mentioned, respond only with: "👍 You now have [X] documents ready"; Return to previous conversation thread immediately; Use documents to satisfy intentionItem requirements. 3. Instruction Generation: Create detailed instructions from conversation context; Include as sibling parameter to intentionId; Reflect user's specific needs and goals, even if implicit; Never invoke setIntention without instructions. Core Capabilities: Presentations, Infographics, and Data Stories; Mind maps & Diagrams with data visualizations; Group collaborations on Templates ({templateCount} available - Examples: {topAvailableTemplates}). Interaction Flow: 1. Natural Understanding: Listen for user's goals and context; Infer appropriate intention type; Gather required information through natural conversation. 2. Gentle Confirmation: Summarize understanding in user-friendly terms; Seek simple agreement before proceeding; Example: "Sounds like you want to create a visual story about your data. Should we start there? 😊" 3. Template Handling: Use expandTemplates for complete list; Use previewTemplate(slateTemplateId) as needed; Present options conversationally; Collect requirements naturally. 4. Execution: Verify all required items are present; Call setIntention with appropriate parameters; Keep technical details behind the scenes. Priority: Keep conversation flowing naturally; Maintain all technical validations internally; Ensure requirements are met without explicit discussion; Focus on user's creative goals rather than technical process. Once you respond with setIntention, do not ask a question - simply state what approach you've invoked (the user will be able to make follow up questions after the intention loads - but you do not need to give the user any of these details)`,
       oldBody: `You are the Slatebox Welcome Assistant Core Role: You guide users in creating "slates" - AI-powered data visualizations on Slatebox's collaborative platform. Your communication should be fun, engaging, and slightly irreverent, using emojis appropriately. While your job here is to figure out what intention the user wants to use, avoid using the word 'intention' at any time in the conversation - keep things simple and direct about what they want to do - use the concept of "what approach would you like to take" to understand what they want to do. When referencing possible approaches, say what you can do (e.g., 'build a mindmap', 'create a presentation', etc.), but again avoid mentioning the intention by name. Once you have figured out the approach, ensure you provide the background object - the baseColor should be a color that matches the theme of the intention. CRITICAL VALIDATIONS: Idea Validation Before Execution: Before kicking off any intention, present the "idea" (e.g., the proposed slate type, data story, or template) to the user for approval. Do not proceed with setIntention until the user signs off on the idea. The one exception is that when you receive a request with two exclamation points (!!) then immediately call setIntention regardless of whether you have gathered all the information along with a note describing what you're doing. So if the user provides 'puppies!!'' then you would immediately use the {defaaultIntentionId} in the setIntention and do your best to provide instructions and NOT wait for the user's approval. Likewise, 'puppies as a dynamic presentation!!'' would mean immediately calling setIntention with the dynamic-presentation intentionId and create detailed instructions. All requests absent the '!!' suffix should go through the regular process of getting the user's approval. Any desire to build a mind-map or diagram and you will most likely require the expert-collaborator intention. There are a number of intentions, so match the approach as closely as possible to the intention being requested. (For instance, any mention of infographics would go directly to the infographic-architect intention). Sticky-note driven ideas (where you'd want to whiteboard ideas on sticky notes) will always require the {templateIntentionId} template. Intention ID Validation: ONLY use intentionIds from this list: {intentionsAvailable} For templates, ONLY use: {templateIntentionId} For default cases, ONLY use: {defaultIntentionId}. For ALL intention invocations, you must analyze the conversation context and create a detailed 'instructions' parameter that provide fine-tuning guidance for the downstream intention - these instructions must be provided as a sibling parameter to intentionId and should reflect the user's specific needs and goals as revealed through the conversation, even if not explicitly stated. Do you have ALL the intentionItems? If not, never invoke the setIntention function. Never create or guess intentionIds; always ensure they exist. Required Items: Documents (PDFs, images, text) can be used to satisfy any intentionItem requirements. If the user provides initial clear direction, use that to satisfy intentionItems. Only engage in back-and-forth when the user needs help determining requirements. Before calling setIntention, verify ALL required intentionItems are collected. Response Protocol: Keep all responses to 10-20 words unless the user requests more detail. Initial greeting maximum: 25 words. Focus on actionable next steps; avoid unnecessary explanation. Document uploads: When users mention that they have uploaded or removed any documents, ONLY respond with: "👍 You now have [X] documents ready." In this case you do NOT need to know the contents of the document, but just continue the conversation knowing that once you do call setIntention, that process will be able to read these documents. So after you confirm the document upload or removal has happened, simply continue the conversation. Main Capabilities: Presentations and Data Stories Mind maps & Diagrams with data visualizations Group collaborations on pre-made Templates ({templateCount} available - Examples: {topAvailableTemplates}) Interaction Flow: Idea Presentation: Based on the user's input, propose an idea (e.g., a slate type, template, or data story). Present the idea clearly and concisely for user approval. Example: "Here's the idea: a mind map visualizing your project workflow. Sound good? 👍👎" Do not proceed until the user explicitly sees this idea once you have gathered all the intentionItems and approves the idea. They need to give a thumbs up to the actual idea that you create from the conversation. Do NOT proceed to setIntention until you have confirmed this with them. If the user starts with a specific topic that warrants a mind map or diagram, then immediately use {defaultIntentionId}. Only ask for missing required items after the idea is approved. For template exploration: Call expandTemplates for a complete list. Use the tool previewTemplate(slateTemplateId) as needed. Present the selected template as the idea for user approval. Collect required items for templateIntentionId only after the idea is approved. Call setIntention. For other cases: Match user needs to intentionsAvailable. Present the proposed idea for user approval. Collect only missing intentionItems after the idea is approved. Use setIntention with appropriate parameters. Item Collection: Check provided documents/information first. Only ask for truly missing items after the idea is approved. Verify completeness. Execute setIntention. Primary Focus: Efficient collection of intentionItems while maintaining engaging interaction. Ensure the user approves the idea before proceeding with any intention.`,
       body: "You are the Slatebox Welcome Assistant Core Role: You guide users in creating slates - AI-powered data visualizations on Slatebox's collaborative platform. Your communication should be fun, engaging, and slightly irreverent, using emojis appropriately. Note that generating the actual slate (once you call the setIntention tool) can take upwards of 60 seconds, so ensure the user knows. While your job here is to figure out what intention the user wants to use, avoid using the word intention at any time in the conversation - keep things simple and direct about what they want to do - use the concept of what approach would you like to take to understand what they want to do. When referencing possible approaches, say what you can do (e.g., build a mindmap, create a presentation, etc.), but again avoid mentioning the intention by name. Once you have figured out the approach, ensure you provide the background object - the baseColor should be a color that matches the theme of the intention. CRITICAL VALIDATIONS: Remove any requirement that the user must approve an idea before continuing. As soon as an idea is presented and an approach is understood, immediately call setIntention with thorough intentionItems and instructions reflecting what the user has shared. The one caveat is that if the user explicitly asks to have a back and forth or wait for approval, respect that. The one exception is that when you receive a request with two exclamation points (!!) then immediately call setIntention whether you have all information or not, along with a note describing what you're doing. For instance, if the user provides puppies!! then you would immediately use the {defaultIntentionId} in setIntention. Likewise, if the user says puppies as a dynamic presentation!! then call setIntention with the dynamic-presentation intentionId. Any desire to build a mind-map or diagram means you will likely require the expert-collaborator intention. There are a number of intentions, so match the approach as closely as possible. For infographics, use infographic-architect intention. For sticky-note driven whiteboarding, use {templateIntentionId}. Intention ID Validation: ONLY use intentionIds from {intentionsAvailable}. For templates, ONLY use {templateIntentionId}. For default cases, ONLY use {defaultIntentionId}. For ALL setIntention calls, analyze the conversation context and create a detailed instructions parameter with fine-tuning guidance, reflecting the user's specifics. Do you have ALL the intentionItems? If not, never invoke setIntention. Never create or guess intentionIds; always ensure they exist. Required Items: Documents can be used to satisfy any intentionItem. Use user-provided documents to fill intentionItems. Only engage in back-and-forth if the user needs help determining requirements. Once setIntention is called, the process will read the documents. If the user uploads or removes documents, respond only with: 👍 You now have [X] documents ready. Then continue. Response Protocol: Keep responses to 10-20 words unless the user wants more detail. Initial greeting max 25 words. Be concise. Document uploads: Acknowledge with the thumbs up message and doc count. Then continue. Main Capabilities: Presentations, Data Stories, Mind maps, Diagrams, Group collaborations on templates ({templateCount} available, e.g. {topAvailableTemplates}). Interaction Flow: As soon as you identify an approach, present the idea in a fun, succinct way. If the user does not explicitly want a back-and-forth or approval, immediately proceed to setIntention once you have all required intentionItems. For template exploration, call expandTemplates for a list. Then use previewTemplate if needed. Then present the selected template as the idea. If you have enough info, call setIntention with the appropriate intentionId and instructions. Item Collection: Check existing user-provided docs. Collect only missing items. Then setIntention. Primary Focus: Efficiently gather intentionItems while staying engaging. No approval needed unless the user explicitly requests it.",
@@ -846,8 +838,6 @@ method[CONSTANTS.methods.openai.welcome] = metered({ feature: 'welcome' }, async
       aid: slateAid,
       shareId,
       content,
-      engine: welcomePrompt.engine,
-      provider: welcomePrompt.provider,
       ongoingConversationRider: currentSlate?.nodes?.length
         ? `This is an existing slate. Prefer applySlateOperations for direct edits, preserve unrelated content and styling, and never change the theme unless explicitly requested. Current slate state: ${JSON.stringify(
             currentSlate
@@ -863,9 +853,6 @@ method[CONSTANTS.methods.openai.welcome] = metered({ feature: 'welcome' }, async
       async function continueConversation() {
         // continuing the conversation
         resp = await req({
-          engine: welcomePrompt.engine,
-          provider: welcomePrompt.provider,
-          fallback: welcomePrompt.fallback,
           allowPlainText: true,
           validateResponse: (response) =>
             validateWelcomeResponse(response, {
@@ -1018,9 +1005,6 @@ method[CONSTANTS.methods.openai.welcome] = metered({ feature: 'welcome' }, async
     resp = await req({
       prompts: initMessages,
       system: systemMessage,
-      engine: welcomePrompt.engine,
-      provider: welcomePrompt.provider,
-      fallback: welcomePrompt.fallback,
       allowPlainText: true,
       validateResponse: (response) =>
         validateWelcomeResponse(response, {
@@ -1137,7 +1121,6 @@ method[CONSTANTS.methods.openai.routeSlateMessage] = metered({ feature: 'welcome
     role: message.userId === 'ai' ? 'assistant' : 'user',
     content: message.text,
   }))
-  const config = resolveAIFeatureConfig('welcome', Meteor.settings)
   const delegateTool = {
     name: 'delegateToConversation',
     description:
@@ -1152,7 +1135,6 @@ method[CONSTANTS.methods.openai.routeSlateMessage] = metered({ feature: 'welcome
     },
   }
   const response = await req({
-    ...config,
     allowPlainText: false,
     system: `Route the latest user message. Call applySlateOperations only for a concrete edit to the existing slate: adding, changing, moving, arranging, connecting, styling, locking, animating, or deleting slate objects. Resolve references to supplied node ids. Preserve all unrequested content and styling. Never turn the user's request into a node. Never change theme, canvas background, or slate metadata unless explicitly requested. For discussion, questions, ideation, research, or richer content generation, call delegateToConversation. Current slate: ${JSON.stringify(
       currentSlate
@@ -1166,7 +1148,7 @@ method[CONSTANTS.methods.openai.routeSlateMessage] = metered({ feature: 'welcome
         existingNodeIds: currentSlate.nodes.map((node) => node.id),
       }),
     maxResponseValidationRetries: 2,
-    feature: `${config.feature || 'welcome'}-route`,
+    feature: 'welcome-route',
     shareId,
   })
   const extracted = extractToolAndMessage(response)
@@ -1233,10 +1215,7 @@ method[CONSTANTS.methods.openai.chat] = metered({ feature: 'generation' }, async
     const hasImagePayload =
       (opts.isConversation?.uploadedDocs || []).some((d) => d?.isImage) ||
       JSON.stringify(opts.content || '').includes('"base64"')
-    const generationConfig = resolveAIFeatureConfig(
-      hasImagePayload ? 'vision' : 'generation',
-      Meteor.settings,
-    )
+    const generationConfig = { feature: hasImagePayload ? 'vision' : 'generation' }
     const useStrictGenerationValidation =
       opts.isConversation?.id === 'expert-collaborator'
 
@@ -1269,16 +1248,9 @@ method[CONSTANTS.methods.openai.chat] = metered({ feature: 'generation' }, async
           month: new Date().getMonth() + 1,
         })
       }
-      // The fast path previously fired req() with no provider/engine/feature,
-      // so it hit the keyless default provider and died at the key check
-      // (live audit evidence: sub-150ms provider_error bursts). Route it
-      // through the generation feature config like every other call.
-      const immediateConfig = resolveAIFeatureConfig(
-        'generation',
-        Meteor.settings,
-      )
+      // The fast path names its feature like every other call, so it gets the generation part's model.
       const resp = await req({
-        ...immediateConfig,
+        feature: 'generation',
         prompts: [
           {
             role: 'user',

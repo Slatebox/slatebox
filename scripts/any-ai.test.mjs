@@ -31,7 +31,7 @@ const resolver = (...addresses) => (host, options, callback) => callback(null, a
 // ---------- endpoint policy ----------
 
 test('no product file names a bundled or default local model', () => {
-  for (const path of ['server/methods/ai/connections.mjs', 'server/methods/ai/feature-config.mjs', 'server/methods/ai/req.js',
+  for (const path of ['server/methods/ai/connections.mjs', 'server/ai-control/resolve.mjs', 'server/methods/ai/req.js',
     'server/methods/ai/ai-settings-core.mjs', 'server/methods/ai/connection-check.mjs']) {
     assert.doesNotMatch(source(path), /inkling|llama3|qwen2\.5|mistral:|gemma/i, path)
   }
@@ -126,7 +126,9 @@ test('a connection is checked and normalised; a cloud preset keeps its own addre
   assert.equal(openai.apiKey, 'sk-test-0123456789')
   assert.deepEqual(openai.capabilities, { vision: true, images: true })
   assert.equal(normalizeConnection({ name: 'claude', type: 'anthropic', model: 'a-model', apiKey: 'k-0123456789' }, self).baseUrl, 'https://api.anthropic.com/v1')
-  assert.equal(normalizeConnection({ name: 'di', type: 'deepinfra', apiKey: 'k-0123456789' }, self).model, undefined, 'a DeepInfra key may follow the feature default model')
+  // every connection names its model: there is no per-feature default model to follow
+  assert.throws(() => normalizeConnection({ name: 'di', type: 'deepinfra', apiKey: 'k-0123456789' }, self), /model name/)
+  assert.equal(normalizeConnection({ name: 'muse', type: 'meta', model: 'muse-ember-1.0', apiKey: 'k-0123456789' }, self).baseUrl, 'https://api.meta.ai/v1', 'every named provider keeps its own address')
   const bad = [
     { name: 'Bad Name', type: 'openai', model: 'm', apiKey: 'k-0123456789' },
     { name: 'x', type: 'nonsense', model: 'm' },
@@ -144,11 +146,10 @@ test('a connection is checked and normalised; a cloud preset keeps its own addre
 
 const conn = (name, extra = {}) => ({ name, type: 'openai-compatible', baseUrl: `http://${name}.lan/v1`, model: `${name}-model`, capabilities: {}, ...extra })
 
-test('the person chooses first, per feature then their default; then their team; then the operator; then the built-in AI', () => {
-  const server = { connections: [conn('ops'), conn('vis', { capabilities: { vision: true } })], use: { default: 'server:ops', vision: 'server:vis' } }
+test('the person chooses first, per feature then their default; then their team; then this server\'s model (Admin → AI control)', () => {
   const person = { connections: [conn('mine'), conn('cloud')], use: { default: 'me:mine', presentation: 'me:cloud', images: 'builtin' } }
   const team = { connections: [conn('teamy')], use: { default: 'team:teamy' } }
-  const pick = (feature, p = person, t = team, ownProviders = true) => resolveAIChoice({ feature, person: p, team: t, server, ownProviders })
+  const pick = (feature, p = person, t = team, ownProviders = true) => resolveAIChoice({ feature, person: p, team: t, ownProviders })
   assert.equal(pick('chat').ref, 'me:mine')
   assert.equal(pick('chat').own, true)
   assert.equal(pick('presentation').ref, 'me:cloud')
@@ -156,38 +157,34 @@ test('the person chooses first, per feature then their default; then their team;
   assert.equal(pick('images').own, false)
   assert.equal(pick('chat', { connections: [], use: {} }).ref, 'team:teamy')
   assert.equal(pick('chat', { connections: [], use: {} }).own, true)
-  assert.equal(pick('vision', null, null).ref, 'server:vis')
+  assert.equal(pick('vision', null, null).ref, 'builtin', 'nothing of their own: this server\'s model')
   assert.equal(pick('vision', null, null).own, false)
-  assert.equal(pick('chat', null, null).ref, 'server:ops')
-  assert.equal(resolveAIChoice({ feature: 'chat', person: null, team: null, server: { connections: [], use: {} }, ownProviders: true }).ref, 'builtin')
   // the operator's one switch: people's own connections and choices are not used
-  assert.equal(pick('chat', person, team, false).ref, 'server:ops')
-  // a person may pick an operator connection, and a choice whose connection is gone is skipped
-  assert.equal(pick('chat', { connections: [], use: { chat: 'server:vis' } }).ref, 'server:vis')
-  assert.equal(pick('chat', { connections: [], use: { chat: 'me:gone' } }, null).ref, 'server:ops')
+  assert.equal(pick('chat', person, team, false).ref, 'builtin')
+  // a choice naming a server connection is no choice any more, and one whose connection is gone is skipped
+  assert.equal(pick('chat', { connections: [], use: { chat: 'server:vis' } }, null).ref, 'builtin')
+  assert.equal(pick('chat', { connections: [], use: { chat: 'me:gone' } }, null).ref, 'builtin')
 })
 
 test('own keys saved before choices existed keep working as they did', () => {
-  const server = { connections: [], use: {} }
   const legacyKey = { name: 'deepinfra', type: 'deepinfra', capabilities: {}, legacy: 'all' }
   const legacyModel = conn('own-model', { legacy: 'chat' })
   const person = { connections: [legacyKey], use: {} }
-  assert.equal(resolveAIChoice({ feature: 'generation', person, team: null, server, ownProviders: true }).ref, 'me:deepinfra')
+  assert.equal(resolveAIChoice({ feature: 'generation', person, team: null, ownProviders: true }).ref, 'me:deepinfra')
   const compat = { connections: [legacyModel], use: {} }
-  assert.equal(resolveAIChoice({ feature: 'chat', person: compat, team: null, server, ownProviders: true }).ref, 'me:own-model')
-  assert.equal(resolveAIChoice({ feature: 'generation', person: compat, team: null, server, ownProviders: true }).ref, 'builtin')
-  assert.equal(resolveAIChoice({ feature: 'chat', person: null, team: compat, server, ownProviders: true }).ref, 'team:own-model')
+  assert.equal(resolveAIChoice({ feature: 'chat', person: compat, team: null, ownProviders: true }).ref, 'me:own-model')
+  assert.equal(resolveAIChoice({ feature: 'generation', person: compat, team: null, ownProviders: true }).ref, 'builtin')
+  assert.equal(resolveAIChoice({ feature: 'chat', person: null, team: compat, ownProviders: true }).ref, 'team:own-model')
 })
 
-test('the operator configuration reads the settings file and the switch', () => {
-  const file = operatorConfig({ public: { env: 'selfhost' }, ai: { connections: { local: { type: 'openai-compatible', baseUrl: 'http://host.docker.internal:11434/v1', model: 'm' } }, use: { default: 'local', images: 'builtin' }, ownProviders: 'off' } })
-  assert.deepEqual(file.connections.map((c) => [c.name, c.source]), [['local', 'file']])
-  assert.deepEqual(file.use, { default: 'server:local', images: 'builtin' })
+test('the operator configuration reads only the switches from the settings file: no connection, choice or key', () => {
+  const file = operatorConfig({ public: { env: 'selfhost' }, ai: { connections: { local: { type: 'openai-compatible', baseUrl: 'http://host.docker.internal:11434/v1', model: 'm' } }, use: { default: 'local' }, ownProviders: 'off' } })
   assert.equal(file.ownProviders, false)
+  assert.equal(file.connections, undefined, 'settings-file connections are not read (ai-control-002 moves their keys into the backend)')
+  assert.equal(file.use, undefined)
   const none = operatorConfig({ public: { env: 'selfhost' }, selfHosted: { workshopAI: true } })
-  assert.deepEqual([none.connections, none.use, none.ownProviders], [[], {}, true], 'with no ai.connections the operator adds none')
-  assert.throws(() => operatorConfig({ public: { env: 'selfhost' }, ai: { connections: { meta: { type: 'openai-compatible', baseUrl: 'http://169.254.169.254/v1', model: 'm' } } } }), /169\.254\.169\.254|metadata|address/i)
-  assert.throws(() => operatorConfig({ public: { env: 'selfhost' }, ai: { use: { default: 'nothing' } } }), /nothing/)
+  assert.deepEqual([none.ownProviders, none.privateEndpoints], [true, true])
+  assert.throws(() => operatorConfig({ public: { env: 'selfhost' }, ai: { ownProviders: 'maybe' } }), /ownProviders/)
 })
 
 test('a feature says what the chosen model cannot do and offers another, it never reroutes', () => {
@@ -379,13 +376,14 @@ test('a keyless endpoint needs no encryption key; a key does', async () => {
   await assert.rejects(ai.update('ana', { level: 'me', connections: [{ name: 'oa', type: 'openai', model: 'm', apiKey: 'sk-0123456789' }] }), { code: 'unavailable' })
 })
 
-test('choices must name a connection that exists at that level or above', async () => {
-  const { ai } = service({ settings: { public: { env: 'selfhost' }, ai: { connections: { ops: { type: 'openai-compatible', baseUrl: 'http://127.0.0.1:11434/v1', model: 'm' } } } } })
+test('choices must name a connection that exists at that level or above; the server\'s models are not choices here', async () => {
+  const { ai } = service()
   await assert.rejects(ai.update('ana', { level: 'me', use: { chat: 'me:nothing' } }), { code: 'invalid_request' })
   await assert.rejects(ai.update('ana', { level: 'me', use: { nonsense: 'builtin' } }), { code: 'invalid_request' })
-  await ai.update('ana', { level: 'me', use: { chat: 'server:ops', images: 'builtin' } })
-  assert.equal((await ai.view('ana')).effective.chat.ref, 'server:ops')
-  await assert.rejects(ai.update('root', { level: 'server', use: { chat: 'me:x' } }), { code: 'invalid_request' })
+  await assert.rejects(ai.update('ana', { level: 'me', use: { chat: 'server:ops' } }), { code: 'invalid_request' })
+  await ai.update('ana', { level: 'me', use: { images: 'builtin' } })
+  assert.equal((await ai.view('ana')).effective.chat.ref, 'builtin')
+  await assert.rejects(ai.update('root', { level: 'server', use: { chat: 'me:x' } }), (error) => error.code === 'invalid_request' && /Admin → AI control/.test(error.message))
 })
 
 test('only a team admin changes the team, only an administrator changes the server, never a guest', async () => {
@@ -395,9 +393,9 @@ test('only a team admin changes the team, only an administrator changes the serv
   assert.equal((await ai.resolveFor({ userId: 'bo', feature: 'generation' })).ref, 'team:shared')
   await assert.rejects(ai.update('ana', { level: 'server', use: { chat: 'builtin' } }), { code: 'forbidden' })
   await assert.rejects(ai.update('guest', { level: 'me', use: { chat: 'builtin' } }), { code: 'registration_required' })
-  await ai.update('root', { level: 'server', connections: [{ name: 'box', type: 'openai-compatible', baseUrl: 'http://127.0.0.1:11434/v1', model: 'm' }], use: { default: 'server:box' } })
-  assert.equal((await ai.resolveFor({ userId: 'root', feature: 'presentation' })).ref, 'server:box')
+  await ai.update('root', { level: 'server', ownProviders: 'on' })
   assert.equal((await ai.view('root')).server.editable, true)
+  assert.equal((await ai.view('root')).server.adminPage, '/admin/ai')
   assert.equal((await ai.view('ana')).server.editable, false)
 })
 
@@ -421,8 +419,9 @@ test('hosted Slatebox refuses private endpoints for administrators, and takes no
   // own AI is for self-hosted Slatebox: a person's connection is refused whatever its address
   await assert.rejects(ai.update('ana', { level: 'me', connections: [{ name: 'desk', type: 'openai-compatible', baseUrl: 'http://192.168.1.20/v1', model: 'm' }] }), { code: 'forbidden', message: OWN_KEYS_CLOUD })
   await assert.rejects(ai.update('ana', { level: 'me', connections: [{ name: 'cloud', type: 'openai-compatible', baseUrl: 'https://llm.example.com/v1', model: 'm' }] }), { code: 'forbidden', message: OWN_KEYS_CLOUD })
-  await assert.rejects(ai.update('root', { level: 'server', connections: [{ name: 'box', type: 'openai-compatible', baseUrl: 'https://10.0.0.1/v1', model: 'm' }] }), { code: 'invalid_request' })
-  await ai.update('root', { level: 'server', connections: [{ name: 'cloud', type: 'openai-compatible', baseUrl: 'https://llm.example.com/v1', model: 'm' }] })
+  // the server's providers are added in Admin → AI control, where an Other address passes the endpoint rules
+  await assert.rejects(ai.update('root', { level: 'server', connections: [{ name: 'cloud', type: 'openai-compatible', baseUrl: 'https://llm.example.com/v1', model: 'm' }] }), (error) => error.code === 'invalid_request' && /Admin → AI control/.test(error.message))
+  await assert.rejects(ai.update('root', { level: 'server', ownProviders: 'on' }), { code: 'forbidden', message: OWN_KEYS_CLOUD })
 })
 
 test('Test connection runs on a saved connection with its key, or on one not yet saved', async () => {
@@ -488,8 +487,10 @@ test('req resolves the chosen connection after the meter gate, and a chosen conn
   const body = req.slice(req.indexOf('async function requestFromProvider'))
   assert.ok(body.indexOf('resolveRequestConnection(') > body.indexOf('aiRequestGate()'), 'resolved after the gate')
   assert.match(body, /gap/)
-  assert.match(req, /primaryResponse\.chosen/)
-  assert.match(req, /if \(!localWorkshop && !apiKey\)/, 'the built-in path still needs its key')
+  // the one fallback (the default model after a failing service) is for the server's own routes only
+  assert.match(req, /route\?\.scope !== 'server'/)
+  // nothing is sent without a route that has its key
+  assert.match(body, /!chosenConnection \|\| chosen\?\.gap \|\| chosen\?\.error/)
 })
 
 test('the meter pays only for Slatebox AI: own choices route to the own-key path', () => {
@@ -512,7 +513,6 @@ test('workshops and conversations let req choose the model, image generation use
 
 import { seal, last4 } from '../web/app/server/metering/vault.mjs'
 import { BUILTIN_ONLY_FEATURES, carriesImages } from '../web/app/server/methods/ai/connections.mjs'
-import { DEFAULT_AI_FEATURES } from '../web/app/server/methods/ai/feature-config.mjs'
 
 const recordingService = (options = {}) => {
   const checked = []
@@ -521,7 +521,7 @@ const recordingService = (options = {}) => {
 }
 
 test('H1: Test connection never sends a saved key to an address other than the saved one', async () => {
-  const { ai, checked } = recordingService({ settings: { public: { env: 'selfhost' }, ai: { connections: { ops: { type: 'openai-compatible', baseUrl: 'http://10.0.0.9/v1', model: 'm', apiKey: 'OPERATOR-FILE-KEY' } } } } })
+  const { ai, checked } = recordingService()
   await ai.update('ana', { level: 'team', connections: [{ name: 'team-model', type: 'openai-compatible', baseUrl: 'http://10.1.1.1/v1', model: 'm', apiKey: 'sk-TEAM-SECRET' }] })
   // a member who is not a team admin cannot test an unsaved team connection at all
   await assert.rejects(ai.check('bo', { level: 'team', connection: { name: 'team-model', type: 'openai-compatible', baseUrl: 'https://attacker.example/v1', model: 'm' } }), { code: 'forbidden' })
@@ -533,9 +533,8 @@ test('H1: Test connection never sends a saved key to an address other than the s
   assert.equal(checked.at(-1).connection.apiKey, undefined)
   await ai.check('ana', { level: 'team', connection: { name: 'team-model', type: 'openai-compatible', baseUrl: 'http://10.1.1.1/v1/', model: 'other' } })
   assert.equal(checked.at(-1).connection.apiKey, 'sk-TEAM-SECRET')
-  // the operator's settings-file key is not sent to a new address by an administrator either
-  await ai.check('root', { level: 'server', connection: { name: 'ops', type: 'openai-compatible', baseUrl: 'https://attacker.example/v1', model: 'm' } })
-  assert.equal(checked.at(-1).connection.apiKey, undefined)
+  // the server's keys are tested in Admin → AI control (ai.keys.test, at the provider's own address)
+  await assert.rejects(ai.check('root', { level: 'server', connection: { name: 'ops', type: 'openai-compatible', baseUrl: 'https://attacker.example/v1', model: 'm' } }), /ai\.keys\.test/)
   // the person's own level follows the same rule
   await ai.update('bo', { level: 'me', connections: [{ name: 'desk', type: 'openai-compatible', baseUrl: 'http://192.168.1.20/v1', model: 'm', apiKey: 'desk-key-0123456789' }] })
   await ai.check('bo', { level: 'me', connection: { name: 'desk', type: 'openai-compatible', baseUrl: 'http://192.168.1.99/v1', model: 'm' } })
@@ -569,7 +568,8 @@ test('L5: a change that fails validation writes nothing', async () => {
 
 test('H3: every feature that reaches req maps to a model choice, or is named as built-in only', () => {
   assert.equal(choiceFeatureFor('welcome-route'), 'chat', 'the chat edit router is part of conversation and edits')
-  for (const feature of Object.keys(DEFAULT_AI_FEATURES)) {
+  // every request feature the call sites send (the old built-in table's names included)
+  for (const feature of ['presentation', 'layout', 'vision', 'welcome', 'generation', 'shape', 'library-refine']) {
     assert.ok(choiceFeatureFor(feature), feature)
     assert.equal(choiceFeatureFor(`${feature}-route`), choiceFeatureFor(feature), `${feature}-route`)
   }
@@ -649,13 +649,13 @@ test('M2: an own key saved with a validation error is not used, as before', asyn
 
 test('M3: an own DeepInfra key saved before choices existed does not take over image generation', async () => {
   const legacyKey = { name: 'deepinfra', type: 'deepinfra', capabilities: {}, legacy: 'all' }
-  const picked = resolveAIChoice({ feature: 'images', person: { connections: [legacyKey], use: {} }, team: null, server: { connections: [], use: {} }, ownProviders: true })
+  const picked = resolveAIChoice({ feature: 'images', person: { connections: [legacyKey], use: {} }, team: null, ownProviders: true })
   assert.equal(picked.ref, 'builtin')
-  assert.equal(resolveAIChoice({ feature: 'vision', person: { connections: [legacyKey], use: {} }, team: null, server: { connections: [], use: {} }, ownProviders: true }).ref, 'me:deepinfra')
+  assert.equal(resolveAIChoice({ feature: 'vision', person: { connections: [legacyKey], use: {} }, team: null, ownProviders: true }).ref, 'me:deepinfra')
 })
 
 test('M4: a self-host operator may keep people off private networks, separately from the switch', async () => {
-  const settings = { public: { env: 'selfhost' }, ai: { privateEndpoints: 'off', connections: { lan: { type: 'openai-compatible', baseUrl: 'http://10.0.0.9/v1', model: 'm' } } } }
+  const settings = { public: { env: 'selfhost' }, ai: { privateEndpoints: 'off' } }
   assert.equal(operatorConfig(settings).privateEndpoints, false)
   assert.equal(operatorConfig({ public: { env: 'selfhost' } }).privateEndpoints, true)
   assert.throws(() => operatorConfig({ public: { env: 'selfhost' }, ai: { privateEndpoints: 'maybe' } }), /privateEndpoints/)
@@ -663,8 +663,7 @@ test('M4: a self-host operator may keep people off private networks, separately 
   await assert.rejects(ai.update('ana', { level: 'me', connections: [{ name: 'desk', type: 'openai-compatible', baseUrl: 'http://192.168.1.20/v1', model: 'm' }] }), { code: 'invalid_request' })
   await assert.rejects(ai.check('ana', { connection: { name: 'desk', type: 'openai-compatible', baseUrl: 'http://192.168.1.20/v1', model: 'm' } }), { code: 'invalid_request' })
   await ai.update('ana', { level: 'me', connections: [{ name: 'cloud', type: 'openai-compatible', baseUrl: 'https://llm.example.com/v1', model: 'm' }] })
-  // the operator's own connections keep the operator rules
-  await ai.update('root', { level: 'server', connections: [{ name: 'box', type: 'openai-compatible', baseUrl: 'http://10.0.0.10/v1', model: 'm' }] })
+  // the server's own providers (Admin → AI control) keep the server rules
   assert.equal(endpointRules({ hosted: false, level: 'person', privateEndpoints: false }).allow.has('private'), false)
   assert.equal(endpointRules({ hosted: false, level: 'server', privateEndpoints: false }).allow.has('private'), true)
 })
@@ -681,10 +680,9 @@ test('M5: an agent token changes or tests team and server AI only with the admin
   const agent = { kind: 'agent', userId: 'root', tokenId: 't', scopes: ['ai:settings'] }
   await registry.run(agent, 'ai.update', { level: 'me', use: { chat: 'builtin' } })
   await registry.run(agent, 'ai.check', { name: 'desk' })
-  for (const level of ['team', 'server']) {
-    await assert.rejects(registry.run(agent, 'ai.update', { level, use: { chat: 'builtin' } }), { status: 403 })
-    await assert.rejects(registry.run(agent, 'ai.check', { level, name: 'desk' }), { status: 403 })
-  }
+  await assert.rejects(registry.run(agent, 'ai.update', { level: 'team', use: { chat: 'builtin' } }), { status: 403 })
+  await assert.rejects(registry.run(agent, 'ai.check', { level: 'team', name: 'desk' }), { status: 403 })
+  await assert.rejects(registry.run(agent, 'ai.check', { level: 'server', name: 'desk' }), { status: 400 }, 'the server\'s keys are tested with ai.keys.test')
   await assert.rejects(registry.run(agent, 'ai.update', { level: 'server', ownProviders: 'off' }), { status: 403 })
   const admin = { ...agent, scopes: ['ai:settings', 'ai:admin'] }
   await registry.run(admin, 'ai.update', { level: 'server', ownProviders: 'off' })
@@ -696,14 +694,19 @@ test('M5: an agent token changes or tests team and server AI only with the admin
   assert.match(labels, /ai:admin/)
 })
 
-test('L2: a person is not told where the operator\'s model lives', async () => {
-  const { ai } = service()
-  await ai.update('root', { level: 'server', connections: [{ name: 'box', type: 'openai-compatible', baseUrl: 'http://10.9.9.9:8000/v1', model: 'ops-model', capabilities: { vision: false } }], use: { default: 'server:box' } })
-  const resolved = await ai.resolveFor({ userId: 'ana', feature: 'vision', request: { images: true } })
+test('L2: a person is not told where the server\'s model lives; an administrator sees which provider it is', async () => {
+  const { aiControlWorld } = await import('./ai-control-kit.mjs')
+  const w = await aiControlWorld()
+  await w.catalog.addProvider({ actor: w.actor, input: { preset: 'other', id: 'box', label: 'Our box', baseUrl: 'https://box.internal.example/v1' } })
+  await w.catalog.saveModels({ actor: w.actor, models: [{ provider: 'box', model: 'ops-model', capabilities: { tools: true, vision: false } }] })
+  await w.keyStore.add({ actor: w.actor, provider: 'box', apiKey: 'sk-test-box-0000000000000001' })
+  await w.bindings.set({ actor: w.actor, changes: [{ surface: 'default', use: 'model', model: 'box:ops-model' }] })
+  const resolved = await w.aiSettings.resolveFor({ userId: 'ana', feature: 'vision', request: { images: true } })
   assert.match(resolved.label, /ops-model/)
-  assert.doesNotMatch(resolved.label, /10\.9\.9\.9/)
-  assert.doesNotMatch(resolved.gap.message, /10\.9\.9\.9/)
-  assert.match((await ai.resolveFor({ userId: 'root', feature: 'chat' })).label, /10\.9\.9\.9/, 'an administrator sees the host')
+  assert.doesNotMatch(resolved.label, /box\.internal/)
+  assert.doesNotMatch(resolved.gap.message, /box\.internal/)
+  assert.match(resolved.gap.message, /Admin → AI control/)
+  assert.match((await w.aiSettings.resolveFor({ userId: 'admin1', feature: 'chat' })).label, /Our box/, 'an administrator sees which provider')
   assert.match(source('server/methods/ai/req.js'), /chosen\.label|chosen\?\.label/)
 })
 

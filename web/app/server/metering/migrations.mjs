@@ -2,6 +2,8 @@
 // metering settings document. M2 (startup, idempotent): providerKeys holds named AI connections
 // beside the older unnamed keys, so its one-key-per-provider index becomes two. M3 (owner-run):
 // removes the old plan and subscription fields. M4 (startup, idempotent): Slatebox Pro's indexes.
+// M5 (startup, idempotent): the server's provider keys (kind 'key', ai-control/keys.mjs): one
+// document per key, at most one active per provider, each key once.
 import { DEFAULT_METERING } from './policy.mjs'
 
 export const M1_MARKER = 'migration:pricing-1'
@@ -11,8 +13,14 @@ export const M2_MARKER = 'migration:any-ai-1'
 // number of named AI connections, each name once (ai.update). Several connections of one type
 // (two OpenAI-compatible endpoints, say) are the point of choosing AI freely.
 export const PROVIDER_KEY_INDEXES = Object.freeze([
-  ['providerKeys', { ownerType: 1, ownerId: 1, provider: 1 }, { unique: true, name: 'providerKeys_unnamed_provider', partialFilterExpression: { name: null } }],
+  ['providerKeys', { ownerType: 1, ownerId: 1, provider: 1 }, { unique: true, name: 'providerKeys_unnamed_provider', partialFilterExpression: { name: null, kind: null } }],
   ['providerKeys', { ownerType: 1, ownerId: 1, name: 1 }, { unique: true, name: 'providerKeys_named', partialFilterExpression: { name: { $type: 'string' } } }],
+])
+// The server's provider keys: each key once per provider (an import on two servers at once stores
+// it once), and at most one active key per provider.
+export const SERVER_KEY_INDEXES = Object.freeze([
+  ['providerKeys', { ownerType: 1, ownerId: 1, provider: 1, keyFingerprint: 1 }, { unique: true, name: 'providerKeys_key_fingerprint', partialFilterExpression: { kind: 'key' } }],
+  ['providerKeys', { ownerType: 1, ownerId: 1, provider: 1, kind: 1 }, { unique: true, name: 'providerKeys_key_active', partialFilterExpression: { kind: 'key', status: 'active' } }],
 ])
 // the index M1 created before named connections existed: unique per owner and provider
 const OLD_PROVIDER_KEY_INDEX = 'ownerType_1_ownerId_1_provider_1'
@@ -50,6 +58,21 @@ export async function runM2(io) {
   if (existing.some((index) => index.name === OLD_PROVIDER_KEY_INDEX)) await io.dropIndex('providerKeys', OLD_PROVIDER_KEY_INDEX)
   for (const [collection, spec, options] of PROVIDER_KEY_INDEXES) await io.ensureIndex(collection, spec, options)
   await io.setMarker(M2_MARKER)
+  return true
+}
+
+export const M5_MARKER = 'migration:ai-keys-1'
+
+// io: { hasMarker, setMarker, indexes(collection) → [{ name, partialFilterExpression }],
+//       dropIndex(collection, name), ensureIndex(collection, spec, options) }
+// The unnamed-key index leaves the server's keys out (they share an owner and provider), then the
+// key indexes are added.
+export async function runM5(io) {
+  if (await io.hasMarker(M5_MARKER)) return false
+  const unnamed = (await io.indexes('providerKeys')).find((index) => index.name === 'providerKeys_unnamed_provider')
+  if (unnamed && !('kind' in (unnamed.partialFilterExpression || {}))) await io.dropIndex('providerKeys', 'providerKeys_unnamed_provider')
+  for (const [collection, spec, options] of [...PROVIDER_KEY_INDEXES, ...SERVER_KEY_INDEXES]) await io.ensureIndex(collection, spec, options)
+  await io.setMarker(M5_MARKER)
   return true
 }
 

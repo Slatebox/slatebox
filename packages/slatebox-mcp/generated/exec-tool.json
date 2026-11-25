@@ -609,7 +609,7 @@
     {
       "name": "check_ai_connection",
       "title": "Test an AI connection",
-      "description": "Test whether Slatebox can reach an AI connection (a provider key, or an OpenAI-compatible endpoint) before it is used for drafting.\n\nTest AI. Tests a saved connection (name) or one not yet saved (connection): whether Slatebox can reach it, whether it accepts the key, which models it lists where it lists them, whether the model answers and whether it calls tools (which conversation, drafts and presentations need). Saves nothing. A saved key is only sent to the address it was saved for. A token needs ai:admin as well for level team or server. On a self-hosted server a model on the host is at host.docker.internal, not localhost.",
+      "description": "Test whether Slatebox can reach an AI connection (a provider key, or an OpenAI-compatible endpoint) before it is used for drafting.\n\nTest AI. Tests your own or your team's saved connection (name) or one not yet saved (connection), on a self-hosted server: whether Slatebox can reach it, whether it accepts the key, which models it lists, whether the model answers and whether it calls tools (which conversation, drafts and presentations need). Saves nothing. A saved key is only sent to the address it was saved for. A token needs ai:admin as well for level team. The server's keys are tested with ai.keys.test. A model on the host is at host.docker.internal, not localhost.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -617,10 +617,9 @@
             "type": "string",
             "enum": [
               "me",
-              "team",
-              "server"
+              "team"
             ],
-            "description": "me (yours), team (team admins) or server (administrators)."
+            "description": "me (yours) or team (team admins)."
           },
           "name": {
             "type": "string",
@@ -637,7 +636,7 @@
               "type": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
-                "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), openai, anthropic, deepinfra, or one an administrator added (ai.control.get lists them)."
+                "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added."
               },
               "baseUrl": {
                 "type": "string",
@@ -737,7 +736,7 @@
     {
       "name": "update_ai_settings",
       "title": "Change AI connections and choices",
-      "description": "Add, change or remove the AI connections Slatebox drafts with, and choose which connection each feature uses.\n\nSet AI. Adds or changes AI connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins), server this server's (administrators; ownProviders on or off lets people use their own). Mix freely: a choice names me:<name>, team:<name>, server:<name> or builtin. Keys are stored encrypted and never returned, and a run's record keeps its code with the apiKey replaced. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI (levels me and team) is for self-hosted Slatebox: Slatebox Cloud refuses it, as AI there comes with Slatebox Pro credits and top-ups.",
+      "description": "Add, change or remove the AI connections Slatebox drafts with, and choose which connection each feature uses.\n\nSet AI. Your own or your team's AI on a self-hosted server: adds or changes connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins); level server only turns own AI on or off for everyone (ownProviders, administrators). A choice names me:<name>, team:<name>, or builtin for this server's model (set in Admin → AI control). Keys are stored encrypted and never returned. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Slatebox Cloud refuses own AI, as AI there comes with Slatebox Pro credits and top-ups.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -764,7 +763,7 @@
                 "type": {
                   "type": "string",
                   "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
-                  "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), openai, anthropic, deepinfra, or one an administrator added (ai.control.get lists them)."
+                  "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added."
                 },
                 "baseUrl": {
                   "type": "string",
@@ -837,7 +836,7 @@
                   "null"
                 ],
                 "maxLength": 48,
-                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
               "chat": {
                 "type": [
@@ -845,7 +844,7 @@
                   "null"
                 ],
                 "maxLength": 48,
-                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
               "chat.route": {
                 "type": [
@@ -853,7 +852,7 @@
                   "null"
                 ],
                 "maxLength": 48,
-                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
               "generation": {
                 "type": [
@@ -861,7 +860,7 @@
                   "null"
                 ],
                 "maxLength": 48,
-                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
               "generation.notes": {
                 "type": [
@@ -869,7 +868,7 @@
                   "null"
                 ],
                 "maxLength": 48,
-                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
               "presentation": {
                 "type": [
@@ -877,7 +876,7 @@
                   "null"
                 ],
                 "maxLength": 48,
-                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
               "vision": {
                 "type": [
@@ -885,7 +884,7 @@
                   "null"
                 ],
                 "maxLength": 48,
-                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
               "images": {
                 "type": [
@@ -893,7 +892,7 @@
                   "null"
                 ],
                 "maxLength": 48,
-                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
               "shape": {
                 "type": [
@@ -901,7 +900,7 @@
                   "null"
                 ],
                 "maxLength": 48,
-                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
               "workshop": {
                 "type": [
@@ -909,7 +908,7 @@
                   "null"
                 ],
                 "maxLength": 48,
-                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
               "workshop.draft": {
                 "type": [
@@ -917,7 +916,7 @@
                   "null"
                 ],
                 "maxLength": 48,
-                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
               "canvas": {
                 "type": [
@@ -925,7 +924,7 @@
                   "null"
                 ],
                 "maxLength": 48,
-                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
               "agent.slatebox": {
                 "type": [
@@ -933,7 +932,7 @@
                   "null"
                 ],
                 "maxLength": 48,
-                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
               "library": {
                 "type": [
@@ -941,7 +940,7 @@
                   "null"
                 ],
                 "maxLength": 48,
-                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
               "connectors": {
                 "type": [
@@ -949,7 +948,7 @@
                   "null"
                 ],
                 "maxLength": 48,
-                "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               }
             },
             "additionalProperties": false,

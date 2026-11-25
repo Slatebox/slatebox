@@ -14,8 +14,9 @@ import { test } from "node:test";
 import { connectionRequest } from "../web/app/server/methods/ai/connection-request.mjs";
 import { localWorkshopRequest } from "../web/app/server/methods/ai/workshop-provider.mjs";
 import { isAllowedPlainTextResponse, normalizeProviderResponse } from "../web/app/server/methods/ai/provider.mjs";
-import { operatorConfig, resolveAIChoice } from "../web/app/server/methods/ai/connections.mjs";
-import { resolveAIFeatureConfig } from "../web/app/server/methods/ai/feature-config.mjs";
+import { buildSnapshot } from "../web/app/server/ai-control/snapshot.mjs";
+import { resolveModel } from "../web/app/server/ai-control/resolve.mjs";
+import { providerFromPreset } from "../web/app/server/ai-control/provider-presets.mjs";
 import { SHAPE_FEATURE, readCandidates } from "../web/app/server/shapes/shape-core.mjs";
 import { createShapeService } from "../web/app/server/shapes/shape-service.mjs";
 
@@ -145,19 +146,14 @@ test("readCandidates: wrapped and odd forms (double-encoded arguments, a bare li
   assert.deepEqual(readCandidates(null), []);
 });
 
-test("the settings key: ai.use.shape picks the connection, else ai.use.default, else the built-in shape model", () => {
-  const connections = [museConnection("https://api.meta.ai/v1")];
-  const pick = (use) => resolveAIChoice({ feature: SHAPE_FEATURE, server: { connections, use }, ownProviders: false }).ref;
-  assert.equal(pick({ shape: "server:meta-muse" }), "server:meta-muse");
-  assert.equal(pick({ default: "server:meta-muse" }), "server:meta-muse");
-  // prod today names presentation, generation and chat only: shapes stay on the built-in model
-  assert.equal(pick({ presentation: "server:meta-muse", generation: "server:meta-muse", chat: "server:meta-muse" }), "builtin");
-  const builtin = resolveAIFeatureConfig(SHAPE_FEATURE, {});
-  assert.ok(builtin.provider && builtin.engine, "the built-in shape model is data (ai-defaults.json)");
-  assert.equal(resolveAIFeatureConfig(SHAPE_FEATURE, { ai: { features: { shape: { engine: "other" } } } }).engine, "other", "settings.ai.features.shape overrides it");
-  // the settings file shape Cloud uses validates with use.shape
-  const config = operatorConfig({ ai: { connections: { "meta-muse": { type: "openai-compatible", baseUrl: "https://api.meta.ai/v1", model: "muse-ember-1.0", apiKeyEnv: "META_LLAMA_API_KEY", capabilities: { tools: true }, toolChoice: "auto" } }, use: { shape: "meta-muse" } } });
-  assert.ok(config);
+test("the shape binding picks the model, else the default binding, else the built-in default (Meta Muse Ember, tool choice auto)", () => {
+  const model = (provider, id) => ({ _id: `${provider}:${id}`, provider, model: id, capabilities: { tools: true }, status: "enabled" });
+  const snap = (bindings) => buildSnapshot({ providers: [providerFromPreset("meta"), providerFromPreset("deepinfra")], models: [model("meta", "muse-ember-1.0"), model("deepinfra", "google/gemini-3.5-flash")], bindings });
+  const bind = (surface, id) => ({ _id: surface, surface, use: "model", model: id });
+  assert.equal(resolveModel(snap([bind("shape", "deepinfra:google/gemini-3.5-flash")]), { surface: SHAPE_FEATURE }).route.model, "google/gemini-3.5-flash");
+  assert.equal(resolveModel(snap([bind("default", "meta:muse-ember-1.0")]), { surface: SHAPE_FEATURE }).route.model, "muse-ember-1.0");
+  const builtin = resolveModel(snap([]), { surface: SHAPE_FEATURE });
+  assert.deepEqual([builtin.source, builtin.route.model, builtin.route.toolChoice], ["builtin", "muse-ember-1.0", "auto"], "Meta refuses a named tool choice");
 });
 
 test("source guards: shape requests take plain text; req.js returns plain text before its strict JSON check", async () => {

@@ -1,56 +1,42 @@
-// The AI control snapshot: every published document of the DB layer (providers, server
-// connections without their keys, models, bindings, prompt heads with their published versions,
-// agents and the global state), checked one document at a time and frozen. resolve.mjs reads only
-// this, so a request never waits on the database for AI configuration.
+// The AI control snapshot: every document of the AI configuration (providers, which provider has
+// an active key (never the key), models, the one binding per part of Slatebox, prompt heads with
+// their published versions, agents and the global switch), checked one document at a time and
+// frozen. resolve.mjs reads only this, so a request never waits on the database for its route.
 //
-// Safety (spec 2.3): a document that fails its checks is skipped and named in `health`; resolution
-// falls through to the settings file and code for that surface only. A reload that throws keeps
-// the last good snapshot. A cold start with the database down runs on the settings file and code.
-// settings.ai.control.dbLayer 'off' (file, restart) never reads the DB layer at all; the global
-// state's dbLayer 'off' (runtime) ignores its documents.
+// Safety: a document that fails its checks is skipped and named in `health`; that part uses the
+// default binding, then the built-in default. A reload that throws keeps the last good snapshot. A
+// cold start with the database down runs on the built-in default (Meta Muse Ember), with the key a
+// settings file still held if it could not be moved yet (keys.mjs keepFromSettings).
 //
 // Pure apart from the injected readers and timers: index.mjs gives it the Meteor collections.
 import { SURFACES, surface as surfaceById } from './catalogue.mjs'
 import { checkVariables, parseTemplate } from './render.mjs'
-import { CODE_SLOTS } from './prompts/index.mjs'
 import { BUILTIN_PROVIDERS, PROTOCOLS, ProviderError, normalizeProvider } from './providers.mjs'
 
 export { PROTOCOLS }
-export const SCOPE_LEVELS = Object.freeze(['server', 'plan', 'team', 'me'])
-export const FAILURE_CLASSES = Object.freeze(['infra', 'shape', 'context', 'any'])
 export const PROMPT_KINDS = Object.freeze(['system', 'user', 'retry', 'tool-description', 'mcp-instructions', 'mcp-prompt', 'envelope'])
 export const AGENT_KINDS = Object.freeze(['builtin-agent', 'inbound-mcp', 'outbound-connector'])
+export const BINDING_USES = Object.freeze(['model', 'off'])
 export const POLL_MS = 5000
 const MAX_BACKOFF_MS = 60000
-const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/
 const PROMPT_ID = /^[a-z0-9][a-z0-9_.-]{0,95}$/
-const ID_CHARS = /^[A-Za-z0-9_.:/@|-]{1,200}$/
+const ID_CHARS = /^[A-Za-z0-9_.:/@|-]{1,260}$/
 const CAPS = ['tools', 'vision', 'images', 'json', 'reasoning']
 
-/** The file switch: settings.ai.control.dbLayer, 'on' (the default) or 'off'. Throws on anything else. */
-export function fileDbLayer(settings = {}) {
-  const value = settings?.ai?.control?.dbLayer
-  if (value === undefined || value === null) return 'on'
-  if (value !== 'on' && value !== 'off') throw new Error('settings ai.control.dbLayer is on or off')
-  return value
-}
-
-const DEFAULT_STATE = Object.freeze({ generation: 0, aiEnabled: true, aiDisabledMessage: null, dbLayer: 'on' })
+const DEFAULT_STATE = Object.freeze({ generation: 0, aiEnabled: true, aiDisabledMessage: null })
 
 function frozen(value) {
-  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value
+  if (!value || typeof value !== 'object' || Object.isFrozen(value) || value instanceof Date) return value
   for (const inner of Object.values(value)) frozen(inner)
   return Object.freeze(value)
 }
 
-/** The snapshot with no DB layer: resolution uses the settings file and code only. */
-export function emptySnapshot({ dbLayer = 'on', source = 'empty', health = [], generation = 0, global = null } = {}) {
+/** The snapshot with no documents: every part resolves to the built-in default. */
+export function emptySnapshot({ source = 'empty', health = [], generation = 0, global = null } = {}) {
   return frozen({
-    generation, dbLayer, source, loadedAt: null,
-    // the global switch (AI off for everyone, and its message) is break-glass state, not an AI
-    // control document: it holds while the DB layer is switched off at runtime
-    state: { ...DEFAULT_STATE, ...(global && { aiEnabled: global.aiEnabled !== false, aiDisabledMessage: global.aiDisabledMessage ?? null }), generation, dbLayer },
-    providers: {}, connections: {}, models: {}, bindings: {}, prompts: {}, promptVersions: {}, agents: {},
+    generation, source, loadedAt: null,
+    state: { ...DEFAULT_STATE, ...(global && { aiEnabled: global.aiEnabled !== false, aiDisabledMessage: global.aiDisabledMessage ?? null }), generation },
+    providers: {}, keys: {}, models: {}, bindings: {}, prompts: {}, promptVersions: {}, agents: {},
     health,
   })
 }
@@ -58,37 +44,19 @@ export const EMPTY_SNAPSHOT = emptySnapshot()
 
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const isInt = (value) => Number.isInteger(value) && value >= 0
-const optionalPositive = (value) => value === undefined || value === null || (Number.isFinite(value) && value > 0)
 
-/** scope { level, id? } -> the key in a binding's _id: server | plan:<id> | team:<id> | me:<id>. */
-export function scopeKey(scope) {
-  if (!isObject(scope) || !SCOPE_LEVELS.includes(scope.level)) return null
-  if (scope.level === 'server') return 'server'
-  return typeof scope.id === 'string' && ID_CHARS.test(scope.id) ? `${scope.level}:${scope.id}` : null
-}
-export const bindingId = (surfaceId, scope) => `${surfaceId}|${scopeKey(scope)}`
+/** A model row's id: <provider>:<model>. */
+export const modelId = (provider, model) => `${provider}:${model}`
 
 // ---------- per-document checks: each returns a problem sentence, or null ----------
 function providerProblem(doc) {
-  if (!SLUG.test(doc._id || '')) return 'a provider id is lowercase letters, digits and dashes'
-  if (BUILTIN_PROVIDERS[doc._id]) return `${doc._id} is a built-in provider; the built-in one applies`
-  if (!PROTOCOLS.includes(doc.protocol)) return `protocol ${doc.protocol} is not one this build speaks`
-  if (doc.baseUrl != null && typeof doc.baseUrl !== 'string') return 'baseUrl is an address'
-  if (doc.status !== undefined && !['active', 'archived'].includes(doc.status)) return 'status is active or archived'
-  // the same checks as a save (the address was checked against the endpoint rules when saved)
+  if (BUILTIN_PROVIDERS[doc._id]) return `${doc._id} is a service of this server, not a model provider`
   try {
     normalizeProvider(doc)
   } catch (error) {
     if (error instanceof ProviderError) return error.message
     throw error
   }
-  return null
-}
-
-function connectionProblem(doc) {
-  if (!SLUG.test(doc.name || '')) return 'a connection name is lowercase letters, digits and dashes'
-  if (typeof doc.provider !== 'string' || !doc.provider) return 'a connection names its provider'
-  if (doc.status !== undefined && !['active', 'disabled'].includes(doc.status)) return 'status is active or disabled'
   return null
 }
 
@@ -99,10 +67,11 @@ function capabilitiesProblem(caps) {
   return null
 }
 
-function modelProblem(doc, connectionRefs) {
-  if (!ID_CHARS.test(doc._id || '')) return 'a model id is <connection>:<model>'
+function modelProblem(doc, providers) {
+  if (!ID_CHARS.test(doc._id || '')) return 'a model id is <provider>:<model>'
   if (typeof doc.model !== 'string' || !doc.model) return 'a model names the model it serves'
-  if (typeof doc.connection !== 'string' || !connectionRefs.has(doc.connection)) return `connection ${doc.connection} does not exist`
+  if (typeof doc.provider !== 'string' || !providers[doc.provider]) return `provider ${doc.provider} does not exist`
+  if (doc._id !== modelId(doc.provider, doc.model)) return `the id should be ${modelId(doc.provider, doc.model)}`
   if (doc.status !== undefined && !['enabled', 'disabled'].includes(doc.status)) return 'status is enabled or disabled'
   const caps = capabilitiesProblem(doc.capabilities)
   if (caps) return caps
@@ -113,6 +82,27 @@ function modelProblem(doc, connectionRefs) {
       if (value !== undefined && value !== null && !(Number.isFinite(value) && value >= 0)) return `prices.${key} is a price of 0 or more`
     }
   }
+  return null
+}
+
+/** What a part of Slatebox needs that a model cannot do, or null. */
+export function capabilityGap(surfaceId, model) {
+  const at = surfaceById(surfaceId)
+  const caps = model?.capabilities || {}
+  return (at?.needs || []).find((need) => (need === 'images' ? caps.images !== true : caps[need] === false)) || null
+}
+
+function bindingProblem(doc, { models }) {
+  const at = surfaceById(doc.surface)
+  if (!at || !at.useKey) return `${doc.surface} is not a part of Slatebox that can be bound`
+  if (doc._id !== doc.surface) return `the id should be ${doc.surface}`
+  if (!BINDING_USES.includes(doc.use)) return 'use is model or off'
+  if (doc.use === 'off') return doc.surface === 'default' ? 'everything not set cannot be turned off here; use the switch for everyone' : null
+  const model = models[doc.model]
+  if (!model) return `model ${doc.model} does not exist`
+  if (model.status === 'disabled') return `model ${doc.model} is disabled`
+  const gap = capabilityGap(doc.surface, model)
+  if (gap) return `${doc.model} cannot do ${gap}, which ${at.title.toLowerCase()} needs`
   return null
 }
 
@@ -152,89 +142,17 @@ const parsePin = (ref) => {
 export { parsePin as parsePromptRef }
 export { bindingProblem }
 
-/** The most entries a model chain holds: the primary and up to four fallbacks. */
-export const MAX_CHAIN = 5
-
-function bindingProblem(doc, { models, prompts, promptVersions, codePromptIds, codeSlots = CODE_SLOTS, connectionRefs = new Set(), connections = {} }) {
-  const at = surfaceById(doc.surface)
-  if (!at || !at.useKey) return `${doc.surface} is not a surface that can be bound`
-  const key = scopeKey(doc.scope)
-  if (!key) return 'scope is server, plan, team or me (with an id)'
-  if (doc._id !== `${doc.surface}|${key}`) return `the id should be ${doc.surface}|${key}`
-  if (doc.status !== undefined && doc.status !== 'published') return 'only a published binding is used'
-  if (doc.enabled !== undefined && typeof doc.enabled !== 'boolean') return 'enabled is true or false'
-  const inner = doc.scope.level === 'team' || doc.scope.level === 'me'
-  if (inner && (doc.params || doc.prompts || doc.tools || doc.limits)) return 'a team or person binding sets only its models and on/off'
-  if (doc.chain !== undefined) {
-    if (!Array.isArray(doc.chain)) return 'chain is a list of models'
-    if (doc.chain.length > MAX_CHAIN) return `chain holds at most ${MAX_CHAIN} entries`
-    for (const [index, entry] of doc.chain.entries()) {
-      if (entry?.on !== undefined && (!Array.isArray(entry.on) || entry.on.some((c) => !FAILURE_CLASSES.includes(c)))) return `chain ${index + 1}: on is a list of ${FAILURE_CLASSES.join(', ')}`
-      // a connection with its own model, or the surface's built-in model
-      if (!entry?.model && typeof entry?.connection === 'string') {
-        if (entry.connection === 'builtin') continue
-        if (!/^server:[a-z0-9][a-z0-9-]{0,39}$/.test(entry.connection) || !connectionRefs.has(entry.connection)) return `chain ${index + 1}: connection ${entry.connection} does not exist`
-        const conn = connections[entry.connection.slice('server:'.length)]
-        if (conn?.status === 'disabled') return `chain ${index + 1}: connection ${entry.connection} is turned off`
-        const gap = at.needs.find((need) => (need === 'images' ? conn && conn.capabilities?.images !== true : conn?.capabilities?.[need] === false))
-        if (gap) return `chain ${index + 1}: ${entry.connection} cannot do ${gap}, which ${at.id} needs`
-        continue
-      }
-      const model = models[entry?.model]
-      if (!model) return `chain ${index + 1}: model ${entry?.model} does not exist`
-      if (model.status === 'disabled') return `chain ${index + 1}: model ${entry.model} is disabled`
-      if (entry.on !== undefined && (!Array.isArray(entry.on) || entry.on.some((c) => !FAILURE_CLASSES.includes(c)))) return `chain ${index + 1}: on is a list of ${FAILURE_CLASSES.join(', ')}`
-      const caps = model.capabilities || {}
-      const gap = at.needs.find((need) => (need === 'images' ? caps.images !== true : caps[need] === false))
-      if (gap) return `chain ${index + 1}: ${entry.model} cannot do ${gap}, which ${at.id} needs`
-    }
-  }
-  if (doc.onTrip !== undefined && doc.onTrip !== null && !['fallback', 'report'].includes(doc.onTrip)) return 'onTrip is fallback or report'
-  if (doc.params !== undefined && doc.params !== null) {
-    if (!isObject(doc.params)) return 'params is an object'
-    for (const key of ['maxTokens', 'timeoutMs']) if (!optionalPositive(doc.params[key])) return `params.${key} is a number above 0`
-    for (const key of ['infraRetries', 'shapeRetries']) if (doc.params[key] != null && !(isInt(doc.params[key]) && doc.params[key] <= 10)) return `params.${key} is a whole number from 0 to 10`
-    if (doc.params.temperature != null && !(Number.isFinite(doc.params.temperature) && doc.params.temperature >= 0 && doc.params.temperature <= 2)) return 'params.temperature is from 0 to 2'
-  }
-  if (doc.prompts !== undefined && doc.prompts !== null) {
-    if (!isObject(doc.prompts)) return 'prompts is an object of slot: prompt id'
-    for (const [slot, ref] of Object.entries(doc.prompts)) {
-      const pin = parsePin(ref)
-      if (!pin) return `prompt slot ${slot} names no prompt`
-      const known = prompts[pin.id] || codePromptIds.has(pin.id)
-      if (!known) return `prompt ${pin.id} does not exist`
-      if (pin.version && !promptVersions[`${pin.id}@${pin.version}`]) return `prompt ${pin.id}@${pin.version} does not exist`
-      // a slot takes the surface's own prompt for it (a version of it, or its published one): the
-      // values a call site gives are that prompt's, so another prompt's text never goes in its place
-      const owner = codeSlots?.[doc.surface]?.[slot]
-      if (owner !== pin.id) return owner ? `prompt slot ${slot} takes ${owner} (or a version of it), not ${pin.id}` : `${doc.surface} has no prompt slot ${slot}`
-    }
-  }
-  if (doc.tools !== undefined && doc.tools !== null) {
-    if (!isObject(doc.tools)) return 'tools is an object'
-    if (doc.tools.mode != null && !['forced', 'auto', 'none'].includes(doc.tools.mode)) return 'tools.mode is forced, auto or none'
-    if (doc.tools.allow != null && (!Array.isArray(doc.tools.allow) || doc.tools.allow.some((t) => typeof t !== 'string'))) return 'tools.allow is a list of tool names'
-  }
-  if (doc.limits !== undefined && doc.limits !== null) {
-    if (!isObject(doc.limits)) return 'limits is an object'
-    for (const key of ['estimate', 'ceiling']) if (!optionalPositive(doc.limits[key])) return `limits.${key} is an amount above 0`
-  }
-  return null
-}
-
 /**
- * Builds a snapshot from raw documents. raw: { state, providers[], connections[], models[],
- * bindings[], prompts[], promptVersions[], agents[] }; fileConnections: the names of the settings
- * file's connections (a model may name server:<file connection>); codePromptIds: prompt ids with
- * built-in text. Each document that fails is skipped and named in health.
+ * Builds a snapshot from raw documents. raw: { state, providers[], keys: { [provider]: { id,
+ * keyFingerprint } }, models[], bindings[], prompts[], promptVersions[], agents[] }. Each document
+ * that fails is skipped and named in health.
  */
-export function buildSnapshot(raw = {}, { fileConnections = [], codePromptIds = [], now = Date.now, source = 'db' } = {}) {
+export function buildSnapshot(raw = {}, { now = Date.now, source = 'db' } = {}) {
   const health = []
   const skip = (kind, id, problem) => health.push({ kind, id: String(id ?? '(no id)').slice(0, 200), problem })
   const state = { ...DEFAULT_STATE, ...(isObject(raw.state) ? raw.state : {}) }
   if (!isInt(state.generation)) state.generation = 0
   if (typeof state.aiEnabled !== 'boolean') state.aiEnabled = true
-  if (state.dbLayer !== 'off') state.dbLayer = 'on'
   delete state._id
 
   const pick = (list, kind, problemOf, keyOf = (doc) => doc._id) => {
@@ -248,48 +166,29 @@ export function buildSnapshot(raw = {}, { fileConnections = [], codePromptIds = 
     return out
   }
 
-  // A dbLayer switched off at runtime ignores every document but keeps counting generations.
-  if (state.dbLayer === 'off') return emptySnapshot({ dbLayer: 'off', source, generation: state.generation, global: state })
-
   const providers = pick(raw.providers, 'provider', providerProblem)
-  // server connections: never a key, a cipher or anything sealed
-  const connections = pick((raw.connections || []).map((doc) => (isObject(doc) ? {
-    name: doc.name, provider: doc.provider, baseUrl: doc.baseUrl ?? null, model: doc.model ?? null,
-    capabilities: doc.capabilities || {}, status: doc.status ?? 'active', keyFingerprint: doc.keyFingerprint ?? null,
-    hasKey: Boolean(doc.cipher || doc.hasKey), keyRef: doc.keyRef?.kind ? { kind: doc.keyRef.kind, ...(doc.keyRef.kind === 'env' && { name: doc.keyRef.name }) } : null,
-    lastCheck: doc.lastCheck ? { at: doc.lastCheck.at ?? null, ok: Boolean(doc.lastCheck.ok), latencyMs: doc.lastCheck.latencyMs ?? null, error: doc.lastCheck.error ?? null } : null,
-  } : doc)), 'connection', connectionProblem, (doc) => doc.name)
-  const connectionRefs = new Set([
-    ...Object.keys(connections).map((name) => `server:${name}`),
-    ...fileConnections.map((name) => `server:${name}`),
-    ...['deepinfra', 'openai', 'anthropic', 'stabilityai'].map((p) => `builtin:${p}`),
-  ])
-  const models = pick(raw.models, 'model', (doc) => modelProblem(doc, connectionRefs))
+  // which provider has an active key: never a key or a cipher
+  const keys = {}
+  for (const [provider, summary] of Object.entries(isObject(raw.keys) ? raw.keys : {})) {
+    if (isObject(summary)) keys[provider] = { id: String(summary.id ?? ''), keyFingerprint: summary.keyFingerprint ?? null }
+  }
+  const models = pick(raw.models, 'model', (doc) => modelProblem(doc, providers))
   const allVersions = {}
   for (const version of Array.isArray(raw.promptVersions) ? raw.promptVersions : []) {
     if (isObject(version) && typeof version.promptId === 'string' && isInt(version.version)) allVersions[`${version.promptId}@${version.version}`] = version
   }
   const prompts = pick(raw.prompts, 'prompt', (head) => promptProblem(head, allVersions[`${head._id}@${head.labels?.published}`]))
-  // only the versions something uses: the published ones, and any a binding pins (checked below)
   const promptVersions = {}
   for (const head of Object.values(prompts)) {
     const published = head.labels?.published
     if (published) promptVersions[`${head._id}@${published}`] = allVersions[`${head._id}@${published}`]
   }
-  for (const doc of Array.isArray(raw.bindings) ? raw.bindings : []) {
-    for (const ref of Object.values(isObject(doc?.prompts) ? doc.prompts : {})) {
-      const pin = parsePin(ref)
-      const version = pin?.version && allVersions[`${pin.id}@${pin.version}`]
-      if (version && !promptVersionProblem(version)) promptVersions[`${pin.id}@${pin.version}`] = version
-    }
-  }
-  const codeIds = new Set(codePromptIds)
-  const bindings = pick(raw.bindings, 'binding', (doc) => bindingProblem(doc, { models, prompts, promptVersions, codePromptIds: codeIds, connectionRefs, connections }))
+  const bindings = pick(raw.bindings, 'binding', (doc) => bindingProblem(doc, { models }))
   const agents = pick(raw.agents, 'agent', agentProblem)
 
   return frozen({
-    generation: state.generation, dbLayer: 'on', source, loadedAt: now(), state,
-    providers, connections, models, bindings, prompts, promptVersions, agents, health,
+    generation: state.generation, source, loadedAt: now(), state,
+    providers, keys, models, bindings, prompts, promptVersions, agents, health,
   })
 }
 
@@ -299,12 +198,8 @@ export function buildSnapshot(raw = {}, { fileConnections = [], codePromptIds = 
  * it changed it reloads in the background and swaps (stale-while-revalidate). A pod that writes
  * calls refresh({ force: true }) and swaps at once.
  */
-export function createSnapshotHolder({
-  read, settings = {}, codePromptIds = () => [], fileConnections = () => [], pollMs = POLL_MS,
-  setTimer = setTimeout, clearTimer = clearTimeout, now = Date.now, log = console,
-}) {
-  const fileSwitch = fileDbLayer(settings)
-  let current = fileSwitch === 'off' ? emptySnapshot({ dbLayer: 'off', source: 'file-switch' }) : null
+export function createSnapshotHolder({ read, pollMs = POLL_MS, setTimer = setTimeout, clearTimer = clearTimeout, now = Date.now, log = console }) {
+  let current = null
   let lastGood = null
   let loading = null
   let timer = null
@@ -312,9 +207,7 @@ export function createSnapshotHolder({
   let warnedCold = false
   let stopped = true
 
-  const build = async () => buildSnapshot(await read.all(), {
-    fileConnections: fileConnections(), codePromptIds: codePromptIds(), now, source: 'db',
-  })
+  const build = async () => buildSnapshot(await read.all(), { now, source: 'db' })
 
   async function reload() {
     try {
@@ -329,16 +222,15 @@ export function createSnapshotHolder({
         log.warn?.(`ai-control: reload failed, keeping generation ${lastGood.generation}: ${error.message}`)
         current = lastGood
       } else {
-        if (!warnedCold) log.warn?.(`ai-control: running without DB layer (${error.message})`)
+        if (!warnedCold) log.warn?.(`ai-control: running on the built-in default (${error.message})`)
         warnedCold = true
-        current = emptySnapshot({ source: 'file+code', health: [{ kind: 'snapshot', id: 'load', problem: 'The AI control settings could not be read; the settings file and built-in defaults apply.' }] })
+        current = emptySnapshot({ source: 'builtin', health: [{ kind: 'snapshot', id: 'load', problem: 'The AI settings could not be read; every part uses the built-in default (Meta Muse Ember).' }] })
       }
       return current
     }
   }
 
   function refresh({ force = false } = {}) {
-    if (fileSwitch === 'off') return Promise.resolve(current)
     if (loading) return loading
     loading = (async () => {
       try {
@@ -351,10 +243,9 @@ export function createSnapshotHolder({
         }
         return await reload()
       } catch (error) {
-        // the generation read itself failed: keep what there is
         failures += 1
         log.warn?.(`ai-control: generation check failed: ${error.message}`)
-        if (!current) current = emptySnapshot({ source: 'file+code' })
+        if (!current) current = emptySnapshot({ source: 'builtin' })
         return current
       } finally {
         loading = null
@@ -380,7 +271,7 @@ export function createSnapshotHolder({
     ready: () => (current ? Promise.resolve(current) : refresh()),
     refresh,
     start() {
-      if (!stopped || fileSwitch === 'off') return
+      if (!stopped) return
       stopped = false
       refresh().finally(schedule)
     },
@@ -389,7 +280,6 @@ export function createSnapshotHolder({
       if (timer) clearTimer(timer)
       timer = null
     },
-    fileSwitch,
   }
 }
 

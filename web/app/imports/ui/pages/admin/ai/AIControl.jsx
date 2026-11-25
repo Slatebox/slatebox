@@ -15,11 +15,13 @@ import Effective from './Effective'
 import Audit from './Audit'
 import Gallery from './Gallery'
 
-// Admin › AI control (/admin/ai): which AI answers each part of Slatebox and where that choice
-// comes from, the providers, keys and models it can use, what each part is bound to, the prompts each part sends, the
-// outside agents people can invite (Agent gallery), and every change to the AI configuration. The page calls only the
-// ai.control.*, ai.bindings.*, ai.prompts.*, ai.agents.gallery.* and ai.audit.* actions, the same ones an administrator's token, exec, MCP and the CLI call; the
-// server checks the administrator on every call.
+// Admin › AI control (/admin/ai): which model answers each part of Slatebox, the providers and
+// their keys (kept only in the backend), the models with their prices, one choice per part, the
+// prompts each part sends, the outside agents people can invite (Agent gallery), and every change
+// to the AI configuration. The page calls only the ai.control.*, ai.providers.*, ai.keys.*,
+// ai.models.*, ai.bindings.*, ai.prompts.*, ai.agents.gallery.* and ai.audit.* actions, the same
+// ones an administrator's token, exec, MCP and the CLI call; the server checks the administrator on
+// every call.
 const TABS = [
   { id: 'overview', label: 'Overview', Panel: Overview },
   { id: 'providers', label: 'Providers and keys', Panel: Providers },
@@ -40,7 +42,7 @@ export default function AIControl() {
         <Link component={RouterLink} to="/admin" underline="hover" variant="body2">Server admin</Link>
         <Typography component="h1" variant="h5" color="text.primary" sx={{ mt: 0.5 }}>AI control</Typography>
         <Typography variant="body2" color="text.secondary">
-          Which AI answers each part of Slatebox on this server, where each choice comes from, and who changed it.
+          Which model answers each part of Slatebox on this server, the providers and keys it uses, and who changed what.
         </Typography>
       </Box>
       <Tabs value={tab} onChange={(_event, next) => setTab(next)} aria-label="AI control sections" sx={{ borderBottom: 1, borderColor: 'divider' }}>

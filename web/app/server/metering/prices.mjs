@@ -112,36 +112,20 @@ export const ESTIMATES = METER_ESTIMATES
 // the prompt before it is sent. A shape request is a short prompt and at most one retry.
 const CEILINGS = METER_CEILINGS
 const DEFAULT_CEILING = 50_000
-// An administrator's published binding may tighten a surface's estimate and ceiling (AI control,
-// spec 1.4 limits: tighten only). source(meterFeature) → { estimate, ceiling } (µ$, either null),
-// set by ai-control/index.mjs from the snapshot.
-let limitSource = () => null
-export function setLimitSource(source) {
-  limitSource = typeof source === 'function' ? source : () => null
-}
-const limitOf = (feature, key) => {
-  try {
-    const value = limitSource(feature)?.[key]
-    return Number.isFinite(value) && value > 0 ? value : null
-  } catch {
-    return null
-  }
-}
-const tighter = (code, set) => (set !== null && (code === undefined || code === null || set < code) ? set : code)
 
 export function actionCeilingMicros(feature) {
-  return tighter(CEILINGS[feature] ?? DEFAULT_CEILING, limitOf(feature, 'ceiling'))
+  return CEILINGS[feature] ?? DEFAULT_CEILING
 }
 
-/** The pre-check estimate for a meter feature: the catalogue's, or a binding's lower one. */
+/** The pre-check estimate for a meter feature: the catalogue's. */
 export function actionEstimateMicros(feature) {
-  return tighter(ESTIMATES[feature], limitOf(feature, 'estimate'))
+  return ESTIMATES[feature]
 }
 
 // Prices an administrator set on a model in AI control (aiModels, spec 1.3), read from the
 // snapshot: they win over the settings file and the table from the next call, with no restart.
-// source(model, where?) → { inPerMillion, outPerMillion, id, builtin } or null; where names the
-// connection that served the call ({ connection, provider }); ai-control/index.mjs sets it.
+// source(model, where?) → { inPerMillion, outPerMillion, id } or null; where names the provider
+// that served the call ({ provider }); ai-control/index.mjs sets it.
 let dbPrices = () => null
 export function setDbPriceSource(source) {
   dbPrices = typeof source === 'function' ? source : () => null
@@ -151,7 +135,7 @@ const dbPriceOf = (model, where = null) => {
   try {
     const row = model ? dbPrices(model, where) : null
     if (!row || !Number.isFinite(row.inPerMillion) || !Number.isFinite(row.outPerMillion)) return null
-    return Object.freeze({ model, inPerMillion: row.inPerMillion, outPerMillion: row.outPerMillion, source: 'db', read: null, ...(row.id && { id: row.id }), ...(row.builtin && { builtin: true }) })
+    return Object.freeze({ model, inPerMillion: row.inPerMillion, outPerMillion: row.outPerMillion, source: 'db', read: null, ...(row.id && { id: row.id }) })
   } catch {
     return null
   }
@@ -163,24 +147,22 @@ export function isPriced(model) {
 }
 
 /**
- * The price of one call. where: the connection that served it ({ connection, provider }), so an
- * administrator's price applies only to that connection's model. A price set on the built-in AI's
- * own model can raise what the table says but never lower it: Slatebox's provider bills the table
- * rate, and budgets and credits are counted from it.
+ * The price of one call. where: the provider that served it ({ provider }), so an administrator's
+ * price applies only to that provider's model. Without one, the dearest price an administrator set
+ * for the model name, then the table (or the dearest row).
  */
 export function aiPrice(model, where = null) {
   const table = prices.find(row => row.model === model)
-  const db = dbPriceOf(model, where)
-  if (db && db.builtin && table) {
-    return Object.freeze({ ...db, inPerMillion: Math.max(db.inPerMillion, table.inPerMillion), outPerMillion: Math.max(db.outPerMillion, table.outPerMillion) })
-  }
-  return db || table || dearest
+  return dbPriceOf(model, where) || table || dearest
 }
 
 // DeepInfra returns usage.estimated_cost. Its unit is not yet confirmed from a recorded
 // response, so it can raise the table price but never lower it.
 export function aiCostMicros({ model, usage = {}, connection = null, provider = null }) {
-  const price = aiPrice(model, connection ? { connection, provider } : null)
+  // a server route's provider (server:<provider>); a person's own connection is priced from the table
+  const server = typeof connection === 'string' && connection.startsWith('server:')
+  const where = server ? { provider: provider && provider !== 'connection' ? provider : connection.slice('server:'.length) } : connection ? { provider: null } : null
+  const price = aiPrice(model, where)
   // Whole micro-dollars per million tokens keep the arithmetic exact; round up.
   const perToken = (usage.inputTokens || 0) * Math.round(price.inPerMillion * 1e6) + (usage.outputTokens || 0) * Math.round(price.outPerMillion * 1e6)
   const table = Math.ceil(perToken / 1e6)

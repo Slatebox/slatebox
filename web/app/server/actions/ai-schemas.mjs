@@ -6,7 +6,7 @@ import { USE_SURFACES } from '../ai-control/catalogue.mjs'
 const ref = {
   type: ['string', 'null'],
   maxLength: 48,
-  description: 'me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear.',
+  description: 'me:<name> or team:<name> for a connection, builtin for this server\'s model (Admin → AI control), null to clear.',
 }
 
 // One property per surface of the catalogue (ai-control/catalogue.mjs): default, the features and
@@ -22,7 +22,7 @@ export const connectionInput = {
   type: 'object',
   properties: {
     name: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,39}$', description: 'Your name for it, for example desk-model.' },
-    type: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,39}$', description: 'The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), openai, anthropic, deepinfra, or one an administrator added (ai.control.get lists them).' },
+    type: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,39}$', description: 'The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added.' },
     baseUrl: { type: 'string', maxLength: 500, description: 'For openai-compatible: the address up to /v1, for example http://host.docker.internal:11434/v1.' },
     model: { type: 'string', maxLength: 200, description: 'The model name the endpoint serves.' },
     apiKey: { type: 'string', maxLength: 400, writeOnly: true, description: 'Stored encrypted and never shown again. Leave it out to keep the saved key; send an empty string to remove it.' },

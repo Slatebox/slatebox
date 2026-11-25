@@ -4,8 +4,9 @@
 // 4ffde9cf, before the move, with `node scripts/ai-request-golden.mjs --prompts <that tree>/web/app`; its two library
 // sites were captured again when the engine’s edit table gained set_appearance (the refine tool offers every edit).
 // Every prompt in the registry is asked for by one of those recordings, so every one is proven; and
-// a published version, or a version a binding pins, really reaches the request, while the DB layer
-// switched off serves the built-in text.
+// a published version really reaches the request, while no published version (or no snapshot)
+// serves the built-in text. (The recordings no longer carry a provider, model or fallback per call:
+// which model answers is chosen in Admin → AI control, not at the call site.)
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -51,13 +52,13 @@ test('the registry: S5 surfaces, unique slots, declared variables, no all-caps p
 })
 
 // a snapshot as AI control loads it: published heads and versions
-const snapshotWith = ({ heads = [], versions = [], bindings = [], dbLayer = 'on' } = {}) => buildSnapshot({
-  state: { generation: 3, dbLayer },
-  prompts: heads, promptVersions: versions, bindings,
-}, { codePromptIds: PROMPT_IDS })
+const snapshotWith = ({ heads = [], versions = [] } = {}) => buildSnapshot({
+  state: { generation: 3 },
+  prompts: heads, promptVersions: versions,
+})
 const use = (snapshot) => prompts.setSource((id) => promptFor(snapshot, prompts.byId[id], CODE_PROMPTS))
 
-test('a published version reaches the request; a pinned one wins; the DB layer off serves the built-in text', async (t) => {
+test('a published version reaches the request; with none (or no snapshot) the built-in text is sent', async (t) => {
   t.after(() => prompts.setSource(null))
   const added = ' Prefer rounded corners.'
   const v2 = { _id: 'shape.system@2', promptId: 'shape.system', version: 2, body: CODE_PROMPTS['shape.system'].body + added, variables: CODE_PROMPTS['shape.system'].variables }
@@ -73,19 +74,13 @@ test('a published version reaches the request; a pinned one wins; the DB layer o
   assert.ok(sent.at(-1).system.endsWith(added), 'the published sentence is in the system text sent')
   assert.ok(sent.at(-1).system.includes('exactly 2 clearly different takes'))
 
-  // a published server binding of the surface pins its slot to version 3
-  use(snapshotWith({
-    heads: [{ _id: 'shape.system', surface: 'shape', kind: 'system', labels: { published: 2 } }], versions: [v2, v3],
-    bindings: [{ _id: 'shape|server', surface: 'shape', scope: { level: 'server' }, status: 'published', version: 1, prompts: { system: 'shape.system@3' } }],
-  }))
+  // publishing version 3 moves what is sent
+  use(snapshotWith({ heads: [{ _id: 'shape.system', surface: 'shape', kind: 'system', labels: { published: 3 } }], versions: [v2, v3] }))
   await draw()
   assert.equal(sent.at(-1).system, 'Draw 2 outlines, simply.')
 
-  // break-glass: the DB layer switched off at runtime (and the file switch, an empty snapshot) is the code
-  use(snapshotWith({ heads: [{ _id: 'shape.system', surface: 'shape', kind: 'system', labels: { published: 2 } }], versions: [v2], dbLayer: 'off' }))
-  await draw()
-  assert.equal(sent.at(-1).system, prompts.code('shape.system', { count: 2 }))
-  use(emptySnapshot({ dbLayer: 'off', source: 'file-switch' }))
+  // an empty snapshot (the database could not be read) is the code
+  use(emptySnapshot())
   await draw()
   assert.equal(sent.at(-1).system, prompts.code('shape.system', { count: 2 }))
 

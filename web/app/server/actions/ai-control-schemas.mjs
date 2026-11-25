@@ -1,9 +1,13 @@
-// Schemas the AI control actions share (spec 4): providers, server connections and models.
+// Schemas the AI control actions share: providers, keys and models.
 import { problem } from './errors.mjs'
-import { AUTH_STYLES, CHAT_PROTOCOLS, PROVIDER_CAPS } from '../ai-control/providers.mjs'
+import { AUTH_STYLES, BUILTIN_PROVIDER_IDS, PROVIDER_CAPS, TOOL_CHOICES } from '../ai-control/providers.mjs'
+import { PRESET_IDS } from '../ai-control/provider-presets.mjs'
 
 export const SLUG = { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,39}$' }
 export const REASON = { type: 'string', minLength: 1, maxLength: 500, description: 'Why, for the change history.' }
+export const PROVIDER_ID = { ...SLUG, description: `A model provider's id (for example meta or deepinfra), or a service beside the models (${BUILTIN_PROVIDER_IDS.join(', ')}).` }
+export const KEY_ID = { type: 'string', pattern: '^[A-Za-z0-9_-]{1,64}$', description: 'A key\'s id, from ai.keys.list.' }
+export const API_KEY = { type: 'string', minLength: 1, maxLength: 400, writeOnly: true, description: 'Stored encrypted with the server\'s key-encryption key and never shown again. For nounproject: key:secret.' }
 const caps = (description) => ({
   type: 'object',
   properties: Object.fromEntries(PROVIDER_CAPS.map((key) => [key, { type: 'boolean' }])),
@@ -14,66 +18,45 @@ const caps = (description) => ({
 export const providerInput = {
   type: 'object',
   properties: {
-    id: { ...SLUG, description: 'The provider\'s id, for example gemini. Built-in ids cannot be used.' },
-    label: { type: 'string', minLength: 1, maxLength: 80 },
-    protocol: { type: 'string', enum: [...CHAT_PROTOCOLS], description: 'The wire protocol it speaks. Gemini, Meta, Mistral, OpenRouter, Groq, Together, Ollama and vLLM speak openai-chat.' },
-    baseUrl: { type: ['string', 'null'], maxLength: 500, description: 'The address up to /v1. null: each connection gives its own.' },
-    baseUrlLocked: { type: 'boolean', description: 'Connections of this provider keep its address (default true when an address is given).' },
+    preset: { type: 'string', enum: [...PRESET_IDS], description: 'What the provider is: meta (Muse), openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, or other (any OpenAI-compatible address).' },
+    id: { ...SLUG, description: 'Its id here; the preset\'s by default (meta, deepinfra, ...).' },
+    label: { type: 'string', minLength: 1, maxLength: 80, description: 'The name shown; the preset\'s by default.' },
+    baseUrl: { type: 'string', maxLength: 500, description: 'For other only: the address up to /v1. Named presets keep their own address.' },
     auth: {
       type: 'object',
       properties: { style: { type: 'string', enum: [...AUTH_STYLES] }, name: { type: 'string', maxLength: 64 } },
       required: ['style'],
       additionalProperties: false,
-      description: 'How the key is sent: bearer (Authorization: Bearer), header { name }, query { name } or none.',
+      description: 'For other only: bearer (Authorization: Bearer), header { name } or none.',
     },
-    extraHeaders: { type: 'object', additionalProperties: { type: 'string', maxLength: 200 }, maxProperties: 10, description: 'Headers sent with every request. Nothing secret: names that look like credentials are refused.' },
-    keyRequired: { type: 'boolean' },
-    modelOptional: { type: 'boolean' },
-    defaultCapabilities: caps('What its models can usually do; a connection or model may say otherwise.'),
+    toolChoice: { type: 'string', enum: [...TOOL_CHOICES], description: 'For other only: how it takes a forced tool call.' },
+    extraHeaders: { type: 'object', additionalProperties: { type: 'string', maxLength: 200 }, maxProperties: 10, description: 'For other only: headers sent with every request. Nothing secret.' },
   },
-  required: ['id', 'label', 'protocol'],
+  required: ['preset'],
   additionalProperties: false,
 }
 
-export const serverConnectionInput = {
+export const providerChange = {
   type: 'object',
   properties: {
-    name: { ...SLUG, description: 'The connection\'s name, for example gemini-main.' },
-    type: { ...SLUG, description: 'The provider: openai-compatible, openai, anthropic, deepinfra, one an administrator added, or a service beside the models (stability, google-cse, nounproject, deepgram).' },
-    baseUrl: { type: 'string', maxLength: 500, description: 'For a provider without a fixed address: the address up to /v1.' },
-    model: { type: 'string', maxLength: 200, description: 'The model it serves. For google-cse, the search engine ID (cx).' },
-    apiKey: { type: 'string', maxLength: 400, writeOnly: true, description: 'Stored encrypted with the server\'s key and never shown again. Leave it out to keep the saved key. For nounproject: key:secret.' },
-    keyRef: {
-      type: 'object',
-      properties: { kind: { type: 'string', enum: ['env', 'none'] }, name: { type: 'string', pattern: '^[A-Z][A-Z0-9_]{1,63}$' } },
-      required: ['kind'],
-      additionalProperties: false,
-      description: 'env: read the key from an environment variable named SLATEBOX_AI_KEY_… (or one the settings file allows) for each request; none: no key. Sending apiKey seals the key instead.',
-    },
-    rotate: {
-      type: 'object',
-      properties: { graceHours: { type: 'integer', enum: [0, 1, 24] } },
-      required: ['graceHours'],
-      additionalProperties: false,
-      description: 'With a new apiKey: the old key keeps working for this many hours, in case the provider has not taken the new one yet.',
-    },
-    capabilities: caps('What the model can do, where you know it. Unset means try it; making images needs images: true.'),
-    maxTokens: { type: 'integer', minimum: 256, maximum: 200000 },
-    toolChoice: { type: 'string', enum: ['auto', 'named', 'required'] },
-    status: { type: 'string', enum: ['active', 'disabled'], description: 'disabled: kept, but nothing is sent to it.' },
+    id: SLUG,
+    label: { type: 'string', minLength: 1, maxLength: 80 },
+    baseUrl: { type: 'string', maxLength: 500, description: 'Other providers only. A new address revokes the provider\'s keys (send revokeKeys true).' },
+    auth: providerInput.properties.auth,
+    toolChoice: providerInput.properties.toolChoice,
+    extraHeaders: providerInput.properties.extraHeaders,
   },
-  required: ['name', 'type'],
+  required: ['id'],
   additionalProperties: false,
 }
 
 export const modelInput = {
   type: 'object',
   properties: {
-    connection: { type: 'string', pattern: '^(server|builtin):[a-z0-9][a-z0-9-]{0,39}$', description: 'server:<connection> or builtin:deepinfra|openai|anthropic|stabilityai.' },
-    model: { type: 'string', minLength: 1, maxLength: 200 },
-    label: { type: ['string', 'null'], maxLength: 80 },
-    capabilities: caps('What the model can do. A binding refuses a model whose flags miss what its surface needs.'),
-    maxContext: { type: ['integer', 'null'], minimum: 1 },
+    provider: { ...SLUG, description: 'The provider that serves it (ai.control.get lists them).' },
+    model: { type: 'string', minLength: 1, maxLength: 200, description: 'The id the provider serves, for example muse-ember-1.0.' },
+    label: { type: ['string', 'null'], maxLength: 80, description: 'The name shown, for example Muse Ember.' },
+    capabilities: caps('What the model can do. A part of Slatebox refuses a model whose flags miss what it needs.'),
     maxOutput: { type: ['integer', 'null'], minimum: 1 },
     prices: {
       type: ['object', 'null'],
@@ -87,14 +70,14 @@ export const modelInput = {
     },
     status: { type: 'string', enum: ['enabled', 'disabled'] },
   },
-  required: ['connection', 'model'],
+  required: ['provider', 'model'],
   additionalProperties: false,
 }
 
-/** A ModelError or ProviderError from ai-control/models.mjs as the action error every surface shows. */
+/** A ModelError, KeyError or ProviderError as the action error every surface shows. */
 export function asProblem(error) {
   if (error?.name === 'ModelError') {
-    const code = error.status === 404 ? 'not_found' : error.status === 409 ? 'conflict' : error.status === 429 ? 'rate_limited' : 'invalid_request'
+    const code = error.status === 404 ? 'not_found' : error.status === 409 ? 'conflict' : error.status === 429 ? 'rate_limited' : error.status === 503 ? 'unavailable' : 'invalid_request'
     return problem(error.status, code, error.message, { ...(error.details && { details: error.details }), ...(error.details?.retryAfter && { retryAfter: error.details.retryAfter }) })
   }
   if (error?.name === 'ProviderError' || error?.name === 'ControlStoreError') return problem(400, 'invalid_request', error.message)

@@ -6,8 +6,8 @@
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { test } from "node:test";
-import { AI_FEATURES, USE_KEYS, choiceFeatureFor, operatorConfig } from "../web/app/server/methods/ai/connections.mjs";
-import { resolveAIFeatureConfig } from "../web/app/server/methods/ai/feature-config.mjs";
+import { AI_FEATURES, USE_KEYS, choiceFeatureFor } from "../web/app/server/methods/ai/connections.mjs";
+import { BINDABLE_SURFACES } from "../web/app/server/ai-control/bindings.mjs";
 import { ESTIMATES, actionCeilingMicros } from "../web/app/server/metering/prices.mjs";
 import {
   DRAWINGS_PER_HOUR, SHAPE_TOOL, UNAVAILABLE_MESSAGE, generateShapes, readCandidates, shapeSystemPrompt,
@@ -106,21 +106,16 @@ const ben = { userId: "ben", teamId: "team1" };
 const cy = { userId: "cy", teamId: "team2" };
 
 // ---- 10, 11: the feature is chosen like every other -------------------------------------------
-test("shape is an AI feature chosen through settings.ai.use, with tools", () => {
+test("shape is a part of Slatebox an administrator binds to a model (and a person may choose their own), with tools", () => {
   const feature = AI_FEATURES.find((f) => f.id === "shape");
   assert.ok(feature);
   assert.deepEqual([...feature.needs], ["tools"]);
   assert.ok(USE_KEYS.includes("shape"));
   assert.equal(choiceFeatureFor("shape"), "shape");
-  const config = operatorConfig({ ai: { connections: { local: { type: "openai-compatible", baseUrl: "http://inference:8080/v1", model: "m" } }, use: { shape: "local" } } });
-  assert.equal(config.use.shape, "server:local");
+  assert.ok(BINDABLE_SURFACES.includes("shape"));
 });
 
-test("the built-in model for shapes is data, and no model is named in the shape code", async () => {
-  const config = resolveAIFeatureConfig("shape", {});
-  assert.equal(config.feature, "shape");
-  assert.ok(config.provider && config.engine, "ai-defaults.json has a shape entry");
-  assert.equal(resolveAIFeatureConfig("shape", { ai: { features: { shape: { provider: "openai", engine: "x" } } } }).engine, "x");
+test("no model is named in the shape code: Admin → AI control chooses it", async () => {
   const dir = new URL("../web/app/server/shapes/", import.meta.url);
   for (const file of await readdir(dir)) {
     const text = await readFile(new URL(file, dir), "utf8");

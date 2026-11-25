@@ -9,53 +9,31 @@ import { resolveRequestConnection } from './ai-settings'
 import { connectionFetch } from './endpoint-policy.mjs'
 import { connectionRequest } from './connection-request.mjs'
 import { carriesImages, featureTitle, surfaceFor } from './connections.mjs'
-import { requestOptionsFromBinding } from '../../ai-control/request-binding.mjs'
-import { requestBreaker } from '../../ai-control/breaker.mjs'
 import { chosenShapeAbort } from './shape-abort.mjs'
 import utils from '../../../imports/api/common/utils'
 import {
   AI_PROVIDERS,
   buildProviderBody,
-  buildProviderHeaders,
   buildProviderTelemetry,
-  getProviderApiKey,
-  getProviderEndpoint,
   isAllowedPlainTextResponse,
   isRetryableProviderFailure,
   keepsFallbackAfterShapeExhaustion,
   normalizeProviderResponse,
-  resolveAIModel,
-  resolveAIProvider,
   resolveAIRequestTimeout,
-  shouldFallbackToModel,
 } from './provider.mjs'
+import { CODE_LIMITS } from '../../ai-control/resolve.mjs'
 
-const INFRA_RETRY_LIMIT = 2
+// Every request has one route: the part's model in Admin → AI control (or a person's own
+// connection on a self-hosted server), with its key from the backend. No key is read from the
+// settings file or the environment here.
+const INFRA_RETRY_LIMIT = CODE_LIMITS.infraRetries
 // Max invalid-JSON responses per provider chain before the chain degrades.
 // The old bound was `errs > 5` + throw, and the throw landed in the
 // infra-failure catch below, so one dead-format chain legally burned
 // 6 primary + 6 fallback calls (live audit 2026-10-30 share …427121: 11
 // invalid calls, zero recovery). Three shape failures = model won't fix it.
-const SHAPE_RETRY_LIMIT = 3
+const SHAPE_RETRY_LIMIT = CODE_LIMITS.shapeRetries
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-
-let loadedLocalDeepInfraEnvironment = false
-
-function loadLocalDeepInfraEnvironment() {
-  if (loadedLocalDeepInfraEnvironment || !Meteor.isDevelopment) return
-  loadedLocalDeepInfraEnvironment = true
-
-  try {
-    process.loadEnvFile?.('settings.local.json')
-  } catch (error) {
-    if (error?.code !== 'ENOENT') {
-      console.warn(
-        'Unable to load local DeepInfra environment settings:',
-        error.message
-      )
-    }
-  }
-}
 
 async function recordProviderTelemetry({
   aiOpts,
@@ -90,12 +68,12 @@ async function recordProviderTelemetry({
         fallbackFromProvider: aiOpts?.fallbackFromProvider,
         fallbackReason: aiOpts?.fallbackReason,
       }),
-      // which configuration served the call: the surface, the connection (a choice ref, or builtin)
-      // and the place in the model chain (0 the primary, 1 its fallback)
+      // which route served the call: the part, the provider (server:<provider>, or a person's own
+      // connection) and the attempt (0 the part's model, 1 the default model after a failing service)
       surface: aiOpts?.surface ?? surfaceFor(aiOpts?.feature) ?? null,
       connection: aiOpts?.connectionRef ?? null,
       attempt: aiOpts?.chainIndex ?? 0,
-      ...(aiOpts?.bindingVersion && { bindingVersion: aiOpts.bindingVersion }),
+      ...(aiOpts?.modelId && { modelId: aiOpts.modelId }),
       ...(aiOpts?.promptVersions && { promptVersions: aiOpts.promptVersions }),
       levelOfDetail: aiOpts?.detailLevel,
       wordsPerNode: aiOpts?.wordsPerNode,
@@ -111,8 +89,8 @@ async function recordProviderTelemetry({
   if (aiOpts?.unpaid && currentAIAction()?.route !== 'byok') return { stop: false }
   // Every call that returned tokens cost money, whether or not its answer was usable.
   if (!usage || !(usage.totalTokens || usage.inputTokens || usage.outputTokens || usage.providerCostUsd)) return { stop: false }
-  // the connection that served it: an administrator's price applies to that connection's model only
-  return chargeProviderCall({ ref: auditId, provider, model, usage, connection: aiOpts?.connectionRef ?? null })
+  // the provider that served it: an administrator's price applies to that provider's model only
+  return chargeProviderCall({ ref: auditId, provider: aiOpts?.priceProvider ?? provider, model, usage, connection: aiOpts?.connectionRef ?? null })
 }
 
 // An attempt that was sent but got no usage back (timeout, dropped connection, 5xx) is
@@ -160,33 +138,27 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
   // (req() resolves it once for the whole model chain and hands it in as route)
   const chosen = operatorWorkshop ? null : aiOpts.route !== undefined ? aiOpts.route : await resolveRequestConnection({ feature: aiOpts.feature, request: { images: withImages, tools: Boolean(aiOpts.functions?.length) }, userId: callerId })
   delete aiOpts.route
-  // What an administrator's published binding sets (AI control): parameters, tools, which built-in model.
-  const control = chosen?.control || null
-  if (control) {
-    const refused = applyControl(aiOpts, control)
-    if (refused) {
-      await recordProviderTelemetry({ aiOpts, user, provider: aiOpts.provider, model: aiOpts.engine, status: 'configuration_error', error: 'toolsNotAllowed' })
-      return refused
-    }
-  }
-  if (chosen?.builtin) {
-    aiOpts.provider = chosen.builtin.provider
-    aiOpts.engine = chosen.builtin.engine
+  if (chosen?.disabled) {
+    return { abort: true, abortMessage: chosen.message || 'This feature is turned off by your administrator.', fallbackBlocked: true, disabled: true, failure: 'stop', surface: chosen.surface ?? null }
   }
   const chosenConnection = chosen?.connection || null
-  aiOpts.connectionRef = operatorWorkshop ? 'selfhost-workshop' : chosen?.ref ?? 'builtin'
+  aiOpts.connectionRef = operatorWorkshop ? 'selfhost-workshop' : chosen?.ref ?? null
+  if (chosen?.surface && !aiOpts.surface) aiOpts.surface = chosen.surface
+  if (chosen?.modelId) aiOpts.modelId = chosen.modelId
+  // the provider a server route's price is looked up under (models.mjs dbPriceFor)
+  if (chosen?.scope === 'server' && chosen.provider) aiOpts.priceProvider = chosen.provider
   // the label a person may read: an operator's connection by its model, not its host
   const chosenLabel = chosenConnection ? chosen.label : null
-  if (chosen?.gap || chosen?.error || (ownKey && !chosen?.own)) {
+  if (!operatorWorkshop && (!chosenConnection || chosen?.gap || chosen?.error || (ownKey && !chosen?.own))) {
     const abortMessage = chosen?.gap?.message || chosen?.error ||
-      `This request is paid by your own AI, but ${chosen?.feature ? featureTitle(chosen.feature).toLowerCase() : 'this feature'} is set to ${chosenLabel || 'the built-in AI'}. Choose your own model for it too in your AI settings.`
-    await recordProviderTelemetry({ aiOpts, user, provider: chosenConnection?.type || aiOpts.provider, model: chosenConnection?.model || aiOpts.engine, status: chosen?.gap ? 'capability' : 'configuration_error', error: abortMessage })
+      (ownKey && !chosen?.own
+        ? `This request is paid by your own AI, but ${chosen?.feature ? featureTitle(chosen.feature).toLowerCase() : 'this feature'} is set to ${chosenLabel || 'this server\'s model'}. Choose your own model for it too in your AI settings.`
+        : 'No model answers this part of Slatebox. An administrator chooses one in Admin → AI control.')
+    await recordProviderTelemetry({ aiOpts, user, provider: chosenConnection?.type || chosen?.provider || null, model: chosenConnection?.model || null, status: chosen?.gap ? 'capability' : 'configuration_error', error: abortMessage })
     return { abort: true, abortMessage, fallbackBlocked: true, chosen: chosen?.ref, chosenLabel, ...(chosen?.gap ? { capability: chosen.gap.need } : { unusable: true }), failure: ownKey && !chosen?.own ? 'stop' : 'config' }
   }
   aiOpts.unpaid = Boolean(chosen?.own)
-  // A DeepInfra key without a model of its own follows the feature's default model, as own keys always have.
-  const ownDeepInfraKey = chosenConnection?.type === 'deepinfra' && !chosenConnection.model ? chosenConnection.apiKey : null
-  const viaConnection = chosenConnection && !ownDeepInfraKey ? { ...connectionRequest(chosenConnection), fetcher: connectionFetch(chosenConnection.baseUrl, chosen.rules) } : null
+  const viaConnection = chosenConnection ? { ...connectionRequest(chosenConnection), fetcher: connectionFetch(chosenConnection.baseUrl, chosen.rules) } : null
   const anthropicConnection = viaConnection?.provider === 'anthropic' ? viaConnection : null
   // a person's endpoint on hosted Slatebox is reached only through a lookup that refuses private
   // addresses, a self-hosted one through the self-host rules (endpoint-policy.mjs connectionFetch)
@@ -214,46 +186,13 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
     // console.log('current prompts are', prompts)
     const running = currentAIAction()
     if (running && running.route !== 'byok' && running.spentMicros >= running.ceilingMicros) {
-      return { abort: true, abortMessage: 'This request grew too large. Try a shorter brief.', fallbackBlocked: true, provider: aiOpts.provider, model: aiOpts.engine }
+      return { abort: true, abortMessage: 'This request grew too large. Try a shorter brief.', fallbackBlocked: true, provider: chosenConnection?.type ?? null, model: chosenConnection?.model ?? null }
     }
-    // telemetry names a chosen connection 'connection' (its model is recorded beside it)
-    const provider = viaConnection && !anthropicConnection ? 'connection' : localWorkshop ? 'selfhost-workshop' : anthropicConnection ? AI_PROVIDERS.anthropic : resolveAIProvider(aiOpts)
-    const useDeepInfra = provider === AI_PROVIDERS.deepinfra
+    // telemetry names a chosen connection 'connection' (its model and route are recorded beside it)
+    const provider = viaConnection && !anthropicConnection ? 'connection' : localWorkshop ? 'selfhost-workshop' : AI_PROVIDERS.anthropic
     const useClaude = provider === AI_PROVIDERS.anthropic
-    if (useDeepInfra) loadLocalDeepInfraEnvironment()
-
-    const model = localWorkshop?.model ?? anthropicConnection?.model ?? resolveAIModel({
-      provider,
-      engine: aiOpts.engine,
-      settings: Meteor.settings,
-      env: process.env,
-    })
-    if (ownDeepInfraKey && provider !== AI_PROVIDERS.deepinfra) {
-      return { abort: true, abortMessage: 'Your own key works with DeepInfra models. This feature is set to another provider.', fallbackBlocked: true, provider, model, unusable: true, failure: 'stop' }
-    }
-    const apiKey = !localWorkshop && (anthropicConnection ? anthropicConnection.apiKey : ownDeepInfraKey || getProviderApiKey({
-      provider,
-      settings: Meteor.settings,
-      env: process.env,
-    }))
-    if (!localWorkshop && !apiKey) {
-      await recordProviderTelemetry({
-        aiOpts,
-        user,
-        provider,
-        model,
-        status: 'configuration_error',
-        error: `${provider} API key is missing`,
-        errCount: errs,
-      })
-      return {
-        abort: true,
-        abortMessage: `${provider} is not configured for this AI request.`,
-        provider,
-        model,
-        failure: 'config',
-      }
-    }
+    const model = localWorkshop?.model ?? anthropicConnection?.model
+    const apiKey = anthropicConnection ? anthropicConnection.apiKey : null
 
     const payload = {
       provider, model, prompts, system,
@@ -261,21 +200,18 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
       functionCall: aiOpts.function_call,
       userId: callerId,
       ...(Number.isFinite(aiOpts.temperature) && { temperature: aiOpts.temperature }),
-      ...(Number.isFinite(aiOpts.controlMaxTokens) && { controlMaxTokens: aiOpts.controlMaxTokens }),
     }
     if (anthropicConnection) payload.maxTokens = anthropicConnection.maxTokens
     // A feature's own cap on the answer (a presentation plan never needs more), within a connection's.
     if (aiOpts.maxTokens) payload.maxTokens = Math.min(payload.maxTokens || Infinity, aiOpts.maxTokens)
     const ai = localWorkshop ? localWorkshopRequest(localWorkshop, payload) : {
       method: 'POST',
-      headers: buildProviderHeaders({ provider, apiKey }),
       body: JSON.stringify(buildProviderBody(payload)),
     }
 
     let response = null
     let responseStatus = null
-    // A local stub provider for development runs only (never in a production build).
-    const endpoint = localWorkshop?.endpoint ?? anthropicConnection?.endpoint ?? ((Meteor.isDevelopment && Meteor.settings.ai?.stubEndpoint) || getProviderEndpoint(provider))
+    const endpoint = localWorkshop?.endpoint ?? anthropicConnection?.endpoint
     // every chosen connection goes through the AI SDK: tools, images inline, tool choice per endpoint
     const sdkPath = Boolean(aiOpts.sdkChat || aiOpts.feature === 'welcome' || viaConnection)
     let providerDetail = ''
@@ -287,8 +223,6 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
     const maxInfraRetries =
       aiOpts.infraRetries ?? Meteor.settings?.ai?.providerInfraRetries ?? INFRA_RETRY_LIMIT
     let attempt = 0
-    // the previous key of a connection whose key was rotated, once it has been tried (spec 6.3)
-    let previousKeyInUse = null
 
     while (true) {
       attempt += 1
@@ -302,9 +236,8 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
         if (sdkPath) {
           try {
             const fetcher = viaConnection?.fetcher || (localWorkshop?.agent && ((url, init) => fetch(url, { ...init, agent: localWorkshop.agent })))
-            // during a key rotation's grace the previous key is tried once after a refusal (spec 6.3)
-            const wire = previousKeyInUse ? connectionRequest({ ...chosenConnection, apiKey: previousKeyInUse }) : viaConnection
-            response = await sdkChatRequest({ provider, endpoint, apiKey: previousKeyInUse ? wire.apiKey : (localWorkshop?.apiKey || apiKey),
+            const wire = viaConnection
+            response = await sdkChatRequest({ provider, endpoint, apiKey: localWorkshop?.apiKey || apiKey,
               body: JSON.parse(ai.body), functions: aiOpts.functions, local: Boolean(localWorkshop || anthropicConnection), signal: abortController.signal,
               ...(fetcher && { fetcher }), ...(wire?.headers && { headers: wire.headers }), ...(wire?.queryParams && { queryParams: wire.queryParams }) })
             responseStatus = 200
@@ -379,13 +312,6 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
       if (!responseError) break
 
       const errorCode = responseError.code
-      // a rotated key the provider does not take yet: the previous one, still in its grace period, once
-      if ((responseStatus === 401 || responseStatus === 403) && chosenConnection?.previousApiKey && !previousKeyInUse) {
-        previousKeyInUse = chosenConnection.previousApiKey
-        response = null
-        responseStatus = null
-        continue
-      }
       // a 5xx (or no status) after the request went out may still have been billed
       if (typeof responseStatus !== 'number' || responseStatus >= 500) {
         const charged = await chargeUnansweredAttempt({ provider, model, unpaid: aiOpts.unpaid })
@@ -462,12 +388,6 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
     const normalized = normalizeProviderResponse({ provider, response: response || {} })
     const { message, toolCall, usage } = normalized
     if (toolCall) calledTool = true
-    // a binding's allowed tools hold for what comes back too: a call to another tool is not used
-    const allowed = control?.tools?.allow
-    if (allowed && toolCall?.name && !allowed.includes(toolCall.name)) {
-      await recordProviderTelemetry({ aiOpts, user, provider, model, status: 'invalid_response', duration: Date.now() - requestStartedAt, responseStatus, usage, errCount: errs, error: 'toolNotAllowed' })
-      return { abort: true, abortMessage: 'The AI asked for a tool this feature may not use.', shape: true, fallbackBlocked: !keepsFallbackAfterShapeExhaustion(aiOpts.feature), provider, model }
-    }
     const validationError = aiOpts.validateResponse?.({
       message,
       toolCall,
@@ -679,154 +599,30 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
   return named
 }
 
-// What a published binding sets on one request (AI control: ai-settings-core.mjs controlOf): the
-// timeout, retries, temperature and answer size an administrator chose win over the call site's
-// (an answer size only ever shrinks), and its allowed tools narrow the tools sent. → a refusal to
-// return without sending, or null.
-function applyControl(aiOpts, control) {
-  const p = control.params || {}
-  if (Number.isFinite(p.timeoutMs)) aiOpts.timeoutMs = p.timeoutMs
-  if (Number.isInteger(p.infraRetries)) aiOpts.infraRetries = p.infraRetries
-  if (Number.isInteger(p.shapeRetries)) aiOpts.shapeRetries = p.shapeRetries
-  if (Number.isFinite(p.maxTokens)) {
-    aiOpts.maxTokens = Math.min(aiOpts.maxTokens || Infinity, p.maxTokens)
-    // a chosen connection's request keeps its own cap unless the binding's is lower
-    aiOpts.controlMaxTokens = p.maxTokens
-  }
-  if (Number.isFinite(p.temperature)) aiOpts.temperature = p.temperature
-  if (control.bindingVersion) aiOpts.bindingVersion = control.bindingVersion
-  if (!aiOpts.surface && control.surface) aiOpts.surface = control.surface
-  const { allow, mode } = control.tools || {}
-  if (Array.isArray(allow) && aiOpts.functions?.length) {
-    const kept = aiOpts.functions.filter((definition) => allow.includes(definition?.name))
-    if (!kept.length) {
-      return { abort: true, abortMessage: `${featureTitle(control.surface)} cannot use the tools this request needs: an administrator limited its tools.`, fallbackBlocked: true, failure: 'stop', provider: aiOpts.provider, model: aiOpts.engine }
-    }
-    aiOpts.functions = kept
-    if (aiOpts.function_call?.name && !allow.includes(aiOpts.function_call.name)) aiOpts.function_call = undefined
-  }
-  if (mode === 'none') {
-    aiOpts.functions = undefined
-    aiOpts.function_call = undefined
-  } else if (mode === 'auto') {
-    aiOpts.function_call = undefined
-  } else if (mode === 'forced' && !aiOpts.function_call?.name && aiOpts.functions?.length === 1) {
-    aiOpts.function_call = { name: aiOpts.functions[0].name }
-  }
-  return null
-}
-
-// The class of a failed attempt, for the model chain (spec 2.1): infra (5xx, 429, timeout, no
-// answer), shape (the answer never took the shape the feature needs), context (too long), config
-// (the connection cannot be used: no key, turned off, a capability missing), other (any other
-// refusal), or stop: a reason no other model changes (the budget, a deadline, own-key rules).
-export function failureClass(result) {
-  if (!result?.abort) return null
-  if (result.failure) return result.failure
-  if (result.shape) return 'shape'
-  return result.fallbackBlocked ? 'stop' : 'other'
-}
-
-// A published binding's model chain (AI control): the primary, then each fallback whose `on`
-// names the class of the last failure (or any). Each attempt writes its own aiAudit row with its
-// place in the chain. The primary's outcome feeds this pod's circuit breaker for the surface.
-async function walkChain(options, route, userId = null) {
-  const original = JSON.parse(JSON.stringify(options.prompts || []))
-  const surface = route.control?.surface ?? null
-  const bindingVersion = route.control?.bindingVersion ?? null
-  let last = null
-  let lastClass = null
-  for (const [index, entry] of route.chain.entries()) {
-    if (index > 0) {
-      if (!lastClass || lastClass === 'stop') break
-      if (!(entry.on || ['any']).some((on) => on === 'any' || on === lastClass)) continue
-    }
-    const attempt = {
-      ...options,
-      prompts: index === 0 ? options.prompts : JSON.parse(JSON.stringify(original)),
-      fallback: undefined,
-      route: { ...entry, control: route.control },
-      chainIndex: index,
-      ...(last && { fallbackFromProvider: last.provider, fallbackReason: last.abortMessage }),
-    }
-    let result
-    try {
-      result = await requestFromProvider(attempt)
-    } catch (error) {
-      if (index === route.chain.length - 1) throw error
-      result = { abort: true, abortMessage: error.message, provider: options.provider, model: options.engine, failure: 'infra' }
-    }
-    if (index === 0) requestBreaker.record(surface, { failure: failureClass(result), bindingVersion, userId, onTrip: route.onTrip })
-    if (!result?.abort) {
-      return last ? { ...result, fallbackFrom: { provider: last.provider, model: last.model, reason: last.abortMessage } } : result
-    }
-    last = result
-    lastClass = failureClass(result)
-  }
-  return last
-}
-
 export default async function req(requested, localWorkshop) {
-  // a resolved AI control binding (ai-control/resolve.mjs) fills in what the call site left out;
-  // without one the options are used exactly as given
-  const { options: given, refusal } = requestOptionsFromBinding(requested)
-  if (refusal) return refusal
-  if (localWorkshop) return requestFromProvider(given, localWorkshop)
-  // Which connection serves this request, once: an administrator's binding may turn the surface
-  // off, or give it a model chain. A lookup that fails leaves it to requestFromProvider, as before.
-  let route
-  let forUser = null
-  try {
-    forUser = requestUserId({ userId: given.userId })
-    route = await resolveRequestConnection({ feature: given.feature, request: { images: carriesImages(given.prompts), tools: Boolean(given.functions?.length) }, userId: forUser })
-  } catch {
-    route = undefined
-  }
+  if (localWorkshop) return requestFromProvider(requested, localWorkshop)
+  // Which model serves this request, once: an administrator may have turned the part off.
+  const forUser = requestUserId({ userId: requested.userId })
+  const request = { images: carriesImages(requested.prompts), tools: Boolean(requested.functions?.length) }
+  const route = await resolveRequestConnection({ feature: requested.feature, request, userId: forUser })
   if (route?.disabled) {
-    return { abort: true, abortMessage: route.message || 'This feature is turned off by your administrator.', fallbackBlocked: true, disabled: true, failure: 'stop', surface: route.control?.surface ?? null }
+    return { abort: true, abortMessage: route.message || 'This feature is turned off by your administrator.', fallbackBlocked: true, disabled: true, failure: 'stop', surface: route.surface ?? null }
   }
-  if (route?.chain?.length) return walkChain(given, route, forUser)
-  const options = route === undefined ? given : { ...given, route }
-  const { fallback } = options
-  const originalPrompts = fallback
-    ? JSON.parse(JSON.stringify(options.prompts || []))
-    : null
-  let primaryResponse
+  const original = JSON.parse(JSON.stringify(requested.prompts || []))
+  const first = await requestFromProvider({ ...requested, route })
+  // The one built-in fallback: when the part's own server model fails as a service (5xx, 429,
+  // timeout) after its retries, the default model is asked once, if it is another model.
+  if (!first?.abort || first.failure !== 'infra' || route?.scope !== 'server' || !route.modelId) return first
+  let fallback = null
   try {
-    primaryResponse = await requestFromProvider(options)
-  } catch (error) {
-    if (!fallback) throw error
-    primaryResponse = {
-      abort: true,
-      abortMessage: error.message,
-      provider: resolveAIProvider(options),
-      model: options.engine,
-    }
+    fallback = await resolveRequestConnection({ feature: requested.feature, request, userId: forUser, useDefault: true })
+  } catch {
+    fallback = null
   }
-
-  if (
-    !primaryResponse?.abort ||
-    !fallback ||
-    primaryResponse.chosen ||
-    !shouldFallbackToModel(primaryResponse)
-  )
-    return primaryResponse
-
-  const fallbackResponse = await requestFromProvider({
-    ...options,
-    ...fallback,
-    prompts: originalPrompts,
-    fallback: undefined,
-    chainIndex: 1,
-    fallbackFromProvider: primaryResponse.provider,
-    fallbackReason: primaryResponse.abortMessage,
+  if (!fallback?.connection || fallback.modelId === route.modelId || fallback.error || fallback.gap) return first
+  const second = await requestFromProvider({
+    ...requested, prompts: original, route: fallback, chainIndex: 1,
+    fallbackFromProvider: route.provider, fallbackReason: first.abortMessage,
   })
-  return {
-    ...fallbackResponse,
-    fallbackFrom: {
-      provider: primaryResponse.provider,
-      model: primaryResponse.model,
-      reason: primaryResponse.abortMessage,
-    },
-  }
+  return second?.abort ? first : { ...second, fallbackFrom: { provider: route.provider, model: first.model ?? route.connection?.model ?? null, reason: first.abortMessage } }
 }

@@ -93,6 +93,12 @@ export const describer = createInstanceDescriber({
   accounts,
   env: process.env,
   cloud: cloudOn,
+  // AI drafting is available when the default model's provider has a key in Admin → AI control
+  aiAvailable: async () => {
+    const { aiControl, aiKeys } = await import('../ai-control/index.mjs')
+    const route = aiControl.get().defaultRoute
+    return Boolean(route && !route.error && await aiKeys.hasKey(route.provider))
+  },
   execLimits: execLimits(),
 })
 

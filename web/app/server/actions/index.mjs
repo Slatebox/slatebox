@@ -25,7 +25,7 @@ import aiControlActions from './ai-control-get.mjs'
 import aiAuditList from './ai-control-audit.mjs'
 import aiControlReset from './ai-control-reset.mjs'
 import aiProviderActions from './ai-providers.mjs'
-import aiConnectionActions from './ai-connections.mjs'
+import aiKeyActions from './ai-keys.mjs'
 import aiModelActions from './ai-models.mjs'
 import aiBindingActions from './ai-bindings.mjs'
 import aiPromptActions from './ai-prompts.mjs'
@@ -72,7 +72,7 @@ export const actions = [
   aiAuditList,
   aiControlReset,
   ...aiProviderActions,
-  ...aiConnectionActions,
+  ...aiKeyActions,
   ...aiModelActions,
   ...aiBindingActions,
   ...aiPromptActions,

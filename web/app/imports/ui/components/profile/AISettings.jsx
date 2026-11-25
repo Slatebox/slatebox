@@ -17,19 +17,28 @@ import Typography from '@mui/material/Typography'
 import CONSTANTS from '../../../api/common/constants'
 import { AccountActions, AccountPanel, AccountSection, FinePrint, SPACE } from '../../common/AccountLayout'
 
-// The AI each feature uses: the person's own connections (a cloud key or any OpenAI-compatible
-// endpoint), their team's, and the server's. Own connections are a self-hosted feature
-// (own-keys.mjs): on Slatebox Cloud (settings.hosted) the tab shows which AI each feature uses and,
-// to administrators, the server's connections; nothing of a person's or team's. Mixed freely; the server checks every address and
-// never shows a key again. The same actions serve exec, MCP and the CLI (ai.get, ai.update, ai.check).
+// The model each feature uses: the person's own connections (a provider with their key, or any
+// OpenAI-compatible endpoint), their team's, and otherwise this server's model, which an
+// administrator sets in Admin → AI control. Own connections are a self-hosted feature
+// (own-keys.mjs): on Slatebox Cloud (settings.hosted) the tab shows which model each feature uses
+// and nothing of a person's or team's. The server checks every address and never shows a key
+// again. The same actions serve exec, MCP and the CLI (ai.get, ai.update, ai.check).
 const TYPES = [
-  { value: 'openai-compatible', label: 'OpenAI-compatible endpoint (any host, or a model on your computer or network)' },
+  { value: 'openai-compatible', label: 'Other (OpenAI-compatible): any host, or a model on your computer or network' },
+  { value: 'meta', label: 'Meta (Muse)' },
   { value: 'openai', label: 'OpenAI' },
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'deepinfra', label: 'DeepInfra' },
+  { value: 'gemini', label: 'Google Gemini' },
+  { value: 'mistral', label: 'Mistral' },
+  { value: 'groq', label: 'Groq' },
+  { value: 'together', label: 'Together AI' },
+  { value: 'fireworks', label: 'Fireworks AI' },
+  { value: 'openrouter', label: 'OpenRouter' },
+  { value: 'xai', label: 'xAI (Grok)' },
 ]
 const BLANK = { name: '', type: 'openai-compatible', baseUrl: '', model: '', apiKey: '', clearKey: false, tools: null, vision: null, images: false }
-const LEVEL_SCOPE = { me: 'me', team: 'team', server: 'server' }
+const LEVEL_SCOPE = { me: 'me', team: 'team' }
 
 const reason = (err, fallback) => err?.reason || err?.message || fallback
 
@@ -134,7 +143,7 @@ function ConnectionDialog({ open, level, initial, onClose, onSaved, hosted }) {
 
 ConnectionDialog.propTypes = {
   open: PropTypes.bool.isRequired,
-  level: PropTypes.oneOf(['me', 'team', 'server']).isRequired,
+  level: PropTypes.oneOf(['me', 'team']).isRequired,
   initial: PropTypes.object,
   onClose: PropTypes.func.isRequired,
   onSaved: PropTypes.func.isRequired,
@@ -142,11 +151,10 @@ ConnectionDialog.propTypes = {
 }
 
 function choicesFor(settings, level) {
-  const out = [{ value: '', label: level === 'server' ? 'Not set' : 'Not set (use the next level)' }, { value: 'builtin', label: 'The AI this server provides' }]
+  const out = [{ value: '', label: 'Not set (use the next level)' }, { value: 'builtin', label: 'This server\'s model' }]
   const add = (scope, list, prefix) => (list || []).forEach((c) => out.push({ value: `${scope}:${c.name}`, label: `${prefix}${c.name}${c.model ? ` (${c.model})` : ''}` }))
   if (level === 'me') add('me', settings.mine?.connections, 'Mine: ')
-  if (level !== 'server') add('team', settings.team?.connections, 'Team: ')
-  add('server', settings.server?.connections, 'Server: ')
+  add('team', settings.team?.connections, 'Team: ')
   return out
 }
 
@@ -269,7 +277,7 @@ export default function AISettings() {
   }
   return (
     <AccountPanel>
-      <AccountSection title="Which AI each feature uses">
+      <AccountSection title="Which model each feature uses">
         <Box sx={{ display: 'grid', rowGap: SPACE.hair }}>
           {[...settings.features, ...partsOf(settings).filter((part) => settings.effective[part.id] && settings.effective[part.id].ref !== settings.effective[part.follows]?.ref)].map((f) => (
             <Typography key={f.id}>
@@ -281,21 +289,24 @@ export default function AISettings() {
         <FinePrint>
           {settings.hosted
             ? 'On Slatebox Cloud, AI comes with Slatebox Pro credits and top-ups (Profile → Credits).'
-            : 'Mix freely: connect a cloud provider with your key, or any OpenAI-compatible endpoint (Ollama, llama.cpp, vLLM, LM Studio or a host), and choose it for one feature or all of them. Your own connections cost nothing on Slatebox.'}
+            : 'Connect a provider with your key, or any OpenAI-compatible endpoint (Ollama, llama.cpp, vLLM, LM Studio or a host), and choose it for one feature or all of them. Your own connections cost nothing on Slatebox. Anything you leave unset uses this server\'s model.'}
         </FinePrint>
       </AccountSection>
       {!settings.hosted && (settings.mine
         ? <Level settings={settings} level="me" title="Yours" holder={settings.mine} editable onChange={setSettings} />
-        : <Alert severity="info">This server uses the AI its operator set up. Own AI providers are turned off.</Alert>)}
+        : <Alert severity="info">This server uses the models its administrator set up. Your own connections are turned off.</Alert>)}
       {!settings.hosted && settings.team && <Level settings={settings} level="team" title="Your team's" holder={settings.team} editable={settings.team.editable} onChange={setSettings} />}
       {settings.server.editable && (
-        <Level settings={settings} level="server" title="This server's (administrators)" holder={settings.server} editable onChange={setSettings}>
+        <AccountSection title="This server's models (administrators)">
+          <Typography variant="body2">
+            Providers, their keys and which model each part of Slatebox uses are set in <a href="/admin/ai">Admin → AI control</a>.
+          </Typography>
           {!settings.hosted && (
             <FormControlLabel
               control={<Switch checked={settings.ownProviders} disabled={settings.server.ownProvidersLocked} onChange={(e) => switchOwn(e.target.checked)} />}
-              label={settings.server.ownProvidersLocked ? 'People may use their own AI (turned off in the settings file)' : 'People may use their own AI'} />
+              label={settings.server.ownProvidersLocked ? 'People may use their own connections (turned off in the settings file)' : 'People may use their own connections'} />
           )}
-        </Level>
+        </AccountSection>
       )}
     </AccountPanel>
   )

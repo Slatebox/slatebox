@@ -10,7 +10,6 @@
 // out: every flag is a boolean or a class, never a key, an address or a model.
 import { CONTRACT_VERSION } from '../actions/registry.mjs'
 import { EXEC_LIMITS, publicLimits } from '../exec/limits.mjs'
-import { AI_PROVIDERS, getProviderApiKey } from '../methods/ai/provider.mjs'
 import { cloudLicensed } from '../cloud-lock.mjs'
 import { businessOnSale } from '../business-billing.mjs'
 
@@ -29,12 +28,12 @@ export const billingAvailable = (settings, { cloud = false } = {}) => cloud === 
 // The Business methods also need the meter (methods/business.js cloudReady), so the report does too.
 export const businessCheckout = (settings, { cloud = false } = {}) => billingAvailable(settings, { cloud }) && meterRuns(settings, { cloud }) && businessOnSale(settings)
 
-export function instanceCapabilities(settings, { mailAvailable, env = {}, cloud = false }) {
+// aiAvailable: whether the default model's provider has a usable key in Admin → AI control (the
+// key store, never the settings file).
+export function instanceCapabilities(settings, { mailAvailable, cloud = false, aiAvailable = false }) {
   const self = selfHosted(settings)
-  // self-hosted: the operator turned AI on, or connected a model in settings.ai (connections.mjs)
-  const drafting = self
-    ? settings.selfHosted?.workshopAI === true || Object.keys(settings.ai?.connections || {}).length > 0
-    : Boolean(getProviderApiKey({ provider: AI_PROVIDERS.deepinfra, settings, env }))
+  // self-hosted: the operator turned AI on, or added a model key in Admin → AI control
+  const drafting = self ? settings.selfHosted?.workshopAI === true || aiAvailable === true : aiAvailable === true
   return {
     mail: Boolean(mailAvailable()),
     calls: !self && Boolean(settings.daily?.apiKey),
@@ -72,6 +71,8 @@ export function createInstanceDescriber({
   cloud = () => cloudLicensed({ settings, env }),
   // exec's limits as this instance applies them (a self-hosted operator may change them).
   execLimits = EXEC_LIMITS,
+  // whether the default model's provider has a usable key (Admin → AI control); read per answer
+  aiAvailable = async () => false,
 }) {
   const origin = givenOrigin.replace(/\/$/, '')
   const [major, minor] = CONTRACT_VERSION.split('.').map(Number)
@@ -127,7 +128,7 @@ export function createInstanceDescriber({
         engine: engine.version,
         relay: settings.build?.relay ?? null,
       },
-      capabilities: instanceCapabilities(settings, { mailAvailable, env, cloud: cloud() === true }),
+      capabilities: instanceCapabilities(settings, { mailAvailable, cloud: cloud() === true, aiAvailable: await aiAvailable().catch(() => false) }),
       limits: fixed.limits,
       canvas: fixed.canvas,
       workshops: fixed.workshops,

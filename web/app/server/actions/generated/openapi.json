@@ -116,7 +116,7 @@
       "put": {
         "operationId": "updateAISettings",
         "summary": "Set AI",
-        "description": "Adds or changes AI connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins), server this server's (administrators; ownProviders on or off lets people use their own). Mix freely: a choice names me:<name>, team:<name>, server:<name> or builtin. Keys are stored encrypted and never returned, and a run's record keeps its code with the apiKey replaced. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI (levels me and team) is for self-hosted Slatebox: Slatebox Cloud refuses it, as AI there comes with Slatebox Pro credits and top-ups.",
+        "description": "Your own or your team's AI on a self-hosted server: adds or changes connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins); level server only turns own AI on or off for everyone (ownProviders, administrators). A choice names me:<name>, team:<name>, or builtin for this server's model (set in Admin → AI control). Keys are stored encrypted and never returned. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Slatebox Cloud refuses own AI, as AI there comes with Slatebox Pro credits and top-ups.",
         "x-required-scope": "ai:settings",
         "x-slatebox": {
           "action": "ai.update",
@@ -189,7 +189,7 @@
                         "type": {
                           "type": "string",
                           "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
-                          "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), openai, anthropic, deepinfra, or one an administrator added (ai.control.get lists them)."
+                          "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added."
                         },
                         "baseUrl": {
                           "type": "string",
@@ -262,7 +262,7 @@
                           "null"
                         ],
                         "maxLength": 48,
-                        "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       },
                       "chat": {
                         "type": [
@@ -270,7 +270,7 @@
                           "null"
                         ],
                         "maxLength": 48,
-                        "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       },
                       "chat.route": {
                         "type": [
@@ -278,7 +278,7 @@
                           "null"
                         ],
                         "maxLength": 48,
-                        "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       },
                       "generation": {
                         "type": [
@@ -286,7 +286,7 @@
                           "null"
                         ],
                         "maxLength": 48,
-                        "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       },
                       "generation.notes": {
                         "type": [
@@ -294,7 +294,7 @@
                           "null"
                         ],
                         "maxLength": 48,
-                        "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       },
                       "presentation": {
                         "type": [
@@ -302,7 +302,7 @@
                           "null"
                         ],
                         "maxLength": 48,
-                        "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       },
                       "vision": {
                         "type": [
@@ -310,7 +310,7 @@
                           "null"
                         ],
                         "maxLength": 48,
-                        "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       },
                       "images": {
                         "type": [
@@ -318,7 +318,7 @@
                           "null"
                         ],
                         "maxLength": 48,
-                        "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       },
                       "shape": {
                         "type": [
@@ -326,7 +326,7 @@
                           "null"
                         ],
                         "maxLength": 48,
-                        "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       },
                       "workshop": {
                         "type": [
@@ -334,7 +334,7 @@
                           "null"
                         ],
                         "maxLength": 48,
-                        "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       },
                       "workshop.draft": {
                         "type": [
@@ -342,7 +342,7 @@
                           "null"
                         ],
                         "maxLength": 48,
-                        "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       },
                       "canvas": {
                         "type": [
@@ -350,7 +350,7 @@
                           "null"
                         ],
                         "maxLength": 48,
-                        "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       },
                       "agent.slatebox": {
                         "type": [
@@ -358,7 +358,7 @@
                           "null"
                         ],
                         "maxLength": 48,
-                        "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       },
                       "library": {
                         "type": [
@@ -366,7 +366,7 @@
                           "null"
                         ],
                         "maxLength": 48,
-                        "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       },
                       "connectors": {
                         "type": [
@@ -374,7 +374,7 @@
                           "null"
                         ],
                         "maxLength": 48,
-                        "description": "me:<name>, team:<name> or server:<name> for a connection, builtin for the AI this server provides, null to clear."
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       }
                     },
                     "additionalProperties": false,
@@ -478,7 +478,7 @@
       "post": {
         "operationId": "checkAIConnection",
         "summary": "Test AI",
-        "description": "Tests a saved connection (name) or one not yet saved (connection): whether Slatebox can reach it, whether it accepts the key, which models it lists where it lists them, whether the model answers and whether it calls tools (which conversation, drafts and presentations need). Saves nothing. A saved key is only sent to the address it was saved for. A token needs ai:admin as well for level team or server. On a self-hosted server a model on the host is at host.docker.internal, not localhost.",
+        "description": "Tests your own or your team's saved connection (name) or one not yet saved (connection), on a self-hosted server: whether Slatebox can reach it, whether it accepts the key, which models it lists, whether the model answers and whether it calls tools (which conversation, drafts and presentations need). Saves nothing. A saved key is only sent to the address it was saved for. A token needs ai:admin as well for level team. The server's keys are tested with ai.keys.test. A model on the host is at host.docker.internal, not localhost.",
         "x-required-scope": "ai:settings",
         "x-slatebox": {
           "action": "ai.check",
@@ -532,10 +532,9 @@
                     "type": "string",
                     "enum": [
                       "me",
-                      "team",
-                      "server"
+                      "team"
                     ],
-                    "description": "me (yours), team (team admins) or server (administrators)."
+                    "description": "me (yours) or team (team admins)."
                   },
                   "name": {
                     "type": "string",
@@ -552,7 +551,7 @@
                       "type": {
                         "type": "string",
                         "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
-                        "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), openai, anthropic, deepinfra, or one an administrator added (ai.control.get lists them)."
+                        "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added."
                       },
                       "baseUrl": {
                         "type": "string",
@@ -688,7 +687,7 @@
       "get": {
         "operationId": "getAIControl",
         "summary": "AI control",
-        "description": "Returns the AI control snapshot: every surface and what it follows, providers, server connections (never keys), models, published bindings, agents, prompt heads, the global switch, and health (documents skipped because they failed their checks). Administrators only.",
+        "description": "Returns the AI control snapshot: every part of Slatebox and what it follows, the providers (what each is, its address) and which have an active key (a fingerprint, never the key), the provider presets, the models with their prices, the bindings, the default model, agents, prompt heads, the global switch, and health. Administrators only.",
         "x-required-scope": "ai:admin:read",
         "x-slatebox": {
           "action": "ai.control.get",
@@ -715,10 +714,13 @@
                     "generation": {
                       "type": "integer"
                     },
-                    "dbLayer": {
-                      "type": "string"
-                    },
                     "surfaces": {
+                      "type": "array"
+                    },
+                    "providers": {
+                      "type": "array"
+                    },
+                    "models": {
                       "type": "array"
                     },
                     "health": {
@@ -881,7 +883,7 @@
       "get": {
         "operationId": "listAIBindings",
         "summary": "AI bindings",
-        "description": "Lists every part of Slatebox that can be bound on this server, with its published binding (model chain, parameters, tools, limits, on/off), its versions newest first with author and note, and why a binding was skipped if it no longer passes its checks. Administrators only.",
+        "description": "Lists every part of Slatebox that can be bound, with its choice (a model, use the default, or turned off) and what it resolves to now (provider, model and where that comes from). Administrators only.",
         "x-required-scope": "ai:admin:read",
         "x-slatebox": {
           "action": "ai.bindings.list",
@@ -913,371 +915,12 @@
                       "items": {
                         "type": "object"
                       }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/ai/control/bindings/draft": {
-      "put": {
-        "operationId": "saveAIBindingDraft",
-        "summary": "Save AI binding draft",
-        "description": "Saves a draft binding for one part of Slatebox: its model chain (primary, then fallbacks with the failures each is tried for), parameters, allowed tools, limits and on/off. Changes nothing live: a person publishes it. An agent's draft is marked as a suggestion. Administrators only.",
-        "x-required-scope": "ai:admin",
-        "x-slatebox": {
-          "action": "ai.bindings.saveDraft",
-          "toolset": "admin",
-          "readOnly": false,
-          "destructive": false,
-          "idempotent": false,
-          "openWorld": false,
-          "confirm": false,
-          "principals": [
-            "person",
-            "agent"
-          ],
-          "modes": [
-            "save"
-          ],
-          "idempotency": "optional"
-        },
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": false,
-            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128,
-              "pattern": "^[!-~]+$"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Slatebox-Confirm",
-            "required": false,
-            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
-            "schema": {
-              "type": "string",
-              "pattern": "^cf_[A-Za-z0-9]{24}$"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "binding": {
-                    "type": "object",
-                    "properties": {
-                      "surface": {
-                        "type": "string",
-                        "enum": [
-                          "default",
-                          "chat",
-                          "chat.route",
-                          "generation",
-                          "presentation",
-                          "vision",
-                          "images",
-                          "shape",
-                          "workshop",
-                          "workshop.draft",
-                          "canvas",
-                          "agent.slatebox",
-                          "library",
-                          "connectors"
-                        ],
-                        "description": "The part of Slatebox, for example agent.slatebox or shape."
-                      },
-                      "scope": {
-                        "type": "object",
-                        "properties": {
-                          "level": {
-                            "type": "string",
-                            "enum": [
-                              "server"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "level"
-                        ],
-                        "additionalProperties": false,
-                        "description": "Only server in this build."
-                      },
-                      "enabled": {
-                        "type": "boolean",
-                        "description": "false turns this part off for everyone; people see disabledMessage."
-                      },
-                      "disabledMessage": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "maxLength": 300,
-                        "description": "What people see while it is off."
-                      },
-                      "chain": {
-                        "type": "array",
-                        "maxItems": 5,
-                        "description": "The primary model, then fallbacks. Each entry names a model from the model list (model) or a connection with its own model (connection: server:<name>, or builtin for the built-in AI). Empty: follow what it follows.",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "model": {
-                              "type": "string",
-                              "maxLength": 260
-                            },
-                            "connection": {
-                              "type": "string",
-                              "maxLength": 60
-                            },
-                            "on": {
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "enum": [
-                                  "infra",
-                                  "shape",
-                                  "context",
-                                  "any"
-                                ]
-                              },
-                              "description": "A fallback is tried when the previous model failed this way: infra (5xx, 429, timeout), shape (answers it could not use), context (too long), any."
-                            }
-                          },
-                          "additionalProperties": false
-                        }
-                      },
-                      "onTrip": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "enum": [
-                          "fallback",
-                          "report",
-                          null
-                        ],
-                        "description": "When the chain keeps failing on a server: fallback uses the settings file and built-in AI for 10 minutes; report keeps the chain and says so. Unset: fallback only for a chain of two or more that lists the built-in AI."
-                      },
-                      "params": {
-                        "type": "object",
-                        "properties": {
-                          "timeoutMs": {
-                            "type": [
-                              "integer",
-                              "null"
-                            ],
-                            "minimum": 1000,
-                            "maximum": 600000
-                          },
-                          "maxTokens": {
-                            "type": [
-                              "integer",
-                              "null"
-                            ],
-                            "minimum": 1,
-                            "maximum": 1000000
-                          },
-                          "infraRetries": {
-                            "type": [
-                              "integer",
-                              "null"
-                            ],
-                            "minimum": 0,
-                            "maximum": 10
-                          },
-                          "shapeRetries": {
-                            "type": [
-                              "integer",
-                              "null"
-                            ],
-                            "minimum": 1,
-                            "maximum": 10
-                          },
-                          "temperature": {
-                            "type": [
-                              "number",
-                              "null"
-                            ],
-                            "minimum": 0,
-                            "maximum": 2
-                          }
-                        },
-                        "additionalProperties": false,
-                        "description": "timeoutMs, maxTokens (only lowers the call site's), infraRetries, shapeRetries, temperature. null or absent: the built-in value."
-                      },
-                      "prompts": {
-                        "type": "object",
-                        "additionalProperties": {
-                          "type": "string",
-                          "maxLength": 120
-                        },
-                        "description": "slot: prompt id, or id@version to pin one."
-                      },
-                      "tools": {
-                        "type": "object",
-                        "properties": {
-                          "mode": {
-                            "type": [
-                              "string",
-                              "null"
-                            ],
-                            "enum": [
-                              "forced",
-                              "auto",
-                              "none",
-                              null
-                            ]
-                          },
-                          "allow": {
-                            "type": [
-                              "array",
-                              "null"
-                            ],
-                            "maxItems": 30,
-                            "items": {
-                              "type": "string",
-                              "maxLength": 64
-                            }
-                          }
-                        },
-                        "additionalProperties": false,
-                        "description": "allow: the only tools sent and accepted back; mode forced, auto or none (none only where the part needs no tools)."
-                      },
-                      "limits": {
-                        "type": "object",
-                        "properties": {
-                          "estimate": {
-                            "type": [
-                              "integer",
-                              "null"
-                            ],
-                            "minimum": 1
-                          },
-                          "ceiling": {
-                            "type": [
-                              "integer",
-                              "null"
-                            ],
-                            "minimum": 1
-                          }
-                        },
-                        "additionalProperties": false,
-                        "description": "Micro-dollars per request; can only lower the built-in values."
-                      }
                     },
-                    "required": [
-                      "surface"
-                    ],
-                    "additionalProperties": false
-                  },
-                  "note": {
-                    "type": "string",
-                    "maxLength": 200,
-                    "description": "A short note kept with the version."
-                  }
-                },
-                "required": [
-                  "binding"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "A preview, or the answer to a repeated request with the same key.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "bindingId": {
-                      "type": "string"
-                    },
-                    "version": {
-                      "type": "integer"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/ai/control/connections": {
-      "get": {
-        "operationId": "listAIConnections",
-        "summary": "AI connections",
-        "description": "Lists the server's AI connections: the settings file's (read-only) and the ones saved in the app, including the services beside the models (Stability, Google picture search, Noun Project, Deepgram). For each: its provider, address, model, where its key lives (sealed, an environment variable, the settings file or none), which key it is (a fingerprint, never the key), its last test and whether it is turned off. Administrators only.",
-        "x-required-scope": "ai:admin:read",
-        "x-slatebox": {
-          "action": "ai.connections.list",
-          "toolset": "admin",
-          "readOnly": true,
-          "destructive": false,
-          "idempotent": true,
-          "openWorld": false,
-          "confirm": false,
-          "principals": [
-            "person",
-            "agent"
-          ]
-        },
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Done.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "connections": {
+                    "skipped": {
                       "type": "array",
                       "items": {
                         "type": "object"
                       }
-                    },
-                    "keysAvailable": {
-                      "type": "boolean"
                     }
                   }
                 }
@@ -1297,15 +940,15 @@
         }
       },
       "put": {
-        "operationId": "saveAIConnections",
-        "summary": "Save AI connections",
-        "description": "Adds or changes server connections: a provider, address, model and key. A key is sealed with the server's key and never returned; keyRef env reads it from an environment variable named SLATEBOX_AI_KEY_… for each request; rotate {graceHours} keeps the old key working for 1 or 24 hours. status disabled keeps a connection but sends nothing to it. Also connects the services beside the models (stability, google-cse with its search engine ID as model, nounproject as key:secret, deepgram). Only a person sends a key, names an environment variable or changes an address or provider; an agent may save a keyless connection to a provider with a fixed address. Administrators only.",
+        "operationId": "setAIBindings",
+        "summary": "Set AI bindings",
+        "description": "Sets which model each named part of Slatebox uses: use model (a model id from the Models list, <provider>:<model>), default (the default model), or off (that part answers \"turned off by your administrator\"). A model that cannot do what the part needs is refused. Only the rows that change are written, each with its own line in the change history; note is optional. Every server picks it up within seconds. Administrators only.",
         "x-required-scope": "ai:admin",
         "x-slatebox": {
-          "action": "ai.connections.save",
+          "action": "ai.bindings.set",
           "toolset": "admin",
           "readOnly": false,
-          "destructive": true,
+          "destructive": false,
           "idempotent": true,
           "openWorld": false,
           "confirm": true,
@@ -1349,138 +992,62 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "connections": {
+                  "changes": {
                     "type": "array",
                     "minItems": 1,
-                    "maxItems": 20,
+                    "maxItems": 14,
                     "items": {
                       "type": "object",
                       "properties": {
-                        "name": {
+                        "surface": {
                           "type": "string",
-                          "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
-                          "description": "The connection's name, for example gemini-main."
+                          "enum": [
+                            "default",
+                            "chat",
+                            "chat.route",
+                            "generation",
+                            "presentation",
+                            "vision",
+                            "images",
+                            "shape",
+                            "workshop",
+                            "workshop.draft",
+                            "canvas",
+                            "agent.slatebox",
+                            "library",
+                            "connectors"
+                          ],
+                          "description": "The part of Slatebox, for example shape or agent.slatebox; default is everything not set."
                         },
-                        "type": {
+                        "use": {
                           "type": "string",
-                          "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
-                          "description": "The provider: openai-compatible, openai, anthropic, deepinfra, one an administrator added, or a service beside the models (stability, google-cse, nounproject, deepgram)."
-                        },
-                        "baseUrl": {
-                          "type": "string",
-                          "maxLength": 500,
-                          "description": "For a provider without a fixed address: the address up to /v1."
+                          "enum": [
+                            "default",
+                            "model",
+                            "off"
+                          ]
                         },
                         "model": {
                           "type": "string",
-                          "maxLength": 200,
-                          "description": "The model it serves. For google-cse, the search engine ID (cx)."
-                        },
-                        "apiKey": {
-                          "type": "string",
-                          "maxLength": 400,
-                          "writeOnly": true,
-                          "description": "Stored encrypted with the server's key and never shown again. Leave it out to keep the saved key. For nounproject: key:secret."
-                        },
-                        "keyRef": {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "env",
-                                "none"
-                              ]
-                            },
-                            "name": {
-                              "type": "string",
-                              "pattern": "^[A-Z][A-Z0-9_]{1,63}$"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false,
-                          "description": "env: read the key from an environment variable named SLATEBOX_AI_KEY_… (or one the settings file allows) for each request; none: no key. Sending apiKey seals the key instead."
-                        },
-                        "rotate": {
-                          "type": "object",
-                          "properties": {
-                            "graceHours": {
-                              "type": "integer",
-                              "enum": [
-                                0,
-                                1,
-                                24
-                              ]
-                            }
-                          },
-                          "required": [
-                            "graceHours"
-                          ],
-                          "additionalProperties": false,
-                          "description": "With a new apiKey: the old key keeps working for this many hours, in case the provider has not taken the new one yet."
-                        },
-                        "capabilities": {
-                          "type": "object",
-                          "properties": {
-                            "tools": {
-                              "type": "boolean"
-                            },
-                            "vision": {
-                              "type": "boolean"
-                            },
-                            "json": {
-                              "type": "boolean"
-                            },
-                            "images": {
-                              "type": "boolean"
-                            },
-                            "reasoning": {
-                              "type": "boolean"
-                            }
-                          },
-                          "additionalProperties": false,
-                          "description": "What the model can do, where you know it. Unset means try it; making images needs images: true."
-                        },
-                        "maxTokens": {
-                          "type": "integer",
-                          "minimum": 256,
-                          "maximum": 200000
-                        },
-                        "toolChoice": {
-                          "type": "string",
-                          "enum": [
-                            "auto",
-                            "named",
-                            "required"
-                          ]
-                        },
-                        "status": {
-                          "type": "string",
-                          "enum": [
-                            "active",
-                            "disabled"
-                          ],
-                          "description": "disabled: kept, but nothing is sent to it."
+                          "maxLength": 260,
+                          "description": "With use model: <provider>:<model>."
                         }
                       },
                       "required": [
-                        "name",
-                        "type"
+                        "surface",
+                        "use"
                       ],
                       "additionalProperties": false
                     }
                   },
-                  "reason": {
+                  "note": {
                     "type": "string",
-                    "minLength": 1,
                     "maxLength": 500,
-                    "description": "Why, for the change history."
+                    "description": "Optional, kept in the change history."
                   }
                 },
                 "required": [
-                  "connections"
+                  "changes"
                 ],
                 "additionalProperties": false
               }
@@ -1495,14 +1062,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "connections": {
+                    "changed": {
                       "type": "array",
                       "items": {
                         "type": "string"
                       }
                     },
-                    "fingerprints": {
-                      "type": "object"
+                    "generation": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
                     }
                   }
                 }
@@ -1526,7 +1096,7 @@
       "get": {
         "operationId": "getAIControlEffective",
         "summary": "Effective AI binding",
-        "description": "Shows the binding each surface (or one) resolves to for a person (userId; none = someone not signed in), with the source of each field: a published binding, an AI settings choice, the settings file or the built-in default. usage true adds each surface's calls, failed calls and spend over the last 24 hours. Administrators only.",
+        "description": "Shows which model each part of Slatebox (or one) answers with for a person (userId; none = someone not signed in): the provider and model, and where that comes from (its own choice, the part it follows, the default, the built-in default, or the person's own AI on a self-hosted server). usage true adds each part's calls, failed calls and spend over the last 24 hours. Administrators only.",
         "x-required-scope": "ai:admin:read",
         "x-slatebox": {
           "action": "ai.control.effective",
@@ -1558,15 +1128,6 @@
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,64}$"
-            }
-          },
-          {
-            "in": "query",
-            "name": "plan",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "pattern": "^[a-z0-9-]{1,32}$"
             }
           },
           {
@@ -1617,7 +1178,7 @@
       "get": {
         "operationId": "getAIControlHealth",
         "summary": "AI control health",
-        "description": "Lists AI control problems: documents skipped because they failed their checks (that surface falls back to the settings file and built-in defaults), and published prompts that fell back to their built-in text. warnings lists models with no price (charged at the dearest rate) and connections whose last test failed. An empty list means nothing is wrong. Administrators only.",
+        "description": "Lists AI control problems: documents skipped because they failed their checks (that part uses the default), keys the settings file still holds that could not be moved to the backend, and published prompts that fell back to their built-in text. warnings lists models with no price (charged at the dearest rate) and providers in use with no active key. An empty list means nothing is wrong. Administrators only.",
         "x-required-scope": "ai:admin:read",
         "x-slatebox": {
           "action": "ai.control.health",
@@ -1644,9 +1205,6 @@
                     "generation": {
                       "type": "integer"
                     },
-                    "dbLayer": {
-                      "type": "string"
-                    },
                     "health": {
                       "type": "array"
                     },
@@ -1671,11 +1229,211 @@
         }
       }
     },
+    "/ai/control/keys": {
+      "get": {
+        "operationId": "listAIKeys",
+        "summary": "AI keys",
+        "description": "Lists the server's provider keys (or one provider's): which key each is (a fingerprint), whether it is active, standby or revoked, who added it and when, and when it was last tested and last used. Never a key. Administrators only.",
+        "x-required-scope": "ai:admin:read",
+        "x-slatebox": {
+          "action": "ai.keys.list",
+          "toolset": "admin",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ]
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+              "description": "A model provider's id (for example meta or deepinfra), or a service beside the models (stability, google-cse, nounproject, deepgram)."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "description": "A key as anyone may read it: id, provider, status (active, standby, revoked), keyFingerprint, label, source, createdAt/By, activatedAt, revokedAt/By, lastTest, lastUsedAt. Never the key."
+                      }
+                    },
+                    "keysAvailable": {
+                      "type": "boolean"
+                    },
+                    "fromSettings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/control/keys/test": {
+      "post": {
+        "operationId": "testAIKey",
+        "summary": "Test AI key",
+        "description": "Tests a saved key (id) or one not yet saved (provider and apiKey): whether the provider is reached, takes the key, and its model answers and calls tools. A saved key keeps the outcome (last tested). Saves nothing else. The key goes only to the provider's own address. An unsaved key is a person's test. Administrators only.",
+        "x-required-scope": "ai:admin",
+        "x-slatebox": {
+          "action": "ai.keys.test",
+          "toolset": "admin",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": true,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                    "description": "A key's id, from ai.keys.list."
+                  },
+                  "provider": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+                    "description": "A model provider's id (for example meta or deepinfra), or a service beside the models (stability, google-cse, nounproject, deepgram)."
+                  },
+                  "apiKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 400,
+                    "writeOnly": true,
+                    "description": "Stored encrypted with the server's key-encryption key and never shown again. For nounproject: key:secret."
+                  },
+                  "model": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "For google-cse, the search engine ID (cx). For a key test, the model asked (the provider's first model by default)."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "reachable": {
+                      "type": "boolean"
+                    },
+                    "tools": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "latencyMs": {
+                      "type": "number"
+                    },
+                    "key": {
+                      "type": "object",
+                      "description": "A key as anyone may read it: id, provider, status (active, standby, revoked), keyFingerprint, label, source, createdAt/By, activatedAt, revokedAt/By, lastTest, lastUsedAt. Never the key."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/ai/control/models": {
       "put": {
         "operationId": "saveAIModels",
         "summary": "Save AI models",
-        "description": "Adds or changes models: the connection that serves each (server:<name> or builtin:<provider>), what it can do (tools, vision, json, images, reasoning), its context and output limits, and its prices in dollars per million input and output tokens (or per image). Metering charges these prices from the next call; a model with no price is charged at the dearest known rate and shown as unpriced. status disabled keeps a model out of bindings. Administrators only.",
+        "description": "Adds or changes models: the provider that serves each, its id and name, what it can do (tools, vision, json, images, reasoning), its longest answer, and its prices in dollars per million input and output tokens (or per image). Metering charges these prices from the next call; a model with no price is charged at the dearest known rate and shown as unpriced. status disabled keeps a model out of the parts of Slatebox. Administrators only.",
         "x-required-scope": "ai:admin",
         "x-slatebox": {
           "action": "ai.models.save",
@@ -1732,22 +1490,24 @@
                     "items": {
                       "type": "object",
                       "properties": {
-                        "connection": {
+                        "provider": {
                           "type": "string",
-                          "pattern": "^(server|builtin):[a-z0-9][a-z0-9-]{0,39}$",
-                          "description": "server:<connection> or builtin:deepinfra|openai|anthropic|stabilityai."
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+                          "description": "The provider that serves it (ai.control.get lists them)."
                         },
                         "model": {
                           "type": "string",
                           "minLength": 1,
-                          "maxLength": 200
+                          "maxLength": 200,
+                          "description": "The id the provider serves, for example muse-ember-1.0."
                         },
                         "label": {
                           "type": [
                             "string",
                             "null"
                           ],
-                          "maxLength": 80
+                          "maxLength": 80,
+                          "description": "The name shown, for example Muse Ember."
                         },
                         "capabilities": {
                           "type": "object",
@@ -1769,14 +1529,7 @@
                             }
                           },
                           "additionalProperties": false,
-                          "description": "What the model can do. A binding refuses a model whose flags miss what its surface needs."
-                        },
-                        "maxContext": {
-                          "type": [
-                            "integer",
-                            "null"
-                          ],
-                          "minimum": 1
+                          "description": "What the model can do. A part of Slatebox refuses a model whose flags miss what it needs."
                         },
                         "maxOutput": {
                           "type": [
@@ -1833,7 +1586,7 @@
                         }
                       },
                       "required": [
-                        "connection",
+                        "provider",
                         "model"
                       ],
                       "additionalProperties": false
@@ -1896,7 +1649,7 @@
       "get": {
         "operationId": "discoverAIModels",
         "summary": "Find AI models",
-        "description": "Lists the models a server connection reports (GET <address>/models, OpenAI-compatible providers only), to fill in the model registry. Writes nothing; the key goes only to the connection's own address, with no redirects. Administrators only.",
+        "description": "Lists the models a provider reports (GET <address>/models, OpenAI-compatible providers), with its active key, to fill in the models. Writes nothing; the key goes only to the provider's own address, with no redirects. Administrators only.",
         "x-required-scope": "ai:admin:read",
         "x-slatebox": {
           "action": "ai.models.discover",
@@ -1914,7 +1667,7 @@
         "parameters": [
           {
             "in": "query",
-            "name": "connection",
+            "name": "provider",
             "required": true,
             "schema": {
               "type": "string",
@@ -1930,7 +1683,7 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "connection": {
+                    "provider": {
                       "type": "string"
                     },
                     "ok": {
@@ -1941,6 +1694,113 @@
                       "items": {
                         "type": "object"
                       }
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/control/models/test": {
+      "post": {
+        "operationId": "testAIModel",
+        "summary": "Test AI model",
+        "description": "Sends one short request to a model with its provider's active key: whether it answers and calls tools. Writes nothing. Administrators only.",
+        "x-required-scope": "ai:admin",
+        "x-slatebox": {
+          "action": "ai.models.test",
+          "toolset": "admin",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": true,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 260,
+                    "description": "A model's id: <provider>:<model>, for example meta:muse-ember-1.0."
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "tools": {
+                      "type": "string"
                     },
                     "message": {
                       "type": "string"
@@ -2753,10 +2613,210 @@
       }
     },
     "/ai/control/providers": {
+      "post": {
+        "operationId": "addAIProvider",
+        "summary": "Add AI provider",
+        "description": "Adds a model provider from a preset: meta (Meta Muse, https://api.meta.ai/v1), openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, or other with its own OpenAI-compatible address. A named preset keeps its own address and key style. models: the preset's suggested model ids to add with their prices. Add its key with ai.keys.add. Only a person adds an Other provider (it chooses where keys go). Administrators only.",
+        "x-required-scope": "ai:admin",
+        "x-slatebox": {
+          "action": "ai.providers.add",
+          "toolset": "admin",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": true,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "object",
+                    "properties": {
+                      "preset": {
+                        "type": "string",
+                        "enum": [
+                          "meta",
+                          "openai",
+                          "anthropic",
+                          "deepinfra",
+                          "together",
+                          "groq",
+                          "fireworks",
+                          "openrouter",
+                          "mistral",
+                          "xai",
+                          "gemini",
+                          "other"
+                        ],
+                        "description": "What the provider is: meta (Muse), openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, or other (any OpenAI-compatible address)."
+                      },
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+                        "description": "Its id here; the preset's by default (meta, deepinfra, ...)."
+                      },
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "description": "The name shown; the preset's by default."
+                      },
+                      "baseUrl": {
+                        "type": "string",
+                        "maxLength": 500,
+                        "description": "For other only: the address up to /v1. Named presets keep their own address."
+                      },
+                      "auth": {
+                        "type": "object",
+                        "properties": {
+                          "style": {
+                            "type": "string",
+                            "enum": [
+                              "bearer",
+                              "header",
+                              "none"
+                            ]
+                          },
+                          "name": {
+                            "type": "string",
+                            "maxLength": 64
+                          }
+                        },
+                        "required": [
+                          "style"
+                        ],
+                        "additionalProperties": false,
+                        "description": "For other only: bearer (Authorization: Bearer), header { name } or none."
+                      },
+                      "toolChoice": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "named",
+                          "required"
+                        ],
+                        "description": "For other only: how it takes a forced tool call."
+                      },
+                      "extraHeaders": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "maxProperties": 10,
+                        "description": "For other only: headers sent with every request. Nothing secret."
+                      }
+                    },
+                    "required": [
+                      "preset"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "models": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "description": "Suggested model ids of the preset to add too."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "description": "Why, for the change history."
+                  }
+                },
+                "required": [
+                  "provider"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "provider": {
+                      "type": "object"
+                    },
+                    "models": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "generation": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
       "put": {
         "operationId": "saveAIProvider",
-        "summary": "Save AI provider",
-        "description": "Adds or changes a provider template: its wire protocol (openai-chat, anthropic-messages or openai-images), address, how the key is sent (bearer, a header, a query parameter or none), extra headers (nothing secret) and what its models can usually do. Built-in providers cannot be changed. Changing an address removes the keys of the connections that use it, after dropKeys true; a key is never sent to a new address. Only a person sets an address, key style or headers. Administrators only.",
+        "summary": "Change AI provider",
+        "description": "Changes a provider's name, or an Other provider's address, key style, tool choice and extra headers (nothing secret). A new address or key style revokes the provider's keys, after revokeKeys true: a key is never sent to a new address. Only a person changes where keys go. Administrators only.",
         "x-required-scope": "ai:admin",
         "x-slatebox": {
           "action": "ai.providers.save",
@@ -2811,34 +2871,17 @@
                     "properties": {
                       "id": {
                         "type": "string",
-                        "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
-                        "description": "The provider's id, for example gemini. Built-in ids cannot be used."
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
                       },
                       "label": {
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 80
                       },
-                      "protocol": {
-                        "type": "string",
-                        "enum": [
-                          "openai-chat",
-                          "anthropic-messages",
-                          "openai-images"
-                        ],
-                        "description": "The wire protocol it speaks. Gemini, Meta, Mistral, OpenRouter, Groq, Together, Ollama and vLLM speak openai-chat."
-                      },
                       "baseUrl": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
+                        "type": "string",
                         "maxLength": 500,
-                        "description": "The address up to /v1. null: each connection gives its own."
-                      },
-                      "baseUrlLocked": {
-                        "type": "boolean",
-                        "description": "Connections of this provider keep its address (default true when an address is given)."
+                        "description": "Other providers only. A new address revokes the provider's keys (send revokeKeys true)."
                       },
                       "auth": {
                         "type": "object",
@@ -2848,7 +2891,6 @@
                             "enum": [
                               "bearer",
                               "header",
-                              "query",
                               "none"
                             ]
                           },
@@ -2861,7 +2903,16 @@
                           "style"
                         ],
                         "additionalProperties": false,
-                        "description": "How the key is sent: bearer (Authorization: Bearer), header { name }, query { name } or none."
+                        "description": "For other only: bearer (Authorization: Bearer), header { name } or none."
+                      },
+                      "toolChoice": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "named",
+                          "required"
+                        ],
+                        "description": "For other only: how it takes a forced tool call."
                       },
                       "extraHeaders": {
                         "type": "object",
@@ -2870,47 +2921,17 @@
                           "maxLength": 200
                         },
                         "maxProperties": 10,
-                        "description": "Headers sent with every request. Nothing secret: names that look like credentials are refused."
-                      },
-                      "keyRequired": {
-                        "type": "boolean"
-                      },
-                      "modelOptional": {
-                        "type": "boolean"
-                      },
-                      "defaultCapabilities": {
-                        "type": "object",
-                        "properties": {
-                          "tools": {
-                            "type": "boolean"
-                          },
-                          "vision": {
-                            "type": "boolean"
-                          },
-                          "json": {
-                            "type": "boolean"
-                          },
-                          "images": {
-                            "type": "boolean"
-                          },
-                          "reasoning": {
-                            "type": "boolean"
-                          }
-                        },
-                        "additionalProperties": false,
-                        "description": "What its models can usually do; a connection or model may say otherwise."
+                        "description": "For other only: headers sent with every request. Nothing secret."
                       }
                     },
                     "required": [
-                      "id",
-                      "label",
-                      "protocol"
+                      "id"
                     ],
                     "additionalProperties": false
                   },
-                  "dropKeys": {
+                  "revokeKeys": {
                     "type": "boolean",
-                    "description": "Go ahead with an address change that removes connections' keys."
+                    "description": "Go ahead with a change that revokes the provider's keys."
                   },
                   "reason": {
                     "type": "string",
@@ -2938,7 +2959,7 @@
                     "provider": {
                       "type": "object"
                     },
-                    "droppedKeys": {
+                    "revokedKeys": {
                       "type": "array",
                       "items": {
                         "type": "string"
@@ -2972,7 +2993,7 @@
       "post": {
         "operationId": "resetAIControl",
         "summary": "Reset AI control",
-        "description": "Returns AI configuration to the settings file and built-in defaults. target use clears the feature choices an administrator made for the server in the app (keys: only those; connections stay); binding removes one part's published binding (surface), so it follows what it follows again; bindings removes every published binding (their versions stay); prompt returns one prompt (promptId) to its built-in text and drops a binding's pin of a version of it, prompts every prompt (their versions stay); dbLayer switches AI control's own documents off at runtime, so every surface resolves from the AI settings, the settings file and code; all does every one. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only.",
+        "description": "Returns AI configuration to its defaults. target binding removes one part's choice (surface), so it uses the default model again; bindings removes every part's choice and the default's, so the built-in default (Meta Muse Ember) answers everything; prompt returns one prompt (promptId) to its built-in text, prompts every prompt (their versions stay); all does every one. Providers, models and keys stay. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only.",
         "x-required-scope": "ai:admin",
         "x-slatebox": {
           "action": "ai.control.reset",
@@ -3025,12 +3046,10 @@
                   "target": {
                     "type": "string",
                     "enum": [
-                      "use",
                       "binding",
                       "bindings",
                       "prompt",
                       "prompts",
-                      "dbLayer",
                       "all"
                     ]
                   },
@@ -3116,32 +3135,6 @@
                     ],
                     "description": "For target prompt: the prompt."
                   },
-                  "keys": {
-                    "type": "array",
-                    "minItems": 1,
-                    "maxItems": 15,
-                    "items": {
-                      "type": "string",
-                      "enum": [
-                        "default",
-                        "chat",
-                        "chat.route",
-                        "generation",
-                        "generation.notes",
-                        "presentation",
-                        "vision",
-                        "images",
-                        "shape",
-                        "workshop",
-                        "workshop.draft",
-                        "canvas",
-                        "agent.slatebox",
-                        "library",
-                        "connectors"
-                      ]
-                    },
-                    "description": "For target use: only these feature choices."
-                  },
                   "reason": {
                     "type": "string",
                     "minLength": 1,
@@ -3168,12 +3161,6 @@
                     "target": {
                       "type": "string"
                     },
-                    "cleared": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "removed": {
                       "type": "array",
                       "items": {
@@ -3185,15 +3172,6 @@
                       "items": {
                         "type": "string"
                       }
-                    },
-                    "unpinned": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "dbLayer": {
-                      "type": "string"
                     }
                   }
                 }

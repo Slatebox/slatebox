@@ -281,17 +281,14 @@ export function planEstimateMicros(chars, prices) {
 }
 
 /**
- * The models a plan request is priced at: those that will serve it. `chosen` is the connection
- * settings.ai.use picks for this person (ai-settings-core.mjs resolveFor); when it names a model,
- * that model alone serves the plan (req.js sends a connection's request to its model, and a plan
- * has no second model). The feature's built-in model and its fallback (`feature`,
- * resolveAIFeatureConfig) price it only on the built-in AI, or on a DeepInfra key without a model
- * of its own, which follows the feature's model as req.js does.
+ * The models a plan request is priced at: the one that will serve it. `chosen` is the route this
+ * person gets for presentations (ai-settings-core.mjs resolveFor: the part's model in Admin → AI
+ * control, or their own connection). A route that names no model (it cannot be used; req.js says
+ * why) is priced at the dearest known rate.
  */
-export function planModels({ feature = {}, chosen = null } = {}) {
+export function planModels({ chosen = null } = {}) {
   const model = chosen?.connection?.model
-  if (typeof model === 'string' && model.trim()) return [model]
-  return [feature.engine, feature.fallback?.engine].filter(Boolean)
+  return [typeof model === 'string' && model.trim() ? model : null]
 }
 
 /** A promise that fails with PLAN_TOO_SLOW once `ms` have passed. */

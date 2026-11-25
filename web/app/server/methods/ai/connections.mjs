@@ -1,9 +1,9 @@
-// AI connections and choices. A connection is a provider the person, their team or the operator
-// connected: a cloud provider with a key, or any OpenAI-compatible endpoint (a model on their own
-// computer, their network or a host) with an address, an optional key and a model name. A choice
-// says which connection each feature uses, with a default for the rest. People mix freely: no
-// rule ties a feature to a kind of provider, and Slatebox never routes a request somewhere the
-// person did not choose. Nothing here names a model.
+// A person's and a team's own AI (self-hosted Slatebox): a connection is a provider they connected
+// (a cloud provider with a key, or any OpenAI-compatible endpoint with an address, an optional key
+// and a model name), and a choice says which connection each feature uses, with a default for the
+// rest. Everything not chosen there is the server's AI, which an administrator sets in Admin → AI
+// control (ai-control/resolve.mjs). Slatebox never routes a request somewhere the person did not
+// choose. Nothing here names a model, and nothing reads a key from the settings file.
 import { EndpointRefused, checkEndpointUrl, endpointRules } from './endpoint-policy.mjs'
 import { chatConnectionTypes } from '../../ai-control/providers.mjs'
 
@@ -54,15 +54,14 @@ export function carriesImages(prompts) {
   return seen(prompts || [])
 }
 
-// Cloud presets fill in their own address. Any other host is an OpenAI-compatible endpoint.
-// The four built-in types are the code layer of the providers (ai-control/providers.mjs); the
-// providers an administrator adds (aiProviders, through the AI control snapshot) are types too,
-// read through connectionTypes() once ai-control/index.mjs has set the source.
+// The named provider presets fill in their own address (ai-control/provider-presets.mjs); any other
+// host is an OpenAI-compatible endpoint. The providers an administrator added (aiProviders, through
+// the AI control snapshot) are types too, read through connectionTypes() once ai-control/index.mjs
+// has set the source.
 export const CONNECTION_TYPES = Object.freeze(Object.fromEntries(Object.entries(chatConnectionTypes({}))
-  .filter(([, type]) => type.builtin)
   .map(([id, type]) => [id, Object.freeze({
     label: type.label, ...(type.baseUrl && { baseUrl: type.baseUrl }), ...(type.keyRequired && { keyRequired: true }),
-    ...(type.modelOptional && { modelOptional: true }), protocol: type.protocol,
+    protocol: type.protocol,
   })])))
 
 // Where the administrators' providers come from: () → the snapshot's providers ({ [id]: doc }).
@@ -100,16 +99,12 @@ export class ConnectionError extends Error {
 }
 
 const NAME = /^[a-z0-9][a-z0-9-]{0,39}$/
-// The name of an environment variable that holds a connection's key (the operator's settings file
-// only): the key itself stays in the environment and is read for each request (keyFromEnv).
-const ENV_NAME = /^[A-Z][A-Z0-9_]{1,63}$/
 export const TOOL_CHOICES = Object.freeze(['auto', 'named', 'required'])
 
 /**
- * Checks one connection as a person, team admin, administrator or settings file gives it.
- * context: { hosted, level: 'person' | 'team' | 'server' | 'file' }
- * → { name, type, baseUrl, model?, apiKey?, apiKeyEnv?, capabilities, maxTokens?, toolChoice? }
- * apiKeyEnv (level 'file' only) names the environment variable that holds the key.
+ * Checks one connection as a person or team admin gives it.
+ * context: { hosted, level: 'person' | 'team' }
+ * → { name, type, baseUrl, model?, apiKey?, capabilities, maxTokens?, toolChoice? }
  * toolChoice says how the endpoint takes a forced tool call: named (that function), required
  * (some tool; for endpoints with no named form) or auto (the model decides; for endpoints that
  * refuse anything else). req.js's shape checks and retries judge a wrong or missing call.
@@ -141,18 +136,12 @@ export function normalizeConnection(input, { hosted, level, privateEndpoints = t
   if (model !== undefined && model !== null && (typeof model !== 'string' || !model || model.length > 200 || /[\r\n]/.test(model))) {
     throw new ConnectionError('Enter the model name your endpoint serves.')
   }
-  if (!model && !preset.modelOptional) throw new ConnectionError('Enter the model name your endpoint serves.')
+  if (!model) throw new ConnectionError('Enter the model name your endpoint serves.')
   const apiKey = input.apiKey
   if (apiKey !== undefined && apiKey !== null && (typeof apiKey !== 'string' || /[\r\n]/.test(apiKey) || apiKey.length > 400)) {
     throw new ConnectionError('Paste the key on one line.')
   }
-  const { apiKeyEnv } = input
-  if (apiKeyEnv !== undefined && apiKeyEnv !== null) {
-    if (level !== 'file') throw new ConnectionError('apiKeyEnv is only for connections in the server\'s settings file. Send the key itself.')
-    if (typeof apiKeyEnv !== 'string' || !ENV_NAME.test(apiKeyEnv)) throw new ConnectionError('apiKeyEnv is the name of an environment variable in capitals, digits and underscores, for example META_API_KEY.')
-    if (apiKey) throw new ConnectionError('Give apiKey or apiKeyEnv, not both.')
-  }
-  if (preset.keyRequired && !apiKey && !apiKeyEnv && !input.keepKey) throw new ConnectionError(`${preset.label} needs a key.`)
+  if (preset.keyRequired && !apiKey && !input.keepKey) throw new ConnectionError(`${preset.label} needs a key.`)
   // what the provider's models can usually do, unless the connection says otherwise
   const capabilities = Object.fromEntries(Object.entries(preset.defaultCapabilities || {}).filter(([key]) => CAPABILITIES.includes(key)))
   if (input.capabilities !== undefined) {
@@ -164,7 +153,6 @@ export function normalizeConnection(input, { hosted, level, privateEndpoints = t
   }
   const out = { name, type, baseUrl, ...(model && { model }), capabilities }
   if (apiKey) out.apiKey = apiKey
-  if (apiKeyEnv) out.apiKeyEnv = apiKeyEnv
   if (input.maxTokens !== undefined && input.maxTokens !== null) {
     if (!Number.isInteger(input.maxTokens) || input.maxTokens < 256 || input.maxTokens > 200000) throw new ConnectionError('maxTokens is a whole number from 256 to 200000.')
     out.maxTokens = input.maxTokens
@@ -177,19 +165,20 @@ export function normalizeConnection(input, { hosted, level, privateEndpoints = t
 }
 
 // ---------- references ----------
-// A choice names a connection by scope and name: me:<name>, team:<name>, server:<name>, or
-// builtin (the AI this server provides by default, the operator's own configuration).
-const SCOPES_FOR = { me: ['me', 'team', 'server'], team: ['team', 'server'], server: ['server'] }
+// A choice names a connection by scope and name: me:<name>, team:<name>, or builtin (the server's
+// AI, as an administrator set it in Admin → AI control).
+const SCOPES_FOR = { me: ['me', 'team'], team: ['team'] }
 
 export function parseRef(ref) {
   if (ref === 'builtin') return { scope: 'builtin' }
-  const match = typeof ref === 'string' && /^(me|team|server):([a-z0-9][a-z0-9-]{0,39})$/.exec(ref)
+  const match = typeof ref === 'string' && /^(me|team):([a-z0-9][a-z0-9-]{0,39})$/.exec(ref)
   return match ? { scope: match[1], name: match[2] } : null
 }
 
 // Checks a use object against the connections a level can see. Throws ConnectionError.
 export function checkUse(use, level, visible) {
   if (!use || typeof use !== 'object' || Array.isArray(use)) throw new ConnectionError('use is an object of default and feature names.')
+  if (!SCOPES_FOR[level]) throw new ConnectionError('Choices are made for yourself or your team. The server\'s AI is set in Admin → AI control.')
   const out = {}
   for (const [key, ref] of Object.entries(use)) {
     if (!USE_KEYS.includes(key)) throw new ConnectionError(`${key} is not a feature. The features are ${USE_KEYS.join(', ')}.`)
@@ -198,7 +187,7 @@ export function checkUse(use, level, visible) {
       continue
     }
     const parsed = parseRef(ref)
-    if (!parsed) throw new ConnectionError(`${ref} is not a choice. Name a connection as me:<name>, team:<name> or server:<name>, or use builtin.`)
+    if (!parsed) throw new ConnectionError(`${ref} is not a choice. Name a connection as me:<name> or team:<name>, or use builtin for this server's AI.`)
     if (parsed.scope !== 'builtin') {
       if (!SCOPES_FOR[level].includes(parsed.scope)) throw new ConnectionError(`${ref} cannot be chosen here.`)
       if (!visible[parsed.scope]?.some((c) => c.name === parsed.name)) throw new ConnectionError(`There is no connection ${ref}.`)
@@ -208,50 +197,19 @@ export function checkUse(use, level, visible) {
   return out
 }
 
-// ---------- the operator's configuration ----------
+// ---------- the operator's switches ----------
 const isSelfHost = (settings) => settings?.public?.env === 'selfhost'
 
 /**
- * The operator's AI from the settings file: settings.ai = { connections: { name: {...} },
- * use: { default, chat, ... } with plain names or builtin, ownProviders: 'on' | 'off',
- * privateEndpoints: 'on' | 'off' (self-host: whether people and teams may connect endpoints on
- * private networks; on by default, the operator's own connections are not affected) }.
+ * The operator's switches from the settings file (no keys, no models, no providers: those live in
+ * Admin → AI control): settings.ai = { ownProviders: 'on' | 'off', privateEndpoints: 'on' | 'off'
+ * (self-host: whether people and teams may connect endpoints on private networks; on by default) }.
  */
 export function operatorConfig(settings = {}) {
   const ai = settings.ai || {}
-  const hosted = !isSelfHost(settings)
-  const connections = []
-  for (const [name, raw] of Object.entries(ai.connections || {})) {
-    let connection
-    try {
-      connection = normalizeConnection({ ...raw, name }, { hosted, level: 'file' })
-    } catch (error) {
-      throw new ConnectionError(`settings ai.connections.${name}: ${error.message}`)
-    }
-    connections.push({ ...connection, source: 'file' })
-  }
-  const use = {}
-  for (const [key, value] of Object.entries(ai.use || {})) {
-    if (!USE_KEYS.includes(key)) throw new ConnectionError(`settings ai.use.${key}: not a feature (${USE_KEYS.join(', ')})`)
-    if (value === 'builtin') use[key] = 'builtin'
-    else if (connections.some((c) => c.name === value)) use[key] = `server:${value}`
-    else throw new ConnectionError(`settings ai.use.${key}: ${value} is not one of ai.connections`)
-  }
   if (ai.ownProviders !== undefined && !['on', 'off'].includes(ai.ownProviders)) throw new ConnectionError('settings ai.ownProviders is on or off')
   if (ai.privateEndpoints !== undefined && !['on', 'off'].includes(ai.privateEndpoints)) throw new ConnectionError('settings ai.privateEndpoints is on or off')
-  return { connections, use, ownProviders: ai.ownProviders !== 'off', ownProvidersLocked: ai.ownProviders === 'off', privateEndpoints: ai.privateEndpoints !== 'off' }
-}
-
-/**
- * A settings-file connection with its key read from the environment now, so a rotated key is used
- * without a restart. → the connection with apiKey, or with error (naming the variable, never a
- * value) when the variable is unset or empty. Other connections are returned as they are.
- */
-export function keyFromEnv(connection, env = {}) {
-  if (!connection?.apiKeyEnv) return connection
-  const value = typeof env[connection.apiKeyEnv] === 'string' ? env[connection.apiKeyEnv].trim() : ''
-  if (!value) return { ...connection, keyError: `its key is not set: the environment variable ${connection.apiKeyEnv} is empty or missing on this server` }
-  return { ...connection, apiKey: value }
+  return { hosted: !isSelfHost(settings), ownProviders: ai.ownProviders !== 'off', ownProvidersLocked: ai.ownProviders === 'off', privateEndpoints: ai.privateEndpoints !== 'off' }
 }
 
 // ---------- resolution ----------
@@ -282,8 +240,7 @@ function fromUse(holder, feature, scopes, people) {
 }
 
 // Keys saved before choices existed: a DeepInfra key serves every model feature, an endpoint the
-// conversation features, as they did. Neither makes images: generated images stayed with the
-// built-in image service before choices existed, and still do unless the person chooses otherwise.
+// conversation features, as they did. Neither makes images.
 function fromLegacy(holder, surfaceId, scope) {
   const feature = rootSurface(surfaceId)
   if (feature === 'images') return null
@@ -292,20 +249,18 @@ function fromLegacy(holder, surfaceId, scope) {
 }
 
 /**
- * Which connection serves one feature (any surface id). The person first (their choice for the
- * surface, then for what it follows, up to their default, then keys saved before choices), then
- * their team the same way, then the operator, then the built-in AI. With ownProviders off only
- * the operator's choices count.
- * → { ref, scope: 'me'|'team'|'server'|'builtin', connection|null, own, feature } where feature is
- *   the surface whose choice applied, or the first-row feature when none of its own was set.
+ * Which of a person's or team's own connections serves one feature (any surface id): the person
+ * first (their choice for the surface, then for what it follows, up to their default, then keys
+ * saved before choices), then their team the same way. With ownProviders off, or nothing chosen,
+ * the server's AI (ref builtin: Admin → AI control) answers.
+ * → { ref, scope: 'me'|'team'|'builtin', connection|null, own, feature }
  */
-export function resolveAIChoice({ feature, person = null, team = null, server = { connections: [], use: {} }, ownProviders = true }) {
-  const scopes = { me: person, team, server }
+export function resolveAIChoice({ feature, person = null, team = null, ownProviders = true }) {
+  const scopes = { me: person, team }
   const steps = ownProviders
     ? [() => fromUse(person, feature, scopes, ['me', 'team']), () => fromLegacy(person, feature, 'me'),
-      () => fromUse(team, feature, { team, server }, ['team']), () => fromLegacy(team, feature, 'team')]
+      () => fromUse(team, feature, { team }, ['team']), () => fromLegacy(team, feature, 'team')]
     : []
-  steps.push(() => fromUse(server, feature, { server }, []))
   for (const step of steps) {
     const found = step()
     if (found) return { own: false, feature: rootSurface(feature), ...found }
@@ -332,7 +287,7 @@ export function connectionLabel(connection, { withHost = true } = {}) {
  * only a capability marked false (or, for making images, not marked true) stops a request.
  * request: { images?: boolean (the request carries images), tools?: boolean }
  */
-export function capabilityGap({ feature, connection, request = {}, label = connectionLabel(connection) }) {
+export function capabilityGap({ feature, connection, request = {}, label = connectionLabel(connection), fix = null }) {
   if (!connection) return null
   const caps = connection.capabilities || {}
   const needs = surfaceById(feature)?.needs || []
@@ -345,7 +300,7 @@ export function capabilityGap({ feature, connection, request = {}, label = conne
   const title = featureTitle(feature).toLowerCase()
   return {
     need,
-    message: `${label} cannot ${verbs[need]}. Choose another model for ${title} in your AI settings.`,
+    message: `${label} cannot ${verbs[need]}. ${fix || `Choose another model for ${title} in your AI settings.`}`,
   }
 }
 
@@ -359,7 +314,7 @@ export function publicConnection(connection, extra = {}) {
     name: connection.name, type: connection.type, baseUrl: connection.baseUrl, host, model: connection.model ?? null,
     capabilities: connection.capabilities || {}, hasKey: Boolean(connection.apiKey || connection.hasKey),
     ...(connection.maxTokens && { maxTokens: connection.maxTokens }), ...(connection.toolChoice && { toolChoice: connection.toolChoice }),
-    ...(connection.source && { source: connection.source }), ...(connection.legacy && { legacy: true }),
+    ...(connection.legacy && { legacy: true }),
     lastError: connection.lastError ?? null, ...extra,
   }
 }
