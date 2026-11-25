@@ -306,6 +306,8 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
   const drawnEmpty = useDrawnEmpty(liveNodes)
   const empty = (drawnEmpty ?? !(board.nodes||[]).some(node=>!node?.options?.isComment)) && !brief
   const firstTurn = empty && !history.length && !draft && !view
+  const seededStarters = !history.length && board.options?.firstRun?.starters?.length
+    ? board.options.firstRun.starters.slice(0,3).map(item=>({label:item.text,text:item.text,...(item.select && {select:item.select})})) : null
   // Add from the library, the strip or the + menu: the entry's own add message, previewed, then kept.
   async function addEntry(entry) {
     const lib=await libraryModule()
@@ -337,7 +339,8 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     prompt={empty ? null : 'What should happen on this slate?'}
     starters={!empty && <Box aria-label="Starter messages" sx={{display:'flex',flexWrap:'wrap',gap:.5,my:1}}>
       {/* Slatebox's own starters: the message they fill goes to Slatebox, not the agent the conversation was with. */}
-      {canvasStarters(board.nodes).map(({label},i)=><Button key={label} size="small" onClick={()=>{setReplyingTo(null);suggest(canvasStarters(liveNodes())[i])}}>{label}</Button>)}
+      {/* A first-run drawing (typed steps) opens with its planned starters until its first message. */}
+      {(seededStarters || canvasStarters(board.nodes)).map(({label},i)=><Button key={label} size="small" onClick={()=>{setReplyingTo(null);suggest((seededStarters || canvasStarters(liveNodes()))[i])}}>{label}</Button>)}
       {/* Your invited agents: "@GitHub " starts a message to one. */}
       {agents.filter(a=>a.canAsk).map(a=><Button key={'agent-'+a.agentId} size="small" data-mention-agent={a.name} sx={{color:a.color}} onClick={()=>{setReplyingTo(a.agentId);suggest({text:''})}}>@{a.name}</Button>)}
       <AddShort onBrowse={()=>browse()} />

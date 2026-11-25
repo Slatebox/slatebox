@@ -16,7 +16,9 @@ import {catalogSamples as samples} from 'slateboxjs/workshops/samples'
 import {catalogFits} from 'slateboxjs/catalog'
 import {boardNamesSlate,componentPlacing} from '../../imports/api/common/component-add.mjs'
 import {datedLaunchPlan} from '../../imports/api/common/plan-dates.mjs'
-import {MAX_BOARDS,slateBoards} from '../../imports/api/common/slate-boards.mjs'
+import {MAIN_BOARD,MAX_BOARDS,slateBoards} from '../../imports/api/common/slate-boards.mjs'
+import {firstRunReplace} from '../first-slate-board.mjs'
+import {worksOnLine} from '../../imports/api/common/first-slate.mjs'
 
 import {slateSaveCore} from '../slate-save'
 import {LibraryItems} from '../../imports/api/common/models'
@@ -52,8 +54,11 @@ Meteor.methods({
     // A library entry (Add a retro): any editor may add one, beside the boards the slate holds, up to 8
     // (library final.md §2.2, catalogFits); past that it opens on a new slate.
     const held=slateBoards(board).length
-    if(kind==='component' && held>=MAX_BOARDS) throw new Meteor.Error('opens-new',catalogFits('retro',{hasBoard:true,many:true,boards:held}).reason)
-    if(kind!=='component' && board.creative || (board.userId!==this.userId && kind!=='component')) throw new Meteor.Error('unavailable',board.creative?'Open the interactive view to edit its behavior.':'Only the owner can add interactive behavior to this drawing.')
+    // A launch plan, pipeline or budget asked for on a slate that holds boards: built beside them, or, on a
+    // first-run slate nobody has changed yet, in place of its board (firstRunReplace).
+    const beside=kind==='board' && board.creative?.model?.kind==='workshop'
+    if((kind==='component' || beside) && held>=MAX_BOARDS) throw new Meteor.Error('opens-new',catalogFits('retro',{hasBoard:true,many:true,boards:held}).reason)
+    if(kind!=='component' && !beside && board.creative || (board.userId!==this.userId && kind!=='component')) throw new Meteor.Error('unavailable',board.creative?'Open the interactive view to edit its behavior.':'Only the owner can add interactive behavior to this drawing.')
     const ai=(await Meteor.callAsync('workshops.account')).canGenerate
     // Notes asked for by number or name are drawn as they stand. A request that has to be thought
     // up is drafted by AI, counted by the meter (or on an install with AI turned on).
@@ -74,6 +79,10 @@ Meteor.methods({
       const tail=history.slice(-2).map(turn=>'Earlier request: '+turn.message.slice(0,120)+'\nKept: '+turn.reply.slice(0,180))
       const brief=board.options?.creationBrief
       if(brief && brief!==message) tail.unshift('Original brief: '+brief.slice(0,160))
+      // After sign-in, the one line the first run keeps about this person ("Works on: shipping by a date").
+      const account=await Meteor.users.findOneAsync(this.userId,{fields:{isAnonymous:1,'profile.start':1}})
+      const works=!account?.isAnonymous && worksOnLine(account?.profile?.start)
+      if(works) tail.unshift(works)
       if(selection) tail.push('Selected on the canvas: the '+selection.kind+' “'+selection.label.replace(/[<>]/g,'')+'”')
       const room=1200-message.length-12
       const prompt=tail.length && room>40 ? tail.join('\n').slice(-room)+'\nRequest: '+message : message
@@ -86,11 +95,17 @@ Meteor.methods({
     if(draft.component) draft={...draft,workshop:datedLaunchPlan(draft.workshop,message)}
     // Beside the slate's boards: shown where Keep puts it (Keep places it again on the slate as it stands then).
     if(draft.component && held) draft={...draft,origin:componentPlacing(board,draft.workshop).origin}
+    if(beside) {
+      const replaced=firstRunReplace(board,draft.workshop)
+      draft=replaced ? {...draft,workshop:replaced,replace:MAIN_BOARD,origin:slateBoards(board)[0].origin}
+        : {...draft,beside:true,origin:componentPlacing(board,draft.workshop).origin}
+    }
     if(digest(await resolve(shareId,this.userId))!==base) throw changed()
     this.connection.slateboxNativeCanvasDraft={id,boardId:board._id,uid:this.userId,base,draft,until:Date.now()+600000}
     // `canvas` is what the page draws as the preview: what Keep would add, where it would add it.
     return {id,mode:draft.mode,format:draft.format || 'map',provider:generated && kind!=='board'?'ai':'direct',canvas:previewCanvasOf(draft),labels:draft.workshop.lanes.map(l=>l.label),
       ...(kind==='board' && {said:businessBoardSaid(draft.workshop)}),
+      ...(draft.replace && {replace:true}), ...(draft.beside && {beside:true,title:draft.workshop.title}),
       // A library entry: which one, and how it behaves (the lines of its "How this board behaves" note).
       ...(draft.component && {component:draft.component,title:draft.workshop.title,rules:draft.workshop.behaviour ? rulebook().lines(draft.workshop) : []}),
       capacities:draft.format==='lanes'?draft.workshop.lanes.filter(l=>l.capacity!==undefined).map(l=>({label:l.label,capacity:l.capacity})):[],
@@ -106,7 +121,7 @@ Meteor.methods({
     const p=this.connection.slateboxNativeCanvasDraft
     if(!p || p.id!==id || p.uid!==this.userId || p.boardId!==board._id || p.until<Date.now() || digest(board)!==p.base) throw changed()
     const {draft}=p
-    if(draft.mode!=='play' || (board.userId!==this.userId && !draft.component) || (board.creative && !draft.component)) throw changed()
+    if(draft.mode!=='play' || (board.userId!==this.userId && !draft.component) || (board.creative && !draft.component && !draft.beside && !draft.replace)) throw changed()
     // The board sits beside the slate's notes and its other boards, covering none of them (where its preview
     // was shown), and the place is stored with it, so every page draws it there. The place and the board's id
     // are worked out on the slate as the write finds it (the save core fences it on the slate's revision).
@@ -120,6 +135,12 @@ Meteor.methods({
         build:current=>{
           // The 8th board landed between the preview and Keep: said as the cap, not as a changed drawing.
           if(slateBoards(current).length>=MAX_BOARDS) throw Object.assign(new Error('full'),{code:'save_refused',full:slateBoards(current).length})
+          if(draft.replace) {
+            // In place of the first-run board: only while it is still as it was made (revision 0, the only board).
+            if(!firstRunReplace(current,draft.workshop)) throw Object.assign(new Error('changed'),{code:'save_refused'})
+            made={boardId:MAIN_BOARD,origin:slateBoards(current)[0].origin}
+            return {set:{lastNativeCanvasProposal:{id,uid:this.userId,boardId:MAIN_BOARD},'creative.model.workshop':draft.workshop,'creative.revision':1},inc:{nativeConversationRevision:1}}
+          }
           made=componentPlacing(current,draft.workshop)
           // An untitled slate takes the kept board's title as its name; a name the person gave stays.
           named=boardNamesSlate(current,draft.workshop)['options.name']
@@ -137,6 +158,6 @@ Meteor.methods({
     if (board.userId!==this.userId) await rememberInvitedEdit(this.userId,board,shareId).catch(()=>{})
     // The page takes the board live (no reload): where it sits, and the revision its saves now name.
     // `name`: the slate's new name, when the board named it (the page shows it, and its saves keep it).
-    return {kept:true,boardId:made.boardId,origin,nativeConversationRevision:(board.nativeConversationRevision??0)+1,...(named && {name:named})}
+    return {kept:true,boardId:made.boardId,origin,nativeConversationRevision:(board.nativeConversationRevision??0)+1,...(named && {name:named}),...(draft.replace && {replaced:true})}
   },
 })

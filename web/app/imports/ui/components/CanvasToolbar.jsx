@@ -4,6 +4,7 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { Meteor } from 'meteor/meteor'
 import { useTracker } from 'meteor/react-meteor-data'
 import CONSTANTS from '../../api/common/constants'
+import { firstShareLabel } from '../../api/common/first-slate.mjs'
 import { Box, Button, ButtonBase, ButtonGroup, Dialog, Divider, IconButton, InputBase, ListItemIcon, ListItemText,
   MenuItem, Popover, Snackbar, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material'
 import MenuIcon from '@mui/icons-material/Menu'
@@ -77,6 +78,16 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
   // A builder slate puts its status and its Save and Submit here (library/build/BuildBar.jsx), never over the canvas.
   const setBuilderSlot = useSetAtom(builderHeaderSlot)
 
+  // A first-run slate's Share says who it is for ("Invite your team") until Share is first opened.
+  const [shareSeen, setShareSeen] = useState(false)
+  const shareLabel = shareSeen ? 'Share' : firstShareLabel(slate?.firstRun)
+  const openShare = () => {
+    if (shareLabel !== 'Share') {
+      setShareSeen(true)
+      Meteor.callAsync(CONSTANTS.methods.firstSlate.shareSeen, route).catch(() => { /* Shown once more next time. */ })
+    }
+    onShare()
+  }
   const onWorkshop = Boolean(route && slate?.creativeKind === 'workshop')
   // A workshop slate's saved workshop, as the canvas page has subscribed to it. The board records
   // decide, reactively: a board kept on this slate during this visit (slate.creativeKind changes
@@ -281,7 +292,7 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
     {!narrow && canAsk && <Button className="sb-ask" data-conversation-toggle color="inherit" variant="outlined" aria-pressed={Boolean(askOpen)}
       startIcon={<AutoAwesome />} aria-label="Ask Slatebox" onClick={() => { setAskOpen(toggledConversation({ open: askOpen, arrival: askArrival, now: performance.now() })); setAskArrival(null) }}><span className="sb-btn-text">Ask Slatebox</span></Button>}
     {presentButton}
-    {owner && <Button className="sb-board-share" variant="contained" color="primary" disableElevation onClick={onShare}>Share</Button>}
+    {owner && <Button className="sb-board-share" variant="contained" color="primary" disableElevation onClick={openShare}>{shareLabel}</Button>}
     {!narrow && !owner && slate && (privacy.isPublic || privacy.isUnlisted) &&
       <Button color="inherit" variant="outlined" startIcon={<LinkIcon />} onClick={copyLink}>Copy link</Button>}
     {!narrow && <span className="sb-board-divider" aria-hidden="true" />}

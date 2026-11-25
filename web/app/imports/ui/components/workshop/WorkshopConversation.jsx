@@ -9,6 +9,7 @@ import ConversationPanel, { ConversationComposer } from '../ConversationPanel'
 import { proposeLaneReply } from '../../../api/common/lane-conversation.mjs'
 import { proposeDirectMapEdit } from '../../../api/common/map-direct-edits.mjs'
 import { workshopStarters } from '../../../api/common/workshop-starters.mjs'
+import { FIRST_RUN_GREETING, firstRunStarters } from '../../../api/common/first-slate-starters.mjs'
 import { asksWhatElse, boardSuggestions, editingLabel, focusContext, focusPlaceholder } from '../../../api/common/board-focus.mjs'
 import PayNotice, { isCreditRefusal } from '../PayNotice'
 import { nativeRequestKind } from '../../../api/common/native-canvas-conversation.mjs'
@@ -62,7 +63,9 @@ function loadHistory(key, drawingKey, keep) {
  * asks "Which board, Retro or Sprint?" with a chip per board (board-pick.mjs). A library entry is added
  * beside the boards, previewed first, then kept (the page draws it live).
  */
-export default function WorkshopConversation({ board: shown, boards: all, onChangeBoard, onKept, shareId, onClose, onPreview, readNodes, library = null }) {
+// `firstRun`: the slate's options.firstRun (the first run made it): its planned starters until the first message.
+// `creationBrief`: the words a slate was made from ("You asked for: …").
+export default function WorkshopConversation({ board: shown, boards: all, onChangeBoard, onKept, shareId, onClose, onPreview, readNodes, library = null, firstRun = null, creationBrief = null }) {
   const boards = all?.length ? all : [shown]
   // The board a person picked for a message ("Which board?"), until another is focused or selected.
   const [picked, setPicked] = useState(null)
@@ -152,7 +155,12 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
   // The board in focus (the gear's "Change this board"): "this" is the board, or a lane or card selected on it.
   const focus = board.focus ?? null
   const context = (!map && focusContext(model, focus, selection)) || (selected ? { kind: selection.kind, id: selected.id } : null)
-  const starters = focus ? boardSuggestions(model, actor) : workshopStarters(model, context)
+  // A first-run slate opens with its three planned starters until the conversation's first message;
+  // the board's sentences (launch plans, budgets) load first, so each is checked as it would be read.
+  const seeded = Boolean(firstRun?.starters?.length && !history.length && boards.length === 1)
+  const [grammarReady, setGrammarReady] = useState(false)
+  useEffect(() => { if (seeded) loadGrammar().then(ok => { if (mounted.current) setGrammarReady(ok) }) }, [seeded])
+  const starters = focus ? boardSuggestions(model, actor) : seeded && !context && (grammarReady || map) ? firstRunStarters(model, firstRun.starters) : workshopStarters(model, context)
   const append = (...turns) => setHistory(prev => keep([...prev, ...turns]))
   const suggest = ({ text, select }) => {
     setRequest(text)
@@ -217,7 +225,10 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
       if (err.code !== 'not-understood') throw err
       const lib = await libraryModule().catch(() => null)
       const local = lib?.libraryTurn(message)
-      if (local) return { reply: full ? 'This slate holds 8 boards, the most for now: each of these opens on a new slate.' : 'Each of these goes beside the boards on this slate.', catalog: local.entries }
+      // "What can I add?" on a first-run slate: the board that goes with this one first (its third starter).
+      const companion = local?.all && firstRun?.starters?.length ? lib.catalogAddRequest(firstRun.starters.at(-1).text)?.id : null
+      if (local) return { reply: full ? 'This slate holds 8 boards, the most for now: each of these opens on a new slate.' : 'Each of these goes beside the boards on this slate.',
+        catalog: companion ? [companion, ...local.entries.filter(id => id !== companion)] : local.entries }
       if (!understood && !map && /\b(?:rule|limit|hold|holds|warn|bin|archive)\b/i.test(message)) {
         throw Error('The board’s rule sentences could not be loaded. Check the connection and try again.')
       }
@@ -274,7 +285,9 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
     }
     const target = picking.board ?? board
     const message = picking.message
-    const onSlate = Boolean(add || picking.slate)
+    // A launch plan, pipeline or budget in their words is built by its readers (beside the board, or in place
+    // of an untouched first-run board), never sent to the board's own sentences or an agent.
+    const onSlate = Boolean(add || picking.slate || nativeRequestKind(said) === 'board')
     if (chosen) setPicked(chosen.boardId)
     if (!onSlate && target.focus && asksWhatElse(message)) { setRequest(''); whatCanItDo(message); return }
     running.current = true
@@ -361,8 +374,14 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
     try {
       const kept = await Meteor.callAsync((drawing.via || 'nativeCanvas') + '.keep', shareId, drawing.id)
       // A library board, added beside the boards here: the page draws it live, with no reload.
-      if (drawing.component) {
-        append({ role: 'user', content: drawing.message }, { role: 'assistant', content: 'Added ' + drawing.title + ' beside the board' + (drawing.rules?.length ? ' · ' + drawing.rules.join(' ') : '') })
+      // The first-run board rebuilt from their words: the page opens it again as saved.
+      if (kept?.replaced) {
+        append({ role: 'user', content: drawing.message }, { role: 'assistant', content: 'Rebuilt the board from your words' + (drawing.said ? ' · ' + drawing.said.replace(/^Added an? [^·]+· /, '') : '') })
+        setTimeout(() => window.location.reload(), 50)
+        return
+      }
+      if (drawing.component || drawing.beside) {
+        append({ role: 'user', content: drawing.message }, { role: 'assistant', content: drawing.beside ? drawing.said : 'Added ' + drawing.title + ' beside the board' + (drawing.rules?.length ? ' · ' + drawing.rules.join(' ') : '') })
         onKept?.({ board: true, boardId: kept?.boardId, origin: kept?.origin, nativeConversationRevision: kept?.nativeConversationRevision, ...(kept?.name && { name: kept.name }) })
         setDrawing(null)
         running.current = false
@@ -487,6 +506,9 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
 
   return <ConversationPanel onClose={onClose} composer={composer}>
     <Box component="ol" role="log" aria-label="Conversation" sx={{ listStyle: 'none', p: 0, my: 1 }}>
+      {/* A first-run slate's welcome, until the first message. */}
+      {!history.length && creationBrief && <ChatTurn who="you">{'You asked for: ' + creationBrief}</ChatTurn>}
+      {!history.length && firstRun && <ChatTurn who="slatebox">{FIRST_RUN_GREETING}</ChatTurn>}
       {history.map((turn, index) => {
         const last = index === history.length - 1
         return turn.role === 'user'

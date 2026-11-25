@@ -18,7 +18,7 @@ import Grid from '@mui/material/Grid2'
 import cloneDeep from 'lodash.clonedeep'
 
 import omit from 'lodash.omit'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { dailyCall } from '../components/huddle/daily-call.mjs'
 import createSlate from '../../api/client/createSlate'
 import addMediaNote from '../../api/client/addMediaNote'
@@ -176,6 +176,9 @@ export default function Canvas() {
     const idle = typeof window.requestIdleCallback === 'function' ? window.requestIdleCallback(go, { timeout: 3000 }) : setTimeout(go, 1500)
     return () => { if (typeof window.cancelIdleCallback === 'function') window.cancelIdleCallback(idle); else clearTimeout(idle) }
   }, [])
+  // "Browse all boards" on the first run opens the new slate with the library showing.
+  const { state: routeState } = useLocation()
+  useEffect(() => { if (routeState?.openLibrary) { setNativeChatOpen(true); setLibraryRequest({ start: {}, nonce: Date.now() }) } }, [])
   useEffect(() => {
     const hear = event => { setNativeChatOpen(true); setLibraryRequest({ ...event.detail, nonce: Date.now() }) }
     window.addEventListener(LIBRARY_EVENT, hear)
@@ -385,6 +388,7 @@ export default function Canvas() {
     exportSlate.shareId = shareId
     if (slate.current.creativeKind) exportSlate.creativeKind = slate.current.creativeKind
     if (slate.current.workshopTitled) exportSlate.workshopTitled = true
+    if (slate.current.firstRun) exportSlate.firstRun = slate.current.firstRun
     setSlate(exportSlate)
   }
 
@@ -797,6 +801,8 @@ export default function Canvas() {
 
     slate.current.nativeConversationRevision = sBase.nativeConversationRevision ?? 0
     slate.current.creativeKind = sBase.creative?.model?.kind
+    // A first-run slate (methods/first-slate.js): the toolbar's one-time Share label reads it.
+    slate.current.firstRun = sBase.options?.firstRun ?? null
     slate.current.workshopTitled = workshopNamesSlate(sBase)
     setNativeBoard({...sBase, routeKey:id, boardIds:slateBoards(sBase).map(board=>board.id), canConverse:Boolean(Meteor.userId() && !asEmbed && !sBase.options?.isEmbedded &&
       (isNew || Meteor.userId()===sBase.userId || accessLevel.current.isEditable))})
@@ -804,7 +810,7 @@ export default function Canvas() {
     // the screen until the person asks, except for a map nobody has changed yet: that one is
     // authored through the conversation.
     const authored = sBase.creative?.model?.kind === 'workshop' ? sBase.creative.model.workshop : null
-    const openConversation = authored ? window.innerWidth >= 1000 || Boolean(authored.lanes?.[0]?.station && !sBase.creative.revision)
+    const openConversation = authored ? window.innerWidth >= 1000 || Boolean(authored.lanes?.[0]?.station && !sBase.creative.revision) || Boolean(sBase.options?.firstRun && !sBase.creative.revision)
       : !sBase.creative && Boolean(isNew || sBase.options?.creationBrief || sBase.nativeConversationRevision || !(sBase.nodes||[]).length)
     pendingConversationFit.current = openConversation && !sBase.creative ? slate.current : null
     setNativeChatOpen(openConversation)
@@ -1433,6 +1439,7 @@ export default function Canvas() {
         </div>
         {canShowConversation && (nativeChatOpen || askKept) && <div style={{ display: nativeChatOpen && !minimised ? 'contents' : 'none' }}>{workshopSlate
           ? <React.Suspense fallback={null}><WorkshopConversation key={id} shareId={id} board={current} boards={boards} onChangeBoard={changeBoard} library={libraryRequest}
+              firstRun={nativeBoard?.options?.firstRun ?? null} creationBrief={nativeBoard?.options?.firstRun ? nativeBoard.options.creationBrief ?? null : null}
               onKept={kept => {
                 takeBoardName(kept?.name)
                 if (kept?.nativeConversationRevision !== undefined) takeBoard({ ...kept, boardIds: [...new Set([...(nativeBoard?.boardIds ?? ['main']), kept.boardId].filter(Boolean))] })
