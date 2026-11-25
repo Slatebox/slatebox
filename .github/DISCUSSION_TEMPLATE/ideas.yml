@@ -1,0 +1,37 @@
+title: "[Idea] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing an idea. The best ones start with the problem, so others can suggest other ways to solve it too.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you or your team trying to get done, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How you'd like Slatebox to help. Sketches and screenshots are welcome.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Canvas and notes
+        - Agents and chat
+        - Presentations
+        - Library and templates
+        - Collaboration and teams
+        - MCP server, CLI or API
+        - Self-hosting
+        - SlateboxJS engine
+        - Something else
+    validations:
+      required: false

@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/Slatebox/slatebox/discussions/categories/q-a
+    about: Questions and how-tos go to Slatebox support (support.slatebox.com), our GitHub Discussions.
+  - name: Share an idea
+    url: https://github.com/Slatebox/slatebox/discussions/categories/ideas
+    about: Feature ideas and feedback.
+  - name: Read the docs
+    url: https://docs.slatebox.com
+    about: Guides and reference for the app, self-hosting, the engine and the MCP server.
+  - name: Contact us privately
+    url: https://slatebox.com/contact/
+    about: For anything that shouldn't be public, like questions about your account.

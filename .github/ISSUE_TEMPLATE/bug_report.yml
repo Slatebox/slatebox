@@ -1,0 +1,51 @@
+name: Bug report
+description: Something in Slatebox isn't working the way it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Questions are best asked in [Q&A](https://github.com/Slatebox/slatebox/discussions/categories/q-a), and security reports go through [SECURITY.md](https://github.com/Slatebox/slatebox/blob/main/SECURITY.md), never a public issue.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a slate
+        2. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - app.slatebox.com
+        - Self-hosted
+        - SlateboxJS engine in my own app
+        - MCP server or CLI
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version (if self-hosted or using the engine)
+      placeholder: e.g. 0.2.1
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and OS
+      placeholder: e.g. Chrome 131 on macOS
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or logs
+      description: Please remove keys, tokens and personal data first.
