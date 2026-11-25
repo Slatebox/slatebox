@@ -73,6 +73,9 @@ function docFor(s) {
   const parts = []
   if (s && typeof s === 'object' && !s.$ref) {
     if (s.description) parts.push(oneLine(s.description))
+    // A list whose items carry the description (an item schema's "fields by kind"): said on the
+    // list, since the declaration renders items inline and would otherwise drop it.
+    else if (s.items && typeof s.items === 'object' && !s.items.$ref && s.items.description) parts.push('Each item: ' + oneLine(s.items.description))
     const limits = constraints(s)
     if (limits.length) parts.push(`(${limits.join(', ')})`)
   }

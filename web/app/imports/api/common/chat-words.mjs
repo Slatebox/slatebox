@@ -96,8 +96,34 @@ export function keptReply(draft, { addSay = null } = {}) {
 // What a drawing request that brought no change says (canvasConversation.preview): why, and what to
 // try, never a bare "try again". reason: no_change (its program changed nothing here), failed (with
 // the runner's words), else no_answer.
-export function chatUnavailableWords(error) {
+// A plan the agent drafted that still broke the canvas's rules after its repairs (`problems`, grouped by
+// exec-chat) is said in one plain sentence with what to try, never as the checker's list of operations.
+// `builder`: the slate is building a smart component, whose first turn offers shapes to start from.
+export function chatUnavailableWords(error, { builder = false } = {}) {
   if (error?.reason === 'no_change') return 'Slatebox found nothing to change on this slate for that. Say what to add or change, for example "add three notes about the launch".'
+  if (error?.reason === 'failed' && planRefusal(error)) {
+    const next = builder ? 'Try saying it more simply, or start from one of the shapes.' : 'Try saying it more simply, for example "add five notes about the launch", or ask for fewer notes at once.'
+    return `Slatebox's agent couldn't fit that onto the canvas: its draft ${draftProblem(error)}, even after it tried to fix it. ${next}`
+  }
   if (error?.reason === 'failed' && error.message) return `Slatebox couldn't make that change: ${String(error.message).replace(/[.\s]+$/, '')}. Try saying it another way.`
   return 'Slatebox couldn\'t turn that into a change on this slate. If it needs something from outside Slatebox, such as commits, issues or docs, ask an invited agent with @ and its name.'
+}
+
+// Whether a failure is a refused plan: its code, its grouped problems, or a message in the checker's words.
+const planRefusal = (error) => error?.code === 'invalid_operation_plan' || (Array.isArray(error?.problems) && error.problems.length > 0) || /\bOperation \d+ /.test(String(error?.message ?? ''))
+
+// What was wrong with the draft, in a person's words: the most common problem, counted ("left out how many
+// notes to add in 23 places"), or a general phrase when the problems are of many kinds.
+function draftProblem(error) {
+  const groups = Array.isArray(error?.problems) ? error.problems : []
+  const places = (group) => Math.max(1, group.operations?.length || 0)
+  const top = [...groups].sort((a, b) => places(b) - places(a))[0]
+  if (!top) return 'didn\'t follow the canvas\'s rules'
+  const n = places(top)
+  const where = n === 1 ? 'in one place' : `in ${n} places`
+  if (/^count must be/.test(top.problem)) return `left out how many notes to add ${where}`
+  if (/unknown field/.test(top.problem)) return `used a setting the canvas doesn't have ${where}`
+  if (/shape must be/.test(top.problem)) return `used a shape the canvas doesn't have ${where}`
+  if (/not in the slate/.test(top.problem)) return `pointed at notes that aren't on the slate ${where}`
+  return 'didn\'t follow the canvas\'s rules'
 }

@@ -4,6 +4,7 @@ import {Box,Button,Typography} from '@mui/material'
 import ConversationPanel,{ConversationComposer,focusMessageAfterReload} from './ConversationPanel'
 import PayNotice, { isCreditRefusal } from './PayNotice'
 import {canvasStarters,nativeRequestKind} from '../../api/common/native-canvas-conversation.mjs'
+import {builderDescription} from '../../api/common/builder-freeform.mjs'
 import {agentLabel,firstNameOf} from '../../api/common/agent-label.mjs'
 import AddStrip,{AddShort} from './library/AddStrip'
 import ChatTurn,{ChatThinking} from './ChatTurn'
@@ -36,8 +37,9 @@ const agentSummary=(name,added)=>{
 }
 
 // Drawing requests run on exec (canvasConversation.*); workshop and interactive-route requests
-// keep their own methods (nativeCanvas.*) until the registry has actions for them.
-const methodsFor=message=>nativeRequestKind(message)==='draw' ? 'canvasConversation' : 'nativeCanvas'
+// keep their own methods (nativeCanvas.*) until the registry has actions for them, and so does a smart
+// component described on a builder slate (a board of lanes, never loose notes: builder-freeform.mjs).
+const methodsFor=(message,board)=>nativeRequestKind(message)==='draw' && !builderDescription(board,message) ? 'canvasConversation' : 'nativeCanvas'
 const BOARD_FORMATS=['launch-plan','pipeline','budget']
 const BOARD_NAMES={'launch-plan':'Launch plan',pipeline:'Sales pipeline',budget:'Budget'}
 const WARNINGS={
@@ -203,7 +205,7 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
         remember({id,message,reply:local.all?'Here is everything you can add to this slate.':'These fit what you described.',attach:{type:'catalog',entries:local.entries}})
         return
       }
-      const via=methodsFor(message)
+      const via=methodsFor(message,board)
       // The line selected on the canvas is what “this line” means.
       const selection=via==='canvasConversation' ? (readSelection?.() ?? null) : null
       const res=await Meteor.callAsync(via+'.preview',shareId,message,aiHistory(),...(selection ? [selection] : []))
@@ -375,7 +377,11 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
             </Box>
             : turn.next?.kind==='pay' ? <PayNotice refusal={turn.next.refusal} from="draft" retry={() => ask(turn.message,{replace:turn.id})} inline />
             : turn.next?.kind==='signIn' || turn.next?.kind==='chip' ? <Button size="small" data-turn-next={turn.next.kind} onClick={()=>openChip(turn.next.agentId)}>{turn.next.kind==='signIn' ? 'Sign in again' : 'Open its chip'}</Button>
-            : turn.next?.kind==='retry' ? <Button size="small" data-turn-next="retry" disabled={Boolean(busy)} onClick={()=>ask(turn.message,{replace:turn.id,to:turn.next.agentId || 'slatebox'})}>Try again</Button>
+            : turn.next?.kind==='retry' ? <Box sx={{display:'flex',flexWrap:'wrap',gap:.5}}>
+              <Button size="small" data-turn-next="retry" disabled={Boolean(busy)} onClick={()=>ask(turn.message,{replace:turn.id,to:turn.next.agentId || 'slatebox'})}>Try again</Button>
+              {/* The person's words back in the box, to say it another way (never lost to a failed turn). */}
+              <Button size="small" data-turn-next="edit" disabled={Boolean(busy)} onClick={()=>{setText(turn.message);requestAnimationFrame(()=>input.current?.focus())}}>Edit request</Button>
+            </Box>
             : null}>{turn.reply}</ChatTurn>}
       </Box>)}
     </Box>}

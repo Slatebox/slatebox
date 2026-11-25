@@ -25,6 +25,9 @@ export const sessionPrincipal = (userId, connectionId) => ({
   tokenId: 'session:' + connectionId,
   tokenName: 'Slatebox conversation',
   scopes: ['slates:read', 'slates:write'],
+  // Its canvas plans are written by a model: slates.applyOperations repairs the slips that have one
+  // meaning only (normalizePlan) before checking them, and refuses anything else as written.
+  modelPlans: true,
 })
 
 // The AI gate, unchanged: a model drafts only for an account that may generate, and only for

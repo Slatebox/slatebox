@@ -4,7 +4,8 @@
 // 4ffde9cf, before the move, with `node scripts/ai-request-golden.mjs --prompts <that tree>/web/app`; its two library
 // sites were captured again when the engine’s edit table gained set_appearance (the refine tool offers every edit),
 // and its exec sites when the engine's slate keys gained style and its fonts the slate styles' faces (the exec client's
-// typings are generated from the engine contract; no prompt text changed).
+// typings are generated from the engine contract; no prompt text changed), and again when the plan's operations gained
+// descriptions of every field (count required on add_nodes, the fields by kind: smart-component-freeform; declarations only).
 // Every prompt in the registry is asked for by one of those recordings, so every one is proven; and
 // a published version really reaches the request, while no published version (or no snapshot)
 // serves the built-in text. (The recordings no longer carry a provider, model or fallback per call:

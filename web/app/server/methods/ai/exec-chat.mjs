@@ -6,6 +6,7 @@
 import { nativeDrawingContext } from '../../../imports/api/common/native-graph-draft.mjs'
 import { selectedNotesContext } from '../../../imports/api/common/chat-selection.mjs'
 import { promptText } from '../../ai-control/prompts/index.mjs'
+import { groupPlanErrors, planErrorHints, planErrorsOf } from 'slateboxjs/operations'
 
 const CHAT_METHODS = ['slates.get', 'slates.applyOperations']
 
@@ -50,23 +51,57 @@ export const writesTo = (result, shareId) =>
       return { n: index + 1, method: write.method, input, body: write.body }
     })
 
+// A refused plan's problems, as validatePlan listed them: the refusal's details when the gate passed
+// them on, else its message split back into sentences. Empty for any other failure.
+export function planProblems(error) {
+  if (error?.code !== 'invalid_operation_plan') return []
+  const listed = Array.isArray(error.details?.errors) ? error.details.errors.filter((line) => typeof line === 'string') : []
+  return listed.length ? listed : planErrorsOf(error.message || '')
+}
+
+// What the model is told of a failed program: a refused plan grouped (one line per problem, not one per
+// operation) with what the contract wants instead; any other failure in the runner's words.
+export function failureWhy(error) {
+  const problems = planProblems(error)
+  if (problems.length) {
+    const grouped = groupPlanErrors(problems).map((group) => group.message).join(' ')
+    const hints = planErrorHints(problems)
+    return `the plan was refused (invalid_operation_plan): ${grouped}${hints.length ? ` To fix it: ${hints.join(' ')}` : ''} Keep the operations that were right`
+  }
+  return `${error?.code}: ${error?.message}${error?.line ? ` (line ${error.line})` : ''}`
+}
+
+// A program that only read (slates.get and nothing else) and wrote nothing: a look before the change,
+// not a failure. It is answered with "now make the change" without spending a repair.
+const onlyRead = (result) => {
+  const calls = Array.isArray(result?.calls) ? result.calls : []
+  return calls.length > 0 && calls.every((call) => call?.method === 'slates.get' && call.ok !== false)
+}
+
 // Why no change came back, so the person is told something they can act on:
 //   no_answer  the model answered nothing usable;  no_change  its program changed nothing here;
-//   failed     its program failed (message: the runner's words, e.g. a note it named is not there).
+//   failed     its program failed (message: the runner's words, e.g. a note it named is not there;
+//              problems: a refused plan's problems, grouped, once the repairs ran out).
 export class ChatUnavailable extends Error {
-  constructor(message, reason = 'no_answer') {
+  constructor(message, reason = 'no_answer', extra = {}) {
     super(message)
     this.reason = reason
+    Object.assign(this, extra)
   }
 }
 
 // model({system, prompts, tool}) -> {toolCall: {name, arguments} | null, text?, abort?}
 // run(intent, code) -> the exec output of a preview run limited to shareId
-export async function execChat({ model, manifest, tool, shareId, board, message, history, selection = null, run, attempts = 2 }) {
+// attempts: programs that may fail or change nothing (the first and its repairs, each sent back with
+// what was wrong). looks: programs that only read the slate, answered "now make the change" without
+// spending an attempt. Every model call is charged to the one request the caller opened.
+export async function execChat({ model, manifest, tool, shareId, board, message, history, selection = null, run, attempts = 3, looks = 1 }) {
   const system = chatSystemPrompt(manifest, shareId)
   let prompts = chatPrompts({ board, shareId, message, history, selection })
   let last
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+  let failures = 0
+  let looked = 0
+  while (failures < attempts) {
     const turn = await model({ system, prompts, tool })
     // a chosen model that cannot do this says so (model returns { abort, message })
     if (!turn || turn.abort) throw Object.assign(new ChatUnavailable(turn?.message || 'The model could not prepare a change.'), { said: Boolean(turn?.message) })
@@ -81,9 +116,12 @@ export async function execChat({ model, manifest, tool, shareId, board, message,
     last = code ? await run(intent, code) : { status: 'failed', error: { code: 'invalid_request', message: 'exec needs code.' }, calls: [] }
     const writes = writesTo(last, shareId)
     if (last.status === 'completed' && writes.length) return { result: last, writes }
+    const look = last.status === 'completed' && looked < looks && onlyRead(last)
+    if (look) looked += 1
+    else failures += 1
     const why = last.status !== 'completed'
-      ? `${last.error?.code}: ${last.error?.message}${last.error?.line ? ` (line ${last.error.line})` : ''}`
-      : 'it made no change to this slate'
+      ? failureWhy(last.error)
+      : look ? 'it only read the slate and changed nothing; now make the change' : 'it made no change to this slate'
     prompts = [
       ...prompts,
       { role: 'assistant', content: `exec ${JSON.stringify({ intent, code: code.slice(0, 8000) })}` },
@@ -91,5 +129,7 @@ export async function execChat({ model, manifest, tool, shareId, board, message,
     ]
   }
   if (last?.status === 'completed') throw new ChatUnavailable('It made no change to this slate.', 'no_change')
-  throw new ChatUnavailable(last?.error?.message || 'The model could not prepare a change.', last?.error?.message ? 'failed' : 'no_answer')
+  const problems = planProblems(last?.error)
+  throw new ChatUnavailable(last?.error?.message || 'The model could not prepare a change.', last?.error?.message ? 'failed' : 'no_answer',
+    { code: last?.error?.code ?? null, ...(problems.length && { problems: groupPlanErrors(problems) }) })
 }

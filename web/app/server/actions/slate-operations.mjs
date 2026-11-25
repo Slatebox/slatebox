@@ -10,6 +10,7 @@ import { applyAddComponent, isAddComponentPlan } from './component-add-op.mjs'
 import { runExpiry } from '../../imports/api/common/slate-operation-runs.mjs'
 import { choreography, publicAction, withOwnGhosts } from '../agents/suggestions.mjs'
 import { undoRecord } from './slate-undo-record.mjs'
+import { normalizePlan } from 'slateboxjs/operations'
 
 // Where update_slate's keys are stored: the fields the engine applier writes on
 // the slate's options (slateboxjs/operations SLATE_KEYS). The line colour also
@@ -336,7 +337,12 @@ export default defineAction({
     // Pause all agents (agents.control): anyone who may edit the slate stops every agent's edits on it.
     if (store && principal.kind === 'agent' && ctx.mode === 'save' && (await store.controlsOf(slate._id)).paused)
       throw problem(423, 'agents_paused', 'People on this slate paused its agents. Ask one of them to resume agents, then retry.')
-    const canvas = (inputs) => canvasEdit(principal, inputs, ctx)
+    // A canvas plan the in-app conversation's model wrote (modelPlans: sessionPrincipal): slips with
+    // one meaning only (a count written "3", a missing count beside the new notes' ids) are repaired
+    // before the plan is checked (normalizePlan); anything else is refused as written. Tokens, MCP
+    // and the API send plans as they are.
+    const canvas = (inputs) =>
+      canvasEdit(principal, principal.modelPlans ? { ...inputs, plan: normalizePlan(inputs.plan).plan } : inputs, ctx)
     let result
     // A library component: the board the chat's Add adds, placed beside the slate's notes.
     if (isAddComponentPlan(input.plan)) result = await applyAddComponent(principal, input, ctx)

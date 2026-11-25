@@ -317,6 +317,7 @@ declare namespace slatebox.ai.keys {
     /** A model provider's id (for example meta or deepinfra), or a service beside the models (stability, google-cse, nounproject, deepgram). */
     provider?: string;
   }): Promise<{
+    /** Each item: A key as anyone may read it: id, provider, status (active, standby, revoked), keyFingerprint, label, source, createdAt/By, activatedAt, revokedAt/By, lastTest, lastUsedAt. Never the key. */
     keys?: Array<Record<string, unknown>>;
     keysAvailable?: boolean;
     fromSettings?: string[];
@@ -2248,10 +2249,11 @@ interface AddComponentPlan {
 interface CanvasPlan {
   /** A concise, natural response describing exactly what will change. Do not claim an operation that is absent from operations. */
   message: string;
-  /** (1–50 items) */
+  /** The operations, applied in order. Each operation's kind decides which fields it may carry; any other field is refused. Fields by kind: add_nodes: count, shape, preset, text, ids, x, y, width, height, placement, style, media; update_nodes: target, changes; delete_nodes: target; duplicate_nodes: target, offset, ids; connect_nodes: from, to, ids, style; disconnect_nodes: from, to, connectionIds; update_connections: from, to, connectionIds, changes; arrange_nodes: target, layout, gap; update_slate: changes. add_nodes requires count (1 to 20): one add_nodes may add several notes (count 3, ids ["a","b","c"]) or one (count 1, ids ["a"]). connect_nodes names its new connectors with ids (one per pair); connectionIds is only for disconnect_nodes and update_connections. Examples: {"kind":"add_nodes","count":1,"ids":["title"],"shape":"rectangle","text":"Title","x":0,"y":0,"width":240,"height":80}; {"kind":"add_nodes","count":2,"ids":["a","b"],"shape":"rectangle","text":"Step","placement":{"relativeTo":"title","direction":"below","arrangement":"row"}}; {"kind":"connect_nodes","from":{"ids":["title"]},"to":{"ids":["a"]},"ids":["title-a"]}; {"kind":"update_nodes","target":{"ids":["a"]},"changes":{"text":"First step"}}. (1–50 items) */
   operations: Array<{
+    /** Which operation this is; it decides the fields the operation may carry. */
     kind: "add_nodes" | "update_nodes" | "delete_nodes" | "duplicate_nodes" | "connect_nodes" | "disconnect_nodes" | "update_connections" | "arrange_nodes" | "update_slate";
-    /** (1 to 20) */
+    /** add_nodes only, and required there: how many notes it adds, 1 to 20. With ids, count is normally ids.length (never fewer). Other kinds take no count. (1 to 20) */
     count?: number;
     shape?: ("rectangle" | "roundedrectangle" | "ellipse" | "circle" | "star" | "triangle" | "pentagon" | "hexagon" | "octagon" | "trapezium" | "parallelogram" | "rarrow" | "larrow" | "diamond" | "stickynote") | {
       /** (1–60 characters) */
@@ -2281,6 +2283,7 @@ interface CanvasPlan {
     preset?: "text" | "sticky";
     /** add_nodes and duplicate_nodes: new note ids (1 to 64 letters, digits, _ or -), which later operations in the plan may name. connect_nodes: ids for the new connectors, one per pair. An id already in use is refused. */
     ids?: string[];
+    /** disconnect_nodes and update_connections only: ids of connectors already on the slate. connect_nodes names its new connectors with ids, never connectionIds. */
     connectionIds?: string[];
     /** (0 to 2000) */
     gap?: number;
@@ -2526,7 +2529,7 @@ interface CanvasPlan {
         color: string;
         gradient?: {
           type: "linear" | "radial";
-          /** (2–8 items) */
+          /** Each item: A CSS colour, such as #336699. (2–8 items) */
           colors: string[];
           direction?: "horizontal" | "vertical" | "diagonal";
         };
@@ -2660,6 +2663,7 @@ interface SlateRead {
     actions?: Array<Record<string, unknown>>;
     [key: string]: unknown;
   };
+  /** Each item: Every key a write sets, read back as the engine loads it, unless fields chose some. */
   nodes: Array<{
     id: string;
     /** The note's text. */
@@ -3677,7 +3681,7 @@ interface WorkshopEditsPlan {
 interface WorkshopLinePlan {
   /** (at least 1 characters) */
   message: string;
-  /** (1–1 items) */
+  /** Each item: Lane workshops: draw a line from a card to another card or to a note (connect), or take away every line between them, or one of the card's lines by its id (disconnect). The lines stay with the card wherever it moves, on or off the lanes. (1–1 items) */
   operations: Array<{
     kind: "connect_workshop_card" | "disconnect_workshop_card";
     cardId: string;

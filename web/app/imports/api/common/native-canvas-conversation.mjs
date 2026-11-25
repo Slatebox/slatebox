@@ -218,10 +218,12 @@ function extendDrawing(nodes,words,prefix,edge,top) {
   if(!additions.length && !links.length) throw new Error('Everything in that request is already on this slate. Name a new step or a new connection.')
   return {mode:'draw',nodes:additions,links,labels}
 }
-export function nativeCanvasDraft(board,message,requestId,generated,samples={}) {
+// `kind`: what the request is read as when the slate decides it, not its words: a smart component described
+// on a builder slate (builder-freeform.mjs) is a board of lanes, drafted or started for it (`generated`).
+export function nativeCanvasDraft(board,message,requestId,generated,samples={},{kind=null}={}) {
   const words=typeof message==='string' ? message.trim():''
   if(!words || words.length>1200 || !/^[a-zA-Z0-9]{17}$/.test(requestId)) throw new Error('Describe the change in up to 1,200 characters.')
-  const mode=nativeRequestKind(words)
+  const mode=kind || nativeRequestKind(words)
   if(mode==='component') {
     // A library entry: its preset (lanes and rules, a decision path, or a business board's sample), named after the topic.
     const {id,topic}=library.catalogAddRequest(words)

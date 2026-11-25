@@ -103,10 +103,11 @@ export function modelFor(shareId, feature = 'canvas') {
   }
 }
 
-const fail = (error) => {
+// builder: the slate builds a smart component (its first turn offers shapes to start from).
+const fail = (error, { builder = false } = {}) => {
   if (error instanceof Meteor.Error) return error
   if (error instanceof TurnRefused) return new Meteor.Error(error.code, error.message)
-  if (error instanceof ChatUnavailable) return new Meteor.Error('draft-unavailable', error.said ? error.message : chatUnavailableWords(error))
+  if (error instanceof ChatUnavailable) return new Meteor.Error('draft-unavailable', error.said ? error.message : chatUnavailableWords(error, { builder }))
   if (['slate_changed', 'no_match', 'id_taken'].includes(error?.code)) return changed()
   if (error?.code === 'rate_limited' || error?.code === 'exec_busy') return new Meteor.Error('busy', 'Another change is being prepared. Try again shortly.')
   if (error?.status && error.status < 500 && error.message) return new Meteor.Error('invalid-turn', error.message)
@@ -168,7 +169,7 @@ Meteor.methods({
       const { writes: _writes, execId: _execId, ...shown } = result
       return shown
     } catch (error) {
-      throw fail(error)
+      throw fail(error, { builder: board.library?.mode === 'build' })
     }
   },
 

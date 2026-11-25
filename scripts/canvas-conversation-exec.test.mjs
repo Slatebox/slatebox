@@ -5,7 +5,10 @@ import { test } from "node:test";
 import { nativeCanvasDraft } from "../web/app/imports/api/common/native-canvas-conversation.mjs";
 import { renderExecTool } from "../web/app/server/actions/client-render.mjs";
 import { aiQualifies, boardDigest, createCanvasConversation, sessionPrincipal } from "../web/app/server/exec/conversation.mjs";
-import { ChatUnavailable, chatPrompts, chatSystemPrompt } from "../web/app/server/methods/ai/exec-chat.mjs";
+import { ChatUnavailable, chatPrompts, chatSystemPrompt, failureWhy, planProblems } from "../web/app/server/methods/ai/exec-chat.mjs";
+import { chatUnavailableWords } from "../web/app/imports/api/common/chat-words.mjs";
+import { validatePlan } from "slateboxjs/operations";
+import { LOGGED_REQUEST, loggedProgram } from "./fixtures/freeform-pieces-program.mjs";
 import { EXEC_LIMITS } from "../web/app/server/exec/limits.mjs";
 import { makeExecWorld } from "./exec-test-world.mjs";
 
@@ -114,7 +117,9 @@ test("the AI path runs the model's program as a preview of this slate; Keep save
   assert.deepEqual(world.slate("demo").nodes[1].relationships.associations.map((a) => a.childId), ["review"]);
 });
 
-test("a failing program goes back to the model once; a second failure is refused", async (t) => {
+// Restated (smart-component-freeform): a failing program goes back to the model up to twice (the first try and two
+// repairs, each told what was wrong); it used to go back once. A program that only reads the slate spends none of them.
+test("a failing program goes back to the model with what was wrong, at most twice; a third failure is refused", async (t) => {
   const { world, conversation, principal } = setup(t);
   const board = structuredClone(world.slate("demo"));
   const good = 'await slatebox.slates.applyOperations({ shareId: "demo", expectedRevision: 0, plan: { message: "Add", operations: [{ kind: "add_nodes", count: 1, shape: "rectangle", text: "Fixed" }] } });';
@@ -123,10 +128,11 @@ test("a failing program goes back to the model once; a second failure is refused
   assert.equal(retried.asked.length, 2);
   assert.match(retried.asked[1].prompts.at(-1).content, /script_error: first try \(line 1\)/);
   assert.deepEqual(preview.labels, ["Fixed"]);
-  const failing = fakeModel("return 1", "throw new Error('again')");
+  const failing = fakeModel("return 1", "throw new Error('again')", "throw new Error('and again')", good);
   await assert.rejects(conversation.preview({ principal, shareId: "demo", board, message: "Add a note that says fixed", id: REQ, useAI: true, model: failing }), ChatUnavailable);
-  assert.equal(failing.asked.length, 2, "one retry, no more");
+  assert.equal(failing.asked.length, 3, "two repairs, no more: the fourth program is never asked for");
   assert.match(failing.asked[1].prompts.at(-1).content, /it made no change to this slate/);
+  assert.match(failing.asked[2].prompts.at(-1).content, /script_error: again/);
   // A program cannot write anywhere else from the conversation.
   const away = fakeModel('await slatebox.slates.applyOperations({ shareId: "many", expectedRevision: 0, plan: { message: "x", operations: [{ kind: "add_nodes", count: 1, shape: "rectangle", text: "x" }] } })');
   await assert.rejects(conversation.preview({ principal, shareId: "demo", board, message: "Add a note somewhere else", id: REQ, useAI: true, model: away }), ChatUnavailable);
@@ -231,4 +237,110 @@ test("a drawing preview carries what the canvas draws: the notes and lines Keep 
   await conversation.keep({ principal, writes: ai.writes, execId: ai.execId });
   const kept = world.slate("demo").nodes.find((n) => n.options.id === "review");
   assert.deepEqual([kept.options.xPos, kept.options.yPos], [ai.canvas.nodes[0].options.xPos, ai.canvas.nodes[0].options.yPos], "drawn where Keep puts it");
+});
+
+// ---- A free-form request's plan (smart-component-freeform): the logged run, its repair, and what a person is told ----
+
+// The program as the model wrote it, its plan captured instead of sent: what validatePlan makes of it.
+async function loggedPlan() {
+  let plan;
+  const slatebox = { slates: { get: async () => ({ revision: 0 }), applyOperations: async (input) => { plan = input.plan; return {}; } } };
+  await new Function("slatebox", `return (async () => {${loggedProgram("demo")}})()`)(slatebox);
+  return plan;
+}
+// The same program with its one remaining slip corrected: connect_nodes names its new connectors with ids.
+const correctedProgram = () => loggedProgram("demo").replace("connectionIds: [id]", "ids: [id]");
+
+test("the declarations the model reads say which fields each operation takes, and that add_nodes needs count", () => {
+  const world = makeExecWorld();
+  try {
+    const system = chatSystemPrompt(world.exec.manifest, "demo");
+    assert.match(system, /Fields by kind: add_nodes: count, shape, preset, text, ids, x, y, width, height, placement, style, media; update_nodes: target, changes;/);
+    assert.match(system, /connect_nodes: from, to, ids, style; disconnect_nodes: from, to, connectionIds;/);
+    assert.match(system, /add_nodes requires count/);
+    assert.match(system, /\/\*\* add_nodes only, and required there: how many notes it adds, 1 to 20\. With ids, count is normally ids\.length/);
+    assert.match(system, /\/\*\* disconnect_nodes and update_connections only: ids of connectors already on the slate\. connect_nodes names its new connectors with ids, never connectionIds\. \*\/\n\s+connectionIds\?: string\[\];/);
+  } finally { world.close(); }
+});
+
+test("the logged free-form plan fails as written (23 counts left out, 5 connectionIds), and the model is told so in two lines", async () => {
+  const plan = await loggedPlan();
+  assert.equal(plan.operations.length, 28);
+  const { errors } = validatePlan(plan, { userMessage: LOGGED_REQUEST });
+  assert.equal(errors.filter((e) => /count must be an integer from 1 to 20/.test(e)).length, 23);
+  assert.deepEqual(errors.filter((e) => !/count must be/.test(e)), [24, 25, 26, 27, 28].map((n) => `Operation ${n} has an unknown field: connectionIds.`));
+  // What the model is told: one line per problem, with what the contract wants instead; never 28 lines.
+  const why = failureWhy({ code: "invalid_operation_plan", message: errors.join(" ") });
+  assert.match(why, /Operations 1–23: count must be an integer from 1 to 20\. Operations 24–28 have an unknown field: connectionIds\./);
+  assert.match(why, /add_nodes requires count/);
+  assert.match(why, /connect_nodes names its new connectors with ids/);
+  assert.equal((why.match(/\bOperations? \d/g) || []).length, 2);
+  assert.deepEqual(planProblems({ code: "invalid_operation_plan", message: "x", details: { errors } }), errors);
+});
+
+test("the logged program is repaired: the count it left out is read from its ids, the refusal goes back grouped, and the fix previews", async (t) => {
+  const { world, conversation, principal } = setup(t);
+  const board = structuredClone(world.slate("demo"));
+  const model = fakeModel(loggedProgram("demo"), correctedProgram());
+  const preview = await conversation.preview({ principal, shareId: "demo", board, message: LOGGED_REQUEST, id: REQ, useAI: true, model });
+  assert.equal(model.asked.length, 2);
+  // The conversation's plans have their unambiguous slips repaired (count = ids.length), so only connectionIds came back.
+  const fix = model.asked[1].prompts.at(-1).content;
+  assert.match(fix, /the plan was refused \(invalid_operation_plan\): Operations 24–28 have an unknown field: connectionIds\./);
+  assert.match(fix, /connect_nodes names its new connectors with ids; connectionIds is only for disconnect_nodes and update_connections\./);
+  assert.doesNotMatch(fix, /count must be/);
+  assert.equal(preview.provider, "ai");
+  assert.equal(preview.links, 5);
+  assert.equal(world.slate("demo").nodes.length, 2, "a preview saves nothing");
+  await conversation.keep({ principal, writes: preview.writes, execId: preview.execId });
+  assert.equal(world.slate("demo").nodes.length, 2 + 23);
+  assert.ok(world.slate("demo").nodes.some((n) => n.options.id === "kit_9"));
+});
+
+test("only the conversation's model plans are repaired: a token's plan with no count is refused as written", async (t) => {
+  const { world } = setup(t);
+  const agent = await world.principalFor(["slates:read", "slates:write"]);
+  await assert.rejects(world.registry.run(agent, "slates.applyOperations", { shareId: "demo", expectedRevision: 0, mode: "preview",
+    plan: { message: "Add", operations: [{ kind: "add_nodes", ids: ["x"], shape: "rectangle", text: "x" }] } }), { code: "invalid_operation_plan" });
+});
+
+test("a program that only reads the slate is a look, not a failure: the repairs are still there for the plan", async (t) => {
+  const { world, conversation, principal } = setup(t);
+  const board = structuredClone(world.slate("demo"));
+  const look = 'const slate = await slatebox.slates.get({ shareId: "demo" }); return slate.revision;';
+  const broken = 'await slatebox.slates.applyOperations({ shareId: "demo", expectedRevision: 0, plan: { message: "Add", operations: [{ kind: "add_nodes", count: 0, shape: "rectangle", text: "x" }] } });';
+  const good = 'await slatebox.slates.applyOperations({ shareId: "demo", expectedRevision: 0, plan: { message: "Add", operations: [{ kind: "add_nodes", count: 1, shape: "rectangle", text: "Kit" }] } });';
+  const model = fakeModel(look, broken, broken, good);
+  const preview = await conversation.preview({ principal, shareId: "demo", board, message: LOGGED_REQUEST, id: REQ, useAI: true, model });
+  assert.equal(model.asked.length, 4);
+  assert.match(model.asked[1].prompts.at(-1).content, /it only read the slate and changed nothing; now make the change/);
+  assert.match(model.asked[2].prompts.at(-1).content, /Operation 1 count must be an integer from 1 to 20\. To fix it: add_nodes requires count/);
+  assert.deepEqual(preview.labels, ["Kit"]);
+  // A second look spends an attempt like any program that changes nothing.
+  const looking = fakeModel(look, look, look, look);
+  await assert.rejects(conversation.preview({ principal, shareId: "demo", board, message: LOGGED_REQUEST, id: REQ, useAI: true, model: looking }), { reason: "no_change" });
+  assert.equal(looking.asked.length, 4);
+});
+
+test("a plan still refused after its repairs is one plain sentence, grouped, with what to try; never the checker's list", async (t) => {
+  const { world, conversation, principal } = setup(t);
+  const board = structuredClone(world.slate("demo"));
+  const noCount = 'await slatebox.slates.applyOperations({ shareId: "demo", expectedRevision: 0, plan: { message: "Add", operations: [' +
+    Array.from({ length: 6 }, (_, i) => `{ kind: "add_nodes", shape: "rectangle", text: "n${i}" }`).join(",") + "] } });";
+  const model = fakeModel(noCount, noCount, noCount);
+  const refused = await conversation.preview({ principal, shareId: "demo", board, message: LOGGED_REQUEST, id: REQ, useAI: true, model }).catch((e) => e);
+  assert.ok(refused instanceof ChatUnavailable);
+  assert.equal(refused.reason, "failed");
+  assert.equal(refused.code, "invalid_operation_plan");
+  assert.deepEqual(refused.problems.map((g) => g.message), ["Operations 1–6: count must be an integer from 1 to 20."]);
+  const words = chatUnavailableWords(refused);
+  assert.equal(words, `Slatebox's agent couldn't fit that onto the canvas: its draft left out how many notes to add in 6 places, even after it tried to fix it. Try saying it more simply, for example "add five notes about the launch", or ask for fewer notes at once.`);
+  assert.doesNotMatch(words, /Operation \d/);
+  assert.match(chatUnavailableWords(refused, { builder: true }), /start from one of the shapes\.$/);
+  // The raw refusal (the logged dump, with no groups to hand) still never reaches a person as a list.
+  const dump = chatUnavailableWords({ reason: "failed", message: Array.from({ length: 20 }, (_, i) => `Operation ${i + 1} count must be an integer from 1 to 20.`).join(" ") });
+  assert.doesNotMatch(dump, /Operation \d/);
+  assert.match(dump, /didn't follow the canvas's rules/);
+  // Any other failure keeps the runner's words.
+  assert.match(chatUnavailableWords({ reason: "failed", message: "The note Budget is not on this slate." }), /^Slatebox couldn't make that change: The note Budget is not on this slate\. Try saying it another way\.$/);
 });
