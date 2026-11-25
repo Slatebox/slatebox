@@ -13,7 +13,7 @@ The Meteor application behind [app.slatebox.com](https://app.slatebox.com) (Slat
 
 ## Overview
 
-The MIT-licensed app powers Slatebox Cloud and self-hosted installations. The repository's top-level `enterprise/` folder (Slatebox Cloud's outside-agent connections) is under the Slatebox Enterprise License instead, and self-hosted builds leave it out. Follow the [self-hosting guide](../self-host/README.md) to install the app, collaboration service and database.
+The MIT-licensed app powers Slatebox Cloud and self-hosted installations. The repository's top-level `enterprise/` folder (Slatebox Cloud's outside-agent connections and team-address service) is under the Slatebox Enterprise License instead; self-hosted images carry it locked until a license key from Slatebox LLC unlocks it. Follow the [self-hosting guide](../self-host/README.md) to install the app, collaboration service and database.
 
 ## Project Structure
 

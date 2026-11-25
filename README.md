@@ -7,7 +7,7 @@
 <div align="center">
 
 **Slatebox is the free, open-source visual intelligence platform for your team and agents.**<br>
-People and agents on one live canvas: diagrams, mind maps, smart boards, plans and presentations that compose themselves. MIT licensed. An open-source alternative to whiteboard tools such as Miro.
+People and agents on one live canvas: diagrams, mind maps, smart boards, plans and presentations that compose themselves. MIT licensed, except outside-agent connections in `enterprise/`. An open-source alternative to whiteboard tools such as Miro.
 
 <sub>*Not affiliated with or endorsed by Miro. Miro is a trademark of its owner.*</sub>
 
@@ -47,7 +47,7 @@ Slatebox is a free, open-source canvas where your team and your agents draw, sor
 
 ### Use Slatebox Cloud
 
-Open [app.slatebox.com](https://app.slatebox.com) and start a slate. Slatebox Cloud is free for individuals and companies alike. The canvas is free. On Slatebox Cloud, AI comes with Slatebox Pro; a self-hosted Slatebox can use its own AI key. Slatebox Pro and balances exist only on Slatebox Cloud. The details are on the [pricing page](https://slatebox.com/plans/).
+Open [app.slatebox.com](https://app.slatebox.com) and start a slate, on your own or as a whole company. The canvas is free. On Slatebox Cloud, AI comes with Slatebox Pro; a self-hosted Slatebox can use its own AI key. Calls you start work the same way, either can be paid from a prepaid balance instead, and Slatebox Business covers a whole team. Slatebox Pro and balances exist only on Slatebox Cloud. The details are on the [pricing page](https://slatebox.com/plans/).
 
 ### Connect your agent
 
@@ -114,9 +114,9 @@ The canvas is [SlateboxJS](https://github.com/Slatebox/slateboxjs), an MIT-licen
 | [`web/app`](web/app) | The Slatebox app behind Slatebox Cloud and every self-hosted install |
 | [`packages/slatebox`](packages/slatebox) | `npx slatebox`: the installer and the `slatebox` command |
 | [`packages/slatebox-mcp`](packages/slatebox-mcp) | The MCP server and CLI for agents (`slatebox-mcp`) |
-| [`packages/create-slatebox`](packages/create-slatebox) | `npm create slatebox`, the same as `npx slatebox install` |
+| [`packages/create-slatebox`](packages/create-slatebox) | A thin `create-slatebox` wrapper around `npx slatebox install` (not published to npm yet) |
 | [`self-host`](self-host) | The one-container image and its guide |
-| [`enterprise`](enterprise) | Outside-agent connections (not MIT, see [License](#license)) |
+| [`enterprise`](enterprise) | Outside-agent connections and the Slatebox Cloud team-address service (not MIT, see [License](#license)) |
 | [`docs`](docs) | Technical notes on the app |
 
 ## Community and support
@@ -128,7 +128,7 @@ The canvas is [SlateboxJS](https://github.com/Slatebox/slateboxjs), an MIT-licen
 
 ## License
 
-Slatebox is [MIT licensed](LICENSE), and so is the [SlateboxJS](https://github.com/Slatebox/slateboxjs) engine. The one exception is the [`enterprise/`](enterprise/README.md) directory, which holds the connections to outside agents (inviting an outside MCP server onto a slate, and connectors). Everything in `enterprise/` is under the source-available [Slatebox Enterprise License](enterprise/LICENSE): you may read, change and test it, but running it in production needs an agreement with Slatebox LLC. Third-party components keep their own licenses. See [LICENSING.md](LICENSING.md).
+Slatebox is [MIT licensed](LICENSE), and so is the [SlateboxJS](https://github.com/Slatebox/slateboxjs) engine. The one exception is the [`enterprise/`](enterprise/README.md) directory, which holds the connections to outside agents (inviting an outside MCP server onto a slate, and connectors) and the Slatebox Cloud team-address service behind `<name>.slatebox.team`. Everything in `enterprise/` is under the source-available [Slatebox Enterprise License](enterprise/LICENSE): you may read, change and test it, but running it in production needs an agreement with Slatebox LLC. Third-party components keep their own licenses. See [LICENSING.md](LICENSING.md).
 
 Slatebox's own MCP server, command line and API, and single sign-on with the bundled Keycloak, are MIT and work on every install.
 

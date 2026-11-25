@@ -41,7 +41,7 @@ unacceptable behavior through https://slatebox.com/contact/?topic=conduct.
 | [`self-host`](self-host) | The one-container image `ghcr.io/slatebox/slatebox` | with the app |
 | [`packages/slatebox`](packages/slatebox) | `npx slatebox`: the installer and CLI | npm `slatebox`, tags `slatebox@X.Y.Z` |
 | [`packages/slatebox-mcp`](packages/slatebox-mcp) | The MCP server and local CLI | npm `slatebox-mcp`, tags `slatebox-mcp@X.Y.Z` |
-| [`packages/create-slatebox`](packages/create-slatebox) | `npm create slatebox`, a thin wrapper | follows `slatebox` |
+| [`packages/create-slatebox`](packages/create-slatebox) | A thin `create-slatebox` wrapper around `npx slatebox install` (not on npm yet) | follows `slatebox` |
 | [`scripts`](scripts) | Tests, checks and the release script | |
 | [`docs`](docs) | Guides that live with the code (docs.slatebox.com is the published site) | |
 | [`enterprise`](enterprise) | Enterprise features. **Not MIT**: [Slatebox Enterprise License](enterprise/LICENSE) | with the app |

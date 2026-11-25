@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Tim Heckel and Slatebox contributors
+Copyright (c) 2026 Slatebox LLC and Slatebox contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
