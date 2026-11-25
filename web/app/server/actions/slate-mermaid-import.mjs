@@ -179,7 +179,7 @@ export default defineAction({
     required: ['ok', 'mode', 'shareId', 'kind', 'notes', 'lines', 'message'],
   },
   failure: { code: 'mermaid_import_failed', message: 'The diagram could not be drawn. Retry with the same key.' },
-  tool: { name: 'import_mermaid', title: 'Draw a mind map, flowchart or Gantt plan from Mermaid', description: 'Draw a mind map, brainstorm, flowchart or project plan (Gantt chart) written in Mermaid (flowchart/graph, mindmap or gantt) as editable notes and lines on a shared slate, new or beside what an existing slate holds. Returns the slate link, where the team edits it live and can present it.' },
+  tool: { name: 'import_mermaid', title: 'Draw a mind map, flowchart or Gantt plan', description: 'Draw an editable mind map, brainstorm, flowchart or project plan (Gantt chart) on a shared slate, from an outline written in Mermaid (flowchart/graph, mindmap or gantt), on a new slate or beside what an existing slate holds. Returns the slate link, where the team edits it live and can present it.' },
   handler(principal, input, ctx) {
     let model
     try {

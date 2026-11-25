@@ -110,7 +110,7 @@ export const presentationsCreate = defineAction({
   },
   output: createOutput,
   load: loadSlate(true),
-  tool: { name: 'create_presentation', title: 'Create a presentation', description: 'Turn a slate into slides: the Slatebox agent plans a styled presentation (its steps, layouts and captions) that flies across the canvas. Returns the steps and a link that plays it.' },
+  tool: { name: 'create_presentation', title: 'Create a presentation', description: 'Make a presentation (slides) from a slate: the Slatebox agent composes a styled deck (its steps, layouts and captions) that flies across the canvas. For slides about a topic, draw the points on a slate first (import_mermaid). Returns the steps and a link that plays it.' },
   precheck(_principal, input) {
     if (input.palette && !input.style) throw problem(400, 'invalid_request', 'A palette goes with a style: name the style too.', { details: { field: 'palette' } })
   },

@@ -64,7 +64,7 @@ export default defineAction({
   input: { type: 'object', properties: { shareId: shareIdInput }, additionalProperties: false },
   output: { type: 'object', properties: { catalogVersion: { type: 'string' }, components: { type: 'array', items: { type: 'object' } } }, required: ['catalogVersion', 'components'] },
   load: (principal, input, ctx) => (input.shareId ? loadSlate(false)(principal, input, ctx) : null),
-  tool: { name: 'list_components', title: 'List boards: retro, pipeline, budget and more', description: 'List the boards and starters a person can add to a slate, such as a retro, pros and cons, now / next / later, impact × effort, decision path, triage, team board, launch plan, hiring plan, sales pipeline, budget and incident review, with what each one is for. A slate holds up to 8 boards side by side.' },
+  tool: { name: 'list_components', title: 'Find a board: retro, kanban lanes, pipeline, budget', description: 'List the boards a person can add to a slate for the team to work on, such as a retro, team board (kanban lanes), pros and cons, now / next / later, impact × effort, decision path, triage, launch plan, hiring plan, sales pipeline, budget and incident review, with what each one is for. edit_slate adds one to a slate. A slate holds up to 8 boards side by side.' },
   handler: (_principal, _input, { resource: slate }) => listComponents(slate ?? null),
 })
 

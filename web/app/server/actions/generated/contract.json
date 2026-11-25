@@ -7778,8 +7778,8 @@
       },
       "tool": {
         "name": "edit_slate",
-        "title": "Edit a slate",
-        "description": "Edit a diagram, mind map, whiteboard or board on a slate: add, change, connect, lay out or remove notes and lines, and edit boards (cards, lanes, rules, plan weeks, budgets, presentation order; name the board on a slate with several). One call saves atomically; mode \"preview\" shows the result without saving. Your canvas edits appear live as suggestions people on the slate keep or discard.",
+        "title": "Edit a diagram, mind map or whiteboard",
+        "description": "Edit a slate (a diagram, mind map, whiteboard or board): add, change, connect, lay out or remove notes and lines, add boards such as a retro, and edit boards (cards, lanes, rules, plan weeks, budgets, presentation order; name the board on a slate with several). One call saves atomically; mode \"preview\" shows the result without saving. Your canvas edits appear live as suggestions people on the slate keep or discard.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": true,
@@ -8344,8 +8344,8 @@
       },
       "tool": {
         "name": "import_mermaid",
-        "title": "Draw a mind map, flowchart or Gantt plan from Mermaid",
-        "description": "Draw a mind map, brainstorm, flowchart or project plan (Gantt chart) written in Mermaid (flowchart/graph, mindmap or gantt) as editable notes and lines on a shared slate, new or beside what an existing slate holds. Returns the slate link, where the team edits it live and can present it.",
+        "title": "Draw a mind map, flowchart or Gantt plan",
+        "description": "Draw an editable mind map, brainstorm, flowchart or project plan (Gantt chart) on a shared slate, from an outline written in Mermaid (flowchart/graph, mindmap or gantt), on a new slate or beside what an existing slate holds. Returns the slate link, where the team edits it live and can present it.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": false,
@@ -12273,8 +12273,8 @@
       },
       "tool": {
         "name": "list_components",
-        "title": "List boards: retro, pipeline, budget and more",
-        "description": "List the boards and starters a person can add to a slate, such as a retro, pros and cons, now / next / later, impact × effort, decision path, triage, team board, launch plan, hiring plan, sales pipeline, budget and incident review, with what each one is for. A slate holds up to 8 boards side by side.",
+        "title": "Find a board: retro, kanban lanes, pipeline, budget",
+        "description": "List the boards a person can add to a slate for the team to work on, such as a retro, team board (kanban lanes), pros and cons, now / next / later, impact × effort, decision path, triage, launch plan, hiring plan, sales pipeline, budget and incident review, with what each one is for. edit_slate adds one to a slate. A slate holds up to 8 boards side by side.",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,
@@ -14214,7 +14214,7 @@
       "tool": {
         "name": "create_presentation",
         "title": "Create a presentation",
-        "description": "Turn a slate into slides: the Slatebox agent plans a styled presentation (its steps, layouts and captions) that flies across the canvas. Returns the steps and a link that plays it.",
+        "description": "Make a presentation (slides) from a slate: the Slatebox agent composes a styled deck (its steps, layouts and captions) that flies across the canvas. For slides about a topic, draw the points on a slate first (import_mermaid). Returns the steps and a link that plays it.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": false,
