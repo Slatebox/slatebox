@@ -460,6 +460,7 @@ export function integrationActions(service) {
     defineAction({
       id: 'integrations.allowChanges',
       title: 'Let an integration make changes too',
+      failure: { code: 'internal_error', message: 'Slatebox could not turn on that agent\'s changes just now. Try again in a moment.' },
       // People only: an agent never widens an agent's rights.
       description: 'Turn on the changes an integration\'s server offers that your consent has off (one connected before agents read and write kept them off), on every slate it is on. Each change still waits on a card you approve; ones that delete, close or merge stay off. Only tools you allowed before at the same definition: a changed tool asks for integrations.review first. Needs Slatebox Pro or Business.',
       toolset: 'connectors',
