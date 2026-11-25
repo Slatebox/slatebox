@@ -797,7 +797,7 @@ test('private API slate creation shares the app starter, rejects ownership overr
 
   const { nativeSlateFromBrief } = await import('../web/app/imports/api/common/native-diagram-brief.mjs')
   const { summarizeSlate: summarizeSlateForAI } = requireModel('slateboxjs/operations')
-  for (const source of [undefined, 'call-status', 'sign-in-outage', 'interview-notes', 'friday-launch']) {
+  for (const source of [undefined, 'call-status', 'sign-in-outage', 'interview-notes']) {
     const words = 'Field report -> Support response\nSupport response → Follow up'
     const body = {kind:'diagram', brief:words, ...(source ? {source} : {})}
     const create = {...req, key:'diagram-'+(source || 'blank'), body}
@@ -907,7 +907,7 @@ test('public create schema distinguishes legacy maps and native diagram sources'
   assert.deepEqual(diagram.required,['kind','brief'])
   assert.equal(diagram.properties.kind.const,'diagram')
   assert.equal(diagram.properties.brief.maxLength,1200)
-  assert.deepEqual([...diagram.properties.source.enum].sort(),['call-status','friday-launch','interview-notes','sign-in-outage'])
+  assert.deepEqual([...diagram.properties.source.enum].sort(),['call-status','interview-notes','sign-in-outage'])
   assert.deepEqual(operation.responses[201].content['application/json'].schema,operation.responses[200].content['application/json'].schema)
   assert.equal(operation['x-required-scope'],'slates:write')
 })

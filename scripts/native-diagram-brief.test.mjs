@@ -3,7 +3,6 @@ import test from 'node:test'
 import { nativeSlateFromBrief, readCreationBrief } from '../web/app/imports/api/common/native-diagram-brief.mjs'
 import { nativeDrawingContext } from '../web/app/imports/api/common/native-graph-draft.mjs'
 import callStatus from '../web/app/imports/api/common/call-status-slate.mjs'
-import fridayLaunch from '../web/app/imports/api/common/friday-launch-slate.mjs'
 
 function read(brief, extra = {}) {
   return readCreationBrief('#' + new URLSearchParams({ brief, ...extra }))
@@ -60,30 +59,8 @@ test('a named source accepts pasted evidence lines and a path through a source n
   assert.deepEqual(added.slice(0, 2).map(node => node.relationships.associations), [[], []])
 })
 
-test('the homepage session source opens its decided drawing and extends a named note', () => {
-  const question = 'What can still ship on Friday?'
-  assert.equal(read(question, { source: 'friday-launch' }).source, 'friday-launch')
-  const original = nativeSlateFromBrief(question, 'friday-launch')
-  assert.deepEqual(original.nodes, fridayLaunch.nodes)
-  assert.deepEqual(original.nodes.map(node => node.options.id), ['promise', 'checkout', 'migration', 'friday', 'reader', 'monday', 'tell'])
-  assert.equal(original.nodes.flatMap(node => node.relationships.associations).length, 7)
-  assert.deepEqual(original.options, { ...fridayLaunch.options, creationBrief: question, briefSource: 'friday-launch' })
-
-  const row = 'Ships Monday → Email the pilot customers'
-  const extended = nativeSlateFromBrief(row, 'friday-launch')
-  assert.equal(extended.options.creationBrief, row)
-  assert.equal(extended.options.briefSource, 'friday-launch')
-  assert.deepEqual(extended.nodes.slice(0, 7).map(node => node.options), fridayLaunch.nodes.map(node => node.options))
-  assert.equal(extended.nodes.length, 8)
-  assert.equal(extended.nodes.filter(node => node.options.text === 'Ships Monday').length, 1)
-  const added = extended.nodes[7]
-  assert.equal(added.options.text, 'Email the pilot customers')
-  assert.deepEqual(added.relationships.associations, [])
-  assert.deepEqual(extended.nodes.find(node => node.options.id === 'monday').relationships.associations.map(edge => edge.childId),
-    ['tell', added.options.id])
-  assert.equal(extended.nodes.flatMap(node => node.relationships.associations).length, 8)
-  assert.equal(fridayLaunch.nodes.length, 7)
-  assert.equal(fridayLaunch.nodes.find(node => node.options.id === 'monday').relationships.associations.length, 1)
+test('the retired Friday sample is not a source', () => {
+  assert.throws(() => read('What can still ship on Friday?', { source: 'friday-launch' }), /Unknown source/)
 })
 
 test('preserves pasted notes and rejects an incomplete or oversized brief', () => {
@@ -106,10 +83,11 @@ test('collaboration and budget examples use the same Create slate URL', async ()
 })
 
 test('a brief row names a source note that wraps over two lines', () => {
-  const board = nativeSlateFromBrief('second engineer reads it first → Pair on the review', 'friday-launch')
-  assert.equal(board.nodes.length, 8)
-  const reader = board.nodes.find(node => node.options.id === 'reader')
-  assert.equal(reader.options.text, 'Second engineer\nreads it first')
-  assert.deepEqual(reader.relationships.associations.map(edge => edge.childId), ['monday', board.nodes[7].options.id])
-  assert.equal(board.nodes[7].options.text, 'Pair on the review')
+  const board = nativeSlateFromBrief('can’t open a workspace → Offer a callback', 'sign-in-outage')
+  const blocked = board.nodes.find(node => node.options.id === 'blocked')
+  assert.equal(blocked.options.text, 'Can’t open\na workspace')
+  const added = board.nodes.at(-1)
+  assert.equal(added.options.text, 'Offer a callback')
+  assert.ok(blocked.relationships.associations.some(edge => edge.childId === added.options.id))
+  assert.equal(board.nodes.filter(node => /can’t open/i.test(node.options.text)).length, 1)
 })

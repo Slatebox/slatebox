@@ -1772,7 +1772,7 @@ declare namespace slatebox.slates {
     brief: string;
   } | {
     kind: "diagram";
-    source?: "sign-in-outage" | "call-status" | "interview-notes" | "friday-launch";
+    source?: "sign-in-outage" | "call-status" | "interview-notes";
     /** Plain text, including multiple lines. Connect two named steps using → or ->. Use up to 24 distinct notes including source notes. (1–1200 characters) */
     brief: string;
   }): Promise<({

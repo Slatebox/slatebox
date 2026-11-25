@@ -4,7 +4,7 @@
 // first (loadBoardRoute).
 
 /** Each board route and the name of the sample it opens. */
-export const BOARD_SAMPLES = { 'launch-plan': 'sampleLaunchPlan', 'hiring-plan': 'hiringPlanSample', pipeline: 'samplePipeline', budget: 'sampleBudget', nest: 'sortEvidenceSample' }
+export const BOARD_SAMPLES = { 'launch-plan': 'launchPlanSample', 'hiring-plan': 'hiringPlanSample', pipeline: 'samplePipeline', budget: 'sampleBudget', nest: 'sortEvidenceSample' }
 
 /** Whether a workshop link (#model=…) holds one of these boards. */
 export const boardInLink = hash => {

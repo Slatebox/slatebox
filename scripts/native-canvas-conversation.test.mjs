@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {nativeCanvasDraft, mapFromDrawing} from '../web/app/imports/api/common/native-canvas-conversation.mjs'
 import {nativeSlateFromBrief} from '../web/app/imports/api/common/native-diagram-brief.mjs'
+import sevenNoteDrawing from './fixtures/seven-note-drawing.mjs'
 import {draftToPlan} from '../web/app/imports/api/common/canvas-draft-plan.mjs'
 import {createRequire} from 'node:module'
 import {readFileSync} from 'node:fs'
@@ -52,7 +53,7 @@ test('provider sees relevant source note text and real links, with bounded discl
   assert.deepEqual(context.connections,[{from:'note-1',to:'note-2'},{from:'note-2',to:'note-3'}])
   assert.ok(!JSON.stringify(context).includes('private.invalid'))
 })
-const friday=()=>nativeSlateFromBrief('What can still ship on Friday?','friday-launch')
+const friday=()=>({...structuredClone(sevenNoteDrawing),options:{...sevenNoteDrawing.options,creationBrief:'What can still ship on Friday?'}})
 const note=(board,id)=>board.nodes.find(n=>n.options.id===id)
 test('a step named after an existing note extends that note beside it, in any letter case',()=>{
   const base=friday();const original=structuredClone(base)

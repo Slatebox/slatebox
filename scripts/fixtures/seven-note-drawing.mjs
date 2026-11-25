@@ -1,4 +1,5 @@
-// Shared with the public homepage.
+// A seven-note drawing with wrapped notes and shared steps: the fixture the drawing-extension tests
+// grow (it was the retired homepage Friday sample; now a test fixture only).
 export default {
   "options": {
     "name": "What can still ship on Friday?",

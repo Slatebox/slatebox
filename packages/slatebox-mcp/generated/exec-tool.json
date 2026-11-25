@@ -3151,8 +3151,7 @@
             "enum": [
               "sign-in-outage",
               "call-status",
-              "interview-notes",
-              "friday-launch"
+              "interview-notes"
             ]
           },
           "confirm": {

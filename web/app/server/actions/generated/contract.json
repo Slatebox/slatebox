@@ -1205,8 +1205,7 @@
             "enum": [
               "sign-in-outage",
               "call-status",
-              "interview-notes",
-              "friday-launch"
+              "interview-notes"
             ]
           }
         },
@@ -1245,8 +1244,7 @@
                 "enum": [
                   "sign-in-outage",
                   "call-status",
-                  "interview-notes",
-                  "friday-launch"
+                  "interview-notes"
                 ]
               },
               "brief": {

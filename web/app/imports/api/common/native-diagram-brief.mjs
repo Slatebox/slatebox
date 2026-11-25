@@ -1,7 +1,6 @@
 import signInOutage from './sign-in-outage.mjs'
 import interviews from './interview-notes-slate.mjs'
 import callStatus from './call-status-slate.mjs'
-import fridayLaunch from './friday-launch-slate.mjs'
 
 const maxBriefLength = 1200
 const invalidText = /[<>\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u
@@ -10,7 +9,6 @@ const sources = new Map([
   ['sign-in-outage', signInOutage],
   ['call-status', callStatus],
   ['interview-notes', interviews],
-  ['friday-launch', fridayLaunch],
 ])
 
 export const nativeDiagramSources = Object.freeze([...sources.keys()])

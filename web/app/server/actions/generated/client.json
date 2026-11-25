@@ -6165,7 +6165,7 @@
         "DiagramSummary",
         "Workshop"
       ],
-      "dts": "declare namespace slatebox.slates {\n  /** Create a slate. Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate. @scope slates:write */\n  function create(input: {\n    kind?: \"map\";\n    /** (1–160 characters) */\n    brief: string;\n  } | {\n    kind: \"diagram\";\n    source?: \"sign-in-outage\" | \"call-status\" | \"interview-notes\" | \"friday-launch\";\n    /** Plain text, including multiple lines. Connect two named steps using → or ->. Use up to 24 distinct notes including source notes. (1–1200 characters) */\n    brief: string;\n  }): Promise<({\n    shareId: string;\n    url: string;\n    workshop: Workshop;\n    [key: string]: unknown;\n  } | {\n    shareId: string;\n    url: string;\n    diagram: DiagramSummary;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.slates {\n  /** Create a slate. Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate. @scope slates:write */\n  function create(input: {\n    kind?: \"map\";\n    /** (1–160 characters) */\n    brief: string;\n  } | {\n    kind: \"diagram\";\n    source?: \"sign-in-outage\" | \"call-status\" | \"interview-notes\";\n    /** Plain text, including multiple lines. Connect two named steps using → or ->. Use up to 24 distinct notes including source notes. (1–1200 characters) */\n    brief: string;\n  }): Promise<({\n    shareId: string;\n    url: string;\n    workshop: Workshop;\n    [key: string]: unknown;\n  } | {\n    shareId: string;\n    url: string;\n    diagram: DiagramSummary;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "create_slate",
         "title": "Draw a flowchart, diagram or decision map",
@@ -6190,8 +6190,7 @@
               "enum": [
                 "sign-in-outage",
                 "call-status",
-                "interview-notes",
-                "friday-launch"
+                "interview-notes"
               ]
             },
             "confirm": {
