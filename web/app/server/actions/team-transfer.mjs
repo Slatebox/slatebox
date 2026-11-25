@@ -243,4 +243,138 @@ export const teamImportsDiscard = defineAction({
   handler: (principal, input, { deps }) => deps.teamTransfer.discardImport(principal.userId, input.importId),
 })
 
-export default [teamExport, teamImportsStart, teamImportsList, teamImportsGet, teamImportsConfirm, teamImportsInvite, teamImportsDiscard]
+// ---- Moves: a team's own owner moves it here (team-export/transfer.mjs startMove).
+const moveSummary = (record) => ({
+  ...summarize(record),
+  into: record.move?.intoOrgId ? 'your_team' : 'new_team',
+  ...(record.seats && { seats: record.seats }),
+  ...(record.settings && { settings: record.settings }),
+})
+const moveSummarySchema = {
+  type: 'object',
+  properties: {
+    ...importSummary.properties,
+    into: { type: 'string', enum: ['your_team', 'new_team'] },
+    seats: { type: 'object' },
+    settings: { type: 'string', enum: ['imported', 'kept_yours'] },
+  },
+  required: ['importId', 'state'],
+}
+
+export const teamMoveStart = defineAction({
+  id: 'teamMove.start',
+  title: 'Move a team here',
+  description:
+    'For the owner of a team on this server, or a signed-in person in no team yet: a one-time address (1 hour) to upload a team export from another Slatebox server, to move that team here. uploadUrl takes the archive as a POST of application/octet-stream (at most maxBytes uncompressed), with its passphrase when it is encrypted (Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or Slatebox-Export-Passphrase when it is plain ASCII). The answer is the report of a pending move: nothing is visible to anyone until teamMove.confirm. into says where it lands: your_team (it joins the team you own) or new_team (it becomes your team). The same archive uploaded again answers with the first move. One move waits at a time.',
+  toolset: 'team',
+  kind: 'write',
+  scope: 'team:move',
+  principals: ['person', 'agent'],
+  mounts: { ddp: false, http: { method: 'POST', path: '/team/moves', operationId: 'startTeamMove' } },
+  idempotency: 'optional',
+  replay: 'rerun',
+  successStatus: 200,
+  input: { type: 'object', properties: {}, additionalProperties: false },
+  output: {
+    type: 'object',
+    properties: {
+      uploadUrl: { type: 'string' },
+      method: { type: 'string', enum: ['POST'] },
+      contentType: { type: 'string' },
+      passphraseHeader: { type: 'string' },
+      passphraseHeaderBase64: { type: 'string' },
+      expiresAt: { type: 'string' },
+      maxBytes: { type: 'integer' },
+      into: { type: 'string', enum: ['your_team', 'new_team'] },
+    },
+    required: ['uploadUrl', 'method', 'expiresAt', 'into'],
+  },
+  tool: { name: 'start_team_move', title: 'Move a team here', description: 'For a team owner, or someone in no team yet: get a one-time address (1 hour) to upload a team export from another Slatebox server. It waits as a pending move that only you see until you confirm it.' },
+  handler: (principal, _input, { deps }) => deps.teamTransfer.startMove(principal.userId),
+})
+
+export const teamMoveList = defineAction({
+  id: 'teamMove.list',
+  title: 'My moves',
+  description: 'Your own team moves here, newest first: the one waiting to confirm, and those done or failed.',
+  toolset: 'team',
+  kind: 'read',
+  scope: 'team:move',
+  principals: ['person', 'agent'],
+  mounts: { ddp: false, http: { method: 'GET', path: '/team/moves', operationId: 'listTeamMoves' } },
+  input: { type: 'object', properties: {}, additionalProperties: false },
+  output: { type: 'object', properties: { moves: { type: 'array', items: moveSummarySchema } }, required: ['moves'] },
+  tool: { name: 'list_team_moves', title: 'List my team moves', description: 'List your own team moves to this server, newest first.' },
+  handler: (principal, _input, { deps }) => deps.teamTransfer.listMoves(principal.userId).then((records) => ({ moves: records.map(moveSummary) })),
+})
+
+export const teamMoveGet = defineAction({
+  id: 'teamMove.get',
+  title: 'Move',
+  description: 'One of your own team moves, with its report: what will arrive, what was left out and why.',
+  toolset: 'team',
+  kind: 'read',
+  scope: 'team:move',
+  principals: ['person', 'agent'],
+  mounts: { ddp: false, http: { method: 'GET', path: '/team/moves/{importId}', operationId: 'getTeamMove' } },
+  input: { type: 'object', properties: { importId }, required: ['importId'], additionalProperties: false },
+  output: { type: 'object', properties: { ...moveSummarySchema.properties, report }, required: ['importId', 'state'] },
+  tool: { name: 'get_team_move', title: 'Read a team move', description: 'Read one of your own team moves and its report.' },
+  async handler(principal, input, { deps }) {
+    const record = await deps.teamTransfer.getMove(principal.userId, input.importId)
+    return { ...moveSummary(record), ...(record.report && { report: record.report }) }
+  },
+})
+
+export const teamMoveConfirm = defineAction({
+  id: 'teamMove.confirm',
+  title: 'Confirm move',
+  description:
+    'Confirms your pending move. In no team: the moved team goes live and you become its owner. As a team owner: its slates, presentations, people (as placeholders) and library drafts join your team; your brand kit and agent choices stay, and the moved ones are used only when your team has none. You take the seat of the moved person with your verified address (else of its owner); someone already in your team takes the seat with their address. With invite true, every other person whose address the source had verified gets an email to claim their account (an address that already has an account here must agree to move); nobody gets an account they can sign in to without that email. Slates get back their visibility; board rules stay switched off until reviewed; keys, tokens and agent connections are never moved.',
+  toolset: 'team',
+  kind: 'write',
+  scope: 'team:move',
+  principals: ['person', 'agent'],
+  mounts: { ddp: false, http: { method: 'POST', path: '/team/moves/{importId}/confirm', operationId: 'confirmTeamMove' } },
+  confirm: true,
+  idempotency: 'optional',
+  replay: 'stored',
+  successStatus: 200,
+  input: { type: 'object', properties: { importId, invite: { type: 'boolean', default: false } }, required: ['importId'], additionalProperties: false },
+  output: {
+    type: 'object',
+    properties: {
+      importId: { type: 'string' },
+      state: { type: 'string', enum: ['confirmed'] },
+      teamId: { type: 'string' },
+      merged: { type: 'boolean' },
+      seats: { type: 'object' },
+      settings: { type: 'string', enum: ['imported', 'kept_yours'] },
+      invited: invitedSchema,
+    },
+    required: ['importId', 'state', 'teamId'],
+  },
+  tool: { name: 'confirm_team_move', title: 'Confirm a team move', description: 'Confirm your pending team move: the team becomes yours, or joins the team you own, and optionally its people are emailed to claim their accounts. The person agrees first.' },
+  handler: (principal, input, { deps }) => deps.teamTransfer.confirmMove(principal.userId, input.importId, { invite: input.invite }),
+})
+
+export const teamMoveDiscard = defineAction({
+  id: 'teamMove.discard',
+  title: 'Discard move',
+  description: 'Discards your pending move: everything it wrote (slates, files, people, settings, library drafts) is deleted. A pending move nobody confirms is discarded after 14 days.',
+  toolset: 'team',
+  kind: 'write',
+  scope: 'team:move',
+  principals: ['person', 'agent'],
+  mounts: { ddp: false, http: { method: 'POST', path: '/team/moves/{importId}/discard', operationId: 'discardTeamMove' } },
+  destructive: true,
+  idempotency: 'optional',
+  replay: 'stored',
+  successStatus: 200,
+  input: { type: 'object', properties: { importId }, required: ['importId'], additionalProperties: false },
+  output: { type: 'object', properties: { importId: { type: 'string' }, state: { type: 'string', enum: ['discarded'] } }, required: ['importId', 'state'] },
+  tool: { name: 'discard_team_move', title: 'Discard a team move', description: 'Delete your pending team move and everything it wrote.' },
+  handler: (principal, input, { deps }) => deps.teamTransfer.discardMove(principal.userId, input.importId),
+})
+
+export default [teamExport, teamImportsStart, teamImportsList, teamImportsGet, teamImportsConfirm, teamImportsInvite, teamImportsDiscard, teamMoveStart, teamMoveList, teamMoveGet, teamMoveConfirm, teamMoveDiscard]

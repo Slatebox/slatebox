@@ -11,6 +11,7 @@ export const tokenPermissions = [
   { scope: 'ai:admin:read', label: 'Read this server\'s AI control: what answers each AI feature, its problems and its change history (administrators only)', explain: 'See which AI model answers each part of Slatebox, any problems with that set-up, and who changed it. It cannot change anything, and never sees a key. Only if you are an administrator.' },
   { scope: 'team:export', label: 'Export everything my team owns (team admins only)', explain: 'Download a copy of every slate and setting your team owns. Only if you are a team admin.' },
   { scope: 'team:import', label: 'Import a team export as a new team, and confirm or discard it (administrators only)', explain: 'Bring a team\'s exported copy into this server as a new team. Only for administrators.' },
+  { scope: 'team:move', label: 'Move a team here from another Slatebox server, and confirm or discard the move (team owners, or people in no team yet)', explain: 'Bring your team\'s exported copy from another Slatebox server into this one, as your team. Only if you own your team here or are in no team yet.' },
   { scope: 'library:review', label: 'Review library submissions (administrators)', explain: 'Open, refine, publish and take down what people submit to the shared library. Only for administrators.' },
 ]
 

@@ -8,6 +8,9 @@
 //   apiTokens.*        Tokens are credentials. A script must never mint, list or revoke them,
 //                      so token management is unreachable from every script on every surface.
 //   exec.run, exec.get A script does not start or read other scripts (no recursion).
+//   teamMove.*         Moving a whole team onto this server is the person's own step, run from
+//                      `npx slatebox migrate` / `slatebox import` or the API: it needs the archive's
+//                      bytes uploaded, which no script can send, so a script gets nothing from it.
 //
 // For later packages that add actions: a bound write must declare idempotency 'optional' or
 // 'required' (exec derives a key per call so a confirmed or retried script never saves twice),
@@ -15,7 +18,7 @@
 // wrote goes under a labelled field (details.content, with who wrote it); anything else is a
 // channel for injected instructions into the agent reading the error.
 
-export const NEVER_BOUND = Object.freeze([/^apiTokens\./, /^exec\.(run|get)$/])
+export const NEVER_BOUND = Object.freeze([/^apiTokens\./, /^exec\.(run|get)$/, /^teamMove\./])
 
 export const isNeverBound = (id) => NEVER_BOUND.some((rule) => rule.test(id))
 

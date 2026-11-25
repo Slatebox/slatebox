@@ -15519,6 +15519,724 @@
         }
       }
     },
+    "/team/moves": {
+      "post": {
+        "operationId": "startTeamMove",
+        "summary": "Move a team here",
+        "description": "For the owner of a team on this server, or a signed-in person in no team yet: a one-time address (1 hour) to upload a team export from another Slatebox server, to move that team here. uploadUrl takes the archive as a POST of application/octet-stream (at most maxBytes uncompressed), with its passphrase when it is encrypted (Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or Slatebox-Export-Passphrase when it is plain ASCII). The answer is the report of a pending move: nothing is visible to anyone until teamMove.confirm. into says where it lands: your_team (it joins the team you own) or new_team (it becomes your team). The same archive uploaded again answers with the first move. One move waits at a time.",
+        "x-required-scope": "team:move",
+        "x-slatebox": {
+          "action": "teamMove.start",
+          "toolset": "team",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "uploadUrl": {
+                      "type": "string"
+                    },
+                    "method": {
+                      "type": "string",
+                      "enum": [
+                        "POST"
+                      ]
+                    },
+                    "contentType": {
+                      "type": "string"
+                    },
+                    "passphraseHeader": {
+                      "type": "string"
+                    },
+                    "passphraseHeaderBase64": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "maxBytes": {
+                      "type": "integer"
+                    },
+                    "into": {
+                      "type": "string",
+                      "enum": [
+                        "your_team",
+                        "new_team"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "uploadUrl",
+                    "method",
+                    "expiresAt",
+                    "into"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listTeamMoves",
+        "summary": "My moves",
+        "description": "Your own team moves here, newest first: the one waiting to confirm, and those done or failed.",
+        "x-required-scope": "team:move",
+        "x-slatebox": {
+          "action": "teamMove.list",
+          "toolset": "team",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ]
+        },
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "moves": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "importId": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "pending",
+                              "confirming",
+                              "confirmed",
+                              "discarding",
+                              "discarded",
+                              "failed"
+                            ]
+                          },
+                          "teamId": {
+                            "type": "string"
+                          },
+                          "teamName": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string"
+                          },
+                          "failure": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "invited": {
+                            "type": "object",
+                            "properties": {
+                              "sent": {
+                                "type": "integer"
+                              },
+                              "needsConsent": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "mailDisabled": {
+                                "type": "integer"
+                              },
+                              "unverified": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "into": {
+                            "type": "string",
+                            "enum": [
+                              "your_team",
+                              "new_team"
+                            ]
+                          },
+                          "seats": {
+                            "type": "object"
+                          },
+                          "settings": {
+                            "type": "string",
+                            "enum": [
+                              "imported",
+                              "kept_yours"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "importId",
+                          "state"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "moves"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/team/moves/{importId}": {
+      "get": {
+        "operationId": "getTeamMove",
+        "summary": "Move",
+        "description": "One of your own team moves, with its report: what will arrive, what was left out and why.",
+        "x-required-scope": "team:move",
+        "x-slatebox": {
+          "action": "teamMove.get",
+          "toolset": "team",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ]
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "importId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{1,40}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "importId": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "running",
+                        "pending",
+                        "confirming",
+                        "confirmed",
+                        "discarding",
+                        "discarded",
+                        "failed"
+                      ]
+                    },
+                    "teamId": {
+                      "type": "string"
+                    },
+                    "teamName": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "failure": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "invited": {
+                      "type": "object",
+                      "properties": {
+                        "sent": {
+                          "type": "integer"
+                        },
+                        "needsConsent": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "mailDisabled": {
+                          "type": "integer"
+                        },
+                        "unverified": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "into": {
+                      "type": "string",
+                      "enum": [
+                        "your_team",
+                        "new_team"
+                      ]
+                    },
+                    "seats": {
+                      "type": "object"
+                    },
+                    "settings": {
+                      "type": "string",
+                      "enum": [
+                        "imported",
+                        "kept_yours"
+                      ]
+                    },
+                    "report": {
+                      "type": "object",
+                      "description": "What the import made: the team, the source (instance, team, when, and whether a key this server knows signed it), counts per section with each skip and its reason, the people (placeholders until invited), the slates with their content hashes, the files, rewritten links, board rules switched off, AI connections (without keys) and the tokens to make again.",
+                      "properties": {
+                        "team": {
+                          "type": "object"
+                        },
+                        "source": {
+                          "type": "object"
+                        },
+                        "sections": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "created": {
+                                "type": "integer"
+                              },
+                              "skipped": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        },
+                        "people": {
+                          "type": "array",
+                          "items": {
+                            "type": "object"
+                          }
+                        },
+                        "slates": {
+                          "type": "array",
+                          "items": {
+                            "type": "object"
+                          }
+                        },
+                        "files": {
+                          "type": "object"
+                        },
+                        "links": {
+                          "type": "object"
+                        },
+                        "rulesSwitchedOff": {
+                          "type": "integer"
+                        },
+                        "ai": {
+                          "type": "object"
+                        },
+                        "tokens": {
+                          "type": "array",
+                          "items": {
+                            "type": "object"
+                          }
+                        },
+                        "skipped": {
+                          "type": "array",
+                          "items": {
+                            "type": "object"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "importId",
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/team/moves/{importId}/confirm": {
+      "post": {
+        "operationId": "confirmTeamMove",
+        "summary": "Confirm move",
+        "description": "Confirms your pending move. In no team: the moved team goes live and you become its owner. As a team owner: its slates, presentations, people (as placeholders) and library drafts join your team; your brand kit and agent choices stay, and the moved ones are used only when your team has none. You take the seat of the moved person with your verified address (else of its owner); someone already in your team takes the seat with their address. With invite true, every other person whose address the source had verified gets an email to claim their account (an address that already has an account here must agree to move); nobody gets an account they can sign in to without that email. Slates get back their visibility; board rules stay switched off until reviewed; keys, tokens and agent connections are never moved.",
+        "x-required-scope": "team:move",
+        "x-slatebox": {
+          "action": "teamMove.confirm",
+          "toolset": "team",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": true,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "importId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{1,40}$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "invite": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "importId": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "confirmed"
+                      ]
+                    },
+                    "teamId": {
+                      "type": "string"
+                    },
+                    "merged": {
+                      "type": "boolean"
+                    },
+                    "seats": {
+                      "type": "object"
+                    },
+                    "settings": {
+                      "type": "string",
+                      "enum": [
+                        "imported",
+                        "kept_yours"
+                      ]
+                    },
+                    "invited": {
+                      "type": "object",
+                      "properties": {
+                        "sent": {
+                          "type": "integer"
+                        },
+                        "needsConsent": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "mailDisabled": {
+                          "type": "integer"
+                        },
+                        "unverified": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "importId",
+                    "state",
+                    "teamId"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/team/moves/{importId}/discard": {
+      "post": {
+        "operationId": "discardTeamMove",
+        "summary": "Discard move",
+        "description": "Discards your pending move: everything it wrote (slates, files, people, settings, library drafts) is deleted. A pending move nobody confirms is discarded after 14 days.",
+        "x-required-scope": "team:move",
+        "x-slatebox": {
+          "action": "teamMove.discard",
+          "toolset": "team",
+          "readOnly": false,
+          "destructive": true,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "importId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{1,40}$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "importId": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "discarded"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "importId",
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/tokens": {
       "get": {
         "operationId": "listApiTokens",

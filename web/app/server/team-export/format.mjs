@@ -8,7 +8,8 @@
 //   {"t":"doc","s":"team","d":{...}}          the team: its name
 //   {"t":"doc","s":"members","d":{...}}       one per person: name, email, roles, owner (never a password)
 //   {"t":"doc","s":"index","d":{...}}         the source ids of every slate that follows
-//   {"t":"file","d":{...}} + {"t":"chunk"}... one per uploaded file the slates use, its bytes in chunks
+//   {"t":"file","d":{...}} + {"t":"chunk"}... one per uploaded file the slates, brand kit, presentations
+//                                             and library items use, its bytes in chunks
 //   {"t":"doc","s":"slates","d":{...},"h":…}  one per slate (boards and smart components included), with its content hash
 //   {"t":"doc","s":"versions","d":{...}}      recent saved versions of each slate
 //   {"t":"doc","s":"events","d":{...}}        the slates' recent event log
@@ -19,6 +20,7 @@
 //   {"t":"doc","s":"settings","d":{...}}      team settings (branding and the like)
 //   {"t":"doc","s":"ai","d":{...}}            team AI connections and choices (never a key)
 //   {"t":"doc","s":"tokens","d":{...}}        the names and scopes of the members' API tokens (never a secret)
+//   {"t":"doc","s":"library","d":{...}}       the shared-library items the members wrote: details and content (arrive as drafts)
 //   {"t":"skip","s":…,"id":…,"reason":…}       something the exporter left out, and why
 //   {"t":"end", ...}                          counts, the digest of every line before it and its signature
 //
@@ -46,6 +48,7 @@ export const SECTIONS = Object.freeze([
   'settings',
   'ai',
   'tokens',
+  'library',
 ])
 
 export const LIMITS = Object.freeze({

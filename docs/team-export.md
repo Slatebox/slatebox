@@ -35,7 +35,7 @@ is open: this page describes every part of it. The code is `web/app/server/team-
 | `{"t":"doc","s":"team"}` | `_id`, `name`, `createdOn` |
 | `{"t":"doc","s":"members"}` | one per person: `_id`, `email`, `emailVerified`, `firstName`, `lastName`, `owner`, `roles` (team claims), `createdAt` |
 | `{"t":"doc","s":"index"}` | `slates: [{id, shareId}]` for every slate that follows |
-| `{"t":"file"}` + `{"t":"chunk"}`… | an uploaded file the slates use: `id`, `url`, `ext`, `size`, `sha256`; then its bytes as base64 in chunks of up to 512 KiB |
+| `{"t":"file"}` + `{"t":"chunk"}`… | an uploaded file the slates, the brand kit, the presentations or the library items use: `id`, `url`, `ext`, `size`, `sha256`; then its bytes as base64 in chunks of up to 512 KiB |
 | `{"t":"doc","s":"slates","h":…}` | a slate, with its boards, smart components and board rules; `h` is its content hash (below) |
 | `{"t":"doc","s":"versions"}` | up to 20 recent saved versions per slate; `snapshot` is the whole slate as it was, as one JSON string |
 | `{"t":"doc","s":"events"}` | up to 500 event-log rows per slate from the last 90 days |
@@ -46,6 +46,7 @@ is open: this page describes every part of it. The code is `web/app/server/team-
 | `{"t":"doc","s":"settings"}` | team settings such as branding |
 | `{"t":"doc","s":"ai"}` | `connections [{name, provider, baseUrl, model, hadKey}]`, `use` (which connection each feature uses) |
 | `{"t":"doc","s":"tokens"}` | `userId`, `name`, `scopes`, `createdAt`, `revoked` |
+| `{"t":"doc","s":"library"}` | a shared-library item a member wrote: `_id`, `kind`, `authorId`, `title`, `summary`, `description`, `category`, `synonyms`, `status`, `sourceShareId`, `content` (the published version, else the one waiting for review, else the draft). Built-in items never travel |
 | `{"t":"skip"}` | something left out, and why: `another_team` (a file another team uploaded), `missing`, `too_large` |
 | `{"t":"end"}` | `lines`, `bytes`, `counts`, `digest`, `signer {alg, publicKey, fingerprint, signature}` |
 
@@ -57,7 +58,10 @@ wallet and meter records. These fields are removed wherever they appear (`format
 - the team document;
 - the people whose team it is (never guests);
 - the slates whose team it is, and what belongs to those slates;
-- a file a member uploaded, or a picture of one of the team's slates.
+- a file a member uploaded, or a picture of one of the team's slates;
+- a file the team's slates, brand kit, presentations or library items use whose uploader has no
+  account on the server any more;
+- the library items its members wrote.
 
 A slate that shows another team's file keeps that file's address, and the file is not copied.
 
@@ -112,6 +116,8 @@ The file is treated as hostile.
 - **AI connections** arrive without keys, and only when their address is public (HTTPS, not
   localhost, not a private or link-local address).
 - **Tokens** are never made. The report lists them to make again.
+- **Library items** arrive as their authors' drafts. Nothing reaches the receiving server's
+  library until its own review approves it. The report lists each with the status it had.
 - **Event log.** The event log starts again: the source's events stay in the file.
 - **Failure.** A refused file removes everything the import wrote.
 - **Confirm or discard.** Confirm makes the team live. Discard deletes everything the import wrote.
@@ -122,6 +128,29 @@ The file is treated as hostile.
     invites it with `teamImports.invite` (Admin tools shows a button per address).
   - People who are not invited stay placeholders. Team pages show them as "Not yet invited".
 - **Unconfirmed imports.** An import still pending after 14 days is discarded.
+
+## Moves
+
+A move is an import that the team's own owner makes, without an administrator of the receiving
+server. Use it to move a team from your own server to Slatebox Cloud, or back
+(`npx slatebox migrate --to cloud`, `npx slatebox import --from cloud`).
+
+- **Who.** A signed-in person who owns their team on the receiving server, or who is in no team
+  yet. Only they can read, confirm or discard their move. One move waits at a time.
+- **Where it lands.** In no team, the moved team becomes theirs. As a team owner, it joins their
+  team.
+- **Pending.** The archive lands in the same hidden team as an import, with the same checks.
+- **Confirm (`teamMove.confirm`):**
+  - The mover takes the seat of the moved person with their verified address, or else of the
+    moved owner. Slates, comments, presentations and library drafts of that seat become theirs.
+  - Into a team, a moved person whose address belongs to someone already in that team takes
+    that person's seat. The team's own brand kit, agent choices and connection names are kept;
+    the moved ones are used only where the team has none.
+  - Nobody else gets an account they can sign in to. With `invite`, the other people whose
+    address the source had verified get the email to claim their placeholder, as for an import.
+- **The same archive twice** (same digest, same person) answers with the first move, and the
+  second copy is removed.
+- **Limit.** A move holds at most 2 GB uncompressed.
 
 ## Addresses
 
@@ -137,6 +166,8 @@ Each address works once, only for the person it was issued to, and is stored by 
 - `POST /team-transfer/import/<ticket>`: send the file as `application/octet-stream`.
   - The passphrase goes in a header (below).
   - The answer is the import report.
+- `POST /team-transfer/move/<ticket>` (from `teamMove.start`, 1 hour): the same for a move. It
+  answers 201 with the report, or 200 with the first move when this archive was moved already.
 
 **Passphrase headers:**
 - `Slatebox-Export-Passphrase-Base64`: base64url of the passphrase's UTF-8 bytes. Use it for any
@@ -148,3 +179,5 @@ Each address works once, only for the person it was issued to, and is stored by 
 - `team:export` lets a token export (a team admin's token).
 - `team:import` lets a token import, list, read, confirm, invite and discard imports (an
   administrator's token).
+- `team:move` lets a token start, list, read, confirm and discard its person's own moves. Exec
+  scripts cannot call these: a script cannot send an archive.

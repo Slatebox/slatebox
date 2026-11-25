@@ -12,6 +12,7 @@ import { LIMITS, canonicalJson, contentHash, scrubSecrets, uploadKey, urlsIn } f
 import { decodeUseKeys } from '../methods/ai/connection-store.mjs'
 
 const BATCH = 500
+const LIBRARY_KINDS = ['component', 'slate', 'presentation']
 const chunks = (list, size = BATCH) => {
   const out = []
   for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size))
@@ -21,7 +22,8 @@ const jsonBytes = (value) => Buffer.byteLength(JSON.stringify(value), 'utf8')
 
 /**
  * db: { organizations, users, permissions, slates, snapshots, events, comments, presentations,
- *       presentationChats, slateAccess, orgSettings, providerKeys, aiChoices, apiTokens }
+ *       presentationChats, slateAccess, orgSettings, providerKeys, aiChoices, apiTokens,
+ *       libraryItems?, libraryVersions? }
  * readFile(key, maxBytes) → Buffer | null: an uploaded file's bytes (null when it is gone).
  * cloudUrl: where uploads are served from. adminClaims: the claim ids a role may be.
  */
@@ -102,19 +104,37 @@ export function createTeamExporter({ db, readFile, cloudUrl, limits = LIMITS, no
     if (index.length > limits.slates) throw Object.assign(new Error('The team has more slates than an export may hold.'), { status: 413, code: 'too_large' })
     yield { t: 'doc', s: 'index', d: { slates: index } }
 
-    const external = new Set()
-    for (const { id } of index) {
-      const slate = await db.slates.findOne({ _id: id })
-      if (!slate) continue
-      for (const url of urlsIn(slate)) {
+    const external = new Map() // url -> { key, ext, ownerUserId }
+    const take = (doc) => {
+      for (const url of urlsIn(doc)) {
         const found = uploadKey(url, cloudUrl)
         if (!found) continue
         const ours = (found.ownerUserId && memberSet.has(found.ownerUserId)) || (found.slateId && slateIds.has(found.slateId))
         if (ours) files.set(found.key, { url, ext: found.ext })
-        else external.add(url)
+        else external.set(url, found)
       }
     }
-    for (const url of external) skipped.push({ s: 'files', id: url, reason: 'another_team' })
+    for (const { id } of index) {
+      const slate = await db.slates.findOne({ _id: id })
+      if (slate) take(slate)
+    }
+    // The brand kit's logos, the presentations' pictures and the library items' boards point at
+    // uploads too: those files travel with the team, or the moved team would show the old server's.
+    for await (const setting of db.orgSettings.find({ orgId })) take(setting)
+    const deckShares = index.map((entry) => entry.shareId).filter(Boolean)
+    for (const batch of chunks(deckShares)) for await (const deck of db.presentations.find({ slateShareId: { $in: batch } })) take(deck)
+    const libraryRows = await libraryOf(memberIds)
+    for (const row of libraryRows) take(row)
+    // An upload whose uploader has no account here any more (a person removed, or a moved
+    // team's placeholder whose seat someone took) is the team's when its slates use it: nobody
+    // else can own it.
+    const uploaders = [...new Set([...external.values()].map((found) => found.ownerUserId).filter(Boolean))]
+    const present = new Set()
+    for (const batch of chunks(uploaders)) for (const user of await db.users.find({ _id: { $in: batch } }, { projection: { _id: 1 } }).toArray()) present.add(user._id)
+    for (const [url, found] of external) {
+      if (found.ownerUserId && !present.has(found.ownerUserId)) files.set(found.key, { url, ext: found.ext })
+      else skipped.push({ s: 'files', id: url, reason: 'another_team' })
+    }
 
     // Files before slates: the importer stores each file and then points the slates at it.
     const fileHashes = new Map() // url -> sha256
@@ -209,6 +229,39 @@ export function createTeamExporter({ db, readFile, cloudUrl, limits = LIMITS, no
             revoked: Boolean(token.revokedAt),
           },
         }
+
+    // Library items the members wrote, as they stand (published, waiting or draft). The other
+    // server's library is its own: they arrive there as their authors' drafts.
+    for (const row of libraryRows) yield* small('library', row, skipped)
+  }
+
+  // A member's library item: its details and the content people see (the published version,
+  // else the one waiting for review, else the draft). Built-in and showcase items are every
+  // server's own and never travel.
+  async function libraryOf(memberIds) {
+    if (!db.libraryItems) return []
+    const out = []
+    for (const batch of chunks(memberIds))
+      for await (const item of db.libraryItems.find({ authorId: { $in: batch }, origin: 'user' })) {
+        const n = item.publishedVersion ?? item.pendingVersion ?? null
+        const version = n && db.libraryVersions ? await db.libraryVersions.findOne({ itemId: item._id, n }) : null
+        const content = version?.content ?? item.draft ?? null
+        if (!content || !LIBRARY_KINDS.includes(item.kind)) continue
+        out.push({
+          _id: item._id,
+          kind: item.kind,
+          authorId: item.authorId,
+          title: String(item.title || '').slice(0, 200),
+          summary: String(item.summary || '').slice(0, 500),
+          ...(typeof item.description === 'string' && { description: item.description.slice(0, 5000) }),
+          ...(typeof item.category === 'string' && { category: item.category }),
+          synonyms: Array.isArray(item.synonyms) ? item.synonyms.filter((word) => typeof word === 'string').slice(0, 12) : [],
+          status: typeof item.status === 'string' ? item.status : 'draft',
+          ...(typeof item.sourceShareId === 'string' && { sourceShareId: item.sourceShareId }),
+          content,
+        })
+      }
+    return out
   }
 
   return { preflight, records }

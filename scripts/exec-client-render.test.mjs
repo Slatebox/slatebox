@@ -34,10 +34,10 @@ const writeAction = (overrides = {}) => defineAction({
 const registryWith = (...extra) =>
   createRegistry({ actions: [...appActions, ...extra], components: appComponents, scopes: API_TOKEN_SCOPES });
 
-test("a method exists for each HTTP action an agent may call, except token management and exec itself", () => {
+test("a method exists for each HTTP action an agent may call, except token management, exec itself and team moves", () => {
   const expected = appActions
     .filter((a) => a.mounts.http && a.principals.includes("agent"))
-    .filter((a) => !/^apiTokens\./.test(a.id) && !/^exec\./.test(a.id))
+    .filter((a) => !/^apiTokens\./.test(a.id) && !/^exec\./.test(a.id) && !/^teamMove\./.test(a.id))
     .map((a) => a.id)
     .sort();
   assert.deepEqual(manifest.methods.map((m) => m.name), expected);
@@ -45,6 +45,9 @@ test("a method exists for each HTTP action an agent may call, except token manag
   assert.equal(manifest.methods.some((m) => m.name.startsWith("apiTokens.")), false, "no token management in client.json");
   assert.equal(manifest.methods.some((m) => m.name.startsWith("exec.")), false, "no recursion");
   assert.ok(NEVER_BOUND.some((rule) => rule.test("apiTokens.create")));
+  // A move uploads an archive's bytes, which no script can send (exec-binding.mjs).
+  assert.ok(NEVER_BOUND.some((rule) => rule.test("teamMove.start")));
+  assert.equal(manifest.methods.some((m) => m.name.startsWith("teamMove.")), false, "no team moves in client.json");
   assert.deepEqual(boundActions(registry).map((a) => a.id).sort(), expected);
   // A DDP-only action is not reachable from a script until it has a route.
   const ddpOnly = defineAction({ ...writeAction(), id: "things.local", principals: ["person"], mounts: { ddp: true }, idempotency: "optional" });

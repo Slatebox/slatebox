@@ -11,6 +11,7 @@
     "ai:admin:read",
     "team:export",
     "team:import",
+    "team:move",
     "library:review"
   ],
   "errors": {
@@ -13435,6 +13436,624 @@
         "name": "discard_team_import",
         "title": "Discard a team import",
         "description": "For an administrator of this server: delete a pending imported team and everything the import wrote.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "teamMove.start",
+      "title": "Move a team here",
+      "description": "For the owner of a team on this server, or a signed-in person in no team yet: a one-time address (1 hour) to upload a team export from another Slatebox server, to move that team here. uploadUrl takes the archive as a POST of application/octet-stream (at most maxBytes uncompressed), with its passphrase when it is encrypted (Slatebox-Export-Passphrase-Base64 header as base64url of its UTF-8 bytes, or Slatebox-Export-Passphrase when it is plain ASCII). The answer is the report of a pending move: nothing is visible to anyone until teamMove.confirm. into says where it lands: your_team (it joins the team you own) or new_team (it becomes your team). The same archive uploaded again answers with the first move. One move waits at a time.",
+      "action": "teamMove.start",
+      "toolset": "team",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "team:move",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/team/moves",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "uploadUrl": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "POST"
+            ]
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "passphraseHeader": {
+            "type": "string"
+          },
+          "passphraseHeaderBase64": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "maxBytes": {
+            "type": "integer"
+          },
+          "into": {
+            "type": "string",
+            "enum": [
+              "your_team",
+              "new_team"
+            ]
+          }
+        },
+        "required": [
+          "uploadUrl",
+          "method",
+          "expiresAt",
+          "into"
+        ]
+      },
+      "tool": {
+        "name": "start_team_move",
+        "title": "Move a team here",
+        "description": "For a team owner, or someone in no team yet: get a one-time address (1 hour) to upload a team export from another Slatebox server. It waits as a pending move that only you see until you confirm it.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "teamMove.list",
+      "title": "My moves",
+      "description": "Your own team moves here, newest first: the one waiting to confirm, and those done or failed.",
+      "action": "teamMove.list",
+      "toolset": "team",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "team:move",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/team/moves",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "moves": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "importId": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "pending",
+                    "confirming",
+                    "confirmed",
+                    "discarding",
+                    "discarded",
+                    "failed"
+                  ]
+                },
+                "teamId": {
+                  "type": "string"
+                },
+                "teamName": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "expiresAt": {
+                  "type": "string"
+                },
+                "failure": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "invited": {
+                  "type": "object",
+                  "properties": {
+                    "sent": {
+                      "type": "integer"
+                    },
+                    "needsConsent": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "mailDisabled": {
+                      "type": "integer"
+                    },
+                    "unverified": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "into": {
+                  "type": "string",
+                  "enum": [
+                    "your_team",
+                    "new_team"
+                  ]
+                },
+                "seats": {
+                  "type": "object"
+                },
+                "settings": {
+                  "type": "string",
+                  "enum": [
+                    "imported",
+                    "kept_yours"
+                  ]
+                }
+              },
+              "required": [
+                "importId",
+                "state"
+              ]
+            }
+          }
+        },
+        "required": [
+          "moves"
+        ]
+      },
+      "tool": {
+        "name": "list_team_moves",
+        "title": "List my team moves",
+        "description": "List your own team moves to this server, newest first.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "teamMove.get",
+      "title": "Move",
+      "description": "One of your own team moves, with its report: what will arrive, what was left out and why.",
+      "action": "teamMove.get",
+      "toolset": "team",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "team:move",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/team/moves/{importId}",
+        "pathParams": [
+          "importId"
+        ],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "importId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9]{1,40}$"
+          }
+        },
+        "required": [
+          "importId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "importId": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "running",
+              "pending",
+              "confirming",
+              "confirmed",
+              "discarding",
+              "discarded",
+              "failed"
+            ]
+          },
+          "teamId": {
+            "type": "string"
+          },
+          "teamName": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "failure": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "invited": {
+            "type": "object",
+            "properties": {
+              "sent": {
+                "type": "integer"
+              },
+              "needsConsent": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "mailDisabled": {
+                "type": "integer"
+              },
+              "unverified": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "into": {
+            "type": "string",
+            "enum": [
+              "your_team",
+              "new_team"
+            ]
+          },
+          "seats": {
+            "type": "object"
+          },
+          "settings": {
+            "type": "string",
+            "enum": [
+              "imported",
+              "kept_yours"
+            ]
+          },
+          "report": {
+            "type": "object",
+            "description": "What the import made: the team, the source (instance, team, when, and whether a key this server knows signed it), counts per section with each skip and its reason, the people (placeholders until invited), the slates with their content hashes, the files, rewritten links, board rules switched off, AI connections (without keys) and the tokens to make again.",
+            "properties": {
+              "team": {
+                "type": "object"
+              },
+              "source": {
+                "type": "object"
+              },
+              "sections": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              "people": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "slates": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "files": {
+                "type": "object"
+              },
+              "links": {
+                "type": "object"
+              },
+              "rulesSwitchedOff": {
+                "type": "integer"
+              },
+              "ai": {
+                "type": "object"
+              },
+              "tokens": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "skipped": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "importId",
+          "state"
+        ]
+      },
+      "tool": {
+        "name": "get_team_move",
+        "title": "Read a team move",
+        "description": "Read one of your own team moves and its report.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "teamMove.confirm",
+      "title": "Confirm move",
+      "description": "Confirms your pending move. In no team: the moved team goes live and you become its owner. As a team owner: its slates, presentations, people (as placeholders) and library drafts join your team; your brand kit and agent choices stay, and the moved ones are used only when your team has none. You take the seat of the moved person with your verified address (else of its owner); someone already in your team takes the seat with their address. With invite true, every other person whose address the source had verified gets an email to claim their account (an address that already has an account here must agree to move); nobody gets an account they can sign in to without that email. Slates get back their visibility; board rules stay switched off until reviewed; keys, tokens and agent connections are never moved.",
+      "action": "teamMove.confirm",
+      "toolset": "team",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": true,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "team:move",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/team/moves/{importId}/confirm",
+        "pathParams": [
+          "importId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "invite"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "importId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9]{1,40}$"
+          },
+          "invite": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "importId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "importId": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "confirmed"
+            ]
+          },
+          "teamId": {
+            "type": "string"
+          },
+          "merged": {
+            "type": "boolean"
+          },
+          "seats": {
+            "type": "object"
+          },
+          "settings": {
+            "type": "string",
+            "enum": [
+              "imported",
+              "kept_yours"
+            ]
+          },
+          "invited": {
+            "type": "object",
+            "properties": {
+              "sent": {
+                "type": "integer"
+              },
+              "needsConsent": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "mailDisabled": {
+                "type": "integer"
+              },
+              "unverified": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "importId",
+          "state",
+          "teamId"
+        ]
+      },
+      "tool": {
+        "name": "confirm_team_move",
+        "title": "Confirm a team move",
+        "description": "Confirm your pending team move: the team becomes yours, or joins the team you own, and optionally its people are emailed to claim their accounts. The person agrees first.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "teamMove.discard",
+      "title": "Discard move",
+      "description": "Discards your pending move: everything it wrote (slates, files, people, settings, library drafts) is deleted. A pending move nobody confirms is discarded after 14 days.",
+      "action": "teamMove.discard",
+      "toolset": "team",
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "team:move",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/team/moves/{importId}/discard",
+        "pathParams": [
+          "importId"
+        ],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "importId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9]{1,40}$"
+          }
+        },
+        "required": [
+          "importId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "importId": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "discarded"
+            ]
+          }
+        },
+        "required": [
+          "importId",
+          "state"
+        ]
+      },
+      "tool": {
+        "name": "discard_team_move",
+        "title": "Discard a team move",
+        "description": "Delete your pending team move and everything it wrote.",
         "annotations": {
           "readOnlyHint": false,
           "destructiveHint": true,

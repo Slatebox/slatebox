@@ -4,6 +4,8 @@
 //        is signed and checked but not encrypted.
 //   POST /team-transfer/import/<ticket>  the archive as the raw body (application/octet-stream),
 //        its passphrase in a header; answers with the import report.
+//   POST /team-transfer/move/<ticket>    the same, for a team's own owner moving it here (a move);
+//        answers 201 with the report, or 200 with the earlier move when this archive was moved already.
 // The passphrase header is Slatebox-Export-Passphrase-Base64 (base64url of the passphrase's UTF-8
 // bytes, so any passphrase travels as it was typed), or Slatebox-Export-Passphrase for one in plain
 // ASCII. The base64 header wins when both are sent.
@@ -71,20 +73,22 @@ export function mountTeamTransfer(app, transfer, { express }) {
     return undefined
   })
 
-  app.post(TRANSFER_PATH + '/import/:ticket', async (req, res) => {
+  const upload = (receive) => async (req, res) => {
     if (!TICKET.test(req.params.ticket)) return sendError(res, { status: 404, code: 'ticket_invalid', message: 'This upload address is used or expired.' })
     const type = String(req.get('content-type') || '').split(';')[0].trim().toLowerCase()
     if (type !== 'application/octet-stream')
       return sendError(res, { status: 415, code: 'unsupported_type', message: 'Send the archive as application/octet-stream.' })
     try {
-      const result = await transfer.receiveImport(req.params.ticket, req, passphraseFromHeaders(req))
+      const result = await receive(req.params.ticket, req, passphraseFromHeaders(req))
       res.setHeader('Cache-Control', 'no-store')
-      return res.status(201).json(result)
+      return res.status(result?.duplicate ? 200 : 201).json(result)
     } catch (error) {
       // stop reading what is left of the upload
       req.unpipe?.()
       req.resume?.()
       return sendError(res, error)
     }
-  })
+  }
+  app.post(TRANSFER_PATH + '/import/:ticket', upload((ticket, body, passphrase) => transfer.receiveImport(ticket, body, passphrase)))
+  app.post(TRANSFER_PATH + '/move/:ticket', upload((ticket, body, passphrase) => transfer.receiveMove(ticket, body, passphrase)))
 }

@@ -17,15 +17,28 @@
 //   Template and directory flags are dropped. Every board rule arrives switched off.
 // - AI connections arrive without keys, and only those with a public address.
 // - Tokens are never made: the report lists them to make again.
+// - Library items arrive as their authors' drafts: nothing reaches this server's library until
+//   its own review approves it.
+//
+// A move (moving a team to another server by its own owner, not by this server's administrator)
+// imports the same way, into the same hidden team, and records who is moving it and into which
+// team (move: { actorUserId, intoOrgId }). Its confirm (confirm with move) then either makes the
+// hidden team live with the mover as its owner, or merges it into the mover's own team. The mover
+// takes the seat of the archive's person with their address (else the archive's owner); a person
+// whose address belongs to someone already in the team takes that person's seat. The other
+// people stay placeholders until the mover chooses to invite them. The same archive moved twice
+// by the same person returns the first move (archive digest), and nothing is written twice.
 // Every document the import writes carries teamImportId, so a discard (or a failed import)
 // removes exactly what it wrote.
 import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import { unsafeKeyPath } from '../common/document-keys.mjs'
 import { ArchiveError } from './archive.mjs'
+import { addressQuery } from './invite.mjs'
 import { encodeUseKeys } from '../methods/ai/connection-store.mjs'
 import { USE_KEYS } from '../methods/ai/connections.mjs'
 import { LIMITS, OPTION_FLAGS, SECTIONS, SLATE_FLAGS, contentHash, eachObject, mapStrings, replaceUrls } from './format.mjs'
+import { LIBRARY_LICENSE, slugify } from '../../imports/api/common/library-model.mjs'
 
 export const PENDING_DAYS = 14
 
@@ -42,6 +55,7 @@ const isId = (value) => typeof value === 'string' && /^[A-Za-z0-9_:.-]{1,80}$/.t
 const shortText = (value, max) => (typeof value === 'string' ? value.slice(0, max) : '')
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{1,60}$/
 const CONNECTION_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/
+const LIBRARY_KINDS = ['component', 'slate', 'presentation']
 const MEMBER_FIELDS = new Set(['_id', 'email', 'emailVerified', 'firstName', 'lastName', 'owner', 'roles', 'createdAt'])
 const ROLES = ['NONE', 'READ', 'COMMENT', 'EDIT']
 const VISIBILITY = ['private', 'unlisted', 'public']
@@ -87,6 +101,8 @@ export function isPublicEndpoint(baseUrl) {
  * knownSigners: fingerprints of signing keys this server trusts (its own), or a function giving them.
  * invite(user, { confirmed }) → 'sent' | 'needs_consent' | 'unverified' | 'mail_disabled' | 'already_invited'
  *     (invite.mjs; confirm with invite, and inviteAddress for an address the source had not verified).
+ * libraryPreview(content) → the listing preview of a library item's content (optional).
+ * db.libraryItems is optional: without it library items are skipped.
  */
 export function createTeamImporter({
   db,
@@ -102,10 +118,11 @@ export function createTeamImporter({
   aiProviders,
   knownSigners = [],
   invite = null,
-  limits = LIMITS,
+  libraryPreview = (content) => ({ kind: content?.kind ?? 'component', notes: 0 }),
+  limits: defaultLimits = LIMITS,
   now = Date.now,
 }) {
-  const TAGGED = ['organizations', 'users', 'permissions', 'slates', 'snapshots', 'comments', 'presentations', 'presentationChats', 'slateAccess', 'orgSettings', 'providerKeys', 'aiChoices']
+  const TAGGED = ['organizations', 'users', 'permissions', 'slates', 'snapshots', 'comments', 'presentations', 'presentationChats', 'slateAccess', 'orgSettings', 'providerKeys', 'aiChoices', ...(db.libraryItems ? ['libraryItems'] : [])]
 
   async function removeWritten(importId) {
     const files = await db.importMap.find({ importId, section: 'files' }).toArray()
@@ -122,10 +139,12 @@ export function createTeamImporter({
    * Returns { importId, report }. On any refusal of the archive itself, everything written is
    * removed and an ImportError or ArchiveError is thrown.
    */
-  async function importArchive(archive, { actorUserId }) {
+  async function importArchive(archive, { actorUserId, move = null, limits: given = null }) {
+    const limits = given || defaultLimits
     const importId = newId()
     const startedAt = now()
-    await db.imports.insertOne({ _id: importId, state: 'running', createdBy: actorUserId, createdAt: new Date(startedAt), updatedAt: new Date(startedAt) })
+    const moving = move ? { actorUserId, intoOrgId: move.intoOrgId ?? null } : null
+    await db.imports.insertOne({ _id: importId, state: 'running', createdBy: actorUserId, createdAt: new Date(startedAt), updatedAt: new Date(startedAt), ...(moving && { move: moving }) })
     const orgId = newId()
     const ids = new Map() // any source id or share id -> new
     const members = new Map() // source user id -> { newId, name }
@@ -146,6 +165,7 @@ export function createTeamImporter({
       rulesSwitchedOff: 0,
       ai: { imported: [], skipped: [] },
       tokens: [],
+      library: [],
       skipped: [],
     }
     const count = (section, outcome = 'created', n = 1) => {
@@ -160,6 +180,7 @@ export function createTeamImporter({
       db.importMap.insertOne({ _id: newId(), importId, section, sourceId: String(sourceId).slice(0, 300), newId: created })
 
     let ownerId = null
+    let digest = null
     let section = -1
     let head = null
     let file = null // the file being read: { meta, parts, size }
@@ -490,6 +511,70 @@ export function createTeamImporter({
           })
         count('tokens', 'skipped')
       },
+      async library(d) {
+        if (!db.libraryItems) return skip('library', d?._id, 'not_supported')
+        const reason = checkDoc('library', d, limits.slateBytes)
+        if (reason) return skip('library', d?._id, reason)
+        if (!isId(d._id) || done.has('library:' + d._id)) return skip('library', d._id, 'duplicate')
+        done.add('library:' + d._id)
+        if (!LIBRARY_KINDS.includes(d.kind) || typeof d.title !== 'string' || !isPlain(d.content) || d.content.kind !== d.kind) return skip('library', d._id, 'invalid')
+        if (validateBoard) {
+          let broken = false
+          eachObject(d.content, (item) => {
+            if (!broken && Array.isArray(item.lanes) && Array.isArray(item.cards)) {
+              try {
+                validateBoard(item)
+              } catch {
+                broken = true
+              }
+            }
+          })
+          if (broken) return skip('library', d._id, 'invalid_board')
+        }
+        const content = owned(rewrite(structuredClone(d.content)))
+        if (isPlain(content.slate)) {
+          for (const flag of SLATE_FLAGS) delete content.slate[flag]
+          eachObject(content, (item) => {
+            if (isPlain(item.behaviour) && Array.isArray(item.behaviour.rules)) for (const rule of item.behaviour.rules) if (isPlain(rule)) rule.on = false
+          })
+        }
+        const id = newId()
+        const author = (isId(d.authorId) && members.get(d.authorId)) || null
+        const title = shortText(d.title, 200).trim() || 'Imported item'
+        const at = new Date(now())
+        const sourceShareId = typeof d.sourceShareId === 'string' && shareIds.has(d.sourceShareId) ? shareIds.get(d.sourceShareId) : null
+        await db.libraryItems.insertOne({
+          _id: id,
+          kind: d.kind,
+          origin: 'user',
+          status: 'draft',
+          reviewStatus: null,
+          slug: slugify(title, id),
+          title,
+          summary: shortText(d.summary, 500),
+          ...(typeof d.description === 'string' && { description: d.description.slice(0, 5000) }),
+          ...(typeof d.category === 'string' && /^[a-z][a-z-]{0,40}$/.test(d.category) && { category: d.category }),
+          categoryLocked: false,
+          synonyms: Array.isArray(d.synonyms) ? d.synonyms.filter((word) => typeof word === 'string').map((word) => word.slice(0, 60)).slice(0, 12) : [],
+          authorId: author?.newId || ownerId,
+          authorName: author?.name || '',
+          provenance: {},
+          ...(sourceShareId && { sourceShareId }),
+          draft: content,
+          versionCount: 0,
+          counts: { copies: 0, adds: 0, branches: 0 },
+          popularity: 0,
+          license: LIBRARY_LICENSE,
+          preview: libraryPreview(content),
+          importedLibrary: { status: shortText(d.status, 40) },
+          createdAt: at,
+          updatedAt: at,
+          teamImportId: importId,
+        })
+        await remember('library', d._id, id)
+        if (report.library.length < 500) report.library.push({ title, kind: d.kind, was: shortText(d.status, 40) })
+        count('library')
+      },
     }
 
     async function takeFile(record) {
@@ -542,6 +627,7 @@ export function createTeamImporter({
         if (next.done) {
           if (file) throw new ArchiveError('corrupt', 'A file in the archive is incomplete.')
           const verified = next.value || {}
+          digest = typeof verified.end?.digest === 'string' ? verified.end.digest : null
           if (!report.team) throw new ImportError(422, 'team_missing', 'The archive has no team.')
           await settleOwner()
           report.source = {
@@ -588,6 +674,15 @@ export function createTeamImporter({
       await iterator.return?.().catch(() => {})
     }
     const finishedAt = now()
+    // The same archive moved again by the same person: the first move stands, this copy goes.
+    if (moving && digest) {
+      const earlier = await db.imports.findOne({ _id: { $ne: importId }, digest, 'move.actorUserId': actorUserId, state: { $in: ['pending', 'confirming', 'confirmed'] } })
+      if (earlier) {
+        await removeWritten(importId)
+        await db.imports.deleteMany({ _id: importId })
+        return { importId: earlier._id, state: earlier.state, report: earlier.report ?? null, duplicate: true }
+      }
+    }
     // Never the source ids in what is returned: the map stays on the server.
     report.people = report.people.map(({ newId: _id, ...person }) => person)
     await db.imports.updateOne(
@@ -596,6 +691,7 @@ export function createTeamImporter({
         $set: {
           state: 'pending',
           orgId,
+          ...(digest && { digest }),
           teamName: report.team.name,
           updatedAt: new Date(finishedAt),
           expiresAt: new Date(finishedAt + PENDING_DAYS * 86400000),
@@ -627,9 +723,7 @@ export function createTeamImporter({
     return get(importId)
   }
 
-  /** Makes the hidden team live: its slates get back what they were, and, with invite, its people are invited. */
-  async function confirm(importId, { invite: sendInvites = false } = {}) {
-    const { orgId } = await claim(importId, 'confirming')
+  async function restoreVisibility(importId, orgId) {
     for await (const slate of db.slates.find({ orgId, teamImportId: importId }, { projection: { _id: 1, importedVisibility: 1 } })) {
       const was = slate.importedVisibility || {}
       await db.slates.updateOne(
@@ -641,22 +735,122 @@ export function createTeamImporter({
       const was = presentation.importedVisibility || {}
       await db.presentations.updateOne({ _id: presentation._id }, { $set: { isPublic: was.isPublic === true, isPublished: was.isPublished === true }, $unset: { importedVisibility: 1 } })
     }
+  }
+
+  // Emails each placeholder of the import whose address the source had verified (invite.mjs).
+  async function inviteAll(importId, orgId) {
+    const invited = { sent: 0, needsConsent: [], mailDisabled: 0, unverified: [] }
+    if (!invite) return invited
+    for await (const user of db.users.find({ orgId, 'importPlaceholder.importId': importId })) {
+      if (!user.importPlaceholder?.email) continue
+      const outcome = await invite(user).catch(() => 'failed')
+      if (outcome === 'sent') invited.sent += 1
+      else if (outcome === 'needs_consent') invited.needsConsent.push(user.importPlaceholder.email)
+      else if (outcome === 'mail_disabled') invited.mailDisabled += 1
+      else if (outcome === 'unverified') invited.unverified.push(user.importPlaceholder.email)
+    }
+    return invited
+  }
+
+  /** Makes the hidden team live: its slates get back what they were, and, with invite, its people are invited. */
+  async function confirm(importId, { invite: sendInvites = false } = {}) {
+    const found = await get(importId)
+    if (found?.move) throw new ImportError(409, 'is_a_move', 'This import is a move: the person moving the team confirms it.')
+    const { orgId } = await claim(importId, 'confirming')
+    await restoreVisibility(importId, orgId)
     await db.organizations.updateOne({ _id: orgId }, { $set: { 'teamImport.state': 'confirmed' }, $unset: { hidden: 1 } })
     // Addresses the source had verified are invited; the others wait in invited.unverified until
     // the administrator confirms each one (inviteAddress), since an archive edited by hand could
     // list any address.
-    const invited = { sent: 0, needsConsent: [], mailDisabled: 0, unverified: [] }
-    if (sendInvites && invite)
-      for await (const user of db.users.find({ orgId, 'importPlaceholder.importId': importId })) {
-        if (!user.importPlaceholder?.email) continue
-        const outcome = await invite(user).catch(() => 'failed')
-        if (outcome === 'sent') invited.sent += 1
-        else if (outcome === 'needs_consent') invited.needsConsent.push(user.importPlaceholder.email)
-        else if (outcome === 'mail_disabled') invited.mailDisabled += 1
-        else if (outcome === 'unverified') invited.unverified.push(user.importPlaceholder.email)
-      }
+    const invited = sendInvites ? await inviteAll(importId, orgId) : { sent: 0, needsConsent: [], mailDisabled: 0, unverified: [] }
     await db.imports.updateOne({ _id: importId }, { $set: { state: 'confirmed', confirmedAt: new Date(now()), updatedAt: new Date(now()), invited } })
     return { importId, state: 'confirmed', teamId: orgId, invited }
+  }
+
+  // Everything the import wrote that names placeholder `from` names `to` instead, and the
+  // placeholder goes. Its roles go to `to` only when keepRoles (the mover of a new team);
+  // someone already in the team keeps their own.
+  async function takeSeat(importId, from, to, { keepRoles }) {
+    for (const name of ['slates', 'snapshots', 'presentations', 'presentationChats', 'slateAccess'])
+      await db[name].updateMany({ teamImportId: importId, userId: from }, { $set: { userId: to } })
+    await db.comments.updateMany({ teamImportId: importId, createdByUserId: from }, { $set: { createdByUserId: to } })
+    for (const comment of await db.comments.find({ teamImportId: importId, mentionedTeamMembers: from }, { projection: { _id: 1, mentionedTeamMembers: 1 } }).toArray())
+      await db.comments.updateOne({ _id: comment._id }, { $set: { mentionedTeamMembers: [...new Set(comment.mentionedTeamMembers.map((id) => (id === from ? to : id)))] } })
+    if (db.libraryItems) await db.libraryItems.updateMany({ teamImportId: importId, authorId: from }, { $set: { authorId: to } })
+    if (keepRoles)
+      for (const row of await db.permissions.find({ teamImportId: importId, userId: from }).toArray()) {
+        const has = await db.permissions.findOne({ userId: to, orgId: row.orgId, claimId: row.claimId })
+        if (has) await db.permissions.deleteMany({ _id: row._id })
+        else await db.permissions.updateOne({ _id: row._id }, { $set: { userId: to } })
+      }
+    else await db.permissions.deleteMany({ teamImportId: importId, userId: from })
+    await db.users.deleteMany({ _id: from, teamImportId: importId })
+  }
+
+  /**
+   * Confirms a move (an import with move). actor: { userId, email } — the mover, already checked
+   * by the caller to be the one who started it and still able to (transfer.mjs).
+   * Without move.intoOrgId the hidden team goes live with the mover as its owner; with it, the
+   * team's slates, people and the rest join that team. Returns { importId, state, teamId,
+   * merged, seats, settings, invited }.
+   */
+  async function confirmMove(importId, { actor, invite: sendInvites = false }) {
+    const found = await get(importId)
+    if (!found) throw new ImportError(404, 'not_found', 'There is no such move.')
+    if (!found.move) throw new ImportError(409, 'not_a_move', 'This import is not a move.')
+    const { orgId: staging, move } = await claim(importId, 'confirming')
+    const into = move.intoOrgId || null
+    const team = into || staging
+    await restoreVisibility(importId, staging)
+
+    const placeholders = await db.users.find({ orgId: staging, 'importPlaceholder.importId': importId }).toArray()
+    const email = typeof actor.email === 'string' ? actor.email.trim().toLowerCase() : null
+    const seat = (email && placeholders.find((user) => user.importPlaceholder?.email === email)) || placeholders.find((user) => user.isOrgOwner) || null
+    const seats = { mover: seat ? `${seat.profile?.firstName ?? ''} ${seat.profile?.lastName ?? ''}`.trim() : null, matched: [] }
+    // People already in the team, found by address in any letter case.
+    const existing = new Map()
+    if (into)
+      for (const user of placeholders) {
+        const address = user.importPlaceholder?.email
+        if (!address || user === seat) continue
+        const member = await db.users.findOne({ orgId: into, ...addressQuery(address) }, { projection: { _id: 1 } })
+        if (member) existing.set(user._id, member._id)
+      }
+
+    let settings = 'imported'
+    if (into) {
+      for (const name of ['users', 'permissions', 'slates', 'presentations'])
+        await db[name].updateMany({ teamImportId: importId, orgId: staging }, { $set: { orgId: into } })
+      // The team's own brand kit and agent choices win; the moved ones are left out.
+      if (await db.orgSettings.findOne({ orgId: into, teamImportId: { $ne: importId } }, { projection: { _id: 1 } })) {
+        await db.orgSettings.deleteMany({ teamImportId: importId, orgId: staging })
+        settings = 'kept_yours'
+      } else await db.orgSettings.updateMany({ teamImportId: importId, orgId: staging }, { $set: { orgId: into } })
+      for (const connection of await db.providerKeys.find({ teamImportId: importId, ownerType: 'org', ownerId: staging }).toArray()) {
+        const taken = await db.providerKeys.findOne({ ownerType: 'org', ownerId: into, name: connection.name }, { projection: { _id: 1 } })
+        if (taken) await db.providerKeys.deleteMany({ _id: connection._id })
+        else await db.providerKeys.updateOne({ _id: connection._id }, { $set: { ownerId: into } })
+      }
+      const choices = await db.aiChoices.findOne({ _id: 'org:' + staging })
+      if (choices) {
+        await db.aiChoices.deleteMany({ _id: 'org:' + staging })
+        if (!(await db.aiChoices.findOne({ _id: 'org:' + into }))) await db.aiChoices.insertOne({ ...choices, _id: 'org:' + into })
+      }
+      await db.organizations.deleteMany({ _id: staging, teamImportId: importId })
+    } else {
+      await db.organizations.updateOne({ _id: staging }, { $set: { 'teamImport.state': 'confirmed', createdByUserId: actor.userId }, $unset: { hidden: 1 } })
+    }
+
+    if (seat) await takeSeat(importId, seat._id, actor.userId, { keepRoles: !into })
+    for (const [from, to] of existing) {
+      await takeSeat(importId, from, to, { keepRoles: false })
+      seats.matched.push(placeholders.find((user) => user._id === from)?.importPlaceholder?.email)
+    }
+    if (!into) await db.users.updateOne({ _id: actor.userId }, { $set: { orgId: staging, isOrgOwner: true } })
+
+    const invited = sendInvites ? await inviteAll(importId, team) : { sent: 0, needsConsent: [], mailDisabled: 0, unverified: [] }
+    await db.imports.updateOne({ _id: importId }, { $set: { state: 'confirmed', orgId: team, confirmedAt: new Date(now()), updatedAt: new Date(now()), invited, seats, settings } })
+    return { importId, state: 'confirmed', teamId: team, merged: Boolean(into), seats, settings, invited }
   }
 
   /**
@@ -719,5 +913,11 @@ export function createTeamImporter({
     return { purged }
   }
 
-  return { importArchive, get, list, confirm, inviteAddress, discard, purge }
+  async function listMoves(actorUserId, { limit = 20 } = {}) {
+    return db.imports
+      .find({ 'move.actorUserId': actorUserId, state: { $in: ['pending', 'confirming', 'confirmed', 'failed', 'running'] } }, { sort: { createdAt: -1 }, limit, projection: { report: 0 } })
+      .toArray()
+  }
+
+  return { importArchive, get, list, listMoves, confirm, confirmMove, inviteAddress, discard, purge }
 }

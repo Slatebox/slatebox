@@ -11,6 +11,8 @@ import CONSTANTS from '../../imports/api/common/constants'
 import {
   AIChoices,
   Comments,
+  LibraryItems,
+  LibraryVersions,
   OrganizationSettings,
   Organizations,
   Permissions,
@@ -33,6 +35,7 @@ import { createTeamExporter } from './export-core.mjs'
 import { createTeamImporter } from './import-core.mjs'
 import { createPlaceholderInvite } from './invite.mjs'
 import { createTeamTransfer, createTicketStore } from './transfer.mjs'
+import { previewOf } from '../library/core.mjs'
 import { mountTeamTransfer } from './routes.mjs'
 
 const TeamImports = new Mongo.Collection('teamImports')
@@ -56,6 +59,8 @@ const db = {
   providerKeys: raw(ProviderKeys),
   aiChoices: raw(AIChoices),
   apiTokens: raw(SlateApiTokens),
+  libraryItems: raw(LibraryItems),
+  libraryVersions: raw(LibraryVersions),
   imports: raw(TeamImports),
   importMap: raw(TeamImportMap),
 }
@@ -123,6 +128,7 @@ const importer = createTeamImporter({
   },
   deleteFile: (key) => deleteStoredFile(key),
   validateBoard: validateWorkshop,
+  libraryPreview: previewOf,
   teamClaims,
   aiProviders: Object.keys(CONNECTION_TYPES),
   knownSigners: () => knownSigners,
@@ -144,7 +150,7 @@ export const teamTransfer = createTeamTransfer({
   exporter,
   importer,
   tickets: createTicketStore({ collection: raw(TeamTransferTickets) }),
-  loadUser: (id) => Meteor.users.findOneAsync(id, { fields: { _id: 1, orgId: 1, isAnonymous: 1 } }),
+  loadUser: (id) => Meteor.users.findOneAsync(id, { fields: { _id: 1, orgId: 1, isAnonymous: 1, isOrgOwner: 1, emails: 1 } }),
   isTeamAdmin: async (user) =>
     Boolean(user?.orgId && (await Permissions.findOneAsync({ userId: user._id, orgId: user.orgId, claimId: CONSTANTS.claims.admin._id }, { fields: { _id: 1 } }))),
   isServerAdmin,
