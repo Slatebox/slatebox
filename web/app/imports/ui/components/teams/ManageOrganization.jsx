@@ -42,6 +42,7 @@ import { globalMessage } from '../../jotai/atoms'
 import BusinessPanel from './BusinessPanel'
 import InvitePeopleDialog from './InvitePeopleDialog'
 import memberShape from './member-shape'
+import { AppPageHeader, PAGE_SPACE } from '../../common/AppPage'
 import { AdvancedPermissionsDialog, ChangeEmailDialog, RemoveMemberDialog } from './MemberDialogs'
 import {
   ADMIN, SERVER_ADMIN, assignableRoles, claimWords, displayName, extraClaims, holds, initials, memberStatus, roleChanges, roleOf,
@@ -60,7 +61,7 @@ const STATUS_SX = {
   'not-invited': (theme) => ({ bgcolor: '#e9ebe4', color: '#3b4a40', ...theme.applyStyles('dark', { bgcolor: '#3a4a40', color: '#e3e8df' }) }),
 }
 
-const visuallyHidden = { position: 'absolute', width: 1, height: 1, p: 0, m: -1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 }
+const visuallyHidden = { position: 'absolute', width: '1px', height: '1px', p: 0, m: -1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 }
 
 const SEARCH_FROM = 7
 
@@ -338,21 +339,20 @@ export default function ManageOrganization() {
   const count = people.length
 
   return (
-    <Box data-team-page="" sx={{ display: 'grid', gap: { xs: 2, sm: 2.5 }, pb: { xs: viewer.canAdd ? 10 : 2, sm: 2 } }}>
-      <Box component="header" sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 1.5, flexWrap: 'wrap' }}>
-        <Box sx={{ flex: '1 1 260px', minWidth: 0 }}>
-          <Typography variant="h4" component="h1" sx={{ fontWeight: 750, fontSize: { xs: 26, sm: 32 }, lineHeight: 1.15, overflowWrap: 'anywhere' }}>
-            {nouns.team}
-            <Box component="span" sx={{ color: 'text.secondary', fontWeight: 500 }}> · {org?.name}</Box>
-          </Typography>
-          {viewer.canView && (
-            <Typography color="text.secondary" sx={{ mt: 0.5 }} data-team-count={count}>
-              {count} {count === 1 ? nouns.person : nouns.people}
-              {invitedCount > 0 && ` · ${invitedCount} ${invitedCount === 1 ? 'invitation' : 'invitations'} not accepted yet`}
-            </Typography>
-          )}
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+    <Box data-team-page="" sx={{ display: 'grid', gap: PAGE_SPACE.section, pb: { xs: viewer.canAdd ? 10 : 0, sm: 0 } }}>
+      <AppPageHeader
+        sx={{ mb: 0 }}
+        title={<>
+          {nouns.team}
+          <Box component="span" sx={{ color: 'text.secondary', fontWeight: 500 }}> · {org?.name}</Box>
+        </>}
+        subtitle={viewer.canView ? (
+          <Box component="span" data-team-count={count}>
+            {count} {count === 1 ? nouns.person : nouns.people}
+            {invitedCount > 0 && ` · ${invitedCount} ${invitedCount === 1 ? 'invitation' : 'invitations'} not accepted yet`}
+          </Box>
+        ) : null}
+        actions={(integrations || viewer.canAdd) ? <>
           {integrations && (
             <Button component={RouterLink} to="/integrations" startIcon={<HubOutlinedIcon />} data-team-integrations="">Agents and integrations</Button>
           )}
@@ -360,8 +360,8 @@ export default function ManageOrganization() {
             <Button variant="contained" startIcon={<PersonAddAlt1OutlinedIcon />} onClick={() => setInviting(true)}
               sx={{ display: { xs: 'none', sm: 'inline-flex' } }} data-team-invite="">Invite people</Button>
           )}
-        </Box>
-      </Box>
+        </> : null}
+      />
 
       <BusinessPanel />
 

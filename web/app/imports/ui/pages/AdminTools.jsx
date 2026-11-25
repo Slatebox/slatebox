@@ -7,7 +7,7 @@ import React, { useEffect } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { Meteor } from 'meteor/meteor'
 import { useAtom } from 'jotai'
-import Container from '@mui/material/Container'
+import AppPage from '../common/AppPage'
 import Grid from '@mui/material/Grid2'
 import InputAdornment from '@mui/material/InputAdornment'
 import Button from '@mui/material/Button'
@@ -86,7 +86,7 @@ export default function AdminTools() {
   ]
 
   return (
-    <Container maxWidth="xl">
+    <AppPage title="Server admin" subtitle="How this Slatebox server is doing, and the tools to run it.">
       <Grid
         container
         alignItems="flex-start"
@@ -94,11 +94,7 @@ export default function AdminTools() {
         spacing={3}
       >
         <Grid size={12}>
-          <Box sx={{ pt: { xs: 1, md: 3 } }}>
-            <Typography component="h1" variant="h4" sx={{ fontWeight: 750, fontSize: { xs: 26, sm: 32 } }}>Server admin</Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>How this Slatebox server is doing, and the tools to run it.</Typography>
-          </Box>
-          <Box component="nav" aria-label="Admin sections" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 2 }} data-admin-sections="">
+          <Box component="nav" aria-label="Admin sections" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }} data-admin-sections="">
             {ADMIN_SECTIONS.map((section) => (
               <Button key={section.id} component={RouterLink} to={section.to} size="small" disableElevation
                 variant={section.id === 'overview' ? 'contained' : 'outlined'} aria-current={section.id === 'overview' ? 'page' : undefined}
@@ -205,6 +201,6 @@ export default function AdminTools() {
           </>
         )}
       </Grid>
-    </Container>
+    </AppPage>
   )
 }

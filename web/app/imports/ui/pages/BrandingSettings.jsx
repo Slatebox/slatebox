@@ -39,6 +39,7 @@ import ColorsSection from '../components/brand/ColorsSection'
 import StyleSection from '../components/brand/StyleSection'
 import BrandPreview from '../components/brand/BrandPreview'
 import pullColors from '../components/brand/pullColors'
+import AppPage, { AppPageHeader } from '../common/AppPage'
 
 const SAVE_DELAY = 600
 
@@ -253,10 +254,8 @@ export default function BrandingSettings() {
 
   if (!orgId && ready) {
     return (
-      <Box sx={{ maxWidth: 760, mx: 'auto', px: { xs: 2, sm: 3 }, py: 3 }}>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 750, fontSize: { xs: 26, sm: 32 } }}>Brand kit</Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>A brand kit belongs to a team. <Link component={RouterLink} to="/team">Make or join a team</Link> to set one up.</Typography>
-      </Box>
+      <AppPage title="Brand kit"
+        subtitle={<>A brand kit belongs to a team. <Link component={RouterLink} to="/team">Make or join a team</Link> to set one up.</>} />
     )
   }
 
@@ -351,17 +350,14 @@ export default function BrandingSettings() {
   )
 
   return (
-    <Box data-brand-kit="" sx={{ maxWidth: 1280, mx: 'auto', px: { xs: 0.5, sm: 2 }, py: { xs: 1.5, sm: 3 }, display: 'grid', gap: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 2, flexWrap: 'wrap' }}>
-        <Box sx={{ flex: '1 1 420px', minWidth: 0 }}>
-          <Link component={RouterLink} to="/team/settings" underline="hover" variant="body2">Team settings</Link>
-          <Typography variant="h4" component="h1" sx={{ fontWeight: 750, fontSize: { xs: 26, sm: 32 } }}>Brand kit</Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-            Your logos, colors and fonts, and the one style every slate and presentation starts with.
-          </Typography>
-        </Box>
-        {editable && <SaveState state={saveState} onUndo={runUndo} canUndo={undo.length > 0} undoLabel={undo[undo.length - 1]?.label || ''} />}
-      </Box>
+    <AppPage data-brand-kit=""
+      header={(
+        <AppPageHeader sx={{ mb: 1 }} title="Brand kit"
+          eyebrow={<Link component={RouterLink} to="/team/settings" underline="hover" variant="body2">Team settings</Link>}
+          subtitle="Your logos, colors and fonts, and the one style every slate and presentation starts with."
+          actions={editable ? <SaveState state={saveState} onUndo={runUndo} canUndo={undo.length > 0} undoLabel={undo[undo.length - 1]?.label || ''} /> : null} />
+      )}
+      sx={{ display: 'grid', gap: 2, alignContent: 'start' }}>
       {admin === false && (
         <Box sx={card} data-brand-read-only="">
           <Typography variant="body2">Only team admins can change the brand kit. This is what your team uses now.</Typography>
@@ -392,6 +388,6 @@ export default function BrandingSettings() {
           </Box>
         </Box>
       </Section>
-    </Box>
+    </AppPage>
   )
 }

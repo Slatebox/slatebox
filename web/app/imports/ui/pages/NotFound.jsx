@@ -5,15 +5,17 @@ import { Meteor } from 'meteor/meteor'
 import { useTracker } from 'meteor/react-meteor-data'
 import { Box, Button, Typography } from '@mui/material'
 import { TileArt } from '../components/EmptyState'
+import AppPage from '../common/AppPage'
 
 export default function NotFound() {
   // A visitor who is not signed in is offered Sign in, not a list they do not have.
   const signedIn = useTracker(() => Boolean(Meteor.userId()), [])
   const home = { variant: 'contained', color: 'primary', disableElevation: true, size: 'large', sx: { borderRadius: 6, px: 3 } }
   return (
-    <Box component="section" aria-labelledby="not-found-title" sx={{
+    // the shared page layout's edges; the message itself sits in the middle of the page, as an empty list's does
+    <AppPage component="section" aria-labelledby="not-found-title" sx={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
-      gap: 1.5, minHeight: 'calc(100svh - 64px - 48px)', px: 2, mx: 'auto', maxWidth: 560, boxSizing: 'border-box',
+      gap: 1.5, minHeight: 'calc(100svh - 64px - 48px)',
     }}>
       <Box sx={{ mb: 2 }}><TileArt variant="lost" size={176} /></Box>
       <Typography variant="overline" sx={{ color: 'text.secondary', letterSpacing: '.12em', fontWeight: 700 }}>404</Typography>
@@ -32,6 +34,6 @@ export default function NotFound() {
           Start a new slate
         </Button>
       </Box>
-    </Box>
+    </AppPage>
   )
 }

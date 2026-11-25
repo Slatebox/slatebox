@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom'
-import Container from '@mui/material/Container'
+import AppPage from '../common/AppPage'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Stack from '@mui/material/Stack'
@@ -103,18 +103,21 @@ export default function LibraryItem() {
 
   if (error) {
     return (
-      <Container component="main" maxWidth="md" sx={{ py: 4 }}>
+      <AppPage>
         <Alert severity="info" sx={{ mb: 2 }}>{error}</Alert>
         <Button component={RouterLink} to="/library" startIcon={<ArrowBackIcon />}>Back to the library</Button>
-      </Container>
+      </AppPage>
     )
   }
 
   const from = item && provenanceLine(item)
   const uses = item && usesLine(item)
   return (
-    <Container component="main" maxWidth="lg" sx={{ py: { xs: 2, md: 3 }, px: { xs: 2, md: 3 } }}>
-      <Button component={RouterLink} to="/library" startIcon={<ArrowBackIcon />} size="small" sx={{ mb: 1.5 }}>Library</Button>
+    <AppPage
+      titleId="item-title"
+      title={item ? item.title : <Skeleton width="40%" />}
+      eyebrow={<Button component={RouterLink} to="/library" startIcon={<ArrowBackIcon />} size="small" sx={{ mb: 1 }}>Library</Button>}
+    >
       <Box sx={{ display: 'grid', gap: { xs: 2, md: 4 }, rowGap: { md: 2 }, gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 3fr) minmax(280px, 2fr)' }, alignItems: 'start' }}>
         <Box sx={{ gridColumn: { md: 1 }, gridRow: { md: 1 } }}>
           {item
@@ -134,8 +137,7 @@ export default function LibraryItem() {
                 <Chip size="small" label={KIND_NAMES[item.kind]} />
                 {item.category && <Chip size="small" variant="outlined" label={categoryLabel(item.category)} component={RouterLink} to={`/library?category=${item.category}`} clickable />}
               </Stack>
-              <Typography id="item-title" variant="h4" component="h1" sx={{ fontWeight: 700, fontSize: { xs: '1.6rem', md: '2rem' } }}>{item.title}</Typography>
-              <Typography sx={{ mt: 1 }}>{item.summary}</Typography>
+              <Typography>{item.summary}</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
                 {authorLine(item)}
                 {from && <> · {from.text} <Link component={RouterLink} to={`/library/${from.itemId}`} data-provenance>{from.title}</Link></>}
@@ -169,7 +171,7 @@ export default function LibraryItem() {
               </Box>
             </>
           ) : (
-            <><Skeleton width="60%" height={48} /><Skeleton /><Skeleton width="80%" /></>
+            <><Skeleton /><Skeleton width="80%" /></>
           )}
         </Box>
         {moves.length > 0 && (
@@ -188,6 +190,6 @@ export default function LibraryItem() {
         )}
       </Box>
       {item && <AddToSlateDialog open={picking} title={item.title} busy={busy} onPick={use} onClose={() => setPicking(false)} />}
-    </Container>
+    </AppPage>
   )
 }

@@ -42,6 +42,7 @@ import {
 } from '../jotai/atoms'
 import { Slates } from '../../api/common/models'
 import { Box } from '@mui/material'
+import AppPage, { PAGE_SPACE } from '../common/AppPage'
 
 export default function DisplaySlates({
   sentSlateMinimumPerPage,
@@ -307,57 +308,54 @@ export default function DisplaySlates({
     },
   ]
 
+  // The shared page layout (AppPage): the title row with search and paging stays put; the grid scrolls under it.
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: 'calc(100vh - 64px)',
-      }}
+    <AppPage
+      fill
+      data-slates-page={type}
+      header={(
+        <Box
+          sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+            pb: 2,
+            borderBottom: 1,
+            borderColor: 'divider',
+          }}
+        >
+          <Title
+            key={titleKey}
+            showAdd
+            showSearch
+            searchOptions={tags.map((t) => t.tag)}
+            onAdd={() => history('/new')}
+            onSearchInputChange={filterSlates}
+            onPrivateChanged={onPrivateChanged}
+            onDelete={onDelete}
+            onToggleSelect={onToggleSelect}
+            isSelectAllToggled={isSelectAllToggled}
+            slateMinimumPerPage={slateFilter.slateMinimumPerPage}
+            recordsPerPage={slateFilter.slateRecordsPerPage}
+            showPaging={slateFilter.totalSlates > slateFilter.slateMinimumPerPage}
+            totalPages={Math.ceil(
+              slateFilter.totalSlates / slateFilter.slateRecordsPerPage
+            )}
+            onChangePage={onChangePage}
+            onChangePageSize={onChangePageSize}
+            page={slateFilter.slatePage}
+            pinSlatePerPageCount={pinSlatePerPageCount}
+            headerMessage={headerMessage}
+            subHeaderMessage={subHeaderMessage}
+          />
+        </Box>
+      )}
     >
-      <Box
-        sx={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 1,
-          p: 1,
-          borderBottom: 1,
-          borderColor: 'divider',
-          // borderRadius: 2,
-          // backgroundColor: theme.palette.background.default,
-          // boxShadow: '0 0 10px rgba(0, 0, 0, 0.3)',
-        }}
-      >
-        <Title
-          key={titleKey}
-          showAdd
-          showSearch
-          searchOptions={tags.map((t) => t.tag)}
-          onAdd={() => history('/new')}
-          onSearchInputChange={filterSlates}
-          onPrivateChanged={onPrivateChanged}
-          onDelete={onDelete}
-          onToggleSelect={onToggleSelect}
-          isSelectAllToggled={isSelectAllToggled}
-          slateMinimumPerPage={slateFilter.slateMinimumPerPage}
-          recordsPerPage={slateFilter.slateRecordsPerPage}
-          showPaging={slateFilter.totalSlates > slateFilter.slateMinimumPerPage}
-          totalPages={Math.ceil(
-            slateFilter.totalSlates / slateFilter.slateRecordsPerPage
-          )}
-          onChangePage={onChangePage}
-          onChangePageSize={onChangePageSize}
-          page={slateFilter.slatePage}
-          pinSlatePerPageCount={pinSlatePerPageCount}
-          headerMessage={headerMessage}
-          subHeaderMessage={subHeaderMessage}
-        />
-      </Box>
-      <Box sx={{ flexGrow: 1, overflowY: 'auto', padding: '10px' }}>
+      <Box sx={{ flexGrow: 1, overflowY: 'auto', pt: PAGE_SPACE.header, pb: 2 }}>
         {type === 'mine' && <RecentlyJoined />}
         {view === 'loading' ? (
           <ImageList
-            gap={10}
+            gap={20}
             cols={cols || (xlmq ? 4 : lgmq ? 3 : 2)}
             rowHeight={cellHeight ? parseInt(cellHeight, 10) : 250}
             sx={{
@@ -391,7 +389,7 @@ export default function DisplaySlates({
             secondary={empty.secondary} onClear={empty.clear ? clearFilter : undefined} />
         ) : (
           <ImageList
-            gap={10}
+            gap={20}
             cols={cols || (xlmq ? 4 : lgmq ? 3 : 2)}
             rowHeight={cellHeight ? parseInt(cellHeight, 10) : 250}
             sx={{
@@ -409,7 +407,7 @@ export default function DisplaySlates({
                 history(`/canvas/${slate.shareId}`)
               }
               return (
-                <Box component="li" key={slate.shareId} sx={{ minWidth: 0, listStyle: 'none', px: 0.75, pb: 1 }}>
+                <Box component="li" key={slate.shareId} sx={{ minWidth: 0, listStyle: 'none', pb: 1 }}>
                   <Box sx={{ position: 'relative', height: cellHeight || 210, overflow: 'hidden', border: 1, borderColor: 'divider', borderRadius: 1 }}>
                     {/* The thumbnail is one picture, named after the slate; its parts say nothing and take no focus or clicks. */}
                     <Box role="img" aria-label={name} sx={{ width: '100%', height: '100%' }}>
@@ -449,6 +447,6 @@ export default function DisplaySlates({
           </ImageList>
         )}
       </Box>
-    </Box>
+    </AppPage>
   )
 }

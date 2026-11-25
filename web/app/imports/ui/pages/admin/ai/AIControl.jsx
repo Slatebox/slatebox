@@ -1,11 +1,10 @@
 import React, { useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import Box from '@mui/material/Box'
-import Container from '@mui/material/Container'
+import AppPage from '../../../common/AppPage'
 import Link from '@mui/material/Link'
 import Tab from '@mui/material/Tab'
 import Tabs from '@mui/material/Tabs'
-import Typography from '@mui/material/Typography'
 import Overview from './Overview'
 import Providers from './Providers'
 import Models from './Models'
@@ -37,20 +36,15 @@ export default function AIControl() {
   const [tab, setTab] = useState('overview')
   const { Panel } = TABS.find((t) => t.id === tab) || TABS[0]
   return (
-    <Container maxWidth="xl">
-      <Box py={2}>
-        <Link component={RouterLink} to="/admin" underline="hover" variant="body2">Server admin</Link>
-        <Typography component="h1" variant="h5" color="text.primary" sx={{ mt: 0.5 }}>AI control</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Which model answers each part of Slatebox on this server, the providers and keys it uses, and who changed what.
-        </Typography>
-      </Box>
-      <Tabs value={tab} onChange={(_event, next) => setTab(next)} aria-label="AI control sections" sx={{ borderBottom: 1, borderColor: 'divider' }}>
+    <AppPage title="AI control"
+      eyebrow={<Link component={RouterLink} to="/admin" underline="hover" variant="body2">Server admin</Link>}
+      subtitle="Which model answers each part of Slatebox on this server, the providers and keys it uses, and who changed what.">
+      <Tabs variant="scrollable" scrollButtons={false} value={tab} onChange={(_event, next) => setTab(next)} aria-label="AI control sections" sx={{ borderBottom: 1, borderColor: 'divider' }}>
         {TABS.map((t) => <Tab key={t.id} value={t.id} label={t.label} id={`ai-control-tab-${t.id}`} aria-controls={`ai-control-panel-${t.id}`} />)}
       </Tabs>
       <Box role="tabpanel" id={`ai-control-panel-${tab}`} aria-labelledby={`ai-control-tab-${tab}`} py={3}>
         <Panel />
       </Box>
-    </Container>
+    </AppPage>
   )
 }

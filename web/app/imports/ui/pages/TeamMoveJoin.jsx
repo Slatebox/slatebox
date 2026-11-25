@@ -7,7 +7,8 @@ import Button from '@mui/material/Button'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import BrandBar from '../common/BrandBar'
-import { AccountActions, AccountPage, AccountPanel, AccountSection, FinePrint } from '../common/AccountLayout'
+import { AccountActions, AccountPanel, AccountSection, FinePrint } from '../common/AccountLayout'
+import AppPage from '../common/AppPage'
 
 // /team-move/join?token=…: a team moved to this server, and this person already had an account
 // here, so instead of a new account they got an invitation to join (server/team-export/invite.mjs).
@@ -75,10 +76,11 @@ export default function TeamMoveJoin() {
   return (
     <Box sx={{ minHeight: '100svh', bgcolor: 'background.default' }}>
       <BrandBar />
-      <Box sx={{ maxWidth: 760, mx: 'auto', px: 3, pt: { xs: 2, sm: 3 } }}>
-        <AccountPage title="Join a moved team">
+      {/* outside the app's frame: this box pads 24px as the main area does, so AppPage's edges match every page */}
+      <Box sx={{ p: 3 }}>
+        <AppPage title="Join a moved team">
           <AccountPanel>{body}</AccountPanel>
-        </AccountPage>
+        </AppPage>
       </Box>
     </Box>
   )

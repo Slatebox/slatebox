@@ -9,6 +9,7 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
 import Typography from '@mui/material/Typography'
+import AppPage from '../common/AppPage'
 import CreateOrganization from '../components/teams/CreateOrganization'
 import ManageOrganization from '../components/teams/ManageOrganization'
 import { Organizations } from '../../api/common/models'
@@ -24,8 +25,9 @@ export default function Team() {
   const orgNameType = user?.isEducationCertified ? 'Classroom' : 'Team'
   const lower = orgNameType.toLowerCase()
 
-  const page = (children) => (
-    <Box data-team-route="" sx={{ maxWidth: 1040, mx: 'auto', px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 3 } }}>{children}</Box>
+  // the shared page layout: full width, the same edges as every other page
+  const page = (children, header) => (
+    <AppPage data-team-route="" {...header}>{children}</AppPage>
   )
 
   if (org) return page(<ManageOrganization />)
@@ -45,12 +47,6 @@ export default function Team() {
 
   return page(
     <Box sx={{ display: 'grid', gap: 2 }}>
-      <Box component="header">
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 750, fontSize: { xs: 26, sm: 32 } }}>Create your {lower}</Typography>
-        <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-          Work on slates together, share them with everyone on the {lower}, and manage who can do what.
-        </Typography>
-      </Box>
       {blocked ? (
         <Box sx={(theme) => ({ bgcolor: 'shell.surface', border: '1px solid', borderColor: 'shell.border', borderRadius: '14px', p: 2,
           ...theme.applyStyles('dark', { bgcolor: 'background.paper' }) })}>
@@ -60,6 +56,10 @@ export default function Team() {
       ) : (
         <CreateOrganization privateBetaAccess />
       )}
-    </Box>
+    </Box>,
+    {
+      title: `Create your ${lower}`,
+      subtitle: `Work on slates together, share them with everyone on the ${lower}, and manage who can do what.`,
+    },
   )
 }

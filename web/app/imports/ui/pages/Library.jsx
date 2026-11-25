@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
-import Container from '@mui/material/Container'
+import AppPage from '../common/AppPage'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Tabs from '@mui/material/Tabs'
@@ -79,18 +79,16 @@ export default function Library() {
   }
 
   return (
-    <Container component="main" maxWidth="xl" sx={{ py: { xs: 2, md: 3 }, px: { xs: 2, md: 3 } }}>
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ justifyContent: 'space-between', alignItems: { md: 'flex-end' }, mb: 2 }}>
-        <Box>
-          <Typography variant="h4" component="h1" sx={{ fontWeight: 700 }}>Library</Typography>
-          <Typography color="text.secondary" sx={{ maxWidth: 720, mt: 0.5 }}>
-            Smart components, slates and presentations anyone can use. Open a copy to make it yours, or add a component to one of your slates. Everything here is free.
-          </Typography>
-          {stats && <Typography variant="body2" sx={{ mt: 1 }} data-library-count-line>{countLine(stats)}</Typography>}
+    <AppPage
+      title="Library"
+      subtitle={<>
+        <Box component="span" sx={{ display: 'block', maxWidth: 720 }}>
+          Smart components, slates and presentations anyone can use. Open a copy to make it yours, or add a component to one of your slates. Everything here is free.
         </Box>
-        <Button component={RouterLink} to="/new#build=new" variant="outlined" sx={{ flexShrink: 0 }}>Build your own component</Button>
-      </Stack>
-
+        {stats && <Typography variant="body2" color="text.primary" sx={{ mt: 1 }} data-library-count-line>{countLine(stats)}</Typography>}
+      </>}
+      actions={<Button component={RouterLink} to="/new#build=new" variant="outlined" sx={{ flexShrink: 0 }}>Build your own component</Button>}
+    >
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tabs value={filters.kind ?? 'all'} onChange={(_e, value) => setFilters({ kind: value === 'all' ? null : value })} variant="scrollable" allowScrollButtonsMobile aria-label="Kind">
           {KIND_TABS.map(tab => <Tab key={tab.label} value={tab.id ?? 'all'} label={tab.label} />)}
@@ -151,6 +149,6 @@ export default function Library() {
           <Button variant="outlined" onClick={more} disabled={loading}>Show more</Button>
         </Box>
       )}
-    </Container>
+    </AppPage>
   )
 }

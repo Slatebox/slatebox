@@ -15,7 +15,8 @@ import { useTranslator } from '../common/i18n'
 import confirmService from '../common/confirm'
 import CONSTANTS from '../../api/common/constants'
 import TabPanel from '../common/TabPanel'
-import { AccountActions, AccountPage, AccountPanel, AccountSection, AccountTabs, FinePrint, SPACE, dangerZone } from '../common/AccountLayout'
+import AppPage from '../common/AppPage'
+import { AccountActions, AccountPanel, AccountSection, AccountTabs, FinePrint, SPACE, dangerZone } from '../common/AccountLayout'
 import Credits from '../components/billing/Credits'
 import { registrationDetails, globalMessage } from '../jotai/atoms'
 import AuthManager from '../../api/common/AuthManager'
@@ -227,7 +228,7 @@ export default function Profile() {
   const user = Meteor.user()
   if (user?.isAnonymous) {
     return (
-      <AccountPage title="Save your work to access your profile on any device.">
+      <AppPage title="Save your work to access your profile on any device.">
         <AccountActions>
           <Button
             color="primary"
@@ -245,14 +246,14 @@ export default function Profile() {
             Delete Account
           </Button>
         </AccountActions>
-      </AccountPage>
+      </AppPage>
     )
   }
 
   // one column, three fields wide enough to read and no wider
   const field = { maxWidth: 480 }
   return (
-    <AccountPage title={user ? t('profile.header') : null}>
+    <AppPage title={user ? t('profile.header') : null}>
       {user && (
         <>
           <AccountTabs value={tabValue} onChange={changeTab}>
@@ -490,6 +491,6 @@ export default function Profile() {
           )}
         </>
       )}
-    </AccountPage>
+    </AppPage>
   )
 }

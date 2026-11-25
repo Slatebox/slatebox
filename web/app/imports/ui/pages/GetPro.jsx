@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { useTracker } from 'meteor/react-meteor-data'
 import { Meteor } from 'meteor/meteor'
-import { Box, Button, Typography } from '@mui/material'
+import { Button, Typography } from '@mui/material'
 import createAnonymousUser from '../../api/client/createAnonymousUser'
 import SlateLoading from '../components/SlateLoading'
 import { proSheetPath } from '../components/billing/pay/pay-url.mjs'
+import AppPage from '../common/AppPage'
 
 // /pro?plan=monthly|yearly: the site's "Get Slatebox Pro". Anyone lands in the pay sheet at once,
 // with the plan they picked: a member as they are, a new visitor as a guest made here (no sign-up
@@ -26,11 +27,11 @@ export default function GetPro() {
   }, [loggingIn, userId, retry])
 
   if (userId && !loggingIn) return <Navigate replace to={proSheetPath(params)} />
-  if (!error) return <Box component="main"><SlateLoading /></Box>
+  if (!error) return <AppPage><SlateLoading /></AppPage>
   return (
-    <Box component="main" sx={{ minHeight: '100svh', bgcolor: 'background.default', color: 'text.primary', p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, textAlign: 'center' }}>
+    <AppPage sx={{ minHeight: 'calc(100svh - 64px - 48px)', color: 'text.primary', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, textAlign: 'center' }}>
       <Typography role="alert" sx={{ fontSize: 17 }}>{error}</Typography>
       <Button variant="contained" disableElevation sx={{ borderRadius: 6, px: 3 }} onClick={() => { setError(''); setRetry(n => n + 1) }}>Try again</Button>
-    </Box>
+    </AppPage>
   )
 }

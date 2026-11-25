@@ -8,7 +8,8 @@ import Collapse from '@mui/material/Collapse'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import Alert from '@mui/material/Alert'
-import { AccountPage, AccountSection, FinePrint, SPACE } from '../common/AccountLayout'
+import { AccountSection, FinePrint, SPACE } from '../common/AccountLayout'
+import AppPage from '../common/AppPage'
 import LibraryPreview from '../components/library/LibraryPreview'
 import libraryApi from '../../api/client/library'
 import { categoryLabel } from '../../api/common/library-model.mjs'
@@ -30,14 +31,12 @@ export default function MyLibrary() {
   }, [refresh])
   const groups = groupMine(answer?.items || [])
   return (
-    <AccountPage title="My library">
-      <Typography color="text.secondary">
-        Smart components, slates and presentations you saved or sent to the library. An administrator reviews each one before anyone else sees it.
-      </Typography>
-      {problem && <Alert severity="error" sx={{ mt: SPACE.text }}>{problem}</Alert>}
-      {answer === null && <Typography color="text.secondary" sx={{ mt: SPACE.block }}>Loading…</Typography>}
+    <AppPage title="My library"
+      subtitle="Smart components, slates and presentations you saved or sent to the library. An administrator reviews each one before anyone else sees it.">
+      {problem && <Alert severity="error" sx={{ mb: SPACE.text }}>{problem}</Alert>}
+      {answer === null && <Typography color="text.secondary">Loading…</Typography>}
       {answer && groups.length === 0 && (
-        <Box sx={{ mt: SPACE.block, display: 'grid', gap: SPACE.text, justifyItems: 'start' }} data-testid="mine-empty">
+        <Box sx={{ display: 'grid', gap: SPACE.text, justifyItems: 'start' }} data-testid="mine-empty">
           <Typography>Nothing here yet.</Typography>
           <Typography variant="body2" color="text.secondary">
             Publish a slate from Share, or a presentation from its settings. Build a smart component of your own from Ask Slatebox › Add to this slate.
@@ -45,14 +44,14 @@ export default function MyLibrary() {
           <Button variant="outlined" component={RouterLink} to="/library">Browse the library</Button>
         </Box>
       )}
-      <Box sx={{ display: 'grid', gap: SPACE.section, mt: SPACE.block }}>
+      <Box sx={{ display: 'grid', gap: SPACE.section }}>
         {groups.map((group) => (
           <AccountSection key={group.id} title={`${group.title} (${group.items.length})`} data-testid={`mine-group-${group.id}`}>
             {group.items.map((item) => <MineRow key={item.id} item={item} onChanged={() => setRefresh((n) => n + 1)} />)}
           </AccountSection>
         ))}
       </Box>
-    </AccountPage>
+    </AppPage>
   )
 }
 

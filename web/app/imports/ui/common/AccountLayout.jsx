@@ -4,8 +4,11 @@ import Box from '@mui/material/Box'
 import Tabs from '@mui/material/Tabs'
 import Typography from '@mui/material/Typography'
 
-// One layout for the account pages (Profile and its tabs, Team settings): one column with one
-// left edge for the title, the tabs and every section. Spacing comes from one small scale, in
+// The parts of the account pages (Profile and its tabs, My library, Library review, the admin
+// cards): tabs, panels and sections with one left edge. The page itself is AppPage
+// (common/AppPage.jsx), the one page layout every page in the app uses. AccountPage below is only
+// for the stand-alone pages outside the app's frame (Connect an app, Sign in a device), which
+// show one short request in a reading column. Spacing comes from one small scale, in
 // theme units of 8px: 0.5 = 4px, 1 = 8px, 1.5 = 12px, 2 = 16px, 3 = 24px, 4 = 32px, 6 = 48px.
 export const SPACE = {
   hair: 0.5, // 4px: a label and its own detail
@@ -23,7 +26,7 @@ export const space = SPACE
 // commands and code to copy: monospace, so flags such as --no-install read as typed
 export const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace'
 
-// the column: readable lines on a wide screen
+// the column: readable lines on a wide screen (the stand-alone pages and the admin cards)
 export const COLUMN_WIDTH = 760
 
 export function AccountPage({ title, children }) {

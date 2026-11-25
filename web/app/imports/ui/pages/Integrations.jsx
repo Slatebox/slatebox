@@ -5,7 +5,7 @@
 import React from 'react'
 import { Meteor } from 'meteor/meteor'
 import { Navigate } from 'react-router-dom'
-import Box from '@mui/material/Box'
+import AppPage from '../common/AppPage'
 import EnterpriseSlot from '../common/EnterpriseSlot'
 import { enterpriseState } from '../../api/common/edition.mjs'
 
@@ -14,8 +14,9 @@ export const integrationsOn = (settings) => enterpriseState(settings).unlocked
 export default function Integrations() {
   if (!integrationsOn(Meteor.settings)) return <Navigate to="/profile" replace />
   return (
-    <Box data-integrations-route="" sx={{ maxWidth: 1040, mx: 'auto', px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 3 } }}>
+    // the shared page layout; the page's own title row is AppPageHeader, inside the slot
+    <AppPage data-integrations-route="">
       <EnterpriseSlot name="integrations.page" />
-    </Box>
+    </AppPage>
   )
 }

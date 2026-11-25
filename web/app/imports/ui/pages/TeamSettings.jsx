@@ -47,6 +47,7 @@ import ExportEverything from '../components/teams/ExportEverything'
 import { Level } from '../components/profile/AISettings'
 import { paymentsHere } from '../components/billing/pay/pay-env'
 import { PRICING_URL } from '../../api/common/contact.mjs'
+import AppPage from '../common/AppPage'
 import {
   confirmsName, deleteTeamState, pickSection, settingsIntro, teamNameProblem, teamSettingsSections, TEAM_NAME_MAX,
 } from '../components/teams/team-settings-model.mjs'
@@ -372,26 +373,17 @@ export default function TeamSettings() {
     navRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
   }, [wide, active, sections.length])
 
-  const header = (
-    <Box sx={{ mb: { xs: 2, md: 3 } }}>
-      <Typography variant="h4" component="h1" sx={{ fontWeight: 750, fontSize: { xs: 26, sm: 32 } }}>
-        {education ? t('teamSettings.educationHeader') : t('teamSettings.header')}
-      </Typography>
-      {!holding && settingsIntro(sections, org?.name) && (
-        <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>{settingsIntro(sections, org?.name)}</Typography>
-      )}
-    </Box>
-  )
+  const title = education ? t('teamSettings.educationHeader') : t('teamSettings.header')
+  const intro = !holding ? settingsIntro(sections, org?.name) : null
 
   if (user && !orgId) {
     return (
-      <Box sx={{ maxWidth: 760, pt: { xs: 1, md: 3 }, pb: 6 }}>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 750, fontSize: { xs: 26, sm: 32 }, mb: 2 }}>Team settings</Typography>
+      <AppPage title="Team settings">
         <Box sx={card}>
           <Typography variant="body1" sx={{ mb: 1.5 }}>You are not in a team yet. Make one to share slates, a brand kit and a balance with the people you work with.</Typography>
           <Button component={RouterLink} to="/team" variant="contained" disableElevation>Create a team</Button>
         </Box>
-      </Box>
+      </AppPage>
     )
   }
 
@@ -515,15 +507,14 @@ export default function TeamSettings() {
   }
 
   return (
-    <Box sx={{ maxWidth: 1040, mx: { xs: -1, sm: 0 }, pt: { xs: 1, md: 3 }, pb: 6, minWidth: 0 }} data-team-settings="">
-      {header}
-      <Box sx={wide ? { display: 'grid', gridTemplateColumns: '220px minmax(0, 760px)', gap: 4 } : { minWidth: 0 }}>
+    <AppPage data-team-settings="" title={title} subtitle={intro || null}>
+      <Box sx={wide ? { display: 'grid', gridTemplateColumns: '220px minmax(0, 1fr)', gap: 4 } : { minWidth: 0 }}>
         {holding ? <Box /> : nav}
         <Box sx={{ display: 'grid', gap: 2, alignContent: 'start', minWidth: 0 }} data-team-settings-panel={active || ''}
           role="region" aria-labelledby={active ? `team-settings-${active}` : undefined}>
           {holding ? <Typography variant="body2" color="text.secondary" data-team-settings-holding="">Opening…</Typography> : panel}
         </Box>
       </Box>
-    </Box>
+    </AppPage>
   )
 }

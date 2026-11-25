@@ -11,7 +11,8 @@ import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import TextField from '@mui/material/TextField'
-import { AccountPage, AccountTabs, FinePrint, SPACE } from '../common/AccountLayout'
+import { AccountTabs, FinePrint, SPACE } from '../common/AccountLayout'
+import AppPage from '../common/AppPage'
 import LibraryPreview from '../components/library/LibraryPreview'
 import libraryApi from '../../api/client/library'
 import { categoryLabel } from '../../api/common/library-model.mjs'
@@ -96,11 +97,9 @@ export default function LibraryReview() {
 
   const items = answer?.items || []
   return (
-    <AccountPage title="Library review">
-      <Button component={RouterLink} to="/admin" size="small" sx={{ justifySelf: 'start', alignSelf: 'flex-start', px: 0, minWidth: 0 }} data-admin-back="">Server admin</Button>
-      <Typography color="text.secondary">
-        What people sent to the library. Nothing is public until you approve it.
-      </Typography>
+    <AppPage title="Library review"
+      eyebrow={<Button component={RouterLink} to="/admin" size="small" sx={{ px: 0, minWidth: 0 }} data-admin-back="">Server admin</Button>}
+      subtitle="What people sent to the library. Nothing is public until you approve it.">
       <AccountTabs value={tab} onChange={(_event, next) => setTab(next)} aria-label="Queue">
         {QUEUE_TABS.map((entry) => <Tab key={entry.id} value={entry.id} label={entry.label} data-testid={`queue-tab-${entry.id}`} />)}
       </AccountTabs>
@@ -169,6 +168,6 @@ export default function LibraryReview() {
           <Button color="error" variant="contained" onClick={unpublish} disabled={!reason.trim() || busy !== null}>Unpublish</Button>
         </DialogActions>
       </Dialog>
-    </AccountPage>
+    </AppPage>
   )
 }

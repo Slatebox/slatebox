@@ -35,6 +35,7 @@ import { PRICING_URL } from '/imports/api/common/contact.mjs'
 import InviteWalkthrough from './InviteWalkthrough'
 import { changesOffer, toolSummary } from '../common/integration-words.mjs'
 import GoogleIntegration from './GoogleIntegration'
+import { AppPageHeader } from '/imports/ui/common/AppPage.jsx'
 
 export const INTEGRATION_STATUS = {
   active: 'Connected',
@@ -279,12 +280,8 @@ export default function IntegrationsPage() {
 
   return (
     <Box data-integrations-page="" sx={{ display: 'grid', gap: 2 }}>
-      <Box>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 750, fontSize: { xs: 26, sm: 32 } }}>Integrations</Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-          Connect an agent or your Google account once. Then invite it onto any slate, or let it join every slate you own, with no new sign-in.
-        </Typography>
-      </Box>
+      <AppPageHeader sx={{ mb: 1 }} title="Integrations"
+        subtitle="Connect an agent or your Google account once. Then invite it onto any slate, or let it join every slate you own, with no new sign-in." />
       {cloud && state.pro === false && (
         <Box sx={card} data-integrations-pro-note="">
           <Typography variant="body2">Integrations are part of Slatebox Pro and Slatebox Business. <a href={PRICING_URL} target="_blank" rel="noopener noreferrer">See plans</a></Typography>
