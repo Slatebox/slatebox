@@ -138,7 +138,10 @@ export default function AboutYou() {
   const [status, setStatus] = useState('')
   // The interview is open here (Interview.jsx).
   const [talking, setTalking] = useState(false)
-  const busy = useRef(false)
+  // Changes run one after another, in the order people make them (a click while another change
+  // saves waits its turn, never vanishes); the same control pressed again while it saves is ignored.
+  const queue = useRef(Promise.resolve())
+  const pending = useRef(new Set())
   const addField = useRef(null)
   const statusTimer = useRef(null)
   // Changes wait for a good read: after a failed one, Retry first.
@@ -179,22 +182,26 @@ export default function AboutYou() {
 
   // One change at a time (a second click while one runs is ignored); the list is read again after
   // it, so it always shows what is stored. → { ok, result }
-  const run = async (at, work, said) => {
-    if (busy.current) return { ok: false }
-    busy.current = true
-    setError({ at: '', message: '' })
-    try {
-      const result = await work()
-      await load()
-      const words = typeof said === 'function' ? said(result) : said
-      if (words) announce(words)
-      return { ok: true, result }
-    } catch (requestError) {
-      setError({ at, message: reason(requestError, 'That did not work. Try again.') })
-      return { ok: false }
-    } finally {
-      busy.current = false
-    }
+  const run = (at, work, said) => {
+    if (pending.current.has(at)) return Promise.resolve({ ok: false })
+    pending.current.add(at)
+    const turn = queue.current.then(async () => {
+      setError({ at: '', message: '' })
+      try {
+        const result = await work()
+        await load()
+        const words = typeof said === 'function' ? said(result) : said
+        if (words) announce(words)
+        return { ok: true, result }
+      } catch (requestError) {
+        setError({ at, message: reason(requestError, 'That did not work. Try again.') })
+        return { ok: false }
+      } finally {
+        pending.current.delete(at)
+      }
+    })
+    queue.current = turn.catch(() => {})
+    return turn
   }
 
   const add = async (event) => {
