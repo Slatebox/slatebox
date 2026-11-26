@@ -132,7 +132,8 @@ jobs:
       - name: Stage the build context (committed files only)
         run: |
           set -euo pipefail
-          for repo in engine relay; do git -C "$repo" fetch --quiet --depth=1 origin main; done
+          git -C relay fetch --quiet --depth=1 origin HEAD   # the relay's default branch is master
+          git -C engine fetch --quiet --depth=1 origin HEAD
           git -C engine merge-base --is-ancestor HEAD FETCH_HEAD 2>/dev/null || echo "::warning::the engine commit is not on slateboxjs main"
           mkdir "$RUNNER_TEMP/stage"
           app/self-host/stage-image.sh "$RUNNER_TEMP/stage" app HEAD engine HEAD relay HEAD

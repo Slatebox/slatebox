@@ -295,13 +295,14 @@ export function sourcesText({ engine, relay }) {
   return `${JSON.stringify({ engine: { repo: SOURCE_REPOS.engine, commit: engine }, relay: { repo: SOURCE_REPOS.relay, commit: relay } }, null, 2)}\n`
 }
 
-/** Each pinned commit must be on its repository's main (a checkout to ask: --engine-dir / --relay-dir). */
+/** Each pinned commit must be on its repository's default branch (main for the engine, master for the relay; a checkout to ask: --engine-dir / --relay-dir). */
 export function checkSourceCommits({ engine, relay, engineDir, relayDir, run = (dir, args) => spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8' }) }) {
   for (const [name, sha, dir] of [['engine', engine, engineDir], ['relay', relay, relayDir]]) {
     if (!existsSync(dir)) throw new Error(`--${name}-dir ${dir} is not a checkout; the ${name} commit cannot be checked`)
-    run(dir, ['fetch', '--quiet', 'origin', 'main'])
-    const onMain = ['origin/main', 'main'].some((ref) => run(dir, ['merge-base', '--is-ancestor', sha, ref]).status === 0)
-    if (!onMain) throw new Error(`The ${name} commit ${sha} is not on the main branch of ${dir}`)
+    // The remote's default branch (HEAD): main for SlateboxJS, master for the relay.
+    run(dir, ['fetch', '--quiet', 'origin', 'HEAD'])
+    const onMain = ['FETCH_HEAD', 'origin/HEAD', 'origin/main', 'origin/master', 'main', 'master'].some((ref) => run(dir, ['merge-base', '--is-ancestor', sha, ref]).status === 0)
+    if (!onMain) throw new Error(`The ${name} commit ${sha} is not on the default branch of ${dir}`)
   }
 }
 

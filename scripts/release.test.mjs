@@ -119,7 +119,15 @@ test('an app release pins the engine and relay commits in self-host/sources.json
   assert.throws(() => sourcesText({ engine: '', relay }), /--engine <full 40-character commit>/)
   assert.throws(() => sourcesText({ engine: 'abc123', relay }), /--engine/)
   const onMain = (dir, args) => ({ status: args[0] === 'merge-base' ? (args[2] === engine ? 0 : 1) : 0 })
-  assert.throws(() => checkSourceCommits({ engine, relay, engineDir: '.', relayDir: '.', run: onMain }), /relay commit .* is not on the main branch/)
+  assert.throws(() => checkSourceCommits({ engine, relay, engineDir: '.', relayDir: '.', run: onMain }), /relay commit .* is not on the default branch/)
   assert.throws(() => checkSourceCommits({ engine, relay, engineDir: '/nonexistent', relayDir: '.', run: onMain }), /not a checkout/)
   checkSourceCommits({ engine, relay, engineDir: '.', relayDir: '.', run: () => ({ status: 0 }) })
+})
+
+test('a pinned commit on a repository whose default branch is master (the relay) is accepted', async () => {
+  const { checkSourceCommits } = await import('./release.mjs')
+  const seen = []
+  const run = (dir, args) => { seen.push(args.join(' ')); return { status: args[0] === 'merge-base' && args.at(-1) === 'master' ? 0 : 1 } }
+  assert.doesNotThrow(() => checkSourceCommits({ engine: 'a'.repeat(40), relay: 'b'.repeat(40), engineDir: '.', relayDir: '.', run: (d, a) => (a[0] === 'merge-base' && a[2] === 'a'.repeat(40)) ? { status: 0 } : run(d, a) }))
+  assert.ok(seen.includes('fetch --quiet origin HEAD'), 'fetches the default branch, not main')
 })
