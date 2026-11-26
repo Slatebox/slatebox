@@ -18272,7 +18272,7 @@
               "research",
               "web"
             ],
-            "description": "One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web."
+            "description": "One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web."
           },
           "synonyms": {
             "type": "array",
@@ -18342,7 +18342,7 @@
                   "research",
                   "web"
                 ],
-                "description": "One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web."
+                "description": "One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web."
               },
               "authorName": {
                 "type": "string"
@@ -19175,7 +19175,7 @@
               "research",
               "web"
             ],
-            "description": "One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web."
+            "description": "One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web."
           },
           "synonyms": {
             "type": "array",
@@ -19334,7 +19334,7 @@
               "research",
               "web"
             ],
-            "description": "One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web."
+            "description": "One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web."
           },
           "synonyms": {
             "type": "array",
@@ -19351,7 +19351,7 @@
             "minLength": 1,
             "maxLength": 64,
             "pattern": "^[A-Za-z0-9_-]+$",
-            "description": "kind integration: your connected integration to suggest (integrations.list)."
+            "description": "kind integration: the connected integration to submit (integrations.list)."
           },
           "homepage": {
             "type": "string",
@@ -19897,7 +19897,7 @@
     {
       "id": "library.list",
       "title": "Library",
-      "description": "Published items of the shared library: smart components (boards that keep their rules: the ones built into Slatebox and the ones people built), slates and presentations anyone can copy. Filter by kind, category (plan, decide, meetings, track, map), origin (builtin or user) or words (q); sort new or popular. 24 per page by default (at most 48); pass next as cursor for more. Open to anyone.",
+      "description": "Published items of the shared library: smart components (boards that keep their rules: the ones built into Slatebox and the ones people built), slates and presentations anyone can copy. Filter by kind, category (plan, decide, meetings, track, map, make), origin (builtin or user) or words (q); sort new or popular. 24 per page by default (at most 48); pass next as cursor for more. Open to anyone.",
       "action": "library.list",
       "toolset": "library",
       "readOnly": true,
@@ -19954,7 +19954,7 @@
               "research",
               "web"
             ],
-            "description": "One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web."
+            "description": "One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web."
           },
           "q": {
             "type": "string",
@@ -20041,7 +20041,7 @@
                     "research",
                     "web"
                   ],
-                  "description": "One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web."
+                  "description": "One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web."
                 },
                 "authorName": {
                   "type": "string"
@@ -20227,7 +20227,7 @@
                   "research",
                   "web"
                 ],
-                "description": "One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web."
+                "description": "One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web."
               },
               "authorName": {
                 "type": "string"

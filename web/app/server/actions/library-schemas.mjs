@@ -4,10 +4,10 @@ import { problem } from './errors.mjs'
 
 export const itemRef = { type: 'string', minLength: 1, maxLength: 120, pattern: '^[A-Za-z0-9_-]+$', description: 'The item: its id or its slug (library.list items[].id or .slug).' }
 export const kindInput = { type: 'string', enum: [...LIBRARY_KINDS] }
-export const categoryInput = { type: 'string', enum: [...LIBRARY_CATEGORIES, ...INTEGRATION_CATEGORIES], description: 'One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web.' }
+export const categoryInput = { type: 'string', enum: [...LIBRARY_CATEGORIES, ...INTEGRATION_CATEGORIES], description: `One of the categories ${LIBRARY_CATEGORIES.join(', ')}. An integration takes ${INTEGRATION_CATEGORIES.slice(0, -1).join(', ')} or ${INTEGRATION_CATEGORIES.at(-1)}.` }
 // A suggested integration (kind integration): the person's connected MCP server, and what they say about it.
 export const integrationInputs = {
-  integrationId: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', description: 'kind integration: your connected integration to suggest (integrations.list).' },
+  integrationId: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', description: 'kind integration: the connected integration to submit (integrations.list).' },
   homepage: { type: 'string', maxLength: INTEGRATION_LIMITS.homepage, description: 'kind integration: its homepage or docs (https).' },
   auth: { type: 'string', enum: [...INTEGRATION_AUTH], description: 'kind integration: how it signs people in: none, oauth or key.' },
   consent: { type: 'boolean', description: 'kind integration: the person agrees its address, name and description become public if approved.' },

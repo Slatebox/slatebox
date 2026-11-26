@@ -896,7 +896,7 @@ declare namespace slatebox.library {
       origin: "builtin" | "user";
       title: string;
       summary: string;
-      /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
+      /** One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web. */
       category?: "plan" | "decide" | "meetings" | "track" | "map" | "make" | "work" | "business" | "research" | "web";
       authorName: string;
       publishedAt?: string;
@@ -952,10 +952,10 @@ declare namespace slatebox.library {
 }
 
 declare namespace slatebox.library {
-  /** Library. Published items of the shared library: smart components (boards that keep their rules: the ones built into Slatebox and the ones people built), slates and presentations anyone can copy. Filter by kind, category (plan, decide, meetings, track, map), origin (builtin or user) or words (q); sort new or popular. 24 per page by default (at most 48); pass next as cursor for more. Open to anyone. @scope slates:read */
+  /** Library. Published items of the shared library: smart components (boards that keep their rules: the ones built into Slatebox and the ones people built), slates and presentations anyone can copy. Filter by kind, category (plan, decide, meetings, track, map, make), origin (builtin or user) or words (q); sort new or popular. 24 per page by default (at most 48); pass next as cursor for more. Open to anyone. @scope slates:read */
   function list(input: {
     kind?: "component" | "slate" | "presentation" | "integration";
-    /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
+    /** One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web. */
     category?: "plan" | "decide" | "meetings" | "track" | "map" | "make" | "work" | "business" | "research" | "web";
     /** (1–100 characters) */
     q?: string;
@@ -974,7 +974,7 @@ declare namespace slatebox.library {
       origin: "builtin" | "user";
       title: string;
       summary: string;
-      /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
+      /** One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web. */
       category?: "plan" | "decide" | "meetings" | "track" | "map" | "make" | "work" | "business" | "research" | "web";
       authorName: string;
       publishedAt?: string;
@@ -1163,7 +1163,7 @@ declare namespace slatebox.library.review {
     summary?: string;
     /** Plain text, up to 2,000 characters. (at most 2000 characters) */
     description?: string;
-    /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
+    /** One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web. */
     category?: "plan" | "decide" | "meetings" | "track" | "map" | "make" | "work" | "business" | "research" | "web";
     /** Smart components only: words people might search for. (at most 12 items) */
     synonyms?: string[];
@@ -1177,7 +1177,7 @@ declare namespace slatebox.library.review {
       origin: "builtin" | "user";
       title: string;
       summary: string;
-      /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
+      /** One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web. */
       category?: "plan" | "decide" | "meetings" | "track" | "map" | "make" | "work" | "business" | "research" | "web";
       authorName: string;
       publishedAt?: string;
@@ -1237,7 +1237,7 @@ declare namespace slatebox.library {
     summary: string;
     /** Plain text, up to 2,000 characters. (at most 2000 characters) */
     description?: string;
-    /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
+    /** One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web. */
     category?: "plan" | "decide" | "meetings" | "track" | "map" | "make" | "work" | "business" | "research" | "web";
     /** Smart components only: words people might search for. (at most 12 items) */
     synonyms?: string[];
@@ -1282,11 +1282,11 @@ declare namespace slatebox.library {
     summary?: string;
     /** Plain text, up to 2,000 characters. (at most 2000 characters) */
     description?: string;
-    /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
+    /** One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web. */
     category?: "plan" | "decide" | "meetings" | "track" | "map" | "make" | "work" | "business" | "research" | "web";
     /** Smart components only: words people might search for. (at most 12 items) */
     synonyms?: string[];
-    /** kind integration: your connected integration to suggest (integrations.list). (1–64 characters) */
+    /** kind integration: the connected integration to submit (integrations.list). (1–64 characters) */
     integrationId?: string;
     /** kind integration: its homepage or docs (https). (at most 300 characters) */
     homepage?: string;

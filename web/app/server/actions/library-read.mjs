@@ -1,7 +1,7 @@
 // The library's reads: public (published items, for anyone, cached) and the caller's own items.
 import { defineAction } from './registry.mjs'
 import { categoryInput, cursorInput, itemDetail, itemRef, itemSummary, kindInput, object, versionInput, versionOutput } from './library-schemas.mjs'
-import { LIBRARY_STATUSES } from '../../imports/api/common/library-model.mjs'
+import { LIBRARY_CATEGORIES, LIBRARY_STATUSES } from '../../imports/api/common/library-model.mjs'
 
 const everyone = ['person', 'guest', 'agent', 'visitor']
 
@@ -65,7 +65,7 @@ export const libraryList = defineAction({
   id: 'library.list',
   title: 'Library',
   description:
-    'Published items of the shared library: smart components (boards that keep their rules: the ones built into Slatebox and the ones people built), slates and presentations anyone can copy. Filter by kind, category (plan, decide, meetings, track, map), origin (builtin or user) or words (q); sort new or popular. 24 per page by default (at most 48); pass next as cursor for more. Open to anyone.',
+    `Published items of the shared library: smart components (boards that keep their rules: the ones built into Slatebox and the ones people built), slates and presentations anyone can copy. Filter by kind, category (${LIBRARY_CATEGORIES.join(', ')}), origin (builtin or user) or words (q); sort new or popular. 24 per page by default (at most 48); pass next as cursor for more. Open to anyone.`,
   toolset: 'library',
   kind: 'read',
   scope: 'slates:read',
