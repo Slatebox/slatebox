@@ -85,6 +85,8 @@ jobs:
           node-version: 22.13.0
       - name: Release script and changelog tests
         run: npm run test:release
+      - name: Every test file is in a group
+        run: npm run test:groups
 
   installer:
     name: Installer (slatebox)
