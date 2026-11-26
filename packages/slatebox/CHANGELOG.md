@@ -13,6 +13,10 @@ release's highlights.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-26
+
+### Highlights
+
 - New installs get Slatebox 2.1.2 (`ghcr.io/slatebox/slatebox@sha256:8c469149…`, built and signed by
   GitHub from the `v2.1.2` tag).
 - Automatic updates work on a Mac whose Docker is Colima: the host updater no longer looks for
@@ -27,6 +31,11 @@ release's highlights.
   `updater.sh.prev`), so fixes to the host updater arrive with each release (2.1.2 on). A server
   whose host updater was set up before this (installer 0.3.0, never on npm) gets it by running
   `npx slatebox updates enable` once.
+
+### Fixed
+
+- **installer:** a wait that is still waiting keeps the process alive ([55554580](https://github.com/Slatebox/slatebox/commit/55554580ed191ad093f7018b0723de1468523e89))
+- **updates:** the host updater works with Colima, never strands an attempt, and is rewritten by each release ([c47cfded](https://github.com/Slatebox/slatebox/commit/c47cfded526506aa3d99dd10c7f92d3c98bc31b1))
 
 ## [0.3.0] - 2026-11-25
 
@@ -203,7 +212,8 @@ First release of `npx slatebox`. Installs the self-host image 0.1.0, pinned by d
 
 _Not tagged:_ `0.0.0-stage` (2026-11-24) only reserved the package name on npm.
 
-[Unreleased]: https://github.com/Slatebox/slatebox/compare/slatebox%400.2.3...HEAD
+[Unreleased]: https://github.com/Slatebox/slatebox/compare/slatebox%400.3.1...HEAD
+[0.3.1]: https://github.com/Slatebox/slatebox/compare/slatebox%400.3.0...slatebox%400.3.1
 [0.2.3]: https://github.com/Slatebox/slatebox/compare/slatebox%400.2.2...slatebox%400.2.3
 [0.2.2]: https://github.com/Slatebox/slatebox/compare/slatebox%400.2.1...slatebox%400.2.2
 [0.2.1]: https://github.com/Slatebox/slatebox/compare/slatebox%400.2.0...slatebox%400.2.1
