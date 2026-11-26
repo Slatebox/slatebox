@@ -59,8 +59,9 @@ export function openBrowser(url, platform = process.platform, { spawn = nodeSpaw
   return new Promise(resolve => {
     let settled = false
     const finish = result => { if (!settled) { settled = true; clearTimeout(timer); resolve(result) } }
+    // Not unref'd: the opener child is (it may keep running), so this timer is what keeps the
+    // process here until the answer, at most `wait` ms.
     const timer = setTimeout(() => finish({ ok: true }), wait)
-    timer.unref?.()
     let child
     try {
       child = spawn(cmd, args, { stdio: 'ignore', detached: true })

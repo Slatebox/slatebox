@@ -79,8 +79,8 @@ export function queryBackground(input, output, { timeout = 300 } = {}) {
       if (osc) return finish(backgroundFromRgb(osc[1]))
       if (/\x1b\[\?[\d;]*c/.test(buffer)) finish('unknown')
     }
+    // Not unref'd: a terminal that never answers is given `timeout` ms, then the run goes on.
     const timer = setTimeout(() => finish('unknown'), timeout)
-    timer.unref?.()
     try {
       input.setRawMode(true)
       input.on('data', onData)

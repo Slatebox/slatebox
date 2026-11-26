@@ -88,8 +88,9 @@ async function send(ctx, url, init, timeout = 20_000) {
   // questions), so nothing is left running. (One controller, held by the listener, rather than
   // AbortSignal.any, whose combined signal is held only weakly.)
   const controller = new AbortController()
+  // Not unref'd: while a check is out, its timeout is what ends it, so it keeps the process alive
+  // until then (the finally clears it as soon as the check answers).
   const timer = setTimeout(() => controller.abort(new DOMException('The request timed out.', 'TimeoutError')), timeout)
-  timer.unref?.()
   const stopped = ctx.adminSignal
   const onStop = () => controller.abort(stopped.reason)
   stopped?.addEventListener('abort', onStop, { once: true })
