@@ -48,7 +48,7 @@ export const shapesGenerate = defineAction({
   principals: ['agent'],
   mounts: { http: { method: 'POST', path: '/shapes/generate', operationId: 'generateShapes' } },
   // Not read-only and not idempotent: it spends AI (Pro credits or top-ups on Cloud, the
-  // operator's or the person's own key on a self-host) and fresh draws anew, so a client that
+  // person's or team's own key anywhere, the operator's on a self-host) and fresh draws anew, so a client that
   // approves read-only tools by itself still asks. It changes no slate (changesNoSlate) and
   // reaches the AI provider (openWorld); a preview run draws too.
   changesNoSlate: true,

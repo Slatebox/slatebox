@@ -70,7 +70,9 @@ export default function OwnKeys({ owner = 'me', onChange }) {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       {row('AI', aiKey, 'ai', 'Add an AI key')}
       {row('Calls', dailyKey, 'daily', 'Add a Daily key')}
-      <Typography variant="body2" color="text.secondary">With your own key there is no limit and we charge nothing.</Typography>
+      <Typography variant="body2" color="text.secondary">
+        Optional and free to use: requests on your own key spend no Slatebox credits. To choose a connection for each feature, use {owner === 'team' ? 'the team settings\' AI tab' : 'the AI tab'}.
+      </Typography>
       <Dialog open={Boolean(adding)} onClose={() => setAdding(null)} maxWidth="sm" fullWidth>
         <DialogTitle>{adding === 'daily' ? 'Add a Daily key' : 'Add an AI key'}</DialogTitle>
         <DialogContent>

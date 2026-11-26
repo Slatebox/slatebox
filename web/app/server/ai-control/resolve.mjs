@@ -8,8 +8,8 @@
 //   4. Generating images with nothing set: the built-in Stability image service (Ember cannot draw);
 //   5. the default binding ("Everything not set");
 //   6. the built-in default: Meta Muse Ember (provider-presets.mjs BUILTIN_DEFAULT).
-// A person's or team's own AI (self-hosted, ai-settings-core.mjs) comes before 2 to 6 for them, and
-// never before 1 or a part an administrator turned off.
+// A person's or team's own AI (Cloud and self-hosted alike, ai-settings-core.mjs) comes before 2 to
+// 6 for them, and never before 1 or a part an administrator turned off.
 //
 // The request path keeps its own sensible values (no administrator knobs): a 90 second time limit,
 // 2 retries for a failing service, 3 tries for an answer of the right shape, the provider's tool

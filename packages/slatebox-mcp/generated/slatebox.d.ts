@@ -200,7 +200,7 @@ declare namespace slatebox.ai.bindings {
 }
 
 declare namespace slatebox.ai {
-  /** Test AI. Tests your own or your team's saved connection (name) or one not yet saved (connection), on a self-hosted server: whether Slatebox can reach it, whether it accepts the key, which models it lists, whether the model answers and whether it calls tools (which conversation, drafts and presentations need). Saves nothing. A saved key is only sent to the address it was saved for. A token needs ai:admin as well for level team. The server's keys are tested with ai.keys.test. A model on the host is at host.docker.internal, not localhost. @scope ai:settings @openWorld @idempotent */
+  /** Test AI. Tests your own or your team's saved connection (name) or one not yet saved (connection): whether Slatebox can reach it, whether it accepts the key, which models it lists, whether the model answers and whether it calls tools (which conversation, drafts and presentations need). Saves nothing. A saved key is only sent to the address it was saved for. A token needs ai:admin as well for level team. The server's keys are tested with ai.keys.test. On Slatebox Cloud an address must be public https; on a self-hosted Slatebox a model on the host is at host.docker.internal, not localhost. @scope ai:settings @openWorld @idempotent */
   function check(input: {
     /** me (yours) or team (team admins). */
     level?: "me" | "team";
@@ -240,7 +240,7 @@ declare namespace slatebox.ai {
 }
 
 declare namespace slatebox.ai.control {
-  /** Effective AI binding. Shows which model each part of Slatebox (or one) answers with for a person (userId; none = someone not signed in): the provider and model, and where that comes from (its own choice, the part it follows, the default, the built-in default, or the person's own AI on a self-hosted server). usage true adds each part's calls, failed calls and spend over the last 24 hours. Administrators only. @scope ai:admin:read */
+  /** Effective AI binding. Shows which model each part of Slatebox (or one) answers with for a person (userId; none = someone not signed in): the provider and model, and where that comes from (its own choice, the part it follows, the default, the built-in default, or the person's or team's own AI). usage true adds each part's calls, failed calls and spend over the last 24 hours. Administrators only. @scope ai:admin:read */
   function effective(input: {
     surface?: string;
     userId?: string;
@@ -576,7 +576,7 @@ declare namespace slatebox.ai.providers {
 }
 
 declare namespace slatebox.ai {
-  /** Set AI. Your own or your team's AI on a self-hosted server: adds or changes connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins); level server only turns own AI on or off for everyone (ownProviders, administrators). A choice names me:<name>, team:<name>, or builtin for this server's model (set in Admin → AI control). Keys are stored encrypted and never returned. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI (levels me and team) is for self-hosted Slatebox: Slatebox Cloud refuses it, as AI there comes with Slatebox Pro credits and top-ups. @scope ai:settings @destructive @confirm @idempotent */
+  /** Set AI. Your own or your team's AI: adds or changes connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins); level server only turns own AI on or off for everyone (ownProviders, administrators). A choice names me:<name>, team:<name>, or builtin for this server's model (set in Admin → AI control). Keys are stored encrypted and never returned. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI is optional, on Slatebox Cloud and self-hosted alike. On Slatebox Cloud requests it serves spend no Slatebox credits, and an address must be public https. @scope ai:settings @destructive @confirm @idempotent */
   function update(input: {
     /** me (yours), team (team admins) or server (administrators). */
     level: "me" | "team" | "server";

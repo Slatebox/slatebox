@@ -35,7 +35,7 @@ export const aiControlEffective = defineAction({
   id: 'ai.control.effective',
   title: 'Effective AI binding',
   description:
-    'Shows which model each part of Slatebox (or one) answers with for a person (userId; none = someone not signed in): the provider and model, and where that comes from (its own choice, the part it follows, the default, the built-in default, or the person\'s own AI on a self-hosted server). usage true adds each part\'s calls, failed calls and spend over the last 24 hours. Administrators only.',
+    'Shows which model each part of Slatebox (or one) answers with for a person (userId; none = someone not signed in): the provider and model, and where that comes from (its own choice, the part it follows, the default, the built-in default, or the person\'s or team\'s own AI). usage true adds each part\'s calls, failed calls and spend over the last 24 hours. Administrators only.',
   toolset: 'admin',
   kind: 'read',
   scope: 'ai:admin:read',

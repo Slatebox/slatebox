@@ -4,7 +4,7 @@
 //   General          the team's name, and facts about it (kind, created, your role, people)
 //   Members & roles  the team page (/team) and team slates
 //   Plan & billing   Slatebox Business (BusinessPanel, prices from Stripe) and the team balance
-//   Agents & AI      the team's AI connections and choices (self-hosted), outside agents, Integrations
+//   Agents & AI      the team's own AI connections and choices, outside agents, Integrations
 //   Branding         the brand kit (/team/branding)
 //   Data             export everything (team.export)
 //   Danger zone      delete the team (organizations.delete), with the team's name typed to confirm
@@ -37,7 +37,6 @@ import WarningAmberOutlined from '@mui/icons-material/WarningAmberOutlined'
 import ChevronRight from '@mui/icons-material/ChevronRight'
 import { useTranslator } from '../common/i18n'
 import CONSTANTS from '../../api/common/constants'
-import { ownKeysAllowed } from '../../api/common/own-keys.mjs'
 import { enterpriseState } from '../../api/common/edition.mjs'
 import { Organizations } from '../../api/common/models'
 import AuthManager from '../../api/common/AuthManager'
@@ -270,19 +269,15 @@ function TeamAI({ noun }) {
   let body
   if (error) body = <Alert severity="warning">{error}</Alert>
   else if (!settings) body = <Typography variant="body2" color="text.secondary">Reading the {noun}&apos;s AI…</Typography>
-  else if (settings.hosted) {
-    body = (
-      <Typography variant="body2">
-        On Slatebox Cloud, AI comes with Slatebox Pro credits and top-ups, and Slatebox Business adds a shared pool for the whole {noun}. There is nothing to connect here.
-      </Typography>
-    )
-  } else if (!settings.team) {
-    body = <Typography variant="body2">This server uses the AI its operator set up. Own AI providers are turned off, so the {noun} cannot connect its own.</Typography>
+  else if (!settings.team) {
+    body = <Typography variant="body2">This server uses the AI its administrator set up. Own AI providers are turned off, so the {noun} cannot connect its own.</Typography>
   } else {
     body = (
       <>
         <Typography variant="body2" color="text.secondary">
-          Connections the {noun} adds here are used by every member who has not chosen AI of their own. A member&apos;s own choice wins, then the {noun}&apos;s, then this server&apos;s.
+          {settings.hosted
+            ? `Use the ${noun}'s own key: connections the ${noun} adds here are used by every member who has not chosen their own. It is optional and free to use, and requests on the ${noun}'s key spend no Slatebox credits. A member's own choice wins, then the ${noun}'s, then Slatebox's models.`
+            : `Agent features run on the models this server's administrator set up, or on the ${noun}'s own: connections the ${noun} adds here are used by every member who has not chosen their own. A member's own choice wins, then the ${noun}'s, then this server's.`}
         </Typography>
         <Level settings={settings} level="team" holder={settings.team} editable={settings.team.editable} onChange={setSettings} />
       </>
@@ -455,7 +450,7 @@ export default function TeamSettings() {
           <Box sx={(th) => ({ '& [data-business-panel]': card(th) })}><BusinessPanel /></Box>
         )}
         {metered && (
-          <Card title={ownKeysAllowed(Meteor.settings) ? 'Team balance and keys' : 'Team balance'} icon={CreditCardOutlined}>
+          <Card title="Team balance" icon={CreditCardOutlined}>
             <TeamBalance />
           </Card>
         )}

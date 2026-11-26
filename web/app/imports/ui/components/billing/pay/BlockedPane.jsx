@@ -6,25 +6,24 @@ import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import CONSTANTS from '../../../../api/common/constants'
 import { BILLING_CONTACT_URL } from '../../../../api/common/contact.mjs'
-import { ownKeysAllowed } from '../../../../api/common/own-keys.mjs'
 import ContactLinkText from '../ContactLinkText'
 import { SheetBody, SheetFooter } from './SheetParts'
 
 // When there is nothing to pay here (design §6 blocked): the server's reason and the one thing that
 // helps — confirm the email, write to us (the billing contact form) or ask a team admin, sign in,
-// or (self-hosted Slatebox only, own-keys.mjs) use your own key. On Slatebox Cloud an 'own-key'
-// answer is shown as help: nobody brings their own key there.
+// or use your own key (own-keys.mjs). On a server that cannot keep keys (public.ownKeys false: no
+// vault key) an 'own-key' answer is shown as help.
 const TEXT = {
   verify: 'Confirm your email address first. Nothing can be bought before it is confirmed.',
   help: `Write to us at ${BILLING_CONTACT_URL}, or ask a team admin to top up the team balance.`,
-  'own-key': 'Payments are not taken on this server. Add your own AI or call key instead: it is free.',
+  'own-key': 'Top-ups are not available right now. Use your own AI or call key instead: requests on it spend no Slatebox credits.',
   'sign-in': 'Sign in to get Slatebox Pro or top up a balance.',
   none: 'There is nothing to pay for here.',
 }
 
 export default function BlockedPane({ blocked: given, onClose }) {
   const [sent, setSent] = useState(null)
-  const blocked = given.kind === 'own-key' && !ownKeysAllowed(Meteor.settings) ? { ...given, kind: 'help' } : given
+  const blocked = given.kind === 'own-key' && Meteor.settings.public.ownKeys !== true ? { ...given, kind: 'help' } : given
   const verify = blocked.kind === 'verify' || blocked.code === 'unverified'
   const resend = async () => {
     setSent({ busy: true })

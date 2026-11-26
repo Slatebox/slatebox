@@ -83,7 +83,7 @@ export function createAIControl({ holder, choiceHolders = async () => ({ ownProv
     if (at >= 0) runtimeHealth.splice(at, 1)
   }
 
-  /** What one part resolves to for a person: their own connection first (self-hosted), then AI control. */
+  /** What one part resolves to for a person: their own connection first, then AI control. */
   async function bind({ surface, userId = null } = {}) {
     const snapshot = await holder.ready()
     const resolved = resolveModel(snapshot, { surface })

@@ -88,6 +88,10 @@
       "yearly": ""
     }
   },
+  "ai": {
+    "//": "People's and teams' own AI connections and keys (Profile, AI; team settings): optional on Slatebox Cloud, where a request they serve spends no Slatebox credits and an own connection must be a public https address, and on a self-hosted Slatebox, where they or the administrator's keys turn agent features on. ownProviders: \"on\" (the default) or \"off\" (nobody may use their own; an administrator can also turn them off in the app). privateEndpoints: self-hosted only, \"on\" (the default) lets own connections use your LAN or host.docker.internal, \"off\" keeps them on public addresses; Slatebox Cloud always refuses private, loopback, link-local and metadata addresses. Keys are sealed with SLATEBOX_KEY_ENCRYPTION_KEY from the environment, never from this file.",
+    "ownProviders": "on"
+  },
   "metering": {
     "//": "Slatebox Cloud only: its AI and call meter. It runs only where public.edition is cloud and enterprise.license holds Slatebox Cloud's own key (server/cloud-lock.mjs): anywhere else there is no meter, whatever this says. Leave it off for local development and self-hosting. See server/metering/README.md.",
     "enabled": false,

@@ -5,7 +5,7 @@
 // Slatebox is free and open source. Pro is one optional personal purchase on Slatebox Cloud:
 // it includes a monthly amount of AI and calls on Slatebox's own providers ("Pro credits"),
 // sized to about $3.75 of provider cost a month (policy.mjs sizeCredits) so that full use never
-// costs more than Pro brings in, even yearly, on an international card, with tax on top. Own keys are a self-hosted feature (own-keys.mjs), never part of Cloud; top-ups work with or without Pro.
+// costs more than Pro brings in, even yearly, on an international card, with tax on top. Own AI and call keys are optional beside it (own-keys.mjs) and spend no credits; top-ups work with or without Pro.
 // For a team, Slatebox Business (business/catalog.mjs) adds a shared pool per person.
 import { DEFAULT_METERING, proCreditsInWords } from '../../../server/metering/policy.mjs'
 

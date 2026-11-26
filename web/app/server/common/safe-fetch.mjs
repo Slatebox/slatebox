@@ -22,6 +22,8 @@ const blockedV4 = [
   '0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12',
   '192.0.0.0/24', '192.0.2.0/24', '192.88.99.0/24', '192.168.0.0/16', '198.18.0.0/15', '198.51.100.0/24',
   '203.0.113.0/24', '224.0.0.0/4', '240.0.0.0/4', '255.255.255.255/32',
+  // a cloud metadata service inside a public range (Azure WireServer): never a public address
+  '168.63.129.16/32',
 ].map(v4)
 
 function expandV6(addr) {
@@ -52,9 +54,15 @@ export function isPublicAddress(address) {
     // IPv4-mapped, IPv4-compatible and NAT64 forms carry an IPv4 address: judge that one.
     const tail = `${w[6] >> 8}.${w[6] & 0xff}.${w[7] >> 8}.${w[7] & 0xff}`
     if (w.slice(0, 5).every((x) => x === 0) && (w[5] === 0xffff || w[5] === 0)) return isPublicAddress(tail)
+    if (w[0] === 0x64 && w[1] === 0xff9b && w[2] === 1) {
+      // the local-use NAT64 network 64:ff9b:1::/48 may carry the address at the /96 or the /48 position (RFC 6052): both must be public
+      const at48 = `${w[3] >> 8}.${w[3] & 0xff}.${w[4] & 0xff}.${w[5] >> 8}`
+      return isPublicAddress(tail) && isPublicAddress(at48)
+    }
     if (w[0] === 0x64 && w[1] === 0xff9b) return isPublicAddress(tail)
     if ((w[0] & 0xfe00) === 0xfc00) return false // unique local fc00::/7
     if ((w[0] & 0xffc0) === 0xfe80) return false // link-local fe80::/10
+    if ((w[0] & 0xffc0) === 0xfec0) return false // the old site-local fec0::/10
     if ((w[0] & 0xff00) === 0xff00) return false // multicast
     if (w[0] === 0x2001 && w[1] === 0x0db8) return false // documentation
     if (w[0] === 0x2002) return isPublicAddress(`${w[1] >> 8}.${w[1] & 0xff}.${w[2] >> 8}.${w[2] & 0xff}`) // 6to4

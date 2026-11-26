@@ -19,12 +19,12 @@ import { AccountActions, AccountPanel, AccountSection, FinePrint, SPACE } from '
 
 // The model each feature uses: the person's own connections (a provider with their key, or any
 // OpenAI-compatible endpoint), their team's, and otherwise this server's model, which an
-// administrator sets in Admin → AI control. Own connections are a self-hosted feature
-// (own-keys.mjs): on Slatebox Cloud (settings.hosted) the tab shows which model each feature uses
-// and nothing of a person's or team's. The server checks every address and never shows a key
-// again. The same actions serve exec, MCP and the CLI (ai.get, ai.update, ai.check).
+// administrator sets in Admin → AI control. Own connections work on Slatebox Cloud and self-hosted
+// alike (own-keys.mjs): on Cloud (settings.hosted) they are an option, free to use, that spends no
+// Slatebox credits, at a public https address; on a self-hosted server they, or the administrator's
+// keys, turn agent features on. The server checks every address and never shows a key again. The same actions serve exec, MCP and the CLI (ai.get, ai.update, ai.check).
 const TYPES = [
-  { value: 'openai-compatible', label: 'Other (OpenAI-compatible): any host, or a model on your computer or network' },
+  { value: 'openai-compatible', label: 'Other (OpenAI-compatible): any host, or a model on your computer or network', hostedLabel: 'Other (OpenAI-compatible): any public https host' },
   { value: 'meta', label: 'Meta (Muse)' },
   { value: 'openai', label: 'OpenAI' },
   { value: 'anthropic', label: 'Anthropic' },
@@ -98,7 +98,7 @@ function ConnectionDialog({ open, level, initial, onClose, onSaved, hosted }) {
       <DialogContent>
         <TextField fullWidth margin="dense" label="Name" helperText="Lowercase letters, digits and dashes, for example desk-model" value={form.name} disabled={Boolean(initial)} onChange={set('name')} />
         <TextField select fullWidth margin="dense" label="Type" value={form.type} onChange={set('type')}>
-          {TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
+          {TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{(hosted && t.hostedLabel) || t.label}</MenuItem>)}
         </TextField>
         {form.type === 'openai-compatible' && (
           <TextField fullWidth margin="dense" label="Address" placeholder={hosted ? 'https://llm.example.com/v1' : 'http://host.docker.internal:11434/v1'}
@@ -268,6 +268,8 @@ export default function AISettings() {
   }, [])
   if (error) return <Alert severity="warning">{error}</Alert>
   if (!settings) return null
+  // on self-host nothing is paid, so the tag says only whose key it is
+  const ownTag = settings.hosted ? ' (your own key, no Slatebox credits)' : ' (your own key)'
   const switchOwn = async (on) => {
     try {
       setSettings(await Meteor.callAsync(CONSTANTS.methods.ai.update, { level: 'server', ownProviders: on ? 'on' : 'off' }))
@@ -281,31 +283,35 @@ export default function AISettings() {
         <Box sx={{ display: 'grid', rowGap: SPACE.hair }}>
           {[...settings.features, ...partsOf(settings).filter((part) => settings.effective[part.id] && settings.effective[part.id].ref !== settings.effective[part.follows]?.ref)].map((f) => (
             <Typography key={f.id}>
-              {f.title}: {settings.effective[f.id].label}{settings.effective[f.id].own ? ' (yours, no charge from Slatebox)' : ''}
+              {f.title}: {settings.effective[f.id].label}{settings.effective[f.id].own ? ownTag : ''}
               {settings.effective[f.id].gap && <Typography component="span" color="warning.main"> {settings.effective[f.id].gap}</Typography>}
             </Typography>
           ))}
         </Box>
+        {settings.mine ? (
         <FinePrint>
           {settings.hosted
-            ? 'On Slatebox Cloud, AI comes with Slatebox Pro credits and top-ups (Profile → Credits).'
-            : 'Connect a provider with your key, or any OpenAI-compatible endpoint (Ollama, llama.cpp, vLLM, LM Studio or a host), and choose it for one feature or all of them. Your own connections cost nothing on Slatebox. Anything you leave unset uses this server\'s model.'}
+            ? 'Use your own key, if you like: connect a provider with your key, or any OpenAI-compatible endpoint at a public https address, and choose it for one feature or all of them. It is optional and free to use, and requests on your own key spend no Slatebox credits. Anything you leave unset uses Slatebox\'s models with your Pro credits or balance (Profile → Credits).'
+            : 'Agent features run on the models this server\'s administrator set up, or on your own: connect a provider with your key, or any OpenAI-compatible endpoint (Ollama, llama.cpp, vLLM, LM Studio or a host), and choose it for one feature or all of them. Anything you leave unset uses this server\'s model.'}
         </FinePrint>
+        ) : (
+          // no invitation where own connections cannot be added: turned off, or a guest
+          <FinePrint>{settings.hosted ? 'Features use Slatebox\'s models with your Pro credits or balance (Profile → Credits).' : 'Agent features run on the models this server\'s administrator set up.'}</FinePrint>
+        )}
       </AccountSection>
-      {!settings.hosted && (settings.mine
-        ? <Level settings={settings} level="me" title="Yours" holder={settings.mine} editable onChange={setSettings} />
+      {settings.mine && <Level settings={settings} level="me" title="Use your own key" holder={settings.mine} editable onChange={setSettings} />}
+      {!settings.mine && (settings.ownProviders
+        ? <Alert severity="info">Sign in to use your own connections.</Alert>
         : <Alert severity="info">This server uses the models its administrator set up. Your own connections are turned off.</Alert>)}
-      {!settings.hosted && settings.team && <Level settings={settings} level="team" title="Your team's" holder={settings.team} editable={settings.team.editable} onChange={setSettings} />}
+      {settings.team && <Level settings={settings} level="team" title="Your team's own key" holder={settings.team} editable={settings.team.editable} onChange={setSettings} />}
       {settings.server.editable && (
         <AccountSection title="This server's models (administrators)">
           <Typography variant="body2">
             Providers, their keys and which model each part of Slatebox uses are set in <a href="/admin/ai">Admin → AI control</a>.
           </Typography>
-          {!settings.hosted && (
-            <FormControlLabel
-              control={<Switch checked={settings.ownProviders} disabled={settings.server.ownProvidersLocked} onChange={(e) => switchOwn(e.target.checked)} />}
-              label={settings.server.ownProvidersLocked ? 'People may use their own connections (turned off in the settings file)' : 'People may use their own connections'} />
-          )}
+          <FormControlLabel
+            control={<Switch checked={settings.ownProviders} disabled={settings.server.ownProvidersLocked} onChange={(e) => switchOwn(e.target.checked)} />}
+            label={settings.server.ownProvidersLocked ? 'People may use their own AI and call keys (turned off in the settings file)' : 'People may use their own AI and call keys'} />
         </AccountSection>
       )}
     </AccountPanel>

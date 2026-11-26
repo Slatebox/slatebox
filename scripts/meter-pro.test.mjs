@@ -1,5 +1,6 @@
 // Slatebox Pro and the meter. Pro switches on the monthly amount everyone had before it
-// (included: true); without it, once settings.free.proRequiredFrom has passed, own keys stay free,
+// (included: true); without it, once settings.free.proRequiredFrom has passed, own keys (where they
+// are on: own-keys-cloud.test.mjs) spend no credits,
 // a balance pays, the free presentation plan stays at the guest caps, and everything else is
 // refused with a clear message. Pro credits are never paused by the shared budget.
 import test from 'node:test'
@@ -46,7 +47,9 @@ test('without Pro: included AI is refused with the exact words, and nothing is s
   assert.equal(r.message, COPY.getPro)
 })
 
-test('Slatebox Cloud never uses an own AI key, a team key or a Daily key saved before: without Pro they are refused as Pro', () => {
+// Restated 2026-11-26 (owner: own keys on Cloud too): this used to say Cloud never uses a saved key.
+// Cloud now uses one where own keys are on (own-keys-cloud.test.mjs); with them off it still never does.
+test('with own keys off (settings.ownKeys false), an own AI key, a team key or a Daily key saved before is never used: without Pro they are refused as Pro', () => {
   assert.deepEqual(pick(ask({ keys: { personal: { ai: true } } })), [false, 'pro', undefined])
   assert.deepEqual(pick(ask({ teamId: 't1', keys: { team: { ai: true } } })), [false, 'pro', undefined])
   assert.deepEqual(pick(ask({ kind: 'voice', keys: { personal: { daily: true } } })), [false, 'pro-calls', undefined])

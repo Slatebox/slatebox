@@ -1,18 +1,17 @@
-// Own AI and call keys (and a person's or team's own AI connections) are a self-hosted feature.
-// On Slatebox Cloud (app.slatebox.com, test.slatebox.com) AI and calls come with Slatebox Pro
-// credits and top-ups, so nobody brings their own key there. The rule is about which server this
-// is, never about the person: one signal, public.env, the same one the AI settings ("hosted")
-// and the instance description already read. Only 'selfhost' allows own keys; every other env
-// (prod, test, dev, a missing or misspelled one) is Cloud, so a settings mistake never opens them.
+// Own AI and call keys (a person's or team's own AI connections, and their call key) work on every
+// Slatebox server (owner, 2026-11-26): on Slatebox Cloud (app.slatebox.com, test.slatebox.com)
+// they are optional, and a request served by one spends no Slatebox credits and needs no Pro; on a
+// self-hosted Slatebox they, or the keys its administrator adds, turn agent features on. An
+// administrator's off switches (a part of Slatebox, all AI, or own AI for everyone) win on both.
 //
-// Shared by the server (meter, keys.*, ai.*, exec and the API) and the browser (Credits, the AI
-// tab, team settings, the pay sheet), so both sides read the same rule.
+// What still differs is which server this is, never the person: one signal, public.env, the same
+// one the AI settings ("hosted") and the instance description read. Only 'selfhost' is
+// self-hosted; every other env (prod, test, dev, a missing or misspelled one) is Cloud, so a
+// settings mistake never opens what Cloud keeps shut: there an own connection must be a public
+// https address (endpoint-policy.mjs), and private endpoints (SLATEBOX_AI_PRIVATE_ENDPOINTS) stay
+// a self-hosted operator's choice.
+//
+// Shared by the server and the browser, so both sides read the same rule.
 
 /** Whether this server is a self-hosted Slatebox (public.env 'selfhost'). */
 export const selfHosted = (settings) => settings?.public?.env === 'selfhost'
-
-/** Whether people and teams may bring their own AI and call keys on this server. */
-export const ownKeysAllowed = (settings) => selfHosted(settings)
-
-/** The sentence a Cloud server answers an own-key write with. */
-export const OWN_KEYS_CLOUD = 'Own AI and call keys are for self-hosted Slatebox. On Slatebox Cloud, AI and calls come with Slatebox Pro credits and top-ups.'

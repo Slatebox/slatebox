@@ -1,6 +1,6 @@
 # Slatebox exec: MCP server and CLI
 
-**Slatebox is the free, open-source visual intelligence platform for your team and agents.** Diagrams, flowcharts, mind maps, whiteboards and brainstorms, retro boards, Gantt plans and presentations that compose themselves: you, your team and any agent you invite over MCP work on them together, live. Free and collaborative since 2009. Open source since 2012. An open-source alternative to whiteboard tools such as Miro. MIT licensed. The canvas is free. On Slatebox Cloud, AI comes with Slatebox Pro; a self-hosted Slatebox can use its own AI key.
+**Slatebox is the free, open-source visual intelligence platform for your team and agents.** Diagrams, flowcharts, mind maps, whiteboards and brainstorms, retro boards, Gantt plans and presentations that compose themselves: you, your team and any agent you invite over MCP work on them together, live. Free and collaborative since 2009. Open source since 2012. An open-source alternative to whiteboard tools such as Miro. MIT licensed. The canvas is free. On Slatebox Cloud, agent features come with Slatebox Pro, or use your own AI key and spend no Slatebox credits; on a self-hosted Slatebox, the administrator's keys or your own turn them on.
 
 *Not affiliated with or endorsed by Miro. Miro is a trademark of its owner.*
 

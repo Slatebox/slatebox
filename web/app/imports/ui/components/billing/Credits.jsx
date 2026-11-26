@@ -13,8 +13,8 @@ import { callsLeftText } from './money'
 import { AccountActions, AccountNote, AccountPanel, AccountSection, FinePrint, SPACE } from '../../common/AccountLayout'
 
 // Profile → Credits: Slatebox Pro, plain sentences about what is left this month, the balance
-// and (self-hosted Slatebox only: summary.ownKeysAvailable, own-keys.mjs) own keys. Slatebox Cloud
-// never shows own keys: AI and calls come with Pro credits and top-ups there. Where Pro is never needed (settings.free.proRequiredFrom 'never': self-host), the
+// and own keys where they are on (summary.ownKeysAvailable, own-keys.mjs): optional, free to use,
+// and a request one of them serves spends no Slatebox credits. Where Pro is never needed (settings.free.proRequiredFrom 'never': self-host), the
 // month's amount is free for everyone signed in and is shown as such.
 export default function Credits() {
   const [summary, setSummary] = useState(null)
@@ -65,7 +65,7 @@ export default function Credits() {
         {!summary.included ? (
           <Typography>
             {summary.ownKeysAvailable
-              ? 'AI on Slatebox’s own models, image search and image generation, and calls you start come with Slatebox Pro, or are paid from your balance. Your own AI and call keys are always free, and joining someone else’s call uses nothing of yours.'
+              ? 'AI on Slatebox’s own models, image search and image generation, and calls you start come with Slatebox Pro, or are paid from your balance. Or use your own AI and call keys: optional, free to use, and they spend no Slatebox credits. Joining someone else’s call uses nothing of yours.'
               : 'AI, image search and image generation, and calls you start come with Slatebox Pro, or are paid from your balance. Joining someone else’s call uses nothing of yours.'}
           </Typography>
         ) : (<>
@@ -90,7 +90,7 @@ export default function Credits() {
       </AccountSection>
       <Balance wallet="me" summary={summary} onChange={load} />
       {summary.ownKeysAvailable && (
-        <AccountSection title="Your own keys">
+        <AccountSection title="Use your own key">
           <OwnKeys owner="me" onChange={load} />
         </AccountSection>
       )}

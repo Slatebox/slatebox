@@ -1,8 +1,9 @@
 // Where the server may send an AI request. The address of an AI connection comes from a person,
 // a team admin, an administrator or the operator's settings, and the server connects to it, so:
 //   - a cloud metadata address is refused for everyone, everywhere;
-//   - on hosted Slatebox every address saved in the app (people, teams, administrators) must be
-//     a public https address (metering/own-endpoint.mjs has the rule);
+//   - on Slatebox Cloud (hosted) every address saved in the app (people's and teams' own AI,
+//     administrators) must be a public https address (metering/own-endpoint.mjs has the rule), and
+//     the operator's private-endpoints switch does not apply: it is a self-hosted choice;
 //   - on a self-hosted server the operator may use any other address, loopback included, and
 //     people may use their LAN or the host (host.docker.internal) over http, but never the
 //     container itself (loopback) or a link-local address.
@@ -118,6 +119,7 @@ export function checkEndpointUrl(raw, rules) {
     }
     const host = new URL(checked).hostname.replace(/^\[|\]$/g, '')
     if (METADATA_NAMES.test(host)) throw new EndpointRefused(REFUSED.metadata)
+    if (net.isIP(host)) refuseKind(addressKind(host), rules)
     return checked
   }
   let url

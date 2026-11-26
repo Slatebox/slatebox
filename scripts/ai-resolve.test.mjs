@@ -1,7 +1,7 @@
 // The one resolver (ai-control/resolve.mjs): AI off for everyone, then the part's own choice, the
 // part it follows, generated pictures on Stability while nothing is set, the default binding, then
-// the built-in default (Meta Muse Ember). A person's own AI comes first on a self-hosted server and
-// never on Slatebox Cloud, and never before a part an administrator turned off.
+// the built-in default (Meta Muse Ember). A person's own AI comes first, on a self-hosted server and
+// on Slatebox Cloud alike (owner, 2026-11-26), and never before a part an administrator turned off.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { BUILTIN_DEFAULT, CODE_LIMITS, STABILITY_ROUTE, defaultRoute, resolveModel, toSurface } from '../web/app/server/ai-control/resolve.mjs'
@@ -93,7 +93,9 @@ test('the route says which key the provider has (a fingerprint), never the key; 
   assert.equal(resolveModel(snap({ bindings: [bind('shape', 'model', 'deepinfra:google/gemini-3.5-flash')] }), { surface: 'shape' }).route.toolChoice, 'named', 'DeepInfra takes a named tool')
 })
 
-test('a person\'s own AI comes first on a self-hosted server, never on Cloud, and never before a part turned off', async () => {
+// Restated 2026-11-26 (owner: own keys on Cloud too): Cloud used to skip a person's own AI; it now
+// ranks it as a self-hosted server does, and an administrator's off still wins there.
+test('a person\'s own AI comes first on a self-hosted server and on Cloud, and never before a part turned off', async () => {
   const selfHost = await aiControlWorld({ settings: { public: { env: 'selfhost' } }, hosted: false })
   await selfHost.catalog.addProvider({ actor: selfHost.actor, input: { preset: 'meta' }, models: ['muse-ember-1.0'] })
   await selfHost.keyStore.add({ actor: selfHost.actor, provider: 'meta', apiKey: 'sk-test-meta-server-000000000000' })
@@ -112,7 +114,11 @@ test('a person\'s own AI comes first on a self-hosted server, never on Cloud, an
   await cloud.choices.insertOne({ _id: 'user:ana', use: { chat: 'me:desk' } })
   await cloud.keys.insertOne({ _id: 'own1', ownerType: 'user', ownerId: 'ana', name: 'desk', provider: 'openai-compatible', baseUrl: 'https://desk.example.org/v1', model: 'local-model', cipher: null, last4: '' })
   const onCloud = await cloud.aiSettings.resolveFor({ userId: 'ana', feature: 'chat' })
-  assert.equal(onCloud.scope, 'server', 'own AI is never used on Cloud')
+  assert.equal(onCloud.ref, 'me:desk', 'her own AI comes first on Cloud too')
+  assert.equal(onCloud.own, true)
+  assert.equal(onCloud.rules.publicOnly, true, 'on Cloud an own connection is held to public addresses')
+  await cloud.bindings.set({ actor: cloud.actor, changes: [{ surface: 'chat', use: 'off' }] })
+  assert.equal((await cloud.aiSettings.resolveFor({ userId: 'ana', feature: 'chat' })).disabled, true, 'an administrator\'s off wins over her own AI on Cloud')
 })
 
 test('the eval judge part: bound, it answers with its own model; unset, the default; never a person\'s choice', () => {

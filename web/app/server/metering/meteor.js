@@ -22,14 +22,13 @@ import { debitWithRelease, guardFilter } from './holds.mjs'
 import { METER_RATE_LIMITS, ddpRule } from './limits.mjs'
 import { isProxyAddress, resolveClientAddress } from './client-address.mjs'
 import { assertPublicHost, checkOwnEndpoint, ownEndpointAgent } from './own-endpoint.mjs'
-import { describeKey, keyDocument, loadMasterKey, open as openKey, PROVIDERS } from './vault.mjs'
+import { NOT_AVAILABLE, describeKey, keyDocument, loadMasterKey, open as openKey, PROVIDERS } from './vault.mjs'
 import { minutesLeftFor, roomRequest, tick, transcriptionAllowed } from './calls.mjs'
 import { runM1, runM2, runM4 } from './migrations.mjs'
 import { aiSettings, auxCredential } from '../methods/ai/ai-settings'
 import { dailyClient } from '../methods/huddle-provider.mjs'
 import { TOP_UP_AMOUNTS, cardFeeMode } from '../../imports/api/billing/top-up.mjs'
 import { payAlso, refusalPay } from './refusal-pay.mjs'
-import { OWN_KEYS_CLOUD, ownKeysAllowed } from '../../imports/api/common/own-keys.mjs'
 import { isInstanceAdmin } from '../permissions'
 import { cloudOn, paymentsOn } from '../cloud-lock-meteor'
 import { creditsForPool, inPool, poolMonthKey, teamPool } from './pool.mjs'
@@ -41,20 +40,27 @@ import { meterAlert } from '../email/templates.mjs'
 // the meter runs only on Slatebox Cloud by its signed Cloud key (cloud-lock.mjs): a self-hosted
 // server has none, whatever metering.enabled says.
 const METERED = meteringEnabled(Meteor.settings, { cloud: cloudOn() })
-// Own AI and call keys are a self-hosted feature (own-keys.mjs): on Slatebox Cloud none is saved,
-// shown or used, and a key saved before stays stored but unused.
-const OWN_KEYS = ownKeysAllowed(Meteor.settings)
+// Own AI and call keys work on every server (own-keys.mjs): a request one of them serves is the
+// person's or team's to pay, never Slatebox's credits, and needs no Pro. They are offered where the
+// vault has its master key (vault.mjs: without it no key can be sealed) and no administrator turned
+// own AI off (the server's ownProviders, ai-settings-core.mjs), read with the meter's settings.
+const master = loadMasterKey(process.env)
+const VAULT = Boolean(master)
+async function ownKeysOn() {
+  if (!VAULT) return false
+  const server = await aiSettings.serverState().catch(() => null)
+  return server?.ownProviders === true
+}
 // The operator's prices (settings.metering.prices) join the table once; a wrong entry stops the start.
 configurePrices(Meteor.settings)
 // The deploy settings' Pro switch and credit size (metering.proRequiredFrom: 'now' on Slatebox
 // Cloud, left out on self-host; metering.creditCostMicrosPerMonth): a wrong value stops the start.
-resolveMetering({ deploy: Meteor.settings.metering, ownKeys: OWN_KEYS })
+resolveMetering({ deploy: Meteor.settings.metering, ownKeys: VAULT })
 export const meterOn = () => METERED
 // The browser shows included amounts, Slatebox Pro, balances and own keys only where a meter runs.
 Meteor.settings.public.metered = meterOn()
-const master = loadMasterKey(process.env)
-Meteor.settings.public.ownKeys = OWN_KEYS && Boolean(master)
-export const ownKeysAvailable = () => OWN_KEYS && Boolean(master)
+// whether keys can be saved here at all; whether they are on now is the meter summary's ownKeysAvailable
+Meteor.settings.public.ownKeys = VAULT
 
 // The card Manage shows, read by methods/pro.js (registered there, so this file does not import it).
 let proCardReader = null
@@ -65,11 +71,12 @@ let cached = null
 export async function meterSettings() {
   if (cached && cached.until > Date.now()) return cached.value
   const stored = await SystemSettings.findOneAsync({ _id: 'metering' }) || {}
-  const value = resolveMetering({ stored, deploy: Meteor.settings.metering, ownKeys: OWN_KEYS })
+  const value = resolveMetering({ stored, deploy: Meteor.settings.metering, ownKeys: await ownKeysOn() })
   cached = { value, until: Date.now() + 15000 }
   return value
 }
 const forgetSettings = () => { cached = null }
+const ownKeysAvailable = async () => (await meterSettings()).ownKeys
 
 // ---------- reads ----------
 // pool: a Business team's pool (pool.mjs): the month is the team's counter, the day stays the person's.
@@ -103,10 +110,9 @@ export async function walletState(walletId, now, settings) {
 
 // Daily keys by owner; for AI, the person's own choice for this feature (ai-settings-core.mjs): a
 // connection of theirs or their team's is paid by them, anything else by Slatebox's meter.
-async function keyAvailability(ownerType, ownerId, aiScope) {
-  if (!ownerId || !OWN_KEYS) return {}
+async function keyAvailability(ownerType, ownerId, aiScope, on) {
+  if (!ownerId || !on) return {}
   const ai = aiScope === (ownerType === 'user' ? 'me' : 'team')
-  if (!master) return { ai }
   const docs = await ProviderKeys.find({ ownerType, ownerId, provider: 'daily' }, { fields: { cipher: 0 } }).fetchAsync()
   return { ai, daily: docs.some(d => !d.lastError) }
 }
@@ -152,7 +158,7 @@ async function refusalFlags(user, details = {}) {
     proState: user && !user.isAnonymous ? proSummary(user.pro, Date.now()) : null,
     proAvailable: sold && proOnSale(settings),
     topUpsAvailable: sold,
-    ownKeysAvailable: OWN_KEYS && Boolean(master),
+    ownKeysAvailable: settings.ownKeys,
     ...(details.wallet === 'team' && { teamAdmin: await isTeamAdmin(user) }),
   }
 }
@@ -218,8 +224,8 @@ export async function routeFor({ user, kind, feature, estimateMicros, minutes, r
   const [usage, global, personalKeys, teamKeys, personal, team] = await Promise.all([
     user ? usageFor(user._id, now, pool) : {},
     globalTotals(now),
-    user ? keyAvailability('user', user._id, aiScope) : {},
-    user?.orgId ? keyAvailability('org', user.orgId, aiScope) : {},
+    user ? keyAvailability('user', user._id, aiScope, settings.ownKeys) : {},
+    user?.orgId ? keyAvailability('org', user.orgId, aiScope, settings.ownKeys) : {},
     user ? walletState('user:' + user._id, now, settings) : null,
     user?.orgId ? walletState('org:' + user.orgId, now, settings) : null,
   ])
@@ -234,7 +240,6 @@ export async function routeFor({ user, kind, feature, estimateMicros, minutes, r
 // person's chosen connection for the feature (req.js resolves it again per request, per feature).
 export async function credentialsFor(keyOwner, family, feature, userId) {
   if (family === 'ai') {
-    if (!OWN_KEYS) throw new Meteor.Error('own-key', OWN_KEYS_CLOUD)
     const choice = await aiSettings.resolveFor({ userId, feature })
     if (choice?.own && !choice.error) return { provider: 'connection', ref: choice.ref }
     throw new Meteor.Error('own-key', choice?.error || 'Your own AI could not be used. Check your AI settings.')
@@ -450,6 +455,7 @@ export function proSummaryFor(user, now = Date.now()) {
 }
 
 // ---------- own keys ----------
+const OWN_KEYS_OFF = 'This server uses the AI its administrator set up. Own keys are turned off.'
 async function keyOwnerFor(user, owner, write) {
   if (!user || user.isAnonymous) throw new Meteor.Error('sign-in', 'Sign in to manage your own keys.')
   if (owner === 'team') {
@@ -486,8 +492,8 @@ async function listKeys(ownerType, ownerId) {
 Meteor.methods({
   async 'keys.list'() {
     const user = await Meteor.userAsync()
-    // Cloud: nothing to list or add (a key saved before stays stored, unused: keys.remove still removes it)
-    if (!user || user.isAnonymous || !master || !OWN_KEYS) return { available: OWN_KEYS && Boolean(master), personal: [], team: [], canEditTeam: false }
+    const on = await ownKeysAvailable()
+    if (!user || user.isAnonymous || !on) return { available: on, personal: [], team: [], canEditTeam: false }
     return {
       available: true,
       personal: await listKeys('user', user._id),
@@ -497,8 +503,8 @@ Meteor.methods({
   },
   async 'keys.save'(input) {
     check(input, { owner: Match.OneOf('me', 'team'), provider: String, key: Match.Maybe(String), baseUrl: Match.Maybe(String), model: Match.Maybe(String) })
-    if (!OWN_KEYS) throw new Meteor.Error('own-keys-cloud', OWN_KEYS_CLOUD)
-    if (!master) throw new Meteor.Error('unavailable', 'Own keys are not available on this server.')
+    if (!VAULT) throw new Meteor.Error('unavailable', NOT_AVAILABLE)
+    if (!await ownKeysAvailable()) throw new Meteor.Error('own-keys-off', OWN_KEYS_OFF)
     if (!PROVIDERS.includes(input.provider)) throw new Meteor.Error('invalid-key', 'Choose DeepInfra, your own model or Daily.')
     const user = await Meteor.userAsync()
     const owner = await keyOwnerFor(user, input.owner, true)
@@ -547,7 +553,7 @@ Meteor.methods({
     const [usage, global] = await Promise.all([usageFor(user._id, now, pool), globalTotals(now)])
     const personal = await walletState('user:' + user._id, now, settings)
     const team = user.orgId ? await walletState('org:' + user.orgId, now, settings) : null
-    const keys = OWN_KEYS && master ? await listKeys('user', user._id) : []
+    const keys = settings.ownKeys ? await listKeys('user', user._id) : []
     const label = family => keys.find(k => family === 'daily' ? k.provider === 'daily' : k.provider !== 'daily')?.label ?? null
     return {
       metered: true,
@@ -556,8 +562,8 @@ Meteor.methods({
       refundableCents: refundableCents(personal),
       ...(team && { teamFirstTopUp: !team.firstTopUpAt, teamAdmin: await isTeamAdmin(user), teamRefundableCents: refundableCents(team) }),
       frozen: Boolean(personal.frozen),
-      // own keys are a self-hosted feature: never offered on Slatebox Cloud (own-keys.mjs)
-      ownKeysAvailable: OWN_KEYS && Boolean(master),
+      // own AI and call keys: optional, free to use, and they spend no Slatebox credits (own-keys.mjs)
+      ownKeysAvailable: settings.ownKeys,
       topUpsAvailable: paymentsOn(),
       marginPercent: settings.marginPercent,
       emailVerified: Boolean(user.emails?.[0]?.verified),
@@ -705,7 +711,9 @@ export async function callClient(call, ownKey) {
   // the Deepgram secret goes only into rooms the operator runs unmetered (calls.mjs transcriptionAllowed);
   // a Deepgram key an administrator connected in AI control wins over the settings file's
   const transcriptionKey = transcriptionAllowed(call) ? ((await auxCredential('deepgram'))?.apiKey || Meteor.settings.deepgram?.secret) : null
-  return dailyClient(fetch, ownKey || Meteor.settings.daily?.apiKey, transcriptionKey, base)
+  // a call on someone's own call key never falls back to Slatebox's key (the key was removed, or cannot be read)
+  if (call.provider === 'own-key' && !ownKey) throw new Meteor.Error('huddle-unavailable', 'The call key this call runs on is no longer available.')
+  return dailyClient(fetch, call.provider === 'own-key' ? ownKey : Meteor.settings.daily?.apiKey, transcriptionKey, base)
 }
 
 async function minutesLeftForCall(call, now, settings) {
@@ -727,6 +735,11 @@ export async function tickCall(call, now = Date.now()) {
   const settings = await meterSettings()
   let ownKey = null
   if (call.provider === 'own-key') ownKey = (await credentialsFor(call.keyOwner, 'daily').catch(() => null))?.apiKey
+  if (call.provider === 'own-key' && !ownKey) {
+    // its own key is gone: the call ends here, and nothing is sent on Slatebox's key in its place
+    await HuddleCalls.updateAsync({ _id: call._id, state: 'open' }, { $set: { state: 'ended', endedReason: 'own-key-removed', endedAt: now } })
+    return { decision: 'end', charge: null, warning: null, set: { state: 'ended', endedReason: 'own-key-removed', endedAt: now } }
+  }
   const client = await callClient(call, ownKey)
   const count = await client.presence(call.roomName)
   // a call started on Pro credits is never paused by the shared budget (calls.mjs startCall)

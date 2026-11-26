@@ -28,8 +28,8 @@ function known(pay) {
 /**
  * refusal: a Meteor error ({ error, reason, details: { pay } }), or { code, pay?, details? }.
  * summary: the person's meter.summary (the allowance atom), or null. metered: this server has a meter.
- * ownKeys: this server allows own keys (self-hosted only, own-keys.mjs); on Slatebox Cloud an
- *   'own-key' answer (an older server's) is worked out again without own keys.
+ * ownKeys: this server can keep own keys (public.ownKeys, own-keys.mjs); where it cannot (no vault
+ *   key), an 'own-key' answer is worked out again without own keys.
  * → { action, wallet, label } | { action: 'again', label } (Pro switched on since) | null (not about money)
  */
 export function refusalAction(refusal, { summary = null, metered = true, ownKeys = false } = {}) {

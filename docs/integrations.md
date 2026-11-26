@@ -2,7 +2,8 @@
 
 Integrations are free for everyone: on Slatebox Cloud with any account, and on every self-hosted
 install with no key. The agent work they run counts like any other agent request: on Slatebox Cloud
-against your Slatebox Pro credits; on a self-hosted install on the agent keys its administrator sets.
+against your Slatebox Pro credits, or on your own key, which spends no Slatebox credits; on a
+self-hosted install on the models its administrator sets up, or on people's own.
 
 ## What an integration is
 

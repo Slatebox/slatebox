@@ -9,9 +9,8 @@ import { CREDIT_REFUSALS } from '../../api/common/native-canvas-conversation.mjs
 import { allowance } from '../jotai/atoms'
 import { dropPendingRetry, prefetchPaySheet, useLoadedAllowance, usePaySheet } from './billing/pay/PaySheetHost'
 import { inlinePayActions, inlineRefusalText, refusalAction } from './billing/pay/pay-notice.mjs'
-import { ownKeysAllowed } from '../../api/common/own-keys.mjs'
 
-// Whether a refusal is the meter's: no Slatebox Pro (or, self-hosted, own AI), this month's credits used up,
+// Whether a refusal is the meter's: no Slatebox Pro (and no own key), this month's credits used up,
 // a paused budget, an unconfirmed address. Only a server with a meter has them.
 export const isCreditRefusal = (code) => Meteor.settings.public.metered === true && CREDIT_REFUSALS.includes(code)
 
@@ -27,7 +26,7 @@ export function usePayAction() {
   const { open } = usePaySheet()
   const summary = useAtomValue(allowance)
   return useCallback((refusal, { from = 'draft', retry = null, reason: said = null } = {}) => {
-    const pay = refusalAction(refusal, { summary, metered: Meteor.settings.public.metered === true, ownKeys: ownKeysAllowed(Meteor.settings) })
+    const pay = refusalAction(refusal, { summary, metered: Meteor.settings.public.metered === true, ownKeys: Meteor.settings.public.ownKeys === true })
     if (!pay) return null
     if (pay.action === 'again') return typeof retry === 'function' ? { label: pay.label, action: pay.action, run: retry } : null
     const reason = said ?? refusal.reason ?? ''
@@ -45,7 +44,7 @@ function InlinePay({ refusal, from, retry }) {
   // What this person can buy, from their own meter (read once if nobody on the page has yet): a second way on is offered
   // only when it is known to be theirs; until then the server's own answer is the one button.
   const summary = useLoadedAllowance()
-  const actions = inlinePayActions(refusal, { summary, metered: Meteor.settings.public.metered === true, ownKeys: ownKeysAllowed(Meteor.settings) })
+  const actions = inlinePayActions(refusal, { summary, metered: Meteor.settings.public.metered === true, ownKeys: Meteor.settings.public.ownKeys === true })
   const reason = refusal.reason ?? ''
   const run = item => {
     if (item.action !== 'again') return open({ action: item.action, wallet: item.wallet, reason, retry, from, choice: item.choice })

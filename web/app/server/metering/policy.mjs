@@ -83,7 +83,7 @@ export const DEFAULT_METERING = Object.freeze({
     guestPresentationsPerDay: 10,
     guestPresentationsPerAddressPerDay: 100,
     // From this moment the amounts above come with Slatebox Pro, and a signed-in person without
-    // Pro pays from a balance (or, self-hosted only, their own key) (PRO_SWITCH).
+    // Pro pays from a balance or their own key (PRO_SWITCH).
     proRequiredFrom: PRO_SWITCH.never,
   }),
   budget: Object.freeze({
@@ -102,9 +102,9 @@ export const DEFAULT_METERING = Object.freeze({
 
 export const HOLDS = Object.freeze({ 'video-to-voice': 70, 'smaller-ai': 90, 'pause-calls': 100, 'pause-ai': 110 })
 
-// Slatebox Cloud's words: AI and calls come with Slatebox Pro credits, a balance pays after them,
-// and nobody brings their own key (own keys are for self-hosted Slatebox: own-keys.mjs). A
-// self-hosted meter (settings.ownKeys) says the same with its own keys in it (OWN_KEY_COPY).
+// The meter's words where own keys are off (no vault key, or an administrator turned own AI off):
+// AI and calls come with Slatebox Pro credits and a balance pays after them. Where own keys are on
+// (settings.ownKeys, own-keys.mjs) the same words name them too (OWN_KEY_COPY).
 export const COPY = Object.freeze({
   // Slatebox's own AI comes with Pro once Pro is needed, so the guest copy promises nothing about price
   guestAI: 'Sign in to use AI.',
@@ -139,10 +139,10 @@ export const COPY = Object.freeze({
   balanceVoiceOnly: 'Your balance covers voice but not video, so this call is voice. Top up for video.',
 })
 
-// A self-hosted meter's words where they differ: there people may bring their own AI and call
-// keys (settings.ownKeys), which are free and come first.
+// The meter's words where they differ when own keys are on (settings.ownKeys): people may bring
+// their own AI and call keys, which spend no Slatebox credits and come first.
 export const OWN_KEY_COPY = Object.freeze({
-  unverified: 'Confirm your email address to use the free amount each month. Your own key still works.',
+  unverified: 'Confirm your email address to use the free amount each month. Your own key and your balance still work.',
   aiToday: "You have used today's free AI. Add your own key or top up in your profile.",
   aiMonth: "You have used this month's free AI. Add your own key or top up in your profile.",
   aiPaused: 'Free AI is paused until the 1st. Your own key and your balance still work.',
@@ -152,8 +152,8 @@ export const OWN_KEY_COPY = Object.freeze({
   videoToVoice: 'Your free video for this month is used up, so this call is voice. Add a Daily key or top up for video.',
   freeStopped: `Free use is off for this account. Your own key and your balance still work. Write to us at ${BILLING_CONTACT_URL}.`,
   stagePaused: 'Free AI and free calls are paused until the 1st. Your own keys and your balance still work.',
-  getPro: `AI on Slatebox's own models comes with Slatebox Pro, ${PRO_MONTH}. Get Pro in your profile, or connect your own AI, which is free.`,
-  getProCalls: `Starting a call comes with Slatebox Pro, ${PRO_MONTH}, or add your own Daily key for free. Anyone can join a call that's already running.`,
+  getPro: `AI on Slatebox's own models comes with Slatebox Pro, ${PRO_MONTH}, or a balance. Get Pro or top up in your profile, or use your own AI key: it spends no Slatebox credits.`,
+  getProCalls: `Starting a call comes with Slatebox Pro, ${PRO_MONTH}, or a balance, or use your own call key: it spends no Slatebox credits. Anyone can join a call that's already running.`,
   proPastDue: "Your Pro payment didn't go through, so your credits are paused. Update your card in your profile. Your own keys and your balance still work.",
   proAiToday: "You have used today's Pro credits for AI. Add your own AI or top up in your profile.",
   proAiMonth: "You have used this month's Pro credits for AI. Add your own AI or top up in your profile.",
@@ -162,7 +162,7 @@ export const OWN_KEY_COPY = Object.freeze({
   proStopped: `Included AI and calls are off for this account. Your own key and your balance still work. Write to us at ${BILLING_CONTACT_URL}.`,
 })
 const WITH_OWN_KEYS = Object.freeze({ ...COPY, ...OWN_KEY_COPY })
-/** The meter's words for this server: Cloud's, or a self-hosted meter's with own keys (settings.ownKeys). */
+/** The meter's words for this server: with own keys where they are on (settings.ownKeys), else without. */
 export const copyFor = settings => (settings?.ownKeys === true ? WITH_OWN_KEYS : COPY)
 
 // Whether included AI and calls need Slatebox Pro at this moment (settings.free.proRequiredFrom).
@@ -213,7 +213,8 @@ export function resolveMetering({ stored = {}, deploy = {}, ownKeys = false } = 
     free,
     budget: { ...DEFAULT_METERING.budget, ...stored?.budget },
     topUp: { ...DEFAULT_METERING.topUp, ...stored?.topUp },
-    // whether own AI and call keys pay here: a self-hosted server only (own-keys.mjs), never stored
+    // whether own AI and call keys pay here (own-keys.mjs): the vault and the administrator's switch
+    // say so at each read (meteor.js), never a stored meter setting
     ownKeys: ownKeys === true,
   }
 }
@@ -352,7 +353,7 @@ const MESSAGES = { cloud: messagesOf(COPY), own: messagesOf(WITH_OWN_KEYS) }
 const PRO_MESSAGES = { cloud: proMessagesOf(COPY), own: proMessagesOf(WITH_OWN_KEYS) }
 const wordsFor = settings => (settings?.ownKeys === true ? 'own' : 'cloud')
 // The refusal for a code; `who.pro` (a decision or a person on Pro credits) words it as Pro;
-// `settings.ownKeys` (a self-hosted meter) words it with own keys; `who.pool` words a team pool's month.
+// `settings.ownKeys` (own keys on) words it with own keys; `who.pool` words a team pool's month.
 const POOL_MESSAGES = Object.freeze({ 'ai-month': 'poolAiMonth', 'calls-month': 'poolCallsMonth', 'video-stage': 'poolCallsMonth' })
 export const messageFor = (code, who = null, settings = null) => {
   const words = wordsFor(settings)
@@ -423,8 +424,8 @@ export function route(input) {
   if (person?.anonymous && guestUse(input)) return guestRoute(input, person)
   if (!person || person.anonymous) return refuse('guest', isCall(kind) ? copy.guestCall : copy.guestAI)
 
-  // Own keys pay first, on a self-hosted server only (settings.ownKeys): on Slatebox Cloud a key
-  // someone saved before is never used.
+  // Own keys pay first where they are on (settings.ownKeys): no Slatebox credits, no Pro needed.
+  // An AI key counts only when the person's own choice serves this feature (keys.*.ai, meteor.js).
   const family = settings.ownKeys === true ? OWN_KEY_FAMILY[kind] : null
   if (family && keys.personal?.[family]) return { ok: true, route: 'byok', payer: { type: 'user', id: person.id }, kind, keyOwner: { type: 'user', id: person.id } }
   if (family && teamId && keys.team?.[family]) return { ok: true, route: 'byok', payer: { type: 'user', id: person.id }, kind, keyOwner: { type: 'org', id: teamId } }
@@ -436,7 +437,7 @@ export function route(input) {
   const args = { ...input, usage, minutes, estimateMicros, level, settings, now }
 
   // Without the included amount (no Pro once Pro is needed): the free presentation plan, then a
-  // balance, else what Pro or a balance (or, self-hosted, an own key) would give.
+  // balance, else what Pro or a balance (or an own key) would give.
   if (person.included === false) {
     if (guestUse(input)) {
       const plan = guestRoute(input, person)

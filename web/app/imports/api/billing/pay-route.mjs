@@ -8,11 +8,11 @@
 //   details: the refusal's details; details.wallet 'team' when a team balance was the payer
 //   summary: meter.summary (proAvailable, topUpsAvailable, ownKeysAvailable, proState, teamAdmin,
 //     emailVerified), or null for a guest. A missing flag counts as available, except
-//     ownKeysAvailable: own keys are offered only where the server says so (self-hosted Slatebox,
-//     own-keys.mjs), never on Slatebox Cloud. The sheet's methods refuse if not.
+//     ownKeysAvailable: own keys are offered only where the server says they are on (own-keys.mjs:
+//     a vault key, and own AI not turned off by an administrator). The sheet's methods refuse if not.
 //   action: 'pro' (Pro pane) | 'topup' (Top-up pane, with wallet 'me' or 'team') | 'card' (update
 //     the card of a Pro whose payment failed) | 'manage' (Pro is already on) | 'verify' (confirm the
-//     email first) | 'sign-in' | 'own-key' (no payments on a self-hosted server: its own keys) | 'help' (a
+//     email first) | 'sign-in' | 'own-key' (no payments taken here: use your own key) | 'help' (a
 //     team admin or the billing contact form) | 'none' (not about money)
 
 export const PAY_ACTIONS = Object.freeze(['pro', 'topup', 'card', 'manage', 'verify', 'sign-in', 'own-key', 'help', 'none'])
@@ -30,8 +30,8 @@ export const PAY_CODES = Object.freeze([
 const answer = (action, wallet = null) => Object.freeze({ action, wallet: action === 'topup' ? wallet : null })
 
 function topUp({ details, summary }) {
-  // No top-ups here: a self-hosted server offers its own keys; Slatebox Cloud offers Pro when it is
-  // on sale and not held yet, else the billing contact form.
+  // No top-ups here: own keys where they are on; else Pro when it is on sale and not held yet,
+  // else the billing contact form.
   if (summary?.topUpsAvailable === false) {
     if (summary?.ownKeysAvailable === true) return answer('own-key')
     if (summary?.proAvailable !== false && !summary?.proState?.active) return answer('pro')

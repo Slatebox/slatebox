@@ -7,7 +7,7 @@ export default defineAction({
   id: 'ai.check',
   title: 'Test AI',
   description:
-    'Tests your own or your team\'s saved connection (name) or one not yet saved (connection), on a self-hosted server: whether Slatebox can reach it, whether it accepts the key, which models it lists, whether the model answers and whether it calls tools (which conversation, drafts and presentations need). Saves nothing. A saved key is only sent to the address it was saved for. A token needs ai:admin as well for level team. The server\'s keys are tested with ai.keys.test. A model on the host is at host.docker.internal, not localhost.',
+    'Tests your own or your team\'s saved connection (name) or one not yet saved (connection): whether Slatebox can reach it, whether it accepts the key, which models it lists, whether the model answers and whether it calls tools (which conversation, drafts and presentations need). Saves nothing. A saved key is only sent to the address it was saved for. A token needs ai:admin as well for level team. The server\'s keys are tested with ai.keys.test. On Slatebox Cloud an address must be public https; on a self-hosted Slatebox a model on the host is at host.docker.internal, not localhost.',
   toolset: 'account',
   kind: 'write',
   scope: 'ai:settings',

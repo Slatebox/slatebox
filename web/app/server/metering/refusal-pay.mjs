@@ -6,7 +6,7 @@ import { payRoute } from '../../imports/api/billing/pay-route.mjs'
 
 /**
  * The part of meter.summary pay-route reads, for one person. flags: { proState, proAvailable,
- * topUpsAvailable, ownKeysAvailable (self-hosted only), teamAdmin? } (meteor.js refusalFlags). A guest has none: pay-route asks them to sign in.
+ * topUpsAvailable, ownKeysAvailable (own keys on here), teamAdmin? } (meteor.js refusalFlags). A guest has none: pay-route asks them to sign in.
  */
 export function refusalSummary(user, flags = {}) {
   if (!user || user.isAnonymous) return null

@@ -179,6 +179,11 @@ async function leave({ callId } = {}) {
   const call = await HuddleCalls.findOneAsync({ _id: callId, state: 'open' })
   if (!call) return true
   const ownKey = call.provider === 'own-key' ? (await credentialsFor(call.keyOwner, 'daily').catch(() => null))?.apiKey : null
+  // a call whose own key is gone just ends: nothing is asked of the call provider on Slatebox's key
+  if (call.provider === 'own-key' && !ownKey) {
+    await endOpenCall(call, { reason: 'left', now: Date.now() })
+    return true
+  }
   const client = await callClient(call, ownKey)
   const present = await client.presence(call.roomName)
   if (present !== null && present <= 1) {

@@ -16,7 +16,8 @@ import { operatorConfig } from './connections.mjs'
 import { selfHosted } from '../../../imports/api/common/own-keys.mjs'
 import { isInstanceAdmin } from '../../permissions'
 
-// Slatebox Cloud (any env but 'selfhost', own-keys.mjs): people and teams bring no AI of their own.
+// Slatebox Cloud (any env but 'selfhost', own-keys.mjs): people's and teams' own AI must be at a
+// public https address there (endpoint-policy.mjs); a self-hosted operator may allow private ones.
 export const hosted = !selfHosted(Meteor.settings)
 
 // A wrong ai.ownProviders or ai.privateEndpoints in the settings stops the start with a plain message.

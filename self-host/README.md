@@ -93,7 +93,8 @@ of valid names, so a setting is never silently ignored.
 
 Slatebox bundles no model. It uses whatever you connect, and you can mix them:
 a model on this computer or your network, a host provider, or a cloud provider
-with your key. People may add their own too (Profile, AI), unless
+with your key. Agent features turn on with the models you connect here, or with
+people's own: people and teams may add their own keys too (Profile, AI), unless
 `SLATEBOX_AI_OWN_PROVIDERS=off`. Their choice for a feature wins over yours.
 
 One endpoint for everything:

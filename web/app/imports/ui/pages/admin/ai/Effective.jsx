@@ -15,7 +15,7 @@ import { routeText, sourceText } from './bindings-view.mjs'
 
 // Admin › AI control › What a person gets: for one person (by their id, or someone not signed in),
 // which provider and model answers each part of Slatebox, and where that comes from: the part's own
-// choice, the part it follows, the default, the built-in default, or (self-hosted) their own AI.
+// choice, the part it follows, the default, the built-in default, or their or their team's own AI.
 const failure = (err, fallback) => err?.reason || err?.message || fallback
 
 export default function Effective() {

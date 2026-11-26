@@ -1,4 +1,4 @@
-// A person's and a team's own AI (self-hosted Slatebox): a connection is a provider they connected
+// A person's and a team's own AI (Slatebox Cloud and self-hosted alike, own-keys.mjs): a connection is a provider they connected
 // (a cloud provider with a key, or any OpenAI-compatible endpoint with an address, an optional key
 // and a model name), and a choice says which connection each feature uses, with a default for the
 // rest. Everything not chosen there is the server's AI, which an administrator sets in Admin → AI

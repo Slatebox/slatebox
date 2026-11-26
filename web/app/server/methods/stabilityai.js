@@ -9,7 +9,7 @@ import { FIXED_PRICES } from '../metering/prices.mjs'
 import { aiProviders } from '../config/index.cjs'
 import { auxCredential } from './ai/ai-settings'
 import { guardedFetch, resolveRequestConnection } from './ai/ai-settings'
-import { generateImages } from './ai/image-connection.mjs'
+import { generateImages, imageKind, IMAGE_TYPES } from './ai/image-connection.mjs'
 
 import fetch from 'node-fetch'
 import CONSTANTS from '../../imports/api/common/constants'
@@ -20,10 +20,12 @@ const method = {}
 async function uploadImage(imgBuffer, userId) {
   const now = new Date()
   const folder = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`
+  // stored as what its bytes are (the built-in service sends PNG)
+  const kind = imageKind(imgBuffer) || 'png'
   return storeFile({
     body: imgBuffer,
-    key: `${folder}/ai_${userId}_${Random.id()}.png`,
-    contentType: 'image/png',
+    key: `${folder}/ai_${userId}_${Random.id()}.${kind === 'jpeg' ? 'jpg' : kind}`,
+    contentType: IMAGE_TYPES[kind],
   })
 }
 

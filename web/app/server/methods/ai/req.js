@@ -23,9 +23,9 @@ import {
 } from './provider.mjs'
 import { CODE_LIMITS } from '../../ai-control/resolve.mjs'
 
-// Every request has one route: the part's model in Admin → AI control (or a person's own
-// connection on a self-hosted server), with its key from the backend. No key is read from the
-// settings file or the environment here.
+// Every request has one route: the part's model in Admin → AI control, with its key from the
+// backend, or a person's or team's own connection (Slatebox Cloud or self-hosted) with their key.
+// No key is read from the settings file or the environment here.
 const INFRA_RETRY_LIMIT = CODE_LIMITS.infraRetries
 // Max invalid-JSON responses per provider chain before the chain degrades.
 // The old bound was `errs > 5` + throw, and the throw landed in the

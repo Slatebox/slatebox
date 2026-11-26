@@ -24,7 +24,7 @@ const generation = () => runAIAction({ feature: 'generation' }, async () => {
   }
 })
 const person = { id: 'u1', anonymous: false, emailVerified: true }
-// own keys pay on a self-hosted meter only (settings.ownKeys); Slatebox Cloud: own-keys-cloud.test.mjs
+// own keys pay where they are on (settings.ownKeys), Cloud included: own-keys-cloud.test.mjs
 const selfHostedMeter = { ...DEFAULT_METERING, ownKeys: true }
 const base = { person, teamId: null, usage: {}, wallets: {}, global: {}, settings: selfHostedMeter, now: NOW }
 

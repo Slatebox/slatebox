@@ -1,16 +1,18 @@
 // The one question every AI path asks: which model answers this feature for this person, with
 // which key? The server's answer comes from AI control (ai-control/resolve.mjs: one choice per part
-// of Slatebox, with the provider's active key from the backend, keys.mjs). On a self-hosted server
-// a person or their team may choose their own connections first (own AI); this module keeps those.
-// Pure apart from the injected store and sources, so the same code runs under Meteor
+// of Slatebox, with the provider's active key from the backend, keys.mjs). A person or their team
+// may choose their own connections first (own AI, own-keys.mjs), on Slatebox Cloud and on a
+// self-hosted server alike; this module keeps those. The order is the same everywhere: an
+// administrator's off switch (a part, or all AI), then the person's choice, then their team's, then
+// the server's. Pure apart from the injected store and sources, so the same code runs under Meteor
 // (ai-settings.js) and in tests.
 //
-// Own AI (a person's or a team's connections) is a self-hosted feature (own-keys.mjs). On Slatebox
-// Cloud (hosted) own providers are always off and locked: AI comes with Slatebox Pro credits and
-// top-ups, nothing of a person's or team's is saved, tested or used, and a connection saved before
-// stays stored, unused, until its owner removes it.
+// On Slatebox Cloud (hosted) an own connection must be a public https address, checked when it is
+// saved and again by the lookup of every request (endpoint-policy.mjs), and a connection of one of
+// the server's own keyless providers is never a person's: it would be served by Slatebox while
+// counted as theirs. Keys are sealed in the vault, never returned and never written to the audit
+// trail (only a fingerprint).
 import { problem } from '../../actions/errors.mjs'
-import { OWN_KEYS_CLOUD } from '../../../imports/api/common/own-keys.mjs'
 import { NOT_AVAILABLE, last4, open as openKey, seal } from '../../metering/vault.mjs'
 import { EndpointRefused, checkEndpointUrl, endpointRules } from './endpoint-policy.mjs'
 import {
@@ -28,6 +30,13 @@ const RULE_LEVEL = { me: 'person', team: 'team', server: 'server' }
 const SERVER = { type: 'server', id: 'server' }
 const invalid = (message) => problem(400, 'invalid_request', message)
 const ADMIN_PAGE = 'The server\'s providers, keys and models are set in Admin → AI control.'
+// A provider an administrator added that takes no key is the server's own model: a person's or
+// team's connection to it would be served by this server while counted as theirs (no charge).
+const serverKeyless = (type) => {
+  const found = connectionType(type)
+  return Boolean(found && !found.builtin && found.auth?.style === 'none')
+}
+const SERVER_KEYLESS = (label) => `${label} is one of this server's own models, so it cannot be your own connection. Leave the feature on this server's model instead.`
 const FIX_SERVER = 'An administrator chooses another model for it in Admin → AI control.'
 
 /**
@@ -39,6 +48,7 @@ const FIX_SERVER = 'An administrator chooses another model for it in Admin → A
  *   check(connection, rules) → Test connection result (connection-check.mjs through a guarded fetch),
  *   assertHost?(baseUrl, rules) → resolves when every address of the name is allowed,
  *   checkLimit?: { count, windowMs } Test connection calls per person,
+ *   saveLimit?: { count, windowMs } changes that save connections (and keys), per person,
  *   audit?(entry) records a change in the AI control audit trail (never with a key in it),
  *   now?()
  * }
@@ -47,7 +57,7 @@ const FIX_SERVER = 'An administrator chooses another model for it in Admin → A
  */
 export function createAISettings({
   store, master, settings, hosted, loadUser, isAdmin, isTeamAdmin, check, assertHost = async () => {}, now = Date.now,
-  checkLimit = { count: 20, windowMs: 10 * 60 * 1000 }, audit = null,
+  checkLimit = { count: 20, windowMs: 10 * 60 * 1000 }, saveLimit = { count: 20, windowMs: 10 * 60 * 1000 }, audit = null,
 }) {
   const file = () => operatorConfig(settings)
   // AI control: which model a part of Slatebox uses, or that it is off (ai-control/resolve.mjs)
@@ -58,18 +68,23 @@ export function createAISettings({
   const rulesFor = (ruleLevel) => endpointRules(contextFor(ruleLevel))
   const sameAddress = (a, b) => typeof a === 'string' && typeof b === 'string' && a.replace(/\/+$/, '') === b.replace(/\/+$/, '')
 
-  // Test connection calls per person, in memory: enough to set up a few connections, not a scanner.
-  const checksBy = new Map()
-  function takeCheck(userId) {
-    const at = now()
-    const recent = (checksBy.get(userId) || []).filter((t) => at - t < checkLimit.windowMs)
-    if (recent.length >= checkLimit.count) {
-      checksBy.set(userId, recent)
-      throw problem(429, 'rate_limited', 'Too many connection tests. Wait a few minutes and try again.', { retryAfter: Math.ceil((checkLimit.windowMs - (at - recent[0])) / 1000) })
+  // Test connection calls and saved connections per person, in memory: enough to set up a few
+  // connections, not a scanner or a key-stuffing loop.
+  function limiter(limit, message) {
+    const by = new Map()
+    return (userId) => {
+      const at = now()
+      const recent = (by.get(userId) || []).filter((t) => at - t < limit.windowMs)
+      if (recent.length >= limit.count) {
+        by.set(userId, recent)
+        throw problem(429, 'rate_limited', message, { retryAfter: Math.ceil((limit.windowMs - (at - recent[0])) / 1000) })
+      }
+      recent.push(at)
+      by.set(userId, recent)
     }
-    recent.push(at)
-    checksBy.set(userId, recent)
   }
+  const takeCheck = limiter(checkLimit, 'Too many connection tests. Wait a few minutes and try again.')
+  const takeSave = limiter(saveLimit, 'Too many changes to your connections. Wait a few minutes and try again.')
 
   const ownerFor = (level, user) => {
     if (level === 'me') return { type: 'user', id: user._id }
@@ -117,7 +132,7 @@ export function createAISettings({
   async function serverState() {
     const config = file()
     const stored = await store.getUse(SERVER)
-    const locked = Boolean(hosted) || config.ownProvidersLocked
+    const locked = config.ownProvidersLocked
     return { ownProviders: locked ? false : stored?.ownProviders !== false, ownProvidersLocked: locked }
   }
 
@@ -168,17 +183,19 @@ export function createAISettings({
     const effective = {}
     for (const s of USE_SURFACES) {
       if (s.id === 'default' || !s.inBuild) continue
-      const choice = resolveAIChoice({ feature: s.id, person, team, ownProviders: server.ownProviders })
-      if (choice.connection) {
+      // an administrator turning a part off wins over anyone's own choice, as in resolveFor
+      const control = await controlFor(s.id)
+      const off = Boolean(control && !control.enabled)
+      const choice = off ? null : resolveAIChoice({ feature: s.id, person, team, ownProviders: server.ownProviders })
+      if (choice?.connection) {
         const label = connectionLabel(choice.connection)
         const gap = capabilityGap({ feature: choice.feature, connection: choice.connection, label })
         effective[s.id] = { ref: choice.ref, scope: choice.scope, own: choice.own, label, ...(gap && { gap: gap.message }) }
         continue
       }
-      const control = await controlFor(s.id)
       const route = control?.route
       let label = 'this server\'s model'
-      if (control && !control.enabled) label = control.disabledMessage || 'Turned off by your administrator'
+      if (off) label = control.disabledMessage || 'Turned off by your administrator'
       else if (route?.aux) label = route.label
       else if (route && !route.error) label = serverLabel(route, admin)
       effective[s.id] = { ref: 'builtin', scope: 'builtin', own: false, label, ...(route?.error && { gap: route.error }) }
@@ -203,7 +220,7 @@ export function createAISettings({
   }
 
   // ---------- write ----------
-  const ownOff = () => problem(403, 'forbidden', hosted ? OWN_KEYS_CLOUD : 'This server uses the AI its operator set up. Own AI providers are turned off.')
+  const ownOff = () => problem(403, 'forbidden', 'This server uses the AI its administrator set up. Own AI providers are turned off.')
   async function authorize(user, level, { removeOnly = false } = {}) {
     if (level === 'me') {
       if (!removeOnly && !(await serverState()).ownProviders) throw ownOff()
@@ -233,6 +250,7 @@ export function createAISettings({
       if (names.has(input?.name)) throw invalid(`${input.name} appears twice in this change.`)
       names.add(input?.name)
       if (BUILTIN_PROVIDERS[input?.type]) throw invalid(`${input.type} is a service of the server: an administrator adds its key in Admin → AI control.`)
+      if (serverKeyless(input?.type)) throw invalid(SERVER_KEYLESS(connectionType(input.type).label))
       const previous = existing.find((doc) => legacyName(doc) === input?.name && doc.provider !== 'daily')
       const keepKey = input?.apiKey === undefined && Boolean(previous?.cipher && previous?.last4)
       let connection
@@ -318,7 +336,7 @@ export function createAISettings({
     const owner = await authorize(user, level, { removeOnly })
     if (level === 'server' && (input.connections?.length || input.remove?.length || input.use)) throw invalid(`${ADMIN_PAGE} At the server level, ai.update only turns own AI on or off (ownProviders).`)
     if (input.ownProviders !== undefined && level !== 'server') throw invalid('ownProviders is a server setting.')
-    if (input.ownProviders === 'on' && hosted) throw problem(403, 'forbidden', OWN_KEYS_CLOUD)
+    if (input.connections?.length) takeSave(user._id)
     const stored = (await store.getUse(owner)) || { use: {} }
     const use = { ...(stored.use || {}) }
     const removing = [...(input.remove || [])]
@@ -376,8 +394,9 @@ export function createAISettings({
     if (!RULE_LEVEL[level]) throw invalid('level is me, team or server.')
     if (level === 'server') throw invalid(`${ADMIN_PAGE} Test a key there (ai.keys.test).`)
     if (level === 'team' && !user.orgId) throw problem(403, 'forbidden', 'You are not in a team.')
-    if (hosted) throw problem(403, 'forbidden', OWN_KEYS_CLOUD)
     if (level === 'team' && !input.name && !(await isTeamAdmin(user))) throw problem(403, 'forbidden', 'Only a team admin can test a new connection for the team.')
+    // an administrator turning own AI off also stops testing new endpoints from this server
+    if (!(await serverState()).ownProviders) throw ownOff()
     takeCheck(user._id)
     const owner = ownerFor(level, user)
     const saved = await connectionsOf(owner, true)
@@ -425,6 +444,7 @@ export function createAISettings({
     const label = connectionLabel(connection)
     let error = null
     if (connection.unreadable) error = `The key for ${label} could not be read. Add it again in your AI settings.`
+    else if (serverKeyless(connection.type)) error = `${label} cannot be used: ${SERVER_KEYLESS(connectionType(connection.type).label)}`
     else if (!connection.model) error = `${label} has no model. Choose one in your AI settings.`
     else {
       try {

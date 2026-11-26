@@ -17,7 +17,6 @@ import {
 import { checkConnection } from '../web/app/server/methods/ai/connection-check.mjs'
 import { generateImages } from '../web/app/server/methods/ai/image-connection.mjs'
 import { createAISettings } from '../web/app/server/methods/ai/ai-settings-core.mjs'
-import { OWN_KEYS_CLOUD } from '../web/app/imports/api/common/own-keys.mjs'
 import { connectionRequest } from '../web/app/server/methods/ai/connection-request.mjs'
 import { loadMasterKey } from '../web/app/server/metering/vault.mjs'
 import { createRegistry } from '../web/app/server/actions/registry.mjs'
@@ -264,14 +263,32 @@ test('Test connection explains a refused key and an unreachable endpoint, withou
 })
 
 test('an image is made through the chosen endpoint when it can make images', async (t) => {
-  const png = Buffer.from('fake-png').toString('base64')
+  // only real image bytes are stored, so the stub sends a PNG signature
+  const bytes = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('fake-png')])
+  const png = bytes.toString('base64')
   const stub = await stubServer(t, (req, body, answer) => answer(200, { data: [{ b64_json: png }] }))
   const images = await generateImages({ name: 'art', type: 'openai-compatible', baseUrl: stub.base, model: 'img-model', apiKey: 'k', capabilities: { images: true } },
     { prompt: 'a lighthouse', width: 512, height: 512 }, { fetch })
-  assert.equal(images[0].toString(), 'fake-png')
+  assert.ok(images[0].equals(bytes))
   assert.equal(stub.seen[0].url, '/v1/images/generations')
   assert.equal(stub.seen[0].body.model, 'img-model')
   assert.equal(stub.seen[0].body.response_format, 'b64_json')
+})
+
+test('an image endpoint\'s answer is stored only when it is a real picture of a picture\'s size', async (t) => {
+  const { imageKind, MAX_IMAGE_BYTES } = await import('../web/app/server/methods/ai/image-connection.mjs')
+  const conn = (base) => ({ name: 'art', type: 'openai-compatible', baseUrl: base, model: 'img', capabilities: { images: true } })
+  const notImage = await stubServer(t, (req, body, answer) => answer(200, { data: [{ b64_json: Buffer.from('<html>any file at all</html>').toString('base64') }] }))
+  await assert.rejects(generateImages(conn(notImage.base), { prompt: 'p' }, { fetch }), /not a PNG, JPEG or WebP image/)
+  const big = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(MAX_IMAGE_BYTES)])
+  const tooLarge = await stubServer(t, (req, body, answer) => answer(200, { data: [{ b64_json: big.toString('base64') }] }))
+  await assert.rejects(generateImages(conn(tooLarge.base), { prompt: 'p' }, { fetch }), /too large/)
+  assert.equal(imageKind(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0])), 'jpeg')
+  assert.equal(imageKind(Buffer.from('RIFF\0\0\0\0WEBPVP8 ', 'latin1')), 'webp')
+  assert.equal(imageKind(Buffer.from('GIF89a-not-allowed')), null)
+  // the store is told what the bytes are, never a fixed image/png
+  const glue = source('server/methods/stabilityai.js')
+  assert.match(glue, /contentType: IMAGE_TYPES\[kind\]/)
 })
 
 // ---------- the request a chosen connection sends ----------
@@ -414,14 +431,21 @@ test('the operator switch turns off people\'s own providers; the settings file w
   assert.equal((await locked.ai.view('ana')).ownProviders, false, 'the settings file has the last word')
 })
 
-test('hosted Slatebox refuses private endpoints for administrators, and takes no own AI from people at all', async () => {
-  const { ai } = service({ hosted: true, settings: { public: { env: 'prod' } } })
-  // own AI is for self-hosted Slatebox: a person's connection is refused whatever its address
-  await assert.rejects(ai.update('ana', { level: 'me', connections: [{ name: 'desk', type: 'openai-compatible', baseUrl: 'http://192.168.1.20/v1', model: 'm' }] }), { code: 'forbidden', message: OWN_KEYS_CLOUD })
-  await assert.rejects(ai.update('ana', { level: 'me', connections: [{ name: 'cloud', type: 'openai-compatible', baseUrl: 'https://llm.example.com/v1', model: 'm' }] }), { code: 'forbidden', message: OWN_KEYS_CLOUD })
+// Restated 2026-11-26 (owner: own keys on Cloud too): hosted Slatebox used to refuse a person's own
+// AI whatever its address, and the administrator's ownProviders switch. It now takes a public https
+// connection, still refuses a private one, and lets an administrator turn own AI on or off.
+test('hosted Slatebox takes people\'s own AI at a public https address only, and an administrator may turn it off', async () => {
+  const { ai, store } = service({ hosted: true, settings: { public: { env: 'prod' } } })
+  await assert.rejects(ai.update('ana', { level: 'me', connections: [{ name: 'desk', type: 'openai-compatible', baseUrl: 'http://192.168.1.20/v1', model: 'm' }] }), { code: 'invalid_request' })
+  await ai.update('ana', { level: 'me', connections: [{ name: 'cloud', type: 'openai-compatible', baseUrl: 'https://llm.example.com/v1', model: 'm' }], use: { chat: 'me:cloud' } })
+  assert.equal(store.keys.length, 1)
+  assert.equal((await ai.resolveFor({ userId: 'ana', feature: 'chat' })).ref, 'me:cloud')
   // the server's providers are added in Admin → AI control, where an Other address passes the endpoint rules
   await assert.rejects(ai.update('root', { level: 'server', connections: [{ name: 'cloud', type: 'openai-compatible', baseUrl: 'https://llm.example.com/v1', model: 'm' }] }), (error) => error.code === 'invalid_request' && /Admin → AI control/.test(error.message))
-  await assert.rejects(ai.update('root', { level: 'server', ownProviders: 'on' }), { code: 'forbidden', message: OWN_KEYS_CLOUD })
+  await ai.update('root', { level: 'server', ownProviders: 'off' })
+  assert.equal((await ai.resolveFor({ userId: 'ana', feature: 'chat' })).own, false, 'the administrator\'s switch wins on Cloud')
+  await ai.update('root', { level: 'server', ownProviders: 'on' })
+  assert.equal((await ai.resolveFor({ userId: 'ana', feature: 'chat' })).ref, 'me:cloud')
 })
 
 test('Test connection runs on a saved connection with its key, or on one not yet saved', async () => {
@@ -622,7 +646,7 @@ test('M1: a connection answer is read up to a cap, so a huge body cannot exhaust
 })
 
 test('M1: an image endpoint gives at most one image, and Test connection is rate limited per person', async (t) => {
-  const png = Buffer.from('fake-png').toString('base64')
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('fake-png')]).toString('base64')
   const stub = await stubServer(t, (req, body, answer) => answer(200, { data: Array.from({ length: 6 }, () => ({ b64_json: png })) }))
   const images = await generateImages({ name: 'art', type: 'openai-compatible', baseUrl: stub.base, model: 'img', capabilities: { images: true } }, { prompt: 'p' }, { fetch })
   assert.equal(images.length, 1)

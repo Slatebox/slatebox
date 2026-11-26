@@ -59,7 +59,7 @@ You need Docker (Docker Desktop, OrbStack, Colima, Docker Engine, or Podman with
 
 ### Slatebox Cloud
 
-Open [app.slatebox.com](https://app.slatebox.com) and start a slate, just for you or for your whole company. Guests don't need an account. The canvas is free. On Slatebox Cloud, AI comes with Slatebox Pro; a self-hosted Slatebox can use its own AI key. On Cloud, AI and calls you start can also be paid from a prepaid balance. Slatebox Pro and balances exist only on Slatebox Cloud. The details are on the [pricing page](https://slatebox.com/plans/). Integrations (outside agents and Google, connected once and invited onto any slate) are free for every account.
+Open [app.slatebox.com](https://app.slatebox.com) and start a slate, just for you or for your whole company. Guests don't need an account. The canvas is free. On Slatebox Cloud, agent features come with Slatebox Pro, or use your own AI key and spend no Slatebox credits; on a self-hosted Slatebox, the administrator's keys or your own turn them on. On Cloud, AI and calls you start can also be paid from a prepaid balance. Slatebox Pro and balances exist only on Slatebox Cloud. The details are on the [pricing page](https://slatebox.com/plans/). Integrations (outside agents and Google, connected once and invited onto any slate) are free for every account.
 
 ### Connect your agent
 

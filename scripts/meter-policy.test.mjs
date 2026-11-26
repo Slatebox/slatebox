@@ -6,8 +6,8 @@ import {
 } from '../web/app/server/metering/policy.mjs'
 
 const NOW = Date.UTC(2026, 10, 19, 12, 0, 0)
-// A self-hosted meter: own keys pay first and its words name them (settings.ownKeys). Slatebox
-// Cloud takes no own keys: scripts/own-keys-cloud.test.mjs.
+// A meter with own keys on (settings.ownKeys): they pay first and its words name them. Own keys on
+// Slatebox Cloud: scripts/own-keys-cloud.test.mjs.
 const settings = { ...DEFAULT_METERING, ownKeys: true }
 const person = { id: 'p1', anonymous: false, emailVerified: true }
 const empty = { aiActionsToday: 0, aiMicrosMonth: 0, freeMicrosToday: 0, voiceMinutesMonth: 0, videoMinutesMonth: 0 }
