@@ -60,7 +60,7 @@
     "jsdom": "^26.1.0"
   },
   "dependencies": {
-    "react-dropzone": "^14.3.8",
+    "react-dropzone": "^20.2.1",
     "react-transition-group": "^4.4.5"
   }
 }
