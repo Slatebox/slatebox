@@ -1063,6 +1063,8 @@ declare namespace slatebox.library.review {
     items: Array<Record<string, unknown>>;
     next?: string;
     total: number;
+    /** Whether this server takes suggested integrations (kind integration). */
+    integrations?: boolean;
     [key: string]: unknown;
   }>;
 }

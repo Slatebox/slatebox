@@ -6,7 +6,9 @@
 //   2. a person pastes a custom MCP address, checks it, connects it, and suggests it for the library;
 //   3. an administrator finds it in /admin/library under Integrations, opens it (Slatebox reaches the
 //      server again) and approves it;
-//   4. the person sees it under Existing, marked Community.
+//   4. the person sees it under Existing, marked Community;
+//   5. Custom's problems (not an address, a private or plain-http one, unreachable, not an MCP server)
+//      are said under the address field, and a server behind a key asks for it instead.
 //
 //   cd scripts && SLATEBOX_ORIGIN=http://127.0.0.1:3920 SLATEBOX_PROMOTE=<cmd> SLATEBOX_MCP=http://127.0.0.1:8796 \
 //     npx playwright test integrations-community.spec.mjs
@@ -149,6 +151,43 @@ test('an administrator finds it in the same queue, Slatebox checks the server ag
   await expect(card.locator('[data-gallery-community]')).toHaveText('Community')
   await shot(dialog, '08-approved-community-card')
   await ada.context.close()
+})
+
+test('Custom says what went wrong under the address field, in plain words, and a server behind a sign-in asks for it', async ({ browser }) => {
+  const sam = await person(browser, { first: 'Sam', last: 'Custom' })
+  const dialog = await openConnect(sam.page)
+  await dialog.getByRole('tab', { name: 'Custom' }).click()
+  const custom = dialog.getByRole('tabpanel', { name: 'Custom' })
+  const field = custom.getByLabel('Paste an MCP address')
+  const problem = custom.locator('[data-invite-address-problem]')
+  const check = async (address, words, name) => {
+    await field.fill(address)
+    await custom.getByRole('button', { name: 'Check it' }).click()
+    await expect(problem).toContainText(words, { timeout: 60000 })
+    // On the field itself: its error state, and the message is what describes it.
+    await expect(field).toHaveAttribute('aria-invalid', 'true')
+    await expect(field).toHaveAttribute('aria-describedby', /invite-address-problem/)
+    // Said once, there: not also in a callout above the tabs.
+    await expect(dialog.getByRole('alert')).toHaveCount(1)
+    if (name) await shot(dialog, name)
+  }
+  await check('not a web address', 'Paste the full address, starting with https://', '10a-custom-bad-address')
+  await check('https://10.0.0.1/mcp', 'only connects public servers', '10b-custom-private-address')
+  await check('http://example.com/mcp', 'https://', null)
+  await check('https://unreachable.invalid/mcp', "Couldn't reach unreachable.invalid", '10c-custom-unreachable')
+  await check(`${MCP}/nothing/mcp`, "didn't answer like an MCP server", null)
+  // Typing again clears it.
+  await field.fill(`${MCP}/key/mcp`)
+  await expect(problem).toHaveCount(0)
+  await expect(field).not.toHaveAttribute('aria-invalid', 'true')
+  // Behind a key: not an error, the sign-in step, saying what it needs.
+  await custom.getByRole('button', { name: 'Check it' }).click()
+  await expect(dialog.locator('[data-invite-signin]')).toBeVisible({ timeout: 60000 })
+  await expect(dialog.locator('[data-invite-signin]')).toContainText('Sign-in needed')
+  await expect(dialog.locator('[data-invite-key]')).toBeVisible()
+  await shot(dialog, '10d-custom-needs-key')
+  expect(sam.errors).toEqual([])
+  await sam.context.close()
 })
 
 test('on a phone the tabs stay in reach and the dialog fills the screen', async ({ browser }) => {

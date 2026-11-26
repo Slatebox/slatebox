@@ -21,6 +21,7 @@
 import {
   BUILTIN_AUTHOR, INTEGRATION_CATEGORIES, KIND_LABELS, LIBRARY_CATEGORIES, LIBRARY_KINDS, LIBRARY_LICENSE, LIBRARY_LIMITS, LISTED_KINDS, QUEUE_STATUSES, QUEUE_WAITING,
   UNNAMED_AUTHOR, canReadItem, categoryLabel, categoryLockSentence, libraryError, readIntegrationFields, readMessage, readMeta, reviewStateOf, slugify, transition,
+  secretInPath, secretInPathSentence,
 } from '../../imports/api/common/library-model.mjs'
 import { checkSize, contentHash, snapshotDeck, snapshotSlate, snapshotWorkshop } from './snapshot.mjs'
 import { checkProposal, localRefinement } from './refine.mjs'
@@ -272,7 +273,13 @@ export function createLibraryCore(deps) {
       }),
     }
   }
-  const versionShape = (version) => ({ n: version.n, meta: version.meta, content: version.content, ...(version.createdAt && { createdAt: new Date(version.createdAt).toISOString() }) })
+  // A version kept before the library stopped storing how an integration's author signed in still never says it.
+  const withoutAuthorSignIn = (content) => {
+    if (!content?.probe || !('signedInWith' in content.probe)) return content
+    const { signedInWith, ...probe } = content.probe
+    return { ...content, probe }
+  }
+  const versionShape = (version) => ({ n: version.n, meta: version.meta, content: withoutAuthorSignIn(version.content), ...(version.createdAt && { createdAt: new Date(version.createdAt).toISOString() }) })
   // The thread as its reader may see it. Reviewers see everything. An author sees what was decided and
   // said to them, never the reviewer's own refine chat (refine_proposed), what a review copy was, or
   // anyone's account id.
@@ -555,13 +562,16 @@ export function createLibraryCore(deps) {
       } catch (error) {
         throw asLibraryError(error)
       }
+      // A per-account secret in the path is never suggested (enterprise refuses it too; this holds without it).
+      const secret = secretInPath(found.address)
+      if (secret) throw fail(400, 'secret_in_path', secretInPathSentence(secret))
       const listed = await items.findOne({ kind: 'integration', status: 'published', 'integration.address': found.address, authorId: { $ne: principal.userId } })
       if (listed || (hooks.covered && (await hooks.covered(found.address)) && !(await items.findOne({ kind: 'integration', status: 'published', 'integration.address': found.address, authorId: principal.userId }))))
         throw fail(409, 'already_listed', 'Connect an integration already lists this address, so there is nothing to suggest.')
       content = {
         kind: 'integration',
         card: { url: found.address, ...(fields.homepage && { homepage: fields.homepage }), auth: fields.auth },
-        probe: { host: found.host, at: at().toISOString(), tools: keptTools(found.tools), signedInWith: found.signedInWith ?? null },
+        probe: { host: found.host, at: at().toISOString(), tools: keptTools(found.tools) },
       }
       integrationFields = { integrationId: input.integrationId, address: found.address, host: found.host, ...(fields.homepage && { homepage: fields.homepage }), auth: fields.auth }
       item = await items.findOne({ kind: 'integration', authorId: principal.userId, 'integration.address': found.address })
@@ -705,6 +715,8 @@ export function createLibraryCore(deps) {
         ...(item.migrationPristine && { migrated: true }),
       })),
       ...(next && { next }), total,
+      // Whether this server takes integrations (enterprise code running): the Integrations chip shows only then.
+      integrations: Boolean(integrations()),
     }
   }
 
@@ -783,6 +795,9 @@ export function createLibraryCore(deps) {
       signIn: found?.signIn ? { method: found.signIn.method || null, authHost: found.signIn.authHost || null, issuer: found.signIn.issuer || null } : null,
       tools: keptTools(found?.tools), ...(found?.problem && { problem: String(found.problem).slice(0, 300) }),
     }
+    // What looks like a per-account secret in its path: the review panel says so and approve refuses.
+    const secret = secretInPath(fields.address) || (found?.secretInPath && { why: String(found.secretInPath.why || 'a secret').slice(0, 120) })
+    if (secret) reviewProbe.secretInPath = { why: secret.why }
     // Behind a sign-in its tools are not listed to an anonymous check: nothing to compare then.
     reviewProbe.drift = reviewProbe.reachable && !reviewProbe.signIn ? toolDrift(version.content?.probe?.tools, reviewProbe.tools) : null
     await items.updateOne({ _id: item._id }, { $set: { status: next.status, reviewStatus: next.reviewStatus, reviewProbe, reviewerId: principal.userId, updatedAt: at() } })
@@ -908,6 +923,8 @@ export function createLibraryCore(deps) {
       if (!probe || (pending && probe.version !== pending.n)) throw fail(409, 'open_first', 'Check it first: open it for review, so Slatebox reaches the server again.')
       if (!probe.reachable) throw fail(409, 'probe_failed', 'Slatebox could not reach it when you checked. Check it again, or turn it down.')
       const fields = item.pendingIntegration || item.integration
+      if (probe.secretInPath || secretInPath(fields.address))
+        throw fail(409, 'secret_in_path', 'Its address seems to hold a private code in its path: published, everyone who connected it would act as its author. Turn it down, or ask for an address without it.')
       const other = await items.findOne({ kind: 'integration', status: 'published', 'integration.address': fields.address, _id: { $ne: item._id } })
       if (other || (item.status !== 'published' && hooks.covered && (await hooks.covered(fields.address))))
         throw fail(409, 'already_listed', 'Connect an integration already lists this address. Turn this one down.')

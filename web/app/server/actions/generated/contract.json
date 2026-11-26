@@ -17284,6 +17284,10 @@
           },
           "total": {
             "type": "integer"
+          },
+          "integrations": {
+            "type": "boolean",
+            "description": "Whether this server takes suggested integrations (kind integration)."
           }
         },
         "required": [

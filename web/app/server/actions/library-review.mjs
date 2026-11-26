@@ -29,7 +29,7 @@ export const reviewQueue = defineAction({
     source: { type: 'string', enum: ['migration'] },
     cursor: cursorInput,
   }),
-  output: { type: 'object', properties: { items: { type: 'array', items: { type: 'object' } }, next: { type: 'string' }, total: { type: 'integer' } }, required: ['items', 'total'] },
+  output: { type: 'object', properties: { items: { type: 'array', items: { type: 'object' } }, next: { type: 'string' }, total: { type: 'integer' }, integrations: { type: 'boolean', description: 'Whether this server takes suggested integrations (kind integration).' } }, required: ['items', 'total'] },
   tool: { name: 'list_library_queue', title: 'List library submissions', description: 'For administrators: list the library submissions waiting for review, oldest first.' },
   handler: (principal, input, { deps }) => deps.library.review.queue(principal, input),
 })

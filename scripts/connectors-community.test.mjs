@@ -15,9 +15,10 @@ import { callTool, discover } from '../enterprise/server/mcp-session.mjs'
 import { createConnectorService, memoryStore } from '../enterprise/server/service.mjs'
 import { communityCard, communityId, createGalleryOps, liveGallery, mergeCommunity } from '../enterprise/server/gallery-admin.mjs'
 import { CLOUD_ORIGIN, cloudLibraryOn, createCloudCatalog } from '../enterprise/server/cloud-library.mjs'
-import { GALLERY, canonicalAddress, cardFor, filterCards } from '../enterprise/common/gallery.mjs'
+import { GALLERY, addressProblem, canonicalAddress, cardFor, filterCards } from '../enterprise/common/gallery.mjs'
 import { manifest } from '../enterprise/server/index.js'
 import { sanitizeClientName } from '../web/app/imports/api/common/agent-label.mjs'
+import { secretInPath } from '../web/app/imports/api/common/library-model.mjs'
 
 let servers
 let fetch
@@ -104,12 +105,54 @@ test('a suggestion is the person\'s own working connection, at an allowed addres
   await integrations.insert({ _id: 'i4', ownerId: 'ada', kind: 'mcp', address: GALLERY[0].url, status: 'active', tools: [] })
   await integrations.insert({ _id: 'i5', ownerId: 'ada', kind: 'mcp', address, status: 'needs_sign_in', tools: [] })
   const found = await service.submissionOf(ada, { integrationId: 'i1' })
-  assert.deepEqual(found, { address, host: new URL(address).host, tools: [{ name: 'search', group: 'lookup', hash: 'h1' }], signedInWith: null })
+  // Never how its author signs in: what the library keeps of a suggestion may become public.
+  assert.deepEqual(found, { address, host: new URL(address).host, tools: [{ name: 'search', group: 'lookup', hash: 'h1' }] })
   await assert.rejects(service.submissionOf(ada, { integrationId: 'i2' }), { code: 'not_found' })
   await assert.rejects(service.submissionOf(ada, { integrationId: 'i3' }), { code: 'private_address' })
   await assert.rejects(service.submissionOf(ada, { integrationId: 'i4' }), { code: 'already_listed' })
   await assert.rejects(service.submissionOf(ada, { integrationId: 'i5' }), { code: 'not_working' })
   await assert.rejects(service.submissionOf({ kind: 'guest', userId: 'g' }, { integrationId: 'i1' }), { code: 'sign_in_to_publish' })
+})
+
+// Hosted MCP providers that put a per-account secret in the path (examples shaped like theirs, made up).
+const SECRET_PATHS = [
+  'https://mcp.zapier.com/api/mcp/s/ZjA1NTg0YjItOTQ2Mi00/mcp',
+  'https://mcp.composio.dev/composio/server/3f2b8c1e-9a4d-4e7b-b2c6-1d5e8f9a0b3c/mcp',
+  'https://remote.mcp.pipedream.net/7c9e6679-7425-40de-944b-e07fc1f90ae7/github',
+  'https://mcp.example.com/sse/Xk29fLq8Zr7Tn3Vb6Wm1Pc4Hd',
+  'https://mcp.example.com/v1/token/abc/mcp',
+  'https://mcp.example.com/api-key/mcp',
+  'https://mcp.example.com/u/sk-live4f9a8b7c6d5e/mcp',
+  'https://mcp.example.com/a/9f86d081884c7d659a2feaa0c55ad015/mcp',
+  'https://mcp.example.com/acct/1234567890123456/mcp',
+]
+
+test('an address with what looks like a per-account secret in its path is never suggested, is flagged to the reviewer, and is no card', async () => {
+  for (const address of SECRET_PATHS) assert.ok(secretInPath(address), address)
+  // Ordinary MCP paths, and every address the built-in gallery lists, are not.
+  for (const address of ['https://mcp.example.com/mcp', 'https://mcp.example.com/v1/sse', 'https://mcp.example.com/api/v1/connect', 'https://huggingface.co/mcp', 'https://mcp.example.com/mcp?token=abc', 'https://mcp.example.com/model-context-protocol/server',
+    ...GALLERY.flatMap((card) => [card.url, ...(card.aliases || [])])])
+    assert.equal(secretInPath(address), null, address)
+  // The person's own working connection: refused, saying why.
+  const { service, integrations, ada } = serviceWorld()
+  const address = servers.url('/s/ZjA1NTg0YjItOTQ2Mi00/mcp')
+  await integrations.insert({ _id: 's1', ownerId: 'ada', kind: 'mcp', address, host: new URL(address).host, name: 'Zaps', status: 'active', tools: [{ name: 'search', group: 'lookup', hash: 'h1' }] })
+  await assert.rejects(service.submissionOf(ada, { integrationId: 's1' }), (error) => error.code === 'secret_in_path' && /act as your account/.test(error.message))
+  // The reviewer's check says so, whether or not the server answers.
+  const probe = await service.reviewProbe(address)
+  assert.ok(probe.secretInPath?.why)
+  assert.equal((await service.reviewProbe(servers.url('/open/mcp'))).secretInPath, undefined)
+  // Published anyway (an older approval, or Cloud's feed): no card, here or from Cloud.
+  for (const secret of SECRET_PATHS) {
+    assert.equal(communityCard(published({ integration: { ...published().integration, address: secret } })), null, secret)
+    assert.equal(communityCard(published({ integration: { ...published().integration, address: secret } }), { from: 'cloud' }), null, secret)
+  }
+})
+
+test('a Community card from Slatebox Cloud is checked with none of this install\'s development origins', () => {
+  const local = published({ integration: { ...published().integration, address: `${servers.origin}/open/mcp` } })
+  assert.ok(communityCard(local, { devOrigins: [servers.origin] }), 'this install\'s own card, in a development run')
+  assert.equal(communityCard(local, { from: 'cloud', devOrigins: [servers.origin] }), null, 'a Cloud card never points at this install\'s network')
 })
 
 test('the reviewer\'s check is anonymous and guarded: an open server lists its tools, a hostile redirect or a private address never answers', async () => {
@@ -144,6 +187,12 @@ test('discovering a Community card whose tools changed since review says so', as
   const fresh = { ...card, reviewedTools: found.tools.map(({ name, hash }) => ({ name, hash })) }
   const again = await serviceWorld({ cards: [...GALLERY, fresh] }).service.discover(ada, { address })
   assert.equal(again.reviewDrift, undefined)
+  // Behind a sign-in the reviewer's anonymous check listed no tools: nothing to compare, so no warning
+  // (one that fired on every connect would teach people to ignore the real one).
+  const unreviewed = { ...card, reviewedTools: [] }
+  const signedIn = await serviceWorld({ cards: [...GALLERY, unreviewed] }).service.discover(ada, { address })
+  assert.equal(signedIn.card.id, card.id)
+  assert.equal(signedIn.reviewDrift, undefined)
 })
 
 // A fake Slatebox Cloud: the public export, paged, with one bad card among good ones.
@@ -202,6 +251,25 @@ test('a licensed install pulls Slatebox Cloud\'s Community cards, checks each, k
     cloud.state.huge = true
     assert.equal((await catalog.sync()).ok, false)
     assert.equal((await catalog.cards()).length, 3)
+    // Not for ever: 7 days after the last good copy was fetched, the install drops to its built-in
+    // cards (a card Cloud took out never lives on where the pull keeps failing), and says so.
+    const fetchedAt = new Date(saved.fetchedAt).getTime()
+    let clock = fetchedAt + 6 * 24 * 3600 * 1000
+    const aging = createCloudCatalog({ fetch: async () => { throw new Error('blocked') }, store, origin: cloud.origin, now: () => clock })
+    assert.equal((await aging.cards()).length, 3)
+    assert.equal((await aging.status()).stale, false)
+    clock = fetchedAt + 7 * 24 * 3600 * 1000 + 1
+    assert.equal((await aging.sync()).ok, false)
+    assert.deepEqual(await aging.cards(), [])
+    const stale = await aging.status()
+    assert.equal(stale.stale, true)
+    assert.equal(stale.cards, 0)
+    assert.equal(stale.kept, 3)
+    assert.match(stale.lastError, /blocked/)
+    assert.equal(new Date(stale.servedUntil).getTime(), fetchedAt + 7 * 24 * 3600 * 1000)
+    // A kept copy is held to today's checks: a card a stored copy still carries at a private address is not served.
+    const old = createCloudCatalog({ fetch: async () => { throw new Error('offline') }, store: { get: async () => ({ cards: [{ id: 'cold', url: 'https://10.0.0.1/mcp' }, { id: 'cpath', url: SECRET_PATHS[0] }, { id: 'cok', url: 'https://ok.example.com/mcp' }], fetchedAt: new Date() }), put: async () => {} } })
+    assert.deepEqual((await old.cards()).map((c) => c.id), ['cok'])
     // Never offline before the first pull: no cards, nothing broken.
     const empty = createCloudCatalog({ fetch: async () => { throw new Error('offline') }, store: { get: async () => null, put: async () => {} } })
     assert.deepEqual(await empty.cards(), [])
@@ -234,4 +302,30 @@ test('the invite dialog says the two ways in as real tabs: Existing (the gallery
   const suggest = readFileSync(new URL('../enterprise/client/SuggestIntegration.jsx', import.meta.url), 'utf8')
   assert.match(suggest, /kind: 'integration', integrationId: integration\.integrationId/)
   assert.match(suggest, /INTEGRATION_CONSENT_LINE/)
+})
+
+test('Custom: a problem with the pasted address is said under its field, in plain words with what to do', () => {
+  assert.match(addressProblem({ error: 'bad_address', reason: 'That is not a web address.' }), /starting with https:\/\//)
+  assert.match(addressProblem({ error: 'private_address', reason: 'x' }), /public servers/)
+  assert.match(addressProblem({ error: 'not_https' }), /https:\/\//)
+  assert.equal(addressProblem({ error: 'unreachable', reason: "Couldn't reach x.example. Check the address." }), "Couldn't reach x.example. Check the address.", 'the server\'s own sentence when it is already plain')
+  assert.equal(addressProblem({}), 'Slatebox could not check that address. Check it and try again.')
+  const source = readFileSync(new URL('../enterprise/client/InviteWalkthrough.jsx', import.meta.url), 'utf8')
+  const custom = source.slice(source.indexOf('id="connect-panel-custom"'))
+  // On the field: its error state, the message as its helper text, and aria-describedby pointing at it.
+  for (const marker of ['error={Boolean(addressError)}', 'helperText={addressError || undefined}', "id: 'invite-address-problem'", "'aria-describedby': 'invite-address-problem'", "discover(undefined, { fromCustom: true })"])
+    assert.ok(custom.includes(marker), marker)
+  // The dialog's intro does not repeat what each tab's own line says.
+  const intro = source.slice(source.indexOf("{step === 'choose' && !upgrade && ("), source.indexOf('setting?.canChange'))
+  assert.doesNotMatch(intro, /Pick an agent Slatebox lists|paste the address of any MCP server/i)
+})
+
+test('the suggest form and My library: what becomes public is said before agreeing, and agreeing is asked again on every send', () => {
+  const suggest = readFileSync(new URL('../enterprise/client/SuggestIntegration.jsx', import.meta.url), 'utf8')
+  assert.doesNotMatch(suggest, /\(\$\{integration\.host\}\)/, 'no bare host in parentheses')
+  assert.match(suggest, /your name as the person who suggested it/)
+  const mine = readFileSync(new URL('../web/app/imports/ui/pages/MyLibrary.jsx', import.meta.url), 'utf8')
+  assert.doesNotMatch(mine, /consent: true/, 'never agreed on the author\'s behalf')
+  assert.match(mine, /INTEGRATION_CONSENT_LINE/)
+  assert.match(mine, /disabled=\{!agreed \|\| busy\} onClick=\{sendAgreed\}/)
 })

@@ -441,7 +441,7 @@ function startCloudCatalog(settings) {
     get: () => CloudCatalog.findOneAsync({ _id: 'cloud' }),
     put: (doc) => CloudCatalog.upsertAsync({ _id: 'cloud' }, { $set: doc }),
   }
-  const catalog = createCloudCatalog({ fetch, store, origin, devOrigins: settings.devOrigins, log: (entry) => console.log('[connectors]', JSON.stringify(entry)) })
+  const catalog = createCloudCatalog({ fetch, store, origin, log: (entry) => console.log('[connectors]', JSON.stringify(entry)) })
   const run = async () => {
     const until = new Date(Date.now() + 10 * 60 * 1000)
     const leased = await CloudCatalog.rawCollection().updateOne({ _id: 'lease', $or: [{ until: { $lt: new Date() } }, { until: { $exists: false } }] }, { $set: { until } }, { upsert: false })

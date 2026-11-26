@@ -2,7 +2,7 @@
 // Not MIT: see enterprise/README.md.
 //
 // "Suggest for the Slatebox library": a custom MCP server the person connected and that works,
-// offered to everyone for free (owner, 2026-11-25). It goes to the same review queue as every other
+// offered to everyone at no charge (owner, 2026-11-25). It goes to the same review queue as every other
 // library submission (library.submit kind integration, /admin/library): an administrator checks the
 // server again, may refine the words, and approves it (a Community card under Existing in Connect an
 // integration), asks for changes or turns it down; the person hears back in the bell and by email.
@@ -41,6 +41,15 @@ export function suggestDefaults(integration = {}) {
     auth: kind === 'key' ? 'key' : kind ? 'oauth' : 'none',
     consent: false,
   }
+}
+
+/**
+ * The form's first lines: reviewed first, then listed, and what everyone sees on its card (its address,
+ * and the author's name as "Suggested by"), so nothing on the consent line comes as a surprise.
+ */
+export function suggestIntro(integration = {}) {
+  const address = integration?.host ? `its address at ${integration.host}` : 'its address'
+  return `There is no charge to suggest one, and Slatebox reviews every suggestion before anyone sees it. Approved, it is listed under Existing in Connect an integration, marked Community. Its card shows your name as the person who suggested it, its homepage, and ${address}.`
 }
 
 export default function SuggestIntegration({ open, integration, onClose, onSent = null }) {
@@ -91,7 +100,7 @@ export default function SuggestIntegration({ open, integration, onClose, onSent 
         ) : (
           <Box component="form" id="suggest-integration-form" onSubmit={send} sx={{ display: 'grid', gap: 2, pt: 0.5 }}>
             <Typography variant="body2" color="text.secondary">
-              Free. Slatebox reviews every suggestion before anyone sees it. Approved, it is listed under Existing in Connect an integration, marked Community{integration?.host ? ` (${integration.host})` : ''}.
+              {suggestIntro(integration)}
             </Typography>
             <TextField label="Name" value={form.title} onChange={set('title')} required inputProps={{ maxLength: INTEGRATION_LIMITS.name, 'data-suggest-title': '' }}
               helperText="What people see on its card. No web addresses." />

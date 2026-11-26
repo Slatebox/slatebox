@@ -26,6 +26,7 @@ import { checkMcpUrl } from './mcp-fetch.mjs'
 import { checkRecipe } from './recipes.mjs'
 import { plainText } from './tools.mjs'
 import { PROMPT_IDS } from '/server/ai-control/prompts/index.mjs'
+import { secretInPath } from '/imports/api/common/library-model.mjs'
 
 export const EDITABLE = Object.freeze({ name: 40, job: 40, lands: 200, try: 120, cost: 60, keyHint: 120 })
 const docId = (id) => 'gallery:' + id
@@ -40,7 +41,9 @@ export const communityId = (itemId) => 'c' + String(itemId || '').toLowerCase().
  * The gallery card a published library integration is (this server's own, or one Slatebox Cloud
  * exported to a licensed install), or null when anything in it fails the checks every card passes:
  * a canonical https address the endpoint policy allows, plain words within the card limits with no
- * web addresses, a known group. Its words are its author's and reviewer's, never the server's own.
+ * web addresses, a known group, and no secret in its path (secretInPath). Its words are its author's and
+ * reviewer's, never the server's own. devOrigins: this install's own development origins, for its own
+ * cards only (a card from Slatebox Cloud is checked with none).
  */
 export function communityCard(item, { from = 'local', devOrigins = [] } = {}) {
   if (!item || item.kind !== 'integration' || (item.status && item.status !== 'published')) return null
@@ -49,11 +52,14 @@ export function communityCard(item, { from = 'local', devOrigins = [] } = {}) {
   if (!url) return null
   try {
     // The address as stored (canonicalAddress alone would quietly drop a user name or password).
-    checkMcpUrl(String(fields.address), { devOrigins })
-    checkMcpUrl(url, { devOrigins })
+    const allowed = from === 'cloud' ? [] : devOrigins
+    checkMcpUrl(String(fields.address), { devOrigins: allowed })
+    checkMcpUrl(url, { devOrigins: allowed })
   } catch {
     return null
   }
+  // A per-account secret in its path: whoever connected the card would act as its author. Never a card.
+  if (secretInPath(String(fields.address)) || secretInPath(url)) return null
   const name = plainText(item.title, EDITABLE.name)
   const lands = plainText(item.summary, EDITABLE.lands)
   const group = GROUPS.some((g) => g.id === item.category) ? item.category : null

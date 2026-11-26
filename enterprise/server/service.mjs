@@ -52,6 +52,7 @@
 // to edit the slate.
 import { createHash, randomBytes } from 'node:crypto'
 import { sameAgentName } from '/imports/api/common/agent-mention.mjs'
+import { secretInPath, secretInPathSentence } from '/imports/api/common/library-model.mjs'
 import { canonicalAddress, cardFor, DEAD_HOSTS, GALLERY, lookalikeHost, retiredFor, writesAddress } from '../common/gallery.mjs'
 import { checkMcpUrl, McpFetchRefused } from './mcp-fetch.mjs'
 import { SignInNeeded } from './credentials.mjs'
@@ -420,7 +421,9 @@ export function createConnectorService({
     audit({ kind: 'discover', userId: principal.userId, host, tools: tools.length })
     // A Community card lists the tools its reviewer checked: anything added or changed since is said
     // before the person chooses (they still consent to each tool themselves).
-    const reviewed = Array.isArray(card?.reviewedTools) ? new Map(card.reviewedTools.map((tool) => [tool.name, tool.hash])) : null
+    // Behind a sign-in the reviewer's anonymous check lists no tools (reviewedTools is empty): nothing was
+    // reviewed to compare with, so no warning (one that always fired would teach people to ignore it).
+    const reviewed = Array.isArray(card?.reviewedTools) && card.reviewedTools.length ? new Map(card.reviewedTools.map((tool) => [tool.name, tool.hash])) : null
     const reviewDrift = reviewed ? tools.some((tool) => reviewed.get(tool.name) !== tool.hash) : false
     // Already one of this person's integrations: the page offers to invite it instead of connecting again.
     const integration = await integrations.findOne({ ownerId: principal.userId, address })
@@ -655,10 +658,14 @@ export function createConnectorService({
     const { address, host } = checkAddress(doc.address)
     if (cardFor(address, await gallery())) refuse(409, 'already_listed', 'Connect an integration already lists this address, so there is nothing to suggest.')
     if (retiredFor(address)) refuse(409, 'already_listed', 'Slatebox took this one out of the gallery on purpose.')
+    // A per-account secret in the path (Zapier's /s/<secret>/, a UUID, /sse/<token>) works signed out:
+    // published, everyone who connected it would act as this person. Never suggested.
+    const secret = secretInPath(address)
+    if (secret) refuse(400, 'secret_in_path', secretInPathSentence(secret))
+    // Never how its author signs in (theirs alone, and what the library keeps may become public).
     return {
       address, host,
       tools: (doc.tools || []).map(({ name, group, destructive, hash }) => ({ name, group, ...(destructive && { destructive: true }), hash })),
-      signedInWith: doc.auth?.kind || null,
     }
   }
 
@@ -670,7 +677,9 @@ export function createConnectorService({
    */
   async function reviewProbe(raw) {
     const { address, host } = checkAddress(raw)
-    const out = { address, host, lookalike: lookalikeHost(address), reachable: false, signIn: null, tools: [] }
+    // Said to the reviewer whatever the server answers: reachable signed out is exactly how a path secret looks.
+    const secret = secretInPath(address)
+    const out = { address, host, lookalike: lookalikeHost(address), reachable: false, signIn: null, tools: [], ...(secret && { secretInPath: secret }) }
     try {
       const found = await session.discover(address, fetch, { token: null })
       const tools = await toolsFrom(address, found.tools)

@@ -338,3 +338,21 @@ export function lookalikeHost(address) {
 
 // Gateways and listings known to be gone: plain words instead of a confusing failure.
 export const DEAD_HOSTS = Object.freeze(['server.smithery.ai'])
+
+// What went wrong checking a pasted address, and what to do about it, by the server's code: shown under
+// the address field (its error state, aria-describedby). The server's own sentence when there is no
+// better one; a plain fallback when there is none at all.
+const ADDRESS_HELP = Object.freeze({
+  bad_address: 'That is not a web address. Paste the full address, starting with https://',
+  not_https: 'Only https:// addresses work. Check the address starts with https://',
+  credentials: 'Leave any user name or password out of the address. Slatebox asks for a sign-in or key after it checks the server.',
+  private_address: 'Slatebox only connects public servers, not ones on a private network or this computer. Use the server\'s public https address.',
+  dead_listing: 'This address points to a service that shut down.',
+})
+export function addressProblem(error) {
+  const code = error?.error || error?.code
+  const said = error?.reason || error?.message || ''
+  if (code && ADDRESS_HELP[code]) return ADDRESS_HELP[code]
+  if (said) return said
+  return 'Slatebox could not check that address. Check it and try again.'
+}

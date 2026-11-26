@@ -8,11 +8,17 @@ import Collapse from '@mui/material/Collapse'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import Alert from '@mui/material/Alert'
+import Checkbox from '@mui/material/Checkbox'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogTitle from '@mui/material/DialogTitle'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import { AccountSection, FinePrint, SPACE } from '../common/AccountLayout'
 import AppPage from '../common/AppPage'
 import LibraryPreview from '../components/library/LibraryPreview'
 import libraryApi from '../../api/client/library'
-import { categoryLabel } from '../../api/common/library-model.mjs'
+import { INTEGRATION_CONSENT_LINE, categoryLabel } from '../../api/common/library-model.mjs'
 import { KindTitle, authorActions, authorStatus, diffLines, eventLine, groupMine } from '../components/library/libraryCopy.mjs'
 
 // My library (/library/mine): what you saved or sent to the shared library, grouped by where each
@@ -60,6 +66,9 @@ function MineRow({ item, onChanged }) {
   const [reply, setReply] = React.useState('')
   const [busy, setBusy] = React.useState(false)
   const [problem, setProblem] = React.useState('')
+  // An integration sent again is agreed to again: its address or name may have changed since.
+  const [consenting, setConsenting] = React.useState(false)
+  const [agreed, setAgreed] = React.useState(false)
   const status = authorStatus(item)
   const can = authorActions(item)
   const shown = { ...item, ...(item.pendingMeta || {}), ...(item.draftMeta || {}) }
@@ -76,13 +85,23 @@ function MineRow({ item, onChanged }) {
       setBusy(false)
     }
   }
-  // An integration is sent again from the connection it came from, with the words and agreement it was sent with.
+  // An integration is sent again from the connection it came from, with the words it was sent with,
+  // once its author agrees again (consenting: the dialog below; consent is true only from its checkbox).
   const integration = item.pendingIntegration || item.integration
-  const submitAgain = () => act(() => libraryApi.submit(item.kind === 'component'
+  const send = (consent = false) => act(() => libraryApi.submit(item.kind === 'component'
     ? { kind: 'component', itemId: item.id }
     : item.kind === 'integration'
-      ? { kind: 'integration', integrationId: item.integrationId, ...(integration?.homepage && { homepage: integration.homepage }), auth: integration?.auth || 'none', consent: true }
+      ? { kind: 'integration', integrationId: item.integrationId, ...(integration?.homepage && { homepage: integration.homepage }), auth: integration?.auth || 'none', consent }
       : { kind: item.kind, shareId: item.sourceShareId }))
+  const submitAgain = () => {
+    if (item.kind !== 'integration') return send()
+    setAgreed(false)
+    setConsenting(true)
+  }
+  const sendAgreed = async () => {
+    setConsenting(false)
+    await send(true)
+  }
 
   return (
     <Box data-testid="mine-row" sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '140px 1fr' }, gap: SPACE.group, p: SPACE.text, border: 1, borderColor: 'divider', borderRadius: 1 }}>
@@ -116,6 +135,21 @@ function MineRow({ item, onChanged }) {
           {can.discard && <Button size="small" color="error" onClick={() => act(() => libraryApi.discard({ itemId: item.id }))} disabled={busy}>Discard</Button>}
           {item.events?.length > 0 && <Button size="small" onClick={() => setOpen((now) => !now)} aria-expanded={open}>{open ? 'Hide the thread' : `Thread (${item.events.length})`}</Button>}
         </Box>
+        {item.kind === 'integration' && (
+          <Dialog open={consenting} onClose={() => setConsenting(false)} maxWidth="xs" fullWidth aria-labelledby={`mine-consent-${item.id}`} data-testid="mine-consent">
+            <DialogTitle id={`mine-consent-${item.id}`}>Send {shown.title} again?</DialogTitle>
+            <DialogContent>
+              <Typography variant="body2" sx={{ mb: 1.5 }}>It is sent from your connection as it is now{integration?.host ? `, at ${integration.host}` : ''}. Slatebox checks the server again before anyone sees it.</Typography>
+              <FormControlLabel sx={{ alignItems: 'flex-start', m: 0 }}
+                control={<Checkbox checked={agreed} onChange={(event) => setAgreed(event.target.checked)} sx={{ pt: 0.25 }} inputProps={{ 'aria-describedby': `mine-consent-line-${item.id}`, 'data-testid': 'mine-consent-check' }} />}
+                label={<Typography variant="body2" id={`mine-consent-line-${item.id}`}>{INTEGRATION_CONSENT_LINE}</Typography>} />
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setConsenting(false)}>Cancel</Button>
+              <Button variant="contained" disabled={!agreed || busy} onClick={sendAgreed} data-testid="mine-consent-send">Send for review</Button>
+            </DialogActions>
+          </Dialog>
+        )}
         <Collapse in={open} unmountOnExit>
           <Box sx={{ display: 'grid', gap: 0.75, pt: SPACE.text }} data-testid="mine-thread">
             {(item.events || []).map((event) => (

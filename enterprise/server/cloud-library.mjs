@@ -8,16 +8,21 @@
 //   - One fixed origin (https://app.slatebox.com), reached through the same guarded fetch as every
 //     MCP server (https, public addresses only, capped in bytes and time, no redirects), GET only.
 //   - The public export (GET /api/v1/library/export?kind=integration), paged, at most CLOUD_LIBRARY_LIMITS.pages pages.
-//   - Every card is checked again here as if it were typed in (communityCard): a card that fails is
-//     dropped, never stored.
-//   - The last good copy is kept (connectorCloudCatalog) and served while Cloud cannot be reached:
-//     an install offline keeps working with what it had, or with the built-in cards alone.
+//   - Every card is checked again here as if it were typed in (communityCard), with none of this
+//     install's own development origins (a Cloud card never points at this install's network): a card
+//     that fails is dropped, never stored.
+//   - The last good copy is kept (connectorCloudCatalog) and served while Cloud cannot be reached, for
+//     at most CLOUD_LIBRARY_LIMITS.maxAgeMs (7 days) after it was fetched: then the install drops to its
+//     built-in cards alone, so a card Cloud took out never lives on where the pull keeps failing.
+//     Admin › AI › Gallery shows when it was fetched and when it is out of date.
 //   - settings.enterprise.cloudLibrary: false turns it off (the operator's switch).
 // No credentials are sent: the export is public.
+import { secretInPath } from '/imports/api/common/library-model.mjs'
 import { communityCard } from './gallery-admin.mjs'
+import { checkMcpUrl } from './mcp-fetch.mjs'
 
 export const CLOUD_ORIGIN = 'https://app.slatebox.com'
-export const CLOUD_LIBRARY_LIMITS = Object.freeze({ pages: 20, cards: 400, maxBytes: 2 * 1024 * 1024, timeoutMs: 15000, everyMs: 6 * 3600 * 1000 })
+export const CLOUD_LIBRARY_LIMITS = Object.freeze({ pages: 20, cards: 400, maxBytes: 2 * 1024 * 1024, timeoutMs: 15000, everyMs: 6 * 3600 * 1000, maxAgeMs: 7 * 24 * 3600 * 1000 })
 export const CLOUD_EXPORT_PATH = '/api/v1/library/export'
 
 /** Whether this install pulls Community cards from Slatebox Cloud: a licensed install, unless its operator says no. */
@@ -27,7 +32,7 @@ export const cloudLibraryOn = ({ via, settings }) => via === 'license' && settin
  * fetch: the guarded fetch (createMcpFetch with methods ['GET'], no redirects, small answers);
  * store: { get() → { cards, fetchedAt, lastError, lastTriedAt } | null, put(doc) } (the last good copy).
  */
-export function createCloudCatalog({ fetch, store, origin = CLOUD_ORIGIN, devOrigins = [], now = Date.now, log = () => {} }) {
+export function createCloudCatalog({ fetch, store, origin = CLOUD_ORIGIN, now = Date.now, log = () => {} }) {
   async function pull() {
     const cards = []
     let cursor = null
@@ -45,7 +50,7 @@ export function createCloudCatalog({ fetch, store, origin = CLOUD_ORIGIN, devOri
       }
       const items = Array.isArray(body?.items) ? body.items : []
       for (const item of items) {
-        const card = communityCard(item, { from: 'cloud', devOrigins })
+        const card = communityCard(item, { from: 'cloud' })
         if (card && !cards.some((have) => have.url === card.url || have.id === card.id)) cards.push(card)
       }
       const next = typeof body?.next === 'string' && /^[0-9]{1,9}$/.test(body.next) ? body.next : null
@@ -71,15 +76,40 @@ export function createCloudCatalog({ fetch, store, origin = CLOUD_ORIGIN, devOri
     }
   }
 
-  /** The cards to serve: the last good copy, or none. */
+  // The last good copy is out of date once it is older than maxAgeMs (or has no fetch time at all).
+  const staleAt = (doc) => {
+    const fetched = doc?.fetchedAt ? new Date(doc.fetchedAt).getTime() : NaN
+    return Number.isFinite(fetched) ? fetched + CLOUD_LIBRARY_LIMITS.maxAgeMs : null
+  }
+  const isStale = (doc) => {
+    const until = staleAt(doc)
+    return until === null || now() > until
+  }
+
+  /** The cards to serve: the last good copy while it is fresh enough, else none. */
   async function cards() {
     const doc = await store.get().catch(() => null)
-    return Array.isArray(doc?.cards) ? doc.cards : []
+    if (!Array.isArray(doc?.cards) || !doc.cards.length || isStale(doc)) return []
+    // A copy kept by an older pull is held to today's checks too: public https only, no secret in its path.
+    return doc.cards.filter((card) => {
+      try {
+        checkMcpUrl(String(card?.url || ''), { devOrigins: [] })
+      } catch {
+        return false
+      }
+      return !secretInPath(card.url)
+    })
   }
 
   async function status() {
     const doc = await store.get().catch(() => null)
-    return { cards: Array.isArray(doc?.cards) ? doc.cards.length : 0, fetchedAt: doc?.fetchedAt || null, lastTriedAt: doc?.lastTriedAt || null, lastError: doc?.lastError || null }
+    const kept = Array.isArray(doc?.cards) ? doc.cards.length : 0
+    const stale = Boolean(doc) && isStale(doc)
+    const until = staleAt(doc)
+    return {
+      cards: stale ? 0 : kept, kept, stale, ...(until !== null && { servedUntil: new Date(until) }),
+      fetchedAt: doc?.fetchedAt || null, lastTriedAt: doc?.lastTriedAt || null, lastError: doc?.lastError || null,
+    }
   }
 
   return { sync, cards, status }

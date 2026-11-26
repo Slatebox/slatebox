@@ -17,7 +17,7 @@ import LibraryPreview from '../components/library/LibraryPreview'
 import libraryApi from '../../api/client/library'
 import PropTypes from 'prop-types'
 import { INTEGRATION_AUTH_LABELS, categoryLabel } from '../../api/common/library-model.mjs'
-import { KIND_FILTERS, KindTitle, QUEUE_TABS, waitedFor } from '../components/library/libraryCopy.mjs'
+import { KindTitle, QUEUE_TABS, kindFiltersFor, waitedFor } from '../components/library/libraryCopy.mjs'
 
 // The review queue (administrators only: /admin/library). Everything people send to the library
 // waits here: smart components, slates, presentations and integrations. Open one to review it on a
@@ -47,6 +47,9 @@ export default function LibraryReview() {
   const [unpublishing, setUnpublishing] = React.useState(null)
   const [reason, setReason] = React.useState('')
   const [refresh, setRefresh] = React.useState(0)
+  // Whether this server takes integrations, as the last queue answer said (kept while the next one loads).
+  const [knownIntegrations, setKnownIntegrations] = React.useState(false)
+  React.useEffect(() => { if (typeof answer?.integrations === 'boolean') setKnownIntegrations(answer.integrations) }, [answer])
 
   React.useEffect(() => {
     let live = true
@@ -119,7 +122,7 @@ export default function LibraryReview() {
         {QUEUE_TABS.map((entry) => <Tab key={entry.id} value={entry.id} label={entry.label} data-testid={`queue-tab-${entry.id}`} />)}
       </AccountTabs>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: SPACE.group }} role="group" aria-label="Kind">
-        {KIND_FILTERS.map((entry) => (
+        {kindFiltersFor({ integrations: answer?.integrations ?? knownIntegrations }).map((entry) => (
           <Chip key={entry.id || 'all'} label={entry.label} clickable color={kind === entry.id ? 'primary' : 'default'}
             variant={kind === entry.id ? 'filled' : 'outlined'} onClick={() => setKind(entry.id)} aria-pressed={kind === entry.id} />
         ))}

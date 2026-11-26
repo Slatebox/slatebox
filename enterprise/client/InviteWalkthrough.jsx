@@ -58,7 +58,7 @@ import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx
 import Hexagon from '/imports/ui/components/AgentMark.jsx'
 import { enterpriseState } from '/imports/api/common/edition.mjs'
 import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
-import { GALLERY, cardFor, filterCards, groupsIn, lookalikeHost } from '../common/gallery.mjs'
+import { GALLERY, addressProblem, cardFor, filterCards, groupsIn, lookalikeHost } from '../common/gallery.mjs'
 import { cardState, connectedAction, STATUS_WORDS } from '../common/integration-words.mjs'
 import { followSignIn, openSignInWindow } from './signin'
 import SuggestIntegration from './SuggestIntegration'
@@ -207,6 +207,8 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
   const [sees, setSees] = useState('request')
   const [showAll, setShowAll] = useState(false)
   const [error, setError] = useState('')
+  // A problem with the address pasted under Custom, shown under that field.
+  const [addressError, setAddressError] = useState('')
   // A pasted address (or a card) for an agent of yours already here: { agentId, name, text }.
   const [already, setAlready] = useState(null)
   // The gallery as administrators set it (/admin/ai › Gallery), and whether this person may invite;
@@ -239,7 +241,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
     if (open && shareId && !reconnect) Meteor.callAsync('integrations.slateSetting', { shareId }).then((answer) => { if (live.current) setSetting(answer) }).catch(() => {})
     if (!open) {
       pending.current?.cancel()
-      setStep('choose'); setFound(null); setError(''); setAddress(''); setShowAll(false); setKey(''); setClientId(''); setShowKey(false); setAlready(null); setConnected(null); setRule('ask'); setFilter({ group: 'all', query: '' })
+      setStep('choose'); setFound(null); setError(''); setAddressError(''); setAddress(''); setShowAll(false); setKey(''); setClientId(''); setShowKey(false); setAlready(null); setConnected(null); setRule('ask'); setFilter({ group: 'all', query: '' })
       setCustomName(''); setJustConnected(null); setSuggesting(false)
     } else if (!reconnect && !upgrade) {
       setTabState(rememberedTab())
@@ -274,10 +276,12 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
     }
   }
 
-  async function discover(raw) {
+  // fromCustom: the Custom tab's own "Check it", whose problems show under its address field.
+  async function discover(raw, { fromCustom = false } = {}) {
     const target = (raw ?? address).trim()
     if (!target) return
     setError('')
+    setAddressError('')
     setAlready(null)
     setStep('discovering')
     try {
@@ -314,7 +318,12 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
     } catch (e) {
       if (!live.current) return
       setStep('choose')
-      if (e?.error === 'pro_required') return payThen(() => discover(target))
+      if (e?.error === 'pro_required') return payThen(() => discover(target, { fromCustom }))
+      if (fromCustom) {
+        enterpriseSlots.lockIfRefused(e)
+        setAddressError(addressProblem(e))
+        return
+      }
       setError(errorText(e))
     }
   }
@@ -445,8 +454,8 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
           <Box sx={{ display: 'grid', gap: 2 }}>
             <Typography variant="body2" sx={{ fontSize: 15, lineHeight: 1.55 }}>
               {integrationMode
-                ? 'Pick an agent Slatebox lists, or paste the address of any MCP server. Connect it once, then invite it onto any slate or let it join every slate you own, with no new sign-in.'
-                : 'Pick an agent Slatebox lists, or paste the address of any MCP server. Agents work on this slate with you: everyone here sees each one as a cursor, and its suggestions as ghost notes to keep or discard.'}
+                ? 'Connect it once, then invite it onto any slate or let it join every slate you own, with no new sign-in.'
+                : 'Agents work on this slate with you: everyone here sees each one as a cursor, and its suggestions as ghost notes to keep or discard.'}
             </Typography>
             {setting?.canChange && (
               <Box sx={(t) => ({ ...section(t), display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' })} data-invite-outside-agents="">
@@ -466,7 +475,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
               </Box>
             )}
             <Box sx={(t) => ({ borderBottom: '1px solid #e1e3d6', ...t.applyStyles('dark', { borderBottomColor: '#3a5244' }) })}>
-              <Tabs value={tab} onChange={(_event, next) => { setTab(next); setError('') }} aria-label="How to connect" variant="fullWidth"
+              <Tabs value={tab} onChange={(_event, next) => { setTab(next); setError(''); setAddressError('') }} aria-label="How to connect" variant="fullWidth"
                 sx={(t) => ({
                   minHeight: 44,
                   '& .MuiTab-root': { minHeight: 44, textTransform: 'none', fontSize: 15, fontWeight: 700, color: '#4a5d52' },
@@ -602,9 +611,12 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
             {tab === 'custom' && (
               <Box role="tabpanel" id="connect-panel-custom" aria-labelledby="connect-tab-custom" data-invite-panel="custom" sx={{ display: 'grid', gap: 2 }}>
                 <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5 }} data-invite-tab-line="custom">{CONNECT_TABS.find((t) => t.id === 'custom').line}</Typography>
-                <Box component="form" onSubmit={(e) => { e.preventDefault(); discover() }} sx={(t) => ({ ...section(t), display: 'grid', gap: 1.5 })} data-invite-custom="">
+                <Box component="form" onSubmit={(e) => { e.preventDefault(); discover(undefined, { fromCustom: true }) }} sx={(t) => ({ ...section(t), display: 'grid', gap: 1.5 })} data-invite-custom="">
                   <TextField size="small" fullWidth label="Paste an MCP address" placeholder="https://example.com/mcp" value={address} autoFocus
-                    onChange={(e) => setAddress(e.target.value)} inputProps={{ 'data-invite-address': '', inputMode: 'url', autoCapitalize: 'none', spellCheck: false }} />
+                    error={Boolean(addressError)} helperText={addressError || undefined}
+                    FormHelperTextProps={{ id: 'invite-address-problem', role: 'alert', 'data-invite-address-problem': '' }}
+                    onChange={(e) => { setAddress(e.target.value); if (addressError) setAddressError('') }}
+                    inputProps={{ 'data-invite-address': '', inputMode: 'url', autoCapitalize: 'none', spellCheck: false, ...(addressError && { 'aria-describedby': 'invite-address-problem', 'aria-invalid': true }) }} />
                   <TextField size="small" fullWidth label="Name on your slates (optional)" value={customName} onChange={(e) => setCustomName(e.target.value)}
                     helperText="Left empty, Slatebox suggests one. You can change it before you connect." inputProps={{ maxLength: 32, 'data-invite-custom-name': '' }} />
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -613,7 +625,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                   </Box>
                 </Box>
                 {lookalikeHost(address.trim()) && <Lookalike />}
-                <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0, lineHeight: 1.5 }} data-invite-custom-footer="">Open servers connect straight away; others after you sign in on their own page or paste a key. Only public https addresses work. Once it works, you can suggest it for the Slatebox library, free.</Typography>
+                <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0, lineHeight: 1.5 }} data-invite-custom-footer="">Open servers connect straight away; others after you sign in on their own page or paste a key. Only public https addresses work. Once it works, you can suggest it for the Slatebox library.</Typography>
               </Box>
             )}
           </Box>
@@ -690,7 +702,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
             <Box sx={(t) => ({ ...section(t), display: 'grid', gap: 1 })} data-invite-suggest="">
               <Typography component="div" sx={heading}>Suggest it for the Slatebox library</Typography>
               <Typography variant="body2" sx={{ lineHeight: 1.5 }}>
-                Others could use {justConnected.host || 'this server'} too. Suggest it and, once Slatebox reviews it, it is listed under Existing for everyone, marked Community. It is free, and your sign-in is never shared.
+                Others could use {justConnected.host || 'this server'} too. Suggest it and, once Slatebox reviews it, it is listed under Existing for everyone, marked Community, with your name as the person who suggested it. Your sign-in is never shared.
               </Typography>
               <Box><Button variant="outlined" data-invite-suggest-open="" onClick={() => setSuggesting(true)}>Suggest for the library</Button></Box>
             </Box>

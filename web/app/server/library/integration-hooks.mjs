@@ -4,7 +4,7 @@
 // through setLibraryIntegrations); a locked install leaves them empty, and the core then refuses to
 // take an integration (404 integrations_off) and lists none.
 //
-//   forSubmit(principal, { integrationId })  → { address, host, tools: [{ name, group, destructive, hash }], signedInWith }
+//   forSubmit(principal, { integrationId })  → { address, host, tools: [{ name, group, destructive, hash }] } (never how its author signs in)
 //       the person's own working connection, checked: active, theirs, an address the gallery does not
 //       already list, and one the endpoint policy allows (https, public). Refuses with its sentence.
 //   probe(address)  → { at, reachable, host, lookalike, signIn: { method, authHost, issuer } | null,

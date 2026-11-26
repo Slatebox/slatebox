@@ -15,6 +15,8 @@ export const KIND_FILTERS = Object.freeze([
   { id: 'presentation', label: 'Presentations' },
   { id: 'integration', label: 'Integrations' },
 ])
+/** The queue's kind chips: Integrations only where this server takes them (the queue says so; a locked install does not). */
+export const kindFiltersFor = ({ integrations = false } = {}) => KIND_FILTERS.filter((entry) => entry.id !== 'integration' || integrations)
 export const CATEGORY_CHIPS = Object.freeze(LIBRARY_CATEGORIES.map((id) => ({ id, label: CATEGORY_LABELS[id] })))
 // A suggested integration's categories: the agent gallery's chips.
 export const INTEGRATION_CHIPS = Object.freeze(INTEGRATION_CATEGORIES.map((id) => ({ id, label: INTEGRATION_CATEGORY_LABELS[id] })))
@@ -27,6 +29,9 @@ export const categoryChipsFor = (kind) => (kind === 'integration' ? INTEGRATION_
 export function probeLines(probe, { auth = 'none' } = {}) {
   if (!probe) return [{ tone: 'info', text: 'Not checked yet. Check it: Slatebox reaches the server now, signed out.' }]
   const lines = []
+  // First, whatever else it found: a server that answers signed out is exactly how a path secret looks.
+  if (probe.secretInPath)
+    lines.push({ tone: 'error', text: `Its address seems to hold a private code in its path (${probe.secretInPath.why || 'a secret'}). Published, everyone who connected it would act as its author's account. It cannot be approved: turn it down, or ask for an address without it.` })
   if (!probe.reachable) {
     lines.push({ tone: 'error', text: `Not reachable${probe.host ? ` at ${probe.host}` : ''}${probe.problem ? `: ${probe.problem}` : '.'}` })
     return lines

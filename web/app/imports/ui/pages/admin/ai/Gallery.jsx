@@ -102,11 +102,16 @@ export default function Gallery() {
         The agents people can invite onto a slate, in the order the invite dialog shows them. Slatebox draws diagrams itself, so the gallery lists agents that bring in what it cannot: code, issues, papers, docs, facts and the web. Community cards are custom servers people suggested and an administrator approved in Library review.
       </Typography>
       {data.configuration?.cloudLibrary && (
-        <Alert severity={data.configuration.cloudLibrary.lastError ? 'warning' : 'info'} sx={{ mb: 2 }} data-gallery-cloud="">
-          {data.configuration.cloudLibrary.fetchedAt
-            ? `Community cards from Slatebox Cloud: ${data.configuration.cloudLibrary.cards}, last updated ${new Date(data.configuration.cloudLibrary.fetchedAt).toLocaleString()}.`
-            : 'Community cards from Slatebox Cloud: not fetched yet.'}
-          {data.configuration.cloudLibrary.lastError ? ` The last try did not work (${data.configuration.cloudLibrary.lastError}); the last good copy is still used.` : ''}
+        <Alert severity={data.configuration.cloudLibrary.stale && data.configuration.cloudLibrary.fetchedAt ? 'error' : data.configuration.cloudLibrary.lastError ? 'warning' : 'info'} sx={{ mb: 2 }}
+          data-gallery-cloud="" data-gallery-cloud-stale={data.configuration.cloudLibrary.stale ? '' : undefined}>
+          {!data.configuration.cloudLibrary.fetchedAt
+            ? 'Community cards from Slatebox Cloud: not fetched yet.'
+            : data.configuration.cloudLibrary.stale
+              ? `Community cards from Slatebox Cloud are out of date: last updated ${new Date(data.configuration.cloudLibrary.fetchedAt).toLocaleString()}, more than 7 days ago, so none are shown until Slatebox Cloud can be reached again.`
+              : `Community cards from Slatebox Cloud: ${data.configuration.cloudLibrary.cards}, last updated ${new Date(data.configuration.cloudLibrary.fetchedAt).toLocaleString()}.`}
+          {data.configuration.cloudLibrary.lastError
+            ? ` The last try did not work (${data.configuration.cloudLibrary.lastError})${data.configuration.cloudLibrary.stale ? '.' : `; the last good copy is used until ${data.configuration.cloudLibrary.servedUntil ? new Date(data.configuration.cloudLibrary.servedUntil).toLocaleString() : '7 days after it was fetched'}.`}`
+            : ''}
           {' '}Turn this off with settings.enterprise.cloudLibrary: false.
         </Alert>
       )}

@@ -16,7 +16,68 @@ export const INTEGRATION_CATEGORY_LABELS = Object.freeze({ work: 'Work', busines
 // How a suggested integration signs people in, as its author says (the reviewer's check reads the server itself).
 export const INTEGRATION_AUTH = Object.freeze(['none', 'oauth', 'key'])
 export const INTEGRATION_AUTH_LABELS = Object.freeze({ none: 'No sign-in', oauth: 'Sign in on its own page (OAuth)', key: 'API key or token' })
-export const INTEGRATION_CONSENT_LINE = 'If it is approved, its address, name and description are public: anyone using Slatebox can find and connect it. Your sign-in is never shared.'
+// What the author agrees to: everything that becomes public, their own name included (a Community card
+// says "Suggested by <name>", here and on every licensed self-hosted install that lists Cloud's cards).
+export const INTEGRATION_CONSENT_LINE = 'If it is approved, its address, homepage, name, description and category are public, with your name as the person who suggested it: anyone using Slatebox can find and connect it. Your sign-in is never shared.'
+
+// A path segment that reads like a credential: many hosted MCP servers put a per-account secret in
+// the path (https://mcp.zapier.com/api/mcp/s/<secret>/mcp, a UUID per account, /sse/<token>). Such an
+// address works signed out, so a reviewer's check passes, and everyone who connected its card would
+// act as its author. Suggesting one is refused, the review panel says so, and no card is made of it.
+const SECRET_WORD = /(?:^|[-_.])(?:api[-_]?key|apikey|key|keys|token|tokens|access[-_]?token|secret|secrets|password|passwd|credentials?|bearer|signature|sig)(?:$|[-_.])/i
+const SECRET_PREFIX = /^(?:sk|pk|rk|ak|ghp|gho|ghs|ghu|github_pat|glpat|xox[abposr]|pat)[-_][A-Za-z0-9]/i
+const UUID_SEGMENT = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i
+// Shannon entropy in bits per character.
+function entropy(text) {
+  const counts = new Map()
+  for (const ch of text) counts.set(ch, (counts.get(ch) || 0) + 1)
+  let bits = 0
+  for (const n of counts.values()) bits -= (n / text.length) * Math.log2(n / text.length)
+  return bits
+}
+function secretSegment(segment) {
+  if (SECRET_WORD.test(segment)) return 'a word like key, token or secret'
+  if (SECRET_PREFIX.test(segment)) return 'what looks like an access key'
+  if (UUID_SEGMENT.test(segment)) return 'a unique id, which often stands for one account'
+  if (/^[0-9a-f]{24,}$/i.test(segment)) return 'a long random code'
+  if (/^[0-9]{16,}$/.test(segment)) return 'a long number, which often stands for one account'
+  const letters = /[A-Za-z]/.test(segment)
+  const digits = /[0-9]/.test(segment)
+  if (segment.length >= 20 && letters && digits && /^[A-Za-z0-9_\-.~+=]+$/.test(segment) && entropy(segment) >= 3.2) return 'a long random code'
+  if (segment.length >= 16 && digits && /[a-z]/.test(segment) && /[A-Z]/.test(segment) && entropy(segment) >= 3.2) return 'a long random code'
+  return null
+}
+
+/**
+ * Whether an MCP address carries what looks like a secret in its path → { why } or null. The query and
+ * fragment are not kept with an address (canonicalAddress), so only the path matters here.
+ */
+export function secretInPath(address) {
+  let url
+  try {
+    url = new URL(String(address || '').trim())
+  } catch {
+    return null
+  }
+  const segments = url.pathname.split('/').filter(Boolean).map((part) => {
+    try {
+      return decodeURIComponent(part)
+    } catch {
+      return part
+    }
+  })
+  for (const [index, segment] of segments.entries()) {
+    // Zapier style: /s/<secret>/ ("s" for secret, then the code).
+    if (/^s$/i.test(segment) && segments[index + 1]) return { why: 'a secret after /s/' }
+    const why = secretSegment(segment)
+    if (why) return { why }
+  }
+  return null
+}
+
+/** The sentence a suggestion whose address carries a secret is refused (and a reviewer warned) with. */
+export const secretInPathSentence = (found) =>
+  `Its address seems to hold a private code in its path (${found?.why || 'a secret'}). Published, everyone who connected it would act as your account. Suggest an address without it, for a server that signs each person in.`
 // The kinds the public library lists and exports unless one is asked for by name: an integration is a
 // card in Connect an integration, not something to open on a canvas.
 export const LISTED_KINDS = Object.freeze(['component', 'slate', 'presentation'])
