@@ -13,6 +13,8 @@ release's highlights.
 
 ## [Unreleased]
 
+- New installs get Slatebox 2.1.2 (`ghcr.io/slatebox/slatebox@sha256:8c469149…`, built and signed by
+  GitHub from the `v2.1.2` tag).
 - Automatic updates work on a Mac whose Docker is Colima: the host updater no longer looks for
   the Docker VM's socket on the Mac itself (only Docker Desktop and OrbStack put one there). On
   Linux the socket is mounted with `--mount`, which stops instead of making a folder when it is

@@ -13,11 +13,12 @@ export const DEFAULT_REPOSITORY = 'ghcr.io/slatebox/slatebox'
 // 0.2.0 added the team-address tunnel (cloudflared); 0.2.1 the self-host fixes and team moves;
 // 0.2.2 adds SSO accounts joining the setup team as members (SSO slice 1) and the Help and
 // support menu; 2.1.0 is the first image GitHub builds and signs from a release tag (the image
-// version now equals the app version) and adds `slatebox updates` (automatic updates).
-// PINNED_DIGEST is the published multi-arch index of ghcr.io/slatebox/slatebox:2.1.0
-// (linux/amd64 and linux/arm64); `npm publish` refuses to run without it.
-export const PINNED_TAG = '2.1.0'
-export const PINNED_DIGEST = 'sha256:40cb7fe13714ed5e691479dc283afe65737e643ffda59257ee5c97ad6163b20a'
+// version now equals the app version) and adds `slatebox updates` (automatic updates); 2.1.2
+// rewrites the host updater after each update. PINNED_DIGEST is the published multi-arch index of
+// ghcr.io/slatebox/slatebox:2.1.2 (linux/amd64 and linux/arm64); `npm publish` refuses to run
+// without it.
+export const PINNED_TAG = '2.1.2'
+export const PINNED_DIGEST = 'sha256:8c4691496b330b27087244d9c1532ea50085e928c65db2828db93158501f74fe'
 export const DEFAULT_IMAGE = PINNED_DIGEST ? `${DEFAULT_REPOSITORY}@${PINNED_DIGEST}` : `${DEFAULT_REPOSITORY}:${PINNED_TAG}`
 
 // What the pinned image accepts: its own `slatebox settings --json` (self-host/rootfs/opt/slatebox/
