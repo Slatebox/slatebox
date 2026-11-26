@@ -80,6 +80,11 @@ test('every AI entry point calls runAIAction', () => {
     ['server/methods/workshops.js', 'export function draftForYou'],
     // learning from a connected tool in About you (S3): the look and its one model call, through server/profile/sources-core.mjs's run
     ['server/methods/profile-sources.js', 'run: (userId, fn) =>'],
+    // the start page (S6): the use-case interview's one model call a turn, through server/start/interview-core.mjs's run
+    // (start.interview), and a tile's build, one action for all its boards (personal.build, or start.build for a guest)
+    ['server/start/meteor.js', 'run: (userId, fn) => runAIAction'],
+    ['server/start/meteor.js', 'run: refusing((user, fn) =>'],
+    ['server/methods/workshops.js', 'export function draftForTile'],
   ]
   for (const [file, marker] of entries) {
     const text = source(file)

@@ -152,6 +152,9 @@ method[CONSTANTS.methods.users.identify] = async (opts) => {
         audioMutedOnStart: false,
         // The first run's answer (methods/first-slate.js) comes with the guest into the account.
         ...(user.profile?.start && { start: user.profile.start }),
+        // So does how many start page tiles they keep (server/start): the tiles are the account's own (its id does not
+        // change), and /new keeps showing them under "Yours".
+        ...(Number.isInteger(user.profile?.startTiles) && user.profile.startTiles > 0 && { startTiles: user.profile.startTiles }),
       },
     }
     if (opts.firstName) {

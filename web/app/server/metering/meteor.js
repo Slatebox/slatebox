@@ -25,7 +25,7 @@ import { assertPublicHost, checkOwnEndpoint, ownEndpointAgent } from './own-endp
 import { NOT_AVAILABLE, describeKey, keyDocument, loadMasterKey, open as openKey, PROVIDERS } from './vault.mjs'
 import { minutesLeftFor, roomRequest, tick, transcriptionAllowed } from './calls.mjs'
 import { runM1, runM2, runM4 } from './migrations.mjs'
-import { allowanceUsage } from './allowance.mjs'
+import { GUEST_FEATURES, allowanceUsage } from './allowance.mjs'
 import { aiSettings, auxCredential } from '../methods/ai/ai-settings'
 import { dailyClient } from '../methods/huddle-provider.mjs'
 import { TOP_UP_AMOUNTS, cardFeeMode } from '../../imports/api/billing/top-up.mjs'
@@ -415,7 +415,10 @@ installMeter(createMeter({
 
 // Whether this person can start an AI request now (used to offer AI drafting at all).
 export async function canStartAI(user, feature = 'workshop') {
-  if (!user || user.isAnonymous) return false
+  if (!user) return false
+  // A guest uses the agent only through the guest allowance (the start page's interview and its build), and only
+  // where the meter runs: with no meter there is no allowance to bound it, so a guest saves the account first.
+  if (user.isAnonymous && (!GUEST_FEATURES.includes(feature) || !meterOn())) return false
   if (!meterOn()) {
     // A server with no meter uses its operator's provider. Self-hosted operators opt in to workshop AI;
     // a person (or team) who connected their own AI may use it there too.
@@ -433,7 +436,7 @@ export async function canStartAI(user, feature = 'workshop') {
 // or null when they can. A conversation shows this message as it is.
 export async function aiRefusal(user, feature = 'workshop') {
   if (await canStartAI(user, feature)) return null
-  if (!user || user.isAnonymous) return { code: 'guest', message: COPY.guestAI }
+  if (!user || (user.isAnonymous && (!GUEST_FEATURES.includes(feature) || !meterOn()))) return { code: 'guest', message: COPY.guestAI }
   if (!meterOn()) return null
   const { decision } = await routeFor({ user, kind: 'ai', feature, estimateMicros: ESTIMATES[feature] ?? ESTIMATES.workshop })
   return decision.ok ? null : { code: decision.code, message: decision.message, pay: await payFor(user, decision.code) }
@@ -636,6 +639,8 @@ Meteor.methods({
       // the personalization allowance this month: Slatebox's cost, inside the shared budget, by feature (allowance.mjs)
       allowanceSpentMicros: totals.allowanceMicros || 0, allowanceByFeature: totals.allowanceByFeature || {},
       personalAllowance: settings.personalAllowance,
+      // the guest allowance (allowance.mjs): the start page's interview and its build, a day per guest and per address
+      guestAllowance: settings.guestAllowance, guestAllowancePerAddress: settings.guestAllowancePerAddress,
       todayMicros: global.todayFreeMicros, dailyCeilingMicros: Math.floor(settings.budget.monthlyMicros / settings.budget.dailyCeilingDivisor),
       sevenDayAverageMicros: Math.round(past.reduce((s, r) => s + (r.freeMicros || 0), 0) / 7),
       projectedMicros: Math.round(global.monthFreeMicros / elapsedDays * daysInMonth),

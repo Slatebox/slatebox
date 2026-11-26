@@ -29,6 +29,7 @@ function world(users = []) {
   const sent = { verifications: [], mergeLinks: [] }
   const audits = []
   const slates = [{ _id: 's1', userId: 'guest1' }, { _id: 's2', userId: 'guest1' }, { _id: 's3', userId: 'other' }]
+  const tiles = [{ _id: 't1', userId: 'guest1' }, { _id: 't2', userId: 'other' }]
   const hooks = { beforeAttach: null }
   const emailOwner = email => [...people.values()].find(u => (u.emails || []).some(e => e.address.toLowerCase() === email.toLowerCase())) || null
   const store = {
@@ -57,6 +58,7 @@ function world(users = []) {
       return true
     },
     async moveSlates(from, to) { let n = 0; for (const s of slates) if (s.userId === from) { s.userId = to; n += 1 } return n },
+    async moveTiles(from, to) { let n = 0; for (const t of tiles) if (t.userId === from) { t.userId = to; n += 1 } return n },
   }
   const deps = {
     store,
@@ -72,7 +74,7 @@ function world(users = []) {
     stripe: { subscriptions: { async update(id, params, opts) { stripeCalls.push({ id, params, key: opts?.idempotencyKey }); return { id } } } },
     sync: async (subscriptionId, userId) => { syncs.push({ subscriptionId, userId }); people.get(userId).pro = { subscriptionId, status: 'active' } },
   }
-  return { people, sent, audits, slates, deps, mergeDeps, stripeCalls, syncs, hooks }
+  return { people, sent, audits, slates, tiles, deps, mergeDeps, stripeCalls, syncs, hooks }
 }
 
 const guest = (over = {}) => ({ _id: 'guest1', isAnonymous: true, emails: [{ address: 'guest-x@anonymous.slatebox.invalid', verified: false }], pro: { subscriptionId: 'sub_1', status: 'active' }, ...over })
@@ -164,13 +166,15 @@ test('opening the move link moves the guest\'s Pro and slates into the account i
   const w = world([guest(), member()])
   await claimGuestPurchase(w.deps, paid({ customer_details: { email: 'owner@example.com' } }))
   const out = await mergeGuestPurchase(w.mergeDeps, { guestId: 'guest1', targetId: 'm1' })
-  assert.deepEqual(out, { moved: true, subscriptionId: 'sub_1', slates: 2 })
+  assert.deepEqual(out, { moved: true, subscriptionId: 'sub_1', slates: 2, tiles: 1 })
   // webhooks find the account by the subscription's metadata from now on
   assert.deepEqual(w.stripeCalls, [{ id: 'sub_1', params: { metadata: { product: 'pro', userId: 'm1' } }, key: 'pro-merge:sub_1:m1' }])
   assert.equal(w.people.get('guest1').pro, null)
   assert.deepEqual(w.syncs, [{ subscriptionId: 'sub_1', userId: 'm1' }])
   assert.equal(w.people.get('m1').pro.subscriptionId, 'sub_1')
   assert.deepEqual(w.slates.map(s => s.userId), ['m1', 'm1', 'other'])
+  // the start page's tiles move with them (the store moves the drafts those tiles built and the tile count too)
+  assert.deepEqual(w.tiles.map(t => t.userId), ['m1', 'other'])
   assert.equal(w.people.get('guest1').checkoutClaim.kind, 'merged')
   // a second open moves nothing
   assert.deepEqual(await mergeGuestPurchase(w.mergeDeps, { guestId: 'guest1', targetId: 'm1' }), { moved: false, reason: 'not-pending' })

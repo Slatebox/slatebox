@@ -47,9 +47,14 @@ export function createMeter({ enabled, io, settings: loadSettings, decide, crede
         // callers (a Cloudflare edge, the cluster's own) is not counted.
         const { budget } = settings
         const place = address && !isProxyAddress(address) ? addressBucket(address) : null
+        // The guest allowance keeps its own count per address (`address:guest:…`), with its own share (perAddress).
+        // With no caller's address known it is not given: guest accounts are free to make, so without the
+        // address's count one place could take any number of guests' allowances (allowance.mjs GUEST_NO_ADDRESS).
+        const guest = decision.allowance.guest === true
+        if (guest && !place) return meter.begin({ ...opts, allowanceTaken: 'no-address' })
         const hold = await holdAllowance(io, {
-          feature: decision.allowance.feature, perDay: decision.allowance.perDay,
-          keys: { day: `user:${decision.payer.id}:${dayKey(at)}`, global: `global:${monthKey(at)}`, ...(place && { address: `address:${place}:${dayKey(at)}` }) },
+          feature: decision.allowance.feature, perDay: decision.allowance.perDay, ...(guest && { perAddress: decision.allowance.perAddress }),
+          keys: { day: `user:${decision.payer.id}:${dayKey(at)}`, global: `global:${monthKey(at)}`, ...(place && { address: `address:${guest ? 'guest:' : ''}${place}:${dayKey(at)}` }) },
           ceilingMicros: action.ceilingMicros, estimateMicros, globalCap: Math.floor(budget.monthlyMicros * budget.pauseAiAt / 100), now: at,
         })
         if (!hold.ok) return meter.begin({ ...opts, allowanceTaken: hold.code })

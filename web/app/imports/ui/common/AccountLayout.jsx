@@ -23,6 +23,10 @@ export const SPACE = {
 // (the welcome is checked for all-caps words: scripts/first-minute.test.mjs).
 export const space = SPACE
 
+// a section's heading on a page of sections (the start page's Yours, Made for you and its jobs): one look for all of them
+export const SECTION_HEADING = Object.freeze({ fontWeight: 800, fontSize: { xs: 20, sm: 24 }, letterSpacing: '-.02em', lineHeight: 1.25 })
+export const sectionHeading = SECTION_HEADING
+
 // commands and code to copy: monospace, so flags such as --no-install read as typed
 export const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace'
 

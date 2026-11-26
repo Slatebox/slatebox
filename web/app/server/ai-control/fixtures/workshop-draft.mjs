@@ -56,6 +56,29 @@ const personalSample = (id, title, kind, brief, personal) => ({
   id, title, kind: 'personal-' + kind, brief, personal,
   values: { 'workshop.draft.personal': personalValues(kind, personal), 'workshop.draft.repair': async (render) => ({ instructions: await render(KINDS[kind].system), problem: 'Call the requested tool.' }) },
 })
+// A start page tile's board (workshop.draft.tile): one board of a plan, drafted from what the person said in the talk and
+// the board's why, as data. It passes the same quality gate, and it uses the person's own words from the talk.
+const talkWords = (board, s) => {
+  const labels = [board.title, ...board.lanes.map((lane) => lane.label), ...board.cards.map((card) => card.label)].join('\n')
+  if (sensitive(labels)) throw new Error('It holds something sensitive from the talk.')
+  if (!grounded({ text: labels }, s.tile.summary)) throw new Error('It uses none of the person\'s own words from the talk.')
+}
+KINDS['tile-component'] = { ...KINDS.component, system: 'workshop.draft.tile', of: 'component', parse: (args, s) => {
+  KINDS.component.parse(args, s)
+  talkWords(parseComponentDraft(args), s)
+} }
+KINDS['tile-grid'] = { ...KINDS.grid, system: 'workshop.draft.tile', of: 'grid', parse: (args, s) => {
+  KINDS.grid.parse(args, s)
+  talkWords(parseGridDraft(args, { message: s.brief }), s)
+} }
+// The values workshop.draft.tile renders with, as workshops.js personalInstructions gives them.
+const tileValues = (kind, tile) => async (render) => ({
+  instructions: await render(KINDS[kind].system), summary: tile.summary, why: tile.why, hasName: Boolean(tile.name), ...(tile.name && { name: tile.name }), hasFacts: Boolean(tile.facts), ...(tile.facts && { facts: tile.facts }),
+})
+const tileSample = (id, title, kind, brief, tile) => ({
+  id, title, kind: 'tile-' + kind, brief, tile,
+  values: { 'workshop.draft.tile': tileValues(kind, tile), 'workshop.draft.repair': async (render) => ({ instructions: await render(KINDS[kind].system), problem: 'Call the requested tool.' }) },
+})
 const sample = (id, title, kind, brief) => ({
   id, title, kind, brief,
   values: {
@@ -89,6 +112,13 @@ export default {
     personalSample('personal-sensitive', 'For you: a component for a bookkeeper whose About you holds their salary', 'component',
       'A month-end close board for the dental clinic: lanes for invoices to match, reconciled and closed, with one step at a time.',
       { facts: '- role: Bookkeeper at a dental clinic\n- other: My salary is 52,000 a year\n- routine: Closes the month on the last Friday', why: 'You close the month on the last Friday.', tools: '' }),
+    // A start page tile: one board of the plan a talk ended with (server/start/tiles-core.mjs build)
+    tileSample('tile-fantasy-draft', 'A tile: a fantasy football draft board', 'component',
+      'A snake draft board for a twelve team fantasy football league, 15 rounds: lanes for available players by position (QB, RB, WR, TE, K, DEF) and a lane per round that holds twelve picks. Cards are players; a pick moves one at a time.',
+      { summary: 'A twelve team fantasy football league with a 15 round snake draft in August. Weekly lineups: QB, two RBs, two WRs, a TE, a flex, a kicker and a defense, locked Thursday night.', name: 'Draft board', why: 'Your league drafts 15 rounds, snake style, in August.', facts: '' }),
+    tileSample('tile-marketing-checklist', 'A tile: a printable launch checklist for a marketing team', 'grid',
+      'A printable launch checklist page for a marketing team: a heading with the launch name, a row of cells per stage (brief, messaging, assets, review, launch day, follow-up) and channel tiles for email, the blog, LinkedIn and a webinar.',
+      { summary: 'A marketing team of product marketing, design, content and a social lead plans about four launches a quarter: brief, messaging, assets, review, launch day and a two week follow-up, on email, the blog, LinkedIn and a webinar.', name: 'Launch checklist', why: 'Each launch goes out on email, the blog, LinkedIn and a webinar.', facts: '- role: Head of marketing' }),
   ],
   toolFor: (s) => (KINDS[s.kind].tool.name),
   request: async (s, render) => {
@@ -96,7 +126,7 @@ export default {
     const tool = { ...kind.tool, description: await render(kind.toolId) }
     return {
       system: await render(kind.system),
-      prompts: [{ role: 'user', content: s.kind === 'rules' ? JSON.stringify({ currentWorkshop: MAP, requestedChange: s.brief }) : s.personal ? wrapData('brief', s.brief) : s.brief }],
+      prompts: [{ role: 'user', content: s.kind === 'rules' ? JSON.stringify({ currentWorkshop: MAP, requestedChange: s.brief }) : s.personal || s.tile ? wrapData('brief', s.brief) : s.brief }],
       functions: [tool],
       function_call: { name: tool.name },
     }

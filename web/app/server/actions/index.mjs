@@ -49,6 +49,7 @@ import libraryAuthor from './library-author.mjs'
 import libraryReview from './library-review.mjs'
 import profileActions from './profile.mjs'
 import personalActions from './personal.mjs'
+import startTileActions from './start-tiles.mjs'
 
 export const actions = [
   slatesGet,
@@ -102,6 +103,8 @@ export const actions = [
   ...profileActions,
   // For you: ideas made for the person, from About you (server/personal)
   ...personalActions,
+  // the start page's tiles, made by its use-case interview (server/start)
+  ...startTileActions,
 ]
 
 export const components = { ...slateComponents }

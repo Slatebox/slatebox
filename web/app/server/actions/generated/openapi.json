@@ -400,6 +400,14 @@
                         "maxLength": 48,
                         "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       },
+                      "start.interview": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 48,
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
+                      },
                       "voice": {
                         "type": [
                           "string",
@@ -1043,7 +1051,7 @@
                   "changes": {
                     "type": "array",
                     "minItems": 1,
-                    "maxItems": 21,
+                    "maxItems": 22,
                     "items": {
                       "type": "object",
                       "properties": {
@@ -1067,6 +1075,7 @@
                             "interview",
                             "personal.suggest",
                             "profile.sources",
+                            "start.interview",
                             "voice",
                             "voice.chat",
                             "voice.interview",
@@ -2187,7 +2196,13 @@
                       "profile.sources.facts",
                       "profile.sources.sample",
                       "profile.sources.retry",
-                      "profile.sources.tool"
+                      "profile.sources.tool",
+                      "start.interview.system",
+                      "start.interview.plan",
+                      "start.interview.retry",
+                      "tool.ask",
+                      "tool.propose_plan",
+                      "workshop.draft.tile"
                     ],
                     "description": "The prompt, for example shape.system."
                   },
@@ -2477,7 +2492,13 @@
                       "profile.sources.facts",
                       "profile.sources.sample",
                       "profile.sources.retry",
-                      "profile.sources.tool"
+                      "profile.sources.tool",
+                      "start.interview.system",
+                      "start.interview.plan",
+                      "start.interview.retry",
+                      "tool.ask",
+                      "tool.propose_plan",
+                      "workshop.draft.tile"
                     ],
                     "description": "The prompt, for example shape.system."
                   },
@@ -2528,6 +2549,7 @@
                       "interview",
                       "personal.suggest",
                       "profile.sources",
+                      "start.interview",
                       "voice",
                       "voice.chat",
                       "voice.interview",
@@ -2769,7 +2791,13 @@
                 "profile.sources.facts",
                 "profile.sources.sample",
                 "profile.sources.retry",
-                "profile.sources.tool"
+                "profile.sources.tool",
+                "start.interview.system",
+                "start.interview.plan",
+                "start.interview.retry",
+                "tool.ask",
+                "tool.propose_plan",
+                "workshop.draft.tile"
               ],
               "description": "The prompt, for example shape.system."
             }
@@ -2998,7 +3026,13 @@
                 "profile.sources.facts",
                 "profile.sources.sample",
                 "profile.sources.retry",
-                "profile.sources.tool"
+                "profile.sources.tool",
+                "start.interview.system",
+                "start.interview.plan",
+                "start.interview.retry",
+                "tool.ask",
+                "tool.propose_plan",
+                "workshop.draft.tile"
               ],
               "description": "The prompt, for example shape.system."
             }
@@ -3570,6 +3604,7 @@
                       "interview",
                       "personal.suggest",
                       "profile.sources",
+                      "start.interview",
                       "voice",
                       "voice.chat",
                       "voice.interview",
@@ -3731,7 +3766,13 @@
                       "profile.sources.facts",
                       "profile.sources.sample",
                       "profile.sources.retry",
-                      "profile.sources.tool"
+                      "profile.sources.tool",
+                      "start.interview.system",
+                      "start.interview.plan",
+                      "start.interview.retry",
+                      "tool.ask",
+                      "tool.propose_plan",
+                      "workshop.draft.tile"
                     ],
                     "description": "For target prompt: the prompt."
                   },
@@ -4972,7 +5013,7 @@
                           },
                           "provenance": {
                             "type": "object",
-                            "description": "branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: \"for-you\", ideaId } for a component Slatebox built for its author from an idea in For you."
+                            "description": "branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: \"for-you\", ideaId } for a component Slatebox built for its author from an idea in For you, or { kind: \"tile\", tileId } for one built from their tile on the start page."
                           },
                           "url": {
                             "type": "string"
@@ -5740,7 +5781,7 @@
                         },
                         "provenance": {
                           "type": "object",
-                          "description": "branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: \"for-you\", ideaId } for a component Slatebox built for its author from an idea in For you."
+                          "description": "branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: \"for-you\", ideaId } for a component Slatebox built for its author from an idea in For you, or { kind: \"tile\", tileId } for one built from their tile on the start page."
                         },
                         "url": {
                           "type": "string"
@@ -5927,7 +5968,7 @@
                         },
                         "provenance": {
                           "type": "object",
-                          "description": "branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: \"for-you\", ideaId } for a component Slatebox built for its author from an idea in For you."
+                          "description": "branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: \"for-you\", ideaId } for a component Slatebox built for its author from an idea in For you, or { kind: \"tile\", tileId } for one built from their tile on the start page."
                         },
                         "url": {
                           "type": "string"
@@ -7655,7 +7696,7 @@
                         },
                         "provenance": {
                           "type": "object",
-                          "description": "branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: \"for-you\", ideaId } for a component Slatebox built for its author from an idea in For you."
+                          "description": "branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: \"for-you\", ideaId } for a component Slatebox built for its author from an idea in For you, or { kind: \"tile\", tileId } for one built from their tile on the start page."
                         },
                         "url": {
                           "type": "string"

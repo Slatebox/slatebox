@@ -41,12 +41,14 @@ const ESTIMATES_BEFORE = {
 // 2026-11-26) is a conversation turn, metered as chat's (2,000 and 50,000 µ$); For you's suggestion (S4, 2026-11-26) is
 // one forced call with at most one retry over the person's facts (3,000 and 50,000 µ$); building a For you idea
 // (2026-11-26) is a board draft on workshop.draft under a meter key of its own (personal.build), so it has board
-// drafting's estimate and the meter's default ceiling (5,000 and 50,000 µ$).
+// drafting's estimate and the meter's default ceiling (5,000 and 50,000 µ$). The start page's use-case interview (S6,
+// 2026-11-26) is a conversation turn, metered as chat's (2,000 and 50,000 µ$); a guest's build of its tile is a board draft
+// on workshop.draft under a meter key of its own (start.build, the guest allowance's), so board drafting's (5,000 and 50,000 µ$).
 // Learning from a connected tool (S3, 2026-11-26) is one call, metered as a conversation turn (2,000 and 50,000 µ$).
 // Voice (2026-11-26) is metered by the minute under each voice part's own feature: a minute is held for
 // 50,000 µ$ and may spend at most 200,000 µ$ (server/voice/meter.mjs).
-const ESTIMATES_ADDED = { interview: 2000, 'personal.suggest': 3000, 'personal.build': 5000, 'profile.sources': 2000, voice: 50_000, 'voice-chat': 50_000, 'voice-interview': 50_000 }
-const CEILINGS_ADDED = { interview: 50_000, 'personal.suggest': 50_000, 'personal.build': 50_000, 'profile.sources': 50_000, voice: 200_000, 'voice-chat': 200_000, 'voice-interview': 200_000 }
+const ESTIMATES_ADDED = { interview: 2000, 'personal.suggest': 3000, 'personal.build': 5000, 'start.interview': 2000, 'start.build': 5000, 'profile.sources': 2000, voice: 50_000, 'voice-chat': 50_000, 'voice-interview': 50_000 }
+const CEILINGS_ADDED = { interview: 50_000, 'personal.suggest': 50_000, 'personal.build': 50_000, 'start.interview': 50_000, 'start.build': 50_000, 'profile.sources': 50_000, voice: 200_000, 'voice-chat': 200_000, 'voice-interview': 200_000 }
 const CEILINGS_BEFORE = { generation: 200_000, vision: 200_000, presentation: 200_000, shape: 60_000 }
 
 test('every request feature reaches the same choice as before the catalogue', () => {
@@ -62,6 +64,7 @@ test('request features name their own surface; a router step belongs to its feat
     'library-refine': 'library', connectors: 'connectors', 'generation-route': 'generation', 'canvas-route': 'canvas',
     interview: 'interview', 'interview-route': 'interview',
     'personal.suggest': 'personal.suggest',
+    'start.interview': 'start.interview',
     'image-search': null, call: null, 'not-a-feature-yet': 'chat',
   }
   for (const [feature, at] of Object.entries(expected)) assert.equal(surfaceForRequest(feature), at, feature)
@@ -90,13 +93,16 @@ test('the follows tree: one table, every chain ends at default', () => {
   assert.equal(surface('eval').follows, null)
   assert.equal(surfaceForRequest('eval'), 'eval')
   const roots = { chat: 'chat', 'chat.route': 'chat', workshop: 'chat', 'workshop.draft': 'chat', canvas: 'chat', 'agent.slatebox': 'chat',
-    library: 'library', connectors: 'chat', interview: 'chat', 'personal.suggest': 'chat', 'generation.notes': 'generation', generation: 'generation', images: 'images', default: 'default' }
+    library: 'library', connectors: 'chat', interview: 'chat', 'personal.suggest': 'chat', 'start.interview': 'chat', 'generation.notes': 'generation', generation: 'generation', images: 'images', default: 'default' }
   // the interview follows the conversation until an administrator binds it
   assert.deepEqual(followChain('interview'), ['interview', 'chat', 'default'])
   assert.equal(choiceFeatureFor('interview'), 'chat')
   // For you's suggestion follows the conversation too until an administrator binds it
   assert.deepEqual(followChain('personal.suggest'), ['personal.suggest', 'chat', 'default'])
   assert.equal(choiceFeatureFor('personal.suggest'), 'chat')
+  // and so does the start page's use-case interview (S6)
+  assert.deepEqual(followChain('start.interview'), ['start.interview', 'chat', 'default'])
+  assert.equal(choiceFeatureFor('start.interview'), 'chat')
   for (const [id, root] of Object.entries(roots)) assert.equal(rootSurface(id), root, id)
 })
 
@@ -106,7 +112,7 @@ test('library and connectors have landed: both are in this build; connectors run
   assert.equal(surface('connectors').edition, null)
   const inBuild = SURFACES.filter((s) => s.inBuild && s.useKey).map((s) => s.id)
   assert.deepEqual(inBuild, ['default', 'chat', 'chat.route', 'generation', 'generation.notes', 'presentation', 'vision', 'images', 'shape',
-    'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest', 'profile.sources', 'voice', 'voice.chat', 'voice.interview'])
+    'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest', 'profile.sources', 'start.interview', 'voice', 'voice.chat', 'voice.interview'])
   // learning from a connected tool follows the conversation until an administrator binds it, like the interview
   assert.deepEqual(followChain('profile.sources'), ['profile.sources', 'chat', 'default'])
   assert.equal(surfaceForRequest('profile.sources'), 'profile.sources')
@@ -130,7 +136,12 @@ test('the features people choose first are the catalogue rows that follow defaul
 })
 
 test('a For you build meters under its own key on board drafting\'s row, never as a surface of its own', () => {
-  assert.deepEqual([...surface('workshop.draft').meterFeatures], ['workshop', 'personal.build'])
+  // and a guest's build of a start page tile under start.build (S6, 2026-11-26), the guest allowance's key
+  assert.deepEqual([...surface('workshop.draft').meterFeatures], ['workshop', 'personal.build', 'start.build'])
+  assert.equal(SURFACES.filter((s) => s.meterFeatures.includes('start.build')).length, 1)
+  assert.equal(surface('start.build'), null)
+  assert.equal(METER_ESTIMATES['start.build'], METER_ESTIMATES.workshop)
+  assert.equal(actionCeilingMicros('start.build'), actionCeilingMicros('workshop'))
   assert.deepEqual([...surface('workshop.draft').requestFeatures], ['workshop'])
   assert.equal(SURFACES.filter((s) => s.meterFeatures.includes('personal.build')).length, 1)
   assert.equal(surface('personal.build'), null)

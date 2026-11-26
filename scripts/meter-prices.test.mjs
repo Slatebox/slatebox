@@ -74,6 +74,10 @@ test('fixed prices, estimates and per-action ceilings', () => {
     'personal.build': 5000,
     // learning from a connected tool (S3, 2026-11-26): one call, chat's estimate
     'profile.sources': 2000,
+    // the start page's use-case interview (S6, 2026-11-26): one conversation turn, chat's estimate
+    'start.interview': 2000,
+    // a guest's build of a start page tile (S6): board drafts under the guest allowance's key, board drafting's estimate
+    'start.build': 5000,
     // voice (2026-11-26): what one minute of a voice session is held for (server/voice/meter.mjs)
     voice: 50_000, 'voice-chat': 50_000, 'voice-interview': 50_000,
   })
@@ -87,6 +91,8 @@ test('fixed prices, estimates and per-action ceilings', () => {
   assert.equal(actionCeilingMicros('shape'), 60_000)
   assert.equal(actionCeilingMicros('workshop'), 50_000)
   assert.equal(actionCeilingMicros('personal.build'), 50_000)
+  assert.equal(actionCeilingMicros('start.interview'), 50_000)
+  assert.equal(actionCeilingMicros('start.build'), 50_000)
 })
 
 // ---------- AI control S3: prices set on models in AI control (spec 1.3) ----------

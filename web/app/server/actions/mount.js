@@ -51,6 +51,7 @@ import { createAppLibrary } from '../library/meteor'
 import { countApiCall, noticingFirstAction } from '../agent-reach/usage-meteor'
 import { profileStore } from '../profile/meteor'
 import { createAppPersonal } from '../personal/meteor'
+import { createAppStartTiles } from '../start/meteor'
 
 const IdempotencyRecords = new Mongo.Collection('apiIdempotencyRecords')
 const RateWindows = new Mongo.Collection('apiRateWindows')
@@ -205,6 +206,8 @@ export const deps = {
 deps.library = createAppLibrary(deps)
 // personal.ideas.* (server/personal): For you, which saves to the library and opens slates through the same doors.
 deps.personal = createAppPersonal(deps)
+// start.tiles.* (server/start): the start page's tiles, built through the same drafting, library and slate doors.
+deps.startTiles = createAppStartTiles(deps)
 
 export const limiter = createRateLimiter({ collection: RateWindows.rawCollection() })
 export const registry = createAppRegistry({ deps, idempotency, limiter, extraActions: enterpriseHost.actions })

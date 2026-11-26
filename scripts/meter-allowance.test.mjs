@@ -11,6 +11,7 @@ import { chargeFixed, chargeProviderCall, currentAIAction, installMeter, runAIAc
 import { COPY, DEFAULT_METERING, OWN_KEY_COPY, dayKey, resolveMetering, route } from '../web/app/server/metering/policy.mjs'
 import {
   DEFAULT_PERSONAL_ALLOWANCE, PEOPLE_PER_ADDRESS, PERSONAL_FEATURES, allowanceField, allowancePerDay, holdAllowance, releaseAllowance, resolvePersonalAllowance, usedUpWords,
+  DEFAULT_GUEST_ALLOWANCE, DEFAULT_GUEST_ALLOWANCE_PER_ADDRESS, GUEST_FEATURES, guestAllowanceCheck, guestUsedUpWords, resolveGuestAllowance,
 } from '../web/app/server/metering/allowance.mjs'
 import { guardsPass } from '../web/app/server/metering/holds.mjs'
 
@@ -32,12 +33,14 @@ const turn = (costMicros = 3000) => runAIAction({ feature: 'interview' }, async 
 })
 test.afterEach(() => installMeter(null))
 
-test('the defaults live in one place: 20 interview turns, 5 For you runs and 3 For you builds a day, all three paid for', () => {
-  assert.deepEqual({ ...DEFAULT_PERSONAL_ALLOWANCE }, { interview: 20, 'personal.suggest': 5, 'personal.build': 3 })
+test('the defaults live in one place: 20 interview turns, 5 For you runs, 3 builds and 20 start page turns a day, all four paid for', () => {
+  assert.deepEqual({ ...DEFAULT_PERSONAL_ALLOWANCE }, { interview: 20, 'start.interview': 20, 'personal.suggest': 5, 'personal.build': 3 })
   assert.equal(DEFAULT_METERING.personalAllowance, DEFAULT_PERSONAL_ALLOWANCE)
-  assert.deepEqual(resolveMetering().personalAllowance, { interview: 20, 'personal.suggest': 5, 'personal.build': 3 })
-  // For you joined on 2026-11-26 (owner): its ideas and building one
-  assert.deepEqual([...PERSONAL_FEATURES], ['interview', 'personal.suggest', 'personal.build'])
+  assert.deepEqual(resolveMetering().personalAllowance, { interview: 20, 'start.interview': 20, 'personal.suggest': 5, 'personal.build': 3 })
+  // For you joined on 2026-11-26 (owner): its ideas and building one; then the start page's use-case interview (S6), whose
+  // tile builds are personal.build too (one use for a whole build)
+  assert.deepEqual([...PERSONAL_FEATURES], ['interview', 'personal.suggest', 'personal.build', 'start.interview'])
+  assert.equal(allowancePerDay('start.interview', resolveMetering()), 20)
   const settings = resolveMetering()
   assert.equal(allowancePerDay('interview', settings), 20)
   assert.equal(allowancePerDay('personal.suggest', settings), 5)
@@ -48,7 +51,7 @@ test('the defaults live in one place: 20 interview turns, 5 For you runs and 3 F
   assert.equal(allowanceField('personal.suggest'), 'allowance_personal_suggest')
   assert.equal(allowanceField('personal.build'), 'allowance_personal_build')
   const example = JSON.parse(read('web/app/settings.example.json'))
-  assert.deepEqual(example.metering.personalAllowance, { interview: 20, 'personal.suggest': 5, 'personal.build': 3 })
+  assert.deepEqual(example.metering.personalAllowance, { interview: 20, 'personal.suggest': 5, 'personal.build': 3, 'start.interview': 20 })
   assert.match(example.metering['//personalAllowance'], /UTC day/)
 })
 
@@ -177,10 +180,10 @@ test('past the allowance the meter applies unchanged: Pro credits, a balance, or
 })
 
 test('settings: the operator overrides the defaults (checked at start), a stored value wins, 0 turns it off', () => {
-  assert.deepEqual(resolveMetering({ deploy: { personalAllowance: { interview: 3 } } }).personalAllowance, { interview: 3, 'personal.suggest': 5, 'personal.build': 3 })
+  assert.deepEqual(resolveMetering({ deploy: { personalAllowance: { interview: 3 } } }).personalAllowance, { interview: 3, 'start.interview': 20, 'personal.suggest': 5, 'personal.build': 3 })
   assert.deepEqual(resolveMetering({ deploy: { personalAllowance: { interview: 3 } }, stored: { personalAllowance: { interview: 7 } } }).personalAllowance.interview, 7)
   // a settings file's notes are not features
-  assert.deepEqual(resolvePersonalAllowance({ deploy: { '//': 'note', interview: 10 } }), { interview: 10, 'personal.suggest': 5, 'personal.build': 3 })
+  assert.deepEqual(resolvePersonalAllowance({ deploy: { '//': 'note', interview: 10 } }), { interview: 10, 'start.interview': 20, 'personal.suggest': 5, 'personal.build': 3 })
   for (const bad of [{ interview: -1 }, { interview: 2.5 }, { interview: '20' }, { workshop: 5 }, [], 'twenty']) {
     assert.throws(() => resolveMetering({ deploy: { personalAllowance: bad } }), /personalAllowance/, JSON.stringify(bad))
   }
@@ -377,4 +380,120 @@ test('a For you build is metered under personal.build; every other board draft s
   assert.deepEqual(Object.keys(dayRow(w)).filter(key => key.startsWith('allowance_')), [])
   // the For you suggestion stays metered under its own key
   assert.match(read('web/app/server/personal/meteor.js'), /const FEATURE = 'personal\.suggest'[\s\S]*run: refusing\(\(userId, fn\) => runAIAction\(\{ feature: FEATURE, userId \}, fn\)\)/)
+})
+
+// ---------- the guest allowance (S6, owner 2026-11-26): the start page's use-case interview and its build ----------
+// /new is the page guests land on, so a guest gets a small daily allowance there, per guest and per network address: about
+// 12 turns of the talk and 1 build of its tile. Nothing else is open to a guest through it; past it, save the account.
+const GUEST_TURN_USED_UP = "You've used today's free talk with Slatebox. Save your account to keep going, or come back tomorrow."
+const startTurn = (feature = 'start.interview', costMicros = 3000) => runAIAction({ feature }, async action => {
+  await chargeProviderCall({ ref: 'start-' + refs++, provider: 'p', model: 'm', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 }, costMicros })
+  return action.route
+})
+const guest = { id: 'g1', anonymous: true }
+
+test('the guest allowance: its defaults and its words live in one place, for the start page\'s talk and its build only', () => {
+  assert.deepEqual([...GUEST_FEATURES], ['start.interview', 'start.build'])
+  assert.deepEqual({ ...DEFAULT_GUEST_ALLOWANCE }, { 'start.interview': 12, 'start.build': 1 })
+  assert.deepEqual({ ...DEFAULT_GUEST_ALLOWANCE_PER_ADDRESS }, { 'start.interview': 36, 'start.build': 3 })
+  assert.equal(DEFAULT_METERING.guestAllowance, DEFAULT_GUEST_ALLOWANCE)
+  assert.equal(DEFAULT_METERING.guestAllowancePerAddress, DEFAULT_GUEST_ALLOWANCE_PER_ADDRESS)
+  assert.deepEqual(resolveMetering().guestAllowance, { 'start.interview': 12, 'start.build': 1 })
+  assert.equal(guestUsedUpWords('start.interview'), GUEST_TURN_USED_UP)
+  assert.match(guestUsedUpWords('start.build'), /today's free build\. Save your account/)
+  const example = JSON.parse(read('web/app/settings.example.json'))
+  assert.deepEqual(example.metering.guestAllowance, { 'start.interview': 12, 'start.build': 1 })
+  assert.deepEqual(example.metering.guestAllowancePerAddress, { 'start.interview': 36, 'start.build': 3 })
+  assert.match(example.metering['//guestAllowance'], /per network address|network address/)
+  // the guest allowance names its own count per address, never the signed-in one's
+  assert.match(read('web/app/server/metering/meter-core.mjs'), /address: `address:\$\{guest \? 'guest:' : ''\}\$\{place\}:\$\{dayKey\(at\)\}`/)
+})
+
+test('a guest: 12 turns of the talk and 1 build a day from the guest allowance; then save the account; nothing else is open to them', () => {
+  const ask = (over = {}) => route({ kind: 'ai', feature: 'start.interview', person: guest, keys: {}, usage: {}, wallets: {}, global: {}, settings: cloud(), now: NOW, ...over })
+  const ok = ask()
+  assert.deepEqual([ok.ok, ok.route, ok.allowance], [true, 'allowance', { feature: 'start.interview', perDay: 12, perAddress: 36, guest: true }])
+  assert.equal(ask({ usage: { allowanceToday: { 'start.interview': 11 } } }).route, 'allowance')
+  const done = ask({ usage: { allowanceToday: { 'start.interview': 12 } } })
+  assert.deepEqual([done.ok, done.code, done.message], [false, 'guest', GUEST_TURN_USED_UP])
+  const build = ask({ feature: 'start.build' })
+  assert.deepEqual([build.route, build.allowance.perDay, build.allowance.perAddress], ['allowance', 1, 3])
+  assert.equal(ask({ feature: 'start.build', usage: { allowanceToday: { 'start.build': 1 } } }).code, 'guest')
+  // nothing else: the interview in About you, For you, a board draft, a For you build stay an account's
+  for (const feature of ['interview', 'personal.suggest', 'personal.build', 'workshop', 'welcome']) {
+    const refused = ask({ feature })
+    assert.deepEqual([refused.ok, refused.code, refused.message], [false, 'guest', COPY.guestAI], feature)
+  }
+  // a stopped guest, a shared budget at its pause, a taken hold, or the allowance turned off: none
+  assert.equal(ask({ person: { ...guest, freeStopped: true } }).code, 'guest')
+  assert.equal(ask({ global: { monthFreeMicros: 1_100_000_000 } }).code, 'guest')
+  assert.equal(ask({ allowanceTaken: 'address' }).message, GUEST_TURN_USED_UP)
+  assert.equal(ask({ settings: cloud({ guestAllowance: { 'start.interview': 0, 'start.build': 1 } }) }).code, 'guest')
+  assert.equal(guestAllowanceCheck({ kind: 'ai', feature: 'start.interview', person: { id: 'p1', anonymous: false }, settings: cloud() }), null, 'a signed-in person is the personalization allowance\'s')
+  // a signed-in person's start page talk is the personalization allowance (20 a day); their tile build is personal.build
+  const person = route({ kind: 'ai', feature: 'start.interview', person: { id: 'p1', anonymous: false, emailVerified: true, ...fresh }, keys: {}, usage: {}, wallets: {}, global: {}, settings: cloud(), now: NOW })
+  assert.deepEqual([person.route, person.allowance], ['allowance', { feature: 'start.interview', perDay: 20 }])
+  const turnedOff = route({ kind: 'ai', feature: 'start.interview', person: { id: 'p1', anonymous: false, emailVerified: true, ...fresh }, keys: {}, usage: { allowanceToday: { 'start.interview': 20 } }, wallets: {}, global: {}, settings: cloud(), now: NOW })
+  assert.match(turnedOff.message, /today's free talks on the start page/)
+})
+
+test('in the running meter: a guest\'s 12 turns cost them nothing and count on their day and their address\'s guest count; the 13th says save the account', async () => {
+  const w = await meterWorld({ person: { anonymous: true }, settings: cloud(), address: '203.0.113.7' })
+  for (let i = 0; i < 12; i++) assert.equal(await startTurn(), 'allowance', `turn ${i + 1}`)
+  await assert.rejects(startTurn(), error => error.error === 'guest' && error.reason === GUEST_TURN_USED_UP)
+  assert.equal(dayRow(w)[allowanceField('start.interview')], 12)
+  assert.equal(w.stores.counters.get(`address:guest:203.0.113.7:${dayKey(NOW)}`)[allowanceField('start.interview')], 12)
+  assert.equal(w.stores.counters.get(`address:203.0.113.7:${dayKey(NOW)}`), undefined, 'never the signed-in people\'s count for that address')
+  // one build, then none
+  assert.equal(await startTurn('start.build', 9000), 'allowance')
+  await assert.rejects(startTurn('start.build'), error => error.error === 'guest' && /free build/.test(error.reason))
+  // Slatebox's cost, in the shared budget, nothing of the guest's
+  assert.equal(w.global().monthFreeMicros, 12 * 3000 + 9000)
+  assert.deepEqual(w.spent(), { drafts: 0, todayMicros: 0, monthMicros: 0, heldDay: 0, heldMonth: 0 })
+  // a signed-in person's start page turn counts on the signed-in count for the address, never the guests'
+  const p = await meterWorld({ person: fresh, settings: cloud(), address: '203.0.113.8' })
+  assert.equal(await startTurn(), 'allowance')
+  assert.equal(p.stores.counters.get(`address:203.0.113.8:${dayKey(NOW)}`)[allowanceField('start.interview')], 1)
+  assert.equal(p.stores.counters.get(`address:guest:203.0.113.8:${dayKey(NOW)}`), undefined)
+})
+
+test('one network address shares the guest allowance: 36 turns and 3 builds a day however many guest accounts it makes', async () => {
+  const rows = new Map()
+  const io = {
+    async get(_, key) { await new Promise(r => setImmediate(r)); return rows.get(key) ? { ...rows.get(key) } : null },
+    async incIf(_, key, inc, guards) { await new Promise(r => setImmediate(r)); const row = rows.get(key) || {}; if (!guardsPass(row, guards)) return false; for (const [k, v] of Object.entries(inc)) row[k] = (row[k] || 0) + v; rows.set(key, row); return true },
+    async add(_, key, fields) { const row = rows.get(key) || {}; for (const [k, v] of Object.entries(fields)) row[k] = (row[k] || 0) + v; rows.set(key, row) },
+  }
+  const hold = (who, feature = 'start.interview', perDay = 12, perAddress = 36) => holdAllowance(io, { feature, perDay, perAddress, keys: { day: `user:${who}:d`, global: 'g', address: 'address:guest:203.0.113.7:d' }, ceilingMicros: 1000, estimateMicros: 100, globalCap: 1e12, now: NOW })
+  // five guests from one place, 12 turns each asked for: 36 served, the rest refused for the address
+  const taken = []
+  for (const who of ['g1', 'g2', 'g3', 'g4', 'g5']) for (let i = 0; i < 12; i++) taken.push(await hold(who))
+  assert.equal(taken.filter(h => h.ok).length, 36)
+  assert.deepEqual([...new Set(taken.slice(36).map(h => h.code))], ['address'])
+  assert.equal(rows.get('address:guest:203.0.113.7:d').allowance_start_interview, 36)
+  assert.equal(rows.get('user:g4:d')?.allowance_start_interview ?? 0, 0, 'the fourth guest got none: the address had used its share')
+  // builds: 3 for the address, 1 per guest
+  const builds = []
+  for (const who of ['g1', 'g1', 'g2', 'g3', 'g4']) builds.push(await hold(who, 'start.build', 1, 3))
+  assert.deepEqual(builds.map(h => h.ok || h.code), [true, 'used-up', true, true, 'address'])
+  // the per-person rule still holds alone: a guest is never given past 12, whatever the address has left
+  const solo = []
+  for (let i = 0; i < 13; i++) solo.push(await holdAllowance(io, { feature: 'start.interview', perDay: 12, perAddress: 36, keys: { day: 'user:solo:d', global: 'g', address: 'address:guest:198.51.100.1:d' }, ceilingMicros: 1000, estimateMicros: 100, globalCap: 1e12, now: NOW }))
+  assert.deepEqual([solo.filter(h => h.ok).length, solo.at(-1).code], [12, 'used-up'])
+})
+
+test('guest allowance settings: the operator sets them (checked at start), an administrator\'s stored value wins, 0 turns one off', () => {
+  const resolved = resolveMetering({ deploy: { guestAllowance: { 'start.interview': 5 }, guestAllowancePerAddress: { 'start.build': 2 } } })
+  assert.deepEqual(resolved.guestAllowance, { 'start.interview': 5, 'start.build': 1 })
+  assert.deepEqual(resolved.guestAllowancePerAddress, { 'start.interview': 36, 'start.build': 2 })
+  assert.equal(resolveMetering({ deploy: { guestAllowance: { 'start.interview': 5 } }, stored: { guestAllowance: { 'start.interview': 8 } } }).guestAllowance['start.interview'], 8)
+  assert.deepEqual(resolveGuestAllowance({ deploy: { '//': 'note', 'start.build': 0 } }).guestAllowance, { 'start.interview': 12, 'start.build': 0 })
+  for (const bad of [{ 'start.interview': -1 }, { 'start.interview': 1.5 }, { interview: 3 }, { 'personal.build': 1 }, [], 'twelve']) {
+    assert.throws(() => resolveMetering({ deploy: { guestAllowance: bad } }), /guestAllowance/, JSON.stringify(bad))
+    assert.throws(() => resolveMetering({ deploy: { guestAllowancePerAddress: bad } }), /guestAllowancePerAddress/, JSON.stringify(bad))
+  }
+  // a wrong stored value is left out
+  assert.equal(resolveMetering({ stored: { guestAllowance: { 'start.interview': 'lots' } } }).guestAllowance['start.interview'], 12)
+  // the admin page names both allowances
+  assert.match(read('web/app/imports/ui/pages/admin/FreeBudget.jsx'), /data\.guestAllowance\?\.\['start\.interview'\]/)
 })

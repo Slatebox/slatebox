@@ -56,13 +56,13 @@ function CreationEntry({ alias = false }) {
     if (!Meteor.subscribe(CONSTANTS.publications.users.me).ready()) return { loading: true }
     const user = Meteor.user()
     if (typeof user?.isAnonymous !== 'boolean') return { loading: true }
-    return { profileStart: user.profile?.start ?? null, member: !user.isAnonymous }
+    return { profileStart: user.profile?.start ?? null, member: !user.isAnonymous, tiles: user.profile?.startTiles ?? 0 }
   }, [])
   // Decided once per address: the first run makes the guest itself (a login), and must not be swapped out while it does.
   const decided = useRef(null)
   if (alias) return <Navigate replace to={'/new' + search + hash} />
   if (decided.current?.at !== search + hash) decided.current = null
-  const route = decided.current?.route ?? creationRoute({ hash, search, profileStart: account.profileStart, member: account.member, stored: storedStart() })
+  const route = decided.current?.route ?? creationRoute({ hash, search, profileStart: account.profileStart, member: account.member, stored: storedStart(), tiles: account.tiles })
   if (!account.loading && (route === 'first' || route === 'blank')) decided.current ??= { at: search + hash, route }
   if (route === 'retired') return <Navigate replace to="/new" />
   if (route === 'brief') return <GuestStartGate><NewCreativeSlate fromBrief /></GuestStartGate>

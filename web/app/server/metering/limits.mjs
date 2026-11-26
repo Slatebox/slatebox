@@ -12,7 +12,9 @@ const AI = ['openai.chat', 'openai.welcome', 'openai.routeSlateMessage', 'worksh
   // voice: each ticket opens a session the meter holds a minute at a time for (server/voice)
   'voice.open',
   // a look around a connected tool in About you: outside lookups and one agent call
-  'profile.sources.read']
+  'profile.sources.read',
+  // the start page: its use-case interview's turns, and building a tile (first build or a fresh version)
+  'start.interview.turn', 'start.tiles.build', 'start.tiles.rebuild']
 const CALLS = ['daily.join', 'daily.useVideo']
 const MONEY = ['wallet.refund', 'pro.portal',
   // the pay sheet's Manage pane (server/pro-manage.mjs): changes to Pro itself

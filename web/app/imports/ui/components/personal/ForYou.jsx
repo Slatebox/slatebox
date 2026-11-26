@@ -11,7 +11,7 @@ import Typography from '@mui/material/Typography'
 import AutoAwesomeOutlined from '@mui/icons-material/AutoAwesomeOutlined'
 import CONSTANTS from '../../../api/common/constants'
 import { IDEA_KIND_LABELS, IDEA_WORDS, buildingWords, ideasMadeLine } from '../../../api/common/personal-ideas.mjs'
-import { SPACE } from '../../common/AccountLayout'
+import { SECTION_HEADING, SPACE } from '../../common/AccountLayout'
 
 // For you: smart components and printable pages Slatebox suggests for this person's work, from what
 // they keep in About you and the tools they connected (server/personal/core.mjs). Each card shows
@@ -20,6 +20,7 @@ import { SPACE } from '../../common/AccountLayout'
 //   variant 'page'     My slates: the section with its empty state and Get ideas
 //   variant 'library'  the Library page: its first group, shown only when there are ideas
 //   variant 'panel'    the library in Ask Slatebox's column: the same, in its narrow column
+//   variant 'start'    the start page (/new): a "Made for you" row under the person's own tiles, ideas only
 // `fresh`: opened from the interview's "See ideas made for you", so ideas that are missing or no
 // longer fit About you are asked for at once.
 const M = CONSTANTS.methods.personal.ideas
@@ -90,8 +91,9 @@ export default function ForYou({ variant, fresh }) {
   // the interview's hand-off, read once at mount (clearing it from history below must not re-run the listing)
   const freshAtMount = useRef(fresh)
   const panel = variant === 'panel'
-  // only My slates shows the section with no ideas in it (its empty state, Get ideas); the library shows ideas or nothing
+  // only My slates shows the section with no ideas in it (its empty state, Get ideas); the library and the start page show ideas or nothing
   const onlyIdeas = variant !== 'page'
+  const start = variant === 'start'
 
   const refresh = useCallback(async () => {
     setBusy('refresh')
@@ -175,9 +177,11 @@ export default function ForYou({ variant, fresh }) {
   )
 
   return (
-    <Box component="section" aria-labelledby={headingId} data-for-you={variant} sx={panel ? { mt: 1 } : { px: variant === 'page' ? 1 : 0, mb: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: SPACE.tight, mb: SPACE.tight }}>
-        <Typography id={headingId} ref={heading} tabIndex={-1} component="h2" variant={panel ? 'caption' : 'h6'} sx={{ fontWeight: 700, outline: 'none', flex: '1 1 auto' }}>For you</Typography>
+    <Box component="section" aria-labelledby={headingId} data-for-you={variant} sx={panel ? { mt: 1 } : { px: variant === 'page' ? 1 : 0, mb: SPACE.block }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: SPACE.tight, mb: start ? SPACE.text : SPACE.tight }}>
+        {/* on the start page it is one of the page's sections, headed as its siblings are (Yours, the jobs) */}
+        <Typography id={headingId} ref={heading} tabIndex={-1} component="h2" variant={panel ? 'caption' : 'h6'}
+          sx={start ? { ...SECTION_HEADING, outline: 'none', flex: '1 1 auto' } : { fontWeight: 700, outline: 'none', flex: '1 1 auto' }}>{start ? 'Made for you' : 'For you'}</Typography>
         {!onlyIdeas && refreshButton}
       </Box>
       {!onlyIdeas && !ideas.length && (
@@ -206,7 +210,7 @@ export default function ForYou({ variant, fresh }) {
 }
 
 ForYou.propTypes = {
-  variant: PropTypes.oneOf(['page', 'library', 'panel']),
+  variant: PropTypes.oneOf(['page', 'library', 'panel', 'start']),
   fresh: PropTypes.bool,
 }
 ForYou.defaultProps = { variant: 'page', fresh: false }

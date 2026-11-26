@@ -9,7 +9,8 @@
 //     email goes to it. The guest account becomes a normal account (it can set a password later).
 //   - An email that already belongs to an account is never attached and never signs anyone in. The
 //     guest keeps Pro on this device, and a one-time link goes to that address. Only whoever opens it
-//     (so, whoever reads that mailbox) moves the Pro and the guest's slates into that account.
+//     (so, whoever reads that mailbox) moves the Pro, the guest's slates and their start page tiles
+//     (with the library drafts those tiles built) into that account.
 //     Typing someone else's email therefore gives the typist nothing: no sign-in, no access, no data.
 //   - Every step is idempotent: the webhook and the sheet's confirm both run it, in any order, any
 //     number of times, and one email is sent at most (the claim is written once, atomically).
@@ -102,13 +103,14 @@ export async function claimGuestPurchase(deps, session) {
 export const mergeLinkLive = (link, now) => Boolean(link?.mergeFrom) && now < (link.expiresAt ?? 0)
 
 /**
- * Opening the move link (sent only to the existing account's address): moves the guest's Pro and
- * slates into that account. Runs once per claim: a second open finds the claim already 'merged'.
+ * Opening the move link (sent only to the existing account's address): moves the guest's Pro,
+ * slates and start page tiles into that account. Runs once per claim: a second open finds the claim already 'merged'.
  * deps: { stripe (subscriptions.update), store, sync(subscriptionId, userId), audit(entry), now() }
  * store: { findUser(id) → { _id, isAnonymous, checkoutClaim, pro } | null,
  *          clearGuestPro(guestId, subscriptionId) → boolean, moveSlates(fromId, toId) → number,
+ *          moveTiles(fromId, toId) → number (the tiles, the library drafts they built, and the account's tile count),
  *          setClaim(guestId, claim) }
- * → { moved: boolean, reason?, subscriptionId?, slates? }
+ * → { moved: boolean, reason?, subscriptionId?, slates?, tiles? }
  */
 export async function mergeGuestPurchase(deps, { guestId, targetId }) {
   const { stripe, store, now } = deps
@@ -125,9 +127,11 @@ export async function mergeGuestPurchase(deps, { guestId, targetId }) {
     await deps.sync(subscriptionId, targetId)
   }
   const slates = await store.moveSlates(guestId, targetId)
+  // the start page's tiles are the guest's own work too, and "Make another" opens their kept drafts, so both move
+  const tiles = await store.moveTiles(guestId, targetId)
   await store.setClaim(guestId, { ...claim, kind: 'merged', mergedAt: now() })
-  await deps.audit({ type: 'pro-guest-merged', userId: targetId, guestId, subscriptionId, slates })
-  return { moved: true, subscriptionId, slates }
+  await deps.audit({ type: 'pro-guest-merged', userId: targetId, guestId, subscriptionId, slates, tiles })
+  return { moved: true, subscriptionId, slates, tiles }
 }
 
 /**

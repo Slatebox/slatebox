@@ -10,6 +10,8 @@
 //                       derived { 'first-slate': { state: 'hidden'|'removed', job } }, updatedAt }
 //   personalIdeas     (optional, `ideas`) For you's ideas made from these facts (server/personal/core.mjs):
 //                       removed with the rest when the account goes
+//   personalTiles     (optional, `tiles`) the start page's tiles, made from the person's talks there
+//                       (server/start/tiles-core.mjs): removed with the rest when the account goes
 import {
   FIRST_SLATE_FACT_ID,
   FactError,
@@ -47,7 +49,7 @@ export async function ensureProfileIndexes({ facts, settings }) {
   for (const index of PROFILE_INDEXES) await by[index.collection].createIndex(index.key, index.options || {})
 }
 
-export function createProfileStore({ facts, settings, users, newId, now = Date.now, ideas = null }) {
+export function createProfileStore({ facts, settings, users, newId, now = Date.now, ideas = null, tiles = null }) {
   const readSettings = async (userId) => (await settings.findOne({ _id: userId })) || null
   const readStart = async (userId) => (await users.findOne({ _id: userId }, { projection: { 'profile.start': 1 } }))?.profile?.start ?? null
   const stored = async (userId) => (await facts.find({ userId }).toArray()).map((doc) => ({ ...doc, id: doc._id }))
@@ -271,6 +273,8 @@ export function createProfileStore({ facts, settings, users, newId, now = Date.n
       await settings.deleteOne({ _id: userId })
       // For you's ideas were made from these facts: they go with them
       if (ideas) await ideas.deleteOne({ _id: userId })
+      // the start page's tiles hold what the person said in their talks there: they go too
+      if (tiles) await tiles.deleteMany({ userId })
     },
   }
   return store

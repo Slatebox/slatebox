@@ -6,7 +6,7 @@ import { Accounts } from 'meteor/accounts-base'
 import { Email } from 'meteor/email'
 import { Random } from 'meteor/random'
 import CONSTANTS from '../../imports/api/common/constants'
-import { Audit, LoginLinks, Slates } from '../../imports/api/common/models'
+import { Audit, LibraryItems, LoginLinks, PersonalTiles, Slates } from '../../imports/api/common/models'
 import { verificationMailAvailable } from '../instance/meteor'
 import { PRO_LOOKUP_KEYS, PRO_PRICES } from '../../imports/api/pro/catalog.mjs'
 import { HELD_STATUSES, PRO_COPY, checkProPrice, handleBillingEvent, proOnSale, startProCheckout, syncSubscription } from '../pro-billing.mjs'
@@ -93,6 +93,18 @@ export const claimStore = {
   },
   async moveSlates(fromId, toId) {
     const result = await Slates.rawCollection().updateMany({ userId: fromId }, { $set: { userId: toId } })
+    return result.modifiedCount
+  },
+  // A guest's start page tiles, the private library drafts those tiles built (server/start/tiles-core.mjs: "Make
+  // another" opens them, so they must be the account's own), and the tile count /new reads (profile.startTiles).
+  async moveTiles(fromId, toId) {
+    const result = await PersonalTiles.rawCollection().updateMany({ userId: fromId }, { $set: { userId: toId } })
+    await LibraryItems.rawCollection().updateMany({ authorId: fromId, 'provenance.madeFor.kind': 'tile' }, { $set: { authorId: toId } })
+    const users = Meteor.users.rawCollection()
+    for (const userId of [fromId, toId]) {
+      const count = await PersonalTiles.rawCollection().countDocuments({ userId })
+      await users.updateOne({ _id: userId }, count > 0 ? { $set: { 'profile.startTiles': count } } : { $unset: { 'profile.startTiles': true } })
+    }
     return result.modifiedCount
   },
 }

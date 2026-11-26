@@ -3,7 +3,7 @@
 import { proPriceWords } from '../../imports/api/pro/prices.mjs'
 import { CALL_PRICES, ESTIMATES } from './prices.mjs'
 import { BILLING_CONTACT_URL } from '../../imports/api/common/contact.mjs'
-import { DEFAULT_PERSONAL_ALLOWANCE, allowanceCheck, resolvePersonalAllowance, usedUpWords } from './allowance.mjs'
+import { DEFAULT_GUEST_ALLOWANCE, DEFAULT_GUEST_ALLOWANCE_PER_ADDRESS, DEFAULT_PERSONAL_ALLOWANCE, GUEST_NO_ADDRESS, allowanceCheck, guestAllowanceCheck, guestUsedUpWords, resolveGuestAllowance, resolvePersonalAllowance, usedUpWords } from './allowance.mjs'
 
 // Pro's monthly price in words, from the one place it is written (pro/prices.mjs)
 const PRO_MONTH = proPriceWords('month').label
@@ -97,6 +97,9 @@ export const DEFAULT_METERING = Object.freeze({
   }),
   // the personalization allowance (allowance.mjs): uses a day Slatebox pays for, by meter feature
   personalAllowance: DEFAULT_PERSONAL_ALLOWANCE,
+  // the guest allowance (allowance.mjs): the start page's use-case interview and its build, per guest and per address
+  guestAllowance: DEFAULT_GUEST_ALLOWANCE,
+  guestAllowancePerAddress: DEFAULT_GUEST_ALLOWANCE_PER_ADDRESS,
   marginPercent: 5,
   // cardFee: 'included' (processing folded into the price) or 'absorb' (imports/api/billing/top-up.mjs)
   topUp: Object.freeze({ minCents: 1000, firstMaxCents: 2500, maxBalanceCents: 50000, holdHours: 24, cardFee: 'included' }),
@@ -202,7 +205,8 @@ function creditCost(value, where) {
 
 /**
  * The meter's settings: the defaults, then the deploy settings (Meteor.settings.metering:
- * proRequiredFrom, creditCostMicrosPerMonth and personalAllowance, e.g. 'now' on Cloud), then what an administrator
+ * proRequiredFrom, creditCostMicrosPerMonth, personalAllowance, guestAllowance and guestAllowancePerAddress, e.g. 'now'
+ * on Cloud), then what an administrator
  * stored (SystemSettings 'metering', the admin page). The credit size resizes every allowance
  * (sizeCredits) unless that allowance is itself set. Throws for a wrong deploy value.
  */
@@ -221,6 +225,8 @@ export function resolveMetering({ stored = {}, deploy = {}, ownKeys = false } = 
     topUp: { ...DEFAULT_METERING.topUp, ...stored?.topUp },
     // deploy settings metering.personalAllowance, then an administrator's (checked: a wrong deploy value stops the start)
     personalAllowance: resolvePersonalAllowance({ deploy: deploy?.personalAllowance, stored: stored?.personalAllowance }),
+    // deploy settings metering.guestAllowance and metering.guestAllowancePerAddress, then an administrator's (checked the same way)
+    ...resolveGuestAllowance({ deploy: deploy?.guestAllowance, stored: stored?.guestAllowance, deployPerAddress: deploy?.guestAllowancePerAddress, storedPerAddress: stored?.guestAllowancePerAddress }),
     // whether own AI and call keys pay here (own-keys.mjs): the vault and the administrator's switch
     // say so at each read (meteor.js), never a stored meter setting
     ownKeys: ownKeys === true,
@@ -429,6 +435,16 @@ function guestRoute(input, person) {
  */
 export function route(input) {
   const { kind, person, teamId = null, keys = {}, settings } = input
+  // The guest allowance (allowance.mjs): a guest's turn of the start page's interview, or the build of its tile. A
+  // guest has no other way to pay, so past it the words say to save the account (code guest: the pay sheet asks them to).
+  const guest = settings ? guestAllowanceCheck({
+    kind, feature: input.feature, person, usage: input.usage || {}, settings, taken: input.allowanceTaken ?? null,
+    level: budgetLevel({ ...(input.global || {}), budget: settings.budget }).level,
+  }) : null
+  if (guest?.ok) {
+    return { ok: true, route: 'allowance', payer: { type: 'user', id: person.id }, kind, allowance: { feature: guest.feature, perDay: guest.perDay, perAddress: guest.perAddress, guest: true } }
+  }
+  if (guest) return refuse('guest', guest.noAddress ? GUEST_NO_ADDRESS : guestUsedUpWords(input.feature))
   // An own key that serves this request pays for it: it never uses the allowance.
   const family = settings?.ownKeys === true ? OWN_KEY_FAMILY[kind] : null
   const ownKey = Boolean(family && (keys.personal?.[family] || (teamId && keys.team?.[family])))

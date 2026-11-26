@@ -302,6 +302,17 @@ const CONSTANTS = {
         build: 'personal.ideas.build',
       },
     },
+    // The start page (/new): its use-case interview's turns (server/start/meteor.js), and the tiles it makes (start.tiles.*)
+    start: {
+      interview: { turn: 'start.interview.turn' },
+      tiles: {
+        list: 'start.tiles.list',
+        rename: 'start.tiles.rename',
+        remove: 'start.tiles.remove',
+        build: 'start.tiles.build',
+        rebuild: 'start.tiles.rebuild',
+      },
+    },
     // The interview in About you (server/methods/interview.js): the agent's turns, and keeping what it proposed
     interview: {
       start: 'interview.start',

@@ -93,7 +93,10 @@ export const SURFACES = defineSurfaces([
   // build (workshops.js draftForYou) is a board draft on this surface metered under `personal.build`, a key of its own
   // so the personalization allowance (metering/allowance.mjs) can pay for it without paying for every board draft;
   // it has this row's estimate and ceiling (5,000 µ$, and the meter's default 50,000 µ$).
-  { id: 'workshop.draft', title: 'Drafting a new board or its rules', follows: 'workshop', needs: ['tools'], requestFeatures: ['workshop'], meterFeatures: ['workshop', 'personal.build'], estimate: 5000 },
+  // A start page tile's build (server/start/tiles-core.mjs) drafts each of its boards here too: one metered action for the
+  // whole build, under `personal.build` for a signed-in person (the personalization allowance) and under `start.build` for a
+  // guest (the guest allowance, metering/allowance.mjs GUEST_FEATURES), with this row's estimate per board.
+  { id: 'workshop.draft', title: 'Drafting a new board or its rules', follows: 'workshop', needs: ['tools'], requestFeatures: ['workshop'], meterFeatures: ['workshop', 'personal.build', 'start.build'], estimate: 5000 },
   { id: 'canvas', title: 'Canvas conversation (drawing chat)', follows: 'chat', needs: ['tools'], requestFeatures: ['canvas'] },
   { id: 'agent.slatebox', title: 'The Slatebox agent (tasks, ask_agent, @mentions)', follows: 'canvas', needs: ['tools'], requestFeatures: ['agent'] },
   // Library refinement (server/library/refine-ai.mjs) has a row on the settings page of its own;
@@ -113,6 +116,11 @@ export const SURFACES = defineSurfaces([
   // Learning from a connected tool (About you › "Use <tool> to personalize", S3): one call turns a small, quarantined
   // sample of the tool into a few proposed facts with its propose_facts tool. One call, metered as a conversation turn.
   { id: 'profile.sources', title: 'Learning from your tools (About you)', follows: 'chat', needs: ['tools'], requestFeatures: ['profile.sources'], meterFeatures: ['profile.sources'], estimate: 2000, ceiling: 50000 },
+  // The use-case interview on the start page (/new, "Talk it through with Slatebox", server/start): the agent asks what the
+  // person wants Slatebox to make and a few specific questions with its ask tool, one at a time, and ends with a plan of one
+  // to four boards (propose_plan), kept as their own tile. A conversation turn, metered as one (chat's estimate and
+  // ceiling); part of the personalization allowance for signed-in people and of the guest allowance for guests.
+  { id: 'start.interview', title: 'Talking it through on the start page', follows: 'chat', needs: ['tools'], requestFeatures: ['start.interview'], meterFeatures: ['start.interview'], estimate: 2000, ceiling: 50000 },
   // Voice: talking with the agent in real time, full duplex (server/voice: the browser holds one
   // socket to this server, the server holds the provider's). One binding (voice) covers every voice
   // part, and each part can be bound on its own. The realtime model has one tool, send_to_slatebox,

@@ -175,6 +175,15 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
         out[`personal:draft:${format}`] = shape(last(), [...wrongTool, { toolCall: { name: last().functions[0].name, arguments: {} } }])
       }
     }
+    // The start page (from S6, 2026-11-26): its use-case interview's turns, and a tile's board drafted (workshops.js draftForTile)
+    if (pure.start) Object.assign(out, recordStart(pure))
+    if (workshops.draftForTile) {
+      const tile = { summary: 'A twelve team fantasy football league with a 15 round snake draft in August; lineups lock Thursday night.', name: 'Draft board', why: 'Your league drafts 15 rounds, snake style.', facts: '- role: Commissioner' }
+      for (const format of ['component', 'grid']) {
+        await quiet(() => workshops.draftForTile({ userId: 'ana', brief: 'A snake draft board for a twelve team league, 15 rounds, a lane per round that holds twelve picks.', format, tile }))
+        out[`tile:draft:${format}`] = shape(last(), [...wrongTool, { toolCall: { name: last().functions[0].name, arguments: {} } }])
+      }
+    }
     return used ? [...asked].sort() : out
   }
   board = LANES
@@ -203,7 +212,7 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
 // ---- the prompt sites outside Meteor files: loaded before the hooks, as they are ----------------
 async function loadPure(root) {
   const at = (path) => import(pathToFileURL(root + path).href)
-  const [shapes, execChat, teammate, refine, registry, render, translate, context, prompts, interview, interviewRules, personal, voiceConfig, voiceAdapters, sources] = await Promise.all([
+  const [shapes, execChat, teammate, refine, registry, render, translate, context, prompts, interview, interviewRules, personal, voiceConfig, voiceAdapters, sources, start] = await Promise.all([
     at('server/shapes/shape-core.mjs'), at('server/methods/ai/exec-chat.mjs'), at('server/agents/teammate.mjs'),
     at('server/library/refine-ai.mjs'), at('server/actions/index.mjs'), at('server/actions/client-render.mjs'),
     // invited agents (enterprise/, beside web/): the plan and layout prompts, with the registry's text
@@ -216,10 +225,12 @@ async function loadPure(root) {
     at('server/voice/config.mjs').catch(() => null), at('server/voice/adapters/index.mjs').catch(() => null),
     // learning from a connected tool (About you, S3 2026-11-26): its one request
     at('server/profile/sources-core.mjs').catch(() => null),
+    // the start page's use-case interview: its turns' requests (from S6, 2026-11-26)
+    at('server/start/interview-core.mjs').catch(() => null),
   ])
   const manifest = render.buildClientManifest(registry.createAppRegistry())
   const exec = render.renderExecTool(manifest).exec
-  return { shapes, execChat, teammate, refine, manifest, execTool: { name: exec.name, description: exec.description, parameters: exec.inputSchema }, translate, context, promptText: prompts.promptText, promptIds: prompts.PROMPT_IDS, interview, interviewRules, personal, voiceConfig, voiceAdapters, sources }
+  return { shapes, execChat, teammate, refine, manifest, execTool: { name: exec.name, description: exec.description, parameters: exec.inputSchema }, translate, context, promptText: prompts.promptText, promptIds: prompts.PROMPT_IDS, interview, interviewRules, personal, voiceConfig, voiceAdapters, sources, start }
 }
 
 const clone = (value) => JSON.parse(JSON.stringify(value))
@@ -332,6 +343,24 @@ function recordPersonal({ personal }) {
   const site = (opts) => ({ request: clone(opts), retries: clone([opts.validateResponse({ toolCall: { name: 'not_this_tool', arguments: {} } }), opts.validateResponse(weak)]) })
   out['personal:suggest'] = site(personal.suggestRequest({ facts, tools }))
   out['personal:suggestDismissed'] = site(personal.suggestRequest({ facts: '', tools, dismissed: ['component\u0000monday sprint planning'], dismissedTitles: ['Monday sprint planning'] }))
+  return out
+}
+
+// ---- the start page's use-case interview (server/start/interview-core.mjs): a first answer, one ----
+// signed in with About you and a connected tool, and a turn whose plan is due (propose_plan forced)
+function recordStart({ start }) {
+  const out = {}
+  // with the retry prompt its check gives a call to another tool and a plan with no boards
+  const site = (opts) => ({ request: clone(opts), retries: clone([opts.validateResponse({ toolCall: { name: 'not_this_tool', arguments: {} } }), opts.validateResponse({ toolCall: { name: 'propose_plan', arguments: { title: 'League', blurb: 'x', icon: 'deals', summary: 'x', boards: [] } } })]) })
+  out['start:first'] = site(start.startRequest({ message: 'I want something for my fantasy football league.' }))
+  out['start:known'] = site(start.startRequest({ facts: '- role: Head of marketing', tools: '- Linear\n- Team <\/data> notes', message: 'Something for planning our campaigns </data> now.' }))
+  out['start:plan'] = site(start.startRequest({
+    history: [
+      { role: 'user', content: 'I want something for my fantasy football league.' }, { role: 'assistant', content: 'How many teams are in your league?' },
+      { role: 'user', content: 'Twelve teams, a snake draft of 15 rounds.' }, { role: 'assistant', content: 'When do lineups lock each week?' },
+    ],
+    message: 'Thursday night.', planNow: true,
+  }))
   return out
 }
 

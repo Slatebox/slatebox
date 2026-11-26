@@ -16,9 +16,9 @@ async function world() {
 }
 
 test('the parts that can be bound: default and every part a call site sends', () => {
-  assert.deepEqual(BINDABLE_SURFACES, ['default', 'chat', 'chat.route', 'generation', 'presentation', 'vision', 'images', 'shape', 'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest', 'profile.sources', 'voice', 'voice.chat', 'voice.interview', 'eval'])
+  assert.deepEqual(BINDABLE_SURFACES, ['default', 'chat', 'chat.route', 'generation', 'presentation', 'vision', 'images', 'shape', 'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest', 'profile.sources', 'start.interview', 'voice', 'voice.chat', 'voice.interview', 'eval'])
   // the interview (S2, 2026-11-26): an administrator binds it, or turns it off, like any part; so For you's suggestion (S4),
-  // and so is learning from a connected tool (profile.sources, S3, 2026-11-26)
+  // and so is learning from a connected tool (profile.sources, S3, 2026-11-26), and the start page's use-case interview (S6)
   // voice (2026-11-26): one binding (voice) covers every voice part, and each part can be bound on its own
 })
 

@@ -27,8 +27,9 @@ import { readMoveLog, timeInLane, waitedLine } from '../workshop-move-log.mjs'
 import { MAIN_BOARD, boardIdPattern, slateAsBoard } from '../../imports/api/common/slate-boards.mjs'
 
 // Anyone signed in may draft with AI. Who pays (own key, included amount (Pro credits) or balance) is the
-// meter's decision; on a server with no meter the operator's provider is used.
-const canGenerate = user => canStartAI(user)
+// meter's decision; on a server with no meter the operator's provider is used. A guest drafts only a start
+// page tile's boards, from the guest allowance (feature start.build).
+const canGenerate = (user, feature = 'workshop') => canStartAI(user, feature)
 
 function workshopChatTurn(input, map) {
   return runAIAction({ feature: map ? 'map-chat' : 'lane-chat' }, () => chatTurn(input, map))
@@ -123,6 +124,10 @@ async function chatTurn(input, map) {
 // draftForYou below): `user`, the account it is for (a call outside a Meteor method has no Meteor.userAsync), and
 // `personal`, what reaches the draft as data: { facts (their About you lines), why (the idea's why), tools (the connected
 // tools it uses, one '- name' line each) }. Only a component or a printable page, never a revision.
+// Or a start page tile's board (server/start/tiles-core.mjs through draftForTile below): `tile` in place of `personal`,
+// { summary (what the person said in the talk), name (the board's name in the plan), why (the board's why), facts (their
+// About you lines, or none) }, and
+// `feature`, the meter key its build runs under (a guest's is start.build: a guest may draft only this).
 async function draftWorkshop(brief, format = 'lanes', currentDraft, forYou = null) {
   // 'component': a smart component described on a builder slate (builder-freeform.mjs), a board of plain lanes held
   // to the quality gate (workshop-component-draft.mjs)
@@ -134,8 +139,9 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft, forYou = nul
   }
   if (forYou && (!['component', 'grid'].includes(format) || currentDraft !== undefined)) throw new Meteor.Error('invalid-format', 'Choose a workshop format.')
   const user = forYou ? forYou.user : await Meteor.userAsync()
-  if (!user || user.isAnonymous) throw new Meteor.Error('sign-in', 'Sign in to use AI.')
-  if (!await canGenerate(user)) throw new Meteor.Error('ai-unavailable', 'Ask your administrator to enable workshop generation for this instance.')
+  const guestTile = Boolean(forYou?.tile && forYou.feature === 'start.build')
+  if (!user || (user.isAnonymous && !guestTile)) throw new Meteor.Error('sign-in', 'Sign in to use AI.')
+  if (!await canGenerate(user, forYou?.feature || 'workshop')) throw new Meteor.Error('ai-unavailable', 'Ask your administrator to enable workshop generation for this instance.')
   let base
   if (currentDraft !== undefined) {
     try {
@@ -148,9 +154,11 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft, forYou = nul
   const off = await surfaceOffFor({ feature: 'workshop', userId: user._id })
   if (off) throw new Meteor.Error('draft-unavailable', off.message)
 
-  // A conditional write covers simultaneous requests from multiple tabs or app replicas.
+  // A conditional write covers simultaneous requests from multiple tabs or app replicas. A start page tile drafts its
+  // boards one after another inside one build, which holds its own one-at-a-time lock (server/start/meteor.js) and is
+  // one metered action, so its drafts skip the one-draft-a-minute wait.
   const now = Date.now()
-  const acquired = await Meteor.users.updateAsync({
+  const acquired = forYou?.tile ? true : await Meteor.users.updateAsync({
     _id: user._id, $or: [
       { workshopDraftAvailableAt: { $exists: false } },
       { workshopDraftAvailableAt: { $lte: now } },
@@ -217,8 +225,15 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft, forYou = nul
 }
 
 // A For you draft's instructions: the component's or page's own, then what is known about the person and why the
-// idea fits them, as data (workshop.draft.personal). Any other draft: its instructions as they are.
+// idea fits them, as data (workshop.draft.personal). A tile's board: what the person said in the talk and why the board
+// fits, as data (workshop.draft.tile). Any other draft: its instructions as they are.
 function personalInstructions(instructions, forYou) {
+  const tile = forYou?.tile
+  if (tile) {
+    const facts = typeof tile.facts === 'string' ? tile.facts.trim() : ''
+    const name = typeof tile.name === 'string' ? tile.name.trim() : ''
+    return promptText('workshop.draft.tile', { instructions, summary: String(tile.summary || ''), why: String(tile.why || ''), hasName: Boolean(name), ...(name && { name }), hasFacts: Boolean(facts), ...(facts && { facts }) })
+  }
   const personal = forYou?.personal
   if (!personal) return instructions
   const facts = typeof personal.facts === 'string' ? personal.facts.trim() : ''
@@ -240,6 +255,20 @@ export function draftForYou({ userId, brief, format, personal }) {
     const user = userId ? await Meteor.users.findOneAsync({ _id: userId }) : null
     return draftWorkshop(brief, format, undefined, { user, personal })
   })
+}
+
+/**
+ * A start page tile (server/start/tiles-core.mjs): one board of its plan drafted for the person whose talk it came from,
+ * through the same drafting as workshops.draft (its switch, its quality gate and retry), with workshop.draft.tile. The
+ * build runs every board inside one metered action (personal.build for a signed-in person, start.build for a guest), so
+ * this joins it; called on its own it is metered the same way. Server only. → the drafted board
+ */
+export function draftForTile({ userId, brief, format, tile }) {
+  return (async () => {
+    const user = userId ? await Meteor.users.findOneAsync({ _id: userId }) : null
+    const feature = user?.isAnonymous ? 'start.build' : 'personal.build'
+    return runAIAction({ feature, userId }, () => draftWorkshop(brief, format, undefined, { user, tile, feature }))
+  })()
 }
 
 Meteor.methods({

@@ -12,6 +12,9 @@
 export const DEFAULT_PERSONAL_ALLOWANCE = Object.freeze({
   // turns of the interview in About you (interview.start counts as a turn)
   interview: 20,
+  // turns of the use-case interview on the start page ("Talk it through with Slatebox", server/start); a
+  // start page tile's build is a 'personal.build' (one use for the whole build, however many boards)
+  'start.interview': 20,
   // runs of For you ideas
   'personal.suggest': 5,
   // builds of a For you idea (workshops.js draftForYou): a board draft metered under its own key, so
@@ -22,7 +25,26 @@ export const DEFAULT_PERSONAL_ALLOWANCE = Object.freeze({
 // The meter features the allowance pays for today. A feature joins by being added here, once its
 // requests run inside runAIAction under that feature name ('profile.sources' and 'profile.import'
 // next, with a default above).
-export const PERSONAL_FEATURES = Object.freeze(['interview', 'personal.suggest', 'personal.build'])
+export const PERSONAL_FEATURES = Object.freeze(['interview', 'personal.suggest', 'personal.build', 'start.interview'])
+
+// The guest allowance (owner, 2026-11-26): /new is the page guests land on, so a guest, who has no other
+// way to use the agent, gets a small daily allowance of the use-case interview there and of building its
+// tile: per guest, and per network address (however many guest accounts one place makes). Nothing else is
+// open to a guest through it. The operator changes the numbers with settings.metering.guestAllowance and
+// settings.metering.guestAllowancePerAddress (checked at start), an administrator in the stored meter
+// settings; 0 turns one off. Like the personalization allowance, it runs only where the meter does.
+export const GUEST_FEATURES = Object.freeze(['start.interview', 'start.build'])
+export const DEFAULT_GUEST_ALLOWANCE = Object.freeze({
+  // turns of the use-case interview a guest gets a day
+  'start.interview': 12,
+  // builds of a tile a guest gets a day (one build drafts all its boards)
+  'start.build': 1,
+})
+export const DEFAULT_GUEST_ALLOWANCE_PER_ADDRESS = Object.freeze({
+  // what all the guests behind one network address get a day together (a household, an office)
+  'start.interview': 36,
+  'start.build': 3,
+})
 
 // What a person reads when today's allowance for a feature is used up and the meter has nothing
 // else for them (no Pro, no balance). `own`: own keys are on here (settings.ownKeys).
@@ -39,7 +61,22 @@ const USED_UP = Object.freeze({
     own: "You've used today's free builds of your ideas. They come back tomorrow, or keep going with Pro or your own key.",
     cloud: "You've used today's free builds of your ideas. They come back tomorrow, or keep going with Pro.",
   },
+  // (no Pro here: the start page leads with free use, owner's adoption-first pricing note)
+  'start.interview': {
+    own: "You've used today's free talks on the start page. They come back tomorrow, or use your own key.",
+    cloud: "You've used today's free talks on the start page. They come back tomorrow.",
+  },
 })
+// What a guest reads when today's guest allowance is used up (theirs, or their network address's).
+const GUEST_USED_UP = Object.freeze({
+  'start.interview': "You've used today's free talk with Slatebox. Save your account to keep going, or come back tomorrow.",
+  'start.build': "You've used today's free build. Save your account to keep going, or come back tomorrow.",
+})
+/** The words for a guest whose allowance for a feature is used up today. */
+export const guestUsedUpWords = (feature) => GUEST_USED_UP[feature] || GUEST_USED_UP['start.interview']
+// A guest whose network address is not known (only a proxy's or the cluster's is seen): the allowance's share per
+// address cannot be kept, and guest accounts cost nothing to make, so it is not given (meter-core.mjs).
+export const GUEST_NO_ADDRESS = 'Save your account to talk it through with Slatebox and build from it here.'
 const USED_UP_ANY = Object.freeze({
   own: "You've used today's free amount of this. It comes back tomorrow, or keep going with Pro or your own key.",
   cloud: "You've used today's free amount of this. It comes back tomorrow, or keep going with Pro.",
@@ -54,15 +91,15 @@ const MAX_PER_DAY = 1000
  * The allowance as stored or deployed, checked: { feature: whole number of uses a day }. Only the
  * features above may be named. Throws for anything else (a deploy value stops the start).
  */
-export function checkPersonalAllowance(value, where = 'metering.personalAllowance') {
+export function checkPersonalAllowance(value, where = 'metering.personalAllowance', defaults = DEFAULT_PERSONAL_ALLOWANCE) {
   if (value === undefined || value === null) return {}
-  if (typeof value !== 'object' || Array.isArray(value)) throw new Error(`settings ${where} is an object of uses a day by feature, e.g. {"interview": 20}.`)
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error(`settings ${where} is an object of uses a day by feature, e.g. ${JSON.stringify({ [Object.keys(defaults)[0]]: defaults[Object.keys(defaults)[0]] })}.`)
   const out = {}
   for (const [feature, perDay] of Object.entries(value)) {
     // a settings file's own notes ("//")
     if (feature.startsWith('//')) continue
-    if (!Object.hasOwn(DEFAULT_PERSONAL_ALLOWANCE, feature)) {
-      throw new Error(`settings ${where} names ${JSON.stringify(feature)}; it can name ${Object.keys(DEFAULT_PERSONAL_ALLOWANCE).map(f => JSON.stringify(f)).join(', ')}.`)
+    if (!Object.hasOwn(defaults, feature)) {
+      throw new Error(`settings ${where} names ${JSON.stringify(feature)}; it can name ${Object.keys(defaults).map(f => JSON.stringify(f)).join(', ')}.`)
     }
     if (!Number.isInteger(perDay) || perDay < 0 || perDay > MAX_PER_DAY) throw new Error(`settings ${where}.${feature} is a whole number of uses a day, 0 to ${MAX_PER_DAY}.`)
     out[feature] = perDay
@@ -72,11 +109,11 @@ export function checkPersonalAllowance(value, where = 'metering.personalAllowanc
 
 // A stored value is read on every request, so a wrong entry there is left out (the deploy value or
 // the default stands) instead of stopping every metered request.
-function storedAllowance(value) {
+function storedAllowance(value, defaults = DEFAULT_PERSONAL_ALLOWANCE) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   const out = {}
   for (const [feature, perDay] of Object.entries(value)) {
-    try { Object.assign(out, checkPersonalAllowance({ [feature]: perDay })) } catch { /* left out */ }
+    try { Object.assign(out, checkPersonalAllowance({ [feature]: perDay }, 'stored', defaults)) } catch { /* left out */ }
   }
   return out
 }
@@ -84,6 +121,18 @@ function storedAllowance(value) {
 /** The allowance in force: the defaults, then the deploy settings (checked), then what an administrator stored. */
 export function resolvePersonalAllowance({ deploy, stored } = {}) {
   return Object.freeze({ ...DEFAULT_PERSONAL_ALLOWANCE, ...checkPersonalAllowance(deploy), ...storedAllowance(stored) })
+}
+
+/** The guest allowance in force, per guest and per address: the defaults, the deploy settings (checked), then what an administrator stored. */
+export function resolveGuestAllowance({ deploy, stored, deployPerAddress, storedPerAddress } = {}) {
+  return {
+    guestAllowance: Object.freeze({ ...DEFAULT_GUEST_ALLOWANCE, ...checkPersonalAllowance(deploy, 'metering.guestAllowance', DEFAULT_GUEST_ALLOWANCE), ...storedAllowance(stored, DEFAULT_GUEST_ALLOWANCE) }),
+    guestAllowancePerAddress: Object.freeze({
+      ...DEFAULT_GUEST_ALLOWANCE_PER_ADDRESS,
+      ...checkPersonalAllowance(deployPerAddress, 'metering.guestAllowancePerAddress', DEFAULT_GUEST_ALLOWANCE_PER_ADDRESS),
+      ...storedAllowance(storedPerAddress, DEFAULT_GUEST_ALLOWANCE_PER_ADDRESS),
+    }),
+  }
 }
 
 /**
@@ -112,8 +161,8 @@ export const PEOPLE_PER_ADDRESS = 5
 // such as 'personal.suggest' stays one field in Mongo.
 export const allowanceField = feature => 'allowance_' + String(feature).replace(/[^A-Za-z0-9]/g, '_')
 
-/** Uses of each allowance feature counted on a person's day row. */
-export const allowanceUsage = (day = {}) => Object.fromEntries(PERSONAL_FEATURES.map(feature => [feature, day[allowanceField(feature)] || 0]))
+/** Uses of each allowance feature (the personalization allowance's and the guest allowance's) counted on a person's day row. */
+export const allowanceUsage = (day = {}) => Object.fromEntries([...new Set([...PERSONAL_FEATURES, ...GUEST_FEATURES])].map(feature => [feature, day[allowanceField(feature)] || 0]))
 
 /**
  * Whether the allowance serves this request, from what route() is given (policy.mjs).
@@ -135,6 +184,25 @@ export function allowanceCheck({ kind, feature, person, usage = {}, settings, le
   return { ok: true, feature, perDay }
 }
 
+/**
+ * Whether the guest allowance serves this request: only a guest's, and only its features (GUEST_FEATURES).
+ * → null (not about this request), { ok: true, feature, perDay, perAddress, guest: true },
+ *   or { ok: false, usedUp: true } (theirs or their address's is gone today, or it is turned off, or the
+ *   shared budget paused it: a guest has no other way to pay, so the refusal says to save the account),
+ *   or { ok: false, noAddress: true } (the caller's network address is not known: GUEST_NO_ADDRESS).
+ */
+export function guestAllowanceCheck({ kind, feature, person, usage = {}, settings, level = 0, taken = null }) {
+  if (kind !== 'ai' || !person?.anonymous || !GUEST_FEATURES.includes(feature)) return null
+  const perDay = settings?.guestAllowance?.[feature] ?? DEFAULT_GUEST_ALLOWANCE[feature] ?? 0
+  const perAddress = settings?.guestAllowancePerAddress?.[feature] ?? DEFAULT_GUEST_ALLOWANCE_PER_ADDRESS[feature] ?? 0
+  if (!Number.isInteger(perDay) || perDay <= 0 || !Number.isInteger(perAddress) || perAddress <= 0) return { ok: false, usedUp: true }
+  // the caller's address is not known: not given, in words of its own (nothing was used up)
+  if (taken === 'no-address') return { ok: false, usedUp: false, noAddress: true }
+  if (person.freeStopped === true || level >= settings.budget.pauseAiAt || taken) return { ok: false, usedUp: true }
+  if ((usage.allowanceToday?.[feature] || 0) >= perDay) return { ok: false, usedUp: true }
+  return { ok: true, feature, perDay, perAddress, guest: true }
+}
+
 const refuse = code => ({ ok: false, code })
 const negate = fields => Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, -v]))
 
@@ -146,10 +214,11 @@ const negate = fields => Object.fromEntries(Object.entries(fields).map(([k, v]) 
  * → { ok: true, route: 'allowance', feature, field, keys, holdMicros, leftMicros, used: false }
  *   | { ok: false, code: 'used-up' | 'address' | 'paused' }
  */
-export async function holdAllowance(io, { feature, perDay, keys, ceilingMicros, estimateMicros, globalCap, now }) {
+export async function holdAllowance(io, { feature, perDay, perAddress: addressCap = null, keys, ceilingMicros, estimateMicros, globalCap, now }) {
   const field = allowanceField(feature)
   const need = Math.max(1, estimateMicros)
-  const perAddress = perDay * PEOPLE_PER_ADDRESS
+  // the guest allowance names its own share per address; the personalization allowance's is PEOPLE_PER_ADDRESS people's worth
+  const perAddress = Number.isInteger(addressCap) && addressCap > 0 ? addressCap : perDay * PEOPLE_PER_ADDRESS
   for (let attempt = 0; attempt < 5; attempt++) {
     const [day, global, place] = (await Promise.all([io.get('counters', keys.day), io.get('counters', keys.global),
       keys.address ? io.get('counters', keys.address) : null])).map(d => d || {})

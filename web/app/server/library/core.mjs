@@ -540,12 +540,16 @@ export function createLibraryCore(deps) {
   }
 
   /**
-   * Server only, never an action: a board Slatebox drafted for the person (For you, server/personal) saved as their
-   * own smart component, a private draft like one saved from a builder slate (it has none: library.submit sends the
-   * saved draft). `madeFor` says which idea it came from. → { itemId, slug, status: 'draft' }
+   * Server only, never an action: a board Slatebox drafted for the person (For you, server/personal; or a start page
+   * tile, server/start) saved as their own smart component, a private draft like one saved from a builder slate (it has
+   * none: library.submit sends the saved draft). `madeFor` says where it came from: an idea's id (For you), or
+   * { kind: 'tile', tileId } (a tile, whose kept drafts "Make another" opens again). A guest keeps a tile's drafts on
+   * their guest account (they stay theirs when the account is saved); nothing else of a guest's is saved here.
+   * → { itemId, slug, status: 'draft' }
    */
   async function saveMade(principal, { workshop, title, summary, madeFor = null }) {
-    if (!principal?.userId || principal.kind === 'guest') throw fail(403, 'sign_in_to_publish', 'Sign up to keep your own smart components.')
+    const tile = madeFor && typeof madeFor === 'object' && madeFor.kind === 'tile' && typeof madeFor.tileId === 'string'
+    if (!principal?.userId || (principal.kind === 'guest' && !tile)) throw fail(403, 'sign_in_to_publish', 'Sign up to keep your own smart components.')
     const meta = readMeta({ title, summary }, { kind: 'component' })
     const draft = { kind: 'component', workshop: snapshotWorkshop(validateWorkshop(workshop)) }
     checkSize(draft)
@@ -555,7 +559,7 @@ export function createLibraryCore(deps) {
     const item = {
       _id: id, kind: 'component', origin: 'user', status: 'draft', reviewStatus: null, slug: slugify(meta.title, id),
       title: meta.title, summary: meta.summary, categoryLocked: false, synonyms: [], authorId: principal.userId, authorName: actor.name,
-      provenance: madeFor ? { madeFor: { kind: 'for-you', ideaId: String(madeFor).slice(0, 64) } } : {},
+      provenance: tile ? { madeFor: { kind: 'tile', tileId: madeFor.tileId.slice(0, 64) } } : madeFor ? { madeFor: { kind: 'for-you', ideaId: String(madeFor).slice(0, 64) } } : {},
       draft, versionCount: 0, counts: { copies: 0, adds: 0, branches: 0 }, popularity: 0,
       license: LIBRARY_LICENSE, preview: previewOf(draft), createdAt: at(), updatedAt: at(),
     }

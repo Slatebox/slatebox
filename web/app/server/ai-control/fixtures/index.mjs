@@ -14,6 +14,7 @@ import interview from './interview.mjs'
 import personal from './personal.mjs'
 import voice from './voice.mjs'
 import profileSources from './profile-sources.mjs'
+import start from './start.mjs'
 
-export const FIXTURES = Object.freeze(Object.fromEntries([shape, workshop, workshopDraft, canvas, agent, presentation, library, connectors, interview, personal, ...voice, profileSources].map((f) => [f.surface, f])))
+export const FIXTURES = Object.freeze(Object.fromEntries([shape, workshop, workshopDraft, canvas, agent, presentation, library, connectors, interview, personal, ...voice, profileSources, start].map((f) => [f.surface, f])))
 export const fixtureFor = (surface) => FIXTURES[surface] || null
