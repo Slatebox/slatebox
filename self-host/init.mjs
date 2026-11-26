@@ -28,6 +28,8 @@ const settings = {
   public: { env: 'selfhost', edition: 'self-host', baseUrl: root, wsUrl, chatWoot: { enabled: false } },
   mailGun: { server: '' },
   slateboxAPI: { publicKey, secretKey },
+  // Room tokens only: the room-less legacy relay credential is off (compose.yaml sets RELAY_ALLOW_LEGACY=false).
+  relay: { legacy: false },
   selfHosted: { workshopAI: false },
   // Made once with the other secrets: a backup restored into a new installation gets a new id.
   instance: { id: randomUUID() },

@@ -15,7 +15,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   FRONT_PORT, RELAY_PATH, RUN, SSO_PATH, SSO_REALM, TUNNEL_FAILED, TUNNEL_METRICS, TUNNEL_STARTED, fail, Plain, readSecrets,
-  relaySignature, sleep,
+  relayRoomToken, sleep,
 } from './common.mjs'
 
 const TUNNEL_GRACE_SECONDS = 120
@@ -34,11 +34,11 @@ async function relayReady() {
   if (!response.ok || !body.includes('Websocket')) throw new Plain(`The collaboration relay is not answering (HTTP ${response.status}).`)
 }
 
-// A browser opens a slate's live connection with a signature from the app.
-// Do the same and expect the relay's first sync message back.
+// A browser opens a slate's live connection with a room token from the app.
+// Do the same (a read token for the health room) and expect the relay's first sync message back.
 async function liveEditingReady() {
   const { apiPublicKey, apiSecretKey } = readSecrets()
-  const query = new URLSearchParams(relaySignature(apiPublicKey, apiSecretKey))
+  const query = new URLSearchParams(relayRoomToken(apiPublicKey, apiSecretKey, 'slatebox-health'))
   const socket = new WebSocket(`ws://${front}${RELAY_PATH}/slatebox-health?${query}`)
   socket.binaryType = 'arraybuffer'
   try {
@@ -50,6 +50,8 @@ async function liveEditingReady() {
         else resolve()
       }
       socket.onerror = () => { clearTimeout(timer); reject(new Plain('The live-editing connection could not be opened.')) }
+      // The relay closes a socket it refuses (4401 bad or run-out token, 4403 another room).
+      socket.onclose = event => { clearTimeout(timer); reject(new Plain(`The relay refused the app's room token (close ${event.code}${event.reason ? ` ${event.reason}` : ''}).`)) }
     })
   } finally {
     socket.close()

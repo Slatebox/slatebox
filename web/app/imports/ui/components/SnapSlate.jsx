@@ -87,18 +87,17 @@ export default function SnapSlate({
           }
         },
         onInitCollaboration: async (clientID) => {
-          const collaboratorDetails = await Meteor.callAsync(
-            CONSTANTS.methods.collaborators.init,
-            {
-              id: clientID,
-              shareId: ss.shareId,
-            }
-          )
+          // A slate's picture follows its room and never edits it: a read-only token.
+          const room = { id: clientID, shareId: ss.shareId, readOnly: true }
+          const collaboratorDetails = await Meteor.callAsync(CONSTANTS.methods.collaborators.init, room)
 
           // The same person as on the slate itself: their key, name and colour there.
           return {
             websocketUrl: collaboratorDetails.wsUrl,
             websocketParams: collaboratorDetails.wsParams,
+            websocketRole: collaboratorDetails.relayRole ?? null,
+            refreshWebsocketParams: async () =>
+              (await Meteor.callAsync(CONSTANTS.methods.collaborators.refresh, room))?.wsParams ?? null,
             color: collaboratorDetails.color,
             userName: collaboratorDetails.userName,
             personKey: collaboratorDetails.personKey,

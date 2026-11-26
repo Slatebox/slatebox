@@ -372,6 +372,7 @@ const CONSTANTS = {
     },
     collaborators: {
       init: 'collaborators.init',
+      refresh: 'collaborators.refresh',
     },
     utils: {
       base64StringFromRemoteUrl: 'utils.base64StringFromRemoteUrl',

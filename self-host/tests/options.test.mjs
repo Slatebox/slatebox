@@ -362,7 +362,7 @@ test('an https address turns on built-in HTTPS with an automatically issued cert
   const probe = await waitFor(async () => {
     const result = await docker(['exec', '-e', 'NODE_TLS_REJECT_UNAUTHORIZED=0', '-e', 'NODE_NO_WARNINGS=1', box.id, 'node', '--input-type=module', '-e', `
       import tls from 'node:tls'
-      import { readSecrets, relaySignature } from '/opt/slatebox/lib/common.mjs'
+      import { readSecrets, relayRoomToken } from '/opt/slatebox/lib/common.mjs'
       const certificate = await new Promise((resolve, reject) => {
         const socket = tls.connect({ host: '${host}', port: 443, servername: '${host}', rejectUnauthorized: false }, () => {
           resolve(socket.getPeerCertificate()); socket.end()
@@ -373,10 +373,11 @@ test('an https address turns on built-in HTTPS with an automatically issued cert
       const redirect = await fetch('http://${host}/start', { redirect: 'manual' })
       const { apiPublicKey, apiSecretKey } = readSecrets()
       const live = await new Promise(resolve => {
-        const socket = new WebSocket('wss://${host}/live/tls-check?' + new URLSearchParams(relaySignature(apiPublicKey, apiSecretKey)))
+        const socket = new WebSocket('wss://${host}/live/tls-check?' + new URLSearchParams(relayRoomToken(apiPublicKey, apiSecretKey, 'tls-check')))
         socket.binaryType = 'arraybuffer'
         socket.onmessage = event => { resolve(typeof event.data === 'string' ? event.data : 'synced'); socket.close() }
         socket.onerror = () => resolve('failed')
+        socket.onclose = event => resolve('closed ' + event.code)
       })
       console.log(JSON.stringify({ issuer: certificate.issuer.CN, names: certificate.subjectaltname, ready, redirect: [redirect.status, redirect.headers.get('location')], live }))`])
     if (result.code !== 0) return null

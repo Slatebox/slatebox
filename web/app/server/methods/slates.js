@@ -22,7 +22,7 @@ import {
   SlatePresentations,
 } from '../../imports/api/common/models'
 import { readCreativeState } from '../../imports/api/common/creativeSlates.mjs'
-import { resolveSlateRole, slateVisibility } from './slate-role.mjs'
+import { openSlateRole } from '../common/slate-open-role.mjs'
 import { rememberInvitedEdit } from './joined-slates'
 import { recordNativeGuestEdit } from './kept-native-slate'
 import { saveNativeSlate } from './native-slate-save.mjs'
@@ -49,6 +49,16 @@ async function attempt(asId) {
 }
 
 export const generateSlateShareId = () => attempt()
+
+// The collections the open rule reads (slate-open-role.mjs), shared with collaborators.init.
+export const slateOpenStores = {
+  findSlate: query => Slates.findOneAsync(query),
+  findGrant: query => SlateAccess.findOneAsync(query),
+  listGrants: query => SlateAccess.find(query, {
+    fields: { slateId: 1, type: 1, userId: 1, accessKey: 1, slateAccessPermissionId: 1 },
+  }).fetchAsync(),
+  isTeamAdmin: userId => AuthManager.userHasClaim(userId, [CONSTANTS.claims.admin._id]),
+}
 
 const method = {}
 
@@ -127,37 +137,11 @@ export async function getSlatesForUser(opts, user) {
     throw new Meteor.Error('invalid-argument', 'A slate is opened by its share id.')
   }
   if (opts.shareId) {
-    // first get the slate
-    let getSlateAccess = null
-
-    // embeddable can send in the url_name as the shareId for templates
-    let slate = await Slates.findOneAsync({
-      $or: [{ shareId: opts.shareId }, { 'options.url_name': opts.shareId }],
-    })
-
-
-    if (!slate) {
-      getSlateAccess = await SlateAccess.findOneAsync({
-        accessKey: opts.shareId,
-      })
-      if (getSlateAccess) {
-        slate = await Slates.findOneAsync({ _id: getSlateAccess.slateId })
-        if (!slate) return null
-        // final check: slate public/private/unlisted options must match the accessKey
-        if (
-          (getSlateAccess.type === 'unlisted' && !slate.options.isUnlisted) ||
-          (getSlateAccess.type === 'private' && !slate.options.isPrivate) ||
-          (getSlateAccess.type === 'public' && !slate.options.isPublic)
-        ) {
-          return null
-        }
-      }
-    }
-
-    if (slate && !user && !slate.options?.isPublic && !slate.options?.isUnlisted) return null
-    const isAdmin = Boolean(user?.isMasterUser === true ||
-      (user?.orgId && user.orgId === slate?.orgId && await AuthManager.userHasClaim(user._id, [CONSTANTS.claims.admin._id])))
-
+    // Who may open it, and as what: the same rule the collaboration relay's room token follows
+    // (slate-open-role.mjs, collaborators.init).
+    const opened = await openSlateRole(slateOpenStores, opts.shareId, user)
+    if (!opened) return null
+    const { slate, accessLevel } = opened
     if (slate?.creative) slate.creative = readCreativeState(slate.creative)
 
     // always ensure this is copied over for compatibility
@@ -165,15 +149,6 @@ export async function getSlatesForUser(opts, user) {
       slate.options.id = slate._id
     }
 
-    let accessLevel = null
-    if (slate) {
-      const grants = user?._id && slate.userId === user._id ? [] :
-        await SlateAccess.find({ slateId: slate._id, type: slateVisibility(slate) }, {
-          fields: { slateId: 1, type: 1, userId: 1, accessKey: 1, slateAccessPermissionId: 1 },
-        }).fetchAsync()
-      accessLevel = resolveSlateRole(slate, user, isAdmin, grants, getSlateAccess ? opts.shareId : undefined)
-      if (!accessLevel) return null
-    }
     if (slate) {
       // The slate as it was before its first style is for those who may edit it (Revert to original):
       // it may hold notes its author deleted since.

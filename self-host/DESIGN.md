@@ -48,7 +48,14 @@ everything else to the app. The app tells browsers where the relay is through
 `http://localhost:7070` gives `ws://localhost:7070/live`,
 `https://boards.example.com` gives `wss://boards.example.com/live`.
 `Canvas.jsx` and `SnapSlate.jsx` hand that value to SlateboxJS unchanged, and
-y-websocket appends `/<room>?bearer=…&timestamp=…`.
+y-websocket appends `/<room>?token=…` (a room token for that one slate,
+read or write, that `collaborators.init` mints only for someone who may open
+the slate). The old room-less `bearer`/`timestamp` pair is off in both halves
+(`relay: { legacy: false }` in the app's settings, `RELAY_ALLOW_LEGACY=false`
+for the relay), and the deep health check connects with a short-lived read
+token for the `slatebox-health` room. The relay checks the token with a key
+derived from the same API secret it gets in `API_KEYS`, so self-hosting needs
+no new secret.
 
 Because links, sign-in mail and the live-editing address are all built from
 the public address, the proxy only serves the app for that address (and for

@@ -6,6 +6,10 @@
     "publicKey": "",
     "secretKey": ""
   },
+  "relay": {
+    "//": "collaborators.init hands each viewer a room token for one slate (v2, signed with a key derived from slateboxAPI.secretKey). legacy: true is a rollout-only override that also hands the old bearer/timestamp pair (valid on every room, no expiry) to callers with write, for engines that do not send the token yet; the relay takes it only with RELAY_ALLOW_LEGACY=true. Leave it false.",
+    "legacy": false
+  },
   "packages": {
     "mongo": {
       "reactivity": ["changeStreams", "oplog", "polling"]

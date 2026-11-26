@@ -606,7 +606,27 @@ export default function Canvas() {
           }
           idx = Cookies.get(CONSTANTS.guestCollaboratorCookieId)
         }
-        // Who this person is to their peers. If that fails, the visit is still recorded below
+        // A guest's visit is recorded first: their admission is what lets the relay's room token
+        // (the collaborators method below) carry the same edit rights their saves have.
+        let trackGuest = null
+        if (isGuest) {
+          trackGuest = await Meteor.callAsync(
+            CONSTANTS.methods.organizations.trackGuest,
+            {
+              slateOrgId: slateBase.orgId,
+              slateId: slateBase.options.id,
+              slateOwner: slateBase.userId,
+              userId: Meteor.userId(),
+              orgId: Meteor.user() ? Meteor.user().orgId || null : null,
+              guestCollaboratorId: idx,
+              isUnlisted: slateBase.options.isUnlisted,
+              isPublic: slateBase.options.isPublic,
+            }
+          )
+        }
+
+        // Who this person is to their peers, and the room token for this slate (only for someone
+        // who may open it). If that fails, the visit is still recorded above
         // (organizations.trackGuest), or a visitor with no account could not save at all.
         let collaboratorDetails = {}
         try {
@@ -615,6 +635,7 @@ export default function Canvas() {
             {
               id: idx,
               shareId: slateBase.shareId,
+              routeKey: id,
             }
           )
         } catch (error) {
@@ -633,23 +654,6 @@ export default function Canvas() {
           userName: collaboratorDetails.userName,
           color: collaboratorDetails.color,
           personKey: collaboratorDetails.personKey,
-        }
-
-        let trackGuest = null
-        if (isGuest) {
-          trackGuest = await Meteor.callAsync(
-            CONSTANTS.methods.organizations.trackGuest,
-            {
-              slateOrgId: slateBase.orgId,
-              slateId: slateBase.options.id,
-              slateOwner: slateBase.userId,
-              userId: Meteor.userId(),
-              orgId: Meteor.user() ? Meteor.user().orgId || null : null,
-              guestCollaboratorId: idx,
-              isUnlisted: slateBase.options.isUnlisted,
-              isPublic: slateBase.options.isPublic,
-            }
-          )
         }
 
         // if user doesn't exist here, we should log them as a guest -- they're viewing
@@ -704,6 +708,16 @@ export default function Canvas() {
         const userBaseData = {
           websocketUrl: collaboratorDetails.wsUrl,
           websocketParams: collaboratorDetails.wsParams,
+          // 'read' or 'write': what the relay lets this socket do in the room.
+          websocketRole: collaboratorDetails.relayRole ?? null,
+          // A new room token for this slate, the access check run again: the engine asks before
+          // its token runs out and when the relay refuses it. Resolves { token, exp } or null.
+          refreshWebsocketParams: async () => {
+            const fresh = await Meteor.callAsync(CONSTANTS.methods.collaborators.refresh, {
+              id: idx, shareId: slateBase.shareId, routeKey: id,
+            })
+            return fresh?.wsParams ?? null
+          },
           ...collaborator.current,
           x: 0,
           y: 0,

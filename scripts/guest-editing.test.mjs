@@ -12,14 +12,29 @@ const app = (path) => readFileSync(new URL('../web/app/' + path, import.meta.url
 const keys = { publicKey: 'pk-test', secretKey: 'sk-test' }
 const visitor = { user: null, userId: null, id: 'visitor-1', shareId: 'abc1234567' }
 
-test('with the relay set up, a visitor gets the relay credential, a name, a colour and a key', () => {
-  const details = collaboratorDetails({ ...visitor, settings: { slateboxAPI: keys, public: { wsUrl: 'ws://relay' } }, fallbackSecret: 'x' })
+test('with the relay set up, a visitor the slate is open to gets the room token, a name, a colour and a key', () => {
+  // relay-access.mjs decides the access; scripts/relay-token.test.mjs covers who gets which.
+  const access = { code: 'ok', role: 'read', room: 'slate-1' }
+  const details = collaboratorDetails({ ...visitor, settings: { slateboxAPI: keys, public: { wsUrl: 'ws://relay' } }, fallbackSecret: 'x', access })
   assert.equal(details.isAnonymous, true)
   assert.equal(details.wsUrl, 'ws://relay')
-  assert.ok(details.wsParams.bearer && details.wsParams.timestamp)
+  assert.ok(details.wsParams.token && details.wsParams.exp)
+  assert.equal(details.wsParams.bearer, undefined, 'no legacy pair by default, and never for a read role')
+  assert.equal(details.wsParams.timestamp, undefined)
+  assert.equal(details.relayRole, 'read')
   assert.match(details.personKey, /^[A-Za-z0-9_-]{16}$/)
   assert.ok(details.userName)
   assert.ok(details.color)
+})
+
+test('a visitor the slate is not open to still gets a name, a colour and a key, with no relay credential', () => {
+  for (const access of [undefined, { code: 'no-access' }, { code: 'slate-not-found' }]) {
+    const details = collaboratorDetails({ ...visitor, settings: { slateboxAPI: keys, public: { wsUrl: 'ws://relay' } }, fallbackSecret: 'x', access })
+    assert.equal(details.wsParams, null)
+    assert.equal(details.relayRole, null)
+    assert.match(details.personKey, /^[A-Za-z0-9_-]{16}$/)
+    assert.ok(details.userName)
+  }
 })
 
 test('with no relay key pair, the details still come back, with no relay credential', () => {
@@ -50,11 +65,17 @@ test('the method hands its work to collaboratorDetails with a secret made once p
 })
 
 test('the canvas records a visit even when collaborators.init fails', () => {
+  // The visit is recorded before collaborators.init is asked (the guest's admission decides the
+  // relay role), and a failing collaborators.init is caught, so it can never stop the visit.
   const canvas = app('imports/ui/pages/Canvas.jsx')
   const start = canvas.indexOf('onInitCollaboration: async (clientID) => {')
-  const body = canvas.slice(start, canvas.indexOf('CONSTANTS.methods.organizations.trackGuest', start))
-  assert.match(body, /try \{\s*collaboratorDetails = await Meteor\.callAsync\(\s*CONSTANTS\.methods\.collaborators\.init/)
-  assert.match(body, /\} catch \(error\) \{/)
+  const end = canvas.indexOf('return userBaseData', start)
+  const body = canvas.slice(start, end)
+  const visit = body.indexOf('CONSTANTS.methods.organizations.trackGuest')
+  const init = body.indexOf('CONSTANTS.methods.collaborators.init')
+  assert.ok(visit > 0 && init > visit, 'the visit is recorded first')
+  assert.match(body.slice(visit), /try \{\s*collaboratorDetails = await Meteor\.callAsync\(\s*CONSTANTS\.methods\.collaborators\.init/)
+  assert.match(body.slice(init), /\} catch \(error\) \{/)
 })
 
 test('the example settings name the relay key pair, empty', () => {

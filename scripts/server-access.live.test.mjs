@@ -376,7 +376,8 @@ test('an ordinary account still updates its own call settings and names', live, 
 
 test('the collaboration credential any viewer receives is not a signature for the signed hooks', live, async () => {
   const c = await connect()
-  const init = await c.call('collaborators.init', {})
+  // The legacy pair rides along only for a slate the connection may open (a public one here).
+  const init = await c.call('collaborators.init', { shareId: slates.public.shareId })
   const { bearer, timestamp } = init.wsParams
   const parts = Buffer.from(bearer, 'base64').toString('utf8').split(':')
   assert.equal(parts.length, 2, 'the relay reads publicKey:hash')
@@ -401,6 +402,25 @@ test('the collaboration credential any viewer receives is not a signature for th
     assert.equal(typeof (await r.json()).token, 'string')
     g.close()
   }
+  c.close()
+})
+
+test('collaborators.init hands relay params only to who may open the slate, for its own room', live, async () => {
+  const c = await connect()
+  for (const request of [{}, { shareId: hex(10) }, { shareId: slates.private.shareId }, { shareId: { $ne: null } }]) {
+    const r = await errorOf(c.call('collaborators.init', request))
+    assert.ok(r.error || r.value?.wsParams == null, 'an anonymous connection got relay params for ' + JSON.stringify(request))
+  }
+  const strange = await stranger.call('collaborators.init', { shareId: slates.private.shareId })
+  assert.equal(strange.wsParams, null, 'a stranger got relay params for a private slate')
+  const owner = await victim.call('collaborators.init', { shareId: slates.private.shareId })
+  assert.equal(owner.relayRole, 'write')
+  const room = JSON.parse(Buffer.from(owner.wsParams.token.split('.')[0], 'base64url').toString()).room
+  assert.equal(room, slates.private._id)
+  const viewer = await c.call('collaborators.init', { shareId: slates.public.shareId })
+  assert.equal(viewer.relayRole, 'read', 'an anonymous viewer of a public slate reads')
+  const refreshed = await errorOf(c.call('collaborators.refresh', { shareId: slates.private.shareId }))
+  assert.ok(refreshed.error || refreshed.value?.wsParams == null, 'refresh handed out a private room')
   c.close()
 })
 

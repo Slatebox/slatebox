@@ -297,6 +297,8 @@ function main() {
       cloudLinks: Boolean(extra.aws?.imageBucket),
     },
     slateboxAPI: { publicKey: secrets.apiPublicKey, secretKey: secrets.apiSecretKey },
+    // Room tokens only: a new install has no old engines, so the room-less legacy credential is off.
+    relay: { legacy: false },
   })
   // Single sign-on is either wired to the bundled Keycloak or off; SLATEBOX_SETTINGS cannot half-configure it.
   delete settings.sso
@@ -343,6 +345,8 @@ function main() {
     MONGO_URL: externalMongo || mongoUrl('relay', secrets.mongoRelayPassword),
     API_GEN_KEY: secrets.apiGenKey,
     API_KEYS: JSON.stringify([{ name: 'slatebox', publicKey: secrets.apiPublicKey, secretKey: secrets.apiSecretKey }]),
+    // Room tokens only (the relay's default too): the room-less legacy credential is refused.
+    RELAY_ALLOW_LEGACY: 'false',
   }))
   if (sso.enabled) writePrivate(join(RUN, 'keycloak.env'), envFile(keycloakEnv({ url, secrets })))
   writePrivate(join(RUN, 'Caddyfile'), caddyfile({ url, builtInHttps, acmeCa, sso: sso.enabled, ssoAdminOpen: sso.adminOpen, tunnel: Boolean(tunnel) }))

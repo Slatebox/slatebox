@@ -74,6 +74,8 @@ services:
       MONGO_URL: mongodb://relay:${RELAY_PASSWORD}@mongo:27017/slatebox?replicaSet=rs0
       API_GEN_KEY: ${API_GEN_KEY}
       API_KEYS: ${API_KEYS}
+      # Room tokens only: the room-less legacy credential is refused.
+      RELAY_ALLOW_LEGACY: "false"
     ports:
       - "127.0.0.1:${COLLAB_PORT}:3000"
     healthcheck:

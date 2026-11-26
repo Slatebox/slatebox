@@ -1,5 +1,5 @@
 // Paths and helpers shared by the start-up, health, backup and restore steps.
-import { createHmac, randomBytes } from 'node:crypto'
+import { createHmac, hkdfSync, randomBytes } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
@@ -134,11 +134,17 @@ export function mongodb() {
   return createRequire(join(HOME, 'relay/package.json'))('mongodb')
 }
 
-/** The same signature the app hands a browser for the collaboration relay. */
-export function relaySignature(publicKey, secretKey) {
-  const timestamp = new Date().toISOString()
-  const hash = createHmac('sha256', secretKey).update(`${publicKey}:${timestamp}`).digest('base64')
-  return { bearer: Buffer.from(`${publicKey}:${hash}`).toString('base64'), timestamp }
+/**
+ * A room token for the collaboration relay, as the app mints one for a browser
+ * (web/app/server/common/relay-token.mjs, v2): one room, one role, a short life. The relay
+ * refuses the old room-less bearer/timestamp signature here (RELAY_ALLOW_LEGACY is off).
+ * Returns the query parameters to connect with: { token }.
+ */
+export function relayRoomToken(publicKey, secretKey, room, { role = 'read', ttlSeconds = 60 } = {}) {
+  const key = Buffer.from(hkdfSync('sha256', Buffer.from(secretKey, 'utf8'), Buffer.from('slatebox-relay', 'utf8'), Buffer.from('room-token-v1', 'utf8'), 32))
+  const exp = Math.floor(Date.now() / 1000) + ttlSeconds
+  const payload = Buffer.from(JSON.stringify({ v: 2, pk: publicKey, room, role, exp, n: randomBytes(12).toString('base64url') })).toString('base64url')
+  return { token: `${payload}.${createHmac('sha256', key).update(payload).digest('base64url')}` }
 }
 
 export function shellQuote(value) {
