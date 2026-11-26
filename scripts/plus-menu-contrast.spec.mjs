@@ -10,6 +10,10 @@
 //   cd scripts && SLATEBOX_ORIGIN=http://127.0.0.1:3911 npx playwright test plus-menu-contrast.spec.mjs
 // SLATEBOX_SHOTS=<dir> also saves a picture of each menu, open.
 import { expect, test } from '@playwright/test'
+import { deleteDisposableAccounts } from './spec-cleanup.mjs'
+
+// Every guest this spec makes is deleted before its page closes, here or on staging.
+deleteDisposableAccounts(test)
 
 const ORIGIN = process.env.SLATEBOX_ORIGIN || 'http://127.0.0.1:3911'
 const SHOTS = process.env.SLATEBOX_SHOTS
@@ -99,7 +103,7 @@ async function freshSlate(browser, { viewport, colorScheme }) {
   const page = await context.newPage()
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
-  await page.goto(ORIGIN + '/new')
+  await page.goto(ORIGIN + '/new?empty=1')
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 90000 })
   await page.getByRole('button', { name: 'Got it' }).click({ timeout: 5000 }).catch(() => {})
   await page.waitForTimeout(1500)

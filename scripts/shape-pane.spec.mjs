@@ -95,7 +95,7 @@ async function freshSlate(browser, viewport, { register = false } = {}) {
   const page = await context.newPage()
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
-  await page.goto(ORIGIN + '/new')
+  await page.goto(ORIGIN + '/new?empty=1')
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 90000 })
   await page.getByRole('button', { name: 'Got it' }).click({ timeout: 5000 }).catch(() => {})
   await page.waitForTimeout(1200)
@@ -109,7 +109,7 @@ async function freshSlate(browser, viewport, { register = false } = {}) {
       return new Promise((resolve) => Accounts.createUser({ email: address, password: 'Shape-pane-1!' }, (e) => resolve(e ? e.reason || e.message : 'ok')))
     }, email)
     expect(result).toBe('ok')
-    await page.goto(ORIGIN + '/new')
+    await page.goto(ORIGIN + '/new?empty=1')
     await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 90000 })
     await page.getByRole('button', { name: 'Got it' }).click({ timeout: 5000 }).catch(() => {})
     await page.waitForTimeout(1200)

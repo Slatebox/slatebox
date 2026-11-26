@@ -50,7 +50,7 @@ async function freshSlate(browser, viewport) {
   const page = await context.newPage()
   const errors = []
   page.on('pageerror', e => errors.push(e.message))
-  await page.goto(ORIGIN + '/new')
+  await page.goto(ORIGIN + '/new?empty=1')
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 90000 })
   expect(await page.evaluate(() => window.Meteor?.user()?.isAnonymous ?? true)).toBe(true)
   await page.getByRole('button', { name: 'Got it' }).click({ timeout: 5000 }).catch(() => {})

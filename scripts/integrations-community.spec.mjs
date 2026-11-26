@@ -44,7 +44,7 @@ async function person(browser, { first, last, reviewer = false, viewport = DESK 
   const page = await context.newPage()
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
-  await page.goto(ORIGIN + '/new')
+  await page.goto(ORIGIN + '/new?empty=1')
   // The first-run picker, where the app shows one: an empty slate is enough here.
   await page.getByRole('button', { name: 'Start with an empty slate' }).click({ timeout: 15000 }).catch(() => {})
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 120000 })

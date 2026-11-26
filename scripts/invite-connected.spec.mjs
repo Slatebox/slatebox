@@ -37,7 +37,7 @@ test('a connected agent is added to a slate with one click on Add: cursor and ch
   const page = await context.newPage()
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
-  await page.goto(ORIGIN + '/new')
+  await page.goto(ORIGIN + '/new?empty=1')
   await page.getByRole('button', { name: 'Start with an empty slate' }).click({ timeout: 15000 }).catch(() => {})
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 120000 })
   expect(await page.evaluate(() => window.Meteor?.user()?.isAnonymous ?? true)).toBe(true)
@@ -62,7 +62,7 @@ test('a connected agent is added to a slate with one click on Add: cursor and ch
   await shot(page, '01-connected-on-integrations')
 
   // A new slate of their own.
-  await page.goto(ORIGIN + '/new')
+  await page.goto(ORIGIN + '/new?empty=1')
   await page.getByRole('button', { name: 'Start with an empty slate' }).click({ timeout: 15000 }).catch(() => {})
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 120000 })
   const open = page.locator('[data-invite-agent-open]')

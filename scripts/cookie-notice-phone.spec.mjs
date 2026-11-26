@@ -8,6 +8,10 @@
 // Against a running app (a fresh guest per run: no cookies, no storage):
 //   cd scripts && SLATEBOX_ORIGIN=http://127.0.0.1:3911 npx playwright test cookie-notice-phone.spec.mjs
 import { expect, test } from '@playwright/test'
+import { deleteDisposableAccounts } from './spec-cleanup.mjs'
+
+// Every guest this spec makes is deleted before its page closes, here or on staging.
+deleteDisposableAccounts(test)
 
 const ORIGIN = process.env.SLATEBOX_ORIGIN || 'http://127.0.0.1:3911'
 const phone = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 3 }
@@ -21,7 +25,7 @@ async function freshSlate(browser, extra = {}) {
   const page = await context.newPage()
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
-  await page.goto(ORIGIN + '/new')
+  await page.goto(ORIGIN + '/new?empty=1')
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 90000 })
   expect(await page.evaluate(() => window.Meteor?.user()?.isAnonymous ?? true)).toBe(true)
   await expect(notice(page)).toBeVisible({ timeout: 30000 })
@@ -69,7 +73,7 @@ test('phone: Got it takes the notice away with one tap, gives the bar its room b
   await page.reload()
   await page.waitForTimeout(3000)
   await expect(notice(page)).toHaveCount(0)
-  await page.goto(ORIGIN + '/new')
+  await page.goto(ORIGIN + '/new?empty=1')
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 90000 })
   await page.waitForTimeout(3000)
   await expect(notice(page)).toHaveCount(0)
@@ -94,7 +98,7 @@ test('phone: a browser that drops cookies still remembers the answer (localStora
 test('keyboard: Got it is a real button, reached and pressed from the keyboard', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
   const page = await context.newPage()
-  await page.goto(ORIGIN + '/new')
+  await page.goto(ORIGIN + '/new?empty=1')
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 90000 })
   await expect(notice(page)).toBeVisible({ timeout: 30000 })
   await notice(page).getByRole('button', { name: 'Got it' }).focus()

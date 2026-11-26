@@ -66,7 +66,7 @@ async function openPanel(page) {
   await expect(panel(page)).toBeVisible()
 }
 /** A fresh person: a new context with no login token; a guest from `start`; promoted to a signed-in account. */
-async function person(browser, { first, last, reviewer = false, start = '/new', beforePromote = null }) {
+async function person(browser, { first, last, reviewer = false, start = '/new?empty=1', beforePromote = null }) {
   const context = await browser.newContext({ viewport: DESK })
   const page = await context.newPage()
   const errors = []
@@ -298,7 +298,7 @@ test('3. another person branches off it (the branch keeps Track, locked) and add
 test('4. a slate and a presentation go through the queue, and another person opens a copy of each', async ({ browser, playwright }) => {
   const { page } = shared.author
   // A slate with a board on it, published from Share.
-  await page.goto(ORIGIN + '/new')
+  await page.goto(ORIGIN + '/new?empty=1')
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 120000 })
   await openPanel(page)
   await say(page, 'Add a launch plan')

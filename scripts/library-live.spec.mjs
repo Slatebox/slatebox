@@ -40,7 +40,7 @@ test('Keep adds a board and keeps a rule live on every open page; Undo and the n
   const page = await one.newPage()
   const errors = []
   page.on('pageerror', e => errors.push('A: ' + e.message))
-  await page.goto(ORIGIN + '/new')
+  await page.goto(ORIGIN + '/new?empty=1')
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 90000 })
   // A fresh guest: no login carried in from anywhere else.
   expect(await page.evaluate(() => window.Meteor?.user()?.isAnonymous ?? true)).toBe(true)
@@ -147,7 +147,7 @@ test('a board given its first rule shows it live on a page that never loaded the
   const page = await one.newPage()
   const errors = []
   page.on('pageerror', e => errors.push('A: ' + e.message))
-  await page.goto(ORIGIN + '/new')
+  await page.goto(ORIGIN + '/new?empty=1')
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 90000 })
   await page.getByRole('button', { name: 'Got it' }).click({ timeout: 5000 }).catch(() => {})
   if (!(await panel(page).count())) await page.locator('[data-conversation-toggle]').first().click()
@@ -176,7 +176,7 @@ test.describe('on a phone', () => {
   test('a board kept from the chat sheet takes the screen at once (no reload), and a card drags between lanes', async ({ page }) => {
     const errors = []
     page.on('pageerror', e => errors.push(e.message))
-    await page.goto(ORIGIN + '/new')
+    await page.goto(ORIGIN + '/new?empty=1')
     await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 90000 })
     await page.getByRole('button', { name: 'Got it' }).click({ timeout: 5000 }).catch(() => {})
     if (!(await panel(page).count())) await page.locator('[data-conversation-toggle]').first().click()

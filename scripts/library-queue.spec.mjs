@@ -35,7 +35,7 @@ async function person(browser, { first, last, reviewer = false, viewport = DESK 
   const page = await context.newPage()
   const errors = []
   page.on('pageerror', e => errors.push(e.message))
-  await page.goto(ORIGIN + '/new')
+  await page.goto(ORIGIN + '/new?empty=1')
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 120000 })
   // A fresh guest: nothing carried in from another session.
   expect(await page.evaluate(() => window.Meteor?.user()?.isAnonymous ?? true)).toBe(true)

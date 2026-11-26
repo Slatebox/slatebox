@@ -121,7 +121,7 @@ test('a builder says how the board looks, with no AI call; Undo takes it back; a
   await page.getByRole('dialog').getByRole('button', { name: 'Close' }).first().click()
 
   // The owner's own sentence, on a component whose board is Impact × effort (its only board, as in the builder).
-  await page.goto(ORIGIN + '/new')
+  await page.goto(ORIGIN + '/new?empty=1')
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 120000 })
   await openPanel(page)
   await say(page, 'Add an impact × effort board')

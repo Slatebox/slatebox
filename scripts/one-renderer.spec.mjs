@@ -12,8 +12,12 @@
 //   SLATEBOX_ORIGIN=http://127.0.0.1:7660 npx playwright test -c scripts/playwright.config.mjs one-renderer.spec.mjs
 // SLATEBOX_SHOTS names a folder for the screenshots; SLATEBOX_CHROMIUM a Chromium executable.
 import { expect, test } from '@playwright/test'
+import { deleteDisposableAccounts } from './spec-cleanup.mjs'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+
+// Every guest this spec makes is deleted before its page closes, here or on staging.
+deleteDisposableAccounts(test)
 
 const ORIGIN = process.env.SLATEBOX_ORIGIN || 'http://127.0.0.1:3911'
 const SHOTS = process.env.SLATEBOX_SHOTS || ''
@@ -41,6 +45,8 @@ function structureOf(page, scope, exclude = []) {
     const draft = new RegExp(draftOnly), edit = new RegExp(editOnly)
     const svg = document.querySelector('#slateCanvas svg') ?? document.querySelector('svg')
     const engine = window.slate?.v2 ?? window.slate
+    // Right after a reload the canvas is not drawn yet: nothing to read, and a poll asks again.
+    if (!svg || !engine?.nodes) return { ids: [], places: [], parts: {} }
     const all = [...svg.querySelectorAll('[data-node-id]')].map(g => g.getAttribute('data-node-id'))
     const mine = id => !exclude.includes(id) && (scope === '' ? !/^[a-z0-9]+:/.test(id) : id.startsWith(scope + ':'))
     const ids = [...new Set(all.filter(mine))]
@@ -120,7 +126,7 @@ for (const width of [1440, 390]) {
     const page = await context.newPage()
     const errors = []
     page.on('pageerror', e => errors.push(e.message))
-    await page.goto(ORIGIN + '/new')
+    await page.goto(ORIGIN + '/new?empty=1')
     await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 90000 })
     expect(await page.evaluate(() => window.Meteor?.user()?.isAnonymous ?? true)).toBe(true)
     const shareId = page.url().split('/').pop()
@@ -205,7 +211,7 @@ for (const width of [1440, 390]) {
       const page = await context.newPage()
       const errors = []
       page.on('pageerror', e => errors.push(e.message))
-      await page.goto(ORIGIN + '/new')
+      await page.goto(ORIGIN + '/new?empty=1')
       await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 90000 })
       const shareId = page.url().split('/').pop()
       await page.getByRole('button', { name: 'Got it' }).click({ timeout: 5000 }).catch(() => {})

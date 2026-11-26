@@ -193,7 +193,7 @@ for (const size of [{ name: 'desktop', width: 1440, height: 900 }, { name: 'phon
     }
 
     // 5. On another slate: Add to this slate › Yours › Add, then Keep.
-    await page.goto(ORIGIN + '/new')
+    await page.goto(ORIGIN + '/new?empty=1')
     await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 120000 })
     await openPanel(page)
     await panel(page).getByRole('button', { name: /See all|Browse/ }).first().click()
