@@ -33,7 +33,7 @@ cd web/app
 
 2. Install dependencies
 
-The app uses SlateboxJS, the canvas engine, from a checkout of [Slatebox/slateboxjs](https://github.com/Slatebox/slateboxjs) next to this repository, in a folder named `slateboxjs-v2` (`web/app/package.json` links `../../../slateboxjs-v2`). Clone and build it once, then install the app:
+The app uses SlateboxJS, the canvas engine, from a checkout of [Slatebox/slateboxjs](https://github.com/Slatebox/slateboxjs) next to this repository, in a folder named `slateboxjs-v2` (`web/app/package.json` links `../../../slateboxjs-v2`; the folder name is historical, from before the repository was renamed). Clone and build it once, then install the app:
 
 ```bash
 # from the folder that holds this repository

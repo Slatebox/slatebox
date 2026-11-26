@@ -31,7 +31,7 @@ Security fixes go into the newest release of each artifact. Upgrade to get them.
 | Artifact | Supported | How to upgrade |
 | --- | --- | --- |
 | Slatebox Cloud (app.slatebox.com) | The deployed version | Nothing to do |
-| Self-host image `ghcr.io/slatebox/slatebox` | The latest release (the newest `vX.Y.Z` tag) | `npx slatebox upgrade`, or pull the new tag |
+| Self-host image `ghcr.io/slatebox/slatebox` | The newest published image tag (the newest `vX.Y.Z` release that has an image; `npx slatebox status` shows yours) | Admin › Updates, `npx slatebox upgrade`, or pull the new tag |
 | `slatebox` installer and CLI (npm) | The latest version | `npx slatebox@latest` |
 | `slatebox-mcp` (npm) | The latest version | `npm install -g slatebox-mcp@latest` |
 | Older releases | Not supported | |

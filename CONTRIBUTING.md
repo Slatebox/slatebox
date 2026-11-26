@@ -57,7 +57,8 @@ You need Node 22 (`web/app/.nvmrc` pins 22.12.0 for the app; the npm packages ne
 and Git. Meteor runs its own MongoDB in development.
 
 1. Clone this repository and, next to it, the engine. The app links the engine from a sibling
-   folder named `slateboxjs-v2` (see `web/app/package.json`):
+   folder named `slateboxjs-v2` (see `web/app/package.json`; the folder name is historical, from
+   before the repository was renamed):
 
    ```sh
    git clone https://github.com/Slatebox/slatebox.git

@@ -83,7 +83,7 @@ To point it at your own Slatebox, add `"SLATEBOX_BASE_URL": "https://boards.exam
 
 ### Develop locally
 
-The app is a [Meteor](https://www.meteor.com) 3 and React application in [`web/app`](web/app). It uses the SlateboxJS engine from a sibling checkout named `slateboxjs-v2`. The setup steps are in [web/README.md](web/README.md) and [CONTRIBUTING.md](CONTRIBUTING.md#development-setup).
+The app is a [Meteor](https://www.meteor.com) 3 and React application in [`web/app`](web/app). It uses the SlateboxJS engine from a sibling checkout named `slateboxjs-v2` (the folder name is historical: `web/app/package.json` links that path; the repository is [Slatebox/slateboxjs](https://github.com/Slatebox/slateboxjs)). The setup steps are in [web/README.md](web/README.md) and [CONTRIBUTING.md](CONTRIBUTING.md#development-setup).
 
 ## What you can do
 
@@ -151,6 +151,10 @@ This repository ships three artifacts. Each one has its own version, tags and ch
 | The MCP server | npm [`slatebox-mcp`](https://www.npmjs.com/package/slatebox-mcp) and the MCP Registry | `slatebox-mcp@X.Y.Z` | [packages/slatebox-mcp/CHANGELOG.md](packages/slatebox-mcp/CHANGELOG.md) |
 
 Changelogs are generated from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and each tag becomes a [GitHub Release](https://github.com/Slatebox/slatebox/releases) with its changelog section as the notes. The details are in [docs/releasing.md](docs/releasing.md).
+
+A self-hosted Slatebox updates from those releases only: each image is built and signed by GitHub from its tag, and the server's admin chooses when it applies them in Admin › Updates ([how updates work](docs/releasing.md#self-host-updates)). `npx slatebox upgrade` does the same by hand, with a backup and a rollback.
+
+The SlateboxJS engine is versioned separately: npm [`slateboxjs`](https://www.npmjs.com/package/slateboxjs), tags `vX.Y.Z` in [Slatebox/slateboxjs](https://github.com/Slatebox/slateboxjs).
 
 ## Community
 

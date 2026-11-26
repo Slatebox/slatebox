@@ -18,7 +18,9 @@ new MCP server only once `slatebox` is released as well, so release the two toge
 release first, whatever order the flags are typed in, so the `slatebox` tag points at a commit that
 already pins the new `slatebox-mcp` (tags can't be moved afterwards), and the installer's notes
 get a generated line, "Runs slatebox-mcp X.Y.Z". The canvas
-engine, SlateboxJS, is versioned in its own repository.
+engine, SlateboxJS, is versioned in its own repository: npm
+[`slateboxjs`](https://www.npmjs.com/package/slateboxjs), tags `vX.Y.Z` in
+[Slatebox/slateboxjs](https://github.com/Slatebox/slateboxjs).
 
 ## What a version number means
 
@@ -35,36 +37,20 @@ engine, SlateboxJS, is versioned in its own repository.
 - Before 1.0.0 a minor bump may include breaking changes (the npm packages are 0.x today).
 - Pre-releases use `X.Y.Z-rc.N` (or `-beta.N`) and tag the same way (`v2.1.0-rc.1`).
 
-## The app's next version: 2.0.0
+## Version history
 
-The app has two earlier version lines. The hosted app was released as 1.0 to 1.3.21 until July
-2026 (the older sections of [CHANGELOG.md](../CHANGELOG.md); the ship script still stamped Cloud
-images `1.3.21-local…` because it reads the newest changelog heading). The self-host image then
-published previews 0.1.0 to 0.2.2 in November 2026, built from the same code. The root
-`package.json` starts at 0.2.2, the newest version actually published.
+The app has had three version lines:
 
-The next app release is **2.0.0**:
+- **1.0 to 1.3.21**: the hosted app, until July 2026 (the older sections of
+  [CHANGELOG.md](../CHANGELOG.md)).
+- **0.1.0 to 0.2.2**: self-host image previews, November 2026, built from the same code.
+- **2.0.0 onward**: one version for the app and the image. 2.0.0 is above every version anyone had
+  seen, and its changes include breaking ones (themes and the `themeId` creation link parameter
+  are gone). 2.0.0 was an app release only; **2.1.0** is the first image GitHub built and signed
+  from a release tag. The installer pins the newest published image (`npx slatebox status` shows
+  which one a server runs).
 
-- it must be above every app version anyone has seen (1.3.21 and 0.2.2), so no person or tool reads
-  it as a downgrade, and the image tag `2.0.0` sorts above `0.2.2`;
-- the changes since 1.3.21 include breaking ones (themes and the `themeId` creation link parameter
-  are gone), which call for a major version;
-- the public surfaces it carries (`/api/v1`, the hosted MCP server, the self-host image) are ones
-  people now build on, which is what 1.0 and above promise.
-
-Cut it with an explicit version: `ship --release app:2.0.0`. After that, plain bumps apply.
-
-**Order for the first release.** `release.mjs` reads the commit range from the artifact's previous
-tag, and the ship has no way to pass `--since`. So the earlier versions must be tagged first:
-
-1. Ship the branch that adds the release tooling (`cliff.toml`, `scripts/release.mjs`, the
-   changelogs, `.github/workflows/release.yml`) without `--release`.
-2. Run the owner's tag backfill, `backfill-release-tags.sh --apply`, against `community/main`
-   (see [Earlier versions](#earlier-versions)).
-3. Then `ship --release app:2.0.0` (and any npm package releases).
-
-A `--release` before the backfill stops with "No earlier v* tag is reachable from HEAD" before
-anything is built; nothing is left behind.
+The earlier versions were tagged afterwards (see [Earlier versions](#earlier-versions)).
 
 ## Commits become the changelog
 
@@ -88,12 +74,14 @@ A release is a step of the ship, not a separate process: there is no release pul
 release bot.
 
 ```sh
-# on the build box, through the usual ship entry point
-slatebox-roscoe-ship.py --test --release slatebox-mcp:minor
-slatebox-roscoe-ship.py --both --release app:2.0.0 --release slatebox:patch
+# on the build box, through the maintainers' ship script (it tests, builds, deploys and pushes)
+ship --test --release slatebox-mcp:minor
+ship --both --release app:minor --release slatebox:patch
 ```
 
-`--release <artifact>:<major|minor|patch|X.Y.Z>` (repeatable) runs, after the stale-tree gate and
+`ship` is the maintainers' release script on the build box; it is not in this repository. Without
+it, see [Without the ship script](#without-the-ship-script). `--release
+<artifact>:<major|minor|patch|X.Y.Z>` (repeatable) runs, after the stale-tree gate and
 before anything is built:
 
 1. `node scripts/release.mjs <artifact> <bump>` on the app checkout, which
@@ -197,8 +185,6 @@ name, pulls by digest and runs the installer's upgrade (backup, health check, ro
    --notes "Signed channel feed for self-hosted updates. Do not delete." --latest=false
    --prerelease` (from the default branch).
 6. **Ship script:** pass `--engine <sha> --relay <sha>` to `release.mjs app` with `--release app:…`.
-- **npm packages:** from the tagged commit, `npm publish --workspace slatebox` or
-  `npm publish --workspace slatebox-mcp` (the `prepublishOnly` checks run first).
 
 ### Without the ship script
 
