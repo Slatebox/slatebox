@@ -56,7 +56,7 @@
     "test:self-host-image": "node --test --test-concurrency=1 self-host/tests/backup.test.mjs self-host/tests/browser.test.mjs self-host/tests/configure.test.mjs self-host/tests/image.test.mjs self-host/tests/lifecycle.test.mjs self-host/tests/log-content.test.mjs self-host/tests/options.test.mjs self-host/tests/tunnel.test.mjs self-host/tests/uploads.test.mjs self-host/tests/setup.test.mjs self-host/tests/sso.test.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.57.0",
+    "@playwright/test": "1.65.1",
     "jsdom": "^26.1.0"
   },
   "dependencies": {
