@@ -96,7 +96,9 @@ export function createTeamTransfer({ exporter, importer, tickets, loadUser, isTe
 
   // The archive for a download address, or an ImportError. The team admin is checked again: one
   // who left the team, or lost the role, since asking gets nothing.
-  async function openExport(ticket, passphrase) {
+  // onEnd(end): told the archive's end record ({ lines, bytes, counts }) once it is written (a move
+  // from this server compares the counts with what the receiving server made: server/selfhost-options).
+  async function openExport(ticket, passphrase, { onEnd = null } = {}) {
     const record = await tickets.redeem(ticket, 'export')
     if (!record) throw refused(404, 'ticket_invalid', 'This download address is used or expired. Ask for a new export.')
     const user = await teamAdmin(record.userId)
@@ -110,7 +112,10 @@ export function createTeamTransfer({ exporter, importer, tickets, loadUser, isTe
       passphrase: passphrase || null,
       signer: typeof signer === 'function' ? signer() : signer,
       limits,
-      onEnd: (end) => log('team export written', { orgId: record.orgId, lines: end.lines, bytes: end.bytes }),
+      onEnd: (end) => {
+        log('team export written', { orgId: record.orgId, lines: end.lines, bytes: end.bytes })
+        onEnd?.(end)
+      },
     })
     const slug = String(team?.team?.name || 'team').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'team'
     return { stream, filename: `${slug}-${stamp.slice(0, 10)}.${passphrase ? 'sbxteam' : 'sbxteam.gz'}` }
@@ -231,6 +236,14 @@ export function createTeamTransfer({ exporter, importer, tickets, loadUser, isTe
     return fn(...args)
   }
   return {
+    // What an export of the caller's team would hold, with the same checks as startExport and no
+    // download address (a move from this server asks first: server/selfhost-options).
+    async preflight(userId) {
+      const user = await teamAdmin(userId)
+      const summary = await exporter.preflight(user.orgId)
+      if (!summary) throw refused(404, 'no_team', 'Your team was not found.')
+      return summary
+    },
     startExport,
     openExport,
     startImport,

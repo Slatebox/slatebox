@@ -97,14 +97,26 @@ export function publicHeaders(res, action) {
 // action and User-Agent); never fails the request.
 export function mountHttp(app, registry, { express, authenticate, forwardedCount = 0, onAgentCall = null }) {
   const router = express.Router()
-  const openApi = buildOpenApi(registry)
+  // Built again when actions join after start (registry.extend: enterprise code unlocked while the server ran).
+  let openApi = { version: -1, doc: null }
+  const currentOpenApi = () => {
+    const version = typeof registry.version === 'function' ? registry.version() : 0
+    if (openApi.version !== version) openApi = { version, doc: buildOpenApi(registry) }
+    return openApi.doc
+  }
+  currentOpenApi() // a bad schema stops the server at start, as before
   router.get('/openapi.json', (_req, res) => {
     res.setHeader('Cache-Control', 'no-store')
-    res.json(openApi)
+    res.json(currentOpenApi())
   })
-  for (const action of registry.list()) {
+  // The actions' own routes sit in a router of their own, ahead of the 404 below, so actions that
+  // join later (addActions) are reached like the first ones.
+  const actionRoutes = express.Router()
+  router.use(actionRoutes)
+  const mountAction = (action) => {
     const http = action.mounts.http
-    if (!http) continue
+    if (!http) return
+    const router = actionRoutes // eslint-disable-line no-shadow
     const parse = express.json({ limit: action.bodyLimit })
     // A browser on another origin asks first: GET only, no credentials.
     if (action.publicCache)
@@ -156,6 +168,7 @@ export function mountHttp(app, registry, { express, authenticate, forwardedCount
       }
     })
   }
+  for (const action of registry.list()) mountAction(action)
   router.use((_req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     sendError(res, problem(404, 'unknown_route', 'There is no such API route. See /api/v1/openapi.json.'))
@@ -170,5 +183,7 @@ export function mountHttp(app, registry, { express, authenticate, forwardedCount
     return sendError(res, error)
   })
   app.use(API_BASE, router)
+  // Routes for actions added to the registry after start (registry.extend first).
+  router.addActions = (actions) => actions.forEach(mountAction)
   return router
 }

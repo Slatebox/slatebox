@@ -158,8 +158,28 @@ The image includes Slatebox's enterprise features (inviting outside agents such
 as GitHub, Linear or Hugging Face onto a slate, and the connectors behind them),
 locked. An on-prem license from Slatebox unlocks them on one install, without
 moving to Slatebox Cloud. Single sign-on with the bundled Keycloak needs no
-license and is never locked. To ask for a license, use **Admin tools → Upgrade
-on prem** in the app, or [contact Slatebox](https://slatebox.com/contact/).
+license and is never locked.
+
+The quickest way is the **Upgrade** button in the app's header, which this
+server's administrator sees (other people see the same reasons and are asked to
+talk to their admin). It offers two choices, each one click:
+
+- **Unlock enterprise, stay on your servers.** *Start free trial* signs this
+  server in to Slatebox Cloud once (approve a code in any browser, your phone
+  included) and gets a trial key bound to this server's address. The features
+  turn on at once, with no restart, and the page opens **Integrations**. After
+  that the key is checked offline. *I have a license key* takes a key you got
+  from Slatebox and turns the features on the same way.
+- **Move your team to Slatebox Cloud.** Signs in to Slatebox Cloud for an hour,
+  sends your team's slates, people, team settings, brand kit and files there
+  server to server, compares what arrived with what was sent, and makes it live
+  when you say so. This server keeps its copy; you can show everyone here a
+  banner pointing to Slatebox Cloud.
+
+Keys entered this way are kept in this server's database. A key given in the
+container's settings or environment (below) always wins. To ask Slatebox about a
+license, use **Admin tools → Upgrade on prem** or
+[contact Slatebox](https://slatebox.com/contact/).
 
 Give the key you receive with `-e SLATEBOX_LICENSE=sblic1.…`, or keep it in a file
 and mount it (`-v /path/slatebox.license:/run/secrets/slatebox.license:ro -e

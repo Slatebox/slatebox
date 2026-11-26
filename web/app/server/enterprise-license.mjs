@@ -21,6 +21,10 @@
 //   SLATEBOX_LICENSE                    the key itself, as an environment variable
 //   settings.enterprise.licenseFile     a file holding the key
 //   SLATEBOX_LICENSE_FILE               a file holding the key, as an environment variable
+//   the key an administrator entered     kept in this server's database (server/enterprise-key.mjs):
+//                                       the header button › Unlock (a trial key from Slatebox
+//                                       Cloud, or a license key pasted in). Checked exactly like the
+//                                       others, so a database row unlocks nothing Slatebox did not sign.
 import { createPublicKey, verify as verifySignature } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 
@@ -77,6 +81,8 @@ export function parseLicense(text) {
 
 /** What a license says, safe to show an administrator (never the key itself). */
 export const licenseSummary = (payload) => ({
+  // A free trial Slatebox Cloud issued (server/licenses/issuer.mjs); a bought license says nothing.
+  ...(payload.trial === true && { trial: true }),
   id: String(payload.id || ''),
   licensee: String(payload.licensee || ''),
   kind: String(payload.kind || 'on-prem'),
@@ -85,7 +91,7 @@ export const licenseSummary = (payload) => ({
   hosts: Array.isArray(payload.hosts) ? payload.hosts.map(String) : [],
 })
 
-const hostOf = (url) => {
+export const hostOf = (url) => {
   try {
     return new URL(url).hostname.toLowerCase()
   } catch {
@@ -132,8 +138,8 @@ export function verifyLicense(text, { keys = LICENSE_KEYS, now = Date.now(), hos
   return { valid: false, reason: 'expired', license }
 }
 
-/** The install's license key as written in its settings or environment, or null. */
-export function readLicenseText({ settings, env = {}, readFile = (path) => readFileSync(path, 'utf8') }) {
+/** The install's license key as written in its settings or environment (else the one an administrator entered), or null. */
+export function readLicenseText({ settings, env = {}, readFile = (path) => readFileSync(path, 'utf8'), stored = null }) {
   const inline = settings?.enterprise?.license || env.SLATEBOX_LICENSE
   if (typeof inline === 'string' && inline.trim()) return { text: inline.trim() }
   const file = settings?.enterprise?.licenseFile || env.SLATEBOX_LICENSE_FILE
@@ -144,6 +150,7 @@ export function readLicenseText({ settings, env = {}, readFile = (path) => readF
       return { text: null, problem: 'unreadable_file' }
     }
   }
+  if (typeof stored === 'string' && stored.trim()) return { text: stored.trim(), entered: true }
   return { text: null }
 }
 
@@ -152,12 +159,12 @@ export function readLicenseText({ settings, env = {}, readFile = (path) => readF
  * @returns {{ unlocked: boolean, via: 'cloud'|'license'|null, reason: string, words: string,
  *             license: object|null, endsAt: number|null }}
  */
-export function enterpriseAccess({ settings, env = {}, readFile, keys = LICENSE_KEYS, now = Date.now() }) {
+export function enterpriseAccess({ settings, env = {}, readFile, keys = LICENSE_KEYS, now = Date.now(), stored = null }) {
   const out = (unlocked, via, reason, license = null, endsAt = null) => ({ unlocked, via, reason, words: LICENSE_WORDS[reason] || '', license, endsAt })
   // Cloud proves itself with a Cloud key; a self-hosted install with an on-prem key. Each kind
   // unlocks only its own edition, so neither a settings change nor the other kind's key unlocks.
   const cloud = settings?.public?.edition === 'cloud'
-  const { text, problem } = readLicenseText({ settings, env, readFile })
+  const { text, problem } = readLicenseText({ settings, env, readFile, stored })
   if (problem) return out(false, null, problem)
   if (!text) return out(false, null, cloud ? 'cloud_no_key' : 'no_license')
   const checked = verifyLicense(text, { keys, now, host: hostOf(settings?.public?.baseUrl) })

@@ -28,14 +28,14 @@ import { slateListSelector } from './slate-list.mjs'
 import { API_TOKEN_SCOPES } from '../api-token-core.mjs'
 import apiTokenService from '../api-token-auth.mjs'
 import { createAppRegistry } from './index.mjs'
-import { enterpriseHost } from '../enterprise-loader.mjs'
+import { enterpriseHost, lateMounts } from '../enterprise-loader.mjs'
 import { accounts, describer } from '../instance/meteor'
 import { createIdempotencyStore, ensureIdempotencyIndexes } from './idempotency.mjs'
 import { createRateLimiter } from './rate-limit.mjs'
 import { principalFromToken } from './principal.mjs'
 import { MOVE_ACTIONS, MOVE_RESOURCE_PATH } from '../oauth/device.mjs'
 import { mountHttp } from './http.mjs'
-import { mountDdp } from './ddp.mjs'
+import { ddpMethodsFor, mountDdp } from './ddp.mjs'
 import { mountMermaidFiles } from './mermaid-file.mjs'
 import { createMeteorExec, ensureExecCollections } from '../exec/meteor'
 import { gatedRegistry } from '../exec/system.mjs'
@@ -211,7 +211,7 @@ ensureExecCollections()
 export function mountActions(app) {
   // Proxies in front of the app; Meteor reads the same setting for its own client addresses.
   const forwardedCount = Number.parseInt(process.env.HTTP_FORWARDED_COUNT, 10) || 0
-  mountHttp(app, gatedRegistry(registry, exec.gate), {
+  const http = mountHttp(app, gatedRegistry(registry, exec.gate), {
     express,
     // Personal tokens; and a move's device sign-in (server/oauth/device.mjs), for the move actions only.
     authenticate: async (req) => {
@@ -227,11 +227,20 @@ export function mountActions(app) {
   // The one-time addresses a team export downloads from and an import uploads to.
   mountTeamExport(app, express)
   // each account's first action through the app, beside the first by an agent (agent-reach)
-  mountDdp(noticingFirstAction(registry), {
+  const ddp = {
     defineMethods: (methods) => Meteor.methods(methods),
     makeError: (code, reason, details) => new Meteor.Error(code, reason, details),
     loadUser: (userId) => Meteor.users.findOneAsync(userId, { fields: { _id: 1, isAnonymous: 1 } }),
     scopes: API_TOKEN_SCOPES,
+  }
+  mountDdp(noticingFirstAction(registry), { ...ddp })
+  // Enterprise actions a license unlocked while the server ran (server/enterprise.js unlockNow):
+  // into the one registry, then their /api/v1 routes and Meteor methods, with the same checks.
+  // MCP's tool list and exec's client follow at the next restart; the app's own calls work now.
+  lateMounts.push((actions) => {
+    registry.extend(actions)
+    http.addActions(actions)
+    Meteor.methods(ddpMethodsFor(noticingFirstAction(registry), actions, ddp))
   })
 }
 

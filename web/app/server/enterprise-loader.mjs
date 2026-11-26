@@ -153,3 +153,23 @@ export function loadEnterprise({ settings, load, host = enterpriseHost, log = ()
   mod.register(api, { edition, settings, unlocked: true, via: first.via, features, agentInvite: features.includes('agents.invite'), isUnlocked })
   return { edition, loaded: true, name: mod.manifest?.name || 'enterprise', access: first, features }
 }
+
+// Where actions that join after start are mounted (server/actions/mount.js adds one: the registry,
+// its /api/v1 routes and its Meteor methods). Each is called with the new action definitions.
+export const lateMounts = []
+
+/**
+ * Unlocks enterprise code while the server runs: a license key arrived after start (an
+ * administrator entered one, or Slatebox Cloud issued a trial key: server/selfhost-options). The same load
+ * and the same per-call license checks as at start, into a host of its own; its actions then go to
+ * every late mount, and `apply(host)` adds the rest (Meteor methods, routes, startups).
+ * Nothing happens when the key does not unlock, the build has no enterprise code, or it is a stub.
+ * @param {Parameters<typeof loadEnterprise>[0] & { mounts?: Array<(actions: object[]) => void>, apply?: (host: ReturnType<typeof createEnterpriseHost>) => void }} options
+ */
+export function loadEnterpriseLate({ mounts = lateMounts, apply = () => {}, host = createEnterpriseHost(), ...options }) {
+  const result = loadEnterprise({ ...options, host })
+  if (!result.loaded) return { ...result, host }
+  for (const mount of mounts) mount(host.actions)
+  apply(host)
+  return { ...result, host }
+}

@@ -46,7 +46,15 @@ export default function EnterpriseLicense() {
           </AccountActions>
         )}
         {!status.unlocked && (
-          <FinePrint>With a license key, add it to the server settings as enterprise.license and restart the app.</FinePrint>
+          <AccountActions>
+            {/* The header button's panel: a free trial from Slatebox Cloud, or a license key pasted in, on at once */}
+            <Button variant="outlined" onClick={() => window.dispatchEvent(new Event('slatebox:open-enterprise-options'))} data-testid="open-enterprise-options">
+              Start a free trial or enter a key
+            </Button>
+          </AccountActions>
+        )}
+        {!status.unlocked && (
+          <FinePrint>A key can also go in the server settings as enterprise.license (read at start).</FinePrint>
         )}
       </AccountSection>
     </AccountPanel>

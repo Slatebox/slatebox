@@ -2,10 +2,13 @@
 // server says enterprise code is unlocked (Slatebox Cloud, or a licensed self-hosted install) it
 // requests the enterprise chunk after start; elsewhere it requests nothing.
 import { Meteor } from 'meteor/meteor'
-import { loadEnterpriseClient } from '../imports/api/client/enterprise-slots.mjs'
+import { enterpriseClient, loadEnterpriseClient } from '../imports/api/client/enterprise-slots.mjs'
+
+// The same loader, for enterprise code a license unlocks while the page is open (adoptEnterpriseState).
+enterpriseClient.load = () => import('/enterprise/client')
 
 Meteor.startup(() => {
-  loadEnterpriseClient({ settings: Meteor.settings, load: () => import('/enterprise/client') }).catch((error) =>
+  loadEnterpriseClient({ settings: Meteor.settings, load: enterpriseClient.load }).catch((error) =>
     console.warn('[enterprise]', error)
   )
 })

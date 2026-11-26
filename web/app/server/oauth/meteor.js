@@ -16,6 +16,7 @@ import { cloudOn } from '../cloud-lock-meteor'
 import { createOAuthCore, REQUEST_ID } from './core.mjs'
 import { createDeviceFlow, createWindowCounter, DeviceError, teamClaimsConfigured } from './device.mjs'
 import { mountOAuth as mount } from './routes.mjs'
+import { licenseIssuerConfigured } from '../licenses/issuer.mjs'
 
 /* eslint-disable camelcase, no-undef */
 const load = createRequire(
@@ -48,15 +49,17 @@ export const oauth = createOAuthCore({
   errors: load('@modelcontextprotocol/sdk/server/auth/errors.js'),
 })
 
-// Offered only on Slatebox Cloud: team addresses where the claim service is set up, and moves
-// (team:export and team:move for `slatebox migrate` / `import --from cloud`) everywhere on Cloud.
+// Offered only on Slatebox Cloud: team addresses where the claim service is set up, moves
+// (team:export and team:move for `slatebox migrate` / `import --from cloud`, and a self-hosted
+// server's own Move to Slatebox Cloud) everywhere on Cloud, and enterprise license keys for
+// self-hosted servers where Cloud holds the signing key (server/licenses).
 export const device = createDeviceFlow({
   grants: OAuthDeviceGrants,
   apiTokens: SlateApiTokens,
   users: Meteor.users,
   origin: appOrigin(),
   counter: createWindowCounter({ collection: OAuthDeviceCounters.rawCollection() }),
-  enabled: (purpose) => cloudOn() && (purpose === 'move' || teamClaimsConfigured(Meteor.settings)),
+  enabled: (purpose) => cloudOn() && (purpose === 'move' || (purpose === 'license' ? licenseIssuerConfigured(Meteor.settings) : teamClaimsConfigured(Meteor.settings))),
   pepper: Meteor.settings.cloudflare?.teamClaims?.auditPepper || 'slatebox-device',
 })
 

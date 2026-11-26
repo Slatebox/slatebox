@@ -189,6 +189,19 @@ resource `/api/v1/team/moves`: `/api/v1` takes it for `team.export` and `teamMov
 answers `403 token_not_for_this` for anything else. It never works on `/mcp`. A personal access
 token with the same two permissions (`SLATEBOX_CLOUD_TOKEN`) still works for scripts.
 
+## A move started from a self-hosted server
+
+A self-hosted server's administrator can move their team from the app itself (the header's
+**Upgrade** › **Move your team to Slatebox Cloud**; `web/app/server/selfhost-options`). The server
+plays the CLI's part: it signs in to Slatebox Cloud with a device code as client `slatebox-server`
+("Your Slatebox server", purpose `move`: the same scopes, resource and hour as above; a Cloud that
+does not know that client yet is asked as `slatebox-cli`), writes the export in-process and streams
+it to the move's upload address, encrypted with a random passphrase it then forgets. It compares
+the archive's end counts with Cloud's report section by section, and confirms only when the
+administrator says so. The token is kept in memory only: after a restart, or after its hour, the
+move asks for a new sign-in and goes on from the step that stopped (an uploaded move is never sent
+twice). Writes carry the flow's own Idempotency-Keys, so a retried confirm is one confirm.
+
 ## Addresses
 
 `team.export` and `teamImports.start` return a one-time address:

@@ -12,12 +12,14 @@ import {
 import { mountActions } from './actions/mount'
 import { mountMcp } from './mcp/meteor'
 import { mountOAuth } from './oauth/meteor'
+import { mountLicenses } from './licenses/meteor'
 
 // Every /api/v1 route, its OpenAPI document and the matching Meteor methods come from the
 // action registry (server/actions).
 mountActions(app)
 mountMcp(app) // POST /mcp: the hosted MCP endpoint (exec, describe and one typed tool per client method)
 mountOAuth(app) // /oauth/* and /.well-known/oauth-*: how an MCP app signs a person in to /mcp
+mountLicenses(app) // POST /licenses/key: Slatebox Cloud's enterprise keys for self-hosted servers (Cloud only)
 
 if (Meteor.settings.public.env === 'selfhost') {
   app.get('/embed/:shareId', async (request, response) => {

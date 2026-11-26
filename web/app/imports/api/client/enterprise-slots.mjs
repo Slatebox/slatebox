@@ -59,3 +59,32 @@ export async function loadEnterpriseClient({ settings, load, slots = enterpriseS
   mod.register(slots.api, { edition, via: state.via, features: state.features, agentInvite: state.features.includes('agents.invite') })
   return { edition, loaded: true }
 }
+
+// Enterprise code unlocked while this page is open (the header button's trial or a pasted key,
+// server/selfhost-options): the server answers its new public state, the page takes it as its own
+// and loads the enterprise chunk now, with no reload. client/enterprise.js gives the loader (the
+// only MIT file that names the enterprise chunk); components re-render through subscribe().
+const changes = new Set()
+let generation = 0
+export const enterpriseClient = {
+  load: null,
+  generation: () => generation,
+  subscribe(listener) {
+    changes.add(listener)
+    return () => changes.delete(listener)
+  },
+}
+
+/**
+ * @param {{ settings: object, state: { unlocked: boolean, via?: string, features?: string[] }, slots?: ReturnType<typeof createSlots>, load?: () => Promise<object> }} options
+ */
+export async function adoptEnterpriseState({ settings, state, slots = enterpriseSlots, load = enterpriseClient.load }) {
+  if (!state?.unlocked || !load) return { loaded: false, reason: state?.unlocked ? 'no_loader' : 'locked' }
+  settings.public = settings.public || {}
+  const already = enterpriseState(settings).unlocked && slots.names().length > 0
+  settings.public.enterprise = { unlocked: true, via: state.via, features: Array.isArray(state.features) ? state.features : [] }
+  const result = already ? { edition: editionOf(settings), loaded: true, already: true } : await loadEnterpriseClient({ settings, load, slots })
+  generation += 1
+  changes.forEach((listener) => listener())
+  return result
+}

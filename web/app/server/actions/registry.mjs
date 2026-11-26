@@ -230,17 +230,27 @@ export function createRegistry({
 }) {
   const byId = new Map()
   const routes = new Set()
-  for (const action of actions) {
-    if (byId.has(action.id)) throw new Error(`Action ${action.id} is declared twice`)
-    const unknown = [action.scope, ...(action.alsoScopes || [])].find((item) => item !== null && !scopes.includes(item))
-    if (unknown) throw new Error(`Action ${action.id}: unknown scope ${unknown}`)
-    if (action.mounts.http) {
-      const route = `${action.mounts.http.method} ${action.mounts.http.path.replace(/\{[^}]+\}/g, '{}')}`
-      if (routes.has(route)) throw new Error(`Action ${action.id}: ${route} is mounted twice`)
-      routes.add(route)
+  // Every action is checked before any is added, so a refused list adds nothing.
+  function accept(list) {
+    const ids = new Set()
+    const added = new Set()
+    for (const action of list) {
+      if (byId.has(action.id) || ids.has(action.id)) throw new Error(`Action ${action.id} is declared twice`)
+      const unknown = [action.scope, ...(action.alsoScopes || [])].find((item) => item !== null && !scopes.includes(item))
+      if (unknown) throw new Error(`Action ${action.id}: unknown scope ${unknown}`)
+      if (action.mounts.http) {
+        const route = `${action.mounts.http.method} ${action.mounts.http.path.replace(/\{[^}]+\}/g, '{}')}`
+        if (routes.has(route) || added.has(route)) throw new Error(`Action ${action.id}: ${route} is mounted twice`)
+        added.add(route)
+      }
+      ids.add(action.id)
     }
-    byId.set(action.id, action)
+    for (const route of added) routes.add(route)
+    for (const action of list) byId.set(action.id, action)
   }
+  accept(actions)
+  // Bumped by extend(): what is built from the list (exec's redactor) is built again.
+  let version = 0
   function admit(action, caller) {
     // No session and no token: a read open to visitors runs as one (over HTTP, http.mjs has
     // already made one that carries the address it is counted by).
@@ -443,15 +453,25 @@ export function createRegistry({
 
   // Every scope a token may need for the actions an agent can call, in the vocabulary's order:
   // what /mcp's challenge and the OAuth metadata advertise.
-  const needed = new Set(
-    [...byId.values()].filter((action) => action.principals.includes('agent')).flatMap((action) => [action.scope, ...action.alsoScopes]).filter(Boolean)
-  )
-  const neededScopes = () => scopes.filter((scope) => needed.has(scope))
+  const neededScopes = () => {
+    const needed = new Set(
+      [...byId.values()].filter((action) => action.principals.includes('agent')).flatMap((action) => [action.scope, ...action.alsoScopes]).filter(Boolean)
+    )
+    return scopes.filter((scope) => needed.has(scope))
+  }
 
   return {
     neededScopes,
     get: (id) => byId.get(id),
     list: () => [...byId.values()],
+    // Actions that join after start: enterprise code a license unlocked while the server ran
+    // (server/enterprise.js unlockNow). The same checks as at start; nothing is replaced.
+    extend(more) {
+      accept(more)
+      version += 1
+      return more.map((action) => action.id)
+    },
+    version: () => version,
     admits,
     peek,
     components,

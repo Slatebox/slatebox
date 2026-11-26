@@ -78,10 +78,15 @@ import getUserDisplayName from '../api/common/getUserName'
 import LoadHeap from './components/LoadHeap'
 import { rememberSignedIn } from './common/accountCopy.mjs'
 import { enterpriseState } from '../api/common/edition.mjs'
+import UpgradeButton from './components/selfhost/UpgradeButton'
+import MovedBanner from './components/selfhost/MovedBanner'
+import { useEnterpriseGeneration } from './components/selfhost/useSelfhostStatus'
 // logo color: #0F4C75
 const shrunkDrawerWidth = '50px !important'
 
 export default function Main() {
+  // Enterprise code unlocked while the page is open (the header button): Integrations appears at once.
+  useEnterpriseGeneration()
   const userName = React.useRef('')
   const drawerWidth = React.useRef(0)
   const isOnCanvas = useAtomValue(onCanvas) // useSelector((state) => state.onCanvas)
@@ -426,6 +431,8 @@ export default function Main() {
             </Box>
             {orgName && mdmq && <Typography noWrap sx={{ color: 'shell.secondaryInk', borderLeft: 1, borderColor: 'shell.border', pl: 2 }}>{orgName}</Typography>}
             <Box sx={{ flex: 1 }} />
+            {/* A self-hosted install: unlock enterprise here, or move the team to Slatebox Cloud */}
+            {signedIn && <UpgradeButton />}
             {signedIn && <MessagesMenu />}
             {guest && <Button variant="outlined" color="inherit" startIcon={<SaveIcon />} onClick={saveYourWork}>Save your work</Button>}
             <AccountMenu sheet={narrow} />
@@ -524,6 +531,8 @@ export default function Main() {
           loadedUser={loadedUser}
         />
         <MessageListener />
+        {/* After a move to Slatebox Cloud, when the administrator switched it on */}
+        {!embeddedSlate && !isOnCanvas && <MovedBanner />}
         {!slate?.options?.isEmbedded && !embeddedSlate && (
           // The cookie notice: a small card in the corner, and on a phone one slim line along the
           // foot that the canvas pages leave room for (main.css --sb-cookie-strip), so it never

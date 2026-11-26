@@ -4,9 +4,17 @@
 import { toActionError } from './errors.mjs'
 import { principalFromUser } from './principal.mjs'
 
-export function mountDdp(registry, { defineMethods, makeError, loadUser, scopes }) {
+export function mountDdp(registry, options) {
+  const methods = ddpMethodsFor(registry, registry.list(), options)
+  options.defineMethods(methods)
+  return Object.keys(methods)
+}
+
+// The Meteor methods for some of the registry's actions: all of them at start (mountDdp), or those
+// that joined later (registry.extend: enterprise code a license unlocked while the server ran).
+export function ddpMethodsFor(registry, actions, { makeError, loadUser, scopes }) {
   const methods = {}
-  for (const action of registry.list()) {
+  for (const action of actions) {
     if (!action.mounts.ddp) continue
     // A second argument { idempotencyKey } (actions that take one): a method Meteor sends again after
     // a reconnect, or a Try again, is the same request, answered once (the registry's record).
@@ -26,6 +34,5 @@ export function mountDdp(registry, { defineMethods, makeError, loadUser, scopes 
       }
     }
   }
-  defineMethods(methods)
-  return Object.keys(methods)
+  return methods
 }

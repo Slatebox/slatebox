@@ -256,7 +256,9 @@ export default function IntegrationsPage() {
   const [state, setState] = useState({ integrations: null, pro: null })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [connecting, setConnecting] = useState(false)
+  // Arriving just after enterprise features were turned on (the self-hosted header's Unlock): the
+  // gallery opens at once, so the catalog is the first thing seen.
+  const [connecting, setConnecting] = useState(() => new URLSearchParams(window.location.search).get('welcome') === 'enterprise')
   const [reconnect, setReconnect] = useState(null)
   const [reviewing, setReviewing] = useState(null)
   const [upgrade, setUpgrade] = useState(null)

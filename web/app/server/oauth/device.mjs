@@ -43,6 +43,25 @@ export const MOVE_SCOPES = Object.freeze(['team:export', 'team:move'])
 export const MOVE_ACTIONS = Object.freeze(['team.export', 'teamMove.start', 'teamMove.list', 'teamMove.get', 'teamMove.confirm', 'teamMove.discard', 'teamMove.invite'])
 export const MOVE_RESOURCE_PATH = '/api/v1/team/moves'
 
+// A self-hosted server's own sign-in for an enterprise license (server/licenses): a free trial key
+// bound to that server's host, or the license the account already has. A route scope like
+// team-addresses: never an action scope, so no personal token, MCP tool or exec call carries it.
+export const LICENSE_SCOPE = 'license:trial'
+export const LICENSE_RESOURCE_PATH = '/licenses'
+
+const MOVE_PURPOSE = {
+  scopes: MOVE_SCOPES,
+  resourcePath: MOVE_RESOURCE_PATH,
+  // A move downloads and uploads a whole team: an hour, still with no refresh token.
+  tokenSeconds: 60 * 60,
+  actions: MOVE_ACTIONS,
+  grants: Object.freeze({
+    'team:export': 'move your team: export everything your team owns here, if you are its admin',
+    'team:move': 'move your team: bring a team here from another Slatebox server, waiting for your confirmation',
+  }),
+  cannot: 'It can do nothing else: it will not be able to open, change or share your slates one by one, and the sign-in ends after an hour.',
+}
+
 // The first-party clients. team-addresses is a route scope (enterprise/team-addresses), not an
 // action scope: it is never in API_TOKEN_SCOPES, so no personal token, MCP tool or exec call
 // carries it, and '*' or admin tokens never imply it. The move scopes are action scopes, but the
@@ -61,19 +80,25 @@ export const DEVICE_CLIENTS = Object.freeze({
         // The claim service reports what came of the sign-in (enterprise/team-addresses/routes.mjs).
         reportsOutcome: true,
       }),
-      move: Object.freeze({
-        title: 'Move your team',
-        scopes: MOVE_SCOPES,
-        resourcePath: MOVE_RESOURCE_PATH,
-        // A move downloads and uploads a whole team: an hour, still with no refresh token.
-        tokenSeconds: 60 * 60,
-        actions: MOVE_ACTIONS,
-        grants: Object.freeze({
-          'team:export': 'move your team: export everything your team owns here, if you are its admin',
-          'team:move': 'move your team: bring a team here from another Slatebox server, waiting for your confirmation',
-        }),
-        cannot: 'It can do nothing else: it will not be able to open, change or share your slates one by one, and the sign-in ends after an hour.',
+      move: Object.freeze({ title: 'Move your team', ...MOVE_PURPOSE }),
+    }),
+  }),
+  // A self-hosted Slatebox server signing in from its own admin's browser (the header button for self-hosted installs,
+  // web/app/server/selfhost-options): an enterprise trial or license for that server, or moving its team here.
+  'slatebox-server': Object.freeze({
+    name: 'Your Slatebox server',
+    purposes: Object.freeze({
+      license: Object.freeze({
+        title: 'Unlock enterprise features',
+        scopes: Object.freeze([LICENSE_SCOPE]),
+        resourcePath: LICENSE_RESOURCE_PATH,
+        tokenSeconds: 15 * 60,
+        grants: Object.freeze({ [LICENSE_SCOPE]: 'get an enterprise license key for that server: a free trial, or the license your account already has' }),
+        cannot: 'It will not be able to read or change your slates, and the sign-in ends after 15 minutes.',
+        // The license service reports what came of it (server/licenses/routes.mjs), so /device says.
+        reportsOutcome: true,
       }),
+      move: Object.freeze({ title: 'Move your team to Slatebox Cloud', ...MOVE_PURPOSE }),
     }),
   }),
 })
