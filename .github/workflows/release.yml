@@ -8,6 +8,8 @@
 #
 # Run it by hand (workflow_dispatch) to refresh a release's notes, for example once the
 # self-host image for an app version has been published and its digest can be recorded.
+# selfhost-image.yml calls it (workflow_call) once the image and its signed release manifest are
+# published, so the notes carry both.
 name: Release
 
 on:
@@ -20,6 +22,12 @@ on:
     inputs:
       tag:
         description: Existing release tag (vX.Y.Z, slatebox@X.Y.Z or slatebox-mcp@X.Y.Z)
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: Existing release tag
         required: true
         type: string
 
@@ -76,6 +84,10 @@ jobs:
               echo '```'
             else
               echo "The image \`ghcr.io/slatebox/slatebox:$version\` is not published yet. This release's notes are updated with its digest when it is."
+            fi
+            if gh release view "$TAG" --json assets --jq '.assets[].name' 2>/dev/null | grep -qx release-manifest.json; then
+              echo
+              echo "Self-hosted servers update to it through the signed [release manifest](https://github.com/${{ github.repository }}/releases/download/$TAG/release-manifest.json) (Admin › Updates). Verify the image: \`cosign verify --certificate-identity-regexp 'https://github.com/Slatebox/slatebox/.github/workflows/selfhost-image.yml@refs/tags/v.*' --certificate-oidc-issuer https://token.actions.githubusercontent.com ghcr.io/slatebox/slatebox@$digest\`"
             fi
           } >> "$RUNNER_TEMP/notes.md"
 

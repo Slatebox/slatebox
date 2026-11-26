@@ -1,0 +1,7 @@
+[Unit]
+Description=Automatic updates for Slatebox team
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /opt/slatebox/team/updater.sh

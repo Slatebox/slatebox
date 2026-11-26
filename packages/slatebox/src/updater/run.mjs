@@ -1,0 +1,185 @@
+// The host updater: `slatebox-updater`, run by updater.sh inside a short-lived container made from
+// the image that is running now, as root, with the Docker socket and the install's folder mounted
+// at the same path. It trusts nothing the app says about what to install:
+//
+//   1. the app's decision names a version (or "roll back"), never an image;
+//   2. this reads the signed feed and manifests itself, with the keys built into this image, and
+//      refuses a version they do not name, an older one, a withdrawn one, or a major release
+//      without approval; a rollback goes only to the image the install record names as previous;
+//   3. it pulls by the manifest's digest and runs the installer's own upgrade path (pre-upgrade
+//      backup, set the old container aside, start, health check, roll back with the backup);
+//   4. it reports each phase with `docker exec <name> slatebox updates report`; an outcome that
+//      cannot be delivered (Slatebox is down) waits in updates/pending-report.json.
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { parseArgs } from 'node:util'
+import { collect, resolveAnswers } from '../answers.mjs'
+import { EXIT, InstallError } from '../errors.mjs'
+import { makeRunner } from '../runner.mjs'
+import { Redactor } from '../secrets.mjs'
+import { localHost } from '../targets/hosts.mjs'
+import { applyOnHost, backupsDir } from '../targets/docker.mjs'
+import { parse as parseYaml } from '../yaml.mjs'
+import { DEFAULT_FEED_URL, FeedError, checkManifest, fetchSigned, imageRefFor, manifestUrl, readFeed, resolveTarget } from './feed.mjs'
+import { compareVersions } from './policy.mjs'
+import { PENDING_REPORT, SLATEBOX_BIN } from './host-script.mjs'
+
+export const PRE_UPGRADE_KEEP = 3
+const PKG = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
+
+/** Node's fetch as the feed's transport (redirects to GitHub's asset hosts followed). */
+export const nodeGet = async url => {
+  const response = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(30_000), headers: { 'user-agent': 'Slatebox self-host updater' } })
+  if (!response.ok) throw new Error(`${new URL(url).host} answered ${response.status}`)
+  return { bytes: Buffer.from(await response.arrayBuffer()) }
+}
+
+/** Keep the newest few pre-upgrade backups; the rest go. */
+export function prunePreUpgrade(dir, keep = PRE_UPGRADE_KEEP) {
+  if (!existsSync(dir)) return []
+  const files = readdirSync(dir).filter(file => /^pre-upgrade-.*\.gz$/.test(file))
+    .map(file => ({ file, at: statSync(join(dir, file)).mtimeMs })).sort((a, b) => b.at - a.at || (a.file < b.file ? 1 : -1))
+  const old = files.slice(keep).map(item => item.file)
+  for (const file of old) rmSync(join(dir, file), { force: true })
+  return old
+}
+
+/** The phase names the app shows, from the installer's own steps. */
+function phaseOf(id, status) {
+  if (status !== 'start') return null
+  return { backup: 'backing-up', image: 'pulling', start: 'starting' }[id] || null
+}
+
+/**
+ * One updater run.
+ * @param {object} options { name, dir, backups, outsideUrl, feedUrl, decision, env, run, get, log, now, platform }
+ * @returns {Promise<{ outcome: string, exitCode: number, detail: string }>}
+ */
+export async function runUpdater({ name, dir, backups = null, outsideUrl = null, feedUrl = null, decision, env = process.env, run, get = nodeGet, keys, fetch = globalThis.fetch, log = line => process.stdout.write(`${line}\n`), healthTimeout = 600, healthPoll, platform = 'linux' }) {
+  const redactor = new Redactor()
+  const out = {
+    step(id, status, detail = '') {
+      log(`${status === 'fail' ? '✗' : status === 'ok' ? '✓' : status === 'warn' ? '!' : '…'} ${redactor.redact(detail || id)}`)
+      const phase = phaseOf(id, status)
+      // Reported as it happens (in order), so Admin › Updates shows the phases live.
+      if (phase && phase !== lastPhase) { lastPhase = phase; reported = reported.then(() => report(phase)) }
+    },
+    say: text => log(redactor.redact(text)), warn: text => log(`! ${redactor.redact(text)}`), event() {}, debug() {},
+  }
+  let lastPhase = null
+  let reported = Promise.resolve()
+  const ctx = {
+    env, flags: {}, home: dirname(dirname(dir)), redactor, out, run: run || makeRunner(out), fetch,
+    interactive: false, tty: false, json: false, yes: true, healthTimeout, healthPoll, platform, version: PKG.version,
+    unattended: true, outsideUrl, confirm: async () => {}, emitPlan: plan => log(`plan: ${plan.action} ${plan.image?.pinned || ''} (${(plan.changes || []).join('; ') || 'no other changes'})`),
+  }
+  const host = localHost(ctx, { dir, name })
+  const attemptId = decision?.attemptId
+  const report = async (phase, { detail = '', version = null, downgradeSafe = false, preUpgradeBackup = null } = {}) => {
+    const args = ['exec', name, SLATEBOX_BIN, 'updates', 'report', '--attempt', attemptId, '--phase', phase,
+      ...(detail ? ['--detail', String(detail).slice(0, 1500)] : []), ...(version ? ['--version', version] : []),
+      ...(downgradeSafe ? ['--downgrade-safe'] : []), ...(preUpgradeBackup === null ? [] : ['--pre-upgrade-backup', preUpgradeBackup ? 'yes' : 'no'])]
+    const result = await host.docker(args, { timeout: 120_000 })
+    if (result.code !== 0 && ['healthy', 'rolled-back', 'failed', 'verification-failed'].includes(phase)) {
+      // Slatebox cannot take the report now: keep it for the next run that reaches it.
+      mkdirSync(join(dir, 'updates'), { recursive: true, mode: 0o700 })
+      writeFileSync(join(dir, PENDING_REPORT), JSON.stringify({ attemptId, phase, detail, version, downgradeSafe }), { mode: 0o600 })
+    }
+    return result.code === 0
+  }
+  const flush = () => reported
+  const finish = async (outcome, exitCode, detail, extra = {}) => {
+    await flush()
+    await report(outcome, { detail, ...extra })
+    log(`${outcome}: ${detail}`)
+    return { outcome, exitCode, detail }
+  }
+
+  if (!attemptId || !['apply', 'rollback'].includes(decision?.action)) return { outcome: 'none', exitCode: 0, detail: 'nothing to do' }
+  const recordText = existsSync(join(dir, 'install.yaml')) ? readFileSync(join(dir, 'install.yaml'), 'utf8') : null
+  if (!recordText) return finish('failed', EXIT.PRECONDITION, `There is no install record in ${dir}.`)
+  const record = parseYaml(recordText)
+  const { answers, errors } = resolveAnswers(collect({ record }), {})
+  if (errors.length) return finish('failed', EXIT.USAGE, `The install record is not valid (${errors.map(error => error.field).join(', ')}).`)
+  const keepDir = backups || backupsDir(host, answers)
+
+  await report('verifying')
+  let imageRef
+  let manifest = null
+  let current = decision.current || null
+  if (decision.action === 'apply') {
+    const url = feedUrl || decision.feedUrl || DEFAULT_FEED_URL
+    try {
+      const feedResult = await readFeed({ get, url, keys })
+      const getManifest = async version => checkManifest((await fetchSigned(get, manifestUrl(url, version), { keys })).document, { version })
+      if (!current) {
+        const said = await host.docker(['exec', name, SLATEBOX_BIN, 'version'])
+        try { current = JSON.parse(said.stdout).version || null } catch { current = null }
+      }
+      if (!current) throw new FeedError('unknown-version', 'The running image does not say which version it is.')
+      ;({ manifest } = await resolveTarget({ current, requested: decision.target?.version, channel: decision.channel || 'stable', feedResult, getManifest, approved: decision.approved === true }))
+    } catch (error) {
+      if (error instanceof FeedError) return finish('verification-failed', 3, error.message)
+      return finish('failed', 1, error.message)
+    }
+    imageRef = imageRefFor(manifest)
+    log(`verified ${manifest.version}: ${imageRef}`)
+  } else {
+    // A rollback goes to the image this install ran before its last upgrade, and nowhere else.
+    imageRef = record.previousImageDigest
+    if (!imageRef || !/^sha256:[a-f0-9]{64}$|@sha256:[a-f0-9]{64}$/.test(imageRef)) return finish('failed', EXIT.PRECONDITION, 'The install record names no previous image to roll back to.')
+    const there = await host.docker(['image', 'inspect', '--format', '{{.Id}}', imageRef])
+    if (there.code !== 0) return finish('failed', EXIT.PRECONDITION, `The previous image (${imageRef.slice(0, 19)}) is no longer on this host.`)
+  }
+
+  const before = existsSync(keepDir) ? new Set(readdirSync(keepDir)) : new Set()
+  const previousBackup = decision.action === 'rollback' ? newestPreUpgrade(keepDir, record) : null
+  try {
+    await applyOnHost(ctx, host, answers, { record, imageRef, refresh: false, unattended: true })
+  } catch (error) {
+    if (error instanceof InstallError && error.exitCode === EXIT.ROLLED_BACK) return finish('rolled-back', EXIT.ROLLED_BACK, error.message)
+    if (error instanceof InstallError && error.exitCode === EXIT.ROLLBACK_FAILED) return finish('failed', EXIT.ROLLBACK_FAILED, error.message)
+    return finish('failed', error.exitCode || 1, error.message)
+  }
+  const made = existsSync(keepDir) ? readdirSync(keepDir).filter(file => !before.has(file) && file.startsWith('pre-upgrade-')) : []
+
+  if (decision.action === 'rollback' && !decision.keepData) {
+    // The newer version may have changed the data in ways the older one cannot read: put back the
+    // copy taken just before the upgrade (Admin › Updates said so before the admin confirmed).
+    if (!previousBackup) return finish('failed', EXIT.PRECONDITION, 'The previous version is running again, but the backup from before the upgrade is gone, so its data was kept as it is.')
+    out.step('restore', 'start', `Restoring the backup from before the upgrade (${previousBackup})`)
+    const restored = await host.restoreFromFile(name, previousBackup)
+    if (restored.code !== 0) return finish('failed', EXIT.PRECONDITION, `The previous version is running again, but restoring ${previousBackup} failed: ${String(restored.stderr).trim().split('\n').pop()}`)
+  }
+  prunePreUpgrade(keepDir)
+  const version = manifest?.version || decision.target?.version || null
+  const downgradeSafe = Boolean(manifest && current && (manifest.downgradeSafeTo || []).some(item => compareVersions(item, current) === 0))
+  return finish('healthy', 0, decision.action === 'rollback' ? 'rolled back to the previous version' : `updated to ${version}`, {
+    version: decision.action === 'rollback' ? null : version, downgradeSafe, preUpgradeBackup: decision.action === 'apply' && made.length > 0,
+  })
+}
+
+/** The pre-upgrade backup the last upgrade made (pre-upgrade-<previous>-<current>.gz), newest first. */
+function newestPreUpgrade(dir, record) {
+  if (!existsSync(dir)) return null
+  const prev = String(record.previousImageDigest || '').replace(/^.*@/, '').slice(7, 19)
+  const files = readdirSync(dir).filter(file => file.startsWith(`pre-upgrade-${prev}-`) && file.endsWith('.gz')).sort()
+  return files.length ? join(dir, files.at(-1)) : null
+}
+
+async function main(argv) {
+  const { values } = parseArgs({ args: argv, strict: true, options: { name: { type: 'string' }, dir: { type: 'string' }, backups: { type: 'string' }, 'outside-url': { type: 'string' }, 'feed-url': { type: 'string' } } })
+  if (!values.name || !values.dir) {
+    process.stderr.write('Usage: slatebox-updater --name <install> --dir <its folder> [--backups <dir>] [--outside-url <url>] [--feed-url <url>]\n(run by updater.sh, with SLATEBOX_UPDATE_DECISION set)\n')
+    return 2
+  }
+  let decision
+  try { decision = JSON.parse(process.env.SLATEBOX_UPDATE_DECISION || '{}') } catch { decision = {} }
+  const result = await runUpdater({ name: values.name, dir: values.dir, backups: values.backups || null, outsideUrl: values['outside-url'] || null, feedUrl: values['feed-url'] || null, decision })
+  return result.exitCode
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main(process.argv.slice(2)).then(code => process.exit(code), error => { process.stderr.write(`${error?.stack || error}\n`); process.exit(1) })
+}

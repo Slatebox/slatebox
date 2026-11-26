@@ -110,3 +110,16 @@ test('a moved slatebox-mcp pin is a line in the installer\'s notes', () => {
   assert.equal(addGeneratedLine('### Added\n\n- a\n\n### Fixed\n\n- f', 'Changed', '- b'), '### Added\n\n- a\n\n### Changed\n\n- b\n\n### Fixed\n\n- f')
   assert.equal(addGeneratedLine('### Added\n\n- a', 'Changed', '- b'), '### Added\n\n- a\n\n### Changed\n\n- b')
 })
+
+test('an app release pins the engine and relay commits in self-host/sources.json; none given is refused', async () => {
+  const { sourcesText, checkSourceCommits, SOURCE_REPOS } = await import('./release.mjs')
+  const engine = 'a'.repeat(40)
+  const relay = 'b'.repeat(40)
+  assert.deepEqual(JSON.parse(sourcesText({ engine, relay })), { engine: { repo: SOURCE_REPOS.engine, commit: engine }, relay: { repo: SOURCE_REPOS.relay, commit: relay } })
+  assert.throws(() => sourcesText({ engine: '', relay }), /--engine <full 40-character commit>/)
+  assert.throws(() => sourcesText({ engine: 'abc123', relay }), /--engine/)
+  const onMain = (dir, args) => ({ status: args[0] === 'merge-base' ? (args[2] === engine ? 0 : 1) : 0 })
+  assert.throws(() => checkSourceCommits({ engine, relay, engineDir: '.', relayDir: '.', run: onMain }), /relay commit .* is not on the main branch/)
+  assert.throws(() => checkSourceCommits({ engine, relay, engineDir: '/nonexistent', relayDir: '.', run: onMain }), /not a checkout/)
+  checkSourceCommits({ engine, relay, engineDir: '.', relayDir: '.', run: () => ({ status: 0 }) })
+})

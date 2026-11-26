@@ -82,6 +82,14 @@ release's highlights.
 
 ### Added
 
+- Automatic updates for self-hosted Slatebox: `slatebox install` and `slatebox upgrade` set up a host
+  updater (a launchd agent, systemd timer or cron line every five minutes) on an image that has
+  `slatebox updates` (2.1.0 on). It applies only a release signed by Slatebox, pulled by its digest,
+  through the same backup, health check and rollback as `slatebox upgrade`; when to apply is set in
+  Admin › Updates. New: `slatebox updates [enable | disable | check | apply | auto on|off | run]`
+  (also `slatebox update`), `--no-auto-updates`. `slatebox uninstall` removes the updater.
+  `slatebox upgrade` refuses while an automatic update runs.
+
 - **installer:** a wizard in the terminal. Questions, answers, the plan and the setup link are
   in the terminal's own text color (bold where it matters), so they read on light and dark
   backgrounds; Slatebox gold (dark), deep green (light) or mid tones (not known) mark the

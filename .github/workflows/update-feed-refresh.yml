@@ -1,0 +1,52 @@
+# Re-signs the self-host update feed every day (sequence + 1, a new expiry 30 days out), so a quiet
+# month never lets it expire: an expired feed stops automatic updates on every self-hosted server
+# ("Slatebox can't confirm the newest version"). It changes no channel and withdraws nothing.
+# To withdraw a release by hand: run it with `yank: 2.0.4=why` (workflow_dispatch).
+name: Update feed refresh
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+    inputs:
+      yank:
+        description: Withdraw a release (version=reason), or leave empty
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-feed
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SLATEBOX_RELEASE_KEY: ${{ secrets.SLATEBOX_RELEASE_KEY }}
+      SLATEBOX_RELEASE_KEY_ID: ${{ vars.SLATEBOX_RELEASE_KEY_ID }}
+      BASE: https://github.com/${{ github.repository }}/releases/download
+      YANK: ${{ inputs.yank }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.13.0
+      - name: Re-sign the feed
+        run: |
+          set -euo pipefail
+          if [ -z "${SLATEBOX_RELEASE_KEY:-}" ]; then echo "No release key yet (docs/releasing.md, one-time setup): nothing to refresh."; exit 0; fi
+          gh release view update-feed >/dev/null 2>&1 || { echo "No update-feed release yet: nothing to refresh."; exit 0; }
+          gh release download update-feed --pattern channels.json --dir "$RUNNER_TEMP/feed"
+          node scripts/release-manifest.mjs check-keys
+          node scripts/release-manifest.mjs feed --base "$BASE" --previous "$RUNNER_TEMP/feed/channels.json" ${YANK:+--yank "$YANK"} --out channels.json
+          node scripts/release-manifest.mjs sign channels.json
+          gh release upload update-feed channels.json channels.json.sig --clobber

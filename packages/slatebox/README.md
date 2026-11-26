@@ -156,6 +156,8 @@ With `--json`, stdout is one JSON event per line (`plan`, `step`, `done`,
 slatebox status                       # address, health, version, AI, SSO, last backup
 slatebox logs [-f] [--service tunnel] # the container's log, every line redacted
 slatebox upgrade                      # back up, upgrade, check health, roll back (with the backup) on failure
+slatebox updates                      # automatic updates: the version, what is available, what happens next
+slatebox updates apply | auto off     # update now; or stop applying updates by themselves
 slatebox backup [--to ./backups]      # a complete backup now
 slatebox restore slatebox-backup.gz
 slatebox secrets path                 # where SLATEBOX_KEY_ENCRYPTION_KEY and your keys are kept
@@ -163,6 +165,12 @@ slatebox secrets reveal SLATEBOX_KEY_ENCRYPTION_KEY   # to a terminal only, neve
 slatebox uninstall                    # keeps data; --delete-data --confirm <name> removes it (alias: remove)
 slatebox installs                     # every install this computer made (--name picks one)
 ```
+
+Automatic updates: on an image that has them (2.1.0 on), the install also sets up a host updater
+(a launchd agent on a Mac, a systemd timer or cron on Linux) that runs every five minutes. It does
+nothing until Slatebox's **Admin › Updates** says so, and then installs only a release signed by
+Slatebox, pulled by its digest, with the same backup, health check and rollback as `slatebox
+upgrade`. Leave it out with `--no-auto-updates`; remove it with `slatebox updates disable`.
 
 The installer generates `SLATEBOX_KEY_ENCRYPTION_KEY` once and stores it
 outside the data: `~/.slatebox/installs/<name>/secrets.env` (mode 0600) on this

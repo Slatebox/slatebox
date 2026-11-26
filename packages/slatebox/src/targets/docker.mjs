@@ -26,6 +26,7 @@ import { envFileText, parseEnvFile } from '../secrets.mjs'
 import { firstFreePort, localHost, MARKER, parseKeyValues, portFree, remotePreflightScript, sshHost, which } from './hosts.mjs'
 import { checkTeamAddress, ensureTeamAddress, TUNNEL_TOKEN } from './address.mjs'
 import { credentialsPath } from '../cloud.mjs'
+import { removeUpdater } from '../updater/schedule.mjs'
 
 const SLATEBOX = '/opt/slatebox/bin/slatebox'
 const KEPT_FILE = 'secrets.kept.env'
@@ -359,8 +360,8 @@ async function health(ctx, host, answers) {
   const deep = await host.docker(['exec', answers.name, SLATEBOX, 'health', '--deep', '--wait', '60'], { timeout: 120_000 })
   if (deep.code !== 0) return { ok: false, why: lastLine(deep.stderr) || 'slatebox health failed' }
   if (answers.address.team) return teamHealth(ctx, host, answers)
-  // From outside, the way a browser asks.
-  const url = `${answers.address.url}/readyz`
+  // From outside, the way a browser asks (the host updater, in a container, asks through the host: ctx.outsideUrl).
+  const url = `${ctx.outsideUrl || answers.address.url}/readyz`
   let outside = false
   for (let attempt = 0; attempt < 10 && !outside; attempt++) {
     try {
@@ -608,7 +609,14 @@ export async function applyDocker(ctx, answers, options = {}) {
   }
 }
 
-async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef, archive, refresh = false }) {
+/**
+ * The same flow on a host the caller made: the host updater (updater/run.mjs) runs it inside a
+ * container on the Docker host itself, unattended. Unattended keeps backup.sh and its schedule as
+ * the installer wrote them, asks Slatebox Cloud nothing, and writes the record next to the install.
+ */
+export const applyOnHost = (ctx, host, answers, options) => applyOn(ctx, host, answers, options)
+
+async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef, archive, refresh = false, unattended = false }) {
   const { out } = ctx
   out.step('preflight', 'start', `Checking ${host.where}`)
   const facts = host.kind === 'ssh' ? await preflightSsh(ctx, host, answers) : await preflightLocal(ctx, host)
@@ -618,7 +626,7 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
   await checkPorts(host, answers, facts, existing)
   out.step('preflight', 'ok', `${host.where}: ${dockerLine(facts)}`)
   // Docker first, then the name: nobody claims a name on a machine that cannot run Slatebox.
-  const team = answers.address.team ? await checkTeamAddress(ctx, answers) : null
+  const team = answers.address.team && !unattended ? await checkTeamAddress(ctx, answers) : null
 
   // The image. Before a yes, only what is already on the host is looked at:
   // nothing is pulled or loaded (an upgrade fetches its tag first, because
@@ -652,7 +660,7 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
     settings = settingsFor(answers, caps, { deferred: !imageReady })
     guardKey(ctx, host, answers, stored, settings.secrets, existing)
     settingsText = envFileText(settings.env, `Settings for the Slatebox "${answers.name}", written by the slatebox installer. No secrets.`, { format: 'docker' })
-    scriptText = answers.backups.to === 'off' ? null : backupScript(ctx, host, answers, facts)
+    scriptText = unattended ? (existing.files[BACKUP_SCRIPT] ?? null) : answers.backups.to === 'off' ? null : backupScript(ctx, host, answers, facts)
     // The key encryption key is made once and then kept; referenced keys are read now. Before
     // the plan is approved, a team address that is still to be claimed has no token: the plan
     // shows a stand-in, and nothing is written until the claim has brought the real one.
@@ -812,7 +820,7 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
   // The address and the setup link are what the person waits for: they are printed now, before
   // the backup schedule, which only ever warns (and gives up after a timeout) if it cannot be set.
   ctx.announce?.(done(ctx, host, answers, image, { generated, fresh }))
-  if (scriptText || previous[BACKUP_SCRIPT]) {
+  if (!unattended && (scriptText || previous[BACKUP_SCRIPT])) {
     try {
       const how = await scheduleBackups(ctx, host, answers, facts)
       if (how !== 'unchanged') out.step('backups', 'ok', answers.backups.to === 'off' ? 'Backup schedule removed' : `Daily backups by ${how}`)
@@ -902,6 +910,15 @@ async function saveRecord(ctx, host, answers, image, settings, caps, record, unc
     lastHealthy: now,
     installedAt: record?.installedAt || now,
     state: 'installed',
+  }
+  if (ctx.unattended) {
+    // The host updater: the record next to the install (on this computer that is the installer's own copy).
+    next.updatedBy = 'auto-updater'
+    next.version = image.labels?.['org.opencontainers.image.version'] || null
+    await host.writeFile(join(host.dir, 'install.yaml'), recordText(next), 0o600)
+    ctx.recordFile = join(host.dir, 'install.yaml')
+    ctx.record = next
+    return ctx.recordFile
   }
   if (host.kind === 'ssh') await host.writeFile(join(host.dir, 'install.yaml'), recordText(next), 0o600)
   ctx.recordFile = writeRecord(ctx.home, next)
@@ -1033,6 +1050,7 @@ export function uninstallDocker(ctx, record, { deleteData }) {
     }
     const removed = { ...record, backups: { ...record.backups, to: 'off' } }
     try { await scheduleBackups(ctx, host, removed, { systemd: 'yes' }) } catch { /* nothing scheduled */ }
+    try { await removeUpdater(ctx, host, record) } catch { /* no updater */ }
     if (deleteData) {
       const volume = await host.docker(['volume', 'rm', `${record.name}-data`])
       if (volume.code !== 0 && !/no such volume/i.test(volume.stderr)) throw new InstallError(EXIT.PRECONDITION, `The data volume could not be removed: ${lastLine(volume.stderr)}`)

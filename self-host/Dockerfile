@@ -9,6 +9,7 @@
 #   app/        web/app of the Slatebox app checkout (no settings*.json)
 #   engine/     SlateboxJS
 #   relay/      the Slatebox fork of y-websocket
+#   installer/  packages/slatebox (bin, src, package.json): the host updater runs it from the image
 #   self-host/  this directory
 #
 # See DESIGN.md for the reasoning behind each stage.
@@ -23,6 +24,9 @@ ARG TEMURIN_JRE=21.0.13_9-jre-noble
 # cloudflared, from Cloudflare's GitHub release, pinned by version here and by each
 # architecture's sha256 below and in build/cloudflared.sha256 (a bump changes both files).
 ARG CLOUDFLARED_VERSION=2026.11.2
+# The Docker CLI for the host updater (self-hosted updates), from Docker's static builds, pinned by
+# version here and by checksum below and in build/docker-cli.sha256 (a bump changes both files).
+ARG DOCKER_CLI_VERSION=29.10.1
 
 # Meteor 3.5 bundles against Node 24.15.0. Every stage that runs or compiles
 # for the app takes its Node binary from this one image.
@@ -48,6 +52,21 @@ ARG CLOUDFLARED_VERSION
 ADD --checksum=sha256:58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd \
     https://raw.githubusercontent.com/cloudflare/cloudflared/${CLOUDFLARED_VERSION}/LICENSE /cloudflared-LICENSE.txt
 FROM cloudflared-${TARGETARCH} AS cloudflared-download
+
+# --- the Docker CLI, for the host updater ----------------------------------------
+FROM scratch AS docker-cli-amd64
+ARG DOCKER_CLI_VERSION
+ADD --checksum=sha256:061642059fa7f2ed9b2f04a327a951cff4249585cf04b2661c2a6539197c9962 \
+    https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_CLI_VERSION}.tgz /docker.tgz
+FROM scratch AS docker-cli-arm64
+ARG DOCKER_CLI_VERSION
+ADD --checksum=sha256:a38c8a9ef6d17bce07499bfd3a3688542274769dc3b4f75c06ea2705fe65053e \
+    https://download.docker.com/linux/static/stable/aarch64/docker-${DOCKER_CLI_VERSION}.tgz /docker.tgz
+FROM scratch AS docker-cli-license
+ARG DOCKER_CLI_VERSION
+ADD --checksum=sha256:2d81ea060825006fc8f3fe28aa5dc0ffeb80faf325b612c955229157b8c10dc0 \
+    https://raw.githubusercontent.com/docker/cli/v${DOCKER_CLI_VERSION}/LICENSE /docker-cli-LICENSE.txt
+FROM docker-cli-${TARGETARCH} AS docker-cli-download
 
 # --- Keycloak, built once for how Slatebox runs it -----------------------------
 # Build options are fixed here so the container starts it with --optimized:
@@ -115,6 +134,20 @@ RUN expected="$(awk -v file="cloudflared-linux-${TARGETARCH}" '$2 == file { prin
  && echo "$expected  /out/cloudflared" | sha256sum -c - \
  && chmod 0755 /out/cloudflared \
  && /out/cloudflared --version | grep -F "version ${CLOUDFLARED_VERSION} "
+
+# --- the Docker CLI, unpacked and checked once more ------------------------------
+FROM base AS docker-cli
+ARG TARGETARCH
+ARG DOCKER_CLI_VERSION
+COPY self-host/build/docker-cli.sha256 /build/docker-cli.sha256
+COPY --from=docker-cli-download /docker.tgz /build/docker.tgz
+RUN mkdir /out && tar -xzf /build/docker.tgz -C /build docker/docker \
+ && mv /build/docker/docker /out/docker \
+ && expected="$(awk -v file="docker-linux-${TARGETARCH}" '$2 == file { print $1 }' /build/docker-cli.sha256)" \
+ && test -n "$expected" \
+ && echo "$expected  /out/docker" | sha256sum -c - \
+ && chmod 0755 /out/docker \
+ && /out/docker --version | grep -F "version ${DOCKER_CLI_VERSION},"
 
 # --- Server dependencies, compiled against the runtime's own libc -------------
 FROM base AS server-dependencies
@@ -220,6 +253,10 @@ COPY --from=mongo /usr/bin/mongod /usr/bin/mongodump /usr/bin/mongorestore /usr/
 COPY --from=caddy /usr/bin/caddy /usr/local/bin/caddy
 # A third-party program, kept beside Keycloak and Java rather than in Slatebox's own /opt/slatebox.
 COPY --from=cloudflared /out/cloudflared /opt/cloudflared/bin/cloudflared
+# The Docker CLI and the installer, for the host updater (self-hosted updates). Only a short-lived
+# container the host's updater.sh starts, with the Docker socket mounted, ever runs them.
+COPY --from=docker-cli /out/docker /opt/slatebox/libexec/docker
+COPY installer/ /opt/slatebox/installer/
 COPY --from=fonts /out/ /usr/share/fonts/googlefonts/
 RUN fc-cache -f
 
@@ -232,6 +269,8 @@ COPY self-host/licenses/ /opt/slatebox/licenses/
 COPY --from=fonts /fonts.md /opt/slatebox/licenses/third-party/fonts.md
 COPY --from=mongodb-notices / /opt/slatebox/licenses/third-party/
 COPY --from=cloudflared-license / /opt/slatebox/licenses/third-party/
+COPY --from=docker-cli-license / /opt/slatebox/licenses/third-party/
+COPY installer/LICENSE.md /opt/slatebox/licenses/slatebox-installer-LICENSE.md
 COPY app-license/LICENSE.md /opt/slatebox/licenses/slatebox-app-LICENSE.md
 COPY app-license/LICENSING.md /opt/slatebox/licenses/slatebox-app-LICENSING.md
 COPY engine/LICENSE /opt/slatebox/licenses/slateboxjs-LICENSE.txt
@@ -246,20 +285,26 @@ RUN ln -s /opt/slatebox/bin/slatebox /usr/local/bin/slatebox
 ARG APP_REVISION
 ARG ENGINE_REVISION
 ARG RELAY_REVISION
+# The release this image is (SemVer, the app tag without its v): 2.1.0. A local build without one
+# says 0.0.0-dev+<app revision>, which the updater never treats as a release.
+ARG RELEASE_VERSION
+ARG DOCKER_CLI_VERSION
 ARG NODE_VERSION
 ARG MONGO_VERSION
 ARG CADDY_VERSION
 ARG KEYCLOAK_VERSION
 ARG CLOUDFLARED_VERSION
 RUN test -n "$APP_REVISION" && test -n "$ENGINE_REVISION" && test -n "$RELAY_REVISION" \
- && printf '{"app":"%s","engine":"%s","relay":"%s","node":"%s","mongodb":"%s","caddy":"%s","keycloak":"%s","cloudflared":"%s"}\n' \
-      "$APP_REVISION" "$ENGINE_REVISION" "$RELAY_REVISION" "$NODE_VERSION" "$MONGO_VERSION" "$CADDY_VERSION" "$KEYCLOAK_VERSION" "$CLOUDFLARED_VERSION" \
-      > /opt/slatebox/identity.json
-# The version label names the app revision; without it the image would show
-# the Ubuntu base image's version.
+ && version="${RELEASE_VERSION:-0.0.0-dev+${APP_REVISION}}" \
+ && printf '{"version":"%s","app":"%s","engine":"%s","relay":"%s","node":"%s","mongodb":"%s","caddy":"%s","keycloak":"%s","cloudflared":"%s","docker":"%s"}\n' \
+      "$version" "$APP_REVISION" "$ENGINE_REVISION" "$RELAY_REVISION" "$NODE_VERSION" "$MONGO_VERSION" "$CADDY_VERSION" "$KEYCLOAK_VERSION" "$CLOUDFLARED_VERSION" "$DOCKER_CLI_VERSION" \
+      > /opt/slatebox/identity.json \
+ && test ! -e /opt/slatebox/release-keys.d
+# The version label is the release (SemVer); the revision label is the app commit. Without a
+# version label the image would show the Ubuntu base image's version.
 LABEL org.opencontainers.image.title="Slatebox" \
       org.opencontainers.image.description="Slatebox with its collaboration relay and database in one container, Keycloak for optional single sign-on, and cloudflared for an optional team address" \
-      org.opencontainers.image.version="${APP_REVISION}" \
+      org.opencontainers.image.version="${RELEASE_VERSION:-0.0.0-dev}" \
       org.opencontainers.image.revision="${APP_REVISION}" \
       com.slatebox.engine.revision="${ENGINE_REVISION}" \
       com.slatebox.relay.revision="${RELAY_REVISION}" \

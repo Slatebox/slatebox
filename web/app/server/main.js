@@ -111,5 +111,7 @@ import './shapes/meteor'
 
 // a self-hosted server's setup link: nobody signs up until its first admin exists (Cloud: off)
 import './self-host-setup/meteor'
+// Admin › Updates: update checks against the signed GitHub feed (self-hosted only)
+import './updates/meteor'
 // single sign-on (off unless settings.sso.enabled; see server/sso)
 import './sso'

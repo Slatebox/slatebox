@@ -12,7 +12,8 @@
   "scripts": {
     "release": "node scripts/release.mjs",
     "changelog:preview": "node scripts/release.mjs app patch --dry-run",
-    "test:release": "node --test scripts/release.test.mjs scripts/read-release-version.test.mjs",
+    "test:release": "node --test scripts/release.test.mjs scripts/read-release-version.test.mjs scripts/release-manifest.test.mjs",
+    "test:updates": "node --test scripts/updates-parity.test.mjs scripts/updates-service.test.mjs scripts/updates-container.test.mjs scripts/updates-methods.test.mjs scripts/admin-updates-view.test.mjs scripts/release-manifest.test.mjs && cd packages/slatebox && node --test --test-concurrency=1 test/updater-*.test.mjs",
     "test:specs": "playwright test -c scripts/playwright.config.mjs",
     "test:port-container": "node scripts/test-port-container.mjs",
     "check:client-bundle": "node scripts/check-client-bundle.mjs",

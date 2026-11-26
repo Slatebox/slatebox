@@ -28,6 +28,7 @@ import { offersFirstAdmin, plainFirstAdmin, richFirstAdmin } from './admin-setup
 import { resolveUi } from './ui/mode.mjs'
 import { exportTeamFile, importTeamFile, inviteMovedPeople, moveTeam } from './move.mjs'
 import { parse as parseYaml } from './yaml.mjs'
+import { UPDATES_USAGE, ensureUpdater, updatesCommand, withRecordLock } from './updater/commands.mjs'
 
 const PKG = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
@@ -39,6 +40,7 @@ export const COMMANDS = Object.freeze([
   { name: 'setup-link', usage: 'setup-link', summary: 'a new one-time link that creates the first admin (ends the last one)' },
   { name: 'logs', usage: 'logs [-f] [--service app|relay|mongo|proxy|tunnel|sso] [--since 10m]', summary: 'the container\'s log' },
   { name: 'upgrade', usage: 'upgrade [--to <image>]', summary: 'back up, upgrade, check health, roll back on failure' },
+  { name: 'updates', usage: UPDATES_USAGE, summary: 'automatic updates from GitHub releases (when: Admin › Updates)' },
   { name: 'rename', usage: 'rename <new-name>', summary: 'move the team address to https://<new-name>.slatebox.team' },
   { name: 'address', usage: 'address [release | rotate]', summary: 'the team address: show it, give it back, or get a new tunnel token' },
   { name: 'uninstall', usage: 'uninstall [--keep-address] [--delete-data --confirm <name>]', summary: 'stop and remove (alias: remove); data is kept unless you say otherwise' },
@@ -57,7 +59,7 @@ export const COMMANDS = Object.freeze([
   { name: 'mcp', usage: 'mcp [--http --port <n>]', summary: 'start the MCP server (the same as slatebox-mcp)' },
   { name: 'help', usage: 'help', summary: 'this text' },
 ])
-const ALIASES = Object.freeze({ remove: 'uninstall' })
+const ALIASES = Object.freeze({ remove: 'uninstall', update: 'updates' })
 const SLATE_COMMANDS = new Set(['exec', 'describe', 'mcp'])
 const COMMAND_NAMES = new Set(COMMANDS.map(command => command.name))
 
@@ -159,6 +161,7 @@ function parse(argv) {
     service: { type: 'string' }, since: { type: 'string' },
     from: { type: 'string' }, out: { type: 'string' }, invite: { type: 'boolean' }, 'keep-archive': { type: 'boolean' },
     passphrase: { type: 'string' }, plain: { type: 'boolean' }, qr: { type: 'boolean' }, 'replace-waiting': { type: 'boolean' }, 'delete-archive': { type: 'boolean' }, email: { type: 'string' },
+    'auto-updates': { type: 'boolean' }, 'feed-url': { type: 'string' },
   }
   for (const [flag, type] of Object.entries(ANSWER_FLAGS)) {
     options[flag] = type === 'multiple' ? { type: 'string', multiple: true } : { type }
@@ -615,6 +618,7 @@ async function dispatch(ctx, positionals, flags) {
         else if (!ctx.json) ctx.out.say(`Nothing was changed. To apply: slatebox install ${flags.answers ? `--answers ${flags.answers} ` : ''}... (the same answers)${ctx.interactive ? '' : ' --yes'}`)
         return 0
       }
+      if (!done.nothingToChange) await ensureUpdater(ctx, ctx.record, flags)
       if (ctx.rich) await richClosing(ctx, done, flags.from === 'cloud' ? fromCloudLines(done) : [])
       else {
         finish(ctx, done, [...closing(ctx, done), ...(flags.from === 'cloud' ? fromCloudLines(done) : [])])
@@ -629,9 +633,12 @@ async function dispatch(ctx, positionals, flags) {
       const { answers, errors } = resolveAnswers(collect({ record }), {})
       if (errors.length) throw new InstallError(EXIT.USAGE, 'The install record is not valid.', { fields: errors })
       const imageRef = upgradeImage(record, flags)
-      const done = await applyTarget(ctx, answers, { record, imageRef, explicitContext: true, refresh: true })
+      const done = await withRecordLock(ctx, record, () => applyTarget(ctx, answers, { record, imageRef, explicitContext: true, refresh: true }))
+      await ensureUpdater(ctx, ctx.record || record, flags)
       return finish(ctx, done, done.nothingToChange ? [`Already up to date: ${done.name} runs ${done.imageDigest}.`] : ['', `Upgraded. Slatebox is running at ${done.address} (${done.imageDigest}).`])
     }
+    case 'updates':
+      return updatesCommand(ctx, requireRecord(ctx, flags), sub, rest, flags)
     case 'status': {
       const record = requireRecord(ctx, flags)
       const status = record.target === 'k8s' ? await statusK8s(ctx, record) : await statusDocker(ctx, record)

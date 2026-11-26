@@ -16,6 +16,14 @@
 //   --date <YYYY-MM-DD>  release date (default: today, UTC)
 //   --any-branch         allow a release from a branch other than main
 //   --no-tag             commit only, no tag
+//   --engine <sha>       app releases: the SlateboxJS commit the ship's engine build used
+//   --relay <sha>        app releases: the relay (y-websocket) commit
+//   --engine-dir <dir>   the SlateboxJS checkout to check --engine against (default ../slateboxjs-v2)
+//   --relay-dir <dir>    the relay checkout (default ../y-websocket)
+//
+// An app release writes self-host/sources.json (the engine and relay commits) into its
+// chore(release) commit, so the tag alone says what the self-host image is built from
+// (.github/workflows/selfhost-image.yml). Each commit must be on its repository's main.
 //
 // The last line printed on success is RELEASE_TAG=<tag> (the ship script reads it).
 
@@ -25,6 +33,9 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 const REPO_URL = 'https://github.com/Slatebox/slatebox'
+export const SOURCES_FILE = 'self-host/sources.json'
+export const SOURCE_REPOS = Object.freeze({ engine: 'https://github.com/Slatebox/slateboxjs-v2', relay: 'https://github.com/Slatebox/y-websocket' })
+const FULL_SHA = /^[0-9a-f]{40}$/
 const GIT_CLIFF_VERSION = '2.14.2'
 
 export const ARTIFACTS = {
@@ -276,8 +287,26 @@ function runCliff(artifact, tag, range) {
 
 // ---- release ------------------------------------------------------------------------
 
+/** self-host/sources.json: the engine and relay commits an app release's image is built from. */
+export function sourcesText({ engine, relay }) {
+  for (const [name, sha] of Object.entries({ engine, relay })) {
+    if (!FULL_SHA.test(sha || '')) throw new Error(`An app release needs --${name} <full 40-character commit> (the ship script passes the commits its engine build used)`)
+  }
+  return `${JSON.stringify({ engine: { repo: SOURCE_REPOS.engine, commit: engine }, relay: { repo: SOURCE_REPOS.relay, commit: relay } }, null, 2)}\n`
+}
+
+/** Each pinned commit must be on its repository's main (a checkout to ask: --engine-dir / --relay-dir). */
+export function checkSourceCommits({ engine, relay, engineDir, relayDir, run = (dir, args) => spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8' }) }) {
+  for (const [name, sha, dir] of [['engine', engine, engineDir], ['relay', relay, relayDir]]) {
+    if (!existsSync(dir)) throw new Error(`--${name}-dir ${dir} is not a checkout; the ${name} commit cannot be checked`)
+    run(dir, ['fetch', '--quiet', 'origin', 'main'])
+    const onMain = ['origin/main', 'main'].some((ref) => run(dir, ['merge-base', '--is-ancestor', sha, ref]).status === 0)
+    if (!onMain) throw new Error(`The ${name} commit ${sha} is not on the main branch of ${dir}`)
+  }
+}
+
 function parseArgs(argv) {
-  const opts = { dryRun: false, since: '', date: new Date().toISOString().slice(0, 10), anyBranch: false, tag: true, positional: [] }
+  const opts = { dryRun: false, since: '', date: new Date().toISOString().slice(0, 10), anyBranch: false, tag: true, positional: [], engine: '', relay: '', engineDir: '../slateboxjs-v2', relayDir: '../y-websocket' }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--dry-run') opts.dryRun = true
@@ -285,6 +314,10 @@ function parseArgs(argv) {
     else if (a === '--date') opts.date = argv[++i]
     else if (a === '--any-branch') opts.anyBranch = true
     else if (a === '--no-tag') opts.tag = false
+    else if (a === '--engine') opts.engine = argv[++i]
+    else if (a === '--relay') opts.relay = argv[++i]
+    else if (a === '--engine-dir') opts.engineDir = argv[++i]
+    else if (a === '--relay-dir') opts.relayDir = argv[++i]
     else if (a === '-h' || a === '--help') opts.help = true
     else if (a.startsWith('-')) throw new Error(`Unknown option ${a}`)
     else opts.positional.push(a)
@@ -335,6 +368,10 @@ function release(name, spec, opts) {
 
   // Version files, lock file and companions.
   const writes = new Map([[changelogPath, after]])
+  if (name === 'app') {
+    writes.set(SOURCES_FILE, sourcesText({ engine: opts.engine, relay: opts.relay }))
+    if (!opts.dryRun) checkSourceCommits({ engine: opts.engine, relay: opts.relay, engineDir: opts.engineDir, relayDir: opts.relayDir })
+  }
   for (const vf of artifact.versionFiles) {
     const json = readJson(vf.file)
     for (const keys of vf.keys) if (!setIn(json, keys, version)) throw new Error(`${vf.file}: no ${keys.join('.')} to update`)

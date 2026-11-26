@@ -381,12 +381,21 @@ test('the build scripts put enterprise/ in every image', () => {
   const dockerAt = selfHostBuild.indexOf('docker build')
   assert.ok(copyAt > 0 && checkAt > copyAt && dockerAt > checkAt, 'self-host copies the committed enterprise/ and checks it before building the image')
   assert.ok(!selfHostBuild.includes('enterprise-stage.mjs" stub'), 'no stub in a self-host image')
-  // The one-container image (self-host/build-image.sh) carries it the same way.
-  const oneImage = read('self-host/build-image.sh')
-  const oneCopy = oneImage.indexOf('archive "$app_sha:enterprise"')
-  const oneCheck = oneImage.indexOf('enterprise-stage.mjs" check-present "$stage/app"')
-  assert.ok(oneCopy > 0 && oneCheck > oneCopy && oneImage.indexOf('docker build') > oneCheck, 'the one-container image copies and checks enterprise/ before building')
-  assert.ok(!oneImage.includes('enterprise-stage.mjs" stub'), 'no stub in the one-container image')
+  // The one-container image carries it the same way: its context is staged by
+  // self-host/stage-image.sh (copy, then check), which build-image.sh and the release workflow
+  // (.github/workflows/selfhost-image.yml) both run before they build.
+  const oneStage = read('self-host/stage-image.sh')
+  const oneCopy = oneStage.indexOf('archive "$app_sha:enterprise"')
+  const oneCheck = oneStage.indexOf('enterprise-stage.mjs" check-present "$stage/app"')
+  assert.ok(oneCopy > 0 && oneCheck > oneCopy, 'the one-container image\'s staging copies and then checks enterprise/')
+  assert.ok(!oneStage.includes('enterprise-stage.mjs" stub'), 'no stub in the one-container image')
+  for (const builder of ['self-host/build-image.sh', '.github/workflows/selfhost-image.yml']) {
+    const text = read(builder)
+    const staged = text.indexOf('stage-image.sh')
+    const built = Math.max(text.indexOf('docker build '), text.indexOf('uses: docker/build-push-action'))
+    assert.ok(staged > 0 && built > staged, `${builder} stages with stage-image.sh before it builds`)
+    assert.ok(!text.includes('enterprise-stage.mjs" stub'), `no stub in ${builder}`)
+  }
   const cloudBuild = read('scripts/test-port-container.mjs')
   assert.match(cloudBuild, /copyEnterprise\(appContext\)/)
   assert.match(cloudBuild, /checkEnterprisePresent\(buildContext\)/)

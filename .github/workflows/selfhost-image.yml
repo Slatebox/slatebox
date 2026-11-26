@@ -1,0 +1,323 @@
+# The self-host image for an app release, built from its tag, signed, and announced to every
+# self-hosted Slatebox through the signed update feed (docs/releasing.md, "Self-host updates").
+# It publishes; it gates nothing (shipping policy: no CI gate). Tags are created only by the ship
+# script on the build box (scripts/release.mjs), so who may create a v* tag is the root of trust:
+# keep the tag ruleset (docs/releasing.md, one-time setup).
+#
+#   push of vX.Y.Z            -> ghcr.io/slatebox/slatebox:X.Y.Z (+ X.Y, X, stable, latest when newest)
+#   push of vX.Y.Z-rc.N       -> ghcr.io/slatebox/slatebox:X.Y.Z-rc.N (+ preview)
+#   workflow_dispatch         -> the same for an existing tag; push: false builds and smoke-tests
+#                                both architectures and publishes nothing (a dry run)
+#
+# Each architecture builds on its own native runner (a Meteor build under emulation takes hours).
+# The image is pushed by digest, joined into one index, signed with cosign (keyless, GitHub OIDC)
+# and given SLSA provenance; then the release manifest and the channel feed are signed with the
+# project's release key (the one secret: SLATEBOX_RELEASE_KEY in the "release" environment).
+name: Self-host image
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing app release tag (vX.Y.Z)
+        required: true
+        type: string
+      push:
+        description: Publish (false builds and smoke-tests only)
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: selfhost-image-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  REPOSITORY: ghcr.io/slatebox/slatebox
+  TAG: ${{ inputs.tag || github.ref_name }}
+  PUBLISH: ${{ github.event_name == 'push' || inputs.push }}
+
+jobs:
+  resolve:
+    name: Resolve the release
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.what.outputs.version }}
+      channel: ${{ steps.what.outputs.channel }}
+      commit: ${{ steps.what.outputs.commit }}
+      engine: ${{ steps.what.outputs.engine }}
+      relay: ${{ steps.what.outputs.relay }}
+      engine_repo: ${{ steps.what.outputs.engine_repo }}
+      relay_repo: ${{ steps.what.outputs.relay_repo }}
+      newest: ${{ steps.what.outputs.newest }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+      - id: what
+        name: Version, channel and pinned sources
+        run: |
+          set -euo pipefail
+          [[ $TAG =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]] || { echo "::error::$TAG is not vX.Y.Z"; exit 1; }
+          version=${BASH_REMATCH[1]}
+          commit=$(git rev-parse "refs/tags/$TAG^{commit}")
+          # Only a tag on main is a release.
+          git merge-base --is-ancestor "$commit" origin/main || { echo "::error::$TAG is not on main"; exit 1; }
+          [ -f self-host/sources.json ] || { echo "::error::$TAG has no self-host/sources.json (scripts/release.mjs app --engine --relay writes it)"; exit 1; }
+          engine=$(jq -er '.engine.commit' self-host/sources.json)
+          relay=$(jq -er '.relay.commit' self-host/sources.json)
+          engine_repo=$(jq -er '.engine.repo' self-host/sources.json)
+          relay_repo=$(jq -er '.relay.repo' self-host/sources.json)
+          for sha in "$engine" "$relay"; do [[ $sha =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sources.json pins $sha, not a full commit"; exit 1; }; done
+          case "$version" in *-*) channel=preview ;; *) channel=stable ;; esac
+          newest=$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          {
+            echo "version=$version"; echo "channel=$channel"; echo "commit=$commit"
+            echo "engine=$engine"; echo "relay=$relay"; echo "engine_repo=$engine_repo"; echo "relay_repo=$relay_repo"
+            echo "newest=$([ "$newest" = "$TAG" ] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build linux/${{ matrix.arch }}
+    needs: resolve
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+          path: app
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: Slatebox/slateboxjs-v2
+          ref: ${{ needs.resolve.outputs.engine }}
+          path: engine
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: Slatebox/y-websocket
+          ref: ${{ needs.resolve.outputs.relay }}
+          path: relay
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.13.0
+      - name: Stage the build context (committed files only)
+        run: |
+          set -euo pipefail
+          for repo in engine relay; do git -C "$repo" fetch --quiet --depth=1 origin main; done
+          git -C engine merge-base --is-ancestor HEAD FETCH_HEAD 2>/dev/null || echo "::warning::the engine commit is not on slateboxjs-v2 main"
+          mkdir "$RUNNER_TEMP/stage"
+          app/self-host/stage-image.sh "$RUNNER_TEMP/stage" app HEAD engine HEAD relay HEAD
+          test ! -e "$RUNNER_TEMP/stage/self-host/rootfs/opt/slatebox/release-keys.d"
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        if: env.PUBLISH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Build (and load for the smoke test)
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: ${{ runner.temp }}/stage
+          file: ${{ runner.temp }}/stage/self-host/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          tags: slatebox-smoke:${{ matrix.arch }}
+          provenance: false
+          build-args: |
+            APP_REVISION=${{ needs.resolve.outputs.commit }}
+            ENGINE_REVISION=${{ needs.resolve.outputs.engine }}
+            RELAY_REVISION=${{ needs.resolve.outputs.relay }}
+            RELEASE_VERSION=${{ needs.resolve.outputs.version }}
+      - name: Smoke test
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker run -d --name smoke -p 7070:7070 -e SLATEBOX_URL=http://localhost:7070 -e SLATEBOX_UPDATES=off slatebox-smoke:${{ matrix.arch }}
+          trap 'docker logs smoke | tail -100; docker rm -f smoke >/dev/null' EXIT
+          docker exec smoke slatebox health --deep --wait 900
+          docker exec smoke slatebox version | jq -e --arg v "$VERSION" '.version == $v'
+          docker exec smoke slatebox settings --json | jq -e '.commands | index("updates")'
+          docker exec smoke slatebox updates --help | grep -q 'policy --json'
+          docker run --rm --entrypoint /opt/slatebox/libexec/docker slatebox-smoke:${{ matrix.arch }} --version
+          docker run --rm --entrypoint sh slatebox-smoke:${{ matrix.arch }} -c 'test ! -e /opt/slatebox/release-keys.d && test -f /opt/slatebox/installer/src/updater/run.mjs'
+          docker inspect slatebox-smoke:${{ matrix.arch }} --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' | grep -qx "$VERSION"
+      - name: Push by digest
+        id: push
+        if: env.PUBLISH == 'true'
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: ${{ runner.temp }}/stage
+          file: ${{ runner.temp }}/stage/self-host/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          provenance: false
+          outputs: type=image,name=${{ env.REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
+          build-args: |
+            APP_REVISION=${{ needs.resolve.outputs.commit }}
+            ENGINE_REVISION=${{ needs.resolve.outputs.engine }}
+            RELAY_REVISION=${{ needs.resolve.outputs.relay }}
+            RELEASE_VERSION=${{ needs.resolve.outputs.version }}
+      - name: Keep the digest
+        if: env.PUBLISH == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          echo "${{ steps.push.outputs.digest }}" > "$RUNNER_TEMP/digests/${{ matrix.arch }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: env.PUBLISH == 'true'
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/${{ matrix.arch }}
+          retention-days: 7
+
+  publish:
+    name: Index, signature, provenance, tags
+    needs: [resolve, build]
+    if: (github.event_name == 'push' || inputs.push)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      index: ${{ steps.index.outputs.index }}
+      amd64: ${{ steps.index.outputs.amd64 }}
+      arm64: ${{ steps.index.outputs.arm64 }}
+    env:
+      VERSION: ${{ needs.resolve.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: digest-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: index
+        name: One index for both, checked
+        run: |
+          set -euo pipefail
+          amd64=$(cat "$RUNNER_TEMP/digests/amd64"); arm64=$(cat "$RUNNER_TEMP/digests/arm64")
+          docker buildx imagetools create -t "$REPOSITORY:$VERSION" "$REPOSITORY@$amd64" "$REPOSITORY@$arm64"
+          index=$(docker buildx imagetools inspect "$REPOSITORY:$VERSION" --format '{{json .Manifest}}' | jq -r .digest)
+          platforms=$(docker buildx imagetools inspect "$REPOSITORY@$index" --raw | jq -r '[.manifests[] | select(.platform.os != "unknown") | "\(.platform.os)/\(.platform.architecture)"] | sort | join(",")')
+          [ "$platforms" = "linux/amd64,linux/arm64" ] || { echo "::error::the index holds $platforms"; exit 1; }
+          { echo "index=$index"; echo "amd64=$amd64"; echo "arm64=$arm64"; } >> "$GITHUB_OUTPUT"
+      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - name: Sign (cosign, keyless)
+        run: cosign sign --yes --recursive "$REPOSITORY@${{ steps.index.outputs.index }}"
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-name: ${{ env.REPOSITORY }}
+          subject-digest: ${{ steps.index.outputs.index }}
+          push-to-registry: true
+      - name: Moving tags
+        env:
+          CHANNEL: ${{ needs.resolve.outputs.channel }}
+          NEWEST: ${{ needs.resolve.outputs.newest }}
+        run: |
+          set -euo pipefail
+          src="$REPOSITORY@${{ steps.index.outputs.index }}"
+          if [ "$CHANNEL" = preview ]; then
+            docker buildx imagetools create -t "$REPOSITORY:preview" "$src"
+          elif [ "$NEWEST" = true ]; then
+            IFS=. read -r major minor _ <<< "$VERSION"
+            docker buildx imagetools create -t "$REPOSITORY:$major.$minor" -t "$REPOSITORY:$major" -t "$REPOSITORY:stable" -t "$REPOSITORY:latest" "$src"
+          fi
+
+  manifest:
+    name: Release manifest and update feed
+    needs: [resolve, publish]
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.resolve.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      SLATEBOX_RELEASE_KEY: ${{ secrets.SLATEBOX_RELEASE_KEY }}
+      SLATEBOX_RELEASE_KEY_ID: ${{ vars.SLATEBOX_RELEASE_KEY_ID }}
+      BASE: https://github.com/${{ github.repository }}/releases/download
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.13.0
+      - name: The signing key is a production key
+        run: node scripts/release-manifest.mjs check-keys
+      - name: Build and sign the manifest
+        run: |
+          set -euo pipefail
+          node scripts/release.mjs notes "$TAG" > "$RUNNER_TEMP/notes.md"
+          previous=$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "$TAG" | head -1 || true)
+          node scripts/release-manifest.mjs build --version "$VERSION" --repository "$REPOSITORY" \
+            --index "${{ needs.publish.outputs.index }}" \
+            --platform "linux/amd64=${{ needs.publish.outputs.amd64 }}" --platform "linux/arm64=${{ needs.publish.outputs.arm64 }}" \
+            --commit "${{ needs.resolve.outputs.commit }}" --sources self-host/sources.json --notes-file "$RUNNER_TEMP/notes.md" \
+            ${previous:+--previous-stable "${previous#v}"} --out release-manifest.json
+          node scripts/release-manifest.mjs sign release-manifest.json
+      - name: Attach to the GitHub Release
+        run: |
+          set -euo pipefail
+          # release.yml makes the release for the same tag push; wait for it.
+          for i in $(seq 1 60); do gh release view "$TAG" >/dev/null 2>&1 && break; sleep 10; done
+          gh release upload "$TAG" release-manifest.json release-manifest.json.sig --clobber
+      - name: Update the channel feed
+        env:
+          CHANNEL: ${{ needs.resolve.outputs.channel }}
+          NEWEST: ${{ needs.resolve.outputs.newest }}
+        run: |
+          set -euo pipefail
+          gh release view update-feed >/dev/null 2>&1 || { echo "::error::Create the rolling update-feed release once (docs/releasing.md)"; exit 1; }
+          gh release download update-feed --pattern channels.json --dir "$RUNNER_TEMP/feed" 2>/dev/null || true
+          if [ "$CHANNEL" = preview ]; then
+            set -- --preview "$VERSION" --preview-manifest release-manifest.json
+          elif [ "$NEWEST" = true ]; then
+            set -- --stable "$VERSION" --stable-manifest release-manifest.json
+          else
+            echo "An older release: the feed keeps its newer one."; exit 0
+          fi
+          node scripts/release-manifest.mjs feed --base "$BASE" --previous "$RUNNER_TEMP/feed/channels.json" "$@" --out channels.json
+          node scripts/release-manifest.mjs sign channels.json
+          gh release upload update-feed channels.json channels.json.sig --clobber
+
+  notes:
+    name: Release notes with the digest and the manifest
+    needs: [resolve, manifest]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ inputs.tag || github.ref_name }}

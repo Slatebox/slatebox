@@ -144,6 +144,18 @@ function licenseSettings(extra) {
   return { licenseFile: file }
 }
 
+// Updates (lib/updates.mjs): SLATEBOX_UPDATES=auto|notify|off, SLATEBOX_UPDATE_FEED=<the feed's address>.
+function updateSettings() {
+  const mode = setting('SLATEBOX_UPDATES') || 'auto'
+  if (!['auto', 'notify', 'off'].includes(mode)) throw new Plain(`SLATEBOX_UPDATES is auto, notify or off (received ${mode})`)
+  const feed = setting('SLATEBOX_UPDATE_FEED')
+  if (feed) {
+    const url = parseUrl('SLATEBOX_UPDATE_FEED', feed, ['https:', 'http:'])
+    if (!url.pathname.endsWith('/update-feed/channels.json')) throw new Plain(`SLATEBOX_UPDATE_FEED is the address of a channels.json in an update-feed folder (received ${url.origin}${url.pathname})`)
+  }
+  return { mode, feed: feed || '' }
+}
+
 function mergeSettings(base, extra) {
   for (const [key, value] of Object.entries(extra)) {
     if (value && typeof value === 'object' && !Array.isArray(value) && base[key] && typeof base[key] === 'object') {
@@ -282,6 +294,7 @@ function main() {
   const license = licenseSettings(extra)
   const sso = ssoMode(setting)
   const ownKeysKey = keyEncryptionKey()
+  const updates = updateSettings()
 
   // Every setting is valid. Only now is anything written.
   for (const dir of [RUN, TMP_DIR, ...(externalMongo ? [] : [DB_DIR]), ...(sso.enabled ? [KEYCLOAK_DATA, join(RUN, 'keycloak-tmp')] : [])]) {
@@ -313,6 +326,7 @@ function main() {
   if (ai.settings) settings.ai = { ...settings.ai, ...ai.settings, connections: { ...settings.ai?.connections, ...ai.settings.connections }, use: { ...settings.ai?.use, ...ai.settings.use } }
   // An app from before settings.ai reads this one endpoint for workshops.
   if (ai.legacy) settings.selfHosted.workshopProvider = ai.legacy
+  settings.selfHosted.updates = { mode: updates.mode, ...(updates.feed ? { feedUrl: updates.feed } : {}) }
   if (ai.on) {
     settings.selfHosted.workshopAI = true
   } else if (settings.selfHosted.workshopAI !== true) {
@@ -361,6 +375,8 @@ function main() {
     SLATEBOX_SSO: sso.enabled ? 'keycloak' : 'off',
     SLATEBOX_SSO_ADMIN: sso.adminOpen ? 'open' : 'closed',
     SLATEBOX_TUNNEL: tunnel ? 1 : 0,
+    SLATEBOX_UPDATES: updates.mode,
+    SLATEBOX_UPDATE_FEED: updates.feed,
   }))
   if (!externalMongo) {
     writePrivate(MONGO_KEY_FILE, secrets.mongoKey + '\n', 0o400)
@@ -370,7 +386,7 @@ function main() {
 
   const identity = JSON.parse(readFileSync(join(HOME, 'identity.json'), 'utf8'))
   const say = line => process.stdout.write(`${line}\n`)
-  say(`Slatebox (app ${identity.app}, engine ${identity.engine}, relay ${identity.relay})`)
+  say(`Slatebox ${identity.version ? `${identity.version} ` : ''}(app ${identity.app}, engine ${identity.engine}, relay ${identity.relay})`)
   say(`Address:   ${url.origin}`)
   say(`HTTPS:     ${builtInHttps ? `built in, certificates for ${url.hostname} (publish ports 80 and 443)` : tunnel ? 'at Cloudflare, through the secure tunnel' : url.protocol === 'https:' ? 'handled by your proxy' : 'off'}`)
   say(`Tunnel:    ${tunnel ? `on, Cloudflare Tunnel ${tunnel.tunnelId} for ${url.host} (outbound only; no ports to open)` : 'off'}`)
@@ -378,6 +394,7 @@ function main() {
   say(`Secrets:   ${created === 'all' ? 'created for this new installation' : created ? `kept, ${created} new` : 'kept from earlier starts'} (${join(DATA, 'secrets')})`)
   say(`Mail:      ${mailUrl ? `on, from ${mailFrom}` : 'off (set SLATEBOX_MAIL_URL to send invitations and sign-in mail)'}`)
   say(`SSO:       ${sso.enabled ? `on, Keycloak ${identity.keycloak || ''} at ${url.origin}${SSO_PATH}/, issuer ${issuerFor(url)}${sso.only ? ', single sign-on only' : ''}${sso.defaultRole === 'none' ? ', new people join a team only by invitation' : ', new people join the first team as members'}${sso.domains.length ? `, email domains ${sso.domains.join(', ')}` : ''}${sso.adminOpen ? '' : ', admin console closed on this address'}`.replace('  ', ' ') : 'off (set SLATEBOX_SSO=keycloak to turn on single sign-on)'}`)
+  say(`Updates:   ${{ auto: 'checked on GitHub every 6 hours; applied as Admin › Updates says', notify: 'checked on GitHub every 6 hours; never applied by themselves (SLATEBOX_UPDATES=notify)', off: 'off: no update check leaves this server (SLATEBOX_UPDATES=off)' }[updates.mode]}`)
   for (const line of ai.summary) say(line)
   const kekSource = {
     setting: 'the key from SLATEBOX_KEY_ENCRYPTION_KEY',

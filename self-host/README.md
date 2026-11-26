@@ -77,6 +77,8 @@ Every setting is optional and is given with `-e NAME=value`.
 | `SLATEBOX_KEY_ENCRYPTION_KEY` | 32 random bytes in base64, made once with `openssl rand -base64 32`. Every AI and call key saved on this server (an administrator's in Admin, AI control, and people's and teams' own) is encrypted with it. Unset, the first start makes one and keeps it in the data volume (`/data/secrets/key-encryption.key`), and every later start reads it back; it is never replaced. Either way, keep the same key for the life of the server and store it with your backups, which do not contain it: with a different key, saved keys cannot be read and are added again. It is never written to the log. |
 | `SLATEBOX_SETTINGS` | A JSON object of further app settings, for example `{"daily":{"apiKey":"…"}}` to turn on calls, or `{"enterprise":{"license":"sblic1.…"}}` for an on-prem license (below). |
 | `SLATEBOX_LICENSE`, `SLATEBOX_LICENSE_FILE` | An on-prem license key for the enterprise features (below): the key itself, or the path inside the container of a file that holds it. Give one of them, or the license in `SLATEBOX_SETTINGS`, not both. The key is never written to the log. |
+| `SLATEBOX_UPDATES` | `auto` (default): Admin › Updates decides whether releases are applied by themselves. `notify`: admins are told about releases, nothing is applied by itself. `off`: no update request ever leaves this server. See [Updates](#updates). |
+| `SLATEBOX_UPDATE_FEED` | Another update feed (a mirror): the address of its `update-feed/channels.json`. What it serves must still be signed by Slatebox. |
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use a MongoDB you run elsewhere. The bundled database is then not started. |
 | `SLATEBOX_SSO` | `keycloak` turns on single sign-on with the Keycloak bundled in the image (off by default). People sign in with Entra ID, Okta, Google Workspace, SAML, OpenID Connect or LDAP through it. Keycloak's admin console is at `/auth/admin/` on the same address. |
 | `SLATEBOX_SSO_ONLY` | `true`, with `SLATEBOX_SSO=keycloak`: single sign-on is the only way in, no passwords and no guests. |
@@ -234,6 +236,42 @@ run` command again. The volume keeps your data:
 docker pull ghcr.io/slatebox/slatebox
 docker rm -f slatebox
 docker run -d --name slatebox -p 7070:7070 -v slatebox-data:/data ghcr.io/slatebox/slatebox
+```
+
+## Updates
+
+Slatebox checks GitHub for new releases every 6 hours and shows them to server
+admins in **Admin › Updates**: the release notes, a "Signature verified" mark,
+and an **Update now** button. There an admin also chooses whether updates are
+applied by themselves, on which days and at what time (in their own time zone),
+how many days to wait after a release, and the stable or preview channel. Major
+releases always need an admin's approval first.
+
+The update itself is done by a small host updater, not by Slatebox: `npx
+slatebox install` sets it up (`npx slatebox updates enable` adds it to an install
+from before). Every five minutes it asks the container what to do. When there is
+an update, it checks the release's signature itself, takes a backup, starts the
+new version and checks its health; if the new version is not healthy, the
+previous one and its data are put back. Only a release signed by Slatebox,
+pulled by its digest, is ever installed.
+
+```sh
+npx slatebox updates                 # the version, what is available, what happens next
+npx slatebox updates apply           # update now
+npx slatebox updates auto off        # tell me about releases, never apply them by themselves
+npx slatebox updates disable         # remove the host updater
+docker exec slatebox slatebox updates status
+```
+
+`SLATEBOX_UPDATES=notify` never applies updates by itself; `SLATEBOX_UPDATES=off`
+makes no update request at all (for a server without internet access, keep
+using `slatebox upgrade --image-archive`). On Kubernetes, Admin › Updates shows
+the exact upgrade command for each release. Each image is signed with cosign:
+
+```sh
+cosign verify ghcr.io/slatebox/slatebox:<version> \
+  --certificate-identity-regexp 'https://github.com/Slatebox/slatebox/.github/workflows/selfhost-image.yml@refs/tags/v.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
 ## Build the image from source

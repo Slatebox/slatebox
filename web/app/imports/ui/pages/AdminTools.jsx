@@ -19,13 +19,14 @@ import Box from '@mui/material/Box'
 import CONSTANTS from '../../api/common/constants'
 import { globalMessage } from '../jotai/atoms'
 import useServerAdmin from '../common/useServerAdmin'
-import { ADMIN_SECTIONS } from '../../api/common/server-admin.mjs'
+import { ADMIN_SECTIONS, SELF_HOST_SECTIONS, selfHostedServer } from '../../api/common/server-admin.mjs'
 import AdminOverview from './admin/AdminOverview'
 import FreeBudget from './admin/FreeBudget'
 import TeamImports from './admin/TeamImports'
 import EnterpriseLicense from './admin/EnterpriseLicense'
 import LibraryQueueCard from './admin/LibraryQueueCard'
 import AIControlCard from './admin/ai/AIControlCard'
+import UpdatesCard from './admin/updates/UpdatesCard'
 import EnterpriseSlot from '../common/EnterpriseSlot'
 
 export default function AdminTools() {
@@ -102,6 +103,11 @@ export default function AdminTools() {
                 {section.id === 'overview' ? 'Overview' : section.title}
               </Button>
             ))}
+            {selfHostedServer(Meteor.settings) && SELF_HOST_SECTIONS.map((section) => (
+              <Button key={section.id} component={RouterLink} to={section.to} size="small" disableElevation variant="outlined" data-admin-section={section.id}>
+                {section.title}
+              </Button>
+            ))}
           </Box>
         </Grid>
         {Meteor.user() && hasUberMenschClaim && (
@@ -115,6 +121,11 @@ export default function AdminTools() {
             {Meteor.settings.public.metered && (
               <Grid size={12}>
                 <FreeBudget />
+              </Grid>
+            )}
+            {selfHostedServer(Meteor.settings) && (
+              <Grid size={12}>
+                <UpdatesCard />
               </Grid>
             )}
             <Grid size={12}>

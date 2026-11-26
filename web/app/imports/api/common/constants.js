@@ -224,6 +224,17 @@ const CONSTANTS = {
     auth: {
       isAuthenticated: 'auth.isAuthenticated',
     },
+    // Admin › Updates on a self-hosted server (server/updates/meteor.js); absent on Slatebox Cloud.
+    updates: {
+      status: 'updates.status',
+      checkNow: 'updates.checkNow',
+      setPolicy: 'updates.setPolicy',
+      approve: 'updates.approve',
+      applyNow: 'updates.applyNow',
+      retry: 'updates.retry',
+      cancel: 'updates.cancel',
+      rollback: 'updates.rollback',
+    },
     // Server admin (server/admin/meteor.js): whether the signed-in account administers this server,
     // and the admin home's Overview. Plain methods for the admin pages, not registry actions.
     admin: {

@@ -131,11 +131,58 @@ app release.
 
 ### After the tag: publishing
 
-Publishing stays a deliberate, owner-run step, outside CI:
+- **Self-host image (automatic):** `.github/workflows/selfhost-image.yml` builds
+  `ghcr.io/slatebox/slatebox:X.Y.Z` from the tag, on a native runner per architecture, from the
+  engine and relay commits the tag pins in `self-host/sources.json` (written by `release.mjs app
+  --engine <sha> --relay <sha>`, which the ship passes from the engine build it consumed). It
+  smoke-tests each architecture, pushes by digest, joins one index (exactly linux/amd64 and
+  linux/arm64), signs it with cosign (keyless) with SLSA provenance, moves `X.Y`, `X`, `stable` and
+  `latest` when it is the newest stable release (`preview` for an `-rc` tag), then publishes the
+  signed release manifest and updates the signed update feed. Every self-hosted Slatebox sees the
+  release in Admin › Updates within 6 hours. It publishes; it gates nothing. A dry run: Actions,
+  Self-host image, Run workflow, the tag, `push` off (both architectures build and are
+  smoke-tested, nothing is published). `self-host/build-images.sh` and
+  `self-host/release-images.py` stay as the manual fallback.
+- **npm packages:** from the tagged commit, `npm publish --workspace slatebox` or
+  `npm publish --workspace slatebox-mcp` (the `prepublishOnly` checks run first).
 
-- **Self-host image:** build and publish `ghcr.io/slatebox/slatebox:X.Y.Z` from the tagged commit
-  (`self-host/build-images.sh`, `self-host/release-images.py`), then run the Release workflow by hand
-  (Actions, Release, Run workflow, tag `vX.Y.Z`) so the release notes record the digest.
+### Self-host updates
+
+Self-hosted servers update from GitHub, never from anywhere else:
+
+| File | Where | Signed with |
+| --- | --- | --- |
+| the image `ghcr.io/slatebox/slatebox@sha256:…` | GHCR | cosign keyless (identity `https://github.com/Slatebox/slatebox/.github/workflows/selfhost-image.yml@refs/tags/vX.Y.Z`, issuer `https://token.actions.githubusercontent.com`) + provenance |
+| `release-manifest.json` (+ `.sig`): version, index and per-platform digests, notes, `minUpgradeFrom`, `downgradeSafeTo`, migrations | assets of the release `vX.Y.Z` | the project release key (Ed25519, `sbrel1`) |
+| `channels.json` (+ `.sig`): stable and preview versions, withdrawn versions, a sequence and an expiry | assets of the rolling release `update-feed` | the project release key |
+
+The app (Admin › Updates) checks the feed every 6 hours and records what the admin wants. The host
+updater (`updater.sh`, set up by the installer, every five minutes) asks the container over `docker
+exec`, then fetches and verifies the feed and the manifest itself, refuses anything they do not
+name, pulls by digest and runs the installer's upgrade (backup, health check, rollback).
+`update-feed-refresh.yml` re-signs the feed every day so it never expires; run it by hand with
+`yank: X.Y.Z=why` to withdraw a release (servers on it are told to update; nobody else installs it).
+
+#### One-time setup (owner)
+
+1. **Tag ruleset:** in the repository's Settings, Rules, a tag ruleset for `v*` that only the
+   owner and the build box's deploy key may create, update or delete. Whoever can create a `v*`
+   tag can ship to every self-hosted server.
+2. **Release key:** `node scripts/release-manifest.mjs keygen --id slatebox-rel-2026-11 --out
+   ~/slatebox-release-keys` (keep that folder off every repository). Add the printed public half
+   to `RELEASE_KEYS` in `packages/slatebox/src/updater/verify.mjs` and its copy
+   `web/app/server/updates/verify.mjs` in a commit before the first release. Make a second key the
+   same way and keep it offline: it is added to `RELEASE_KEYS` only to rotate or to recover.
+3. **Environment `release`:** Settings, Environments, New environment `release`, deployment
+   branches and tags: tags `v*` only. Secret `SLATEBOX_RELEASE_KEY` = the private key file's
+   contents; variable `SLATEBOX_RELEASE_KEY_ID` = `slatebox-rel-2026-11`.
+4. **GHCR:** the package `ghcr.io/slatebox/slatebox` was first pushed from a laptop. In its package
+   settings, Manage Actions access, add `Slatebox/slatebox` with the Write role, so the workflow's
+   `GITHUB_TOKEN` can push.
+5. **The feed release, once:** `gh release create update-feed --title "Self-host update feed"
+   --notes "Signed channel feed for self-hosted updates. Do not delete." --latest=false
+   --prerelease` (from the default branch).
+6. **Ship script:** pass `--engine <sha> --relay <sha>` to `release.mjs app` with `--release app:…`.
 - **npm packages:** from the tagged commit, `npm publish --workspace slatebox` or
   `npm publish --workspace slatebox-mcp` (the `prepublishOnly` checks run first).
 

@@ -5,7 +5,9 @@
 #   ./build-image.sh /path/to/slateboxjs /path/to/y-websocket
 #
 # Needs Git and Docker with BuildKit. Everything else, including the engine
-# build, happens inside the build. Only committed files are used.
+# build, happens inside the build. Only committed files are used (stage-image.sh).
+# RELEASE_VERSION=2.1.0 stamps the release into identity.json and the version label; a release is
+# normally built by .github/workflows/selfhost-image.yml from its tag, and this stays the manual way.
 set -euo pipefail
 
 if [[ $# != 2 ]]; then
@@ -26,7 +28,7 @@ relay_sha=$(git -C "$relay" rev-parse --short=12 HEAD)
 # refused unless the label is allowed to say so.
 # Git-ignored files count too: rootfs is copied from disk below, so an ignored file there would go
 # into the image without ever being in the revision the label names.
-if [[ -n $(git -C "$app" status --porcelain -- self-host web/app enterprise LICENSE LICENSING.md) ]] \
+if [[ -n $(git -C "$app" status --porcelain -- self-host web/app enterprise packages/slatebox LICENSE LICENSING.md) ]] \
   || [[ -n $(git -C "$app" ls-files --others --ignored --exclude-standard -- self-host/Dockerfile self-host/build self-host/licenses self-host/rootfs) ]]; then
   if [[ ${ALLOW_DIRTY:-} != 1 ]]; then
     echo 'Commit your changes under self-host/ and web/app/ first (git-ignored files under self-host/rootfs, build or licenses count), or set ALLOW_DIRTY=1 for a local trial build.' >&2
@@ -63,38 +65,13 @@ fi
 
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
-mkdir -p "$stage/app" "$stage/engine" "$stage/relay" "$stage/self-host" "$stage/app-license"
-git -C "$app" archive "$app_sha:web/app" | tar -x -C "$stage/app"
-git -C "$engine" archive "$engine_sha" | tar -x -C "$stage/engine"
-git -C "$relay" archive "$relay_sha" | tar -x -C "$stage/relay"
-git -C "$app" show "$app_sha:LICENSE" > "$stage/app-license/LICENSE.md"
-git -C "$app" show "$app_sha:LICENSING.md" > "$stage/app-license/LICENSING.md"
-
-# The app tree carries settings files for the hosted service. None of them may
-# enter an image: each installation generates its own on first start.
-find "$stage/app" -name 'settings*.json' -delete
-# The committed enterprise/ code (enterprise/LICENSE, not MIT) goes in at the app's '/enterprise'
-# path. It stays locked on a self-hosted install until an on-prem license key from Slatebox LLC
-# unlocks it (web/app/server/enterprise-license.mjs); single sign-on with the bundled Keycloak is
-# never locked, and payments and metering are never part of a self-hosted Slatebox.
-mkdir -p "$stage/app/enterprise"
-git -C "$app" archive "$app_sha:enterprise" | tar -x -C "$stage/app/enterprise"
-node "$app/scripts/enterprise-stage.mjs" check-present "$stage/app"
-rm -rf "$stage/app/.vscode" "$stage/app/.circleci"
-printf '%s\n' '**/settings*.json' '**/.env' '**/.env.*' '**/node_modules' '**/.meteor/local' > "$stage/.dockerignore"
-
-# The image's own files come from this directory as it stands (identical to the
-# commit unless ALLOW_DIRTY=1 was given).
-for item in Dockerfile build licenses rootfs; do cp -R "$here/$item" "$stage/self-host/$item"; done
-
-# Files in the image are owned by root and read by an unprivileged user, so
-# their modes must not depend on the umask this script or the checkout ran under.
-chmod -R u+rwX,go+rX,go-w "$stage"
+"$here/stage-image.sh" "$stage" "$app" "$app_sha" "$engine" "$engine_sha" "$relay" "$relay_sha"
 
 docker build --platform "$platform" \
   --build-arg "APP_REVISION=$app_label" \
   --build-arg "ENGINE_REVISION=$engine_sha" \
   --build-arg "RELAY_REVISION=$relay_sha" \
+  ${RELEASE_VERSION:+--build-arg "RELEASE_VERSION=$RELEASE_VERSION"} \
   -f "$stage/self-host/Dockerfile" -t "$image" "$stage"
 
 for each in "${platforms[@]}"; do

@@ -14,11 +14,15 @@ export const SETTINGS = Object.freeze([
   // An on-prem license key from Slatebox LLC for the enterprise features (enterprise/README.md):
   // the key itself, or the path of a file inside the container that holds it.
   'SLATEBOX_LICENSE', 'SLATEBOX_LICENSE_FILE',
+  // Updates from GitHub releases: auto (Admin › Updates decides), notify (never applied by itself) or
+  // off (no update request ever leaves this server). SLATEBOX_UPDATE_FEED is another signed feed
+  // (a test feed, or a mirror); what it serves must still be signed with a release key.
+  'SLATEBOX_UPDATES', 'SLATEBOX_UPDATE_FEED',
 ])
 export const DATABASE_SETTINGS = Object.freeze(['MONGO_URL', 'MONGO_OPLOG_URL'])
 // One key variable per provider in SLATEBOX_AI_PROVIDERS (its keyEnv), never listed by name.
 export const PROVIDER_KEY = /^SLATEBOX_AI_KEY_[A-Z0-9_]{1,40}$/
-export const COMMANDS = Object.freeze(['backup', 'restore', 'password-link', 'setup-link', 'health', 'version', 'sso', 'ai', 'settings', 'tunnel'])
+export const COMMANDS = Object.freeze(['backup', 'restore', 'password-link', 'setup-link', 'health', 'version', 'sso', 'ai', 'settings', 'tunnel', 'updates'])
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (process.argv[2] !== '--json') {

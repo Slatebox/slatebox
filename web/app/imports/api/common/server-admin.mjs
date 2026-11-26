@@ -64,5 +64,16 @@ export const ADMIN_SECTIONS = Object.freeze([
   Object.freeze({ id: 'library', to: '/admin/library', title: 'Library review', detail: 'Submissions waiting for review' }),
 ])
 
-/** The admin links a person sees: all of them for a server administrator, none for anyone else (or while unknown). */
-export const adminLinksFor = (admin) => (admin === true ? ADMIN_SECTIONS : [])
+/** Pages only a self-hosted server has (settings.public.env 'selfhost', not the Cloud edition). */
+export const SELF_HOST_SECTIONS = Object.freeze([
+  Object.freeze({ id: 'updates', to: '/admin/updates', title: 'Updates', detail: 'New versions from GitHub, when they are applied, and what happened' }),
+])
+
+/** Whether these settings are a self-hosted server's (the same rule as the setup link's). */
+export const selfHostedServer = (settings) => settings?.public?.env === 'selfhost' && settings?.public?.edition !== 'cloud'
+
+/**
+ * The admin links a person sees: all of them for a server administrator, none for anyone else (or
+ * while unknown). A self-hosted server adds its own (Updates).
+ */
+export const adminLinksFor = (admin, { selfHosted = false } = {}) => (admin === true ? (selfHosted ? [...ADMIN_SECTIONS, ...SELF_HOST_SECTIONS] : ADMIN_SECTIONS) : [])

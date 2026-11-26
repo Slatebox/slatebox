@@ -1,0 +1,5 @@
+# The Docker CLI inside the image (for the host updater only: /opt/slatebox/libexec/docker), from
+# download.docker.com/linux/static/stable, version in the Dockerfile (DOCKER_CLI_VERSION). The
+# sha256 of each extracted docker binary; the archives are pinned in the Dockerfile too.
+f71558dcbb6c2e028fc5c7cf67270ef6fafd9cc865570b73700d405b2c2ebc02  docker-linux-amd64
+18ef622cfd90a2790d6eb391e5ec191fe02c80035902b8d14ef1a8e87a9eee7c  docker-linux-arm64

@@ -1,0 +1,9 @@
+#!/bin/sh
+# The host updater's entry point: run by updater.sh (written by the installer next to backup.sh) in
+# a short-lived container made from the image that is already running, as root, with the Docker
+# socket mounted. It is the installer's own tested upgrade path (backup, swap, health check, roll
+# back) from /opt/slatebox/installer, with the pinned Docker CLI from /opt/slatebox/libexec. It
+# applies only a version the signed release manifest names, pulled by digest.
+set -eu
+export PATH=/opt/slatebox/libexec:$PATH
+exec node /opt/slatebox/installer/src/updater/run.mjs "$@"

@@ -10,6 +10,7 @@
 #   docker exec slatebox slatebox sso [admin-password | scim-secret | events [N] | sessions [--json]]
 #   docker exec slatebox slatebox ai [check]
 #   docker exec slatebox slatebox tunnel [--json] [--wait N]
+#   docker exec slatebox slatebox updates [status | check | policy --json | report ... | heartbeat ...]
 #   docker run --rm --entrypoint /opt/slatebox/bin/slatebox IMAGE settings --json
 set -euo pipefail
 umask 077
@@ -143,10 +144,19 @@ password_link() { with_app_env password-link.mjs "$@"; }
 # before that. A new link replaces the last one; exit 3 when the server is already set up.
 setup_link() { with_app_env setup-link.mjs "$@"; }
 
+# Self-hosted updates from GitHub releases (lib/updates.mjs): the host updater asks what to do and
+# reports how it went; the app's Admin › Updates writes the same record.
+updates() { with_app_env updates.mjs "$@"; }
+
 case ${1:-} in
   backup) backup ;;
   password-link) shift; password_link "$@" ;;
   setup-link) shift; setup_link "$@" ;;
+  updates)
+    shift
+    if [[ ${1:-} == --help || ${1:-} == -h ]]; then sed -n '3,14p' "$LIB/updates.mjs" | sed 's|^// \{0,1\}||'; exit 0; fi
+    updates "$@"
+    ;;
   restore) restore ;;
   health) shift; exec node "$LIB/health.mjs" "$@" ;;
   # The team-address tunnel: connected, connecting, or refused.
@@ -184,6 +194,7 @@ Usage, from the Docker host:
   docker exec slatebox slatebox sso [admin-password | scim-secret | events [N] | sessions [--json]]
   docker exec slatebox slatebox ai [check]
   docker exec slatebox slatebox tunnel [--json] [--wait N]
+  docker exec slatebox slatebox updates [status | check]
   docker exec slatebox slatebox settings --json
 EOF
     exit 2
