@@ -1,3 +1,7 @@
+// GET /licenses/offer on Slatebox Cloud: whether it issues free trials to servers now, and how long
+// they run (settings.licenses.trialDays), so a server's panel offers the trial only when Cloud will
+// answer it and names the length Cloud really issues. No sign-in needed; 404 like any unknown route
+// where Cloud has no signing key (the panel then leads with Get a license and the pasted key).
 // POST /licenses/key on Slatebox Cloud: a self-hosted server asks for an enterprise license key
 // (issuer.mjs) with the token its administrator's device sign-in gave it (client 'slatebox-server',
 // scope license:trial, bound to /licenses). A plain route, not a registry action, on purpose:
@@ -8,6 +12,7 @@ import { Buffer } from 'node:buffer'
 import { LicenseIssueError } from './issuer.mjs'
 
 export const LICENSE_KEY_PATH = '/licenses/key'
+export const LICENSE_OFFER_PATH = '/licenses/offer'
 const BODY_LIMIT = 2048
 
 const send = (res, status, body) => {
@@ -54,12 +59,17 @@ function readJson(req) {
  * @param {object} options
  * @param {() => boolean} options.gate                      Cloud key and the signing key, checked live
  * @param {() => ReturnType<import('./issuer.mjs').createLicenseIssuer>} options.issuer
+ * @param {() => { trialDays: number }} [options.offer]       what GET /licenses/offer answers
  * @param {(req) => Promise<{ _id: string, email?: string|null, deviceGrantId?: string|null }|null>} options.authenticate
  *   the owner of a device token with license:trial bound to this resource, or null
  * @param {(caller: object, outcome: { ok: boolean, code?: string, message: string }) => Promise<void>|void} [options.report]
  *   tells the /device page that approved the sign-in what came of it
  */
-export function mountLicenseRoutes(app, { gate, issuer, authenticate, report = () => {}, log = () => {} }) {
+export function mountLicenseRoutes(app, { gate, issuer, authenticate, offer = () => ({ trialDays: 30 }), report = () => {}, log = () => {} }) {
+  app.get(LICENSE_OFFER_PATH, (req, res) => {
+    if (!gate()) return fail(res, 404, 'unknown_route', 'There is no such route.')
+    return send(res, 200, { trial: true, trialDays: offer().trialDays })
+  })
   app.post(LICENSE_KEY_PATH, async (req, res) => {
     if (!gate()) return fail(res, 404, 'unknown_route', 'There is no such route.')
     let caller = null
@@ -72,6 +82,7 @@ export function mountLicenseRoutes(app, { gate, issuer, authenticate, report = (
         email: caller.email || null,
         host: body.host,
         installId: typeof body.installId === 'string' ? body.installId.slice(0, 64) : null,
+        proof: body.proof ?? null,
       })
       await Promise.resolve(report(caller, { ok: true, message: issued.trial ? `Your free trial key for ${issued.hosts[0]} was sent to your server.` : 'Your license key was sent to your server.' })).catch(() => {})
       return send(res, 200, issued)

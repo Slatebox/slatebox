@@ -6,8 +6,10 @@
 //                    'slatebox-server' ("Your Slatebox server"); a Cloud that does not know that
 //                    client yet answers invalid_client, and a move then signs in as 'slatebox-cli'
 //                    (the installer's client, which Cloud has offered moves to since 0.2).
-//   licenses         POST /licenses/key: a trial key bound to this server's host, or the account's
-//                    own license (server/licenses on Cloud).
+//   licenses         GET /licenses/offer: whether Cloud issues trials now, and their length;
+//                    POST /licenses/key: a trial key bound to this server's host (proven with a
+//                    one-time proof Cloud fetches back from this server), or the account's own
+//                    license (server/licenses on Cloud).
 //   moves            the /api/v1 team move actions the CLI's `slatebox migrate --to cloud` uses, and
 //                    the one-time upload address they hand out.
 // Every answer that is not a success becomes a CloudError with Cloud's own code and words.
@@ -50,7 +52,16 @@ export function cloudOrigin(raw) {
  */
 export function createCloudClient({ origin, fetch: fetchImpl = globalThis.fetch, userAgent = 'slatebox-server', timeoutMs = 120_000 }) {
   const base = cloudOrigin(origin)
-  const reach = (error) => new CloudError('unreachable', `Slatebox Cloud (${new URL(base).host}) can't be reached: ${error?.cause?.code || error?.code || error?.name || 'no answer'}.`)
+  // Words an on-prem admin can act on; the low-level cause stays in .detail for the server log.
+  const reach = (error) => {
+    const where = new URL(base).host
+    return new CloudError(
+      'unreachable',
+      `Slatebox Cloud (${where}) can't be reached from this server. Check that this server can make outbound https connections to ${where} (a proxy or firewall may block them). A license key works offline: choose "I have a license key".`,
+      0,
+      { detail: error?.cause?.code || error?.code || error?.name || 'no answer' }
+    )
+  }
   async function readJson(response) {
     const text = await response.text().catch(() => '')
     try {
@@ -65,7 +76,7 @@ export function createCloudClient({ origin, fetch: fetchImpl = globalThis.fetch,
     const error = data?.error && typeof data.error === 'object' ? data.error : {}
     return new CloudError(error.code || `http_${response.status}`, error.message || `Slatebox Cloud answered ${response.status}.`, response.status, { details: error.details, retryAfter: error.retryAfter })
   }
-  async function send(path, { method = 'POST', form, json, bearer, headers = {}, body, duplex } = {}) {
+  async function send(path, { method = 'POST', form, json, bearer, headers = {}, body, duplex, signal, timeout = timeoutMs } = {}) {
     let response
     try {
       response = await fetchImpl(new URL(path, base).href, {
@@ -82,9 +93,10 @@ export function createCloudClient({ origin, fetch: fetchImpl = globalThis.fetch,
         ...(json !== undefined && { body: JSON.stringify(json) }),
         ...(body !== undefined && { body, duplex: duplex || 'half' }),
         redirect: 'error',
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout),
       })
     } catch (error) {
+      if (signal?.aborted) throw new CloudError('cancelled', 'Cancelled.')
       throw reach(error)
     }
     const data = await readJson(response)
@@ -120,15 +132,18 @@ export function createCloudClient({ origin, fetch: fetchImpl = globalThis.fetch,
     origin: base,
     deviceAuthorize: ({ clientId = SERVER_CLIENT, scope, label }) => send('/oauth/device_authorization', { form: { client_id: clientId, scope, ...(label && { device_label: label }) } }).then((r) => r.data),
     deviceToken: ({ clientId = SERVER_CLIENT, deviceCode }) => send('/oauth/token', { form: { grant_type: DEVICE_GRANT, device_code: deviceCode, client_id: clientId } }).then((r) => r.data),
-    licenseKey: (token, { host, installId }) => send('/licenses/key', { bearer: token, json: { host, installId } }).then((r) => r.data),
+    licenseKey: (token, { host, installId, proof }) => send('/licenses/key', { bearer: token, json: { host, installId, proof } }).then((r) => r.data),
+    /** Whether Cloud issues trials to servers now: { trial: true, trialDays } (404 where it does not). */
+    licenseOffer: () => send('/licenses/offer', { method: 'GET', timeout: 5000 }).then((r) => r.data),
     startMove: (token, key) => action('POST', '/team/moves', token, {}, { key }),
     listMoves: (token) => action('GET', '/team/moves', token),
     getMove: (token, id) => action('GET', `/team/moves/${encodeURIComponent(id)}`, token),
     confirmMove: (token, id, invite, key) => action('POST', `/team/moves/${encodeURIComponent(id)}/confirm`, token, { invite: Boolean(invite) }, { key }),
     discardMove: (token, id) => action('POST', `/team/moves/${encodeURIComponent(id)}/discard`, token, {}),
     /** The archive (a Node stream) to a move's upload address; answers the import's report. */
-    async upload(address, stream, passphrase) {
+    async upload(address, stream, passphrase, { signal } = {}) {
       const { data } = await send(own(address), {
+        signal,
         headers: { 'content-type': 'application/octet-stream', ...(passphrase && { 'slatebox-export-passphrase-base64': Buffer.from(passphrase, 'utf8').toString('base64url') }) },
         body: Readable.toWeb(stream),
       })

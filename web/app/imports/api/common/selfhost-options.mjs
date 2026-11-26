@@ -12,8 +12,10 @@
 //   - Slatebox Cloud: nothing, ever (it is already Cloud, with enterprise code on).
 //   - A guest, or nobody signed in: nothing.
 //   - This server's administrator (the uberMensch claim): the button, both choices actionable.
-//   - Anyone else signed in: the button with the same reasons, and Ask your admin in place of the
-//     buttons (they cannot unlock this server or move a team they do not run).
+//   - Anyone else signed in: a quiet "Enterprise" link (not the gold Upgrade: they cannot act), with
+//     the same reasons and Ask your admin in place of the buttons.
+//   - A kept key that has ended (or will not unlock here): the admin's button reads Renew, and the
+//     panel says when it ended and leads with Get a license and the pasted key.
 //   - Once enterprise code is unlocked here: a small "Enterprise" status chip ("Renew" in a license's
 //     grace days) in place of the button; the move to Cloud stays one click away in its menu.
 // No price is ever shown in the app: "Compare" and "Get a license" go to slatebox.com.
@@ -22,15 +24,20 @@ import { editionOf, enterpriseState } from './edition.mjs'
 export const PLANS_URL = 'https://slatebox.com/plans/'
 export const LICENSE_URL = 'https://slatebox.com/contact/?topic=on-prem&source=app-header'
 export const CLOUD_ORIGIN = 'https://app.slatebox.com'
-// What the trial is called before Slatebox Cloud says how long it runs (Cloud decides: its
-// settings.licenses.trialDays, 30 by default, owner-adjustable there without a release).
-export const TRIAL_DAYS_DEFAULT = 30
+const DAY = 86_400_000
+const ymd = (ms) => new Date(ms).toISOString().slice(0, 10)
+
+/** The trial button's words: the length only when Slatebox Cloud said it (Cloud decides, without a release). */
+export const trialLabel = (days) => (Number.isInteger(days) && days > 0 ? `Start ${days}-day free trial` : 'Start free trial')
+
+// A kept key that will not unlock here, in the panel's words (status.license from selfhost.status).
+const ENDED = new Set(['expired', 'wrong_host', 'not_yet'])
 
 /**
  * What the header shows.
  * @param {{ settings: object, signedIn: boolean, serverAdmin: boolean|null, license?: { reason?: string }|null }} who
  *   serverAdmin null while the server has not answered yet (show nothing until it has).
- * @returns {{ show: 'none'|'offer'|'chip', role?: 'admin'|'member', chip?: 'enterprise'|'renew' }}
+ * @returns {{ show: 'none'|'offer'|'chip', role?: 'admin'|'member', chip?: 'enterprise'|'renew', ended?: true }}
  */
 export function upgradeOffer({ settings, signedIn, serverAdmin, license = null }) {
   if (editionOf(settings) === 'cloud') return { show: 'none' }
@@ -40,7 +47,46 @@ export function upgradeOffer({ settings, signedIn, serverAdmin, license = null }
     const renew = license?.reason === 'grace'
     return { show: 'chip', role, chip: renew ? 'renew' : 'enterprise' }
   }
+  if (role === 'admin' && ENDED.has(license?.reason) && license?.license) return { show: 'offer', role, ended: true }
   return { show: 'offer', role }
+}
+
+/**
+ * What the panel says up front about a kept key that has ended, is ending, or will not unlock here.
+ * @param {{ reason?: string, license?: { trial?: boolean, expiresAt?: string, issuedAt?: string, hosts?: string[] }|null, endsAt?: number|null }|null} status
+ * @returns {null | { kind: 'grace'|'expired'|'wrong_host'|'not_yet', trial: boolean, title: string, text: string }}
+ */
+export function licenseNotice(status) {
+  const license = status?.license
+  if (!license) return null
+  const trial = license.trial === true
+  const what = trial ? 'free trial' : 'license'
+  if (status.reason === 'grace') {
+    const until = typeof status.endsAt === 'number' ? ymd(status.endsAt - DAY) : null
+    return {
+      kind: 'grace',
+      trial,
+      title: `Your ${what} ended on ${license.expiresAt}.`,
+      text: `Enterprise features stay on${until ? ` until ${until}` : ' for a few more days'}, then turn off. Get a license to keep them on.`,
+    }
+  }
+  if (status.reason === 'expired')
+    return {
+      kind: 'expired',
+      trial,
+      title: `Your ${what} ended on ${license.expiresAt}.`,
+      text: `Enterprise features are off on this server. ${trial ? 'The free trial is used, so ' : ''}Get a license to turn them back on, or paste a license key. Your slates, people and settings are all still here.`,
+    }
+  if (status.reason === 'wrong_host')
+    return {
+      kind: 'wrong_host',
+      trial,
+      title: `The ${what} kept here is for ${(license.hosts || []).join(', ') || 'another server'}.`,
+      text: "It does not match this server's address, so enterprise features are off. Paste a license key for this address, or get one.",
+    }
+  if (status.reason === 'not_yet')
+    return { kind: 'not_yet', trial, title: `The ${what} kept here starts on ${license.issuedAt}.`, text: 'Enterprise features turn on that day.' }
+  return null
 }
 
 // What enterprise code does, in the order the panel lists it. Only what enterprise/ really holds

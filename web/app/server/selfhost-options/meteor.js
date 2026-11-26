@@ -16,11 +16,12 @@ import { Organizations, Permissions, SystemSettings } from '../../imports/api/co
 import CONSTANTS from '../../imports/api/common/constants'
 import { editionOf } from '../../imports/api/common/edition.mjs'
 import { CLOUD_ORIGIN, PLANS_URL, LICENSE_URL } from '../../imports/api/common/selfhost-options.mjs'
-import { enterpriseAccess, hostOf } from '../enterprise-license.mjs'
+import { enterpriseAccess, installHost } from '../enterprise-license.mjs'
 import { enterpriseRuntime } from '../enterprise-runtime.mjs'
 import { teamTransfer } from '../team-export/meteor'
 import { createCloudClient } from './cloud-client.mjs'
 import { createUpgradeService, UpgradeError } from './service.mjs'
+import { installProofs } from './proofs.mjs'
 
 const UpgradeFlows = new Mongo.Collection('selfhostFlows')
 const MOVED_ROW = 'movedToCloud'
@@ -57,7 +58,8 @@ const flows = {
 let service = null
 function serviceNow() {
   if (service) return service
-  const host = hostOf(origin())
+  // The same host the key store and the license check use (enterprise-license.mjs installHost).
+  const host = installHost({ settings: Meteor.settings, env: process.env })
   service = createUpgradeService({
     cloud: createCloudClient({ origin: cloudOrigin(), userAgent: `slatebox-server (${host})` }),
     flows,
@@ -72,6 +74,7 @@ function serviceNow() {
       const { stream } = await teamTransfer.openExport(ticket, passphrase, { onEnd })
       return stream
     },
+    proofs: installProofs,
     install: {
       host,
       origin: origin(),
@@ -127,12 +130,19 @@ Meteor.methods({
       serverAdmin: true,
       teamAdmin,
       team: team ? { name: team.team?.name || org?.name || '', members: team.members, slates: team.slates } : org ? { name: org.name || '' } : null,
-      license: { reason: access.reason, words: access.words, license: access.license, unlocked: enterpriseRuntime.running().loaded === true },
+      license: { reason: access.reason, words: access.words, license: access.license, endsAt: access.endsAt ?? null, unlocked: enterpriseRuntime.running().loaded === true },
       cloudOrigin: new URL(cloudOrigin()).origin,
       trial: await serviceNow().latest(user._id, 'trial'),
       move: await serviceNow().latest(user._id, 'move'),
       movedSaved: moved ? { url: moved.url, banner: Boolean(moved.banner) } : null,
     }
+  }),
+  // Whether Slatebox Cloud issues free trials to servers now, and their length: the panel offers
+  // the trial only then (otherwise it leads with Get a license and the pasted key).
+  'selfhost.cloudOffer': asMeteor(async function cloudOffer() {
+    selfHosted()
+    const user = await signedIn()
+    return serviceNow().offer(user._id)
   }),
   'selfhost.startTrial': asMeteor(async function startTrial() {
     selfHosted()
@@ -211,7 +221,7 @@ Meteor.methods({
 // The panel follows a flow every second or two; keys are typed by hand.
 DDPRateLimiter.addRule({ type: 'method', name: 'selfhost.follow', connectionId: () => true }, 90, 60 * 1000)
 DDPRateLimiter.addRule({ type: 'method', name: 'selfhost.enterKey', connectionId: () => true }, 10, 60 * 1000)
-for (const name of ['selfhost.startTrial', 'selfhost.resumeTrial', 'selfhost.startMove', 'selfhost.resumeMove', 'selfhost.confirmMove', 'selfhost.cancel', 'selfhost.movedBanner'])
+for (const name of ['selfhost.cloudOffer', 'selfhost.startTrial', 'selfhost.resumeTrial', 'selfhost.startMove', 'selfhost.resumeMove', 'selfhost.confirmMove', 'selfhost.cancel', 'selfhost.movedBanner'])
   DDPRateLimiter.addRule({ type: 'method', name, connectionId: () => true }, 20, 60 * 1000)
 
 Meteor.startup(async () => {

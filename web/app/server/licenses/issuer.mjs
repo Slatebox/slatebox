@@ -8,8 +8,12 @@
 //      (a row with source 'purchase'), when it covers the asking host (or names none);
 //   2. the account's trial for that same host, again (re-runnable: the same key every time);
 //   3. a new free trial: trialDays long (settings.licenses.trialDays, 30 by default), bound to the
-//      asking host (so it unlocks that install only), kind on-prem, trial: true. One per account,
-//      and one per public host name across accounts; refused with a plain reason otherwise.
+//      asking host (so it unlocks that install only), kind on-prem, trial: true, with no grace days
+//      after it ends (enterprise-license.mjs). Only for a public host name (one with a dot: a bare
+//      intranet name or "localhost" may be anyone's), and only once the host has proven it is the
+//      asker (host-proof.mjs: Cloud fetches a one-time proof from https://<host>). One per account,
+//      and one per proven host across accounts; refused with a plain reason otherwise. An unproven
+//      ask records nothing about the host, so it can never use up the real owner's trial.
 // Every issue is audited, and each account may ask at most 10 times an hour.
 // The signing key is Slatebox LLC's private Ed25519 key, in Cloud's server-side settings only
 // (settings.licenses.signer { kid, privateKey }), never in the repository; without it nothing is
@@ -45,7 +49,12 @@ export function cleanHost(value) {
   return HOST.test(host) ? host : null
 }
 // A host only one install can have (a public name): "localhost" or a bare name may be anyone's.
-const sharedHost = (host) => !host.includes('.')
+const sharedHost = (host) => !host.includes('.') || host.endsWith('.localhost')
+const HOST_WORDS = {
+  no_proof: 'This server did not send a proof of its address. Update Slatebox on this server, then try again.',
+  unreachable: (host) => `Slatebox Cloud could not reach https://${host} to confirm this request came from it. A free trial needs this server to answer at its own address from the internet. If it cannot, get a license at slatebox.com: a license key works offline.`,
+  mismatch: (host) => `https://${host} did not confirm this request: the trial was asked for a server other than the one answering there. Ask from the Slatebox server at ${host}, or get a license at slatebox.com.`,
+}
 const ymd = (ms) => new Date(ms).toISOString().slice(0, 10)
 
 /**
@@ -54,17 +63,20 @@ const ymd = (ms) => new Date(ms).toISOString().slice(0, 10)
  * @param {(payload: object) => Promise<string>} options.sign  signs a key (enterprise-license.mjs signLicense with Cloud's signer)
  * @param {{ take: Function }} options.counter  device.mjs createWindowCounter / memoryWindowCounter
  * @param {number} [options.trialDays]
+ * @param {{ prove: (host: string, proof: unknown) => Promise<{ ok: boolean, why?: string }> }} options.prover
+ *   host-proof.mjs createHostProver: whether the host answers the asker's one-time proof
  * @param {(entry: object) => Promise<void>|void} [options.audit]
  */
-export function createLicenseIssuer({ licenses, sign, counter, trialDays = TRIAL_DAYS, audit = () => {}, now = Date.now, newId }) {
+export function createLicenseIssuer({ licenses, sign, counter, prover, trialDays = TRIAL_DAYS, audit = () => {}, now = Date.now, newId }) {
+  if (!prover?.prove) throw new Error('createLicenseIssuer needs a host prover (host-proof.mjs)')
   const auditRow = (entry) => Promise.resolve(audit({ ...entry, at: new Date(now()) })).catch(() => {})
   const live = (row) => !row.expiresAt || Date.parse(row.expiresAt + 'T00:00:00Z') + DAY > now()
 
   /**
-   * @param {{ userId: string, email?: string|null, host: string, installId?: string|null }} ask
+   * @param {{ userId: string, email?: string|null, host: string, installId?: string|null, proof?: { id: string, secret: string } }} ask
    * @returns {Promise<{ key: string, trial: boolean, licenseId: string, expiresAt: string, hosts: string[], again: boolean }>}
    */
-  async function issue({ userId, email = null, host: given, installId = null }) {
+  async function issue({ userId, email = null, host: given, installId = null, proof = null }) {
     if (!userId) throw new LicenseIssueError(401, 'unauthorized', 'Sign in to Slatebox Cloud first.')
     const host = cleanHost(given)
     if (!host) throw new LicenseIssueError(400, 'invalid_request', 'The server did not say its host name.')
@@ -92,8 +104,19 @@ export function createLicenseIssuer({ licenses, sign, counter, trialDays = TRIAL
         throw new LicenseIssueError(409, 'trial_used', `The free trial for ${host} has ended. Get a license at slatebox.com to keep enterprise features on.`)
       throw new LicenseIssueError(409, 'trial_used', `This account already had its free trial (for ${(mine.hosts || [])[0] || 'another server'}). Get a license at slatebox.com for this server.`)
     }
-    // 3. A new trial; a public host name gets one trial, whoever asks.
-    if (!sharedHost(host) && (await licenses.findOne({ trial: true, hosts: host }))) {
+    // 3. A new trial: only for a public host name, only once that host proves it is the asker,
+    //    and then one per host, whoever asks.
+    if (sharedHost(host)) {
+      await auditRow({ type: 'license-trial-refused', userId, host, reason: 'trial_needs_public_host' })
+      throw new LicenseIssueError(400, 'trial_needs_public_host', `A free trial needs this server's public address (like slatebox.example.com), and ${host} is a local name. Get a license at slatebox.com: a license key works on any install, offline.`)
+    }
+    const proven = await prover.prove(host, proof)
+    if (!proven.ok) {
+      const words = HOST_WORDS[proven.why] || HOST_WORDS.mismatch
+      await auditRow({ type: 'license-trial-refused', userId, host, reason: `host_${proven.why || 'unproven'}` })
+      throw new LicenseIssueError(403, 'host_unproven', typeof words === 'function' ? words(host) : words, { why: proven.why || 'mismatch' })
+    }
+    if (await licenses.findOne({ trial: true, hosts: host })) {
       await auditRow({ type: 'license-trial-refused', userId, host, reason: 'trial_used_host' })
       throw new LicenseIssueError(409, 'trial_used_host', `${host} already had a free trial. Get a license at slatebox.com to keep enterprise features on.`)
     }

@@ -13,6 +13,7 @@ import { signLicense } from '../enterprise-license.mjs'
 import { createWindowCounter, LICENSE_SCOPE } from '../oauth/device.mjs'
 import { device } from '../oauth/meteor'
 import { createLicenseIssuer, ensureLicenseIndexes, licenseIssuerConfigured, trialDaysFrom } from './issuer.mjs'
+import { createHostProver } from './host-proof.mjs'
 import { mountLicenseRoutes } from './routes.mjs'
 
 const Licenses = new Mongo.Collection('enterpriseLicenses')
@@ -29,6 +30,8 @@ const issuerNow = () => {
     licenses: Licenses.rawCollection(),
     sign: (payload) => signLicense(payload, { kid, privateKey: key }),
     counter: createWindowCounter({ collection: LicenseCounters.rawCollection() }),
+    // A trial's host proves it is the asker: https://<host>/.well-known/slatebox-license-proof/<id>.
+    prover: createHostProver(),
     trialDays: trialDaysFrom(Meteor.settings),
     audit: (entry) => Audit.insertAsync({ ...entry, created: Date.now() }),
     newId: () => Random.id(),
@@ -48,6 +51,7 @@ export function mountLicenses(app) {
     gate,
     issuer: issuerNow,
     authenticate,
+    offer: () => ({ trialDays: trialDaysFrom(Meteor.settings) }),
     report: (caller, outcome) => (caller?.deviceGrantId ? device.report({ grantId: caller.deviceGrantId, userId: caller._id, ...outcome }) : undefined),
     log: (line) => console.error('[licenses]', line),
   })

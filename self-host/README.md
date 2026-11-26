@@ -161,8 +161,9 @@ moving to Slatebox Cloud. Single sign-on with the bundled Keycloak needs no
 license and is never locked.
 
 The quickest way is the **Upgrade** button in the app's header, which this
-server's administrator sees (other people see the same reasons and are asked to
-talk to their admin). It offers two choices, each one click:
+server's administrator sees (other people see a quiet **Enterprise** link with
+the same reasons, and are asked to talk to their admin). It offers two choices,
+each one click:
 
 - **Unlock enterprise, stay on your servers.** *Start free trial* signs this
   server in to Slatebox Cloud once (approve a code in any browser, your phone
@@ -170,6 +171,17 @@ talk to their admin). It offers two choices, each one click:
   turn on at once, with no restart, and the page opens **Integrations**. After
   that the key is checked offline. *I have a license key* takes a key you got
   from Slatebox and turns the features on the same way.
+
+  The trial is offered only when Slatebox Cloud says it issues them, for as many
+  days as Cloud says. It needs this server's public address (a name like
+  `slatebox.example.com`, not `localhost` or a bare intranet name), reachable
+  from the internet over https: Cloud checks the address really is this server
+  by fetching a one-time proof from
+  `https://<your address>/.well-known/slatebox-license-proof/…`. Each address
+  gets one trial, which ends on its last day (a bought license keeps 14 days of
+  grace). This server also needs outbound https to `app.slatebox.com`. If either
+  is not possible, a license key works on any install, offline. When a trial or
+  license ends, the button reads **Renew** and the panel says when it ended.
 - **Move your team to Slatebox Cloud.** Signs in to Slatebox Cloud for an hour,
   sends your team's slates, people, team settings, brand kit and files there
   server to server, compares what arrived with what was sent, and makes it live

@@ -1,7 +1,13 @@
 // Runs the browser spec for the header's Upgrade (scripts/selfhost-options.spec.mjs) end to end on
 // this computer: a stand-in Slatebox Cloud (scripts/fake-slatebox-cloud.mjs) and a local
-// self-hosted Meteor app, then the same app told it is Slatebox Cloud. Local only: its own Meteor
-// database, no outside service, no real license key.
+// self-hosted Meteor app, then the same app with an ended trial key in its settings, then the same
+// app told it is Slatebox Cloud. Local only: its own Meteor database, no outside service, no real
+// license key.
+//
+// The app's address is http://roscoe.test:<port> (a public-looking name: Cloud gives no trial to
+// localhost or a bare name). The browser maps roscoe.test to this computer
+// (--host-resolver-rules), and the stand-in Cloud fetches the trial's host proof from the app's
+// local port, as the real Cloud fetches https://<host>.
 //
 //   node scripts/selfhost-options-e2e.mjs [--dir <work dir>] [--shots <folder>] [--port 3730] [--cloud-port 3741] [--serve]
 // --serve starts both and keeps them running (for running the spec by hand), printing its environment.
@@ -16,6 +22,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { testSigner } from './fake-slatebox-cloud.mjs'
+import { signLicense } from '../web/app/server/enterprise-license.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const args = process.argv.slice(2)
@@ -27,7 +34,8 @@ const dir = resolve(flag('dir', join(tmpdir(), 'slatebox-selfhost-e2e')))
 const shots = flag('shots', '') ? resolve(flag('shots')) : ''
 const port = Number(flag('port', 3730))
 const cloudPort = Number(flag('cloud-port', 3741))
-const origin = `http://localhost:${port}`
+const HOST = 'roscoe.test'
+const origin = `http://${HOST}:${port}`
 const cloud = `http://127.0.0.1:${cloudPort}`
 const log = (text) => console.log(`[e2e] ${text}`)
 
@@ -61,11 +69,12 @@ if (patched === license) throw new Error('could not add the test key to the app 
 writeFileSync(licensePath, patched)
 
 // 3. Settings: a self-hosted install whose Slatebox Cloud is the stand-in.
-const settingsFor = (edition) => {
+const settingsFor = (edition, { license = null, name = edition } = {}) => {
   const settings = JSON.parse(readFileSync(join(source, 'settings.example.json'), 'utf8'))
   settings.public = { ...settings.public, env: edition === 'cloud' ? 'dev' : 'selfhost', edition, baseUrl: origin, instanceName: 'Roscoe' }
   settings.cloud = { origin: cloud }
-  const path = join(dir, `settings.${edition}.json`)
+  if (license) settings.enterprise = { ...settings.enterprise, license }
+  const path = join(dir, `settings.${name}.json`)
   writeFileSync(path, JSON.stringify(settings, null, 2))
   return path
 }
@@ -116,20 +125,20 @@ function start(cmd, argv, options, ready, name) {
 // A fresh database every run (the build cache stays).
 rmSync(join(app, '.meteor/local/db'), { recursive: true, force: true })
 
-const meteor = (edition) => start('meteor', ['run', '--port', String(port), '--settings', settingsFor(edition)], { cwd: app, env: { ...process.env, METEOR_DISABLE_OPTIMISTIC_CACHING: '1' } }, /App running at/, `meteor-${edition}`)
+const meteor = (edition, options = {}) => start('meteor', ['run', '--port', String(port), '--settings', settingsFor(edition, options)], { cwd: app, env: { ...process.env, METEOR_DISABLE_OPTIMISTIC_CACHING: '1' } }, /App running at/, `meteor-${options.name || edition}`)
 
 function spec(phase) {
   log(`browser spec, phase ${phase}`)
   execFileSync(join(root, 'node_modules/.bin/playwright'), ['test', '-c', 'scripts/playwright.config.mjs', 'selfhost-options.spec.mjs'], {
     cwd: root,
     stdio: 'inherit',
-    env: { ...process.env, SLATEBOX_ORIGIN: origin, SLATEBOX_CLOUD: cloud, SLATEBOX_PROMOTE: promote, SLATEBOX_KEYFILE: keyFile, SLATEBOX_PHASE: phase, ...(shots && { SLATEBOX_SHOTS: shots }) },
+    env: { ...process.env, SLATEBOX_ORIGIN: origin, SLATEBOX_HOST: HOST, SLATEBOX_CLOUD: cloud, SLATEBOX_PROMOTE: promote, SLATEBOX_KEYFILE: keyFile, SLATEBOX_PHASE: phase, ...(shots && { SLATEBOX_SHOTS: shots }) },
   })
 }
 
 try {
   log(`stand-in Slatebox Cloud on ${cloud}`)
-  await start(process.execPath, [join(root, 'scripts/fake-slatebox-cloud.mjs'), String(cloudPort), keyFile], { cwd: root }, /fake Slatebox Cloud at/, 'cloud')
+  await start(process.execPath, [join(root, 'scripts/fake-slatebox-cloud.mjs'), String(cloudPort), keyFile, `${HOST}=http://127.0.0.1:${port}`], { cwd: root }, /fake Slatebox Cloud at/, 'cloud')
   log(`self-hosted app on ${origin} (first build takes a few minutes)`)
   let server = await meteor('self-host')
   // Set up already, as the installer's setup link leaves it (each person is then promoted by the spec).
@@ -139,6 +148,14 @@ try {
     await new Promise(() => {})
   }
   spec('selfhost')
+  try { process.kill(-server.pid, 'SIGTERM') } catch { /* gone */ }
+  await new Promise((r) => setTimeout(r, 4000))
+  // A free trial that ended a month ago, in the settings (they win over the key kept in the database).
+  const ymd = (days) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10)
+  const ended = await signLicense({ id: 'trial_ended', licensee: 'ada@roscoe.test', trial: true, issuedAt: ymd(-60), expiresAt: ymd(-31), hosts: [HOST] }, { kid: signer.kid, privateKey: signer.privateKey })
+  log('the same app with an ended trial key')
+  server = await meteor('self-host', { license: ended, name: 'expired' })
+  spec('expired')
   try { process.kill(-server.pid, 'SIGTERM') } catch { /* gone */ }
   await new Promise((r) => setTimeout(r, 4000))
   log('the same app, told it is Slatebox Cloud')

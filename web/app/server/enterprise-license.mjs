@@ -100,11 +100,18 @@ export const hostOf = (url) => {
 }
 
 /**
+ * This install's host name, worked out one way everywhere a key is checked, kept or asked for
+ * (enterpriseAccess, enterprise-key.mjs save, the trial request): settings.public.baseUrl, else
+ * ROOT_URL (what Meteor.absoluteUrl() answers from). '' when neither says.
+ */
+export const installHost = ({ settings, env = {} } = {}) => hostOf(settings?.public?.baseUrl || env?.ROOT_URL || '')
+
+/**
  * Checks a license key offline.
  * @param {string} text  the key
  * @param {{ keys?: Record<string, string>, now?: number, host?: string }} [options]
  *   keys: key id -> Ed25519 public key (SPKI DER, base64); Slatebox LLC's by default.
- *   host: this install's host name (settings.public.baseUrl), checked when the key names hosts.
+ *   host: this install's host name (installHost), checked when the key names hosts.
  * @returns {{ valid: boolean, reason: string, license?: ReturnType<typeof licenseSummary>, endsAt?: number }}
  */
 export function verifyLicense(text, { keys = LICENSE_KEYS, now = Date.now(), host = '' } = {}) {
@@ -131,10 +138,11 @@ export function verifyLicense(text, { keys = LICENSE_KEYS, now = Date.now(), hos
   if (license.kind === 'cloud' && !license.hosts.length) return { valid: false, reason: 'wrong_kind', license }
   if (license.hosts.length && !license.hosts.some((name) => name.toLowerCase() === String(host).toLowerCase()))
     return { valid: false, reason: 'wrong_host', license }
-  // The key covers its last day in full, then the grace.
+  // The key covers its last day in full, then the grace. A free trial has no grace: it ends on its
+  // last day (a renewal is never an outage; a trial ending is not one).
   const endsAt = to + DAY
   if (now < endsAt) return { valid: true, reason: 'license', license, endsAt }
-  if (now < endsAt + LICENSE_GRACE_DAYS * DAY) return { valid: true, reason: 'grace', license, endsAt: endsAt + LICENSE_GRACE_DAYS * DAY }
+  if (!license.trial && now < endsAt + LICENSE_GRACE_DAYS * DAY) return { valid: true, reason: 'grace', license, endsAt: endsAt + LICENSE_GRACE_DAYS * DAY }
   return { valid: false, reason: 'expired', license }
 }
 
@@ -167,7 +175,7 @@ export function enterpriseAccess({ settings, env = {}, readFile, keys = LICENSE_
   const { text, problem } = readLicenseText({ settings, env, readFile, stored })
   if (problem) return out(false, null, problem)
   if (!text) return out(false, null, cloud ? 'cloud_no_key' : 'no_license')
-  const checked = verifyLicense(text, { keys, now, host: hostOf(settings?.public?.baseUrl) })
+  const checked = verifyLicense(text, { keys, now, host: installHost({ settings, env }) })
   if (!checked.valid) return out(false, null, checked.reason, checked.license || null)
   if (checked.license.kind !== (cloud ? 'cloud' : 'on-prem')) return out(false, null, 'wrong_kind', checked.license)
   if (cloud) return out(true, 'cloud', checked.reason === 'grace' ? 'grace' : 'cloud', checked.license, checked.endsAt)

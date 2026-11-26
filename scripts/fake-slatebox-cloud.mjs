@@ -7,9 +7,13 @@
 //
 // Used in-process by scripts/selfhost-options.test.mjs, and as its own process by the browser spec
 // (scripts/selfhost-options.spec.mjs):
-//   node scripts/fake-slatebox-cloud.mjs <port> <keyfile>
-// where keyfile is JSON { kid, privateKey (PKCS8 PEM) } written by the spec's harness. GET /device
-// is a stand-in consent page with Approve and Decline; /__state answers what Cloud holds now.
+//   node scripts/fake-slatebox-cloud.mjs <port> <keyfile> [<host>=<origin> ...]
+// where keyfile is JSON { kid, privateKey (PKCS8 PEM) } written by the spec's harness, and each
+// host=origin says where the trial's host proof is fetched for that host (the real Cloud fetches
+// https://<host>; a test install answers on plain http on this computer). GET /device is a
+// stand-in consent page with Approve and Decline; /__state answers what Cloud holds now;
+// POST /__control { mode } switches it to 'up' (default), 'down' (every connection dropped, as an
+// unreachable Cloud) or 'no-trials' (no signing key: /licenses/* answer 404, as Cloud does today).
 import { createPrivateKey, generateKeyPairSync, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -19,6 +23,7 @@ import { createDeviceFlow, MOVE_ACTIONS, MOVE_RESOURCE_PATH, memoryWindowCounter
 import { mountDeviceFlow } from '../web/app/server/oauth/routes.mjs'
 import { createApiTokenService } from '../web/app/server/api-token-core.mjs'
 import { createLicenseIssuer } from '../web/app/server/licenses/issuer.mjs'
+import { createHostProver } from '../web/app/server/licenses/host-proof.mjs'
 import { mountLicenseRoutes } from '../web/app/server/licenses/routes.mjs'
 import { signLicense } from '../web/app/server/enterprise-license.mjs'
 import { createTeamExporter } from '../web/app/server/team-export/export-core.mjs'
@@ -67,8 +72,18 @@ export function testSigner(kid = 'test-cloud-2026') {
  * @param {{ port?: number, signer?: ReturnType<typeof testSigner>, trialDays?: number, now?: () => number,
  *           account?: { _id: string, email: string, firstName: string }, autoApprove?: boolean }} [options]
  */
-export async function startFakeCloud({ port = 0, signer = testSigner(), trialDays = 30, now = Date.now, account = { _id: 'cloudAlice0000001', email: 'alice@acme.test', firstName: 'Alice' } } = {}) {
+export async function startFakeCloud({ port = 0, signer = testSigner(), trialDays = 30, now = Date.now, account = { _id: 'cloudAlice0000001', email: 'alice@acme.test', firstName: 'Alice' }, hostOrigins = {} } = {}) {
   const app = express()
+  // 'up', 'down' (drop every connection but these controls) or 'no-trials' (no signing key).
+  let mode = 'up'
+  app.post('/__control', express.json(), (req, res) => {
+    mode = ['up', 'down', 'no-trials'].includes(req.body?.mode) ? req.body.mode : 'up'
+    res.json({ mode })
+  })
+  app.use((req, res, next) => {
+    if (mode === 'down' && !req.path.startsWith('/__')) return req.socket.destroy()
+    return next()
+  })
   const server = await new Promise((resolve) => {
     const s = app.listen(port, '127.0.0.1', () => resolve(s))
   })
@@ -138,6 +153,15 @@ export async function startFakeCloud({ port = 0, signer = testSigner(), trialDay
     licenses,
     sign: (payload) => signLicense(payload, { kid: signer.kid, privateKey: signer.privateKey }),
     counter: memoryWindowCounter({ now }),
+    // The real prover's check (the same secret back from the host), over plain http to the test
+    // install named in hostOrigins; a host not named there is unreachable, as from the internet.
+    prover: createHostProver({
+      originFor: (host) => hostOrigins[host] || `http://unreachable.invalid`,
+      get: async (url) => {
+        const answer = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(5000) })
+        return { status: answer.status, text: (await answer.text()).slice(0, 1024) }
+      },
+    }),
     trialDays,
     now,
     newId: () => randomBytes(6).toString('hex'),
@@ -145,8 +169,9 @@ export async function startFakeCloud({ port = 0, signer = testSigner(), trialDay
   const licenseAudience = device.resourceFor('slatebox-server', 'license')
   const outcomes = []
   mountLicenseRoutes(app, {
-    gate: () => true,
+    gate: () => mode !== 'no-trials',
     issuer: () => issuer,
+    offer: () => ({ trialDays }),
     async authenticate(req) {
       const found = await tokens.authenticateApiRequest(req, { audience: licenseAudience })
       if (!found || !found.token.scopes?.includes('license:trial')) return null
@@ -191,15 +216,20 @@ export async function startFakeCloud({ port = 0, signer = testSigner(), trialDay
     device,
     approve,
     outcomes,
+    hostOrigins,
+    setMode: (next) => {
+      mode = next
+    },
     close: () => new Promise((resolve) => server.close(() => resolve())),
   }
 }
 
-// node scripts/fake-slatebox-cloud.mjs <port> <keyfile>
+// node scripts/fake-slatebox-cloud.mjs <port> <keyfile> [<host>=<origin> ...]
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
-  const [port, keyFile] = process.argv.slice(2)
+  const [port, keyFile, ...hosts] = process.argv.slice(2)
   const key = JSON.parse(readFileSync(keyFile, 'utf8'))
   const signer = { kid: key.kid, privateKey: createPrivateKey(key.privateKey), keys: { [key.kid]: key.spki } }
-  const cloud = await startFakeCloud({ port: Number(port), signer })
+  const hostOrigins = Object.fromEntries(hosts.map((pair) => pair.split('=')).filter(([host, at]) => host && at))
+  const cloud = await startFakeCloud({ port: Number(port), signer, hostOrigins })
   console.log(`fake Slatebox Cloud at ${cloud.origin} (test key ${signer.kid})`)
 }

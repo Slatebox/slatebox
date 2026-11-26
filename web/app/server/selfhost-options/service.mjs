@@ -4,9 +4,11 @@
 // Two flows, each started by one click and followed by the panel (flow(id) every second or two):
 //
 //   trial   signing_in → issuing → applying → unlocked
-//           A device sign-in to Slatebox Cloud ("Your Slatebox server": license:trial), then Cloud's
-//           POST /licenses/key: a trial key bound to this server's host (or the account's own
-//           license). The key is checked and kept here (enterprise-key.mjs) and the enterprise code
+//           Offered only when Cloud says it issues trials (offer(): GET /licenses/offer, which also
+//           names their length). A device sign-in to Slatebox Cloud ("Your Slatebox server":
+//           license:trial), then Cloud's POST /licenses/key with a one-time proof this server answers
+//           at its own address (licenses/host-proof.mjs), so Cloud knows the host is really this
+//           server's: a trial key bound to this server's host (or the account's own license). The key is checked and kept here (enterprise-key.mjs) and the enterprise code
 //           is registered at once (server/enterprise.js unlockNow). After that it is checked
 //           offline, like any key: nothing more is asked of Cloud.
 //   move    signing_in → exporting → uploading → review → confirming → moved
@@ -23,6 +25,8 @@
 //     goes on from the step that stopped, after a new sign-in when Cloud's token ended (an hour for
 //     a move) or the server restarted (tokens are kept in memory only, never in the database);
 //   - Cloud's writes carry Idempotency-Keys kept on the flow, so a retried confirm is one confirm.
+// Cancel stops a flow at any step before it is done: a sign-in nobody wants to finish (a closed
+// window, the wrong account), or a move's export and upload (aborted, and discarded on Cloud).
 // Refusals are UpgradeError with a code and words a person can act on.
 import { randomBytes, randomUUID } from 'node:crypto'
 import { Transform } from 'node:stream'
@@ -52,6 +56,8 @@ const CLOUD_WORDS = {
   team_owner_required: 'On Slatebox Cloud, only the owner of a team can move a team into it. Sign in there as the owner, or with an account in no team yet.',
   trial_used: null,
   trial_used_host: null,
+  trial_needs_public_host: null,
+  host_unproven: null,
 }
 const cloudWords = (error) => (Object.hasOwn(CLOUD_WORDS, error.code) && CLOUD_WORDS[error.code]) || error.message
 const signInEnded = (error) => error instanceof CloudError && (error.status === 401 || error.code === 'unauthorized' || error.code === 'invalid_token')
@@ -86,6 +92,8 @@ export function memoryFlows() {
  *   the caller's team, or throws (not a team admin, no team): transfer.mjs startExport's checks
  * @param {(userId: string, passphrase: string, onEnd: (end: object) => void) => Promise<import('node:stream').Readable>} deps.exportStream
  * @param {{ host: string, origin: string, installId: string, label: string }} deps.install
+ * @param {ReturnType<import('../licenses/host-proof.mjs').createProofStore>} deps.proofs
+ *   the one-time proofs this server answers at /.well-known/slatebox-license-proof/<id>
  */
 export function createUpgradeService({
   cloud,
@@ -97,6 +105,7 @@ export function createUpgradeService({
   preflight,
   exportStream,
   install,
+  proofs,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now = Date.now,
   newId = () => randomBytes(12).toString('hex'),
@@ -105,6 +114,9 @@ export function createUpgradeService({
   // Kept in memory only: the device code while signing in, and Cloud's token after.
   const secrets = new Map()
   const running = new Set()
+  // A move's export and upload under way, aborted by cancel().
+  const aborts = new Map()
+  const cancelled = async (flowId) => (await flows.get(flowId))?.state === 'cancelled'
 
   async function admin(userId) {
     if (!userId || !(await isServerAdmin(userId))) throw new UpgradeError('admin_required', 'Only an administrator of this server can do this. Ask your admin.', 403)
@@ -188,7 +200,9 @@ export function createUpgradeService({
     const known = error instanceof UpgradeError || error instanceof CloudError || (typeof error?.code === 'string' && error?.status >= 400 && error?.status < 500)
     const message = error instanceof CloudError ? cloudWords(error) : known ? error.message : 'Something went wrong on this server. Try again.'
     if (!known) log('selfhost step failed', { flow: flow._id, error: error?.stack || error?.message || String(error) })
-    if (code === 'cancelled') return
+    if (error?.detail) log('selfhost step failed', { flow: flow._id, code, detail: error.detail })
+    // Cancelled by the administrator: the flow says so already, whatever the step threw on its way out.
+    if (code === 'cancelled' || (await cancelled(flow._id))) return
     secrets.delete(flow._id)
     await flows.set(flow._id, {
       state: ended ? 'needs_sign_in' : 'failed',
@@ -212,9 +226,18 @@ export function createUpgradeService({
 
   async function trialSteps(flow) {
     const token = secrets.get(flow._id)?.token || (await waitForToken(flow))
+    if (await cancelled(flow._id)) return
     await flows.set(flow._id, { state: 'issuing', updatedAt: now() })
-    const issued = await cloud.licenseKey(token, { host: install.host, installId: install.installId })
+    // Cloud fetches this back from https://<host> while it answers: only this server can.
+    const proof = proofs.make()
+    let issued
+    try {
+      issued = await cloud.licenseKey(token, { host: install.host, installId: install.installId, proof })
+    } finally {
+      proofs.forget(proof.id)
+    }
     if (typeof issued?.key !== 'string') throw new UpgradeError('cloud_refused', 'Slatebox Cloud sent no license key.', 502)
+    if (await cancelled(flow._id)) return
     await flows.set(flow._id, { state: 'applying', updatedAt: now() })
     const saved = await keys.save(issued.key, { host: install.host, by: flow.userId, source: issued.trial ? 'trial' : 'license' })
     const applied = await unlock()
@@ -256,6 +279,28 @@ export function createUpgradeService({
     else await flows.set(flow._id, { failure: null, updatedAt: now() })
     drive(flow, trialSteps)
     return view(await flows.get(flow._id))
+  }
+
+  /**
+   * Whether Slatebox Cloud issues free trials to servers now, and how long they run (Cloud decides).
+   * @returns {Promise<{ trial: boolean, trialDays: number|null, reason?: 'not_offered'|'unreachable'|'no_host', message?: string }>}
+   */
+  async function offer(userId) {
+    await admin(userId)
+    if (!install.host || !install.host.includes('.'))
+      return { trial: false, trialDays: null, reason: 'no_host', message: `A free trial needs this server's public address (like slatebox.example.com)${install.host ? `, and ${install.host} is a local name` : ''}. A license key from slatebox.com works on any install, offline.` }
+    try {
+      const answer = await cloud.licenseOffer()
+      const days = Number(answer?.trialDays)
+      if (answer?.trial !== true) return { trial: false, trialDays: null, reason: 'not_offered', message: 'Slatebox Cloud does not issue free trials to servers right now. Get a license at slatebox.com and paste it here.' }
+      return { trial: true, trialDays: Number.isInteger(days) && days > 0 ? days : null }
+    } catch (error) {
+      if (error instanceof CloudError && error.code === 'unreachable') {
+        log('selfhost cloud unreachable', { detail: error.detail })
+        return { trial: false, trialDays: null, reason: 'unreachable', message: error.message }
+      }
+      return { trial: false, trialDays: null, reason: 'not_offered', message: 'Slatebox Cloud does not issue free trials to servers right now. Get a license at slatebox.com and paste it here.' }
+    }
   }
 
   /** A license key pasted in: checked, kept and applied at once. Never echoed. */
@@ -330,9 +375,26 @@ export function createUpgradeService({
       })
       archive.on('error', (error) => counter.destroy(error))
       archive.pipe(counter)
+      if (await cancelled(flow._id)) {
+        archive.destroy?.()
+        return
+      }
       await flows.set(flow._id, { state: 'uploading', updatedAt: now() })
-      const result = await cloud.upload(ticket.uploadUrl, counter, passphrase)
+      const abort = new AbortController()
+      aborts.set(flow._id, abort)
+      let result
+      try {
+        result = await cloud.upload(ticket.uploadUrl, counter, passphrase, { signal: abort.signal })
+      } finally {
+        aborts.delete(flow._id)
+        if (abort.signal.aborted) archive.destroy?.()
+      }
       if (!result?.importId) throw new UpgradeError('cloud_refused', 'Slatebox Cloud did not take the archive.', 502)
+      // Cancelled as the upload finished: nothing goes live, and Cloud's copy is discarded.
+      if (await cancelled(flow._id)) {
+        await cloud.discardMove(token, result.importId).catch(() => {})
+        return
+      }
       const record = result.report ? result : await cloud.getMove(token, result.importId)
       const checked = verify(end?.counts, record.report)
       await flows.set(flow._id, {
@@ -431,9 +493,11 @@ export function createUpgradeService({
     const flow = await own(userId, flowId, kind)
     if (['moved', 'unlocked', 'cancelled'].includes(flow.state)) return view(flow)
     const token = secrets.get(flow._id)?.token
+    // Said first, so a step still running sees it and stops without writing over it.
+    await flows.set(flow._id, { state: 'cancelled', signIn: null, failure: null, updatedAt: now() })
+    aborts.get(flow._id)?.abort()
     if (kind === 'move' && flow.importId && token) await cloud.discardMove(token, flow.importId).catch(() => {})
     secrets.delete(flow._id)
-    await flows.set(flow._id, { state: 'cancelled', signIn: null, updatedAt: now() })
     return view(await flows.get(flow._id))
   }
 
@@ -455,6 +519,7 @@ export function createUpgradeService({
   }
 
   return {
+    offer,
     startTrial,
     resumeTrial,
     enterKey,

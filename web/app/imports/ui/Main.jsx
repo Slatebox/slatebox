@@ -427,7 +427,8 @@ export default function Main() {
             {loadedUser && (!mdmq || !isMainDrawerOpen) && <IconButton color="inherit" aria-label="Open navigation" onClick={handleDrawerOpen}><MenuIcon /></IconButton>}
             <Box component={Link} to="/" aria-label="My slates" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, color: 'inherit', textDecoration: 'none' }}>
               <img src="/brand/slatebox.svg" alt="" width="29" height="29" />
-              <Typography sx={{ fontWeight: 750, letterSpacing: '-.04em', fontSize: 22 }}>Slatebox</Typography>
+              {/* On a small phone the mark alone, so the header's buttons always fit */}
+              <Typography sx={{ fontWeight: 750, letterSpacing: '-.04em', fontSize: 22, '@media (max-width:419px)': { display: 'none' } }}>Slatebox</Typography>
             </Box>
             {orgName && mdmq && <Typography noWrap sx={{ color: 'shell.secondaryInk', borderLeft: 1, borderColor: 'shell.border', pl: 2 }}>{orgName}</Typography>}
             <Box sx={{ flex: 1 }} />
