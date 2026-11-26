@@ -13,12 +13,14 @@
 // Or the person keeps the link: it is shown with a QR code (and opened in a browser when one can
 // open here), and the installer waits up to 10 minutes for the admin to be created, polling the
 // server's setup state, until Enter ends the wait.
-import { browserFor, offerToOpen } from './browser.mjs'
+import { browserFor, elsewhereSentence, isLoopback, offerToOpen, tunnelHint } from './browser.mjs'
 import { EXIT, InstallError } from './errors.mjs'
 import { setupState } from './setup-link.mjs'
 
 export const WAIT_MS = 10 * 60_000
 export const POLL_MS = 3000
+// One check of the wait may take this long at most (an exec or a page that hangs is given up on).
+export const CHECK_MS = 10_000
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 // The commonest passwords that pass a length check; refused with the rest of the strength check.
@@ -80,10 +82,25 @@ const unescape = text => String(text).replace(/&#39;/g, '\'').replace(/&quot;/g,
 /** The setup page's mistakes, by the order shown: field errors and the page's own problem line. */
 export const pageProblems = html => [...String(html).matchAll(/<(?:span|p) class="error">([^<]*)<\/(?:span|p)>/g)].map(match => unescape(match[1]).trim()).filter(Boolean)
 
-async function send(ctx, url, init) {
-  const response = await (ctx.fetch || globalThis.fetch)(url, { redirect: 'manual', signal: AbortSignal.timeout(20_000), ...init })
-  const text = typeof response.text === 'function' ? await response.text().catch(() => '') : ''
-  return { status: response.status, text }
+async function send(ctx, url, init, timeout = 20_000) {
+  if (ctx.adminSignal?.aborted) throw ctx.adminSignal.reason
+  // Ended by the timeout, or by ctx.adminSignal: the wizard was stopped (Ctrl-C between
+  // questions), so nothing is left running. (One controller, held by the listener, rather than
+  // AbortSignal.any, whose combined signal is held only weakly.)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(new DOMException('The request timed out.', 'TimeoutError')), timeout)
+  timer.unref?.()
+  const stopped = ctx.adminSignal
+  const onStop = () => controller.abort(stopped.reason)
+  stopped?.addEventListener('abort', onStop, { once: true })
+  try {
+    const response = await (ctx.fetch || globalThis.fetch)(url, { redirect: 'manual', signal: controller.signal, ...init })
+    const text = typeof response.text === 'function' ? await response.text().catch(() => '') : ''
+    return { status: response.status, text }
+  } finally {
+    clearTimeout(timer)
+    stopped?.removeEventListener('abort', onStop)
+  }
 }
 
 const reachWhy = error => error?.cause?.code || error?.code || error?.name || error?.message || 'no answer'
@@ -120,47 +137,53 @@ export async function createAdmin(ctx, { origins, token, values }) {
 
 /**
  * The server's setup state: 'set-up', 'waiting', 'invalid' (the link no longer works and nobody
- * is set up), or null when it cannot be asked. The image's own check when an exec is at hand
- * (docker or kubectl exec), else the setup page, whose answer says the same.
+ * is set up), or null when it cannot be asked. The setup page first (a GET answers cheaply, and
+ * says when a newer link replaced this one), then the image's own check when an exec is at hand
+ * (docker or kubectl exec, which starts a process in the container). Each try is bounded by
+ * `timeout` ms.
  */
-export async function setupStatus(ctx, { origins, token, exec }) {
-  if (exec) {
-    const state = await setupState(exec).catch(() => null)
-    if (state) return state.setUp ? 'set-up' : 'waiting'
-  }
+export async function setupStatus(ctx, { origins, token, exec, timeout = CHECK_MS }) {
   for (const origin of origins) {
     try {
-      const { status, text } = await send(ctx, `${origin}/setup/${encodeURIComponent(token)}`, { method: 'GET', headers: { accept: 'text/html' } })
+      const { status, text } = await send(ctx, `${origin}/setup/${encodeURIComponent(token)}`, { method: 'GET', headers: { accept: 'text/html' } }, timeout)
       if (status === 200 && /already set up/.test(text)) return 'set-up'
       if (status === 200) return 'waiting'
       if (status === 410) return 'invalid'
     } catch { /* the next address */ }
   }
+  if (exec) {
+    const state = await setupState(exec, { timeout }).catch(() => null)
+    if (state) return state.setUp ? 'set-up' : 'waiting'
+  }
   return null
 }
 
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
-
 /**
  * Wait until the admin exists: 'set-up', 'stopped' (stop() resolved: Enter), 'timeout', or
- * 'invalid' (the link stopped working with nobody set up: replaced by a newer one).
+ * 'invalid' (the link stopped working with nobody set up: replaced by a newer one). Every check
+ * is raced against stop and the deadline, so neither waits on a check that hangs.
  */
-export async function waitForAdmin(ctx, { origins, token, exec, stop, timeout = WAIT_MS, interval = ctx.adminPoll ?? POLL_MS, now = Date.now }) {
+export async function waitForAdmin(ctx, { origins, token, exec, stop, timeout = WAIT_MS, interval = ctx.adminPoll ?? POLL_MS, check = CHECK_MS, now = Date.now }) {
   // A real timer between checks, always (not ctx.sleep, which tests make instant): the wait has
   // to give the terminal its turn, or Enter is never read.
-  const wait = sleep
   const deadline = now() + timeout
-  let stopped = false
-  stop?.then(() => { stopped = true })
-  const pause = ms => Promise.race([wait(ms), stop || new Promise(() => {})])
-  for (;;) {
-    if (stopped) return 'stopped'
-    const state = await setupStatus(ctx, { origins, token, exec })
-    if (state === 'set-up') return 'set-up'
-    if (state === 'invalid') return 'invalid'
-    if (stopped) return 'stopped'
-    if (now() >= deadline) return 'timeout'
-    await pause(Math.min(interval, Math.max(0, deadline - now())))
+  const STOP = Symbol('stop')
+  const TIMEOUT = Symbol('timeout')
+  const stopped = stop ? stop.then(() => STOP) : new Promise(() => {})
+  const timers = new Set()
+  const after = (ms, value) => new Promise(resolve => { const timer = setTimeout(() => { timers.delete(timer); resolve(value) }, ms); timers.add(timer) })
+  try {
+    for (;;) {
+      const state = await Promise.race([stopped, after(Math.max(0, deadline - now()), TIMEOUT), setupStatus(ctx, { origins, token, exec, timeout: check })])
+      if (state === STOP) return 'stopped'
+      if (state === 'set-up') return 'set-up'
+      if (state === 'invalid') return 'invalid'
+      if (state === TIMEOUT || now() >= deadline) return 'timeout'
+      const paused = await Promise.race([stopped, after(Math.min(interval, Math.max(0, deadline - now())), null)])
+      if (paused === STOP) return 'stopped'
+    }
+  } finally {
+    for (const timer of timers) clearTimeout(timer)
   }
 }
 
@@ -173,8 +196,8 @@ const execFor = (ctx, done) => (done.target === 'ssh' ? null : ctx.setupExec || 
  * Name, email, team and password, then the setup form. Returns 'created', 'set-up' (someone else
  * made the admin), 'dead' (the link no longer works), or 'unreachable' (use the link instead).
  */
-async function createHere(ctx, done, link, { say, warn, ok, during }) {
-  const p = ctx.prompt
+async function createHere(ctx, done, link, { say, warn, ok, during, prompt }) {
+  const p = prompt || ctx.prompt
   const rich = Boolean(ctx.rich)
   const token = linkToken(link)
   const origins = setupOrigins(ctx, done, link)
@@ -185,10 +208,10 @@ async function createHere(ctx, done, link, { say, warn, ok, during }) {
     values.team = await p.text('Team name', { default: values.team, label: 'Team', validate: value => (value.length > 120 ? 'Use at most 120 characters.' : null) })
     let password
     for (;;) {
-      password = await p.secret(rich ? 'Password' : 'Password (at least 8 characters, typing is hidden)', { label: 'Password' })
+      password = await p.secret(rich ? 'Password' : 'Password (at least 8 characters, typing is hidden)', { label: 'Password', required: true })
       const problem = passwordProblem(password, { email: values.email, name: values.name })
       if (problem) { warn(problem); continue }
-      const again = await p.secret('Password again', { label: 'Again' })
+      const again = await p.secret('Password again', { label: 'Again', required: true })
       if (again !== password) { warn('The two passwords don\'t match. Type them again.'); continue }
       break
     }
@@ -219,19 +242,65 @@ async function createHere(ctx, done, link, { say, warn, ok, during }) {
   }
 }
 
+const cancelled = error => error instanceof InstallError && error.exitCode === EXIT.CANCELLED
+
+/**
+ * The prompt, for as long as the first-admin step runs: once signal is aborted (Ctrl-C between
+ * questions: the closing is drawn without waiting for this step), every call throws, so a step
+ * still running in the background draws nothing and asks nothing more.
+ */
+function guarded(p, signal) {
+  if (!signal) return p
+  return new Proxy(p, {
+    get(target, key) {
+      const value = target[key]
+      if (typeof value !== 'function') return value
+      return (...args) => {
+        if (signal.aborted) throw new InstallError(EXIT.CANCELLED, 'Stopped.')
+        return value.apply(target, args)
+      }
+    },
+  })
+}
+
 /**
  * The wizard, after "Slatebox is running": create the admin here (recommended), or keep the link
- * (shown with a QR code) and wait for it to be used. Returns what happened.
+ * (shown with a QR code) and wait for it to be used. Returns what happened: 'created', 'set-up',
+ * 'dead', 'waiting', or 'stopped' (signal aborted). Esc or Ctrl-C at any of its questions ends
+ * this step only: Slatebox is installed, so the link is kept (shown, if it was not yet) and the
+ * closing lines follow.
  */
-export async function richFirstAdmin(ctx, done) {
-  const p = ctx.prompt
+export async function richFirstAdmin(ctx, done, { signal } = {}) {
+  const p = guarded(ctx.prompt, signal)
+  if (signal) ctx.adminSignal = signal
+  try {
+    return await firstAdminSteps(ctx, done, p, signal)
+  } catch (error) {
+    if (signal?.aborted) return 'stopped'
+    if (!cancelled(error)) throw error
+    p.note('info', 'Stopped. Slatebox is installed; the admin account was not created.')
+    if (ctx.setupLink?.url) {
+      if (ctx.setupLinkShown) p.note('info', 'The setup link above still works for 24 hours.')
+      else p.setupLinkBox(ctx.setupLink)
+      ctx.setupLinkShown = true
+    }
+    return 'waiting'
+  } finally {
+    if (ctx.adminSignal === signal) ctx.adminSignal = null
+  }
+}
+
+async function firstAdminSteps(ctx, done, p, signal) {
   const link = ctx.setupLink
   const ssoOnly = Boolean(ctx.answers?.sso?.enabled && ctx.answers?.sso?.only)
+  // A link to localhost, with no browser here: only an SSH tunnel would open it elsewhere.
+  const onlyHere = isLoopback(link.url) && !browserFor(ctx).ok
   const choice = ssoOnly ? 'link' : await p.choose('The first admin: the server administrator and owner of the first team', [
     { value: 'create', label: 'Create the admin account now', hint: 'here in the terminal', recommended: true },
-    { value: 'link', label: 'I\'ll use the setup link', hint: 'in a browser, on this or any device' },
+    { value: 'link', label: 'I\'ll use the setup link', hint: onlyHere ? 'opens only on this computer, or through an SSH tunnel' : 'in a browser, on this or any device' },
   ], { default: 'create', label: 'First admin' })
   const hooks = {
+    prompt: p,
     say: text => p.note('info', text),
     warn: text => p.note('warn', text),
     ok: text => p.note('ok', text),
@@ -241,23 +310,29 @@ export async function richFirstAdmin(ctx, done) {
     const result = await createHere(ctx, done, link, hooks)
     if (result !== 'unreachable') return result
   }
-  return useLink(ctx, done, link)
+  return useLink(ctx, done, link, p, signal)
 }
 
-/** The setup link: shown (box and QR), offered to a browser here, then waited on. */
-async function useLink(ctx, done, link) {
-  const p = ctx.prompt
+/**
+ * The setup link: shown (box and QR), offered to a browser here, then waited on. A localhost
+ * link opens on no other device: no QR code, and with no browser here, the SSH tunnel to use.
+ */
+async function useLink(ctx, done, link, p, signal) {
   const here = browserFor(ctx)
-  if (!here.ok) p.note('info', `No browser here (${here.why}). Open this on any device:`)
+  const loopback = isLoopback(link.url)
+  if (!here.ok) p.note('info', elsewhereSentence({ why: here.why, failed: false, url: link.url }))
   p.setupLinkBox(link)
-  p.qr(link.url, 'Or scan it with a phone')
-  if (here.ok) await offerToOpen(ctx, link.url, { secret: true, label: 'Browser' })
+  ctx.setupLinkShown = true
+  if (loopback && !here.ok) p.note('info', tunnelHint(link.url, ctx.env))
+  else if (!loopback) p.qr(link.url, 'Or scan it with a phone')
+  if (here.ok) await offerToOpen({ ...ctx, prompt: p }, link.url, { secret: true, label: 'Browser' })
   const keys = p.watchKeys()
   const deadline = Date.now() + WAIT_MS
   const t = p.task('Waiting for the admin account to be created', { right: () => `Enter stops waiting ${'·'} ${clock(Math.max(0, deadline - Date.now()))}` })
+  const aborted = signal ? new Promise(resolve => signal.addEventListener('abort', () => resolve('stop'), { once: true })) : null
   let result
   try {
-    result = await waitForAdmin(ctx, { origins: setupOrigins(ctx, done, link), token: linkToken(link), exec: execFor(ctx, done), stop: keys.pressed })
+    result = await waitForAdmin(ctx, { origins: setupOrigins(ctx, done, link), token: linkToken(link), exec: execFor(ctx, done), stop: aborted ? Promise.race([keys.pressed, aborted]) : keys.pressed })
   } finally {
     keys.stop()
   }
@@ -282,24 +357,28 @@ const clock = ms => {
 
 /**
  * Plain prompts, after the closing lines: one optional question, only for a person at a
- * terminal; Enter creates the admin here. No answer (the input ended) leaves the link as printed.
+ * terminal; Enter creates the admin here. No answer (the input ended) or a cancel at any of its
+ * questions leaves the link as printed: Slatebox is installed, so the run still ends well.
  */
 export async function plainFirstAdmin(ctx, done) {
   if (ctx.answers?.sso?.enabled && ctx.answers?.sso?.only) return 'waiting'
-  let yes
+  let asked = false
   try {
-    yes = await ctx.prompt.confirm('Create the admin account here in the terminal now?', { default: true })
+    const yes = await ctx.prompt.confirm('Create the admin account here in the terminal now?', { default: true })
+    if (!yes) return 'waiting'
+    asked = true
+    const result = await createHere(ctx, done, ctx.setupLink, {
+      say: text => ctx.out.say(text),
+      warn: text => ctx.stderr.write(`  ${text}\n`),
+      ok: text => ctx.out.say(`✓ ${text}`),
+      during: (label, fn) => { ctx.stderr.write(`… ${label}\n`); return fn() },
+    })
+    if (result === 'unreachable') ctx.out.say('The setup link printed above still works.')
+    return result
   } catch (error) {
-    if (error instanceof InstallError && error.exitCode === EXIT.CANCELLED) { ctx.stderr.write('\n'); return 'waiting' }
-    throw error
+    if (!cancelled(error)) throw error
+    ctx.stderr.write('\n')
+    if (asked) ctx.out.say('Stopped. The admin account was not created; the setup link printed above still works.')
+    return 'waiting'
   }
-  if (!yes) return 'waiting'
-  const result = await createHere(ctx, done, ctx.setupLink, {
-    say: text => ctx.out.say(text),
-    warn: text => ctx.stderr.write(`  ${text}\n`),
-    ok: text => ctx.out.say(`✓ ${text}`),
-    during: (label, fn) => { ctx.stderr.write(`… ${label}\n`); return fn() },
-  })
-  if (result === 'unreachable') ctx.out.say('The setup link printed above still works.')
-  return result
 }

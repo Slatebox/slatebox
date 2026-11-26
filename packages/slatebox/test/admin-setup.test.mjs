@@ -16,8 +16,8 @@ const ENV = { SMTP_URL: 'smtp://u:p@h:587' }
 const io = { sleep: async () => {}, deviceLabel: 'test-box', openBrowser: () => {}, teamHealthDelay: 1, teamHealthAttempts: 3, healthPoll: 1, adminPoll: 5 }
 const LOCAL_ORIGIN = `http://localhost:${PORT}`
 
-function machine(options) {
-  const docker = new FakeDocker({ provider: 'colima', serverArch: 'arm64', settings: [...LEGACY_SETTINGS, 'SLATEBOX_TUNNEL_TOKEN'], commands: ['tunnel', 'setup-link'] })
+function machine(options, dockerOptions = {}) {
+  const docker = new FakeDocker({ provider: 'colima', serverArch: 'arm64', settings: [...LEGACY_SETTINGS, 'SLATEBOX_TUNNEL_TOKEN'], commands: ['tunnel', 'setup-link'], ...dockerOptions })
   docker.addImage(IMAGE)
   const server = setupServer(docker, options)
   return { docker, server, home: sandbox() }
@@ -107,11 +107,17 @@ test('setup status and the wait: set up after a few checks, stopped by Enter, a 
     setTimeout(() => press('enter'), 30)
     assert.equal(await waitForAdmin({ fetch: server.fetch }, { origins: [LOCAL_ORIGIN], token, stop, interval: 5 }), 'stopped')
     assert.equal(await waitForAdmin({ fetch: server.fetch }, { origins: [LOCAL_ORIGIN], token, timeout: 20, interval: 5 }), 'timeout')
-    // The image's own check is asked first when an exec is at hand.
-    const exec = args => docker.run('docker', ['exec', 'slatebox', 'slatebox', ...args])
-    assert.equal(await setupStatus({ fetch: () => { throw new Error('not asked') } }, { origins: [LOCAL_ORIGIN], token, exec }), 'waiting')
+    // The setup page is asked first (a GET is cheaper than starting a process in the container);
+    // the image's own check (docker exec, bounded by the check's timeout) only when no page answers.
+    const execs = []
+    const exec = (args, options) => { execs.push(options); return docker.run('docker', ['exec', 'slatebox', 'slatebox', ...args]) }
+    assert.equal(await setupStatus({ fetch: server.fetch }, { origins: [LOCAL_ORIGIN], token, exec }), 'waiting')
+    assert.deepEqual(execs, [])
+    assert.equal(await setupStatus({ fetch: () => { throw new Error('no page') } }, { origins: [LOCAL_ORIGIN], token, exec, timeout: 1234 }), 'waiting')
+    assert.deepEqual(execs, [{ timeout: 1234 }])
     docker.setUp('slatebox')
-    assert.equal(await setupStatus({ fetch: () => { throw new Error('not asked') } }, { origins: [LOCAL_ORIGIN], token, exec }), 'set-up')
+    assert.equal(await setupStatus({ fetch: () => { throw new Error('no page') } }, { origins: [LOCAL_ORIGIN], token, exec }), 'set-up')
+    assert.deepEqual(execs.at(-1), { timeout: 10_000 })
   }
   {
     const { docker, server } = machine()
@@ -119,6 +125,29 @@ test('setup status and the wait: set up after a few checks, stopped by Enter, a 
     await docker.run('docker', ['exec', 'slatebox', 'slatebox', 'setup-link', '--json'])
     assert.equal(await waitForAdmin({ fetch: server.fetch }, { origins: [LOCAL_ORIGIN], token, interval: 1 }), 'invalid')
   }
+})
+
+test('the wait is bounded by its deadline and by Enter even when a check hangs; a hanging page is given up on', async () => {
+  const hang = () => new Promise(() => {})
+  const never = { fetch: hang }
+  let start = Date.now()
+  assert.equal(await waitForAdmin(never, { origins: [LOCAL_ORIGIN], token: 't', exec: hang, timeout: 40, interval: 5 }), 'timeout')
+  assert.ok(Date.now() - start < 1000, 'the deadline ended the wait')
+  let press
+  const stop = new Promise(resolve => { press = resolve })
+  setTimeout(() => press('stop'), 20)
+  start = Date.now()
+  assert.equal(await waitForAdmin(never, { origins: [LOCAL_ORIGIN], token: 't', exec: hang, stop, interval: 5 }), 'stopped')
+  assert.ok(Date.now() - start < 1000, 'Enter (or Ctrl-C) ended the wait')
+  // A page that never answers is aborted after the check's timeout, then the next address is asked.
+  const asked = []
+  const slow = (url, init) => new Promise((resolve, reject) => {
+    asked.push(new URL(url).origin)
+    if (url.startsWith('https://box.example')) resolve({ status: 200, text: async () => '<h1>This Slatebox is already set up</h1>' })
+    else init.signal.addEventListener('abort', () => reject(init.signal.reason))
+  })
+  assert.equal(await setupStatus({ fetch: slow }, { origins: [LOCAL_ORIGIN, 'https://box.example'], token: 't', timeout: 20 }), 'set-up')
+  assert.deepEqual(asked, [LOCAL_ORIGIN, 'https://box.example'])
 })
 
 // ------------------------------------------------------------------ the wizard
@@ -202,6 +231,85 @@ test('wizard: "I\'ll use the setup link" over SSH shows why no browser opens, th
   assert.match(result.text, new RegExp(`Sign in at http://localhost:${PORT}`))
 })
 
+test('wizard: Esc or Ctrl-C at any first-admin question ends that step only: the link is kept, the closing lines follow, exit 0', async () => {
+  const create = ['Create the admin account now', KEY.enter]
+  const cases = [
+    ['First admin, Esc', [['Create the admin account now', KEY.esc]]],
+    ['First admin, Ctrl-C', [['Create the admin account now', KEY.ctrlC]]],
+    ['Name, Esc', [create, ['Your name', KEY.esc]]],
+    ['Email, Ctrl-C', [create, ['Your name', ['Ada', KEY.enter]], ['Email', KEY.ctrlC]]],
+    ['Team, Esc', [create, ['Your name', ['Ada', KEY.enter]], ['Email', KEY.enter], ['Team name', KEY.esc]]],
+    ['Password, Ctrl-C', [create, ['Your name', ['Ada', KEY.enter]], ['Email', KEY.enter], ['Team name', KEY.enter], ['Password', KEY.ctrlC]]],
+    ['Password again, Esc', [create, ['Your name', ['Ada', KEY.enter]], ['Email', KEY.enter], ['Team name', KEY.enter], ['Password', [strong, KEY.enter]], ['Password again', KEY.esc]]],
+  ]
+  for (const [name, steps] of cases) {
+    const { docker, server, home } = machine()
+    const result = await richCli(['install', ...LOCAL], { run: docker.run, fetch: server.fetch, home, env: ENV, io, script: [...toReview, ...steps] })
+    assert.equal(result.code, 0, `${name}: ${result.text}`)
+    assert.doesNotMatch(result.text, /Canceled\. Nothing was changed|Run slatebox install again/, name)
+    assert.match(result.text, /Stopped\. Slatebox is installed; the admin account was not created\./, name)
+    // The link (not shown yet: the person chose to create the admin here) is shown once, in its box.
+    assert.equal(result.stderr.split(docker.setupLinks[0]).length - 1, 1, `${name}: the setup link is shown once`)
+    assert.match(result.text, /Create the first account \(the server administrator\)/, name)
+    // The closing lines: the secrets warning, the install record and what to do next.
+    assert.match(result.text, /▲ Save \S+secrets\.env in your password manager now\./, name)
+    assert.match(result.text, /Install record: /, name)
+    assert.match(result.text, /Next {3}slatebox status/, name)
+    assert.deepEqual(server.calls.filter(call => call.method === 'POST'), [], name)
+    assert.equal(result.modes.at(-1), false, `${name}: the terminal is put back`)
+  }
+})
+
+test('wizard: Esc at the browser question after "I\'ll use the setup link" keeps the link already shown and draws the closing lines', async () => {
+  const { docker, server, home } = machine()
+  const result = await richCli(['install', ...LOCAL], {
+    run: docker.run, fetch: server.fetch, home, env: { ...ENV, DISPLAY: ':0' }, io,
+    script: [...toReview, ['Create the admin account now', [KEY.down, KEY.enter]], ['Open it in your browser now?', KEY.esc]],
+  })
+  assert.equal(result.code, 0, result.text)
+  assert.match(result.text, /The setup link above still works for 24 hours\./)
+  assert.equal(result.stderr.split(docker.setupLinks[0]).length - 1, 1, 'shown once')
+  assert.match(result.text, /Next {3}slatebox status/)
+})
+
+test('wizard: Ctrl-C between questions (while the account is being created) ends that step only: the link and the closing lines, exit 0', async () => {
+  const { docker, server, home } = machine()
+  let prompt, aborted = false
+  // The form is sent and hangs (a server that does not answer); Ctrl-C arrives as SIGINT then.
+  const fetch = (url, init = {}) => (init.method === 'POST'
+    ? new Promise((resolve, reject) => init.signal.addEventListener('abort', () => { aborted = true; reject(init.signal.reason) }))
+    : server.fetch(url, init))
+  const result = await richCli(['install', ...LOCAL], {
+    run: docker.run, fetch, home, env: ENV, io: { ...io, onRichPrompt: p => { prompt = p } },
+    script: [...toReview, ['Create the admin account now', KEY.enter], ['Your name', ['Ada', KEY.enter]], ['Email', KEY.enter], ['Team name', KEY.enter],
+      ['Password', [strong, KEY.enter]], ['Password again', [strong, KEY.enter]], ['Creating the admin account', () => { prompt.onInterrupt(); return [] }]],
+  })
+  assert.equal(result.code, 0, result.text)
+  assert.match(result.text, /■ Creating the admin account/)
+  assert.match(result.text, /Stopped\. Slatebox is installed and running\./)
+  assert.doesNotMatch(result.text, /Run slatebox install again|Canceled\. Nothing was changed/)
+  assert.equal(result.stderr.split(docker.setupLinks[0]).length - 1, 1, 'the setup link is shown')
+  assert.match(result.text, /Install record: /)
+  assert.match(result.text, /Next {3}slatebox status/)
+  assert.ok(aborted, 'the request in flight is abandoned')
+  // Nothing more is asked or drawn after the closing lines.
+  assert.ok(result.text.trimEnd().split('\n').at(-1).includes('slatebox upgrade'), result.text.slice(-300))
+})
+
+test('wizard over SSH with a localhost setup link: opens only on this computer, the SSH tunnel to use, no QR code', async () => {
+  const { docker, server, home } = machine({}, { setupOrigin: LOCAL_ORIGIN })
+  const result = await richCli(['install', ...LOCAL], {
+    run: docker.run, fetch: server.fetch, home, env: { ...ENV, SSH_CONNECTION: '10.0.0.2 51234 10.0.0.9 22', USER: 'ops' }, io,
+    script: [...toReview, [/I'll use the setup link +opens only on this computer, or through an SSH tunnel/, [KEY.down, KEY.enter]], ['Enter stops waiting', KEY.enter]],
+  })
+  assert.equal(result.code, 0, result.text)
+  const text = result.text.replace(/\n {3}/g, ' ')
+  assert.match(text, /No browser here \(this is an SSH session\)\. This link opens only on this computer:/)
+  assert.match(text, new RegExp(`ssh -L ${PORT}:localhost:${PORT} ops@10\\.0\\.0\\.9, then open the link there\\.`))
+  assert.doesNotMatch(result.text, /any device|scan it with a phone/i)
+  assert.doesNotMatch(result.text, /[█▀▄]{8}/)
+})
+
 test('wizard: single sign-on only offers no password account; the link is kept', async () => {
   const { docker, server, home } = machine()
   const flags = LOCAL.filter(flag => flag !== '--no-sso')
@@ -237,6 +345,28 @@ test('plain: no answer to the optional question leaves the printed link as it is
   assert.equal(result.code, 0, result.stderr)
   assert.match(result.stderr, /https:\/\/box\.example\/setup\/SetupToken\S+ {3}\(printed to this terminal only\)/)
   assert.deepEqual(server.calls, [])
+})
+
+test('plain: the input ending (or a cancel) inside the first-admin questions leaves the link; the run ends well and --show-secrets still runs', async () => {
+  for (const input of ['\ny\ny\n', '\ny\ny\nAda\n\n\n']) {
+    const { docker, server, home } = machine()
+    const result = await cli(['install', ...LOCAL, '--show-secrets'], { run: docker.run, fetch: server.fetch, home, env: ENV, tty: true, input, platform: 'linux', io })
+    assert.equal(result.code, 0, result.stderr)
+    assert.doesNotMatch(result.stderr, /Cancelled/)
+    assert.match(result.stdout, /Stopped\. The admin account was not created; the setup link printed above still works\./)
+    assert.match(result.stderr, /https:\/\/box\.example\/setup\/SetupToken\S+ {3}\(printed to this terminal only\)/)
+    // --show-secrets printed the key (the last line), after the first admin.
+    const out = result.stdout.trimEnd().split('\n')
+    assert.ok(out.at(-1).length >= 16 && !/Stopped/.test(out.at(-1)), result.stdout)
+    assert.deepEqual(server.calls.filter(call => call.method === 'POST'), [])
+  }
+})
+
+test('plain over SSH: the closing lines say no browser is here, with a QR code for the setup link under --qr', async () => {
+  const { docker, server, home } = machine()
+  const result = await cli(['install', ...LOCAL, '--yes', '--qr'], { run: docker.run, fetch: server.fetch, home, env: { ...ENV, SSH_CONNECTION: '10.0.0.2 51234 10.0.0.9 22', LANG: 'en_US.UTF-8' }, tty: true, input: '', platform: 'linux', io })
+  assert.equal(result.code, 0, result.stderr)
+  assert.match(result.stderr, /No browser here \(this is an SSH session\)\. Open this on any device:\n {2}https:\/\/box\.example\/setup\/SetupToken\S+ {3}\(printed to this terminal only\)\n( {4}[█▀▄ ]+\n){10,}/)
 })
 
 test('--yes and --json are unchanged: no question, no form sent, no new event', async () => {

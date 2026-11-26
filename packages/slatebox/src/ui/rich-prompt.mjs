@@ -16,7 +16,7 @@ import { Writable } from 'node:stream'
 import { SIZES as SIZE_NAMES } from '../answers.mjs'
 import { EXIT, InstallError } from '../errors.mjs'
 import { terminalGuard } from './keys.mjs'
-import { qrLines } from './qr.mjs'
+import { qrLines, qrSize } from './qr.mjs'
 import { columns, link, makePaint, pad, strip, truncate, width, wrap } from './term.mjs'
 
 const CANCELED = 'Canceled. Nothing was changed.'
@@ -730,11 +730,15 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
 
   /**
    * A QR code for url, with a caption, when the terminal is wide enough for it: black on white
-   * where there is color (it scans on light and dark terminals), half blocks or ASCII as the
-   * terminal allows. It holds no text, so it is written as it is.
+   * where there is color (it scans on light and dark terminals), in full cells when the terminal
+   * has the rows and columns for it (backgrounds only: no gaps whatever the line spacing), else
+   * half blocks, or ASCII, as the terminal allows (src/ui/qr.mjs). It holds no text, so it is
+   * written as it is.
    */
   function qr(url, caption = 'Scan it with a phone') {
-    const rows = qrLines(url, { unicode: term.unicode, color: term.depth > 0 })
+    const size = qrSize(url)
+    const full = term.depth > 0 && (output.rows || 0) >= size + 10 && size * 2 + 4 <= W()
+    const rows = full ? qrLines(url, { unicode: false, color: true }) : qrLines(url, { unicode: term.unicode, color: term.depth > 0 })
     if (width(rows[0]) + 4 > W()) { note('info', 'The terminal is too narrow for a QR code; widen it to see one.'); return }
     line('')
     line(`   ${paint('dim', caption)}`)
@@ -744,14 +748,16 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
 
   /**
    * A link that has to be opened on another device: the sentence (no browser here, or the
-   * browser did not open), the link (past the redactor when it is the setup link), and a QR code.
+   * browser did not open), the link (past the redactor when it is the setup link), and a QR code
+   * (or, for a link only this computer can open, the hint saying how to reach it instead).
    */
-  function elsewhere({ sentence, url, secret = false }) {
+  function elsewhere({ sentence, url, secret = false, hint = '', qr: withQr = true }) {
     line('')
     for (const [i, piece] of wrapR(sentence, lineW() - 4).entries()) line(i ? `   ${piece}` : ` ${paint('accent', g.pointer)} ${piece}`)
     const shown = `   ${paint('link', link(term, url))}`
     if (secret) { clearDrawn(); rawWrite(`${shown}\n`) } else line(shown)
-    qr(url)
+    for (const piece of hint ? wrapR(hint, lineW() - 4) : []) line(`   ${paint('dim', piece)}`)
+    if (withQr) qr(url)
   }
 
   /**

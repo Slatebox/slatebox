@@ -3,6 +3,7 @@
 // (the download, the start) wait SBX_FAKE_DELAY milliseconds, so spinner rows are seen.
 // SBX_FAKE_DOCKER=stopped pretends Docker is installed but not running (for the first
 // SBX_FAKE_DOCKER_STOPPED_CALLS docker calls, when set: then it has been started).
+// SBX_FAKE_SETUP=hang leaves the first-admin form unanswered.
 import { LEGACY_SETTINGS } from '../../src/ai/settings-adapter.mjs'
 import { main } from '../../src/cli.mjs'
 import { DEFAULT_IMAGE } from '../../src/image.mjs'
@@ -28,8 +29,14 @@ const run = async (cmd, args, options) => {
   }
   return docker.run(cmd, args, options)
 }
-const fetch = async (url, init) => {
+const fetch = async (url, init = {}) => {
   if (delay && new URL(url).pathname.includes('availability')) await wait(delay / 2)
+  // SBX_FAKE_SETUP=hang: the setup form is sent and never answered (until the request is aborted).
+  if (process.env.SBX_FAKE_SETUP === 'hang' && new URL(url).pathname.startsWith('/setup/') && init.method === 'POST') {
+    // (A timer stands in for the open socket that keeps a real request's process alive.)
+    const socket = setInterval(() => {}, 1000)
+    return new Promise((resolve, reject) => init.signal?.addEventListener('abort', () => { clearInterval(socket); reject(init.signal.reason) }))
+  }
   return cloud.fetch(url, init)
 }
 

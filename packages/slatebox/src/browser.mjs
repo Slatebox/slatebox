@@ -7,6 +7,8 @@ import { spawn as nodeSpawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 
 const set = (env, name) => env?.[name] !== undefined && env[name] !== ''
+// CI=false, CI=0 and CI=no say this is not CI (some tools set CI=false on purpose).
+const ciRun = env => set(env, 'CI') && !/^(false|0|no|off)$/i.test(String(env.CI).trim())
 
 /** Why no browser can open here, in words that finish "No browser here (...)". */
 export const NO_BROWSER_WHY = {
@@ -33,7 +35,7 @@ export function inContainer(env = {}, exists = existsSync) {
 export function browserHere(env = {}, platform = process.platform, { container = () => inContainer(env) } = {}) {
   const no = reason => ({ ok: false, reason, why: NO_BROWSER_WHY[reason] })
   if (set(env, 'SSH_CONNECTION') || set(env, 'SSH_TTY') || set(env, 'SSH_CLIENT')) return no('ssh')
-  if (set(env, 'CI')) return no('ci')
+  if (ciRun(env)) return no('ci')
   const desktopless = platform !== 'darwin' && platform !== 'win32'
   if (desktopless && !set(env, 'DISPLAY') && !set(env, 'WAYLAND_DISPLAY') && !set(env, 'WSL_DISTRO_NAME')) return no('display')
   if (desktopless && container()) return no('container')
@@ -90,9 +92,32 @@ async function tryOpen(ctx, url) {
 /** ctx's view of browserHere (ctx.inContainer is a test's container check). */
 export const browserFor = ctx => browserHere(ctx.env, ctx.platform, ctx.inContainer ? { container: ctx.inContainer } : undefined)
 
-/** The sentence before the link, when it has to be opened elsewhere. */
-export function elsewhereSentence({ why, failed }) {
-  return failed ? `Couldn't open a browser here (${why}). Open this on any device:` : `No browser here (${why}). Open this on any device:`
+/** Whether a URL points at this computer only (localhost, 127.x, ::1): no other device can open it. */
+export function isLoopback(url) {
+  try {
+    const host = new URL(url).hostname.replace(/^\[|\]$/g, '').toLowerCase()
+    return host === 'localhost' || host.endsWith('.localhost') || /^127\.\d+\.\d+\.\d+$/.test(host) || host === '::1'
+  } catch { return false }
+}
+
+/**
+ * How to open a loopback URL from another computer: an SSH tunnel to this one, named by the SSH
+ * session's own address (SSH_CONNECTION: client ip, client port, server ip, server port) when
+ * there is one.
+ */
+export function tunnelHint(url, env = {}) {
+  let port
+  try { const u = new URL(url); port = u.port || (u.protocol === 'https:' ? '443' : '80') } catch { return '' }
+  const server = String(env.SSH_CONNECTION || '').trim().split(/\s+/)[2]
+  const user = env.USER || env.LOGNAME
+  const target = server ? `${user ? `${user}@` : ''}${server.includes(':') ? `[${server}]` : server}` : '<this computer>'
+  return `To open it from your own computer, forward the port first: ssh -L ${port}:localhost:${port} ${target}, then open the link there.`
+}
+
+/** The sentence before the link, when it has to be opened elsewhere (loopback: only here, or through a tunnel). */
+export function elsewhereSentence({ why, failed, url }) {
+  const then = url && isLoopback(url) ? 'This link opens only on this computer:' : 'Open this on any device:'
+  return failed ? `Couldn't open a browser here (${why}). ${then}` : `No browser here (${why}). ${then}`
 }
 
 /**
@@ -116,13 +141,20 @@ export async function offerToOpen(ctx, url, { question = 'Open it in your browse
   return 'failed'
 }
 
-/** The link to open on any device: the sentence, the link, and (wizard, or --qr) a QR code. */
+/**
+ * The link to open on any device: the sentence, the link, and (wizard, or --qr) a QR code. A
+ * loopback link (http://localhost:...) opens on no other device: it gets the SSH tunnel to use
+ * instead, and no QR code (a phone could not open it).
+ */
 export async function showElsewhere(ctx, url, { why, failed = false, secret = false }) {
-  if (ctx.rich) return ctx.prompt.elsewhere({ sentence: elsewhereSentence({ why, failed }), url, secret })
+  const loopback = isLoopback(url)
+  const hint = loopback ? tunnelHint(url, ctx.env) : ''
+  if (ctx.rich) return ctx.prompt.elsewhere({ sentence: elsewhereSentence({ why, failed, url }), url, secret, hint, qr: !loopback })
   const write = text => (secret ? ctx.stderr.write(`${text}\n`) : ctx.stderr.write(`${ctx.redactor.redact(text)}\n`))
-  write(`  ${elsewhereSentence({ why, failed })}`)
+  write(`  ${elsewhereSentence({ why, failed, url })}`)
   write(`    ${url}`)
-  if (ctx.flags?.qr) for (const row of await plainQr(ctx, url)) ctx.stderr.write(`    ${row}\n`)
+  if (hint) ctx.stderr.write(`  ${hint}\n`)
+  else if (ctx.flags?.qr) for (const row of await plainQr(ctx, url)) ctx.stderr.write(`    ${row}\n`)
 }
 
 /** A QR code for plain output: --qr asked for it; Unicode unless the locale says otherwise. */

@@ -35,8 +35,45 @@ release's highlights.
 - **installer:** the QR encoder is vendored (uqr 0.1.3, MIT, pure JavaScript) in
   `src/vendor/qrcode.mjs`; the package still has two dependencies.
 
+- **installer:** a setup link or sign-in page on `localhost` / `127.0.0.1` / `::1`, with no
+  browser here, says "This link opens only on this computer:" instead of "Open this on any
+  device:", gives the `ssh -L <port>:localhost:<port> <user>@<server>` tunnel (the server
+  address from `SSH_CONNECTION`) and shows no QR code; the wizard's "I'll use the setup link"
+  hint says so too.
+- **installer:** plain closing lines with no browser here say so before the setup link ("No
+  browser here (...). Open this on any device:"), and `--qr` adds a QR code for the setup link
+  there (it was only on the device sign-in page). Runs where a browser can open (every golden
+  transcript) are unchanged.
+
+### Fixed
+
+- **installer:** Esc or Ctrl-C at a first-admin question (First admin, Name, Email, Team,
+  Password) no longer reports a finished install as "Canceled. Nothing was changed." with exit
+  7: it ends that step only, keeps the setup link (shown in its box if it was not yet), draws
+  the closing lines (the secrets warning, the install record, next steps) and exits 0. Ctrl-C
+  between those questions (while the account is being created) does the same, abandoning the
+  request in flight, instead of "Run slatebox install again to finish". Plain prompts: the
+  input ending or a cancel at any first-admin question leaves the printed link, exits 0 and
+  still runs `--show-secrets`; a password question at the end of piped input no longer asks
+  again forever.
+- **installer:** the wait for the admin is bounded: each check (the setup page first, a cheap
+  GET; the image's own `setup-link --check` through docker or kubectl exec only when no page
+  answers) is given up on after 10 seconds and raced against Enter and the 10-minute
+  deadline, so a hung exec no longer holds the wait (and Enter) for up to 15 minutes, and the
+  container no longer starts a process every 3 seconds.
+- **installer:** the colored QR code draws every cell as an upper half block in the top
+  module's color on the bottom module's color, so terminals that add line spacing below the
+  glyph no longer show light gaps across it (they made the code unreadable to scanners), and
+  the wizard uses full cells (backgrounds only, which no line spacing breaks) when the
+  terminal has the rows. Terminals that add spacing above the glyph can still show gaps in the
+  half-block look; without color the code is drawn in the terminal's own colors (inverted on
+  a light terminal).
+- **installer:** `CI=false`, `CI=0`, `CI=no` and `CI=off` no longer count as a CI run (a browser
+  is offered again).
+
 ### Changed
 
+- **installer:** golden QR snapshot `setup-link.color.txt` follows the new colored look.
 - **installer:** golden transcript `plain-team-taken.stderr.txt` gains one line, the optional
   first-admin question (no answer left in that scenario, so the printed link stays as it is).
   The scenario sets `DISPLAY` (a Linux desktop), so its browser question is asked as before.

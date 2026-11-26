@@ -6,6 +6,7 @@
 // The link is as good as an admin password, so the installer prints it only to a terminal, on
 // stderr, never into --json or a pipe (`slatebox setup-link --force-stdout` is the one way to pipe
 // it), and its token is added to the redactor the moment it is known.
+import { browserFor, elsewhereSentence, isLoopback, plainQr, tunnelHint } from './browser.mjs'
 
 const lastJson = text => {
   try { return JSON.parse(String(text || '').trim().split('\n').pop()) } catch { return null }
@@ -17,9 +18,10 @@ export const showsSetupLink = ctx => Boolean(ctx.tty) && !ctx.json
 /**
  * The image's setup state through exec(args) (docker exec or kubectl exec of the in-image
  * `slatebox`): { setUp, linkExpiresAt }, or null when the image has no setup links (before 0.2.0).
+ * options go to the runner (a { timeout } for the first-admin wait's checks).
  */
-export async function setupState(exec) {
-  const result = await exec(['setup-link', '--check'])
+export async function setupState(exec, options) {
+  const result = await exec(['setup-link', '--check'], options)
   if (result.code !== 0) return null
   const state = lastJson(result.stdout)
   return state && typeof state.setUp === 'boolean' ? state : null
@@ -53,6 +55,9 @@ export async function firstAdmin(ctx, exec) {
     return true
   }
   const link = await makeSetupLink(ctx, exec)
+  // Plain output with --qr and no browser here: the closing lines carry a QR code for the link
+  // (made now, since the closing lines are written synchronously). Never for a localhost link.
+  if (link.url && !ctx.rich && ctx.flags?.qr && !browserFor(ctx).ok && !isLoopback(link.url)) link.qr = await plainQr(ctx, link.url)
   if (link.url) ctx.setupLink = link
   else if (!link.setUp) {
     ctx.out.step('setup', 'warn', `The one-time setup link could not be made (${link.error}). Run slatebox setup-link to try again.`)
@@ -84,8 +89,15 @@ export function setupLines(ctx, name) {
     return ['', 'Nobody can sign up until the first admin exists. Get the one-time setup link at a terminal:',
       `  ${command(name)}`, 'Open it to create the first account: the server administrator and the owner of the first team.']
   }
+  // Plain output with no browser here says so before the link, as the wizard does: a link to
+  // open on any device (with --qr, a QR code), or, for a localhost link, the SSH tunnel to use.
+  const here = ctx.rich ? { ok: true } : browserFor(ctx)
+  const elsewhere = here.ok ? [] : [{ terminal: elsewhereSentence({ why: here.why, url: link.url }) }]
+  const after = here.ok ? [] : isLoopback(link.url) ? [`  ${tunnelHint(link.url, ctx.env)}`] : (link.qr || []).map(row => ({ terminal: `    ${row}` }))
   return ['', 'Create the first account (the server administrator) with this one-time setup link.',
     'It works once and expires in 24 hours; nobody can sign up before it is used:',
+    ...elsewhere,
     { terminal: `  ${link.url}   (printed to this terminal only)` },
+    ...after,
     `Lost it? ${command(name)} prints a new one and ends this one.`]
 }

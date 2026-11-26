@@ -14,7 +14,7 @@ export const ID = tag => `sha256:${Buffer.from(tag).toString('hex').padEnd(64, '
 const USAGE = 'Usage, from the Docker host:\n  docker exec slatebox slatebox backup > x\n  docker exec slatebox slatebox health\n'
 
 export class FakeDocker {
-  constructor({ settings = LEGACY_SETTINGS, broken = [], serverArch = 'amd64', commands = [], setUp = false, provider = null } = {}) {
+  constructor({ settings = LEGACY_SETTINGS, broken = [], serverArch = 'amd64', commands = [], setUp = false, provider = null, setupOrigin = 'https://box.example' } = {}) {
     this.calls = []
     this.images = new Map()
     this.arch = new Map()
@@ -29,6 +29,8 @@ export class FakeDocker {
     this.registry = new Map()
     // Every one-time setup link token the fake image made (setup-link --json).
     this.setupLinks = []
+    // The address the image's setup links carry (its ROOT_URL).
+    this.setupOrigin = setupOrigin
     // A data volume whose first admin already exists.
     this.alreadySetUp = setUp
     // crontab: 'hang' waits like macOS's permission prompt (until the caller's timeout, if any;
@@ -164,7 +166,7 @@ export class FakeDocker {
         if (container.setUp) return fail('This Slatebox is already set up.', 3)
         container.link = `${SETUP_TOKEN_PREFIX}${String(this.setupLinks.length).padStart(3, '0')}`
         this.setupLinks.push(container.link)
-        return ok(`${JSON.stringify({ url: `https://box.example/setup/${container.link}`, expiresAt: '2026-11-25T12:00:00.000Z' })}\n`)
+        return ok(`${JSON.stringify({ url: `${this.setupOrigin}/setup/${container.link}`, expiresAt: '2026-11-25T12:00:00.000Z' })}\n`)
       }
       if (args.includes('backup')) {
         if (options.outputFile) writeFileSync(options.outputFile, 'BACKUP')

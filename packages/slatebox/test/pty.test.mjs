@@ -107,6 +107,46 @@ test('pty: the whole local install with a team address against the stand-ins (Do
   assert.ok(run.icanon && run.echo)
 })
 
+// The local install up to the first admin, with a team address (as above).
+const TO_FIRST_ADMIN = [
+  { wait: 'Where should Slatebox run' }, { send: '\r' },
+  { wait: 'Where should your team open' }, { send: '\r' },
+  { wait: 'Team address' }, { send: 'support\r' },
+  { wait: 'Pick a free address' }, { send: '\r' },
+  { wait: 'Admin email' }, { send: '\r' },
+  { wait: 'Agents for drafts' }, { send: '\r' },
+  { wait: 'Single sign-on with' }, { send: '\r' },
+  { wait: 'usual settings' }, { send: '\r' },
+  { wait: 'Change a section' }, { sleep: 50 }, { send: '\r' },
+  { wait: 'Open it in your browser' }, { send: 'n' },
+  { wait: 'Create the admin account now' },
+]
+
+test('pty: Ctrl-C at a first-admin question ends that step only: the link and the closing lines, exit 0', { skip }, () => {
+  const run = drive(['node', HARNESS, 'install'], [...TO_FIRST_ADMIN, { sleep: 50 }, { send: '\r' }, { wait: 'Your name' }, { sleep: 50 }, { send: '\x03' }, { wait: 'Next' }])
+  assert.equal(run.failedStep, null, run.text.slice(-2500))
+  assert.equal(run.code, 0, run.text.slice(-2500))
+  assert.match(run.text, /Stopped\. Slatebox is installed; the admin account was not created\./)
+  assert.doesNotMatch(run.text, /Canceled\. Nothing was changed|Run slatebox install again/)
+  assert.match(run.text, /https:\/\/box\.example\/setup\/SetupToken\S{20,}/)
+  assert.match(run.text, /Install record: /)
+  assert.ok(run.icanon && run.echo)
+})
+
+test('pty: Ctrl-C between questions (SIGINT while the account is being created) ends that step only, exit 0', { skip }, () => {
+  const run = drive(['node', HARNESS, 'install'], [...TO_FIRST_ADMIN, { sleep: 50 }, { send: '\r' },
+    { wait: 'Your name' }, { send: 'Ada\r' }, { wait: 'Email' }, { send: 'ada@example.com\r' }, { wait: 'Team name' }, { send: '\r' },
+    { wait: 'Password' }, { send: 'Correct-Horse-42\r' }, { wait: 'Password again' }, { send: 'Correct-Horse-42\r' },
+    { wait: 'Creating the admin account' }, { sleep: 100 }, { send: '\x03' }, { wait: 'Next' }], { env: { SBX_FAKE_SETUP: 'hang' } })
+  assert.equal(run.failedStep, null, run.text.slice(-2500))
+  assert.equal(run.code, 0, run.text.slice(-2500))
+  assert.match(run.text, /Stopped\. Slatebox is installed and running\./)
+  assert.doesNotMatch(run.text, /Run slatebox install again|Canceled\. Nothing was changed/)
+  assert.match(run.text, /https:\/\/box\.example\/setup\/SetupToken\S{20,}/)
+  assert.match(run.text, /Install record: /)
+  assert.ok(run.icanon && run.echo)
+})
+
 test('pty: --plain is today\'s plain transcript, byte for byte', { skip }, () => {
   // Each answer is typed once its prompt has been written in full, as a person would.
   const run = drive(['node', BIN, 'install', '--target', 'export', '--plain'], [

@@ -806,7 +806,7 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
   out.step('start', 'ok', answers.address.team ? `Slatebox is healthy on ${host.where}` : `Slatebox is healthy at ${answers.address.url}`)
 
   // The first admin comes from the image's one-time setup link; an image without one keeps the old advice.
-  const inImage = args => host.docker(['exec', answers.name, SLATEBOX, ...args])
+  const inImage = (args, options) => host.docker(['exec', answers.name, SLATEBOX, ...args], options)
   const linked = caps.commands.includes('setup-link') && await firstAdmin(ctx, inImage)
   if (!linked && fresh) await firstAccount(ctx, host, answers, caps)
   // The address and the setup link are what the person waits for: they are printed now, before

@@ -18,7 +18,9 @@ ends the last. At a terminal the installer then offers to create that admin
 account right there (name, email, team, password), through the same one-time
 link, or keeps the link, with a QR code, and waits until it is used. Over SSH,
 or anywhere no browser can open, it says so and shows links (the sign-in page and
-the setup link) to open on any device instead of asking to open a browser.
+the setup link) to open on any device instead of asking to open a browser; a
+`http://localhost` link, which no other device can open, comes with the
+`ssh -L` tunnel to use instead of a QR code.
 `npx slatebox --dry-run` asks the same questions and
 prints the plan without changing anything. You need Node.js 22.13 or newer, and
 Docker (Docker Desktop, OrbStack, Colima, Docker Engine, or Podman with its Docker

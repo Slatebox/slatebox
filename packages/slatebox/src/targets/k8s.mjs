@@ -317,7 +317,7 @@ export async function applyK8s(ctx, answers, { record, planOnly = false, imageRe
   if (result.warning) out.step('route', 'warn', result.warning)
   out.step('start', 'ok', `Slatebox is ready${answers.k8s.route === 'none' ? ' (port-forward to reach it)' : ` at ${answers.address.url}`}`)
   // The first admin comes from the image's one-time setup link; an image without one keeps the old advice.
-  const linked = await firstAdmin(ctx, args => k(['exec', '-n', answers.k8s.namespace, n.pod, '-c', 'slatebox', '--', SLATEBOX, ...args]))
+  const linked = await firstAdmin(ctx, (args, options) => k(['exec', '-n', answers.k8s.namespace, n.pod, '-c', 'slatebox', '--', SLATEBOX, ...args], options))
   if (!linked && !previous) {
     out.say(`\n${answers.adminEmail ? `Open ${answers.address.url} and create the first account with ${answers.adminEmail}.` : `Open ${answers.address.url} and create the first account.`}`)
   }

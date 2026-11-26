@@ -460,7 +460,11 @@ function useRich(ctx, io, ui) {
   ctx.stderr = prompt.stderr
   ctx.out.listener = prompt.listener
   ctx.ui = { probe: prompt.probe }
+  // Tests only: the prompt, to stand in for a Ctrl-C between questions (SIGINT is not raised there).
+  io.onRichPrompt?.(prompt)
   prompt.onInterrupt = () => {
+    // During the first admin (after the install), Ctrl-C ends that step only (richClosing).
+    if (ctx.onClosingInterrupt) return ctx.onClosingInterrupt()
     prompt.fatal(new InstallError(EXIT.CANCELLED, ctx.applying ? 'Stopped. Run slatebox install again to finish; it is safe to run again.' : 'Canceled. Nothing was changed.'))
     prompt.close()
     process.exit(EXIT.CANCELLED)
@@ -482,7 +486,26 @@ async function richClosing(ctx, done, extra = []) {
   lines.push(`Install record: ${done.installRecord}`, ...extra)
   const headline = done.nothingToChange ? `Nothing to change: ${done.name} is running at ${done.address}` : `Slatebox is running at ${done.address}`
   p.outroHeadline(headline)
-  if (link) await richFirstAdmin(ctx, done)
+  if (link) {
+    // Slatebox is installed: whatever ends the first-admin step (Esc or Ctrl-C at its questions,
+    // inside richFirstAdmin; Ctrl-C between them, here), the link is kept and the closing lines
+    // below are drawn, and the run ends well.
+    const abort = new AbortController()
+    let interrupted
+    const stopped = new Promise(resolve => { interrupted = resolve })
+    ctx.onClosingInterrupt = () => {
+      if (abort.signal.aborted) return
+      abort.abort()
+      p.fatal(new InstallError(EXIT.CANCELLED, 'Stopped. Slatebox is installed and running.'))
+      interrupted()
+    }
+    try {
+      await Promise.race([richFirstAdmin(ctx, done, { signal: abort.signal }), stopped])
+    } finally {
+      ctx.onClosingInterrupt = null
+    }
+    if (abort.signal.aborted && ctx.setupLink?.url && !ctx.setupLinkShown) p.setupLinkBox(ctx.setupLink)
+  }
   const pending = ctx.setupLink?.pending ? setupLines(ctx, done.name).filter(line => typeof line === 'string' && line) : null
   p.outroTail({ pending, lines, next: done.name === 'slatebox' ? next : [...next.map(item => `${item} --name ${done.name}`)] })
   return 0

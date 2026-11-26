@@ -7,10 +7,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { browserHere, inContainer, offerToOpen, openBrowser, opener } from '../src/browser.mjs'
+import { browserHere, inContainer, isLoopback, offerToOpen, openBrowser, opener, tunnelHint } from '../src/browser.mjs'
+import { setupLines } from '../src/setup-link.mjs'
 import { LEGACY_SETTINGS } from '../src/ai/settings-adapter.mjs'
 import { Redactor } from '../src/secrets.mjs'
-import { qrLines } from '../src/ui/qr.mjs'
+import { qrLines, qrSize } from '../src/ui/qr.mjs'
 import { encode } from '../src/vendor/qrcode.mjs'
 import { cli, FakeCloud, FakeDocker, sandbox } from './fakes.mjs'
 import { KEY, richCli } from './rich-fakes.mjs'
@@ -37,6 +38,12 @@ test('browser here: the environment matrix', () => {
     [{ SSH_CLIENT: '1 2 3' }, 'linux', false, 'ssh'],
     [{ SSH_CONNECTION: '1 2 3 4', DISPLAY: 'localhost:10.0' }, 'linux', false, 'ssh'],
     [{ CI: 'true' }, 'darwin', false, 'ci'],
+    [{ CI: '1' }, 'darwin', false, 'ci'],
+    // CI=false, 0, no or off: not a CI run.
+    [{ CI: 'false' }, 'darwin', false, 'ok'],
+    [{ CI: '0' }, 'darwin', false, 'ok'],
+    [{ CI: 'FALSE', DISPLAY: ':0' }, 'linux', false, 'ok'],
+    [{ CI: 'no' }, 'win32', false, 'ok'],
     [{ DISPLAY: ':0' }, 'linux', true, 'container'],
     // macOS and Windows open the host's browser even from a shell that looks containerized.
     [{}, 'darwin', true, 'ok'],
@@ -135,6 +142,41 @@ test('offerToOpen: an opener that fails, throws or returns false says so and sho
   assert.equal(yes.err(), '  Opening it in your browser.\n')
 })
 
+test('a localhost link with no browser here: opens only on this computer, the SSH tunnel to use, and no QR code', async () => {
+  for (const url of ['http://localhost:38128/setup/tok', 'http://127.0.0.1:3999/device?code=AB', 'http://[::1]:8080/x', 'http://app.localhost:7070/']) assert.equal(isLoopback(url), true, url)
+  for (const url of ['https://acme.slatebox.team/setup/t', 'http://10.0.0.9:7070/', 'http://localhost.example.com/', 'not a url']) assert.equal(isLoopback(url), false, url)
+  assert.equal(tunnelHint('http://localhost:38128/setup/t', { ...SSH, USER: 'ops' }), 'To open it from your own computer, forward the port first: ssh -L 38128:localhost:38128 ops@10.0.0.9, then open the link there.')
+  assert.equal(tunnelHint('http://localhost/setup/t', {}), 'To open it from your own computer, forward the port first: ssh -L 80:localhost:80 <this computer>, then open the link there.')
+  assert.match(tunnelHint('http://localhost:7070/', { SSH_CONNECTION: 'fe80::1 5000 fe80::2 22' }), /ssh -L 7070:localhost:7070 \[fe80::2\],/)
+  // --qr asked, but a phone could not open it: the tunnel instead of the QR code.
+  const run = plainCtx({ env: { ...SSH, USER: 'ops', LANG: 'en_US.UTF-8' }, flags: { qr: true } })
+  assert.equal(await offerToOpen(run.ctx, 'http://127.0.0.1:3999/device?code=AB'), 'shown')
+  assert.equal(run.err(), '  No browser here (this is an SSH session). This link opens only on this computer:\n    http://127.0.0.1:3999/device?code=AB\n  To open it from your own computer, forward the port first: ssh -L 3999:localhost:3999 ops@10.0.0.9, then open the link there.\n')
+  assert.doesNotMatch(run.err(), /any device|[█▀▄]/)
+})
+
+test('plain closing lines: no browser here says so before the setup link, with a QR code under --qr; a desktop is unchanged', () => {
+  const link = { url: 'https://acme.slatebox.team/setup/tok', qr: ['QR-ROW-1', 'QR-ROW-2'] }
+  const terminal = lines => lines.map(line => (typeof line === 'string' ? line : `[terminal]${line.terminal}`))
+  assert.deepEqual(terminal(setupLines({ env: SSH, platform: 'linux', inContainer: () => false, setupLink: link }, 'slatebox')), [
+    '', 'Create the first account (the server administrator) with this one-time setup link.',
+    'It works once and expires in 24 hours; nobody can sign up before it is used:',
+    '[terminal]No browser here (this is an SSH session). Open this on any device:',
+    '[terminal]  https://acme.slatebox.team/setup/tok   (printed to this terminal only)',
+    '[terminal]    QR-ROW-1', '[terminal]    QR-ROW-2',
+    'Lost it? slatebox setup-link prints a new one and ends this one.',
+  ])
+  // A desktop: as before (no sentence, no QR code even if one was made).
+  assert.deepEqual(terminal(setupLines({ env: { DISPLAY: ':0' }, platform: 'linux', inContainer: () => false, setupLink: link }, 'slatebox')).filter(line => /No browser|QR-ROW/.test(line)), [])
+  // A localhost link over SSH: only here, and the tunnel.
+  const local = setupLines({ env: { ...SSH, USER: 'ops' }, platform: 'linux', inContainer: () => false, setupLink: { url: 'http://localhost:38128/setup/tok' } }, 'slatebox')
+  assert.deepEqual(terminal(local).slice(3, 6), [
+    '[terminal]No browser here (this is an SSH session). This link opens only on this computer:',
+    '[terminal]  http://localhost:38128/setup/tok   (printed to this terminal only)',
+    '  To open it from your own computer, forward the port first: ssh -L 38128:localhost:38128 ops@10.0.0.9, then open the link there.',
+  ])
+})
+
 test('a setup link shown elsewhere is written past the redactor (the terminal only), like the link itself', async () => {
   const token = 'Zk3aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789-_qr'
   const run = plainCtx({ env: SSH })
@@ -152,7 +194,9 @@ test('a setup link shown elsewhere is written past the redactor (the terminal on
 function teamInstall() {
   const docker = new FakeDocker({ provider: 'colima', serverArch: 'arm64', settings: [...LEGACY_SETTINGS, 'SLATEBOX_TUNNEL_TOKEN'], commands: ['tunnel'] })
   docker.addImage('slatebox-test:browser')
-  const cloud = new FakeCloud()
+  // A cloud the person's other devices can reach (the real one is https://slatebox.com); a
+  // localhost page is the loopback case, below.
+  const cloud = new FakeCloud({ base: 'https://cloud.example' })
   return { docker, cloud, home: sandbox() }
 }
 const TEAM = ['install', '--image', 'slatebox-test:browser', '--target', 'local', '--team-address', 'acme', '--port', '17495', '--ai', 'none', '--no-sso', '--backups', 'off', '--size', 'small', '--admin-email', 'ops@example.com', '--mail-url-from', 'env:SMTP_URL']
@@ -237,17 +281,29 @@ test('QR code: the modules drawn are the encoder\'s, with a two-module quiet zon
   const ascii = qrLines(SAMPLE, { unicode: false })
   assert.equal(ascii.length, size)
   ascii.forEach((row, y) => assert.equal(row, data[y].map(dark => (dark ? '##' : '  ')).join('')))
-  // Colored half blocks: top and bottom module of each cell, black on white.
+  // Colored half blocks: every cell "▀", the top module the glyph's color and the bottom one the
+  // background (black or white), so line spacing below the glyph shows the bottom module's color.
   const color = qrLines(SAMPLE, { unicode: true, color: true })
   assert.equal(color.length, Math.ceil(size / 2))
   color.forEach((raw, i) => {
-    const row = raw.replace(/\x1b\[[\d;]*m/g, '')
-    assert.equal(row.length, size)
-    ;[...row].forEach((cell, x) => {
+    let fg = null, bg = null
+    const cells = []
+    for (const [, codes, ch] of raw.matchAll(/\x1b\[([\d;]*)m|(.)/gu)) {
+      if (codes !== undefined) for (const code of codes.split(';').map(Number)) { if (code === 0) fg = bg = null; else if (code === 30 || code === 37) fg = code === 30; else if (code === 40 || code === 47) bg = code === 40 }
+      else cells.push({ ch, fg, bg })
+    }
+    assert.equal(cells.length, size)
+    cells.forEach((cell, x) => {
       const top = data[2 * i][x], bottom = data[2 * i + 1]?.[x] ?? false
-      assert.equal(cell, top && bottom ? '█' : top ? '▀' : bottom ? '▄' : ' ')
+      assert.deepEqual(cell, { ch: '▀', fg: top, bg: bottom }, `row ${i}, column ${x}`)
     })
+    assert.ok(raw.endsWith('\x1b[0m'))
   })
+  // Full cells with color: one row a module, two spaces on black (dark) or white (light), only backgrounds.
+  const full = qrLines(SAMPLE, { unicode: false, color: true })
+  assert.equal(full.length, size)
+  full.forEach((row, y) => assert.equal(row, `${data[y].map(dark => (dark ? '\x1b[40m  ' : '\x1b[47m  ')).join('')}\x1b[0m`))
+  assert.equal(qrSize(SAMPLE), size)
   // The quiet zone: the first row and column are light.
   assert.equal(ascii[0].trim(), '')
   assert.ok(ascii.every(row => row.startsWith('    ')))

@@ -50,13 +50,17 @@ export function createPrompt({ input, output }) {
       if (!answer) return fallback
       return answer === 'y' || answer === 'yes'
     },
-    /** Hidden input: nothing is echoed while the key is typed. */
-    async secret(question) {
+    /**
+     * Hidden input: nothing is echoed while the key is typed. required: the input ending is a
+     * cancel (as for the other questions), not an empty answer that would be asked again forever.
+     */
+    async secret(question, { required = false } = {}) {
       output.write(`? ${question}: `)
       const tty = input.isTTY && typeof input.setRawMode === 'function'
       if (!tty) {
         const answer = await nextLine()
         output.write('\n')
+        if (answer === null && required) throw new InstallError(EXIT.CANCELLED, 'Cancelled.')
         return answer?.trim() || undefined
       }
       rl.pause()
