@@ -23,6 +23,7 @@ const LAYOUT = {
   AIControl: ['pages/admin/ai/AIControl.jsx'],
   LibraryReview: ['pages/LibraryReview.jsx'],
   LibraryIntegrationReview: ['pages/LibraryIntegrationReview.jsx'],
+  Updates: ['pages/admin/updates/Updates.jsx'],
   Library: ['pages/Library.jsx'],
   MyLibrary: ['pages/MyLibrary.jsx'],
   LibraryItem: ['pages/LibraryItem.jsx'],

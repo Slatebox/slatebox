@@ -127,7 +127,7 @@ export default function Updates() {
         ))}
       </Box>
 
-      <Box sx={{ display: 'grid', gap: 3, maxWidth: 980 }} data-testid="admin-updates">
+      <Box sx={{ display: 'grid', gap: 3 }} data-testid="admin-updates">
         {status.decision?.notice && <Alert severity="error">{status.decision.notice}</Alert>}
 
         <AccountSection title="This server" data-testid="updates-current">

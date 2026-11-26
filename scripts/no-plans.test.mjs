@@ -62,6 +62,8 @@ test('no user-facing string asks anyone to upgrade or unlock a feature', () => {
     for (const m of read(file).matchAll(strings)) {
       const text = m[2] ?? m[3] ?? ''
       if ((ownerAllowed[file] || []).includes(text.trim())) continue
+      // The command that moves a self-hosted install to a new version (`slatebox upgrade`) is its name, not an upsell.
+      if (/\bslatebox upgrade\b/.test(text) && !/\bupgrade\b/i.test(text.replace(/\bslatebox upgrade\b/g, ''))) continue
       if (/\bupgrade\b|upgrade today|upgrade now|unlock (themes|more|pro|features|video|ai)\b/i.test(text)) hits.push(`${file}: ${text.slice(0, 80)}`)
     }
   }
