@@ -46,7 +46,11 @@ def main():
         os.close(master)
         if spec.get('cwd'):
             os.chdir(spec['cwd'])
-        script = '"$@"; code=$?; printf "\\n<<stty>>\\n"; stty -a; exit $code'
+        # Ctrl-C on a cooked terminal sends SIGINT to the whole foreground group, this sh included.
+        # bash (macOS's sh) waits for the command and carries on; dash (Debian's and Ubuntu's sh)
+        # dies at once, so the command's exit code and the stty lines are lost. A trap (not an
+        # ignore: the command still gets SIGINT's default) keeps every sh alive to report them.
+        script = 'trap : INT; "$@"; code=$?; printf "\\n<<stty>>\\n"; stty -a; exit $code'
         os.execvpe('sh', ['sh', '-c', script, 'sh'] + spec['cmd'], env)
     output = bytearray()
     seen = 0

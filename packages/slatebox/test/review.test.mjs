@@ -77,12 +77,14 @@ test('1: over SSH a file that exists but cannot be read is an error, not "no fil
 // ------------------------------------------------------------------ 2
 
 test('2: the backup script names docker by its absolute path (cron\'s PATH on macOS has no /usr/local/bin)', async () => {
+  // docker is found first in a directory cron's PATH does not have (bin first: a Linux runner
+  // has its own /usr/bin/docker, which must not be the one found).
   const { docker, home } = setup()
   const bin = join(home, 'bin')
   mkdirSync(bin)
   writeFileSync(join(bin, 'docker'), '#!/bin/sh\n')
   chmodSync(join(bin, 'docker'), 0o755)
-  const result = await cli(['install', '--image', IMAGE, '--ai', 'none', '--port', '17436', '--yes'], { run: docker.run, home, env: { PATH: `/usr/bin:${bin}` } })
+  const result = await cli(['install', '--image', IMAGE, '--ai', 'none', '--port', '17436', '--yes'], { run: docker.run, home, env: { PATH: `${bin}:/usr/bin` } })
   assert.equal(result.code, 0, result.stderr)
   const script = readFileSync(join(home, 'installs', 'slatebox', 'backup.sh'), 'utf8')
   assert.match(script, new RegExp(`^docker=${join(bin, 'docker').replace(/[/.]/g, '\\$&')}$`, 'm'))

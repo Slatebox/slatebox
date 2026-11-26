@@ -140,8 +140,13 @@ test('ssh: without Docker on the server and without consent, exit 4 and nothing 
   const result = await cli(['install', 'ssh', 'root@203.0.113.5', '--admin-email', 'ops@example.com', '--ai', 'none', '--yes', '--json'], { run, home })
   assert.equal(result.code, 4)
   assert.equal(result.events.at(-1).needs, 'install-docker')
-  assert.equal(calls.length, 1, 'only the read-only preflight ran')
-  assert.ok(calls[0].args.includes('BatchMode=yes'))
+  // A short home (Linux's /tmp) multiplexes the connection, and closing it (ssh -O exit) runs
+  // nothing on the server; a long one (macOS's /var/folders) does not multiplex.
+  const remote = calls.filter(call => !call.args.includes('-O'))
+  assert.equal(remote.length, 1, 'only the read-only preflight ran')
+  assert.ok(remote[0].args.includes('BatchMode=yes'))
+  if (remote[0].args.some(arg => arg.startsWith('ControlPath='))) assert.deepEqual(calls.at(-1).args.slice(0, 2), ['-O', 'exit'], 'the shared connection was closed')
+  else assert.equal(calls.length, 1)
 
   const planned = await cli(['plan', 'ssh', 'root@203.0.113.5', '--admin-email', 'ops@example.com', '--ai', 'none', '--install-docker', '--json'], { run, home })
   assert.equal(planned.code, 0, planned.stderr)
