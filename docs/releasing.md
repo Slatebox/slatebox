@@ -47,8 +47,8 @@ The app has had three version lines:
 - **2.0.0 onward**: one version for the app and the image. 2.0.0 is above every version anyone had
   seen, and its changes include breaking ones (themes and the `themeId` creation link parameter
   are gone). 2.0.0 was an app release only; **2.1.0** is the first image GitHub built and signed
-  from a release tag. The installer pins the newest published image (`npx slatebox status` shows
-  which one a server runs).
+  from a release tag. Installer 0.3.0 and later pin the newest published image (`npx slatebox
+  status` shows which one a server runs).
 
 The earlier versions were tagged afterwards (see [Earlier versions](#earlier-versions)).
 
@@ -126,8 +126,10 @@ app release.
   smoke-tests each architecture, pushes by digest, joins one index (exactly linux/amd64 and
   linux/arm64), signs it with cosign (keyless) with SLSA provenance, moves `X.Y`, `X`, `stable` and
   `latest` when it is the newest stable release (`preview` for an `-rc` tag), then publishes the
-  signed release manifest and updates the signed update feed. Every self-hosted Slatebox sees the
-  release in Admin › Updates within 6 hours. It publishes; it gates nothing. A dry run: Actions,
+  signed release manifest and updates the signed update feed. A self-hosted Slatebox on 2.1.0 or
+  later sees the release in Admin › Updates within 6 hours and can update itself; an older install
+  runs `npx slatebox@latest upgrade` once (after installer 0.3.0 is on npm) to get there. It
+  publishes; it gates nothing. A dry run: Actions,
   Self-host image, Run workflow, the tag, `push` off (both architectures build and are
   smoke-tested, nothing is published). To publish by hand (a re-run), choose **Use workflow from:
   the tag** `vX.Y.Z` itself and give the same tag with `push` on: a run from a branch never
