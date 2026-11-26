@@ -381,7 +381,9 @@ test('at a terminal the sign-in offers to open the browser on the Cloud\'s own p
   // is approved with Enter. (Without --yes: with it nothing is asked; see the test after this one.)
   const flags = ['--target', 'local', '--admin-email', 'ops@example.com', '--no-sso', '--size', 'small']
   const result = await cli(['install', '--team-address', 'acme', ...BASE, ...flags], {
-    run: docker.run, home, fetch: cloud.fetch, tty: true, input: '\n\ny\n', env: { SLATEBOX_CLOUD_URL: cloud.base },
+    run: docker.run, home, fetch: cloud.fetch, tty: true, input: '\n\ny\n',
+    // A desktop at a terminal (a Linux CI runner has no display, so it would count as "no browser here").
+    env: { SLATEBOX_CLOUD_URL: cloud.base, DISPLAY: ':0' },
     io: { sleep: async () => {}, deviceLabel: 'test-box', openBrowser: url => opened.push(url), teamHealthDelay: 1, teamHealthAttempts: 3 },
   })
   assert.equal(result.code, 0, result.stderr)
