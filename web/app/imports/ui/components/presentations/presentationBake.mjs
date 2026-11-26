@@ -241,6 +241,46 @@ function unworn(options) {
   return out
 }
 
+// What a note made since the original looked like before any style restyled it (options.styleWas):
+// `look`, the note's own value of every option a style changed (null: it had none), and `lines`,
+// the same for each line it draws that the original did not have (by its two ends). Written the
+// first time a style changes a key and never overwritten by the next style, so it is always the
+// note's own look. The original's notes need none (Revert brings them back from the original).
+const LOOK_SKIP = new Set(['styleBase', 'styleWas'])
+const lineKeyOf = (assoc) => `${assoc.parentId}->${assoc.childId}`
+function remembered(was, before = {}, after = {}) {
+  const out = { ...(was && typeof was === 'object' ? was : {}) }
+  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if (LOOK_SKIP.has(key) || Object.hasOwn(out, key)) continue
+    if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) out[key] = before[key] === undefined ? null : clone(before[key])
+  }
+  return out
+}
+function withLook(target, look) {
+  const out = { ...target }
+  for (const [key, value] of Object.entries(look || {})) {
+    if (value === null) delete out[key]
+    else out[key] = clone(value)
+  }
+  return out
+}
+/**
+ * A note made since the original as it was before a style restyled it: its own outline, fill,
+ * fonts, colors, place and size again (its words are its own and stay), the record cleared. Its
+ * lines made since get their own look back too (`lines`, from styleWas.lines).
+ */
+function lookBack(node) {
+  const was = node.options?.styleWas
+  // Its words are its own, newer than any look: never taken back.
+  const options = { ...withLook(node.options || {}, was?.look), text: node.options?.text }
+  if (options.text === undefined) delete options.text
+  delete options.styleWas
+  delete options.styleBase
+  return { ...node, options, relationships: { ...(node.relationships || {}), associations: linesBack(node.relationships?.associations, was?.lines) } }
+}
+// Lines with the look they had before a style restyled them (styleWas.lines of the note they are on).
+const linesBack = (associations, lines) => (associations || []).map((assoc) => (lines?.[lineKeyOf(assoc)] ? withLook(assoc, lines[lineKeyOf(assoc)]) : assoc))
+
 // A note that is no longer the style's: the style's marks off, unlocked if the style locked it.
 function plainOptions(options) {
   const out = { ...options }
@@ -312,7 +352,8 @@ export function revertToOriginal(slateJSON) {
     if (!current) return node
     // Words somebody wrote (a style's own words on art it made since are not theirs).
     const newer = !isUntouchedArt(current) && wordsOf(current.options?.text) && wordsOf(current.options?.text) !== wordsOf(node.options?.text)
-    const lines = (current.relationships?.associations || []).filter((a) => !had.has(lineKey(a)))
+    // Each with its own look again (a style restyled it since).
+    const lines = linesBack((current.relationships?.associations || []).filter((a) => !had.has(lineKey(a))), current.options?.styleWas?.lines)
     if (!newer && !lines.length) return node
     return {
       ...node,
@@ -320,10 +361,12 @@ export function revertToOriginal(slateJSON) {
       relationships: { ...(node.relationships || {}), associations: [...(node.relationships?.associations || []), ...lines] },
     }
   })
-  // Notes made since: kept, all but the art a style added that nobody changed or drew a line to.
+  // Notes made since: kept, all but the art a style added that nobody changed or drew a line to,
+  // each in its own look again (outline, fill, fonts, colors, place and size from before a style
+  // restyled it, its lines too), with its words.
   const linked = linkedIds(doc.nodes)
   const added = (doc.nodes || []).filter((node) => !ids.has(idOf(node)) && !(isUntouchedArt(node) && !linked.has(idOf(node))))
-    .map((node) => ({ ...node, options: isStyleArt(node) ? plainOptions(node.options) : { ...node.options } }))
+    .map((node) => (isStyleArt(node) ? { ...node, options: plainOptions(node.options) } : lookBack(node)))
   const kept = new Set([...nodes, ...added].map(idOf))
   doc.nodes = [...nodes, ...added].map((node) => ({
     ...node,
@@ -570,12 +613,29 @@ export function wearStyle(slateJSON, styleRef, { direction = null, name = '', am
   const keptArt = rest.filter((node) => !gone.has(idOf(node)))
 
   // 1. The slate's own notes in the style (same ids, same words; outlines, fills, fonts, places).
+  // A note or a line made since the original remembers its own look first (styleWas), so Revert
+  // to original gives it back: the original's own are given back from the original.
+  const hadLines = new Set((doc.options.styleOriginal?.nodes || []).flatMap((node) => (node.relationships?.associations || []).map(lineKeyOf)))
   const nodes = own.map((node) => {
     const id = idOf(node)
     const look = composed.skin[id]
-    const associations = (node.relationships?.associations || []).filter((a) => !gone.has(String(a.parentId)) && !gone.has(String(a.childId)))
-      .map((assoc) => ({ ...assoc, ...(composed.lines[`${assoc.parentId}->${assoc.childId}`] || {}) }))
-    return { ...node, options: look ? skinNote(node.options, look, origin) : { ...node.options }, relationships: { ...(node.relationships || {}), associations } }
+    const before = node.relationships?.associations || []
+    const associations = before.filter((a) => !gone.has(String(a.parentId)) && !gone.has(String(a.childId)))
+      .map((assoc) => ({ ...assoc, ...(composed.lines[lineKeyOf(assoc)] || {}) }))
+    const options = look ? skinNote(node.options, look, origin) : { ...node.options }
+    const was = options.styleWas && typeof options.styleWas === 'object' ? options.styleWas : {}
+    const lines = { ...(was.lines || {}) }
+    for (const assoc of associations) {
+      const key = lineKeyOf(assoc)
+      if (hadLines.has(key)) continue
+      const line = remembered(lines[key], before.find((a) => lineKeyOf(a) === key), assoc)
+      if (Object.keys(line).length) lines[key] = line
+    }
+    const lookWas = original && !original.has(id) ? remembered(was.look, node.options, options) : was.look || {}
+    if (Object.keys(lookWas).length || Object.keys(lines).length) {
+      options.styleWas = { ...(Object.keys(lookWas).length ? { look: lookWas } : {}), ...(Object.keys(lines).length ? { lines } : {}) }
+    }
+    return { ...node, options, relationships: { ...(node.relationships || {}), associations } }
   })
   // 2. Art that is somebody's and has no place in the new style: their own note now, as they left it.
   const keptPlain = keptArt.map((node) => ({ ...node, options: keptInStyle(node, style) }))

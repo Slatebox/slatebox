@@ -313,6 +313,58 @@ test('Revert to original keeps a line drawn after the first style between two no
   same(n0.relationships.associations.filter((a) => !(a.parentId === 'n0' && a.childId === 'l1')), s.nodes.find((n) => n.options.id === 'n0').relationships.associations)
 })
 
+// Owner, 2026-11-25: after Revert to original a navy serif note still drew a dashed line to a ticket-shaped note: a
+// note and line made after the first style, restyled by every style since, kept the last style's look.
+test('Revert to original gives a note and a line made since their own look back (every style, switched, removed), with their words', () => {
+  for (const [first, second] of [['journey', 'calm'], ['editorial', 'journey'], ['blueprint', 'neon'], ['calm', 'journey']]) {
+    const plain = ownSlate()
+    const worn = wearStyle(plain, { id: first }, { ambient: true }).slate
+    // Made after the first style, in the slate's own look (a note of their own, a line to a new note, a line between two of the original's notes).
+    const single = { id: 'single', text: 'single', xPos: 1400, yPos: 0, width: 180, height: 80, backgroundColor: '#ffffff', fontColor: '#111111', fontFamily: 'Roboto', borderWidth: 1, borderColor: '#999999', shape: 'rectangle' }
+    const kid = { ...single, id: 'kid', text: 'kid', yPos: 200 }
+    worn.nodes.push({ options: clone(single), relationships: { associations: [{ parentId: 'single', childId: 'kid', lineColor: '#333333', lineWidth: 3, lineDash: 'solid' }] } })
+    worn.nodes.push({ options: clone(kid), relationships: { associations: [] } })
+    worn.nodes.find((n) => n.options.id === 'mine').relationships.associations.push({ parentId: 'mine', childId: 'single', lineColor: '#333333', lineWidth: 3, lineDash: 'solid' })
+    let doc = wearStyle(worn, { id: second }, { ambient: true }).slate
+    doc = wearStyle(doc, { id: first }, { ambient: true }).slate
+    // The styles restyled them (the bug's precondition: the last style's look is on them).
+    assert.notDeepEqual(JSON.parse(JSON.stringify(doc.nodes.find((n) => n.options.id === 'single').options)), single, `${first}/${second}: the style restyled the note made since`)
+    doc.nodes.find((n) => n.options.id === 'single').options.text = 'single, renamed after'
+    for (const label of ['revert', 'remove then revert']) {
+      const back = revertToOriginal(label === 'revert' ? doc : takeOffStyle(doc)).slate
+      const note = (id) => back.nodes.find((n) => n.options.id === id)
+      same(note('single').options, { ...single, text: 'single, renamed after' })
+      same(note('kid').options, kid)
+      same(note('single').relationships.associations, [{ parentId: 'single', childId: 'kid', lineColor: '#333333', lineWidth: 3, lineDash: 'solid' }])
+      const mine = note('mine').relationships.associations.find((a) => a.childId === 'single')
+      same(mine, { parentId: 'mine', childId: 'single', lineColor: '#333333', lineWidth: 3, lineDash: 'solid' })
+      // The original's notes exactly as they were; nothing of a style anywhere.
+      for (const was of plain.nodes) {
+        const now = note(was.options.id)
+        same(now.options, was.options)
+        same(now.relationships.associations.filter((a) => a.childId !== 'single'), was.relationships.associations)
+      }
+      for (const node of back.nodes) assert.equal(node.options.styleWas, undefined, `${first}/${second} ${label}: ${node.options.id} keeps no record`)
+      assert.equal(back.nodes.filter(isStyleArt).length, 0, `${first}/${second} ${label}: no style art`)
+      assert.equal(wornStyle(back), null)
+    }
+  }
+})
+
+// The first style worn on a slate writes no record on the original's notes (Revert gives them back from the original),
+// so a slate's first style (and the library's seeded presentations) is drawn exactly as before.
+test('the original\'s notes carry no record of their own look; a note made since keeps the first look it had', () => {
+  const plain = ownSlate()
+  const once = wearStyle(plain, { id: 'journey' }, { ambient: true }).slate
+  for (const node of once.nodes) assert.equal(node.options.styleWas, undefined, `${node.options.id}: no record on a first style`)
+  once.nodes.push({ options: { id: 'later', text: 'Later', xPos: 0, yPos: 900, width: 200, height: 80, backgroundColor: '#fefefe', fontColor: '#010101' }, relationships: { associations: [] } })
+  const twice = wearStyle(once, { id: 'calm' }, { ambient: true }).slate
+  const thrice = wearStyle(twice, { id: 'neon' }, { ambient: true }).slate
+  const look = thrice.nodes.find((n) => n.options.id === 'later').options.styleWas.look
+  assert.equal(look.backgroundColor, '#fefefe')
+  assert.equal(look.fontColor, '#010101')
+})
+
 test('a picture someone put on a style\'s image art survives every switch, on a plain slate and a library copy', () => {
   const MINE = 'https://example.com/mine.png'
   const w = wearStyle(slateOfLayout(whatIsSlatebox(), 'What is Slatebox'), { id: 'voyage' }).slate
