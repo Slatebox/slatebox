@@ -1,0 +1,11 @@
+ ◆  Where should Slatebox run?
+ │  › This computer
+ │      Docker 29.4.0 (Colima) · recommended
+ │    A Linux server over SSH
+ │      installs Docker there if it is missing
+ │    Kubernetes
+ │      no context found
+ │    Just write the files
+ │      a run command, manifests or a Helm chart, for
+ │      GitOps
+ └

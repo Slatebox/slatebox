@@ -107,30 +107,78 @@ export function freeGb(ctx, path) {
   } catch { return null }
 }
 
-async function preflightLocal(ctx, host) {
-  const version = await host.docker(['version', '--format', '{{.Server.Version}}'])
-  if (version.code === 127) throw new InstallError(EXIT.PRECONDITION, dockerMissing(ctx), { docker: 'missing', podman: Boolean(which('podman', ctx.env.PATH)) })
-  if (version.code !== 0) {
-    throw new InstallError(EXIT.PRECONDITION, `Docker is not running on this computer (${lastLine(version.stderr) || 'docker version failed'}). Start Docker Desktop, OrbStack, Colima (colima start), Podman or the Docker service, then run this again.`, { docker: 'stopped' })
-  }
-  const arch = await host.docker(['version', '--format', '{{.Server.Arch}}'])
-  const serverArch = arch.code === 0 ? arch.stdout.trim() : null
-  if (serverArch && !ARCHES.includes(normalArch(serverArch))) {
-    throw new InstallError(EXIT.PRECONDITION, `Docker on this computer runs ${serverArch} containers; Slatebox runs on 64-bit Intel/AMD (amd64) or ARM (arm64).`, { arch: serverArch })
-  }
-  const info = await host.docker(['info', '--format', '{{.OperatingSystem}}\t{{.Name}}'])
-  const [os = '', name = ''] = info.code === 0 ? info.stdout.trim().split('\t') : []
-  const context = await host.docker(['context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'])
-  const runtime = dockerProvider({ os, name, endpoint: context.code === 0 ? context.stdout.trim() : String(ctx.env.DOCKER_HOST || '') })
-  const free = freeGb(ctx, host.dir)
-  if (free !== null && free < MIN_DISK_GB) {
-    throw new InstallError(EXIT.PRECONDITION, `This computer has ${free.toFixed(1)} GB free where Slatebox keeps its files (${host.dir}); Slatebox needs at least ${MIN_DISK_GB} GB. Free some space, then run this again.`, { diskGb: Number(free.toFixed(1)) })
-  }
+/**
+ * This computer's Docker, processor and disk. probe(label, fn, show) wraps each check: the wizard in
+ * the terminal draws a row for it (ctx.ui.probe); everywhere else it is just fn().
+ */
+async function preflightLocal(ctx, host, probe = (_label, fn) => fn()) {
+  const platform = ctx.platform || process.platform
+  const engine = await probe('Docker engine', async () => {
+    const version = await host.docker(['version', '--format', '{{.Server.Version}}'])
+    if (version.code === 127) throw new InstallError(EXIT.PRECONDITION, dockerMissing(ctx), { docker: 'missing', podman: Boolean(which('podman', ctx.env.PATH)) })
+    if (version.code !== 0) {
+      throw new InstallError(EXIT.PRECONDITION, `Docker is not running on this computer (${lastLine(version.stderr) || 'docker version failed'}). Start Docker Desktop, OrbStack, Colima (colima start), Podman or the Docker service, then run this again.`, { docker: 'stopped' })
+    }
+    const info = await host.docker(['info', '--format', '{{.OperatingSystem}}\t{{.Name}}'])
+    const [os = '', name = ''] = info.code === 0 ? info.stdout.trim().split('\t') : []
+    const context = await host.docker(['context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'])
+    const runtime = dockerProvider({ os, name, endpoint: context.code === 0 ? context.stdout.trim() : String(ctx.env.DOCKER_HOST || '') })
+    return { docker: version.stdout.trim(), runtime }
+  }, {
+    done: found => `${found.docker}${found.runtime ? ` (${found.runtime})` : ''}`,
+    failed: error => error.details?.docker === 'missing'
+      ? { short: 'not installed', hint: platform === 'linux' ? 'Install Docker Engine (curl -fsSL https://get.docker.com | sudo sh), then press r to check again.' : 'Install Docker Desktop, OrbStack or Colima (brew install colima docker && colima start), then press r to check again.' }
+      : { short: 'installed, not running', hint: 'Start Docker Desktop, OrbStack or Colima (colima start), then press r to check again.' },
+  })
+  const serverArch = await probe('Processor', async () => {
+    const arch = await host.docker(['version', '--format', '{{.Server.Arch}}'])
+    const found = arch.code === 0 ? arch.stdout.trim() : null
+    if (found && !ARCHES.includes(normalArch(found))) {
+      throw new InstallError(EXIT.PRECONDITION, `Docker on this computer runs ${found} containers; Slatebox runs on 64-bit Intel/AMD (amd64) or ARM (arm64).`, { arch: found })
+    }
+    return found
+  }, { done: found => found || 'unknown', failed: error => ({ short: `${error.details.arch}: Slatebox needs amd64 or arm64` }) })
+  await probe('Disk', async () => {
+    const gb = freeGb(ctx, host.dir)
+    if (gb !== null && gb < MIN_DISK_GB) {
+      throw new InstallError(EXIT.PRECONDITION, `This computer has ${gb.toFixed(1)} GB free where Slatebox keeps its files (${host.dir}); Slatebox needs at least ${MIN_DISK_GB} GB. Free some space, then run this again.`, { diskGb: Number(gb.toFixed(1)) })
+    }
+    return gb
+  }, { done: gb => (gb === null ? 'free space unknown' : `${Math.floor(gb)} GB free in ~/.slatebox`), failed: error => ({ short: `${error.details.diskGb} GB free; needs ${MIN_DISK_GB} GB`, hint: 'Free some space, then press r to check again.' }) })
   // cron runs with PATH=/usr/bin:/bin; Docker Desktop and OrbStack live elsewhere.
-  return { docker: version.stdout.trim(), runtime, arch: serverArch, docker_path: which('docker', ctx.env.PATH), aws_path: which('aws', ctx.env.PATH) }
+  return { docker: engine.docker, runtime: engine.runtime, arch: serverArch, docker_path: which('docker', ctx.env.PATH), aws_path: which('aws', ctx.env.PATH) }
 }
 
-const dockerLine = facts => `Docker ${facts.docker || facts.docker_server || '(to be installed)'}${facts.runtime ? ` (${facts.runtime})` : ''}`
+/**
+ * The wizard's machine check, before the first question: read-only, one row per check, and the
+ * port this computer would use. Returns { ok, facts } or { ok: false, error, why } (why: windows,
+ * docker, processor, disk) so the "Where" question can say what is possible here.
+ */
+export async function machineCheck(ctx) {
+  const probe = ctx.ui?.probe
+  if ((ctx.platform || process.platform) === 'win32') {
+    ctx.prompt?.heading?.('Checking this computer')
+    ctx.prompt?.note?.('fail', 'Native Windows: use WSL 2 (Ubuntu) with Docker Desktop\'s WSL integration')
+    return { ok: false, why: 'windows' }
+  }
+  ctx.prompt?.heading?.('Checking this computer')
+  try {
+    const facts = await preflightLocal(ctx, localHost(ctx, { dir: installDir(ctx.home, 'slatebox'), name: 'slatebox' }), probe)
+    if (probe && ctx.freePort) {
+      const chosen = ctx.freePort
+      await probe('Port', async () => ({ port: chosen, free: await portFree(chosen) }), {
+        done: ({ port, free }) => (!free ? `${port} is taken (choose another with --port)` : port === 7070 || ctx.portGiven ? `${port} is free` : `7070 is taken; ${port} is free`),
+      })
+    }
+    return { ok: true, facts }
+  } catch (error) {
+    if (!(error instanceof InstallError)) throw error
+    const why = error.details?.docker ? 'docker' : error.details?.arch ? 'processor' : error.details?.diskGb !== undefined ? 'disk' : 'docker'
+    return { ok: false, error, why, docker: error.details?.docker }
+  }
+}
+
+export const dockerLine = facts => `Docker ${facts.docker || facts.docker_server || '(to be installed)'}${facts.runtime ? ` (${facts.runtime})` : ''}`
 
 async function checkPorts(host, answers, facts, existing) {
   if (existing.container.exists) return // the install already holds its ports
@@ -204,7 +252,8 @@ export async function preflightTarget(ctx, partial) {
   refuseWindows(ctx)
   if (target === 'local') {
     const facts = await preflightLocal(ctx, localHost(ctx, { dir: installDir(ctx.home, name), name }))
-    ctx.out.step('preflight', 'ok', `This computer: ${dockerLine(facts)}, ${facts.arch || 'unknown processor'}`)
+    // The wizard's machine check already showed these rows; the check itself still runs.
+    if (!ctx.machineShown) ctx.out.step('preflight', 'ok', `This computer: ${dockerLine(facts)}, ${facts.arch || 'unknown processor'}`)
     return facts
   }
   const s = partial.ssh || {}

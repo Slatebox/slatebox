@@ -181,7 +181,13 @@ export async function signIn(ctx, cloud, { purpose = 'claim a team address', sco
   const minutes = Math.max(1, Math.round((grant.expires_in || 600) / 60))
   ctx.out.event({ event: 'sign-in', status: 'waiting', verificationUri: page, userCode: grant.user_code, expiresIn: grant.expires_in || 600 })
   const lines = ['', `Sign in to Slatebox to ${purpose}.`, `  Open:  ${page}`, `  Code:  ${grant.user_code}`]
-  if (ctx.interactive) {
+  const rich = ctx.interactive && ctx.prompt?.rich
+  if (rich) {
+    // The wizard: the code and page in a box, then a countdown while the browser approves.
+    ctx.prompt.signInBox({ purpose, page, code: grant.user_code })
+    if (ctx.yes) (ctx.openBrowser || openBrowser)(complete || page, ctx.platform)
+    else if (await ctx.prompt.confirm('Open it in your browser now?', { default: true, label: 'Browser' })) (ctx.openBrowser || openBrowser)(complete || page, ctx.platform)
+  } else if (ctx.interactive) {
     lines.push(`  (The code expires in ${minutes} minutes.)`)
     ctx.stderr.write(`${lines.join('\n')}\n`)
     // --yes asks nothing: the page is opened for the person, as Enter at the question would.
@@ -193,9 +199,21 @@ export async function signIn(ctx, cloud, { purpose = 'claim a team address', sco
     lines.push(`  (The code expires in ${minutes} minutes. Approve it in a browser where you are signed in to Slatebox.)`)
     ctx.stderr.write(`${lines.join('\n')}\n`)
   }
-  ctx.stderr.write('... waiting for approval\n')
+  if (!rich) ctx.stderr.write('... waiting for approval\n')
   let interval = Math.max(1, Number(grant.interval) || 5) * 1000
   const deadline = Date.now() + (grant.expires_in || 600) * 1000
+  const waiting = rich ? ctx.prompt.waitForApproval(deadline) : null
+  try {
+    const token = await pollForToken(ctx, cloud, grant, { interval, deadline })
+    waiting?.ok('Signed in')
+    return token
+  } catch (error) {
+    waiting?.clear()
+    throw error
+  }
+}
+
+async function pollForToken(ctx, cloud, grant, { interval, deadline }) {
   const wait = ctx.sleep || sleep
   for (;;) {
     await wait(interval)

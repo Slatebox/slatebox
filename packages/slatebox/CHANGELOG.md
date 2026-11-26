@@ -13,6 +13,35 @@ release's highlights.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-25
+
+### Added
+
+- **installer:** a wizard in the terminal, in Slatebox greens, gold and cream. The machine
+  check runs first and shows one row per check (Docker, processor, disk, port; `r` checks
+  again). Six short sections follow (where, address, admin, agents, sign-in, review),
+  answered with the arrow keys, numbers and Enter, and each answer folds into one line. A
+  taken team address offers the free ones to pick. One question takes the usual settings
+  for backups, size and mail (exactly what `--yes` would choose). The review shows the plan
+  in a box, with Install, Change a section… (asks that section again) or Cancel, and `d` for
+  every file and command; on a server or a cluster Cancel is highlighted, as before. Each
+  install step is a spinner row that settles into its result and time, and the end shows
+  where Slatebox runs and the one-time setup link, never wrapped (a link the terminal can
+  open, where it supports one). Ctrl-C stops at any question and changes nothing (exit 7),
+  and the terminal is always given back.
+- **installer:** `--plain` (or `SLATEBOX_PLAIN=1`) keeps the line-by-line questions, for
+  screen readers and simple terminals. They are also used with `TERM=dumb`, in CI, without
+  raw mode, or under 60 columns, and they are the same, byte for byte, as in 0.2.3.
+  `NO_COLOR` and `FORCE_COLOR` are honored.
+
+### Changed
+
+- The wizard's key handling is `@clack/core` 1.6.0 (pinned exactly; about 56 kB), loaded only
+  for a wizard run: `--version`, `--json`, `--yes`, agents, pipes and CI never load it.
+- `--json`, `--yes`, a run with nobody to ask (exit 3), the answers file, flags and exit codes
+  are unchanged.
+- `create-slatebox` 0.1.4 installs `slatebox` 0.3.0.
+
 ## [0.2.3] - 2026-11-25
 
 ### Changed

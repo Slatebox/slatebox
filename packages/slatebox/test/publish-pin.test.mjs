@@ -40,5 +40,20 @@ test('the slate commands come from one exact slatebox-mcp version, never a range
   const mcp = JSON.parse(readFileSync(new URL('../../slatebox-mcp/package.json', import.meta.url), 'utf8'))
   assert.match(manifest.dependencies['slatebox-mcp'], /^\d+\.\d+\.\d+$/)
   assert.equal(manifest.dependencies['slatebox-mcp'], mcp.version)
-  assert.deepEqual(Object.keys(manifest.dependencies), ['slatebox-mcp'], 'the installer has no other dependency')
+  // Restated (0.3.0, the wizard in the terminal): one other dependency, @clack/core (key handling
+  // only), checked exactly in the next test.
+  assert.deepEqual(Object.keys(manifest.dependencies).sort(), ['@clack/core', 'slatebox-mcp'], 'the installer has no other dependency')
+})
+
+// 0.3.0: the wizard's key handling is @clack/core at one exact version, never a range. Its look is
+// Slatebox's own, so @clack/prompts (a fixed look) and Ink (a 25 MB tree) are not dependencies.
+test('the wizard depends on @clack/core 1.6.0 exactly, and never on @clack/prompts or ink', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  const all = { ...manifest.dependencies, ...manifest.optionalDependencies, ...manifest.peerDependencies, ...manifest.devDependencies }
+  assert.equal(manifest.dependencies['@clack/core'], '1.6.0')
+  assert.equal(all['@clack/prompts'], undefined)
+  assert.equal(all.ink, undefined)
+  const create = JSON.parse(readFileSync(new URL('../../create-slatebox/package.json', import.meta.url), 'utf8'))
+  assert.equal(manifest.version, '0.3.0')
+  assert.equal(create.dependencies.slatebox, '0.3.0')
 })

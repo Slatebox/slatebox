@@ -12,6 +12,9 @@ export class Output {
     this.json = json
     this.debugOn = debug
     this.redactor = redactor
+    // Set only by the wizard in the terminal (src/ui/rich-prompt.mjs): people's lines and steps go
+    // to it (spinner rows that settle), instead of plain lines. Events and --debug do not change.
+    this.listener = null
   }
 
   #text(stream, text) {
@@ -20,11 +23,13 @@ export class Output {
 
   /** A line for people. */
   say(text = '') {
+    if (this.listener) return this.listener.say(this.redactor.redact(text))
     this.#text(this.json ? this.stderr : this.stdout, text)
   }
 
   /** A warning for people, always on stderr. */
   warn(text) {
+    if (this.listener) return this.listener.warn(this.redactor.redact(text))
     this.#text(this.stderr, `! ${text}`)
   }
 
@@ -41,6 +46,7 @@ export class Output {
   /** A step in progress, for both audiences. */
   step(id, status, detail = '') {
     this.event({ event: 'step', id, status, ...(detail ? { detail } : {}) })
+    if (this.listener) return this.listener.step(id, status, this.redactor.redact(detail || id))
     if (!this.json || this.debugOn) {
       const mark = { start: '…', ok: '✓', skip: '–', warn: '!', fail: '✗' }[status] || '·'
       this.#text(this.json ? this.stderr : this.stdout, `${mark} ${detail || id}`)

@@ -1,0 +1,51 @@
+
+Slatebox installer. Enter accepts the default in brackets; Ctrl-C stops without changing anything.
+
+? Which files?
+  1) Docker Compose file  [default]
+  2) Kubernetes manifests
+  3) Helm chart
+  Choose 1-3 (Enter for the default): 3
+? Write them to (./slatebox-deploy): 
+? How does traffic reach it?
+  1) An Ingress (ingress-nginx, Traefik, ...)  [default]
+  2) Gateway API (an HTTPRoute on an existing Gateway)
+  3) Nothing for now (kubectl port-forward)
+  Choose 1-3 (Enter for the default): 3
+? Admin email (the HTTPS certificate contact; the first account comes from the setup link) (Enter skips): ops@example.com
+? AI for drafts and the canvas assistant. Slatebox works with any provider, and none is chosen for you.
+  1) None for now (the usual choice; add a provider later with `slatebox ai add`)
+  2) Cloud provider key(s): OpenAI, Anthropic, DeepInfra, OpenRouter, Groq, Together, Mistral
+  3) An endpoint I run: Ollama, vLLM, LM Studio or any OpenAI-compatible URL, and its model
+  4) Both
+  Choose 1-4: 1
+? Single sign-on (bundled Keycloak: Entra ID, Okta, Google Workspace, SAML, LDAP)? [y/N]: 
+? Backups
+  1) Daily at 03:00 UTC to a volume in the namespace, keep 14  [default]
+  2) Off
+  Choose 1-2 (Enter for the default): 
+? Size
+  1) small: 1Gi memory, 1 CPU, 10Gi storage  [default]
+  2) team: 2Gi memory, 2 CPU, 20Gi storage
+  3) large: 4Gi memory, 4 CPU, 50Gi storage
+  Choose 1-3 (Enter for the default): 
+? Mail: name of the environment variable that holds your SMTP URL (smtp://user:pass@host:587) (Enter skips): 
+  Without mail, someone who forgets a password gets a one-time link from you: docker exec slatebox slatebox password-link <email>
+
+Plan: write the files for Slatebox "slatebox"
+
+  Address:   http://localhost:7070
+  Image:     ghcr.io/slatebox/slatebox@sha256:8a64b09e8e6d53a0fb2b76b60048474eba52a010ddd7f7b834ea898a003e4ec5
+
+  Files:
+    - <HOME>/slatebox-deploy/slatebox/Chart.yaml
+    - <HOME>/slatebox-deploy/slatebox/values.yaml
+    - <HOME>/slatebox-deploy/slatebox/templates/configmap.yaml
+    - <HOME>/slatebox-deploy/slatebox/templates/configmap-slatebox-backup-script.yaml
+    - <HOME>/slatebox-deploy/slatebox/templates/persistentvolumeclaim-slatebox-backups.yaml
+    - <HOME>/slatebox-deploy/slatebox/templates/statefulset-slatebox.yaml
+    - <HOME>/slatebox-deploy/slatebox/templates/service-slatebox.yaml
+    - <HOME>/slatebox-deploy/secret.example.yaml
+    - <HOME>/slatebox-deploy/README.md
+Wrote 9 files to <HOME>/slatebox-deploy. Nothing was applied.
+

@@ -80,7 +80,8 @@ test('exec and describe run slatebox-mcp in this process: help, a listing, and i
 test('the package names one command, slatebox, and depends on exactly one slatebox-mcp', () => {
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   assert.deepEqual(manifest.bin, { slatebox: 'bin/slatebox.mjs' })
-  assert.match(manifest.version, /^0\.2\.\d+$/)
+  // Restated (0.3.0, the wizard in the terminal): the 0.3 line.
+  assert.match(manifest.version, /^0\.3\.\d+$/)
   const source = readFileSync(new URL('../src/cli.mjs', import.meta.url), 'utf8')
   assert.doesNotMatch(source, /npx(\.cmd)?['"`, ]+\[?['"]--yes['"], ['"]--package/, 'slate commands are never fetched with npx')
 })

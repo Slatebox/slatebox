@@ -41,3 +41,11 @@ test('the guard catches what it is for', () => {
     assert.doesNotMatch(line, PAYMENT_WORDS, line)
   }
 })
+
+// 0.3.0: the wizard's copy (src/ui/) and the interview's new words are in what the guard reads.
+test('the guard reads the wizard in the terminal and its copy', () => {
+  const read = files(root).map(file => file.slice(root.length))
+  for (const file of ['src/ui/rich-prompt.mjs', 'src/ui/mode.mjs', 'src/ui/term.mjs', 'src/ui/keys.mjs', 'src/interview.mjs']) {
+    assert.ok(read.includes(file), `${file} is read`)
+  }
+})

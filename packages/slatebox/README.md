@@ -24,6 +24,20 @@ processor, disk space; for a server, SSH, sudo and Docker there; for Kubernetes,
 kubectl and the cluster) and says what is missing before it asks anything else.
 Plain `npx slatebox` lists the commands.
 
+At a terminal the questions are a wizard: it checks this computer first (Docker, the
+processor, disk space and the port, without changing anything), then asks six short
+sections (where, address, admin, agents, sign-in, review) that you answer with the arrow
+keys and Enter. Each answer folds into one line, so the scrollback stays a clean record.
+The review shows the plan in a box: Install, Change a section…, or Cancel, and `d` shows
+every file and command. While it installs, each step is a row with a spinner that settles
+into its result and how long it took. Ctrl-C stops at any question and changes nothing
+(exit 7).
+
+For a screen reader or a simple terminal, `--plain` (or `SLATEBOX_PLAIN=1`) asks the same
+questions one line at a time, with numbered choices. The plain questions are also what you
+get with `TERM=dumb`, in CI, or in a terminal under 60 columns. `NO_COLOR` keeps the wizard
+and drops its colors. `--yes`, `--json`, agents and pipes ask nothing either way.
+
 ### A team address
 
 ```sh

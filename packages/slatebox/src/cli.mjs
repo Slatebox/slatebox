@@ -20,10 +20,11 @@ import { installDir, listRecords, readRecord, slateboxHome, writeRecord } from '
 import { makeRunner } from './runner.mjs'
 import { Redactor } from './secrets.mjs'
 import { finishRename, releaseTeamAddress, renameTeamAddress, rotateTeamAddress, teamStatus } from './targets/address.mjs'
-import { applyDocker, backupDocker, defaultLocalPort, preflightTarget, execNode, LOG_SERVICES, logsDocker, readSecretDocker, restoreDocker, setupLinkDocker, statusDocker, uninstallDocker } from './targets/docker.mjs'
+import { applyDocker, backupDocker, defaultLocalPort, machineCheck, preflightTarget, execNode, LOG_SERVICES, logsDocker, readSecretDocker, restoreDocker, setupLinkDocker, statusDocker, uninstallDocker } from './targets/docker.mjs'
 import { exportFiles } from './targets/export.mjs'
 import { applyK8s, backupK8s, execNodeK8s, preflightCluster, readSecretK8s, restoreK8s, setupLinkK8s, statusK8s, uninstallK8s } from './targets/k8s.mjs'
 import { setupLines } from './setup-link.mjs'
+import { resolveUi } from './ui/mode.mjs'
 import { exportTeamFile, importTeamFile, inviteMovedPeople, moveTeam } from './move.mjs'
 import { parse as parseYaml } from './yaml.mjs'
 
@@ -128,6 +129,8 @@ Global: --yes (after a person approved the plan; asks nothing, takes the default
         not given; answers with no default, such as --host or a server's --admin-email, are
         still exit 3)  --json (NDJSON events on stdout)
         --agent auto|yes|no  --debug  --health-timeout <seconds> (default 600)
+        --plain (line-by-line questions instead of the wizard; for screen readers and
+        simple terminals; also SLATEBOX_PLAIN=1, TERM=dumb, CI, or under 60 columns)
 
 Exit codes: 0 done or nothing to change; 2 bad flags or answers; 3 an answer or a
 confirmation is needed and nobody can be asked; 4 a precondition failed;
@@ -152,7 +155,7 @@ function parse(argv) {
     'cloud-url': { type: 'string' }, 'keep-address': { type: 'boolean' }, follow: { type: 'boolean', short: 'f' },
     service: { type: 'string' }, since: { type: 'string' },
     from: { type: 'string' }, out: { type: 'string' }, invite: { type: 'boolean' }, 'keep-archive': { type: 'boolean' },
-    passphrase: { type: 'string' }, 'replace-waiting': { type: 'boolean' }, 'delete-archive': { type: 'boolean' }, email: { type: 'string' },
+    passphrase: { type: 'string' }, plain: { type: 'boolean' }, 'replace-waiting': { type: 'boolean' }, 'delete-archive': { type: 'boolean' }, email: { type: 'string' },
   }
   for (const [flag, type] of Object.entries(ANSWER_FLAGS)) {
     options[flag] = type === 'multiple' ? { type: 'string', multiple: true } : { type }
@@ -289,16 +292,35 @@ export async function main(argv, io = {}) {
     teamHealthAttempts: io.teamHealthAttempts, teamHealthDelay: io.teamHealthDelay,
     uid: io.uid, schedulerTimeout: io.schedulerTimeout, statfs: io.statfs, healthPoll: io.healthPoll,
   }
-  if (interactive) ctx.prompt = createPrompt({ input: io.stdin, output: io.stderr })
+  // The wizard in the terminal is for the install (and its plan); every other command, and every
+  // run that is not rich (src/ui/mode.mjs), keeps the plain line prompts.
+  if (interactive && ['install', 'plan'].includes(positionals[0]) && !ctx.yes) {
+    const ui = await resolveUi({ json, agentMode, yes: ctx.yes, flags }, io.env, { stdin: io.stdin, stderr: io.stderr }, { platform: io.platform, debug: text => out.debug(text) })
+    if (ui.mode === 'rich') useRich(ctx, io, ui)
+  }
+  if (interactive && !ctx.prompt) ctx.prompt = createPrompt({ input: io.stdin, output: io.stderr })
 
   ctx.emitPlan = plan => {
     out.event({ event: 'plan', ...plan })
+    if (ctx.rich) {
+      // The wizard shows the plan as its review (ctx.confirm); a plan only run shows it all here.
+      ctx.lastPlan = plan
+      ctx.prompt.planBox(plan, ctx.answers)
+      if (ctx.planOnly) out.say(`\n${formatPlan(plan)}\n`)
+      return
+    }
     const text = formatPlan(plan)
     if (json) io.stderr.write(redactor.redact(text) + '\n')
     else out.say(`\n${text}\n`)
   }
   ctx.confirm = async plan => {
     if (ctx.yes) return
+    if (ctx.rich) {
+      const local = plan.target === 'local' || plan.target === 'export'
+      await ctx.prompt.review(plan, ctx.answers, { defaultAction: local ? 'install' : 'cancel', revisable: Boolean(ctx.interviewed), details: formatPlan(plan) })
+      ctx.applying = true
+      return
+    }
     if (ctx.interactive) {
       const local = plan.target === 'local' || plan.target === 'export'
       if (await ctx.prompt.confirm('Apply this plan?', { default: local })) return
@@ -312,7 +334,12 @@ export async function main(argv, io = {}) {
     ctx.prompt?.close()
     return result ?? 0
   } catch (error) {
+    if (ctx.rich && error instanceof InstallError) ctx.prompt.fatal(error)
     ctx.prompt?.close()
+    if (ctx.rich && error instanceof InstallError) {
+      out.event({ event: 'error', id: 'rich', status: 'failed', exitCode: error.exitCode, message: error.message })
+      return error.exitCode
+    }
     if (!(error instanceof InstallError)) {
       out.event({ event: 'error', id: 'internal', status: 'failed', exitCode: 1, message: error.message })
       io.stderr.write(redactor.redact(`✗ ${error.message}\n${flags.debug ? `${error.stack}\n` : ''}`))
@@ -364,7 +391,16 @@ function finish(ctx, done, lines = []) {
   return 0
 }
 
-async function prepareAnswers(ctx, flags, positionals) {
+// The fields each review section owns: "Change a section…" clears them and asks them again.
+const SECTIONS = {
+  where: a => { delete a.target; delete a.ssh; delete a.export; delete a.k8s; a.address = {} },
+  address: a => { a.address = {}; if (a.k8s) { delete a.k8s.route; delete a.k8s.ingressClass; delete a.k8s.gatewayRef; delete a.k8s.tlsIssuer } },
+  admin: a => { delete a.adminEmail },
+  agents: a => { a.ai = {} },
+  signin: a => { a.sso = {}; a.backups = {}; delete a.size; a.mail = {} },
+}
+
+async function prepareAnswers(ctx, flags, positionals, revise = null) {
   const target = positionals[1] && ['local', 'ssh', 'k8s', 'export'].includes(positionals[1]) ? positionals[1] : undefined
   const host = target === 'ssh' ? positionals[2] : undefined
   const file = readAnswersFile(flags.answers)
@@ -373,13 +409,24 @@ async function prepareAnswers(ctx, flags, positionals) {
   const name = cliFlags.name || file?.name || flags.name || 'slatebox'
   const record = readRecord(ctx.home, name)
   let partial = collect({ record, env: ctx.env, file, flags: cliFlags })
+  if (revise && ctx.interviewed) {
+    partial = structuredClone(ctx.interviewed)
+    SECTIONS[revise]?.(partial)
+    if (revise === 'signin') ctx.usualSettings = false
+  }
   // --yes asks nothing: what is not given takes its default (resolveAnswers with { yes }).
   if (ctx.interactive && !ctx.yes) {
-    const kube = await ctx.run('kubectl', ['config', 'current-context']).catch(() => null)
-    ctx.currentContext = kube?.code === 0 ? kube.stdout.trim() : null
+    if (!revise) {
+      const kube = await ctx.run('kubectl', ['config', 'current-context']).catch(() => null)
+      ctx.currentContext = kube?.code === 0 ? kube.stdout.trim() : null
+    }
+    ctx.portGiven = partial.address?.port !== undefined
     ctx.freePort = partial.address?.port ?? await defaultLocalPort()
     ctx.preflight = answers => (answers.target === 'k8s' ? preflightCluster(ctx, answers) : preflightTarget(ctx, answers))
+    if (ctx.rich && !revise) ctx.machineCheck = () => machineCheck(ctx)
+    if (revise) ctx.machineCheck = null
     partial = await interview(ctx, partial)
+    if (ctx.rich) { ctx.interviewed = structuredClone(partial); ctx.prompt.section('Review', 6, 6) }
   }
   const freePort = (partial.target ?? 'local') === 'local' && partial.address?.port === undefined && !partial.address?.url ? await defaultLocalPort() : undefined
   const { answers, missing, errors } = resolveAnswers(partial, { freePort, cwd: ctx.cwd, home: ctx.env.HOME, yes: ctx.yes })
@@ -392,6 +439,37 @@ async function applyTarget(ctx, answers, options) {
   if (answers.target === 'k8s') return applyK8s(ctx, answers, options)
   if (answers.target === 'export') return exportFiles(ctx, answers, options)
   return applyDocker(ctx, answers, { ...options, archive: ctx.flags['image-archive'] })
+}
+
+/** The wizard: its prompt, its writer for other modules' lines, and its rows for each step. */
+function useRich(ctx, io, ui) {
+  const prompt = ui.rich.createRichPrompt({ input: io.stdin, output: io.stderr, term: ui.term, redactor: ctx.redactor, version: ctx.version, home: io.env.HOME })
+  ctx.prompt = prompt
+  ctx.rich = true
+  ctx.stderr = prompt.stderr
+  ctx.out.listener = prompt.listener
+  ctx.ui = { probe: prompt.probe }
+  prompt.onInterrupt = () => {
+    prompt.fatal(new InstallError(EXIT.CANCELLED, ctx.applying ? 'Stopped. Run slatebox install again to finish; it is safe to run again.' : 'Cancelled. Nothing was changed.'))
+    prompt.close()
+    process.exit(EXIT.CANCELLED)
+  }
+}
+
+/** The wizard's last screen: where it runs, the setup link, and what to do next. */
+function richClosing(ctx, done, extra = []) {
+  const p = ctx.prompt
+  const next = ['slatebox status', 'slatebox logs', 'slatebox ai add', 'slatebox upgrade']
+  if (done.target === 'export') return p.outro({ headline: `Wrote ${done.files.length} files to ${done.dir}. Nothing was applied.`, lines: extra })
+  const link = ctx.setupLink?.url ? ctx.setupLink : null
+  const pending = ctx.setupLink?.pending ? setupLines(ctx, done.name).filter(line => typeof line === 'string' && line) : null
+  const lines = []
+  if (done.teamAddress) lines.push(`On this computer it also answers at ${done.localAddress}.`, `Keep a copy of ${installDir(ctx.home, done.name)}/ (keys and the team-address credential).`)
+  if (done.keyGenerated) lines.push(`Your key encryption key is in ${done.secretsFile}. Back it up with your password manager now:`, 'backups do not contain it, and without it saved agent keys cannot be read after a restore.')
+  lines.push(`Install record: ${done.installRecord}`, ...extra)
+  const headline = done.nothingToChange ? `Nothing to change: ${done.name} is running at ${done.address}` : `Slatebox is running at ${done.address}`
+  p.outro({ headline, link, pending, lines, next: done.name === 'slatebox' ? next : [...next.map(item => `${item} --name ${done.name}`)] })
+  return 0
 }
 
 function runningLines(ctx, done) {
@@ -464,25 +542,41 @@ async function dispatch(ctx, positionals, flags) {
     }
     case 'plan':
     case 'install': {
-      const { answers, record, explicitContext } = await prepareAnswers(ctx, flags, positionals)
       const planOnly = command === 'plan' || Boolean(flags['dry-run'])
+      ctx.planOnly = planOnly
       // The address and setup link, printed the moment the install is healthy (before the backup
       // schedule), and not again at the end.
       ctx.announce = healthy => {
-        if (ctx.announced || healthy.target === 'export') return
+        // The wizard says it once, at the end (richClosing).
+        if (ctx.rich || ctx.announced || healthy.target === 'export') return
         ctx.announced = true
         for (const line of runningLines(ctx, healthy)) {
           if (typeof line === 'string') ctx.out.say(line)
           else ctx.stderr.write(`${line.terminal}\n`)
         }
       }
-      const done = await applyTarget(ctx, answers, { record, planOnly, explicitContext })
+      // "Change a section…" in the wizard's review asks that section again; nothing has been
+      // pulled, claimed or written before the review, so the plan is simply made again.
+      let revise = null, answers, done
+      for (;;) {
+        const prepared = await prepareAnswers(ctx, flags, positionals, revise)
+        answers = prepared.answers
+        ctx.answers = answers
+        try {
+          done = await applyTarget(ctx, answers, { record: prepared.record, planOnly, explicitContext: prepared.explicitContext })
+          break
+        } catch (error) {
+          if (!error?.reviseSection || ctx.applying) throw error
+          revise = error.reviseSection
+        }
+      }
       if (done.planned) {
         ctx.out.event({ event: 'done', planned: true, name: answers.name, target: answers.target })
         if (!ctx.json) ctx.out.say(`Nothing was changed. To apply: slatebox install ${flags.answers ? `--answers ${flags.answers} ` : ''}... (the same answers)${ctx.interactive ? '' : ' --yes'}`)
         return 0
       }
-      finish(ctx, done, [...closing(ctx, done), ...(flags.from === 'cloud' ? fromCloudLines(done) : [])])
+      if (ctx.rich) richClosing(ctx, done, flags.from === 'cloud' ? fromCloudLines(done) : [])
+      else finish(ctx, done, [...closing(ctx, done), ...(flags.from === 'cloud' ? fromCloudLines(done) : [])])
       if (flags['show-secrets'] && done.keyGenerated) await showSecretOnce(ctx, ctx.record, 'SLATEBOX_KEY_ENCRYPTION_KEY')
       return 0
     }
