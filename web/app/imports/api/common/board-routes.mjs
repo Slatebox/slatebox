@@ -1,10 +1,10 @@
 // The starter routes for the business boards: /new/launch-plan, /new/hiring-plan, /new/pipeline,
-// /new/budget and /new/nest open the sample board. A workshop link whose model is one of these
+// /new/budget, /new/nest and /new/grid (a printable grid sheet: the worksheet) open the sample board. A workshop link whose model is one of these
 // boards (#model=…) opens too. Their rules are not in the model a plain slate loads, so they load
 // first (loadBoardRoute).
 
 /** Each board route and the name of the sample it opens. */
-export const BOARD_SAMPLES = { 'launch-plan': 'launchPlanSample', 'hiring-plan': 'hiringPlanSample', pipeline: 'samplePipeline', budget: 'sampleBudget', nest: 'sortEvidenceSample' }
+export const BOARD_SAMPLES = { 'launch-plan': 'launchPlanSample', 'hiring-plan': 'hiringPlanSample', pipeline: 'samplePipeline', budget: 'sampleBudget', nest: 'sortEvidenceSample', grid: 'worksheetSample' }
 
 /** Whether a workshop link (#model=…) holds one of these boards. */
 export const boardInLink = hash => {
