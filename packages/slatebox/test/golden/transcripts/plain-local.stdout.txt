@@ -26,6 +26,7 @@ Plan: install Slatebox "slatebox" on this computer
 Open http://localhost:17561 and create the first account.
 
 Slatebox is running at  http://localhost:17561
+! This image has no automatic updates yet (they come with 2.1.0), so no host updater was set up. To get them: npx slatebox@latest upgrade
 
 Your key encryption key is stored in <HOME>/installs/slatebox/secrets.env. Back it up with your password manager now.
 Backups do not contain it, and without it people's saved AI keys cannot be read after a restore.

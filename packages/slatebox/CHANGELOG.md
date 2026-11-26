@@ -89,6 +89,9 @@ release's highlights.
 - **installer:** golden transcript `plain-team-taken.stderr.txt` gains one line, the optional
   first-admin question (no answer left in that scenario, so the printed link stays as it is).
   The scenario sets `DISPLAY` (a Linux desktop), so its browser question is asked as before.
+- **updates:** golden transcripts `plain-local`, `plain-team-taken`, `yes` and `json` gain one
+  line (one `updates` warn event in `--json`): their test image has no `slatebox updates`, so the
+  install says no host updater was set up and how to get one. Nothing else in them changes.
 
 ### Fixed
 

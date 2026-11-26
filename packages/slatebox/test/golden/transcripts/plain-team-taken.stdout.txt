@@ -39,6 +39,7 @@ Slatebox is running at  https://acme.slatebox.team
 Create the first account (the server administrator) with this one-time setup link.
 It works once and expires in 24 hours; nobody can sign up before it is used:
 Lost it? slatebox setup-link prints a new one and ends this one.
+! This image has no automatic updates yet (they come with 2.1.0), so no host updater was set up. To get them: npx slatebox@latest upgrade
 
 On this computer it also answers at http://localhost:7070.
 

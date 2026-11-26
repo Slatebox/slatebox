@@ -33,6 +33,11 @@
   "status": "ok"
  },
  {
+  "event": "step",
+  "id": "updates",
+  "status": "warn"
+ },
+ {
   "event": "done"
  }
 ]
