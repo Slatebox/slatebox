@@ -10,14 +10,14 @@ import { FakeGitHub, testKey } from '../packages/slatebox/test/updater-kit.mjs'
 const key = testKey()
 const NOW = Date.parse('2026-11-25T04:30:00Z')
 
-function world({ mode = 'auto', version = '2.0.0', setUp = false } = {}) {
+function world({ mode = 'auto', version = '2.0.0', setUp = false, runtime = null, install = null } = {}) {
   const cols = updateCols()
   const gh = new FakeGitHub(key)
   const notices = []
   const audits = []
   let now = NOW
   const service = createUpdatesService({
-    cols, settings: { public: { env: 'selfhost' }, selfHosted: { updates: { mode } } }, get: gh.get, keys: key.keys,
+    cols, settings: { public: { env: 'selfhost' }, selfHosted: { updates: { mode, ...(runtime ? { runtime } : {}), ...(install ? { install } : {}) } } }, get: gh.get, keys: key.keys,
     current: () => ({ version, revision: 'abc123' }), setUp: async () => setUp,
     notify: async notice => notices.push(notice), audit: async entry => audits.push(entry), now: () => now, random: () => 0.5, log: { warn() {} },
   })
@@ -45,8 +45,23 @@ test('check now: verified release on offer, one bell notice per version, history
   const status = await w.service.status()
   assert.equal(status.available.version, '2.1.0')
   assert.equal(status.available.signed, true)
-  assert.match(status.available.upgradeCommand, /^npx slatebox upgrade --to localhost:5055\/slatebox@sha256:[a-f0-9]{64}$/)
+  // On Docker the host updater applies it: no Kubernetes command to show.
+  assert.equal(status.available.upgradeCommand, null)
+  assert.equal(status.runtime, 'docker')
   assert.ok(status.history.some(row => row.kind === 'check' && row.ok))
+})
+
+test('on Kubernetes: the upgrade command names the install (as the pod name says)', async () => {
+  for (const [install, name] of [['team', ' --name team'], ['slatebox', ''], [null, '']]) {
+    const w = world({ runtime: 'kubernetes', install })
+    w.gh.release('2.1.0')
+    w.gh.publishFeed({ stable: '2.1.0' })
+    await w.service.checkNow()
+    const status = await w.service.status()
+    assert.equal(status.runtime, 'kubernetes')
+    assert.equal(status.available.upgradeCommand, `npx slatebox upgrade${name} --to localhost:5055/slatebox@${status.available.upgradeCommand.split('@')[1]}`)
+    assert.match(status.available.upgradeCommand, /@sha256:[a-f0-9]{64}$/)
+  }
 })
 
 test('a feed that does not verify: nothing on offer, a security alert, backoff', async () => {
@@ -159,4 +174,22 @@ test('settings: SLATEBOX_UPDATES and SLATEBOX_UPDATE_FEED as configure.mjs write
   assert.deepEqual(updateMode({ selfHosted: { updates: { mode: 'notify', feedUrl: 'https://m.example/update-feed/channels.json' } } }), { mode: 'notify', feedUrl: 'https://m.example/update-feed/channels.json' })
   assert.deepEqual(updateMode({}), { mode: 'auto', feedUrl: null })
   assert.deepEqual(updateMode({ selfHosted: { updates: { mode: 'sometimes' } } }), { mode: 'auto', feedUrl: null })
+})
+
+test('the first administrator\'s own time zone is taken once for a policy nobody set; never over an admin\'s choice', async () => {
+  const w = world()
+  const first = await w.service.adoptTimeZone('America/New_York', { by: 'tim' })
+  assert.equal(first.adopted, true)
+  let status = await w.service.status()
+  assert.equal(status.policy.timeZone, 'America/New_York')
+  assert.equal(status.zoneFrom.timeZone, 'America/New_York')
+  // The words name the zone the window is in.
+  assert.equal((await w.service.adoptTimeZone('Europe/London', { by: 'ana' })).adopted, false, 'once')
+  assert.ok(w.audits.some(entry => /time zone to America\/New_York/.test(entry.action)))
+  await assert.rejects(w.service.adoptTimeZone('Mars/Olympus', { by: 'tim' }), /time zone/)
+  const set = world()
+  await set.service.setPolicy({ timeZone: 'Asia/Tokyo' }, { by: 'tim' })
+  assert.equal((await set.service.adoptTimeZone('America/New_York', { by: 'tim' })).adopted, false)
+  status = await set.service.status()
+  assert.equal(status.policy.timeZone, 'Asia/Tokyo')
 })

@@ -71,10 +71,12 @@ export async function takeLease(cols, { decision, now = Date.now(), current = nu
 }
 
 /** A phase the host updater reports. A final phase ends the lease and goes into the history. */
-export async function report(cols, { attemptId, phase, detail = '', version = null, now = Date.now(), downgradeSafe = false, preUpgradeBackup = null }) {
+export async function report(cols, { attemptId, phase, detail = '', version = null, now = Date.now(), downgradeSafe = false, preUpgradeBackup = null, kind = null, from = null }) {
   if (!PHASES.includes(phase)) throw new Error(`Unknown phase ${phase}. One of: ${PHASES.join(', ')}.`)
   const doc = await readDoc(cols)
-  const attempt = doc?.attempt?.id === attemptId ? doc.attempt : { id: attemptId, kind: 'apply', target: version, from: doc?.current?.version || null, startedAt: new Date(now) }
+  // An attempt this record does not hold (a restore replaced the record): the host updater says what it was.
+  const attempt = doc?.attempt?.id === attemptId ? doc.attempt
+    : { id: attemptId, kind: kind === 'rollback' ? 'rollback' : 'apply', target: version, from: parseVersion(from)?.text || doc?.current?.version || null, startedAt: new Date(now) }
   const text = String(detail || '').slice(0, 2000)
   const set = { attempt: { ...attempt, phase, detail: text, updatedAt: new Date(now) } }
   if (FINAL_PHASES.includes(phase)) {
@@ -95,9 +97,27 @@ export async function report(cols, { attemptId, phase, detail = '', version = nu
 
 /** The host updater checked in (every five minutes while it is set up). */
 export async function heartbeat(cols, { protocol = 1, scheduler = 'unknown', now = Date.now(), host = null, feedUrl = null }) {
-  const set = { updater: { at: new Date(now), protocol: Number(protocol) || 1, scheduler: String(scheduler).slice(0, 40), ...(feedUrl && /^https?:\/\/[^\s]+\/update-feed\/channels\.json$/.test(feedUrl) ? { feedUrl } : {}) } }
+  const set = { updater: { at: new Date(now), protocol: Number(protocol) || 1, scheduler: String(scheduler).slice(0, 40), ...(feedUrl && /^https:\/\/[^\s]+\/update-feed\/channels\.json$/.test(feedUrl) ? { feedUrl } : {}) } }
   if (host) set.host = host
   await cols.settings.updateOne({ _id: UPDATES_ID }, { $set: set })
+}
+
+// The record as text and back, around a rollback that restores the database from before the upgrade
+// (which holds an older copy of this record): the approvals, notices and history stay as they are.
+const DATE_KEYS = new Set(['at', 'createdAt', 'startedAt', 'updatedAt', 'checkedAt', 'until', 'preUpgradeBackupAt'])
+const revive = value => {
+  if (Array.isArray(value)) return value.map(revive)
+  if (!value || typeof value !== 'object' || value instanceof Date) return value
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, DATE_KEYS.has(key) && typeof item === 'string' && Number.isFinite(Date.parse(item)) ? new Date(item) : revive(item)]))
+}
+
+export const exportRecord = async cols => JSON.stringify(await readDoc(cols))
+
+export async function importRecord(cols, text) {
+  const doc = revive(JSON.parse(text))
+  if (!doc || doc._id !== UPDATES_ID) throw new Error('That is not the self-hosted updates record.')
+  const { _id, ...fields } = doc
+  await cols.settings.updateOne({ _id: UPDATES_ID }, { $set: fields }, { upsert: true })
 }
 
 const trimManifest = manifest => ({ ...manifest, notes: typeof manifest.notes === 'string' ? manifest.notes.slice(0, NOTES_MAX) : '' })
@@ -124,6 +144,21 @@ export async function recordCheck(cols, { result = null, error = null, now = Dat
 
 export async function setPolicy(cols, policy) {
   await cols.settings.updateOne({ _id: UPDATES_ID }, { $set: { policy, policySource: 'admin' } })
+}
+
+/**
+ * The first administrator's own time zone, taken once for a policy nobody has set yet (a new
+ * server's window is 04:00 UTC until then, which is the evening before in the Americas).
+ * → whether it was taken.
+ */
+export async function adoptTimeZone(cols, timeZone, { by = null, now = Date.now() } = {}) {
+  const result = await cols.settings.updateOne(
+    { _id: UPDATES_ID, policySource: { $ne: 'admin' }, zoneFrom: { $exists: false } },
+    { $set: { 'policy.timeZone': timeZone, zoneFrom: { timeZone, by, at: new Date(now) } } },
+  )
+  if (result.modifiedCount !== 1) return false
+  await addEvent(cols, { kind: 'admin', detail: `time zone set to ${timeZone} (the administrator's own)`, by }, { now })
+  return true
 }
 
 export async function approve(cols, version, { by = null, now = Date.now() } = {}) {

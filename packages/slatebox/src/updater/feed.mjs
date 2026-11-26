@@ -36,12 +36,41 @@ export function manifestUrl(feedUrl, version) {
 
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
 
+/**
+ * The body of a fetch Response, read at most `max` bytes: a larger one is refused as it streams
+ * (and by its Content-Length first), never downloaded whole before the size is checked.
+ */
+export async function readCapped(response, max = MAX_DOCUMENT_BYTES) {
+  const declared = Number(response.headers?.get?.('content-length'))
+  if (Number.isFinite(declared) && declared > max) throw new FeedError('too-large', `${response.url || 'The answer'} is larger than an update document may be.`)
+  if (!response.body?.getReader) {
+    const bytes = Buffer.from(await response.arrayBuffer())
+    if (bytes.length > max) throw new FeedError('too-large', `${response.url || 'The answer'} is larger than an update document may be.`)
+    return bytes
+  }
+  const reader = response.body.getReader()
+  const chunks = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.length
+    if (size > max) {
+      await reader.cancel().catch(() => {})
+      throw new FeedError('too-large', `${response.url || 'The answer'} is larger than an update document may be.`)
+    }
+    chunks.push(value)
+  }
+  return Buffer.concat(chunks)
+}
+
 /** A fetch that returns bytes or throws: { bytes } for 200. `get(url)` is the injected transport. */
 async function fetchBytes(get, url) {
   let result
   try {
     result = await get(url)
   } catch (error) {
+    if (error instanceof FeedError) throw error
     throw new FeedError('offline', `Could not reach ${new URL(url).host}: ${error?.message || error}`)
   }
   if (!result?.bytes) throw new FeedError('fetch', `${url} did not answer with a file.`)
@@ -135,9 +164,16 @@ export async function resolveTarget({ current, requested, channel = 'stable', fe
   const step = chain.find(manifest => compareVersions(manifest.version, requested) === 0)
   if (!step) throw new FeedError('not-signed', `${requested} is not a release the signed feed offers from ${current}.`)
   if (compareVersions(step.version, current) <= 0) throw new FeedError('downgrade', `${requested} is not newer than ${current}.`)
-  if (yanked(step.version)) throw new FeedError('yanked', `${requested} was withdrawn.`)
-  if ((step.major === true || isMajorStep(current, step.version)) && !approved) throw new FeedError('needs-approval', `${requested} is a major release and was not approved.`)
-  return { manifest: chain[0], chain }
+  // Every version on the way is checked, not only the one asked for: chain[0] is what is installed
+  // now, and a release that needs a newer starting point must never go through a withdrawn one.
+  const path = chain.slice(0, chain.indexOf(step) + 1)
+  for (const manifest of path) {
+    if (!yanked(manifest.version)) continue
+    throw new FeedError('yanked', manifest === step ? `${requested} was withdrawn.` : `${requested} has to be reached through ${manifest.version}, which was withdrawn.`)
+  }
+  const major = path.some(manifest => manifest.major === true || isMajorStep(current, manifest.version))
+  if (major && !approved) throw new FeedError('needs-approval', `${requested} is a major release and was not approved.`)
+  return { manifest: chain[0], chain: path }
 }
 
 /** The image reference to pull: by the index digest, so the bytes are the signed ones. */

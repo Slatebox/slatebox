@@ -48,6 +48,9 @@ test('the feed: sequence + 1 each time, a new expiry, channels kept, withdrawals
   assert.deepEqual(yanked.yanked, [{ version: '2.1.0', reason: 'broke uploads' }])
   const newer = buildFeed({ previous: yanked, base, stable: { version: '2.2.0', sha256: '3'.repeat(64) }, now })
   assert.equal(newer.preview, undefined, 'a preview older than stable offers nothing more')
+  // An older tag never replaces a newer stable (a late or re-run release job).
+  assert.throws(() => buildFeed({ previous: newer, base, stable: { version: '2.1.5', sha256: '4'.repeat(64) }, now }), /2\.1\.5 is older than the feed's stable 2\.2\.0/)
+  assert.equal(buildFeed({ previous: newer, base, stable: { version: '2.2.0', sha256: '3'.repeat(64) }, now }).stable.version, '2.2.0', 'the same one again is fine')
 })
 
 test('keygen, build, sign, verify, feed: end to end with a test key; the updater reads what it wrote', async () => {

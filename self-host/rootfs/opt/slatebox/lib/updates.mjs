@@ -11,9 +11,12 @@
 //   slatebox updates status [--json]      the version, what is available, the policy, the updater
 //   slatebox updates request apply|retry|rollback [--version X.Y.Z]
 //   slatebox updates auto on|off
+//   slatebox updates record export|import  the record as JSON (import: on standard input), kept by the
+//                                         host updater across a rollback that restores the database
 //
 // The decision and the record are the installer's own modules (one copy, in the image at
 // /opt/slatebox/installer/src/updater), byte-identical to the app's.
+import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -48,7 +51,9 @@ export function updateSettings(env = process.env) {
 export const nodeGet = async url => {
   const response = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(20_000), headers: { 'user-agent': 'Slatebox self-host update check' } })
   if (!response.ok) throw new Error(`${new URL(url).host} answered ${response.status}`)
-  return { bytes: Buffer.from(await response.arrayBuffer()) }
+  // Read at most an update document's size: a larger answer is cut off as it streams.
+  const { readCapped } = await load('feed.mjs')
+  return { bytes: await readCapped(response) }
 }
 
 export async function run(args, { db, now = Date.now(), env = process.env, out = process.stdout, stdin = process.stdin, get = nodeGet, home = HOME } = {}) {
@@ -61,10 +66,13 @@ export async function run(args, { db, now = Date.now(), env = process.env, out =
     options: {
       json: { type: 'boolean' }, attempt: { type: 'string' }, phase: { type: 'string' }, detail: { type: 'string' }, version: { type: 'string' },
       'downgrade-safe': { type: 'boolean' }, 'pre-upgrade-backup': { type: 'string' }, pending: { type: 'boolean' },
-      updater: { type: 'string' }, scheduler: { type: 'string' }, 'feed-url': { type: 'string' },
+      updater: { type: 'string' }, scheduler: { type: 'string' }, 'feed-url': { type: 'string' }, kind: { type: 'string' }, from: { type: 'string' },
     },
   })
   const [command, sub] = positionals
+  // Policy changes from the host go into the app's Audit collection too (the same shape as Admin › Updates writes),
+  // which is kept: the events above are pruned to the newest few hundred.
+  const audit = (action, before, after) => db.collection('audit').insertOne({ _id: randomUUID().replace(/-/g, '').slice(0, 17), type: 'self-host-updates', userId: 'host', action, before, after, created: now })
   const write = value => out.write(`${typeof value === 'string' ? value : JSON.stringify(value)}\n`)
   const setUp = (await setupState(db, now)).setUp
   let doc = await store.ensureDoc(cols, { setUp, now })
@@ -96,7 +104,7 @@ export async function run(args, { db, now = Date.now(), env = process.env, out =
       if (!attempt) return write({ action: 'none', reason: 'running' })
       const approved = (doc.approvals || []).some(version => policyMod.compareVersions(version, decision.target?.version || '0.0.0') === 0)
       const keepData = Boolean(doc.attempts?.find(item => item.outcome === 'healthy' && item.kind !== 'rollback')?.downgradeSafe)
-      return write({ action: decision.action, attemptId: attempt.id, target: decision.target, current, channel: doc.policy?.channel || 'stable', approved, keepData, feedUrl: feedAt(), reason: decision.reason, lease: { until: new Date(now + policyMod.LEASE_MS).toISOString() } })
+      return write({ action: decision.action, attemptId: attempt.id, target: decision.target, current, channel: doc.policy?.channel || 'stable', approved, keepData, reason: decision.reason, lease: { until: new Date(now + policyMod.LEASE_MS).toISOString() } })
     }
     case 'report': {
       let given = values
@@ -104,11 +112,11 @@ export async function run(args, { db, now = Date.now(), env = process.env, out =
         const chunks = []
         for await (const chunk of stdin) chunks.push(chunk)
         const pending = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-        given = { attempt: pending.attemptId, phase: pending.phase, detail: pending.detail, version: pending.version, 'downgrade-safe': pending.downgradeSafe }
+        given = { attempt: pending.attemptId, phase: pending.phase, detail: pending.detail, version: pending.version, 'downgrade-safe': pending.downgradeSafe, kind: pending.kind, from: pending.from }
       }
       if (!given.attempt || !given.phase) throw new Plain('Give --attempt and --phase.')
       const pre = given['pre-upgrade-backup']
-      await store.report(cols, { attemptId: given.attempt, phase: given.phase, detail: given.detail, version: given.version, now, downgradeSafe: Boolean(given['downgrade-safe']), preUpgradeBackup: pre === undefined ? null : pre === 'yes' })
+      await store.report(cols, { attemptId: given.attempt, phase: given.phase, detail: given.detail, version: given.version, now, downgradeSafe: Boolean(given['downgrade-safe']), preUpgradeBackup: pre === undefined ? null : pre === 'yes', kind: given.kind || null, from: given.from || null })
       return write({ ok: true })
     }
     case 'heartbeat':
@@ -139,16 +147,26 @@ export async function run(args, { db, now = Date.now(), env = process.env, out =
     }
     case 'request': {
       const value = await store.request(cols, { kind: sub, version: values.version || null, by: 'host', now })
+      await audit(`${sub}${value.version ? ` ${value.version}` : ''} (from the host)`, doc.request || null, value)
       return write({ ok: true, request: value })
+    }
+    case 'record': {
+      if (sub === 'export') return write(await store.exportRecord(cols))
+      if (sub !== 'import') throw new Plain('Usage: slatebox updates record export|import')
+      const chunks = []
+      for await (const chunk of stdin) chunks.push(chunk)
+      await store.importRecord(cols, Buffer.concat(chunks).toString('utf8'))
+      return write({ ok: true })
     }
     case 'auto': {
       if (!['on', 'off'].includes(sub)) throw new Plain('Usage: slatebox updates auto on|off')
       await store.setPolicy(cols, { ...doc.policy, auto: sub === 'on' })
       await store.addEvent(cols, { kind: 'admin', detail: `automatic updates ${sub}`, by: 'host' }, { now })
+      await audit(`automatic updates ${sub} (from the host)`, doc.policy, { ...doc.policy, auto: sub === 'on' })
       return write({ ok: true, auto: sub === 'on' })
     }
     default:
-      throw new Plain('Usage: slatebox updates policy|report|heartbeat|check|status|request|auto (see the top of lib/updates.mjs)')
+      throw new Plain('Usage: slatebox updates policy|report|heartbeat|check|status|request|auto|record (see the top of lib/updates.mjs)')
   }
 }
 

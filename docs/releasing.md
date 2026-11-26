@@ -141,7 +141,14 @@ app release.
   signed release manifest and updates the signed update feed. Every self-hosted Slatebox sees the
   release in Admin › Updates within 6 hours. It publishes; it gates nothing. A dry run: Actions,
   Self-host image, Run workflow, the tag, `push` off (both architectures build and are
-  smoke-tested, nothing is published). `self-host/build-images.sh` and
+  smoke-tested, nothing is published). To publish by hand (a re-run), choose **Use workflow from:
+  the tag** `vX.Y.Z` itself and give the same tag with `push` on: a run from a branch never
+  publishes (its cosign identity would be `refs/heads/...`, which the published verify command
+  refuses, and the `release` environment would not finish the manifest). Every write of the update
+  feed (each release's `feed` job and the daily refresh) runs in the one concurrency group
+  `update-feed`, so none loses another's change; the feed never puts an older version on a channel
+  than it has. GitHub keeps only one waiting run per group, so if two releases are tagged minutes
+  apart, check that the earlier one's `feed` job ran and re-run it if it was cancelled. `self-host/build-images.sh` and
   `self-host/release-images.py` stay as the manual fallback.
 - **npm packages:** from the tagged commit, `npm publish --workspace slatebox` or
   `npm publish --workspace slatebox-mcp` (the `prepublishOnly` checks run first).
@@ -174,8 +181,15 @@ name, pulls by digest and runs the installer's upgrade (backup, health check, ro
    `web/app/server/updates/verify.mjs` in a commit before the first release. Make a second key the
    same way and keep it offline: it is added to `RELEASE_KEYS` only to rotate or to recover.
 3. **Environment `release`:** Settings, Environments, New environment `release`, deployment
-   branches and tags: tags `v*` only. Secret `SLATEBOX_RELEASE_KEY` = the private key file's
-   contents; variable `SLATEBOX_RELEASE_KEY_ID` = `slatebox-rel-2026-11`.
+   branches and tags: selected, the tag rule `v*` **and** the branch `main`. Secret
+   `SLATEBOX_RELEASE_KEY` = the private key file's contents; variable `SLATEBOX_RELEASE_KEY_ID` =
+   `slatebox-rel-2026-11`. The branch is needed by `update-feed-refresh.yml`: its daily schedule
+   always runs on `main`, and with tags only every refresh is refused, so the feed expires 30 days
+   after the last release and every self-hosted server stops applying updates ("feed-expired").
+   The choice: one environment for both rather than a second one holding the same key, because
+   whoever can push a workflow to `main` could use either (the shipping policy pushes to `main`
+   without review), so a second environment would add a copy of the key and no protection. The
+   key reaches only the steps that sign (never checkout, setup-node or `gh`).
 4. **GHCR:** the package `ghcr.io/slatebox/slatebox` was first pushed from a laptop. In its package
    settings, Manage Actions access, add `Slatebox/slatebox` with the Write role, so the workflow's
    `GITHUB_TOKEN` can push.

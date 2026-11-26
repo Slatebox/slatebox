@@ -101,6 +101,10 @@ if (updatesApply) {
       check(policy, Match.ObjectIncluding({}))
       return service.setPolicy(policy, who)
     }),
+    [M.adoptTimeZone]: plain(async (who, timeZone) => {
+      check(timeZone, String)
+      return service.adoptTimeZone(timeZone, who)
+    }),
     [M.approve]: plain(async (who, version) => {
       check(version, String)
       return service.approve(version, who)
@@ -122,7 +126,7 @@ if (updatesApply) {
 
   // Check now: once a minute per person; every change: ten a minute.
   DDPRateLimiter.addRule({ type: 'method', name: M.checkNow, userId: () => true }, 1, 60000)
-  for (const name of [M.setPolicy, M.approve, M.applyNow, M.retry, M.cancel, M.rollback]) {
+  for (const name of [M.setPolicy, M.adoptTimeZone, M.approve, M.applyNow, M.retry, M.cancel, M.rollback]) {
     DDPRateLimiter.addRule({ type: 'method', name, userId: () => true }, 10, 60000)
   }
   DDPRateLimiter.addRule({ type: 'method', name: M.status, userId: () => true }, 60, 60000)

@@ -10,7 +10,7 @@
 //
 // The key list holds public halves only (SPKI DER, base64). A new key is added beside the old one
 // and the old one is never swapped out, so every image ever shipped can still check what is signed
-// with the key it knows. The private half lives in the GitHub environment "release" (tags v* only)
+// with the key it knows. The private half lives in the GitHub environment "release" (v* tags, and main for the daily feed refresh)
 // and a second, offline one with the owner (docs/releasing.md).
 import { createPrivateKey, createPublicKey, sign as signBytes, verify as verifyBytes } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'

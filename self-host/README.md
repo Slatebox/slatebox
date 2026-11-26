@@ -248,12 +248,29 @@ how many days to wait after a release, and the stable or preview channel. Major
 releases always need an admin's approval first.
 
 The update itself is done by a small host updater, not by Slatebox: `npx
-slatebox install` sets it up (`npx slatebox updates enable` adds it to an install
-from before). Every five minutes it asks the container what to do. When there is
-an update, it checks the release's signature itself, takes a backup, starts the
-new version and checks its health; if the new version is not healthy, the
-previous one and its data are put back. Only a release signed by Slatebox,
-pulled by its digest, is ever installed.
+slatebox install` sets it up. Every five minutes it asks the container what to
+do. When there is an update, it checks the release's signature itself, takes a
+backup, starts the new version and checks its health; if the new version is not
+healthy, the previous one and its data are put back. Only a release signed by
+Slatebox, pulled by its digest, is ever installed. If the server restarts in the
+middle of an update, the next run puts the previous version back by itself.
+
+An install from before automatic updates (an image older than 2.1.0) gets them
+in two steps, on the computer that installed it:
+
+```sh
+npx slatebox@latest upgrade          # to an image with automatic updates; this sets up the host updater too
+npx slatebox updates auto on         # or turn on "Apply updates automatically" in Admin › Updates
+```
+
+The second step is needed because a server that already had data before it
+gained the updater only tells admins about releases until someone turns
+applying on. `npx slatebox updates enable` puts the host updater back after
+`npx slatebox updates disable`; it needs an image from 2.1.0 on.
+
+The host updater needs Docker Engine (rootful or rootless) on the same computer:
+on Podman, or a Docker reached over TCP or SSH, `updates enable` says so and you
+update with `npx slatebox upgrade`.
 
 ```sh
 npx slatebox updates                 # the version, what is available, what happens next
@@ -265,8 +282,9 @@ docker exec slatebox slatebox updates status
 
 `SLATEBOX_UPDATES=notify` never applies updates by itself; `SLATEBOX_UPDATES=off`
 makes no update request at all (for a server without internet access, keep
-using `slatebox upgrade --image-archive`). On Kubernetes, Admin › Updates shows
-the exact upgrade command for each release. Each image is signed with cosign:
+using `slatebox upgrade --image-archive`). On Kubernetes there is no host
+updater: Admin › Updates shows the exact upgrade command for each release
+(`npx slatebox upgrade --name <install> --to <image>@sha256:...`). Each image is signed with cosign:
 
 ```sh
 cosign verify ghcr.io/slatebox/slatebox:<version> \

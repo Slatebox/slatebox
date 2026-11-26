@@ -56,6 +56,11 @@ export function buildManifest({ version, repository = DEFAULT_REPOSITORY, index,
 export function buildFeed({ previous = null, base, stable = null, preview = null, yank = [], expiresDays = 30, now = Date.now() }) {
   if (!/^https?:\/\/\S+\/releases\/download$/.test(base || '') && !/^https?:\/\/\S+$/.test(base || '')) fail('--base is the releases/download address')
   const entry = item => (item ? { version: parseVersion(item.version).text, manifest: `${base}/v${parseVersion(item.version).text}/release-manifest.json`, sha256: item.sha256 } : null)
+  // A channel never goes back: an older tag's run (or one that raced a newer one) cannot replace a newer entry.
+  for (const [channel, item] of [['stable', stable], ['preview', preview]]) {
+    const was = previous?.[channel]?.version
+    if (item && was && compareVersions(item.version, was) < 0) fail(`--${channel} ${item.version} is older than the feed's ${channel} ${was}: the feed keeps the newer one`)
+  }
   const next = {
     schema: 1, sequence: (previous?.sequence || 0) + 1, generatedAt: new Date(now).toISOString(), expiresAt: new Date(now + expiresDays * 86_400_000).toISOString(),
     stable: entry(stable) || previous?.stable || null, preview: entry(preview) || previous?.preview || null,

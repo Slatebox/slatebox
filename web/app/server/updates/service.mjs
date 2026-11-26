@@ -5,7 +5,7 @@
 // the host updater looks the version up in the signed manifest itself (installer updater/run.mjs).
 import { DEFAULT_FEED_URL, readFeed } from './feed.mjs'
 import {
-  DAY_MS, HEARTBEAT_LATE_MS, compareVersions, decisionWords, isMajorStep, normalizePolicy, offered, parseVersion, rollbackOffer,
+  DAY_MS, HEARTBEAT_LATE_MS, compareVersions, decisionWords, isMajorStep, normalizePolicy, offered, parseVersion, rollbackOffer, validTimeZone,
 } from './policy.mjs'
 import * as store from './store.mjs'
 
@@ -49,6 +49,8 @@ export function nextCheckDelay({ failures = 0, random = Math.random } = {}) {
  */
 export function createUpdatesService({ cols, settings, get, keys, current = () => ({ version: null }), setUp = async () => true, notify = async () => {}, audit = async () => {}, now = Date.now, random = Math.random, log = console }) {
   const { mode, feedUrl } = updateMode(settings)
+  const runtime = settings?.selfHosted?.updates?.runtime === 'kubernetes' ? 'kubernetes' : 'docker'
+  const install = /^[a-z0-9-]{1,63}$/.test(settings?.selfHosted?.updates?.install || '') ? settings.selfHosted.updates.install : null
   let failures = 0
   let dueAt = 0
 
@@ -127,14 +129,15 @@ export function createUpdatesService({ cols, settings, get, keys, current = () =
     const updaterAt = d.updater?.at ? new Date(d.updater.at).getTime() : null
     const events = await store.listEvents(cols, 60)
     return {
-      mode, feedUrl: feedUrl || null,
+      mode, feedUrl: feedUrl || null, runtime, install,
       current: { version: me.version, revision: me.revision || null },
-      policy: d.policy, policySource: d.policySource,
+      policy: d.policy, policySource: d.policySource, zoneFrom: d.zoneFrom || null,
       available: newer && manifest ? {
         version: manifest.version, releasedAt: manifest.releasedAt, notes: manifest.notes || '', notesUrl: manifest.notesUrl || null,
         migrations: manifest.migrations || [], major, approved: (d.approvals || []).some(v => compareVersions(v, manifest.version) === 0),
         signed: true, preview: manifest.channel === 'preview', minUpgradeFrom: manifest.minUpgradeFrom || null,
-        upgradeCommand: `npx slatebox upgrade --to ${manifest.image.repository}@${manifest.image.index}`,
+        // On Kubernetes the installer applies a release (automatic applying there comes later).
+        upgradeCommand: runtime === 'kubernetes' ? `npx slatebox upgrade${install && install !== 'slatebox' ? ` --name ${install}` : ''} --to ${manifest.image.repository}@${manifest.image.index}` : null,
       } : null,
       decision: { action: decision.action, reason: decision.reason, until: decision.until || null, words: decisionWords(decision, { timeZone: d.policy?.timeZone || 'UTC' }), notice: decision.notice || null },
       feed: { checkedAt: d.feed?.checkedAt || null, ok: Boolean(d.feed?.ok), expired: Boolean(d.feed?.expired), lastError: d.feed?.lastError || null },
@@ -160,6 +163,17 @@ export function createUpdatesService({ cols, settings, get, keys, current = () =
     await store.setPolicy(cols, policy)
     await changed(by, 'changed the update settings', d.policy, policy)
     return policy
+  }
+
+  /** The first administrator's browser time zone, for a policy no administrator has set yet (once). */
+  async function adoptTimeZone(timeZone, { by }) {
+    const d = await doc()
+    if (!validTimeZone(timeZone)) throw new UpdatesError('invalid', 'Choose a time zone such as America/New_York.')
+    if (d.policySource === 'admin' || d.zoneFrom || d.policy?.timeZone === timeZone) return { adopted: false, policy: d.policy }
+    if (!(await store.adoptTimeZone(cols, timeZone, { by, now: now() }))) return { adopted: false, policy: d.policy }
+    const after = { ...d.policy, timeZone }
+    await audit({ by, action: `set the update time zone to ${timeZone} (the administrator's own)`, before: d.policy, after })
+    return { adopted: true, policy: after }
   }
 
   const releaseFor = async version => {
@@ -203,7 +217,7 @@ export function createUpdatesService({ cols, settings, get, keys, current = () =
     return { requested: value }
   }
 
-  return { status, checkNow, tick, setPolicy, approve, applyNow, cancel, rollback, mode, feedUrl, _due: () => dueAt }
+  return { status, checkNow, tick, setPolicy, adoptTimeZone, approve, applyNow, cancel, rollback, mode, feedUrl, _due: () => dueAt }
 }
 
 export { DAY_MS }

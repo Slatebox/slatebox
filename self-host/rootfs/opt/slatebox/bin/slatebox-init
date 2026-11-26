@@ -315,13 +315,33 @@ main() {
       cpu_unsupported
       exit 1
     fi
+    # A rollback left the backup from before the upgrade to load (slatebox restore-on-start): the
+    # database starts empty, because this MongoDB may not open files a newer one wrote, and the
+    # files from before stay aside until the backup has loaded.
+    local pending=/data/restore-on-start.gz
+    if [[ -f $pending ]]; then
+      say 'A rollback left the backup from before the upgrade: loading it into a fresh database.'
+      rm -rf /data/db.before-restore
+      if [[ -d /data/db ]]; then mv /data/db /data/db.before-restore; fi
+      mkdir -p /data/db
+    fi
     start mongo -- mongod --dbpath /data/db --replSet rs0 --bind_ip 127.0.0.1 --port 27017 \
       --keyFile /data/secrets/mongo.key --nounixsocket --quiet \
       --setParameter shutdownTimeoutMillisForSignaledShutdown=0
-    if ! step node "$LIB/mongo-init.mjs"; then
+    if ! step node "$LIB/mongo-init.mjs" || { [[ -f $pending ]] && ! step "$ROOT/bin/slatebox" restore-on-start; }; then
       say 'The database could not be prepared. Stopping the container.'
       shutdown
+      if [[ -f $pending ]]; then
+        # Everything as it was before this start; the backup is kept beside it for a person to look at.
+        rm -rf /data/db
+        if [[ -d /data/db.before-restore ]]; then mv /data/db.before-restore /data/db; fi
+        mv "$pending" /data/restore-on-start.failed.gz
+      fi
       exit 1
+    fi
+    if [[ -f $pending ]]; then
+      rm -f "$pending"
+      rm -rf /data/db.before-restore
     fi
   fi
 

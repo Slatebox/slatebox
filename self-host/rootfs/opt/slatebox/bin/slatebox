@@ -123,6 +123,22 @@ restore() {
   note 'Restore complete. Slatebox is ready.'
 }
 
+# Run by slatebox-init, before the app starts, when an installer left a backup in the volume to load
+# (a rollback to a version that cannot read what a newer one wrote): it goes into the empty
+# database the init made, so the older version never opens the newer data at all.
+readonly RESTORE_ON_START=/data/restore-on-start.gz
+restore_on_start() {
+  [[ -f $RESTORE_ON_START ]] || return 0
+  bundled_database
+  if ! gzip -t "$RESTORE_ON_START" 2>/dev/null ||
+     [[ $(gzip -dc "$RESTORE_ON_START" 2>/dev/null | head -c 4 | od -An -tx1 | tr -d ' \n') != "$ARCHIVE_MAGIC" ]]; then
+    die 'The backup left for the rollback is not a complete Slatebox backup.'
+  fi
+  note 'Loading the backup from before the upgrade (a rollback).'
+  load "$RESTORE_ON_START" || die 'The backup from before the upgrade could not be loaded.'
+  note 'The backup from before the upgrade is loaded.'
+}
+
 with_app_env() { # with_app_env SCRIPT ARGS...: run a lib script with the app's database connection
   [[ -f $RUN/app.env && -f $RUN/state.env ]] || die 'Slatebox is still starting. Try again in a moment.'
   local script=$1
@@ -158,6 +174,7 @@ case ${1:-} in
     updates "$@"
     ;;
   restore) restore ;;
+  restore-on-start) restore_on_start ;;
   health) shift; exec node "$LIB/health.mjs" "$@" ;;
   # The team-address tunnel: connected, connecting, or refused.
   tunnel) shift; exec node "$LIB/health.mjs" --tunnel "$@" ;;

@@ -6,6 +6,10 @@ import { dirname, join } from 'node:path'
 import { EXIT, InstallError } from '../errors.mjs'
 import { shq } from '../runner.mjs'
 
+// What `slatebox restore-on-start` (run by the image's init before the app) loads: written whole, then renamed.
+export const RESTORE_ON_START = '/data/restore-on-start.gz'
+const STAGE_RESTORE = `umask 077; cat > ${RESTORE_ON_START}.part && mv ${RESTORE_ON_START}.part ${RESTORE_ON_START}`
+
 function bindable(port, address) {
   return new Promise(resolve => {
     const server = createServer()
@@ -89,6 +93,8 @@ export function localHost(ctx, { dir, name }) {
     },
     restoreFromFile: (container, path) => docker(['exec', '-i', container, '/opt/slatebox/bin/slatebox', 'restore'], { inputFile: path, timeout: 60 * 60_000 }),
     restoreFromLocal(container, path) { return this.restoreFromFile(container, path) },
+    /** Leave a backup in the data volume for the image to load when it next starts, before its app (no container may run on it). */
+    stageRestore: (volume, image, path) => docker(['run', '--rm', '-i', '--network', 'none', '--volume', `${volume}:/data`, '--entrypoint', '/bin/sh', image, '-c', STAGE_RESTORE], { inputFile: path, timeout: 60 * 60_000 }),
     sh: (script, options) => ctx.run('sh', ['-s'], { input: script, ...options }),
   }
 }
@@ -150,6 +156,7 @@ export function sshHost(ctx, ssh, { name, home }) {
       return host.remote(`${host.sudo}sh -c ${shq(script)}`, { timeout: 60 * 60_000 })
     },
     restoreFromFile: (container, path) => host.remote(`${host.sudo}sh -c ${shq(`docker exec -i ${shq(container)} /opt/slatebox/bin/slatebox restore < ${shq(path)}`)}`, { timeout: 60 * 60_000 }),
+    stageRestore: (volume, image, path) => host.remote(`${host.sudo}sh -c ${shq(`docker run --rm -i --network none --volume ${shq(`${volume}:/data`)} --entrypoint /bin/sh ${shq(image)} -c ${shq(STAGE_RESTORE)} < ${shq(path)}`)}`, { timeout: 60 * 60_000 }),
     restoreFromLocal: (container, file) => host.remote(`${host.sudo}docker exec -i ${shq(container)} /opt/slatebox/bin/slatebox restore`, { inputFile: file, timeout: 60 * 60_000 }),
     sh: (script, options) => host.remote(`${host.sudo}sh -s`, { input: script, ...options }),
     close: () => (multiplex ? ctx.run('ssh', ['-O', 'exit', ...base], { timeout: 10_000 }) : null),

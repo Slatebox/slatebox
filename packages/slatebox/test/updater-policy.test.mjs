@@ -37,6 +37,9 @@ test('in the window, past the wait, a minor release is applied; outside it waits
   assert.equal(later.reason, 'outside-window')
   assert.equal(later.until, at('2026-11-26T04:00:00Z'))
   assert.match(decisionWords(later), /next window/)
+  // The time says its zone (the policy's), so it is never read as the browser's.
+  assert.match(decisionWords(later), /\(Thu, Nov 26, 4:00 AM UTC\)/)
+  assert.match(decisionWords(later, { timeZone: 'America/New_York' }), /11:00 PM EST/)
 })
 
 test('automatic off: notify only; SLATEBOX_UPDATES-style notify keeps it so', () => {
@@ -84,14 +87,29 @@ test('a withdrawn release is never applied, even with Update now; a server on a 
   assert.match(onYanked.notice, /2\.0\.0.*withdrawn: data loss/)
 })
 
-test('Update now ignores the window and the wait; an expired feed stops automatic applying only', () => {
+test('a release that has to go through a withdrawn version first is not applied, even with Update now', () => {
+  const through = {
+    ...base, feed: feed('2.2.0', { yanked: [{ version: '2.1.0', reason: 'broke uploads' }] }),
+    manifests: { '2.2.0': manifest('2.2.0', { releasedAt: '2026-11-01T00:00:00.000Z', minUpgradeFrom: '2.1.0' }) },
+  }
+  const decision = decide(through)
+  assert.equal(decision.reason, 'yanked-step')
+  assert.equal(decision.step, '2.1.0')
+  assert.equal(decide({ ...through, request: { kind: 'apply', version: '2.2.0' } }).reason, 'yanked-step')
+  assert.match(decisionWords(decision), /through 2\.1\.0, which was withdrawn/)
+  // From 2.1.0 or later the step is not needed.
+  assert.equal(decide({ ...through, current: '2.1.0' }).action, 'apply')
+})
+
+test('Update now ignores the window and the wait; an expired feed stops every apply', () => {
   const outside = { ...base, now: at('2026-11-25T13:00:00Z'), manifests: { '2.1.0': manifest('2.1.0', { releasedAt: '2026-11-25T12:00:00.000Z' }) } }
   assert.equal(decide(outside).action, 'none')
   assert.equal(decide({ ...outside, request: { kind: 'apply', version: '2.1.0' } }).action, 'apply')
   assert.equal(decide({ ...outside, request: { kind: 'apply' } }).action, 'apply', 'no version: the newest')
   assert.equal(decide({ ...outside, request: { kind: 'apply', version: '2.0.9' } }).action, 'none', 'a request for another version is not this one')
   assert.equal(decide({ ...base, feedExpired: true }).reason, 'feed-expired')
-  assert.equal(decide({ ...base, feedExpired: true, request: { kind: 'apply' } }).action, 'apply')
+  // The host updater refuses an expired feed (it may be an old one replayed), so Update now waits too.
+  assert.equal(decide({ ...base, feedExpired: true, request: { kind: 'apply' } }).reason, 'feed-expired')
 })
 
 test('one attempt at a time: a live lease means nothing new; an expired one does not hold', () => {
@@ -121,8 +139,25 @@ test('the window by the wall clock: days, a window across midnight, and both day
   assert.equal(inWindow(ny, 'America/New_York', at('2026-03-08T07:30:00Z')), true)
   // 06:59Z is 01:59 EST: not yet.
   assert.equal(inWindow(ny, 'America/New_York', at('2026-03-08T06:59:00Z')), false)
-  // 08:00Z is 04:00 EDT: the window has closed.
-  assert.equal(inWindow(ny, 'America/New_York', at('2026-03-08T08:00:00Z')), false)
+  // The night loses an hour, so the window gets it back: two real hours from 03:00 EDT (07:00Z).
+  assert.equal(inWindow(ny, 'America/New_York', at('2026-03-08T08:30:00Z')), true)
+  // 09:00Z is 05:00 EDT: the window has closed.
+  assert.equal(inWindow(ny, 'America/New_York', at('2026-03-08T09:00:00Z')), false)
+  // A one-hour window at 02:00 on that night still opens (03:00-04:00 EDT): a weekly window skips no week.
+  const sunday = { days: [0], start: '02:00', hours: 1 }
+  let open = 0
+  for (let t = at('2026-03-08T05:00:00Z'); t < at('2026-03-08T11:00:00Z'); t += 60_000) if (inWindow(sunday, 'America/New_York', t)) open++
+  assert.equal(open, 60)
+  assert.equal(inWindow(sunday, 'America/New_York', at('2026-03-08T07:00:00Z')), true)
+  assert.equal(inWindow(sunday, 'America/New_York', at('2026-03-08T08:00:00Z')), false)
+  // A start that exists, with its hour cut short by the change (01:30 for an hour): still a full hour.
+  open = 0
+  for (let t = at('2026-03-08T05:00:00Z'); t < at('2026-03-08T11:00:00Z'); t += 60_000) if (inWindow({ days: [0], start: '01:30', hours: 1 }, 'America/New_York', t)) open++
+  assert.equal(open, 60)
+  // Any other Sunday: the same hour.
+  open = 0
+  for (let t = at('2026-03-15T05:00:00Z'); t < at('2026-03-15T11:00:00Z'); t += 60_000) if (inWindow(sunday, 'America/New_York', t)) open++
+  assert.equal(open, 60)
   // 2026-10-25: London falls back at 02:00 BST to 01:00 GMT. 01:30 happens twice; both count for 01:00-02:00.
   const london = { days: [0], start: '01:00', hours: 1 }
   assert.equal(inWindow(london, 'Europe/London', at('2026-10-25T00:30:00Z')), true) // 01:30 BST

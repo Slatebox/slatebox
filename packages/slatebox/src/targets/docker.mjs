@@ -8,7 +8,7 @@
 // A change or upgrade sets the running container aside (stopped, renamed
 // <name>-previous) and starts the new one on the same data volume; if the new
 // one does not become healthy, the previous one is put back.
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { EXIT, InstallError } from '../errors.mjs'
@@ -18,6 +18,7 @@ import { checkArch, checkCpu, DEFAULT_IMAGE, FALLBACK_CAPABILITIES, inspectImage
 import { SSH_HOST, SSH_USER } from '../answers.mjs'
 import { emptyPlan } from '../plan.mjs'
 import { installDir, recordText, writeRecord } from '../record.mjs'
+import { parse as parseYaml } from '../yaml.mjs'
 import { containerRun, hostPort, ports, previousName, SECRETS_FILE, SETTINGS_FILE, SPEC_LABEL } from '../render/container.mjs'
 import { settingsFor } from '../render/settings.mjs'
 import { shq } from '../runner.mjs'
@@ -180,6 +181,44 @@ export async function machineCheck(ctx) {
 }
 
 export const dockerLine = facts => `Docker ${facts.docker || facts.docker_server || '(to be installed)'}${facts.runtime ? ` (${facts.runtime})` : ''}`
+
+/**
+ * Free space, in GB, where Docker keeps images and volumes (DockerRootDir: another partition on a
+ * server, the VM's disk with Docker Desktop, OrbStack or Colima), read with df in a one-off
+ * container of an image already here. null when it cannot be told (nothing is refused on a guess).
+ */
+export async function dockerFreeGb(host, image) {
+  if (!image) return null
+  const info = await host.docker(['info', '--format', '{{.DockerRootDir}}'])
+  const root = info.code === 0 ? String(info.stdout).trim() : ''
+  if (!root.startsWith('/') || /\s/.test(root)) return null
+  const df = await host.docker(['run', '--rm', '--network', 'none', '--volume', `${root}:/docker-root:ro`, '--entrypoint', 'df', image, '-Pk', '/docker-root'], { timeout: 120_000 })
+  const kb = df.code === 0 ? Number(String(df.stdout).trim().split('\n').pop()?.trim().split(/\s+/)[3]) : NaN
+  return Number.isFinite(kb) ? { gb: kb / 1024 ** 2, root } : null
+}
+
+/** The newest backup's size in GB, for what the one before an upgrade needs (1 GB when there is none). */
+function lastBackupGb(dir) {
+  try {
+    const sizes = readdirSync(dir).filter(file => /\.gz$/.test(file)).map(file => statSync(join(dir, file))).sort((a, b) => b.mtimeMs - a.mtimeMs)
+    return sizes.length ? sizes[0].size / 1024 ** 3 : 1
+  } catch { return 1 }
+}
+
+/** Before an upgrade pulls anything: room for the new image on Docker's disk, and for the backup. */
+async function checkUpgradeSpace(ctx, host, answers, existing) {
+  const docker = await dockerFreeGb(host, existing.container.image)
+  if (docker && docker.gb < MIN_DISK_GB) {
+    throw new InstallError(EXIT.PRECONDITION, `Docker's storage on ${host.where} (${docker.root}) has ${docker.gb.toFixed(1)} GB free; the new image needs at least ${MIN_DISK_GB} GB. Free some space (docker image prune removes images nothing uses), then try again. Nothing was changed.`, { dockerDiskGb: Number(docker.gb.toFixed(1)) })
+  }
+  if (host.kind !== 'local') return
+  const dir = backupsDir(host, answers)
+  const need = Math.max(1, 2 * lastBackupGb(dir))
+  const free = freeGb(ctx, dir)
+  if (free !== null && free < need) {
+    throw new InstallError(EXIT.PRECONDITION, `The backups folder (${dir}) has ${free.toFixed(1)} GB free; the backup taken before the upgrade needs about ${need.toFixed(1)} GB. Free some space, then try again. Nothing was changed.`, { backupDiskGb: Number(free.toFixed(1)) })
+  }
+}
 
 async function checkPorts(host, answers, facts, existing) {
   if (existing.container.exists) return // the install already holds its ports
@@ -616,7 +655,15 @@ export async function applyDocker(ctx, answers, options = {}) {
  */
 export const applyOnHost = (ctx, host, answers, options) => applyOn(ctx, host, answers, options)
 
-async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef, archive, refresh = false, unattended = false }) {
+/** Whether an image loads a backup left in its volume before its app starts (slatebox restore-on-start). */
+async function restoresOnStart(host, image) {
+  if (!image) return false
+  try { return (await probeImage(host.docker, image)).commands.includes('restore-on-start') } catch { return false }
+}
+
+const dataVolume = answers => `${answers.name}-data`
+
+async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef, archive, refresh = false, unattended = false, restoreBackup = null }) {
   const { out } = ctx
   out.step('preflight', 'start', `Checking ${host.where}`)
   const facts = host.kind === 'ssh' ? await preflightSsh(ctx, host, answers) : await preflightLocal(ctx, host)
@@ -645,6 +692,8 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
     checkArch(image, facts.arch, host.where)
     imageReady = true
   }
+  // An upgrade (a container runs now): room for the image and the backup first, before any pull.
+  if (!dockerMissing && !planOnly && existing.container.exists && existing.container.running) await checkUpgradeSpace(ctx, host, answers, existing)
   if (!dockerMissing && !archive) {
     if (refresh) await refreshTag(host.docker, wanted, out.step.bind(out))
     const info = await inspectImage(host.docker, wanted)
@@ -805,10 +854,20 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
   out.step('files', 'ok', `Wrote ${host.dir}`)
 
   const asideNow = existing.container.exists
+  // A rollback's restore goes into the volume before the older version first starts, so it never
+  // opens what the newer one wrote; the same for the automatic rollback below.
+  const previousRestores = Boolean(asideNow && preUpgrade) && await restoresOnStart(host, previousImage)
+  const restoreNow = Boolean(restoreBackup) && caps.commands.includes('restore-on-start')
+  await ctx.beforeSwap?.({ preUpgrade, previousImage, previousRestores, aside: asideNow })
   if (asideNow) await setAside(host, answers)
+  if (restoreNow) {
+    out.step('restore', 'start', `Restoring the backup from before the upgrade (${restoreBackup}) as Slatebox starts`)
+    const staged = await host.stageRestore(dataVolume(answers), image.id, restoreBackup)
+    if (staged.code !== 0) await rollback(ctx, host, answers, { aside: asideNow, previous, preUpgrade, previousImage, previousRestores, why: `the backup could not be put in place (${lastLine(staged.stderr) || 'docker run failed'})` })
+  }
   out.step('start', 'start', `Starting Slatebox and waiting until it is healthy (up to ${ctx.healthTimeout}s)`)
   const result = await startAndCheck(ctx, host, answers, run)
-  if (!result.ok) await rollback(ctx, host, answers, { aside: asideNow, previous, preUpgrade, why: result.why })
+  if (!result.ok) await rollback(ctx, host, answers, { aside: asideNow, previous, preUpgrade, previousImage, previousRestores, why: result.why })
   if (asideNow) await host.docker(['rm', '--force', previousName(answers.name)])
   if (result.warning) out.step('health', 'warn', result.warning)
   out.step('start', 'ok', answers.address.team ? `Slatebox is healthy on ${host.where}` : `Slatebox is healthy at ${answers.address.url}`)
@@ -829,10 +888,10 @@ async function applyOn(ctx, host, answers, { record, planOnly = false, imageRef,
     }
   }
   await saveRecord(ctx, host, answers, image, settings, caps, record, false, previousImage, facts)
-  return done(ctx, host, answers, image, { generated, fresh })
+  return { ...done(ctx, host, answers, image, { generated, fresh }), restoredOnStart: restoreNow }
 }
 
-async function rollback(ctx, host, answers, { aside, previous, preUpgrade, why }) {
+async function rollback(ctx, host, answers, { aside, previous, preUpgrade, previousImage = null, previousRestores = false, why }) {
   const { out } = ctx
   out.step('start', 'fail', `Slatebox did not become healthy: ${why}`)
   for (const file of [SECRETS_FILE, SETTINGS_FILE, BACKUP_SCRIPT]) {
@@ -848,10 +907,18 @@ async function rollback(ctx, host, answers, { aside, previous, preUpgrade, why }
   out.step('rollback', 'start', 'Putting the previous container back')
   await host.docker(['rm', '--force', answers.name])
   const renamed = await host.docker(['rename', previousName(answers.name), answers.name])
-  const started = renamed.code === 0 ? await host.docker(['start', answers.name]) : renamed
+  // The new version may have changed the database before it failed, perhaps so that the previous
+  // one cannot open it: the backup from just before goes into the volume first and is loaded as the
+  // previous version starts (an image from before restore-on-start restores once it is healthy).
+  let staged = null
+  if (renamed.code === 0 && preUpgrade && previousRestores) {
+    out.step('rollback', 'start', `Restoring the backup taken before the upgrade (${preUpgrade}) as the previous version starts`)
+    staged = await host.stageRestore(dataVolume(answers), previousImage, preUpgrade)
+  }
+  const started = renamed.code !== 0 ? renamed : staged && staged.code !== 0 ? staged : await host.docker(['start', answers.name])
   let back = started.code !== 0 ? { ok: false, why: lastLine(started.stderr) || 'docker start failed' } : await waitHealthy(ctx, host, answers.name, ctx.healthTimeout)
   if (back.ok) back = await health(ctx, host, answers)
-  if (back.ok && preUpgrade) {
+  if (back.ok && preUpgrade && !staged) {
     // The new version may have changed the database before it failed: put back the copy taken just before.
     out.step('rollback', 'start', `Restoring the backup taken before the upgrade (${preUpgrade})`)
     const restored = await host.restoreFromFile(answers.name, preUpgrade)
@@ -991,6 +1058,40 @@ export async function statusDocker(ctx, record) {
     }
   } finally {
     await host.close?.()
+  }
+}
+
+// What the host updater changes on a server, and what only the laptop knows.
+const UPDATER_FIELDS = ['image', 'imageRef', 'imageDigest', 'imageId', 'previousImageDigest', 'version', 'lastHealthy', 'updatedBy']
+
+/**
+ * An install on a server over SSH keeps two records: the laptop's (~/.slatebox) and the server's
+ * install.yaml, which the host updater rewrites after each automatic update. When the laptop
+ * connects again: the server's image fields come back to the laptop (status and upgrade plan from
+ * what runs), and the laptop's host updater setting goes to the server. → the record to use.
+ */
+export async function syncServerRecord(ctx, record) {
+  if (!record || record.target !== 'ssh') return record
+  try {
+    return await withHost(ctx, record, async host => {
+      const text = await host.readFile(join(host.dir, 'install.yaml'))
+      const server = text ? parseYaml(text) : null
+      if (!server || server.name !== record.name) return record
+      let next = record
+      const newer = Date.parse(server.lastHealthy || '') > Date.parse(record.lastHealthy || '')
+      if (server.updatedBy === 'auto-updater' && server.imageDigest && server.imageDigest !== record.imageDigest && newer) {
+        next = { ...record, ...Object.fromEntries(UPDATER_FIELDS.filter(key => key in server).map(key => [key, server[key]])) }
+        writeRecord(ctx.home, next)
+        ctx.out.step('record', 'ok', `The server was updated automatically (${server.imageDigest}): this computer's record now says so too`)
+      }
+      if (next.updates && JSON.stringify(server.updates || null) !== JSON.stringify(next.updates)) {
+        await host.writeFile(join(host.dir, 'install.yaml'), recordText({ ...server, updates: next.updates }), 0o600)
+      }
+      return next
+    })
+  } catch {
+    // Unreachable now: the command itself says so; the records are matched the next time.
+    return record
   }
 }
 

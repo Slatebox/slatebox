@@ -48,10 +48,14 @@ test('policy: off makes no request; a stale check is done first, and a feed this
 
 test('heartbeat, report and request write the record the app reads', async () => {
   const db = fakeDb()
-  assert.equal(JSON.parse(await cmd(db, ['heartbeat', '--updater', '1', '--scheduler', 'systemd', '--feed-url', 'http://host.docker.internal:9/update-feed/channels.json'])).ok, true)
+  // A feed address that is not https is never kept (the host updater reads only its own, https, anyway).
+  await cmd(db, ['heartbeat', '--updater', '1', '--scheduler', 'systemd', '--feed-url', 'http://host.docker.internal:9/update-feed/channels.json'])
   let doc = await db.collection('systemSettings').findOne({ _id: 'selfHostUpdates' })
+  assert.equal(doc.updater.feedUrl, undefined)
+  assert.equal(JSON.parse(await cmd(db, ['heartbeat', '--updater', '1', '--scheduler', 'systemd', '--feed-url', 'https://mirror.example/update-feed/channels.json'])).ok, true)
+  doc = await db.collection('systemSettings').findOne({ _id: 'selfHostUpdates' })
   assert.equal(doc.updater.scheduler, 'systemd')
-  assert.equal(doc.updater.feedUrl, 'http://host.docker.internal:9/update-feed/channels.json')
+  assert.equal(doc.updater.feedUrl, 'https://mirror.example/update-feed/channels.json')
   assert.equal(doc.policy.auto, true, 'a server with no first admin yet is new: automatic updates')
   await cmd(db, ['request', 'apply', '--version', '2.1.0'])
   doc = await db.collection('systemSettings').findOne({ _id: 'selfHostUpdates' })
@@ -79,6 +83,12 @@ test('a server that already had its first admin gets notify only', async () => {
   assert.equal(doc.policySource, 'existing')
   await cmd(db, ['auto', 'on'])
   assert.equal((await db.collection('systemSettings').findOne({ _id: 'selfHostUpdates' })).policy.auto, true)
+  await cmd(db, ['request', 'apply', '--version', '2.1.0'])
+  // Kept in the app's Audit collection (not only the pruned events), as Admin › Updates' changes are.
+  const audits = db.collection('audit').rows
+  assert.deepEqual(audits.map(row => [row.type, row.userId, row.action]), [['self-host-updates', 'host', 'automatic updates on (from the host)'], ['self-host-updates', 'host', 'apply 2.1.0 (from the host)']])
+  assert.equal(audits[0].before.auto, false)
+  assert.equal(audits[0].after.auto, true)
 })
 
 test('the policy reads the feed itself when no good check is 7 hours old, and retries a failed one after 15 minutes', async () => {
@@ -91,4 +101,11 @@ test('the policy reads the feed itself when no good check is 7 hours old, and re
   assert.equal(checkDue({ checkedAt: ago(5), lastError: { at: ago(5) } }, now), false)
   assert.equal(checkDue({ checkedAt: ago(20), lastError: { at: ago(20) } }, now), true)
   assert.equal(checkDue({ ok: true, checkedAt: ago(20), lastError: { at: ago(20) } }, now), true, 'a good feed whose last check failed is retried too')
+})
+
+test('where the container runs, for Admin › Updates: Kubernetes (and the install, from the pod name) or Docker', async () => {
+  const { runtimeFacts } = await import('../self-host/rootfs/opt/slatebox/lib/settings.mjs')
+  assert.deepEqual(runtimeFacts({}, 'a1b2c3d4e5f6'), { runtime: 'docker' })
+  assert.deepEqual(runtimeFacts({ KUBERNETES_SERVICE_HOST: '10.0.0.1' }, 'team-0'), { runtime: 'kubernetes', install: 'team' })
+  assert.deepEqual(runtimeFacts({ KUBERNETES_SERVICE_HOST: '10.0.0.1' }, 'odd'), { runtime: 'kubernetes' })
 })

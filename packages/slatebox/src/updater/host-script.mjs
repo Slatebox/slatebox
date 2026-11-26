@@ -12,11 +12,19 @@ export const UPDATER_SCRIPT = 'updater.sh'
 export const UPDATES_DIR = 'updates'
 export const LOCK_DIR = 'updates/lock'
 export const PENDING_REPORT = 'updates/pending-report.json'
+// Written by the updater just before it sets the running container aside; gone when it finishes.
+export const IN_FLIGHT = 'updates/in-flight'
 export const UPDATES_LOG = 'updates/updates.log'
 export const SLATEBOX_BIN = '/opt/slatebox/bin/slatebox'
 export const UPDATER_BIN = '/opt/slatebox/bin/slatebox-updater'
 // A lock older than this belongs to a run that died (a lease in the app ends after 2 hours too).
 export const STALE_LOCK_MINUTES = 180
+
+// A run of updater.sh that died (the computer restarted, Docker stopped) while its updater
+// container ran leaves its lock with no container: after this long that lock is taken over too.
+export const DEAD_LOCK_MINUTES = 15
+export const DOCKER_SOCKET = '/var/run/docker.sock'
+const STAGE_RESTORE = 'umask 077; cat > /data/restore-on-start.gz.part && mv /data/restore-on-start.gz.part /data/restore-on-start.gz'
 
 /**
  * @param {object} options
@@ -27,12 +35,16 @@ export const STALE_LOCK_MINUTES = 180
  *   outsideUrl          macOS (Docker Desktop, OrbStack, Colima): how the updater reaches the published port
  *   feedUrl             another signed feed (tests, mirrors); null for GitHub's
  *   scheduler           launchd, systemd or cron: reported with each heartbeat
+ *   socket              the Docker socket on the host (rootless Docker: $XDG_RUNTIME_DIR/docker.sock)
+ *   asOwner             Linux: run the updater as the folder's owner (and the socket's group), so the
+ *                       files it rewrites stay the owner's; macOS VMs map ownership themselves
  */
-export function updaterScript({ name, dir, docker = 'docker', backups = null, hostNetwork = true, outsideUrl = null, feedUrl = null, scheduler = 'cron', protocol = 1 }) {
+export function updaterScript({ name, dir, docker = 'docker', backups = null, hostNetwork = true, outsideUrl = null, feedUrl = null, scheduler = 'cron', protocol = 1, socket = DOCKER_SOCKET, asOwner = hostNetwork }) {
   const d = shq(docker)
-  const mounts = [`-v /var/run/docker.sock:/var/run/docker.sock`, `-v "$dir:$dir"`, ...(backups ? [`-v ${shq(backups)}:${shq(backups)}`] : [])]
+  const mounts = [`-v "$socket:/var/run/docker.sock"`, `-v "$dir:$dir"`, ...(backups ? [`-v ${shq(backups)}:${shq(backups)}`] : [])]
   const network = hostNetwork ? '--network host' : '--add-host host.docker.internal:host-gateway'
   const extra = [...(backups ? [`--backups ${shq(backups)}`] : []), ...(outsideUrl ? [`--outside-url ${shq(outsideUrl)}`] : []), ...(feedUrl ? [`--feed-url ${shq(feedUrl)}`] : [])]
+  const pending = `$dir/${PENDING_REPORT}`
   return `#!/bin/sh
 # Written by the slatebox installer: automatic updates for the Slatebox "${name}".
 # Run every five minutes by ${scheduler}; safe to run by hand. It changes nothing unless Admin › Updates
@@ -43,30 +55,71 @@ umask 077
 docker=${d}
 name=${shq(name)}
 dir=${shq(dir)}
+socket=${shq(socket)}
 mkdir -p "$dir/${UPDATES_DIR}"
 log="$dir/${UPDATES_LOG}"
 lock="$dir/${LOCK_DIR}"
+inflight="$dir/${IN_FLIGHT}"
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+exists() { "$docker" inspect --format '{{.Id}}' "$1" >/dev/null 2>&1; }
 
-# One run at a time, and never beside \`slatebox upgrade\` (it takes the same lock).
-if ! mkdir "$lock" 2>/dev/null; then
-  if [ -n "$(find "$lock" -maxdepth 0 -mmin +${STALE_LOCK_MINUTES} 2>/dev/null)" ]; then
-    rm -rf "$lock"
-    mkdir "$lock" 2>/dev/null || exit 0
-  else
-    exit 0
+# One run at a time, and never beside \`slatebox upgrade\` (it takes the same lock, as "upgrade").
+take_lock() { mkdir "$lock" 2>/dev/null && echo "updater $(now)" > "$lock/owner"; }
+if ! take_lock; then
+  stale=$(find "$lock" -maxdepth 0 -mmin +${STALE_LOCK_MINUTES} 2>/dev/null)
+  # A run of this script that died with the computer or Docker: no updater container is left.
+  if [ -z "$stale" ] && grep -q '^updater' "$lock/owner" 2>/dev/null && [ -n "$(find "$lock" -maxdepth 0 -mmin +${DEAD_LOCK_MINUTES} 2>/dev/null)" ] && ! exists "$name-updater"; then
+    stale=yes
   fi
+  [ -n "$stale" ] || exit 0
+  echo "$(now) taking over a lock left by a run that died" >> "$log"
+  rm -rf "$lock"
+  take_lock || exit 0
 fi
 trap 'rm -rf "$lock"' EXIT
 trap 'exit 1' INT TERM
+
+# An update cut off after it set Slatebox aside (the computer restarted, Docker stopped): put the
+# previous container back (with the backup from before the upgrade, when its image loads one as it
+# starts) and leave the outcome for Slatebox, so the site never stays down waiting for a person.
+if [ -f "$inflight" ] || { ! exists "$name" && exists "$name-previous"; }; then
+  field() { sed -n "s/^$1=//p" "$inflight" 2>/dev/null | head -n 1; }
+  attempt=$(field attempt | tr -cd 'A-Za-z0-9-')
+  kind=$(field kind | tr -cd 'a-z')
+  from=$(field from | tr -cd 'A-Za-z0-9.+-')
+  backup=$(field backup)
+  outcome=failed
+  detail='The update was cut off (the server or Docker restarted) before it finished; Slatebox runs as it was left. See Admin › Updates.'
+  if exists "$name-previous"; then
+    echo "$(now) recovering: an update was cut off; putting the previous container back" >> "$log"
+    "$docker" rm --force "$name" >/dev/null 2>&1
+    if "$docker" rename "$name-previous" "$name" >> "$log" 2>&1; then
+      if [ -n "$backup" ] && [ -f "$backup" ]; then
+        previous=$("$docker" inspect --format '{{.Image}}' "$name")
+        "$docker" run --rm -i --network none --volume "$name-data:/data" --entrypoint /bin/sh "$previous" -c ${shq(STAGE_RESTORE)} < "$backup" >> "$log" 2>&1 || backup=
+      else
+        backup=
+      fi
+      if "$docker" start "$name" >> "$log" 2>&1; then
+        detail="The update was cut off (the server or Docker restarted) before it finished, so the version from before it was put back\${backup:+ with its data from before the upgrade}."
+        [ "$kind" = rollback ] || outcome=rolled-back
+      fi
+    fi
+    [ "$outcome" != failed ] || [ "$kind" = rollback ] || detail='The update was cut off (the server or Docker restarted) and the previous container could not be started again. Run: npx slatebox upgrade${name === 'slatebox' ? '' : ` --name ${name}`}'
+  fi
+  if [ -n "$attempt" ]; then
+    printf '{"attemptId":"%s","phase":"%s","detail":"%s","kind":"%s","from":"%s"}\\n' "$attempt" "$outcome" "$detail" "\${kind:-apply}" "$from" > "${pending}"
+  fi
+  rm -f "$inflight"
+fi
 
 # Slatebox is not running (stopped, or being changed by hand): nothing to do now.
 "$docker" exec "$name" ${SLATEBOX_BIN} updates heartbeat --updater ${protocol} --scheduler ${shq(scheduler)}${feedUrl ? ` --feed-url ${shq(feedUrl)}` : ''} >/dev/null 2>>"$log" || exit 0
 
 # A run that could not reach Slatebox at the end left its outcome here: deliver it now.
-if [ -f "$dir/${PENDING_REPORT}" ]; then
-  if "$docker" exec -i "$name" ${SLATEBOX_BIN} updates report --pending < "$dir/${PENDING_REPORT}" >/dev/null 2>>"$log"; then
-    rm -f "$dir/${PENDING_REPORT}"
+if [ -f "${pending}" ]; then
+  if "$docker" exec -i "$name" ${SLATEBOX_BIN} updates report --pending < "${pending}" >/dev/null 2>>"$log"; then
+    rm -f "${pending}"
   fi
 fi
 
@@ -75,11 +128,22 @@ case "$decision" in
   *'"action":"apply"'*|*'"action":"rollback"'*) ;;
   *) exit 0 ;;
 esac
+# Never a folder where the socket should be (docker run -v would make one): say so and stop.
+if [ ! -S "$socket" ]; then
+  echo "$(now) no Docker socket at $socket: run npx slatebox updates enable${name === 'slatebox' ? '' : ` --name ${name}`} again" >> "$log"
+  exit 1
+fi
 image=$("$docker" inspect --format '{{.Image}}' "$name") || exit 1
+${asOwner
+    ? `# As the folder's owner, in the socket's group: what it rewrites (install.yaml, the settings, the
+# backups) stays readable by whoever runs npx slatebox here.
+user="$(stat -c %u "$dir"):$(stat -c %g "$dir")"
+group=$(stat -c %g "$socket")`
+    : 'user=0:0\ngroup=0'}
 echo "$(now) starting: $decision" >> "$log"
-"$docker" run --rm --user 0:0 --name "$name-updater" ${network} \\
+"$docker" run --rm --user "$user" --group-add "$group" --name "$name-updater" ${network} \\
   ${mounts.join(' \\\n  ')} \\
-  -e SLATEBOX_UPDATE_DECISION="$decision" \\
+  -e SLATEBOX_UPDATE_DECISION="$decision" -e HOME=/tmp \\
   --entrypoint ${UPDATER_BIN} "$image" \\
   --name "$name" --dir "$dir"${extra.length ? ` ${extra.join(' ')}` : ''} >> "$log" 2>&1
 code=$?

@@ -103,6 +103,20 @@ test('minUpgradeFrom: an install too old for the newest release goes through the
   assert.equal(step.manifest.version, '2.1.0')
 })
 
+test('a release that has to go through a withdrawn version is refused: the step installed now is checked too', async () => {
+  const gh = new FakeGitHub(key)
+  gh.release('2.1.0', { minUpgradeFrom: '2.0.0' })
+  gh.release('2.2.0', { minUpgradeFrom: '2.1.0' })
+  gh.publishFeed({ stable: '2.2.0', yanked: [{ version: '2.1.0', reason: 'broke uploads' }] })
+  const feedResult = await readFeed({ get: gh.get, keys: key.keys })
+  const getManifest = async version => checkManifest(verifyDocument((await gh.get(manifestUrl(FEED_URL, version))).bytes, (await gh.get(`${manifestUrl(FEED_URL, version)}.sig`)).bytes.toString(), { keys: key.keys }).document)
+  await assert.rejects(resolveTarget({ current: '2.0.0', requested: '2.2.0', feedResult, getManifest }), err => err.code === 'yanked' && /through 2\.1\.0/.test(err.message))
+  await assert.rejects(resolveTarget({ current: '2.0.0', requested: '2.1.0', feedResult, getManifest }), err => err.code === 'yanked')
+  // From 2.1.0 on, the withdrawn step is not on the way.
+  const direct = await resolveTarget({ current: '2.1.0', requested: '2.2.0', feedResult, getManifest })
+  assert.equal(direct.manifest.version, '2.2.0')
+})
+
 test('the host refuses what the signed feed does not name, a downgrade and a withdrawn version', async () => {
   const gh = new FakeGitHub(key)
   gh.release('2.1.0')

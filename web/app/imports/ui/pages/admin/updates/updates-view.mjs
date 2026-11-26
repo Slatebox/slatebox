@@ -46,8 +46,11 @@ export const dateTime = (at, timeZone) => (at ? new Intl.DateTimeFormat('en-US',
 /** The host updater's line under the version. */
 export function updaterLine(status, now = Date.now()) {
   if (status.mode === 'off') return { tone: 'default', text: 'Update checks are off on this server (SLATEBOX_UPDATES=off).' }
-  if (!status.updater) return { tone: 'warning', text: 'Host updater not set up. On the server, run: npx slatebox updates enable', command: 'npx slatebox updates enable' }
-  if (status.updater.late) return { tone: 'error', text: `The host updater has not checked in since ${ago(status.updater.at, now)}. On the server, run: npx slatebox updates enable`, command: 'npx slatebox updates enable' }
+  // Kubernetes has no host updater (yet): each release says the one command that applies it.
+  if (status.runtime === 'kubernetes') return { tone: 'default', text: 'Not used on Kubernetes. Each new release shows the command that applies it.' }
+  const enable = `npx slatebox updates enable${status.install && status.install !== 'slatebox' ? ` --name ${status.install}` : ''}`
+  if (!status.updater) return { tone: 'warning', text: `Host updater not set up. On the computer that installed Slatebox, run: ${enable}`, command: enable }
+  if (status.updater.late) return { tone: 'error', text: `The host updater has not checked in since ${ago(status.updater.at, now)}. On the computer that installed Slatebox, run: ${enable}`, command: enable }
   return { tone: 'success', text: `Host updater checked in ${ago(status.updater.at, now)}` }
 }
 

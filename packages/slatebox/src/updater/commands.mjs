@@ -16,8 +16,9 @@ import { writeRecord } from '../record.mjs'
 import { shq } from '../runner.mjs'
 import { backupsDir, hostFor } from '../targets/docker.mjs'
 import { which } from '../targets/hosts.mjs'
-import { LOCK_DIR, SLATEBOX_BIN, UPDATER_SCRIPT, updaterScript } from './host-script.mjs'
+import { DOCKER_SOCKET, LOCK_DIR, SLATEBOX_BIN, UPDATER_SCRIPT, updaterScript } from './host-script.mjs'
 import { withUpdateLock } from './lock.mjs'
+import { hostFeedUrl } from './run.mjs'
 import { removeUpdater, scheduleUpdater, schedulerFor } from './schedule.mjs'
 
 export const UPDATES_USAGE = 'updates [enable | disable | check | apply [--to X.Y.Z] | auto on|off | run]'
@@ -51,9 +52,31 @@ export async function imageHasUpdates(host, name) {
   try { return JSON.parse(last(said.stdout)).commands?.includes('updates') === true } catch { return false }
 }
 
+/**
+ * The Docker socket the updater container gets, on a Linux host: the one the docker CLI talks to
+ * (rootless Docker's is under $XDG_RUNTIME_DIR). Podman, or a Docker reached over TCP or SSH, has
+ * no socket the updater can drive this way: refused with what to do instead.
+ */
+export async function dockerSocket(host, record) {
+  const upgrade = `npx slatebox upgrade${record.name === 'slatebox' ? '' : ` --name ${record.name}`}`
+  const platform = await host.docker(['version', '--format', '{{.Server.Platform.Name}}'])
+  if (/podman/i.test(`${platform.stdout} ${platform.stderr}`)) {
+    throw new InstallError(EXIT.PRECONDITION, `Automatic updates need Docker Engine: the host updater drives Docker through its socket, and this host runs Podman. Update by hand with ${upgrade} (Admin › Updates tells you about each release), or move to Docker Engine.`)
+  }
+  const context = await host.docker(['context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'])
+  const endpoint = context.code === 0 ? String(context.stdout).trim() : ''
+  if (!endpoint) return DOCKER_SOCKET
+  if (!endpoint.startsWith('unix://')) {
+    throw new InstallError(EXIT.PRECONDITION, `Automatic updates need Docker's own socket on this host, and docker talks to ${endpoint}. Update by hand with ${upgrade}, or run the installer where Docker runs.`)
+  }
+  return endpoint.slice('unix://'.length) || DOCKER_SOCKET
+}
+
 /** How updater.sh should run on this host. */
 export async function scriptOptions(ctx, host, record, { feedUrl = null } = {}) {
   const mac = host.kind === 'local' && (ctx.platform || process.platform) === 'darwin'
+  // On a Mac the socket is the Docker VM's own, at the usual path inside it.
+  const socket = mac ? DOCKER_SOCKET : await dockerSocket(host, record)
   let docker = 'docker'
   let facts = {}
   if (host.kind === 'local') docker = which('docker', ctx.env.PATH) || 'docker'
@@ -74,6 +97,8 @@ export async function scriptOptions(ctx, host, record, { feedUrl = null } = {}) 
       outsideUrl: mac && port ? `http://host.docker.internal:${port}` : null,
       feedUrl: feedUrl || record.updates?.feedUrl || null,
       scheduler: schedulerFor(ctx, host, facts),
+      // Rootless Docker (its own socket) maps the container's root to the folder's owner already.
+      socket, asOwner: !mac && socket === DOCKER_SOCKET,
     },
   }
 }
@@ -82,7 +107,10 @@ export async function scriptOptions(ctx, host, record, { feedUrl = null } = {}) 
 export async function enableUpdater(ctx, record, { feedUrl = null, quiet = false } = {}) {
   return withRecordHost(ctx, record, async host => {
     if (!(await imageHasUpdates(host, record.name))) {
-      throw new InstallError(EXIT.PRECONDITION, `The image "${record.name}" runs has no automatic updates yet (they came with 2.1.0). Run slatebox upgrade${record.name === 'slatebox' ? '' : ` --name ${record.name}`} first.`)
+      throw new InstallError(EXIT.PRECONDITION, `The image "${record.name}" runs has no automatic updates yet (they came with 2.1.0). Run slatebox upgrade${record.name === 'slatebox' ? '' : ` --name ${record.name}`} first (npx slatebox@latest upgrade: it sets up the host updater too).`)
+    }
+    if (feedUrl) {
+      try { hostFeedUrl(feedUrl) } catch (error) { throw new InstallError(EXIT.USAGE, `--feed-url: ${error.message}`) }
     }
     const { facts, options } = await scriptOptions(ctx, host, record, { feedUrl })
     const scheduled = await scheduleUpdater(ctx, host, record, updaterScript(options), { facts })
@@ -90,6 +118,14 @@ export async function enableUpdater(ctx, record, { feedUrl = null, quiet = false
     await host.docker(['exec', record.name, SLATEBOX_BIN, 'updates', 'heartbeat', '--updater', '1', '--scheduler', scheduled.scheduler, ...(options.feedUrl ? ['--feed-url', options.feedUrl] : [])])
     writeRecord(ctx.home, { ...record, updates: { enabled: true, scheduler: scheduled.scheduler, ...(options.feedUrl ? { feedUrl: options.feedUrl } : {}) } })
     if (!quiet) ctx.out.step('updates', 'ok', `Automatic updates: the host updater runs by ${scheduled.how}. Choose when updates are applied in Admin › Updates.`)
+    // A server with data from before the updater only tells admins about releases: say how to turn applying on.
+    const said = await host.docker(['exec', record.name, SLATEBOX_BIN, 'updates', 'status', '--json'], { timeout: 120_000 })
+    let auto = null
+    try { auto = said.code === 0 ? JSON.parse(last(said.stdout)).policy?.auto ?? null : null } catch { auto = null }
+    if (auto === false) {
+      scheduled.next = `Updates are not applied by themselves yet on this server (it had data before). Turn that on in Admin › Updates, or run: npx slatebox updates auto on${record.name === 'slatebox' ? '' : ` --name ${record.name}`}`
+      if (!quiet) ctx.out.say(scheduled.next)
+    }
     return scheduled
   })
 }
@@ -101,7 +137,10 @@ export async function ensureUpdater(ctx, record, flags = {}) {
   try {
     return await enableUpdater(ctx, record, { feedUrl: flags['feed-url'] || null })
   } catch (error) {
-    if (error instanceof InstallError && error.exitCode === EXIT.PRECONDITION && /no automatic updates yet/.test(error.message)) return null
+    if (error instanceof InstallError && error.exitCode === EXIT.PRECONDITION && /no automatic updates yet/.test(error.message)) {
+      ctx.out.step('updates', 'warn', `This image has no automatic updates yet (they come with 2.1.0), so no host updater was set up. To get them: npx slatebox@latest upgrade${record.name === 'slatebox' ? '' : ` --name ${record.name}`}`)
+      return null
+    }
     ctx.out.step('updates', 'warn', `The host updater could not be set up (${error.message}). Run slatebox updates enable to try again.`)
     return null
   }
@@ -146,6 +185,7 @@ export async function updatesCommand(ctx, record, sub, rest, flags) {
       ctx.out.event({ event: 'done', name: record.name, updater: scheduled.scheduler })
       say(`Automatic updates are set up: the host updater runs by ${scheduled.how}.`)
       say('Choose when updates are applied (or turn applying off) in Admin › Updates.')
+      if (scheduled.next) say(scheduled.next)
       return 0
     }
     case 'disable':

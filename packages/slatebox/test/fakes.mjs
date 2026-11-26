@@ -43,6 +43,13 @@ export class FakeDocker {
     this.ssoSessions = { ran: false, cap: 500, warning: null, line: 'no pass yet (at most 500 accounts per pass)' }
     // Which Docker this pretends to be: 'colima', 'orbstack', 'desktop' or null (a plain engine).
     this.provider = provider
+    // Backups staged into a data volume for restore-on-start: { volume, image, file }.
+    this.staged = []
+    // What `docker context inspect` and the server's platform name say (rootless Docker, Podman).
+    this.endpoint = null
+    // Free KB on Docker's storage, as df in a one-off container reads it; null: the probe fails.
+    this.dockerFreeKb = null
+    this.platformName = 'Docker Engine - Community'
   }
 
   /** The `docker run --detach` calls that made the install's container (not the image probes). */
@@ -93,9 +100,12 @@ export class FakeDocker {
     }
     if (cmd !== 'docker') return fail(`${cmd} is not installed`, 127)
     const [verb, ...rest] = args
+    if (verb === 'version' && rest.includes('{{.Server.Platform.Name}}')) return ok(`${this.platformName}\n`)
     if (verb === 'version') return ok(rest.includes('{{.Server.Arch}}') ? `${this.serverArch}\n` : '29.4.0\n')
     if (verb === 'compose') return fail("docker: 'compose' is not a docker command.")
+    if (verb === 'info' && rest.includes('{{.DockerRootDir}}')) return ok('/var/lib/docker\n')
     if (verb === 'info') return ok({ colima: 'Ubuntu 24.04.1 LTS\tcolima\n', orbstack: 'OrbStack\torbstack\n', desktop: 'Docker Desktop\tdocker-desktop\n' }[this.provider] || 'Ubuntu 24.04\tbuildbox\n')
+    if (verb === 'context' && rest[0] === 'inspect' && this.endpoint) return ok(`${this.endpoint}\n`)
     if (verb === 'context' && rest[0] === 'inspect') return ok(this.provider === 'colima' ? 'unix:///Users/me/.colima/default/docker.sock\n' : 'unix:///var/run/docker.sock\n')
     if (verb === 'image' && rest[0] === 'inspect') {
       const ref = rest.at(-1)
@@ -129,6 +139,14 @@ export class FakeDocker {
       if (args.includes('settings')) return { code: 2, stdout: '', stderr: USAGE + this.commands.map(command => `  docker exec slatebox slatebox ${command}\n`).join('') }
       if (args.includes('/opt/slatebox/lib/configure.mjs')) return fail(`Unknown setting SLATEBOX_INSTALLER_PROBE. The settings are: ${this.settings.join(', ')} (in capitals).`)
       if (args.includes('mongod')) return ok('db version v8.0.17')
+      // df in a one-off container, on Docker's own storage.
+      if (args.includes('/docker-root')) return this.dockerFreeKb === null ? fail('unexpected run') : ok(`Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 100000000 1 ${this.dockerFreeKb} 1% /docker-root\n`)
+      // A backup left in the data volume for the image to load as it next starts (slatebox restore-on-start).
+      if (args.some(arg => String(arg).includes('/data/restore-on-start.gz'))) {
+        const volume = args[args.indexOf('--volume') + 1].split(':')[0]
+        this.staged.push({ volume, image: args[args.indexOf('/bin/sh') + 1], file: options.inputFile || null })
+        return ok()
+      }
       return fail('unexpected run')
     }
     if (verb === 'inspect') {

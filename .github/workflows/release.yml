@@ -50,11 +50,14 @@ jobs:
     steps:
       # A pushed tag reads the changelog of its own release commit. A manual run reads the
       # default branch, which also covers tags that predate this workflow.
-      - uses: actions/checkout@v4
+      # Pinned by commit, and no git credentials left behind: selfhost-image.yml calls this with
+      # contents: write as part of the signed publish chain (gh uses GH_TOKEN, never git's).
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.repository.default_branch || github.ref }}
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22.13.0
 

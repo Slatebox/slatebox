@@ -20,7 +20,7 @@ import { installDir, listRecords, readRecord, slateboxHome, writeRecord } from '
 import { makeRunner } from './runner.mjs'
 import { Redactor } from './secrets.mjs'
 import { finishRename, releaseTeamAddress, renameTeamAddress, rotateTeamAddress, teamStatus } from './targets/address.mjs'
-import { applyDocker, backupDocker, defaultLocalPort, machineCheck, preflightTarget, execNode, LOG_SERVICES, logsDocker, readSecretDocker, restoreDocker, setupLinkDocker, statusDocker, uninstallDocker } from './targets/docker.mjs'
+import { applyDocker, syncServerRecord, backupDocker, defaultLocalPort, machineCheck, preflightTarget, execNode, LOG_SERVICES, logsDocker, readSecretDocker, restoreDocker, setupLinkDocker, statusDocker, uninstallDocker } from './targets/docker.mjs'
 import { exportFiles } from './targets/export.mjs'
 import { applyK8s, backupK8s, execNodeK8s, preflightCluster, readSecretK8s, restoreK8s, setupLinkK8s, statusK8s, uninstallK8s } from './targets/k8s.mjs'
 import { setupLines } from './setup-link.mjs'
@@ -629,7 +629,7 @@ async function dispatch(ctx, positionals, flags) {
       return 0
     }
     case 'upgrade': {
-      const record = requireRecord(ctx, flags)
+      const record = await syncServerRecord(ctx, requireRecord(ctx, flags))
       const { answers, errors } = resolveAnswers(collect({ record }), {})
       if (errors.length) throw new InstallError(EXIT.USAGE, 'The install record is not valid.', { fields: errors })
       const imageRef = upgradeImage(record, flags)
@@ -638,9 +638,9 @@ async function dispatch(ctx, positionals, flags) {
       return finish(ctx, done, done.nothingToChange ? [`Already up to date: ${done.name} runs ${done.imageDigest}.`] : ['', `Upgraded. Slatebox is running at ${done.address} (${done.imageDigest}).`])
     }
     case 'updates':
-      return updatesCommand(ctx, requireRecord(ctx, flags), sub, rest, flags)
+      return updatesCommand(ctx, await syncServerRecord(ctx, requireRecord(ctx, flags)), sub, rest, flags)
     case 'status': {
-      const record = requireRecord(ctx, flags)
+      const record = await syncServerRecord(ctx, requireRecord(ctx, flags))
       const status = record.target === 'k8s' ? await statusK8s(ctx, record) : await statusDocker(ctx, record)
       if (record.address?.team) status.teamAddress = await teamStatus(ctx, record)
       ctx.out.event({ event: 'done', ...status })

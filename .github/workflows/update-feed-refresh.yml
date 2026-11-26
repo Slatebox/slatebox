@@ -2,6 +2,9 @@
 # month never lets it expire: an expired feed stops automatic updates on every self-hosted server
 # ("Slatebox can't confirm the newest version"). It changes no channel and withdraws nothing.
 # To withdraw a release by hand: run it with `yank: 2.0.4=why` (workflow_dispatch).
+# It runs on main (the schedule always does), so the "release" environment must allow the main
+# branch as well as v* tags (docs/releasing.md, one-time setup, step 3); with tags only, every
+# daily run is refused and the feed expires 30 days after the last release.
 name: Update feed refresh
 
 on:
@@ -29,7 +32,6 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      SLATEBOX_RELEASE_KEY: ${{ secrets.SLATEBOX_RELEASE_KEY }}
       SLATEBOX_RELEASE_KEY_ID: ${{ vars.SLATEBOX_RELEASE_KEY_ID }}
       BASE: https://github.com/${{ github.repository }}/releases/download
       YANK: ${{ inputs.yank }}
@@ -40,7 +42,10 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22.13.0
+      # The private key only here, never in checkout, setup-node or other steps.
       - name: Re-sign the feed
+        env:
+          SLATEBOX_RELEASE_KEY: ${{ secrets.SLATEBOX_RELEASE_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${SLATEBOX_RELEASE_KEY:-}" ]; then echo "No release key yet (docs/releasing.md, one-time setup): nothing to refresh."; exit 0; fi

@@ -11,6 +11,12 @@ test('the host updater line: connected, not set up (with the command), silent, o
   assert.equal(updaterLine({ ...base, updater: null }).command, 'npx slatebox updates enable')
   assert.match(updaterLine({ ...base, updater: { at: new Date(NOW - 4 * 86400000), late: true } }, NOW).text, /has not checked in since 4 days ago/)
   assert.match(updaterLine({ ...base, mode: 'off' }).text, /SLATEBOX_UPDATES=off/)
+  // Another install's name goes into the command; Kubernetes has no host updater to set up.
+  assert.equal(updaterLine({ ...base, updater: null, install: 'team' }).command, 'npx slatebox updates enable --name team')
+  const k8s = updaterLine({ ...base, updater: null, runtime: 'kubernetes' })
+  assert.equal(k8s.tone, 'default')
+  assert.equal(k8s.command, undefined)
+  assert.doesNotMatch(k8s.text, /updates enable/)
 })
 
 test('the main action: approve a major, update now, try again after a rollback, cancel a pending request, nothing while running', () => {

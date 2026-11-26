@@ -7,7 +7,10 @@
 #   push of vX.Y.Z            -> ghcr.io/slatebox/slatebox:X.Y.Z (+ X.Y, X, stable, latest when newest)
 #   push of vX.Y.Z-rc.N       -> ghcr.io/slatebox/slatebox:X.Y.Z-rc.N (+ preview)
 #   workflow_dispatch         -> the same for an existing tag; push: false builds and smoke-tests
-#                                both architectures and publishes nothing (a dry run)
+#                                both architectures and publishes nothing (a dry run). push: true
+#                                publishes only when run from the tag itself ("Use workflow from":
+#                                the tag vX.Y.Z), so the workflow file, the cosign identity
+#                                (refs/tags/...) and the release environment are the tag's own
 #
 # Each architecture builds on its own native runner (a Meteor build under emulation takes hours).
 # The image is pushed by digest, joined into one index, signed with cosign (keyless, GitHub OIDC)
@@ -42,7 +45,8 @@ concurrency:
 env:
   REPOSITORY: ghcr.io/slatebox/slatebox
   TAG: ${{ inputs.tag || github.ref_name }}
-  PUBLISH: ${{ github.event_name == 'push' || inputs.push }}
+  # A run from a branch never publishes: anyone with write access could run a changed workflow file.
+  PUBLISH: ${{ github.event_name == 'push' || (inputs.push && github.ref_type == 'tag' && github.ref_name == inputs.tag) }}
 
 jobs:
   resolve:
@@ -56,7 +60,6 @@ jobs:
       relay: ${{ steps.what.outputs.relay }}
       engine_repo: ${{ steps.what.outputs.engine_repo }}
       relay_repo: ${{ steps.what.outputs.relay_repo }}
-      newest: ${{ steps.what.outputs.newest }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -65,8 +68,13 @@ jobs:
           persist-credentials: false
       - id: what
         name: Version, channel and pinned sources
+        env:
+          WANTS_PUSH: ${{ inputs.push || false }}
         run: |
           set -euo pipefail
+          if [ "$WANTS_PUSH" = true ] && [ "$PUBLISH" != true ]; then
+            echo "::error::Publishing runs only from the tag itself: Run workflow, Use workflow from: tag $TAG (this run is from ${GITHUB_REF})."; exit 1
+          fi
           [[ $TAG =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]] || { echo "::error::$TAG is not vX.Y.Z"; exit 1; }
           version=${BASH_REMATCH[1]}
           commit=$(git rev-parse "refs/tags/$TAG^{commit}")
@@ -79,11 +87,9 @@ jobs:
           relay_repo=$(jq -er '.relay.repo' self-host/sources.json)
           for sha in "$engine" "$relay"; do [[ $sha =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sources.json pins $sha, not a full commit"; exit 1; }; done
           case "$version" in *-*) channel=preview ;; *) channel=stable ;; esac
-          newest=$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
           {
             echo "version=$version"; echo "channel=$channel"; echo "commit=$commit"
             echo "engine=$engine"; echo "relay=$relay"; echo "engine_repo=$engine_repo"; echo "relay_repo=$relay_repo"
-            echo "newest=$([ "$newest" = "$TAG" ] && echo true || echo false)"
           } >> "$GITHUB_OUTPUT"
 
   build:
@@ -196,7 +202,7 @@ jobs:
   publish:
     name: Index, signature, provenance, tags
     needs: [resolve, build]
-    if: (github.event_name == 'push' || inputs.push)
+    if: github.event_name == 'push' || (inputs.push && github.ref_type == 'tag' && github.ref_name == inputs.tag)
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -242,13 +248,15 @@ jobs:
       - name: Moving tags
         env:
           CHANNEL: ${{ needs.resolve.outputs.channel }}
-          NEWEST: ${{ needs.resolve.outputs.newest }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           src="$REPOSITORY@${{ steps.index.outputs.index }}"
+          # Newest now, not when the build started hours ago (a newer tag may have come since).
+          newest=$(gh api "repos/${{ github.repository }}/git/matching-refs/tags/v" --paginate --jq '.[].ref' | sed 's|^refs/tags/||' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
           if [ "$CHANNEL" = preview ]; then
             docker buildx imagetools create -t "$REPOSITORY:preview" "$src"
-          elif [ "$NEWEST" = true ]; then
+          elif [ "$newest" = "$TAG" ]; then
             IFS=. read -r major minor _ <<< "$VERSION"
             docker buildx imagetools create -t "$REPOSITORY:$major.$minor" -t "$REPOSITORY:$major" -t "$REPOSITORY:stable" -t "$REPOSITORY:latest" "$src"
           fi
@@ -263,9 +271,8 @@ jobs:
     env:
       VERSION: ${{ needs.resolve.outputs.version }}
       GH_TOKEN: ${{ github.token }}
-      SLATEBOX_RELEASE_KEY: ${{ secrets.SLATEBOX_RELEASE_KEY }}
       SLATEBOX_RELEASE_KEY_ID: ${{ vars.SLATEBOX_RELEASE_KEY_ID }}
-      BASE: https://github.com/${{ github.repository }}/releases/download
+    # The private key is given only to the steps that sign (never to checkout, setup-node or gh).
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -276,8 +283,12 @@ jobs:
         with:
           node-version: 22.13.0
       - name: The signing key is a production key
+        env:
+          SLATEBOX_RELEASE_KEY: ${{ secrets.SLATEBOX_RELEASE_KEY }}
         run: node scripts/release-manifest.mjs check-keys
       - name: Build and sign the manifest
+        env:
+          SLATEBOX_RELEASE_KEY: ${{ secrets.SLATEBOX_RELEASE_KEY }}
         run: |
           set -euo pipefail
           node scripts/release.mjs notes "$TAG" > "$RUNNER_TEMP/notes.md"
@@ -294,21 +305,59 @@ jobs:
           # release.yml makes the release for the same tag push; wait for it.
           for i in $(seq 1 60); do gh release view "$TAG" >/dev/null 2>&1 && break; sleep 10; done
           gh release upload "$TAG" release-manifest.json release-manifest.json.sig --clobber
-      - name: Update the channel feed
-        env:
-          CHANNEL: ${{ needs.resolve.outputs.channel }}
-          NEWEST: ${{ needs.resolve.outputs.newest }}
+
+  feed:
+    name: Update the channel feed
+    needs: [resolve, manifest]
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+    # Every writer of channels.json (this, a re-run, other releases, the daily refresh) takes turns:
+    # each one downloads the feed, adds to it and uploads it, so two at once would lose one's change.
+    concurrency:
+      group: update-feed
+      cancel-in-progress: false
+    env:
+      VERSION: ${{ needs.resolve.outputs.version }}
+      CHANNEL: ${{ needs.resolve.outputs.channel }}
+      GH_TOKEN: ${{ github.token }}
+      SLATEBOX_RELEASE_KEY_ID: ${{ vars.SLATEBOX_RELEASE_KEY_ID }}
+      BASE: https://github.com/${{ github.repository }}/releases/download
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.13.0
+      - name: The feed as it is now, and whether this release is the newest
+        id: now
         run: |
           set -euo pipefail
           gh release view update-feed >/dev/null 2>&1 || { echo "::error::Create the rolling update-feed release once (docs/releasing.md)"; exit 1; }
           gh release download update-feed --pattern channels.json --dir "$RUNNER_TEMP/feed" 2>/dev/null || true
+          gh release download "$TAG" --pattern release-manifest.json --dir "$RUNNER_TEMP/release"
+          # Read now (inside the turn), not when the build started: a newer tag may have come since.
+          newest=$(gh api "repos/${{ github.repository }}/git/matching-refs/tags/v" --paginate --jq '.[].ref' | sed 's|^refs/tags/||' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          echo "newest=$([ "$newest" = "$TAG" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Sign and upload the feed
+        env:
+          SLATEBOX_RELEASE_KEY: ${{ secrets.SLATEBOX_RELEASE_KEY }}
+          NEWEST: ${{ steps.now.outputs.newest }}
+        run: |
+          set -euo pipefail
           if [ "$CHANNEL" = preview ]; then
-            set -- --preview "$VERSION" --preview-manifest release-manifest.json
+            set -- --preview "$VERSION" --preview-manifest "$RUNNER_TEMP/release/release-manifest.json"
           elif [ "$NEWEST" = true ]; then
-            set -- --stable "$VERSION" --stable-manifest release-manifest.json
+            set -- --stable "$VERSION" --stable-manifest "$RUNNER_TEMP/release/release-manifest.json"
           else
             echo "An older release: the feed keeps its newer one."; exit 0
           fi
+          node scripts/release-manifest.mjs check-keys
+          # It refuses to put an older version on a channel than the feed already has.
           node scripts/release-manifest.mjs feed --base "$BASE" --previous "$RUNNER_TEMP/feed/channels.json" "$@" --out channels.json
           node scripts/release-manifest.mjs sign channels.json
           gh release upload update-feed channels.json channels.json.sig --clobber

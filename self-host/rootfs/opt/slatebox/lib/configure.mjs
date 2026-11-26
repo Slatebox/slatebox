@@ -10,7 +10,7 @@ import {
 } from './common.mjs'
 import { appSettings as ssoAppSettings, issuerFor, keycloakEnv, ssoMode } from './sso.mjs'
 import { operatorAI } from './ai-config.mjs'
-import { DATABASE_SETTINGS, PROVIDER_KEY, SETTINGS as KNOWN } from './settings.mjs'
+import { DATABASE_SETTINGS, PROVIDER_KEY, SETTINGS as KNOWN, runtimeFacts } from './settings.mjs'
 
 // Payments and metering run only on Slatebox Cloud, under its signed license: a self-hosted
 // Slatebox is never a paid service, so its settings cannot switch them on.
@@ -326,7 +326,7 @@ function main() {
   if (ai.settings) settings.ai = { ...settings.ai, ...ai.settings, connections: { ...settings.ai?.connections, ...ai.settings.connections }, use: { ...settings.ai?.use, ...ai.settings.use } }
   // An app from before settings.ai reads this one endpoint for workshops.
   if (ai.legacy) settings.selfHosted.workshopProvider = ai.legacy
-  settings.selfHosted.updates = { mode: updates.mode, ...(updates.feed ? { feedUrl: updates.feed } : {}) }
+  settings.selfHosted.updates = { mode: updates.mode, ...(updates.feed ? { feedUrl: updates.feed } : {}), ...runtimeFacts() }
   if (ai.on) {
     settings.selfHosted.workshopAI = true
   } else if (settings.selfHosted.workshopAI !== true) {

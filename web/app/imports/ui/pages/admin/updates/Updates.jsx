@@ -68,9 +68,15 @@ export default function Updates() {
 
   const load = React.useCallback(async () => {
     try {
-      const next = await Meteor.callAsync(M.status)
+      let next = await Meteor.callAsync(M.status)
+      // A policy nobody has set yet takes the first administrator's own time zone, once and stored,
+      // so the window on this page is the window the server applies.
+      if (next.policySource !== 'admin' && !next.zoneFrom && next.policy.timeZone !== browserZone()) {
+        const adopted = await Meteor.callAsync(M.adoptTimeZone, browserZone()).catch(() => null)
+        if (adopted?.adopted) next = await Meteor.callAsync(M.status)
+      }
       setStatus(next)
-      setDraft((current) => current || { ...next.policy, timeZone: next.policySource === 'admin' ? next.policy.timeZone : (next.policy.timeZone === 'UTC' ? browserZone() : next.policy.timeZone) })
+      setDraft((current) => current || { ...next.policy })
       setError(null)
     } catch (e) {
       setError(e.reason || e.message)
@@ -190,7 +196,7 @@ export default function Updates() {
                   {action.kind === 'cancel' && <Typography color="text.secondary">Waiting for the host updater to start it.</Typography>}
                 </Box>
               )}
-              <FinePrint sx={{ mt: 1.5 }}>On Kubernetes, update with: <Box component="code" sx={{ fontFamily: MONO, wordBreak: 'break-all' }}>{available.upgradeCommand}</Box></FinePrint>
+              {available.upgradeCommand && <FinePrint sx={{ mt: 1.5 }}>On Kubernetes, update with: <Box component="code" sx={{ fontFamily: MONO, wordBreak: 'break-all' }}>{available.upgradeCommand}</Box></FinePrint>}
             </>
           )}
         </AccountSection>

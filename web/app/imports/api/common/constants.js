@@ -229,6 +229,7 @@ const CONSTANTS = {
       status: 'updates.status',
       checkNow: 'updates.checkNow',
       setPolicy: 'updates.setPolicy',
+      adoptTimeZone: 'updates.adoptTimeZone',
       approve: 'updates.approve',
       applyNow: 'updates.applyNow',
       retry: 'updates.retry',

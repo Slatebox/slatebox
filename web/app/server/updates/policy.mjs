@@ -118,11 +118,39 @@ function localParts(now, timeZone) {
   return { day: WEEKDAYS.indexOf(parts.weekday), minute: Number(parts.hour) * 60 + Number(parts.minute) }
 }
 
+const MINUTE = 60 * 1000
+
+/**
+ * The instant the window opens on the local day of `now`: its start time, or, when the clocks went
+ * forward over it (a 02:00 start in New York in March), the first minute that exists after it.
+ */
+function openedAt(start, now, timeZone) {
+  const { minute: at } = localParts(now, timeZone)
+  let t = Math.floor(now / MINUTE) * MINUTE + (start - at) * MINUTE
+  let below = null
+  let above = null
+  for (let i = 0; i < 4 && (below === null || above === null); i++) {
+    const m = localParts(t, timeZone).minute
+    if (m === start) return localParts(t, timeZone).day === localParts(now, timeZone).day ? t : null
+    if (m < start) below = t
+    else above = t
+    t += (start - m) * MINUTE
+  }
+  if (below === null || above === null || above <= below) return null
+  // The local clock jumps between `below` and `above`: find the first minute at or past the start.
+  while (above - below > MINUTE) {
+    const mid = below + Math.max(1, Math.floor((above - below) / MINUTE / 2)) * MINUTE
+    if (localParts(mid, timeZone).minute < start) below = mid
+    else above = mid
+  }
+  return localParts(above, timeZone).day === localParts(now, timeZone).day ? above : null
+}
+
 /**
  * Is `now` inside the window, by the wall clock of its time zone? A window may cross midnight (it
- * belongs to the day it starts on). On the night clocks go forward, a 02:00 window still opens at
- * the first minute that exists (03:00); on the night they go back, the repeated hour counts once
- * more, which only lengthens the window.
+ * belongs to the day it starts on). On the night clocks go forward over the start (a 02:00 start in
+ * New York), the window opens at the first minute that exists (03:00); on that night every window
+ * lasts its full hours in real time (01:30 for an hour closes at 03:30); on the night they go back, the repeated hour counts once more, which only lengthens it.
  */
 export function inWindow(policyWindow, timeZone, now) {
   const { day, minute } = localParts(now, timeZone)
@@ -131,10 +159,15 @@ export function inWindow(policyWindow, timeZone, now) {
   const length = policyWindow.hours * 60
   const week = 7 * 1440
   const at = day * 1440 + minute
-  return policyWindow.days.some(d => {
+  const byClock = policyWindow.days.some(d => {
     const from = d * 1440 + start
     return (at >= from && at < from + length) || (at + week >= from && at + week < from + length)
   })
+  if (byClock) return true
+  if (!policyWindow.days.includes(day)) return false
+  // In real time from its opening, so a night that loses an hour does not shorten (or skip) it.
+  const opened = openedAt(start, now, timeZone)
+  return opened !== null && now >= opened && now < opened + length * MINUTE
 }
 
 /** When the window next opens (a timestamp), searching minute by minute-ish (15 min steps) up to 8 days. */
@@ -158,6 +191,23 @@ export function offered(feed, channel) {
 }
 
 const yankedIn = (feed, version) => (feed?.yanked || []).find(item => compareVersions(item.version, version) === 0) || null
+
+/**
+ * The versions an install on `current` goes through to reach `target`, as far as the manifests at
+ * hand say (minUpgradeFrom), oldest first, ending with the target. The host updater reads every step
+ * itself (feed.mjs upgradeChain); this is what the record knows, so the decision can stop early.
+ */
+export function knownSteps(manifests, current, target) {
+  const steps = [target]
+  let manifest = manifests?.[target]
+  for (let depth = 0; depth < 6 && manifest?.minUpgradeFrom && compareVersions(current, manifest.minUpgradeFrom) < 0; depth++) {
+    const min = parseVersion(manifest.minUpgradeFrom)?.text
+    if (!min || steps.includes(min)) break
+    steps.unshift(min)
+    manifest = manifests?.[min]
+  }
+  return steps
+}
 
 /** The last attempt at a version, from the history (newest first). */
 const lastAttemptAt = (history, version) => (history || []).find(item => item.target && compareVersions(item.target, version) === 0) || null
@@ -191,16 +241,20 @@ export function decide({ policy = DEFAULT_POLICY, now, current = null, feed = nu
   if (yankedIn(feed, target.version)) return none('yanked', { notice })
   const manifest = manifests[target.version] || null
   if (!manifest) return none('no-manifest', { notice })
+  // A release that needs a newer starting point goes through it first: never through a withdrawn one.
+  const withdrawnStep = knownSteps(manifests, current, target.version).find(version => yankedIn(feed, version))
+  if (withdrawnStep) return none('yanked-step', { target, step: withdrawnStep, notice })
   const major = manifest.major === true || isMajorStep(current, target.version)
   const approved = approvals.some(version => compareVersions(version, target.version) === 0)
   if (major && !approved) return none('needs-approval', { target, notice })
 
+  // The host updater refuses an expired feed (it could be an old one replayed), so nothing is asked of it.
+  if (feedExpired) return none('feed-expired', { target, notice })
   // "Update now" (or "Try again"): no window, no waiting, but never past a yank or a major approval.
   if (request && (request.kind === 'apply' || request.kind === 'retry') && (!request.version || compareVersions(request.version, target.version) === 0)) {
     return { action: 'apply', reason: 'requested', target, notice }
   }
   if (!policy.auto) return none('notify-only', { target, notice })
-  if (feedExpired) return none('feed-expired', { target, notice })
   if (major && !policy.includeMajor) return none('major-manual', { target, notice })
   const released = Date.parse(manifest.releasedAt)
   const holdUntil = (Number.isFinite(released) ? released : now) + policy.holdBackDays * DAY_MS
@@ -213,7 +267,7 @@ export function decide({ policy = DEFAULT_POLICY, now, current = null, feed = nu
 
 /** Plain words for a decision, for Admin › Updates and `slatebox updates status`. */
 export function decisionWords(decision, { timeZone = 'UTC' } = {}) {
-  const when = at => new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(at))
+  const when = at => new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(at))
   const v = decision.target?.version
   switch (decision.reason) {
     case 'running': return 'An update is running now.'
@@ -223,10 +277,11 @@ export function decisionWords(decision, { timeZone = 'UTC' } = {}) {
     case 'up-to-date': return 'Slatebox is up to date.'
     case 'unknown-version': return 'This image does not say which version it is, so it is not updated automatically.'
     case 'yanked': return 'The newest release was withdrawn; nothing is applied.'
+    case 'yanked-step': return `${v} has to be reached through ${decision.step}, which was withdrawn; nothing is applied until Slatebox publishes a way around it.`
     case 'no-manifest': return 'The newest release could not be checked yet.'
     case 'needs-approval': return `${v} is a major release: approve it before it is applied.`
     case 'notify-only': return `${v} is available. Automatic updates are off.`
-    case 'feed-expired': return `${v} is available, but Slatebox cannot confirm the newest version right now, so it waits.`
+    case 'feed-expired': return `${v} is available, but Slatebox cannot confirm the newest version right now, so nothing is applied (not even Update now) until it can.`
     case 'major-manual': return `${v} is approved. Major releases are applied when you choose Update now.`
     case 'held-back': return `${v} is applied after ${when(decision.until)}, once it has been out for a few days.`
     case 'not-retried': return `${v} was ${decision.outcome === 'rolled-back' ? 'rolled back' : 'not applied'} last time. Choose Try again, or wait for a newer release.`

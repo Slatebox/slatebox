@@ -23,7 +23,7 @@ test('the methods exist only on a self-hosted server (the setup link\'s rule), n
 
 test('every method checks the server administrator claim (isInstanceAdmin), so a team admin is refused', () => {
   const names = Object.values(CONSTANTS.methods.updates)
-  assert.deepEqual(names.sort(), ['updates.applyNow', 'updates.approve', 'updates.cancel', 'updates.checkNow', 'updates.retry', 'updates.rollback', 'updates.setPolicy', 'updates.status'])
+  assert.deepEqual(names.sort(), ['updates.adoptTimeZone', 'updates.applyNow', 'updates.approve', 'updates.cancel', 'updates.checkNow', 'updates.retry', 'updates.rollback', 'updates.setPolicy', 'updates.status'])
   assert.match(meteor, /const asAdmin = async \(method\) => \{\s*if \(!method\.userId \|\| !\(await isInstanceAdmin\(method\.userId\)\)\) throw new Meteor\.Error\(403/)
   const registered = [...meteor.matchAll(/\[M\.(\w+)\]: plain\(/g)].map(m => m[1])
   assert.equal([...meteor.matchAll(/\[M\.\w+\]:/g)].length, registered.length, 'no method outside plain()')
@@ -33,7 +33,7 @@ test('every method checks the server administrator claim (isInstanceAdmin), so a
 
 test('rate limits: check now once a minute, each change ten a minute; changes audited', () => {
   assert.match(meteor, /DDPRateLimiter\.addRule\(\{ type: 'method', name: M\.checkNow, userId: \(\) => true \}, 1, 60000\)/)
-  assert.match(meteor, /for \(const name of \[M\.setPolicy, M\.approve, M\.applyNow, M\.retry, M\.cancel, M\.rollback\]\) \{\s*DDPRateLimiter\.addRule\(\{ type: 'method', name, userId: \(\) => true \}, 10, 60000\)/)
+  assert.match(meteor, /for \(const name of \[M\.setPolicy, M\.adoptTimeZone, M\.approve, M\.applyNow, M\.retry, M\.cancel, M\.rollback\]\) \{\s*DDPRateLimiter\.addRule\(\{ type: 'method', name, userId: \(\) => true \}, 10, 60000\)/)
   assert.match(meteor, /audit: \(\{ by, action, before, after \}\) => Audit\.insertAsync\(\{ type: 'self-host-updates'/)
 })
 
