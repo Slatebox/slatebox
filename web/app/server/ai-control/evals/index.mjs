@@ -10,6 +10,7 @@ import connectors from './connectors.mjs'
 import interview from './interview.mjs'
 import personal from './personal.mjs'
 import voice from './voice.mjs'
+import profileSources from './profile-sources.mjs'
 
-export const EVALS = Object.freeze({ shape, workshop, 'workshop.draft': workshopDraft, canvas, 'agent.slatebox': agent, presentation, library, connectors, interview, 'personal.suggest': personal, ...voice })
+export const EVALS = Object.freeze({ shape, workshop, 'workshop.draft': workshopDraft, canvas, 'agent.slatebox': agent, presentation, library, connectors, interview, 'personal.suggest': personal, ...voice, 'profile.sources': profileSources })
 export const evalsFor = (surface) => EVALS[surface] || []

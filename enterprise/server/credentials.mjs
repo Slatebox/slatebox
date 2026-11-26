@@ -77,6 +77,8 @@ export function createVault({ store, master, fetch, secretFor = () => null, now 
         tokenEndpoint: server.tokenEndpoint,
         ...(server.revocationEndpoint && { revocationEndpoint: server.revocationEndpoint }),
         ...(server.tokenAccept && { tokenAccept: server.tokenAccept }),
+        ...(server.noResource && { noResource: true }),
+        ...(server.tokenAuth && { tokenAuth: server.tokenAuth }),
       },
       access: sealField(base, 'access', tokens.accessToken),
       refresh: sealField(base, 'refresh', tokens.refreshToken),

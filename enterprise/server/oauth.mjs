@@ -41,14 +41,87 @@ export const KNOWN_PROVIDERS = Object.freeze({
     resources: Object.freeze(['https://api.githubcopilot.com']),
     // GitHub's OAuth apps have no read-only scope for code. public_repo reaches public
     // repositories only (read and write: code, issues, pull requests); read:org lets lookups see
-    // which organisations the person belongs to. Nothing private, no profile email, packages,
+    // which organizations the person belongs to. Nothing private, no profile email, packages,
     // gists or notifications. settings.connectors.oauthApps.github.scopes may widen it (e.g.
     // "repo" for private repositories) on purpose; the consent screen then says so (reachOf).
     scopes: Object.freeze(['public_repo', 'read:org']),
     // GitHub's token endpoint answers form-encoded unless asked for JSON.
     tokenAccept: 'application/json',
   }),
+  // The vendors below offer no open automatic registration (no DCR anyone may use, no Client ID
+  // Metadata Document; Salesforce's registration endpoint needs an initial access token), so an
+  // operator registers one app with each and gives Slatebox its client id and secret
+  // (settings.connectors.oauthApps.<provider>; docs/integrations.md says how). Their issuers and the
+  // only MCP servers their sign-ins are sent to are fixed here, from each vendor's own metadata
+  // (probed 2026-11-26), so settings carry the client only. With no `scopes`, a sign-in asks for what
+  // the server's challenge or metadata names (or `scopesFor` its server, the least it needs).
+  // Exceptions to the standard steps, each a documented fact of that vendor, never a setting:
+  //   metadataIssuer  the issuer its metadata document states, when it is not the protected resource
+  //                   metadata's spelling exactly (a trailing slash; Microsoft's {tenantid} template)
+  //   pkce            'documented': PKCE S256 works though the metadata does not say so (Microsoft)
+  //   resourceParam   false: its token service refuses RFC 8707 `resource` (Microsoft identity v2)
+  //   tokenAuth       'basic': the client secret goes in an Authorization header (Zoom accepts nothing else)
+  //   authorizeParams fixed extra words on the sign-in address (Google: a refresh token needs offline access)
+  slack: Object.freeze({ issuer: 'https://mcp.slack.com', name: 'Slack', resources: Object.freeze(['https://mcp.slack.com']) }),
+  asana: Object.freeze({ issuer: 'https://app.asana.com', name: 'Asana', resources: Object.freeze(['https://mcp.asana.com']) }),
+  hubspot: Object.freeze({ issuer: 'https://mcp.hubspot.com', name: 'HubSpot', resources: Object.freeze(['https://mcp.hubspot.com']) }),
+  box: Object.freeze({ issuer: 'https://api.box.com/', metadataIssuer: 'https://api.box.com', name: 'Box', resources: Object.freeze(['https://mcp.box.com']) }),
+  // Zoom's metadata lists every scope its server has, writes and deletes included (meetings, docs,
+  // workflows), and its challenge names none: the card reads, so it asks for the read scopes only.
+  zoom: Object.freeze({
+    issuer: 'https://zoom.us',
+    name: 'Zoom',
+    resources: Object.freeze(['https://mcp.zoom.us']),
+    scopesFor: Object.freeze({
+      'https://mcp.zoom.us': Object.freeze(['meeting:read:search', 'meeting:read:assets', 'cloud_recording:read:content', 'cloud_recording:read:list_user_recordings',
+        'my_notes:read:content', 'hub:read:content', 'agentic_search:read:search', 'agentic_search:read:ask']),
+    }),
+    tokenAuth: 'basic',
+  }),
+  pitch: Object.freeze({ issuer: 'https://auth.pitch.com/', name: 'Pitch', resources: Object.freeze(['https://mcp.pitch.com']) }),
+  salesforce: Object.freeze({ issuer: 'https://login.salesforce.com', name: 'Salesforce', resources: Object.freeze(['https://api.salesforce.com']) }),
+  // Microsoft's own remote MCP servers (Work IQ for Microsoft 365, the Entra directory server, Azure
+  // DevOps): one multi-tenant Entra app, which each tenant's administrator consents to.
+  microsoft: Object.freeze({
+    issuer: 'https://login.microsoftonline.com/organizations/v2.0',
+    metadataIssuer: 'https://login.microsoftonline.com/{tenantid}/v2.0',
+    name: 'Microsoft',
+    resources: Object.freeze(['https://workiq.svc.cloud.microsoft', 'https://mcp.svc.cloud.microsoft', 'https://mcp.dev.azure.com']),
+    // Each server's own permission as its metadata names it. Work IQ has one, WorkIQAgent.Ask, which
+    // reads and writes (mail, events, files): its write tools start off (the card's recipe.tools).
+    // offline_access: Entra issues no refresh token without it.
+    scopesFor: Object.freeze({
+      'https://workiq.svc.cloud.microsoft': Object.freeze(['fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask', 'offline_access']),
+      'https://mcp.svc.cloud.microsoft': Object.freeze(['api://e8c77dc2-69b3-43f4-bc51-3213c9d915b4/.default', 'offline_access']),
+      'https://mcp.dev.azure.com': Object.freeze(['https://mcp.dev.azure.com/.default', 'offline_access']),
+    }),
+    pkce: 'documented',
+    resourceParam: false,
+  }),
+  // Google Workspace's own remote MCP servers: one Google Cloud OAuth client for all of them. Read-only
+  // scopes by default; `scopes` in settings widens them on purpose (drafts, events).
+  google: Object.freeze({
+    issuer: 'https://accounts.google.com/',
+    metadataIssuer: 'https://accounts.google.com',
+    name: 'Google',
+    resources: Object.freeze(['https://gmailmcp.googleapis.com', 'https://calendarmcp.googleapis.com', 'https://docsmcp.googleapis.com', 'https://sheetsmcp.googleapis.com',
+      'https://chatmcp.googleapis.com', 'https://drivemcp.googleapis.com', 'https://slidesmcp.googleapis.com', 'https://tasksmcp.googleapis.com']),
+    scopesFor: Object.freeze({
+      'https://gmailmcp.googleapis.com': Object.freeze(['https://www.googleapis.com/auth/gmail.readonly']),
+      'https://calendarmcp.googleapis.com': Object.freeze(['https://www.googleapis.com/auth/calendar.calendarlist.readonly', 'https://www.googleapis.com/auth/calendar.events.readonly']),
+      'https://docsmcp.googleapis.com': Object.freeze(['https://www.googleapis.com/auth/documents.readonly', 'https://www.googleapis.com/auth/drive.readonly']),
+      'https://sheetsmcp.googleapis.com': Object.freeze(['https://www.googleapis.com/auth/spreadsheets.readonly', 'https://www.googleapis.com/auth/drive.readonly']),
+      'https://chatmcp.googleapis.com': Object.freeze(['https://www.googleapis.com/auth/chat.spaces.readonly', 'https://www.googleapis.com/auth/chat.messages.readonly']),
+      'https://drivemcp.googleapis.com': Object.freeze(['https://www.googleapis.com/auth/drive.readonly']),
+      'https://slidesmcp.googleapis.com': Object.freeze(['https://www.googleapis.com/auth/presentations.readonly', 'https://www.googleapis.com/auth/drive.readonly']),
+      'https://tasksmcp.googleapis.com': Object.freeze(['https://www.googleapis.com/auth/tasks.readonly']),
+    }),
+    authorizeParams: Object.freeze({ access_type: 'offline', prompt: 'consent' }),
+  }),
 })
+
+/** The known provider an issuer (as the protected resource metadata names it) belongs to, or null. */
+const knownOf = (issuer) => Object.values(KNOWN_PROVIDERS).find((p) => p.issuer === issuer) || null
 
 // What a person is told. Never the server's own words.
 export class SignInProblem extends Error {
@@ -203,9 +276,12 @@ export async function discoverSignIn({ address, challenge = null, fetch, devOrig
     if (meta) break
   }
   if (!meta) fail('no_sign_in_details', 'Couldn\'t read this server\'s sign-in details. Try again later.')
-  if (meta.issuer !== issuer) fail('sign_in_unsafe', UNSAFE)
+  // A known provider's metadata may spell its issuer its own documented way (KNOWN_PROVIDERS), never any other.
+  const known = knownOf(issuer)
+  if (meta.issuer !== issuer && !(known?.metadataIssuer && meta.issuer === known.metadataIssuer)) fail('sign_in_unsafe', UNSAFE)
   const methods = stringList(meta.code_challenge_methods_supported)
-  if (!methods.includes('S256')) fail('no_pkce', NOT_STANDARD)
+  // S256 advertised, or (a known provider that documents PKCE but does not advertise it) nothing advertised at all.
+  if (!methods.includes('S256') && !(known?.pkce === 'documented' && !methods.length)) fail('no_pkce', NOT_STANDARD)
   const responseTypes = stringList(meta.response_types_supported)
   if (responseTypes.length && !responseTypes.includes('code')) fail('no_pkce', NOT_STANDARD)
   const server = {
@@ -218,6 +294,10 @@ export async function discoverSignIn({ address, challenge = null, fetch, devOrig
     cimd: meta.client_id_metadata_document_supported === true,
     authMethods: stringList(meta.token_endpoint_auth_methods_supported),
     offlineAccess: stringList(meta.scopes_supported, 64).includes('offline_access'),
+    ...(known?.metadataIssuer && { metadataIssuer: known.metadataIssuer }),
+    ...(known?.resourceParam === false && { noResource: true }),
+    ...(known?.tokenAuth && { tokenAuth: known.tokenAuth }),
+    ...(known?.authorizeParams && { authorizeParams: { ...known.authorizeParams } }),
   }
   return {
     resource: prm.resource,
@@ -257,7 +337,7 @@ export function appFor(issuer, apps = {}, resource = undefined) {
         provider,
         clientId: app.clientId,
         ...(typeof app.clientSecret === 'string' && app.clientSecret && { clientSecret: app.clientSecret }),
-        scopes: stringList(app.scopes).length ? stringList(app.scopes) : [...(known?.scopes || [])],
+        scopes: stringList(app.scopes).length ? stringList(app.scopes) : [...(known?.scopesFor?.[originOf(resource)] || known?.scopes || [])],
         tokenAccept: known?.tokenAccept || 'application/json',
         name: known?.name || provider,
       }
@@ -273,7 +353,7 @@ export function appFor(issuer, apps = {}, resource = undefined) {
 const SCOPE_WORDS = Object.freeze({
   public_repo: 'read and change your public repositories (code, issues and pull requests)',
   repo: 'read and change all your repositories, private ones too (code, issues, pull requests and settings)',
-  'read:org': 'see which organisations you belong to',
+  'read:org': 'see which organizations you belong to',
   'read:user': 'read your profile',
 })
 export function reachOf(scopes = []) {
@@ -287,11 +367,23 @@ export function reachOf(scopes = []) {
 /** The known provider an issuer belongs to (for its name and the fact that it needs an app), or null. */
 export const knownProvider = (issuer) => Object.entries(KNOWN_PROVIDERS).find(([, p]) => p.issuer === issuer)?.[0] || null
 
-/** The scopes asked for: the app's own; else the challenge's (narrowed to what the resource lists); else the resource's list. */
-export function chooseScopes({ app, scopes, server }) {
+// Servers with automatic registration whose metadata lists every scope they have, writes included,
+// and whose challenge names none, by origin: the least their card needs, when the server lists it.
+// PagerDuty lists about 90 (its card reads incidents, schedules and services: `read` covers them).
+export const LEAST_SCOPES = Object.freeze({
+  'https://mcp.pagerduty.com': Object.freeze(['read']),
+})
+
+/**
+ * The scopes asked for: the app's own; else the challenge's (narrowed to what the resource lists);
+ * else the least the server's card needs (LEAST_SCOPES, those the resource lists); else the resource's list.
+ */
+export function chooseScopes({ app, scopes, server, resource = undefined }) {
   let list
+  const least = (LEAST_SCOPES[originOf(resource)] || []).filter((s) => scopes.resource.includes(s))
   if (app?.scopes?.length) list = [...app.scopes]
   else if (scopes.challenge.length) list = scopes.resource.length ? scopes.challenge.filter((s) => scopes.resource.includes(s)) : [...scopes.challenge]
+  else if (least.length) list = least
   else list = [...scopes.resource]
   if (!list.length && scopes.challenge.length) list = [...scopes.challenge]
   if (!app && server.offlineAccess && !list.includes('offline_access')) list.push('offline_access')
@@ -368,8 +460,10 @@ export function authorizationUrl({ server, clientId, redirectUri, challenge, sta
   url.searchParams.set('code_challenge', challenge)
   url.searchParams.set('code_challenge_method', 'S256')
   url.searchParams.set('state', state)
-  url.searchParams.set('resource', resource)
+  if (!server.noResource) url.searchParams.set('resource', resource)
   if (scopes?.length) url.searchParams.set('scope', scopes.join(' '))
+  // A known provider's fixed extras (Google's offline access), never one of the words above.
+  for (const [key, value] of Object.entries(server.authorizeParams || {})) if (!url.searchParams.has(key)) url.searchParams.set(key, String(value))
   return url.href
 }
 
@@ -382,7 +476,7 @@ export function checkCallback(query, flow, now = Date.now()) {
   if (flow.expiresAt && now > new Date(flow.expiresAt).getTime()) fail('expired', 'That sign-in took too long. Sign in again.')
   const iss = typeof query.iss === 'string' ? query.iss : null
   // RFC 9207: compared exactly whenever present (error answers included), required when promised.
-  if (iss !== null && iss !== flow.issuer) fail('unverified', UNVERIFIED)
+  if (iss !== null && iss !== flow.issuer && !(flow.metadataIssuer && iss === flow.metadataIssuer)) fail('unverified', UNVERIFIED)
   if (iss === null && flow.issParameter) fail('unverified', UNVERIFIED)
   if (typeof query.error === 'string') {
     if (query.error === 'access_denied') fail('cancelled', 'Sign-in was cancelled.')
@@ -409,20 +503,24 @@ export function tokenResult(json, now = Date.now()) {
   }
 }
 
-function clientAuth({ clientId, clientSecret }, params) {
+function clientAuth({ clientId, clientSecret }, params, method = 'post') {
   // A secret (a pre-registered app, or one a registration returned) goes in the body
-  // (client_secret_post): every vendor in the gallery accepts it.
+  // (client_secret_post), which every vendor in the gallery but Zoom accepts; Zoom's goes in an
+  // Authorization header (client_secret_basic, RFC 6749 §2.3.1). → the extra headers
   params.set('client_id', clientId)
-  if (clientSecret) params.set('client_secret', clientSecret)
+  if (!clientSecret) return {}
+  if (method === 'basic') return { authorization: 'Basic ' + Buffer.from(`${encodeURIComponent(clientId)}:${encodeURIComponent(clientSecret)}`).toString('base64') }
+  params.set('client_secret', clientSecret)
+  return {}
 }
 
 async function tokenRequest({ server, client, params, fetch, accept = 'application/json' }) {
-  clientAuth(client, params)
+  const auth = clientAuth(client, params, server.tokenAuth)
   let response
   try {
     response = await fetch(server.tokenEndpoint, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept },
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept, ...auth },
       body: params.toString(),
     })
   } catch (error) {
@@ -437,7 +535,8 @@ async function tokenRequest({ server, client, params, fetch, accept = 'applicati
 
 /** Step 8: the code for tokens, with the verifier and the resource. */
 export function exchangeCode({ server, client, code, verifier, redirectUri, resource, fetch, accept }) {
-  const params = new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri, code_verifier: verifier, resource })
+  const params = new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri, code_verifier: verifier })
+  if (!server.noResource) params.set('resource', resource)
   return tokenRequest({ server, client, params, fetch, accept })
 }
 
@@ -445,7 +544,7 @@ export function exchangeCode({ server, client, code, verifier, redirectUri, reso
 export function refreshTokens({ server, client, refreshToken, resource, scopes, fetch, accept }) {
   const params = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken })
   // An MCP server's sign-in names its resource (RFC 8707); Google's own sign-in has none.
-  if (resource) params.set('resource', resource)
+  if (resource && !server?.noResource) params.set('resource', resource)
   if (scopes?.length) params.set('scope', scopes.join(' '))
   return tokenRequest({ server, client, params, fetch, accept })
 }
@@ -454,9 +553,9 @@ export function refreshTokens({ server, client, refreshToken, resource, scopes, 
 export async function revokeToken({ server, client, token, hint, fetch }) {
   if (!server?.revocationEndpoint || !token) return false
   const params = new URLSearchParams({ token, ...(hint && { token_type_hint: hint }) })
-  clientAuth(client, params)
+  const auth = clientAuth(client, params, server.tokenAuth)
   try {
-    const response = await fetch(server.revocationEndpoint, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: params.toString() })
+    const response = await fetch(server.revocationEndpoint, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', ...auth }, body: params.toString() })
     await response.body?.cancel?.().catch(() => {})
     return response.ok
   } catch {

@@ -9,9 +9,10 @@
 //   userAgent    the User-Agent sent to outside servers (default MCP_USER_AGENT).
 //   oauthApps    apps Slatebox registered with a vendor ahead of time, per provider:
 //                { "github": { "clientId": "...", "clientSecret": "..." } }
-//                A known provider (oauth.mjs KNOWN_PROVIDERS: github) brings its own issuer and
-//                minimal scopes and the only MCP servers its sign-in is sent to; "scopes"
-//                overrides the scopes, "resources" (https origins) adds servers. Any other
+//                A known provider (oauth.mjs KNOWN_PROVIDERS: github, slack, asana, hubspot, box,
+//                zoom, pitch, salesforce, microsoft, google) brings its own issuer, its scopes and
+//                the only MCP servers its sign-in is sent to; "scopes" overrides the scopes,
+//                "resources" (https origins) adds servers. Any other
 //                provider name must also give "issuer" (https; a devOrigins origin in local
 //                development only) and "resources", or its sign-in is never used. The client id
 //                is public; the secret lives only here (or the environment that fills settings),

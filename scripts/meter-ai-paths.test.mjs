@@ -78,6 +78,8 @@ test('every AI entry point calls runAIAction', () => {
     ['server/personal/meteor.js', 'run: refusing('],
     // and building one: a draft through workshops.draft's path, metered under personal.build (workshops.js draftForYou)
     ['server/methods/workshops.js', 'export function draftForYou'],
+    // learning from a connected tool in About you (S3): the look and its one model call, through server/profile/sources-core.mjs's run
+    ['server/methods/profile-sources.js', 'run: (userId, fn) =>'],
   ]
   for (const [file, marker] of entries) {
     const text = source(file)
@@ -109,6 +111,8 @@ test('the set of files that call req is known, and each is reached only through 
     'server/methods/interview.js',
     'server/methods/openai.js',
     'server/methods/presentations.js',
+    // learning from a connected tool: the look and its request run inside runAIAction({ feature: 'profile.sources' }) (server/profile/sources-core.mjs)
+    'server/methods/profile-sources.js',
     'server/methods/workshops.js',
   ])
   // nativeCanvas.preview reaches AI only through workshops.draft

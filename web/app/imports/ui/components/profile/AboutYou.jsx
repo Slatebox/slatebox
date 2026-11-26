@@ -14,13 +14,17 @@ import CONSTANTS from '../../../api/common/constants'
 import confirmService from '../../common/confirm'
 import { FACT_KINDS, KIND_LABELS, LIMITS, groupFacts, profileDownload, sourceLine } from '../../../api/common/personal-facts.mjs'
 import { AccountActions, AccountPanel, AccountSection, FinePrint, SPACE } from '../../common/AccountLayout'
+import { agentInviteOn } from '../../../api/common/edition.mjs'
 import Interview from './Interview'
+import ToolSources from './ToolSources'
 
 // Profile › About you: what Slatebox knows about the person, so it can suggest boards and slates
 // made for their work. Only they see it. Every fact says where it came from and can be changed,
 // hidden or removed; personalization can be switched off; everything can be downloaded or
 // deleted. The same actions serve the API, exec and MCP (server/actions/profile.mjs). "Talk with
 // Slatebox about your work" opens the interview (Interview.jsx): the agent asks, the person keeps.
+// "Use your tools to personalize" (ToolSources.jsx, where integrations run): a switch per connected
+// tool, off until turned on, and a look around it whose proposals the person keeps or skips.
 const M = CONSTANTS.methods.profile
 const reason = (error, fallback) => error?.reason || error?.message || fallback
 const field = { maxWidth: 480 }
@@ -250,6 +254,9 @@ export default function AboutYou() {
   const canTalk = loaded && settings.on && interviewOn
   const toggleInterview = (on) => run('talk', async () => setSwitches(await Meteor.callAsync(M.settings.set, { sources: { interview: on } })),
     on ? 'Learning from talks with the agent is on.' : 'Learning from talks with the agent is off.')
+  // A connected tool's switch (off until switched on: personal-facts.mjs sourceOn), through the same queue.
+  const setSource = (key, on, words) => run(`source:${key}`, async () => setSwitches(await Meteor.callAsync(M.settings.set, { sources: { [key]: on } })), words)
+  const toolsHere = agentInviteOn(Meteor.settings)
   const openTalk = () => {
     if (!canTalk) return
     setTalking(true)
@@ -337,6 +344,16 @@ export default function AboutYou() {
           </>
         )}
       </AccountSection>
+
+      {toolsHere && (
+        <AccountSection title="Use your tools to personalize" data-about-you-tools="">
+          <Typography>Turn on a tool you connected, then ask Slatebox to look around in it. It reads a few things, such as your projects, recent issues or channels, and suggests what to keep. Nothing is kept until you choose Keep.</Typography>
+          <FinePrint>Slatebox only looks things up, never changes anything there, and reads nothing from a tool whose switch is off.</FinePrint>
+          {loaded && !settings.on && <FinePrint>Turn on personalization above to use your tools.</FinePrint>}
+          {loaded && <ToolSources settings={settings} setSource={setSource} onKept={load} announce={announce} />}
+          {error.at.startsWith('source:') && <Alert severity="warning" role="alert">{error.message}</Alert>}
+        </AccountSection>
+      )}
 
       <AccountSection title="Add something about you">
         <Box component="form" onSubmit={add} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: SPACE.text }} aria-label="Add something about you">

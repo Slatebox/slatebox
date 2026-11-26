@@ -281,8 +281,16 @@ test('gallery: curated by what an agent adds that Slatebox cannot do; drawing an
   assert.deepEqual(RETIRED.map((c) => c.id), ['excalidraw', 'apexcharts'])
   assert.deepEqual(GALLERY.map((c) => c.id), [
     'huggingface', 'github', 'linear', 'deepwiki', 'context7', 'wolfram', 'firecrawl', 'exa',
-    'notion', 'atlassian', 'slack', 'granola', 'asana', 'monday', 'clickup', 'trello', 'airtable', 'zapier',
-    'hubspot', 'stripe', 'posthog', 'sentry', 'jina', 'parallel',
+    // the agents the owner named (2026-11-26: "GitHub, Linear, Notion, Jira, Slack, Sentry, Microsoft, google,
+    // also Miro, Figma, Canva, Adobe, Replit, Lovable") come next
+    'notion', 'atlassian', 'slack', 'sentry', 'microsoft365', 'gmail', 'googlecalendar', 'googledocs', 'googlesheets', 'googlechat',
+    'miroboard', 'figma', 'canva', 'adobeaem', 'adobefirefly', 'replit', 'lovable',
+    'granola', 'asana', 'monday', 'clickup', 'trello', 'airtable', 'zapier', 'hubspot', 'stripe', 'posthog', 'jina', 'parallel',
+    // the rest of the wide net (owner, 2026-11-26): each vendor's own remote server, probed that day
+    'gitlab', 'vercel', 'netlify', 'supabase', 'neon', 'cloudflare', 'datadog', 'pagerduty', 'postman', 'v0',
+    'lucid', 'whimsical', 'webflow', 'framer', 'gamma', 'pitch', 'wix',
+    'microsoftdirectory', 'dropbox', 'dropboxdash', 'box', 'zoom', 'calendly',
+    'todoist', 'coda', 'make', 'salesforce', 'intercom', 'typeform', 'attio', 'pipedrive', 'apollo', 'square', 'paypal', 'microsoftlearn', 'cloudflaredocs',
   ])
   // US spelling, and every card has a recipe the server can read
   assert.ok(GALLERY.every((c) => !/summarise|colour|organis/i.test(JSON.stringify(c))), 'US spelling')
@@ -323,8 +331,11 @@ test('gallery: every card is a well-formed listing (https address, unique id and
     assert.ok(/[.!?]$/.test(card.lands), `${card.id}: what lands is a sentence`)
     assert.ok(checkRecipe(card.recipe), card.id)
   }
-  // Agents that only draw what Slatebox draws are not listed (owner, 2026-11-24).
-  assert.ok(!GALLERY.some((c) => /excalidraw|mermaid|whiteboard|miro|tldraw|canva|figma/i.test(c.name + c.url)))
+  // Agents that only draw what Slatebox draws are not listed (owner, 2026-11-24): Excalidraw, Mermaid, tldraw, whiteboards.
+  assert.ok(!GALLERY.some((c) => /excalidraw|mermaid|whiteboard|tldraw/i.test(c.name + c.url)))
+  // Miro, Figma and Canva are listed (owner, 2026-11-26: "also Miro, Figma, Canva"): they bring in a person's own boards
+  // and designs, which Slatebox cannot read otherwise; their words say so, never that they draw for Slatebox.
+  for (const id of ['miroboard', 'figma', 'canva']) assert.match(GALLERY.find((c) => c.id === id).lands, /\byour\b|\byou link\b/, id)
   // The eight listed before come first, in their order.
   assert.deepEqual(GALLERY.slice(0, 8).map((c) => c.id), ['huggingface', 'github', 'linear', 'deepwiki', 'context7', 'wolfram', 'firecrawl', 'exa'])
   assert.ok(GALLERY.slice(8).every((c) => !c.featured))
@@ -345,11 +356,14 @@ test('gallery: refunds and destructive tools start off; the open agents need no 
 })
 
 test('gallery filter: a chip narrows to its group, search words narrow by name, job, what lands and the group name; order is kept', () => {
-  assert.deepEqual(groupsIn(GALLERY).map((g) => g.id), ['work', 'business', 'research', 'web'])
+  // the wide net (2026-11-26) added chips for docs and chat, developer tools and design; Sentry and GitHub moved to developer tools
+  assert.deepEqual(groupsIn(GALLERY).map((g) => g.id), ['work', 'workspace', 'dev', 'design', 'business', 'research', 'web'])
   assert.deepEqual(groupsIn([{ id: 'x', group: 'web' }]).map((g) => g.id), ['web'])
   assert.equal(filterCards(GALLERY).length, GALLERY.length)
   assert.deepEqual(filterCards(GALLERY, { group: 'all' }).map((c) => c.id), GALLERY.map((c) => c.id))
-  assert.deepEqual(filterCards(GALLERY, { group: 'business' }).map((c) => c.id), ['hubspot', 'stripe', 'posthog', 'sentry'])
+  assert.deepEqual(filterCards(GALLERY, { group: 'business' }).map((c) => c.id), ['hubspot', 'stripe', 'posthog', 'salesforce', 'intercom', 'typeform', 'attio', 'pipedrive', 'apollo', 'square', 'paypal'])
+  assert.deepEqual(filterCards(GALLERY, { group: 'design' }).slice(0, 3).map((c) => c.id), ['miroboard', 'figma', 'canva'])
+  assert.ok(filterCards(GALLERY, { group: 'dev' }).some((c) => c.id === 'sentry'))
   assert.deepEqual(filterCards(GALLERY, { group: 'web' }).map((c) => c.id), ['wolfram', 'firecrawl', 'exa', 'parallel'])
   assert.deepEqual(filterCards(GALLERY, { query: 'JIRA' }).map((c) => c.id), ['atlassian'])
   assert.deepEqual(filterCards(GALLERY, { query: '  meeting   transcripts ' }).map((c) => c.id), ['granola'])
@@ -357,6 +371,14 @@ test('gallery filter: a chip narrows to its group, search words narrow by name, 
   assert.ok(filterCards(GALLERY, { query: 'business' }).length >= 4, 'the group name is searched too')
   assert.deepEqual(filterCards(GALLERY, { group: 'research', query: 'papers' }).map((c) => c.id), ['huggingface', 'jina'])
   assert.deepEqual(filterCards(GALLERY, { group: 'web', query: 'jira' }), [])
+  // a brand or product a card covers finds it, and so does its id (keywords: words its text does not say)
+  assert.deepEqual(filterCards(GALLERY, { query: 'atlassian' }).map((c) => c.id), ['atlassian'])
+  assert.deepEqual(filterCards(GALLERY, { query: 'bitbucket' }).map((c) => c.id), ['atlassian'])
+  assert.ok(filterCards(GALLERY, { query: 'google' }).some((c) => c.id === 'gmail'), 'Gmail is a Google card')
+  for (const word of ['outlook', 'teams', 'excel', 'word', 'powerpoint', 'sharepoint']) assert.ok(filterCards(GALLERY, { query: word }).some((c) => c.id === 'microsoft365'), word)
+  assert.ok(filterCards(GALLERY, { query: 'azure' }).some((c) => c.id === 'microsoftdirectory'))
+  assert.deepEqual(filterCards(GALLERY, { query: 'whiteboard' }).map((c) => c.id), ['miroboard'])
+  assert.deepEqual(filterCards(GALLERY, { query: 'miroboard' }).map((c) => c.id), ['miroboard'])
   assert.deepEqual(filterCards(GALLERY, { query: 'nothing-matches-this' }), [])
   assert.deepEqual(filterCards(null ?? [], { query: 'x' }), [])
 })
@@ -367,6 +389,14 @@ test('the invite dialog narrows the gallery with chips and a search box, and say
   assert.match(source, /shownCards\.map\(\(item\)/)
   assert.ok(!/\(gallery\.cards \|\| \[\]\)\.map\(\(item\)/.test(source), 'the grid draws the filtered cards')
   for (const marker of ['data-gallery-chip', 'data-gallery-search', 'data-gallery-none', 'aria-pressed', "'aria-label': 'Search agents'"]) assert.ok(source.includes(marker), marker)
+  // one status line is always there, saying how many agents show (a screen reader hears each search and chip)
+  assert.match(source, /role="status" data-gallery-count=""/)
+  // a card whose vendor app is not set up here shows greyed out and says so; it is never offered blind,
+  // not even when the gallery could not be loaded
+  assert.match(source, /filterCards\(gallery\.notSetUp \|\| \[\], filter\)/)
+  assert.match(source, /Not set up on this server yet\./)
+  assert.match(source, /cards: GALLERY\.filter\(\(c\) => !c\.needsApp\), notSetUp: GALLERY\.filter\(\(c\) => c\.needsApp\)/)
+  assert.ok(!/setGallery\(\{ cards: GALLERY \}\)/.test(source), 'the fallback is filtered')
   // A closed dialog opens again on All with no search words.
   assert.match(source, /setFilter\(\{ group: 'all', query: '' \}\)/)
 })
@@ -877,12 +907,18 @@ test('the gallery: the enabled cards, whether this person may invite (anyone sig
 
 test('the gallery: Slack, Asana and HubSpot appear once their vendor app is set up (they have no automatic registration)', async () => {
   const world = makeWorld()
-  assert.deepEqual(GALLERY.filter((c) => c.needsApp).map((c) => c.id).sort(), ['asana', 'hubspot', 'slack'])
+  // and, since 2026-11-26, the other vendors with no automatic registration (docs/integrations.md says what each operator registers)
+  assert.deepEqual(GALLERY.filter((c) => c.needsApp).map((c) => c.id).sort(), ['asana', 'box', 'gmail', 'googlecalendar', 'googlechat', 'googledocs', 'googlesheets', 'hubspot',
+    'microsoft365', 'microsoftdirectory', 'pitch', 'salesforce', 'slack', 'zoom'])
   const before = await world.service.gallery(world.ada)
   assert.ok(!before.cards.some((c) => ['slack', 'asana', 'hubspot'].includes(c.id)))
+  // still named, so a search for one says it is not set up here: words only, no address to invite
+  assert.deepEqual(before.notSetUp.map((c) => c.id).sort(), GALLERY.filter((c) => c.needsApp).map((c) => c.id).sort())
+  for (const card of before.notSetUp) assert.deepEqual(Object.keys(card).filter((k) => !['id', 'name', 'job', 'lands', 'group', 'keywords'].includes(k)), [], card.id)
   const withSlack = createConnectorService({ ...world.serviceOptions, oauthApps: { slack: { clientId: 'slack-app' }, asana: {} } })
   const after = await withSlack.gallery(world.ada)
   assert.ok(after.cards.some((c) => c.id === 'slack'), 'Slack shows once its app has a client id')
+  assert.ok(!after.notSetUp.some((c) => c.id === 'slack') && after.notSetUp.some((c) => c.id === 'asana'))
   assert.ok(!after.cards.some((c) => c.id === 'asana'), 'an app entry without a client id is not set up')
 })
 

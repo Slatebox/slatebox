@@ -85,7 +85,7 @@ export function createSignIn({ flows, clients, vault, master, fetch, apps = () =
       authHost = new URL(found.server.authorizationEndpoint).host
       sendsTo = new URL(found.resource).host
     } catch {}
-    const scopes = chooseScopes({ app: registration.app, scopes: found.scopes, server: found.server })
+    const scopes = chooseScopes({ app: registration.app, scopes: found.scopes, server: found.server, resource: found.resource })
     return {
       method: 'oauth',
       authHost,
@@ -125,7 +125,7 @@ export function createSignIn({ flows, clients, vault, master, fetch, apps = () =
     let registration = chooseRegistration({ server: found.server, apps: apps(), origin: origin(), pastedClientId: pasted, resource: found.resource })
     if (registration.kind === 'needs_client_id') fail('needs_client_id', 'This server needs a registered app. Paste a client id from the server, or paste a key or token.')
     if (registration.kind === 'dcr') registration = { kind: 'dcr', ...(await dcrClient(found.server)) }
-    const scopes = chooseScopes({ app: registration.app, scopes: found.scopes, server: found.server })
+    const scopes = chooseScopes({ app: registration.app, scopes: found.scopes, server: found.server, resource: found.resource })
     const pkce = pkcePair(random)
     const state = newState(random)
     const flowId = 'f' + random(24).toString('base64url')
@@ -136,12 +136,16 @@ export function createSignIn({ flows, clients, vault, master, fetch, apps = () =
       address,
       resource: found.resource,
       issuer: found.issuer,
+      ...(found.server.metadataIssuer && { metadataIssuer: found.server.metadataIssuer }),
       issParameter: found.server.issParameter,
       server: {
         issuer: found.server.issuer,
         tokenEndpoint: found.server.tokenEndpoint,
         ...(found.server.revocationEndpoint && { revocationEndpoint: found.server.revocationEndpoint }),
         ...(registration.app?.tokenAccept && { tokenAccept: registration.app.tokenAccept }),
+        // a known provider's documented exceptions (oauth.mjs KNOWN_PROVIDERS), kept for refresh and revocation
+        ...(found.server.noResource && { noResource: true }),
+        ...(found.server.tokenAuth && { tokenAuth: found.server.tokenAuth }),
       },
       registration: { kind: registration.kind, clientId: registration.clientId, ...(registration.app && { provider: registration.app.provider }) },
       scopes,

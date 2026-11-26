@@ -1450,11 +1450,14 @@
               "map",
               "make",
               "work",
+              "workspace",
+              "dev",
+              "design",
               "business",
               "research",
               "web"
             ],
-            "description": "One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web."
+            "description": "One of the categories plan, decide, meetings, track, map, make. An integration takes work, workspace, dev, design, business, research or web."
           },
           "q": {
             "type": "string",
@@ -1953,11 +1956,14 @@
               "map",
               "make",
               "work",
+              "workspace",
+              "dev",
+              "design",
               "business",
               "research",
               "web"
             ],
-            "description": "One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web."
+            "description": "One of the categories plan, decide, meetings, track, map, make. An integration takes work, workspace, dev, design, business, research or web."
           },
           "synonyms": {
             "type": "array",
@@ -2052,11 +2058,14 @@
               "map",
               "make",
               "work",
+              "workspace",
+              "dev",
+              "design",
               "business",
               "research",
               "web"
             ],
-            "description": "One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web."
+            "description": "One of the categories plan, decide, meetings, track, map, make. An integration takes work, workspace, dev, design, business, research or web."
           },
           "synonyms": {
             "type": "array",
@@ -2173,11 +2182,14 @@
               "map",
               "make",
               "work",
+              "workspace",
+              "dev",
+              "design",
               "business",
               "research",
               "web"
             ],
-            "description": "One of the categories plan, decide, meetings, track, map, make. An integration takes work, business, research or web."
+            "description": "One of the categories plan, decide, meetings, track, map, make. An integration takes work, workspace, dev, design, business, research or web."
           },
           "synonyms": {
             "type": "array",

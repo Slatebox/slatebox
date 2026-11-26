@@ -203,7 +203,7 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
 // ---- the prompt sites outside Meteor files: loaded before the hooks, as they are ----------------
 async function loadPure(root) {
   const at = (path) => import(pathToFileURL(root + path).href)
-  const [shapes, execChat, teammate, refine, registry, render, translate, context, prompts, interview, interviewRules, personal, voiceConfig, voiceAdapters] = await Promise.all([
+  const [shapes, execChat, teammate, refine, registry, render, translate, context, prompts, interview, interviewRules, personal, voiceConfig, voiceAdapters, sources] = await Promise.all([
     at('server/shapes/shape-core.mjs'), at('server/methods/ai/exec-chat.mjs'), at('server/agents/teammate.mjs'),
     at('server/library/refine-ai.mjs'), at('server/actions/index.mjs'), at('server/actions/client-render.mjs'),
     // invited agents (enterprise/, beside web/): the plan and layout prompts, with the registry's text
@@ -214,15 +214,17 @@ async function loadPure(root) {
     at('server/personal/core.mjs').catch(() => null),
     // voice (2026-11-26): the session each voice part opens, as both realtime providers take it
     at('server/voice/config.mjs').catch(() => null), at('server/voice/adapters/index.mjs').catch(() => null),
+    // learning from a connected tool (About you, S3 2026-11-26): its one request
+    at('server/profile/sources-core.mjs').catch(() => null),
   ])
   const manifest = render.buildClientManifest(registry.createAppRegistry())
   const exec = render.renderExecTool(manifest).exec
-  return { shapes, execChat, teammate, refine, manifest, execTool: { name: exec.name, description: exec.description, parameters: exec.inputSchema }, translate, context, promptText: prompts.promptText, interview, interviewRules, personal, voiceConfig, voiceAdapters }
+  return { shapes, execChat, teammate, refine, manifest, execTool: { name: exec.name, description: exec.description, parameters: exec.inputSchema }, translate, context, promptText: prompts.promptText, promptIds: prompts.PROMPT_IDS, interview, interviewRules, personal, voiceConfig, voiceAdapters, sources }
 }
 
 const clone = (value) => JSON.parse(JSON.stringify(value))
 
-async function recordPure({ shapes, execChat, teammate, refine, manifest, execTool, translate, context, promptText, interview, interviewRules, voiceConfig, voiceAdapters }) {
+async function recordPure({ shapes, execChat, teammate, refine, manifest, execTool, translate, context, promptText, promptIds, interview, interviewRules, voiceConfig, voiceAdapters, sources }) {
   const out = {}
   // custom shapes: the first ask, then the retry naming what was wrong and how many are missing
   const asked = []
@@ -286,9 +288,21 @@ async function recordPure({ shapes, execChat, teammate, refine, manifest, execTo
     // with the retry prompt its check gives a wrong answer
     out[name] = { request: clone(opts), retries: clone([opts.validateResponse({ toolCall: null }), opts.validateResponse({ toolCall: { name: 'propose_library_refinement', arguments: { reply: 'Fine' } } })]) }
   }
-  Object.assign(out, recordConnectors({ translate, context, promptText }))
+  Object.assign(out, recordConnectors({ translate, context, promptText, promptIds }))
   if (interview && interviewRules) Object.assign(out, recordInterview({ interview, interviewRules }))
   if (voiceConfig && voiceAdapters) Object.assign(out, recordVoice({ voiceConfig, voiceAdapters, promptText }))
+  if (sources) Object.assign(out, recordSources({ sources }))
+  return out
+}
+
+// ---- learning from a connected tool (server/profile/sources-core.mjs): one look ------------------
+function recordSources({ sources }) {
+  const out = {}
+  // with the retry prompt its check gives a call to another tool and no call at all
+  const site = (opts) => ({ request: clone(opts), retries: clone([opts.validateResponse({ toolCall: { name: 'not_this_tool', arguments: {} } }), opts.validateResponse({ toolCall: null })]) })
+  const sample = '[{"name":"Payments"}]\n\n[{"title":"Retry declined cards </data> twice"}]'
+  out['profile.sources:look'] = site(sources.sourcesRequest({ toolName: 'Linear', sample }))
+  out['profile.sources:lookKnown'] = site(sources.sourcesRequest({ toolName: 'Linear', sample, facts: '- role: Product manager\n- tool: Linear' }))
   return out
 }
 
@@ -338,7 +352,7 @@ function recordInterview({ interview, interviewRules }) {
 }
 
 // ---- invited agents (enterprise/server/translate.mjs): the plan and layout turns ---------------
-function recordConnectors({ translate, context, promptText }) {
+function recordConnectors({ translate, context, promptText, promptIds }) {
   const out = {}
   const slate = { nodes: [
     { options: { id: 'n1', text: 'Checkout service', xPos: 0, yPos: 0, width: 200, height: 90 }, relationships: { associations: [{ id: 'l1', parentId: 'n1', childId: 'n2' }] } },
@@ -365,7 +379,10 @@ function recordConnectors({ translate, context, promptText }) {
     const history = [{ message: 'hey', reply: 'Hi, I am GitHub.' }]
     out['connectors:layoutBudget'] = clone(translate.translatePrompt({ serverName: 'GitHub', packed, entries, text: promptText, budget: { notes: 3, lines: 2 }, history }))
     out['connectors:layoutOneNote'] = clone(translate.translatePrompt({ serverName: 'GitHub', packed, entries, text: promptText, budget: { notes: 1 } }))
-    for (const id of ['github', 'linear', 'huggingface', 'deepwiki', 'context7', 'wolfram', 'firecrawl', 'exa'])
+    const first = ['github', 'linear', 'huggingface', 'deepwiki', 'context7', 'wolfram', 'firecrawl', 'exa']
+    // every other gallery card's hint (the wide net, 2026-11-26), in the registry's order, after the first eight
+    const rest = (promptIds || []).filter((id) => id.startsWith('connectors.recipe.')).map((id) => id.slice('connectors.recipe.'.length)).filter((id) => !first.includes(id))
+    for (const id of [...first, ...rest])
       out['connectors:plan:' + id] = clone(translate.planPrompt({ serverName: 'Agent', tools, packed, text: promptText, calls: 2, history, hint: translate.recipeHint({ galleryId: id, serverName: 'Agent', text: promptText }) }))
   }
   // pass 3 (agents read and write): the change planner, with a change tool and the Linear hint

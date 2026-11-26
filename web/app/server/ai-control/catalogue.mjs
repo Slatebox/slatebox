@@ -110,6 +110,9 @@ export const SURFACES = defineSurfaces([
   // one retry), metered under its own key; building one is board drafting (workshop.draft, metered under 'personal.build').
   // Both are part of the personalization allowance (metering/allowance.mjs PERSONAL_FEATURES).
   { id: 'personal.suggest', title: 'Ideas made for you (For you)', follows: 'chat', needs: ['tools'], requestFeatures: ['personal.suggest'], meterFeatures: ['personal.suggest'], estimate: 3000, ceiling: 50000 },
+  // Learning from a connected tool (About you › "Use <tool> to personalize", S3): one call turns a small, quarantined
+  // sample of the tool into a few proposed facts with its propose_facts tool. One call, metered as a conversation turn.
+  { id: 'profile.sources', title: 'Learning from your tools (About you)', follows: 'chat', needs: ['tools'], requestFeatures: ['profile.sources'], meterFeatures: ['profile.sources'], estimate: 2000, ceiling: 50000 },
   // Voice: talking with the agent in real time, full duplex (server/voice: the browser holds one
   // socket to this server, the server holds the provider's). One binding (voice) covers every voice
   // part, and each part can be bound on its own. The realtime model has one tool, send_to_slatebox,

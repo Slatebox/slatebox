@@ -29,7 +29,11 @@ export function localRefinement(message, { kind = 'component' } = {}) {
     /^category\s*:\s*(.+)$/i.exec(text)
   if (match) {
     const category = categoryNamed(match[1], kind)
-    if (!category) return { reply: `The categories are ${categoriesOf(kind).map(categoryLabel).join(', ')}.` }
+    if (!category) {
+      // A label with a comma in it ("Docs, chat and meetings") is set apart with semicolons.
+      const labels = categoriesOf(kind).map(categoryLabel)
+      return { reply: `The categories are ${labels.join(labels.some((label) => label.includes(',')) ? '; ' : ', ')}.` }
+    }
     return { reply: `Put it in ${categoryLabel(category)}.`, meta: { category } }
   }
   match = /^(?:summary|one line|line)\s*:\s*(.+)$/is.exec(text)

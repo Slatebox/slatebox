@@ -17,7 +17,7 @@ const cardOut = { type: 'object', description: 'An action card: cardId, connecti
 const obj = (properties) => ({ type: 'object', properties })
 const OUT = {
   list: obj({ connections: { type: 'array', items: { type: 'object' } }, canInvite: { type: 'boolean' } }),
-  gallery: obj({ cards: { type: 'array', items: { type: 'object' } }, canInvite: { type: 'boolean' } }),
+  gallery: obj({ cards: { type: 'array', items: { type: 'object' } }, notSetUp: { type: 'array', items: { type: 'object' }, description: 'Cards this server cannot offer yet because their vendor needs an app its administrator registers: id, name, job, lands, group. Nothing to invite.' }, canInvite: { type: 'boolean' } }),
   discover: obj({ address: { type: 'string' }, host: { type: 'string' }, suggestedName: { type: 'string' }, tools: { type: 'array', items: { type: 'object' } }, summary: { type: ['object', 'null'] }, signIn: { type: 'object', description: 'Present when the server needs sign-in first: method (oauth or key), authHost, needsClientId, keyAllowed.' }, alreadyHere: { type: 'object', description: 'Present when you already invited this server onto the slate: its connectionId, agentId and name (inviting it again is refused with already_here, unless lookAgain is true: its tools changed or none is left, so inviting again updates that agent).' } }),
   signIn: obj({ flowId: { type: 'string' }, authHost: { type: 'string' } }),
   signInStatus: obj({ status: { type: 'string', enum: ['pending', 'done', 'failed', 'unknown'] }, code: { type: 'string' }, message: { type: 'string' }, opened: { type: 'boolean' } }),

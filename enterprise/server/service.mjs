@@ -70,7 +70,7 @@ import {
 } from './translate.mjs'
 import { excalidrawGroup } from './excalidraw.mjs'
 import {
-  checkRecipe, cutWords, dedupeGroups, extract, interleave, isReferenceTool, matchIntent, matchWrite, outputNotes, planLimits, rawData, rawText, RECIPE_LIMITS, requestBudget, requestValues,
+  checkRecipe, cutWords, dedupeGroups, extract, interleave, isReferenceTool, LOOK_LIMITS, matchIntent, matchWrite, outputNotes, planLimits, rawData, rawText, RECIPE_LIMITS, requestBudget, requestValues,
   stepCalls, stepTool, trimToBudget,
 } from './recipes.mjs'
 
@@ -173,6 +173,19 @@ export function profileIntegration(doc, cards = GALLERY) {
     cardId: doc?.galleryId || cardFor(doc?.address, cards)?.id || null,
     kind: doc?.kind || 'mcp',
   }
+}
+
+/**
+ * An integration About you can use to personalize (S3, 2026-11-26): one of the person's own MCP
+ * integrations whose gallery card has a look-around (recipes.mjs checkLookAround), working now. Its
+ * ref is its card's id (one per person: the switch personalSettings.sources['integration:<ref>']).
+ * Names only, like profileIntegration: never an address, a token or a tool. → { ref, name, kind } | null
+ */
+export function profileSource(doc, cards = GALLERY) {
+  if (!doc || (doc.kind || 'mcp') !== 'mcp' || doc.status !== 'active') return null
+  const card = (doc.galleryId && cards.find((c) => c.id === doc.galleryId)) || cardFor(doc.address, cards)
+  if (!card || !checkRecipe(card.recipe)?.lookAround) return null
+  return { ref: card.id, name: String(doc.name || card.name || ''), kind: 'mcp' }
 }
 
 /** The principal an invited agent's work runs as: the inviter's account, named after the agent. */
@@ -361,6 +374,9 @@ export function createConnectorService({
       if (error instanceof SignInNeeded && error.code === 'needs_sign_in') return { needsSignIn: true, again: true }
       throw fromSignIn(error)
     }
+    // A card whose server answers initialize openly and asks for a sign-in only on a tool call
+    // (Google's): signed in first, so its tools are not consented to and then refused.
+    if (!token && cardFor(address, await gallery())?.signInFirst) return { needsSignIn: true, again: false }
     try {
       return { found: await session.discover(address, fetch, { token }), token }
     } catch (error) {
@@ -705,14 +721,21 @@ export function createConnectorService({
 
   /** The gallery the invite dialog shows: the enabled cards in order, and whether this person may invite. */
   async function galleryList(principal) {
-    // A vendor that needs an app registered ahead of time (no automatic registration) is hidden until it is.
-    const cards = (await gallery()).filter((card) => !card.needsApp || Boolean(oauthApps?.[card.needsApp]?.clientId))
+    // A vendor that needs an app registered ahead of time (no automatic registration) is not offered
+    // until it is; the dialog still names it (notSetUp: no address, nothing to invite), so a search
+    // for it says it is not set up on this server instead of finding nothing.
+    const all = await gallery()
+    const ready = (card) => !card.needsApp || Boolean(oauthApps?.[card.needsApp]?.clientId)
     const canInvite = signedInPerson(principal)
     return {
-      cards: cards.map(({ id, name, url, job, lands, try: tryThis, featured, signIn, keyHint, cost, group, origin, homepage, sharedBy }) => ({
+      cards: all.filter(ready).map(({ id, name, url, job, lands, try: tryThis, featured, signIn, keyHint, cost, group, origin, homepage, sharedBy, keywords }) => ({
         id, name, url, job, lands, try: tryThis, featured: Boolean(featured), signIn: signIn || null, keyHint: keyHint || null, cost: cost || '', group: group || null,
+        ...(Array.isArray(keywords) && keywords.length && { keywords: keywords.slice(0, 12) }),
         // A card someone suggested and an administrator approved (the library's review queue): the dialog marks it Community.
         ...(origin === 'community' && { origin, ...(homepage && { homepage }), ...(sharedBy && { sharedBy }) }),
+      })),
+      notSetUp: all.filter((card) => !ready(card)).map(({ id, name, job, lands, group, keywords }) => ({
+        id, name, job, lands, group: group || null, ...(Array.isArray(keywords) && keywords.length && { keywords: keywords.slice(0, 12) }),
       })),
       canInvite,
     }
@@ -1956,12 +1979,81 @@ export function createConnectorService({
   }
 
   /** A native integration connected again (Google): its agents resume on every slate with its tools. */
+  /**
+   * About you › "Use <tool> to personalize" (S3, 2026-11-26): a bounded, read-only look around one of
+   * the person's own integrations, started by them. Its gallery card's lookAround steps run as fixed
+   * calls (no planner), at most LOOK_LIMITS.calls, each with a tool they allowed that only looks
+   * things up (a tool that changes anything is never called here, whatever they allowed), each answer
+   * quarantined and capped. Nothing is saved and no model reads it here: the sample is outside data
+   * for the profile.sources surface, which wraps it as data. → { ref, name, sample: [{ tool, text }] }
+   */
+  async function lookAround(principal, { ref } = {}) {
+    await requirePerson(principal)
+    return oneAtATime(principal, async () => {
+      const cards = await gallery()
+      const rows = await integrations.find({ ownerId: principal.userId })
+      const doc = rows.find((row) => profileSource(row, cards)?.ref === ref) || null
+      const anyStatus = doc || rows.find((row) => (row.galleryId || cardFor(row.address, cards)?.id) === ref) || null
+      if (!doc && anyStatus?.status === 'needs_sign_in') refuse(401, 'needs_sign_in', `${anyStatus.name} needs you to sign in again on the Integrations page first.`)
+      if (!doc) refuse(404, 'not_found', 'That tool is not connected, or Slatebox has nothing to read from it.')
+      const recipe = checkRecipe(cardFor(doc.address, cards)?.recipe)
+      const reached = await discoverAs(principal.userId, doc.address)
+      if (reached.needsSignIn) {
+        await integrations.update(doc._id, { status: 'needs_sign_in', updatedAt: new Date(now()) })
+        refuse(401, 'needs_sign_in', `${doc.name} needs you to sign in again on the Integrations page first.`)
+      }
+      const toolsChanged = () => refuse(409, 'tools_changed', `${doc.name}'s tools changed since you connected it. Look at them on the Integrations page first.`)
+      const listed = normalizeTools(reached.found.tools, recipe.tools || null)
+      const { allowed, changed } = reconcile(doc.tools, listed)
+      if (changed.length) toolsChanged()
+      const lookups = allowed.filter((tool) => tool.group === 'lookup' && !tool.destructive && !isReferenceTool(tool, recipe))
+      const names = new Set(lookups.map((tool) => tool.name))
+      const toolOf = new Map(lookups.map((tool) => [tool.name, tool]))
+      const check = (fresh) => {
+        if (reconcile(doc.tools, normalizeTools(fresh, recipe.tools || null)).changed.length) toolsChanged()
+      }
+      const values = {}
+      const sample = []
+      let calls = 0
+      let chars = 0
+      for (const step of recipe.lookAround.steps) {
+        if (calls >= LOOK_LIMITS.calls || chars >= LOOK_LIMITS.chars) break
+        const tool = stepTool(step, names)
+        if (!tool) continue
+        const schema = toolOf.get(tool)?.inputSchema
+        const [planned] = stepCalls({ ...step, tool }, values)
+        if (!planned) continue
+        const args = fitArgs(schema, planned.args)
+        if (checkArguments(schema, args) || destructiveArgs(args)) continue
+        calls++
+        let raw
+        try {
+          raw = await session.callTool(doc.address, fetch, { name: tool, args, check }, { token: reached.token, ownerId: doc.ownerId })
+        } catch (error) {
+          if (error instanceof ConnectorRefused) throw error
+          if (fromProblem(error)?.code === 'needs_sign_in') refuse(401, 'needs_sign_in', `${doc.name} needs you to sign in again on the Integrations page first.`)
+          continue // one call that fails leaves the others' sample
+        }
+        const clean = quarantine(raw, { outputSchema: toolOf.get(tool)?.outputSchema })
+        if (clean.isError) continue
+        if (step.extract) for (const [name, list] of Object.entries(extract(rawData(raw), step.extract, rawText(raw)))) if (list.length && values[name] === undefined) values[name] = list
+        const text = clean.text.slice(0, Math.min(LOOK_LIMITS.charsPerCall, LOOK_LIMITS.chars - chars)).trim()
+        if (!text) continue
+        sample.push({ tool, text })
+        chars += text.length
+      }
+      audit({ kind: 'look_around', userId: principal.userId, host: doc.host, calls, chars })
+      return { ref, name: doc.name, sample }
+    })
+  }
+
   async function resumeIntegration(integration) {
     if (!integration?._id) return
     await resumeEverywhere(integration, integration.tools || [])
   }
 
   return {
+    lookAround,
     resumeIntegration,
     startSignIn,
     signInStatus,

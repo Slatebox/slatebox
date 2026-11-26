@@ -8,8 +8,10 @@
 // With `reconnect` (an agent that needs sign-in again) it stops after the sign-in.
 // `invited`: the agents already on this slate. A gallery card for one of yours says ✓ On this slate
 // and offers Manage (its chip) instead of inviting it again; a pasted address of one says so too.
-// With more cards than fit at a glance, chips (All, Work, Business …) and a search box narrow the
-// gallery (filterCards); the address box always takes any server.
+// With more cards than fit at a glance, chips (All, then each GROUPS chip: Work, Docs, chat and
+// meetings, Developer tools …) and a search box narrow the gallery (filterCards), and a hidden status
+// line says how many show; the address box always takes any server. A card whose vendor needs an app
+// this server has not registered (notSetUp) shows greyed out with "Not set up on this server yet".
 // `integrations`: the person's connected integrations, invited onto this slate in one step (no
 // sign-in, no consent again); a server they already connected says so and offers the same.
 // Without a shareId it is "Connect an integration" (the Integrations page): the same steps, ending
@@ -156,6 +158,12 @@ const SEES = [
 // What the outside service asks of you, in plain words (cardCost): the service's own price, never Slatebox's.
 // The chips and search box show once the gallery has more cards than this.
 export const FILTER_FROM = 8
+// Where an administrator reads how to register a vendor's app (docs/integrations.md).
+export const APPS_DOC = 'https://github.com/Slatebox/slatebox/blob/main/docs/integrations.md#apps-an-operator-registers'
+const visuallyHidden = { position: 'absolute', width: '1px', height: '1px', p: 0, m: '-1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 }
+// The built-in cards, when the gallery could not be loaded: a vendor that needs a registered app is
+// never offered blind (its app may not be set up here), only named as not set up.
+export const fallbackGallery = () => ({ cards: GALLERY.filter((c) => !c.needsApp), notSetUp: GALLERY.filter((c) => c.needsApp) })
 
 // The two ways in, and the one line each says about itself.
 export const CONNECT_TABS = Object.freeze([
@@ -223,12 +231,13 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
   const theme = useTheme()
   const phone = useMediaQuery(theme.breakpoints.down('sm'))
   const shownCards = filterCards(gallery.cards || [], filter)
+  const shownNotSetUp = gallery.cards ? filterCards(gallery.notSetUp || [], filter) : []
   const live = useRef(true)
   useEffect(() => () => { live.current = false }, [])
   useEffect(() => {
     if (open && !reconnect && !upgrade) Meteor.callAsync('connectors.gallery', {}).then((answer) => {
-      if (live.current) setGallery(Array.isArray(answer?.cards) ? { cards: answer.cards } : { cards: GALLERY })
-    }).catch(() => { if (live.current) setGallery({ cards: GALLERY }) })
+      if (live.current) setGallery(Array.isArray(answer?.cards) ? { cards: answer.cards, notSetUp: Array.isArray(answer.notSetUp) ? answer.notSetUp : [] } : fallbackGallery())
+    }).catch(() => { if (live.current) setGallery(fallbackGallery()) })
     if (open && shareId && !reconnect) Meteor.callAsync('integrations.slateSetting', { shareId }).then((answer) => { if (live.current) setSetting(answer) }).catch(() => {})
     if (!open) {
       pending.current?.cancel()
@@ -506,7 +515,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                 {(gallery.cards || []).length > FILTER_FROM && (
                   <Box data-gallery-filter="" sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, alignItems: { xs: 'stretch', sm: 'center' } }}>
                     <Box role="group" aria-label="Show agents for" sx={{ display: 'flex', gap: 0.75, flexWrap: { xs: 'nowrap', sm: 'wrap' }, overflowX: { xs: 'auto', sm: 'visible' }, flex: 1, pb: { xs: 0.25, sm: 0 } }}>
-                      {[{ id: 'all', label: 'All' }, ...groupsIn(gallery.cards)].map((g) => {
+                      {[{ id: 'all', label: 'All' }, ...groupsIn([...gallery.cards, ...(gallery.notSetUp || [])])].map((g) => {
                         const on = filter.group === g.id
                         return (
                           <Chip key={g.id} label={g.label} size="small" clickable data-gallery-chip={g.id} aria-pressed={on}
@@ -526,8 +535,13 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                 )}
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fill, minmax(200px, 1fr))' }, gap: 1.5 }}>
                   {!gallery.cards && <Box data-gallery-loading="" sx={{ gridColumn: '1 / -1' }}><LinearProgress aria-label="Loading the gallery" /></Box>}
-                  {gallery.cards && !shownCards.length && (
-                    <Typography variant="body2" color="text.secondary" data-gallery-none="" role="status" sx={{ gridColumn: '1 / -1', py: 1 }}>None of the agents here match. Any MCP server works: <Button size="small" onClick={() => setTab('custom')} data-gallery-none-custom="" sx={{ p: 0, minWidth: 0, verticalAlign: 'baseline', textTransform: 'none', fontSize: 'inherit' }}>paste its address under Custom</Button>.</Typography>
+                  {gallery.cards && (
+                    <Box component="span" role="status" data-gallery-count="" sx={visuallyHidden}>
+                      {shownCards.length ? `${shownCards.length} ${shownCards.length === 1 ? 'agent' : 'agents'}` : shownNotSetUp.length ? `${shownNotSetUp.map((c) => c.name).join(', ')}: not set up on this server yet` : 'None of the agents here match'}
+                    </Box>
+                  )}
+                  {gallery.cards && !shownCards.length && !shownNotSetUp.length && (
+                    <Typography variant="body2" color="text.secondary" data-gallery-none="" sx={{ gridColumn: '1 / -1', py: 1 }}>None of the agents here match. Any MCP server works: <Button size="small" onClick={() => setTab('custom')} data-gallery-none-custom="" sx={{ p: 0, minWidth: 0, verticalAlign: 'baseline', textTransform: 'none', fontSize: 'inherit' }}>paste its address under Custom</Button>.</Typography>
                   )}
                   {shownCards.map((item) => {
                     const state = cardState(item, invited, integrations)
@@ -586,6 +600,24 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                       </Box>
                     )
                   })}
+                  {shownNotSetUp.map((item) => (
+                    <Box key={item.id} data-gallery-not-set-up={item.id} aria-disabled="true"
+                      sx={(t) => ({ ...surface(t), p: 1.75, display: 'flex', flexDirection: 'column', gap: 0.75, opacity: 0.72, borderStyle: 'dashed' })}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                        <Box aria-hidden="true" sx={(t) => ({ width: 34, height: 34, borderRadius: '10px', display: 'grid', placeItems: 'center', flexShrink: 0, bgcolor: '#eceee8', ...t.applyStyles('dark', { bgcolor: 'rgba(255,255,255,0.06)' }) })}>
+                          <Hexagon color="#9aa39a" size={20} style={{}} />
+                        </Box>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 750, lineHeight: 1.3 }}>{item.name}</Typography>
+                          <Typography variant="caption" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>{item.job}</Typography>
+                        </Box>
+                      </Box>
+                      <Typography variant="body2" sx={{ lineHeight: 1.45, fontWeight: 650 }} data-gallery-not-set-up-words="">Not set up on this server yet.</Typography>
+                      <Typography variant="caption" color="text.secondary" component="div" sx={{ lineHeight: 1.45 }}>
+                        Its administrator registers an app with the vendor first: <Box component="a" href={APPS_DOC} target="_blank" rel="noopener noreferrer" sx={{ color: 'inherit', fontWeight: 650 }}>how to set it up</Box>.
+                      </Typography>
+                    </Box>
+                  ))}
                 </Box>
                 <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0, lineHeight: 1.5 }} data-invite-footer="">Not listed here? Any MCP server works under Custom. Community cards were suggested by people using Slatebox and reviewed by Slatebox. Each agent&apos;s answers become suggestions on your slate.</Typography>
               </Box>

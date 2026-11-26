@@ -286,6 +286,12 @@ const CONSTANTS = {
         get: 'profile.settings.get',
         set: 'profile.settings.set',
       },
+      // Use <tool> to personalize (server/methods/profile-sources.js): the tools, a look around one, keeping what it proposed
+      sources: {
+        list: 'profile.sources.list',
+        read: 'profile.sources.read',
+        keep: 'profile.sources.keep',
+      },
     },
     // For you (server/actions/personal.mjs): ideas made for the person, from About you, and building one
     personal: {

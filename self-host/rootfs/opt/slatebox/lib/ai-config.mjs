@@ -40,7 +40,7 @@ const TYPES = {
 }
 // The app's features (web/app/server/ai-control/catalogue.mjs USE_SURFACES); the app checks them again at start.
 const USE = ['default', 'chat', 'chat.route', 'generation', 'generation.notes', 'presentation', 'vision', 'images', 'shape',
-  'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest', 'voice', 'voice.chat', 'voice.interview']
+  'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest', 'profile.sources', 'voice', 'voice.chat', 'voice.interview']
 // The parts that talk: they take only a voice connection, and a voice connection serves only them.
 const VOICE_USE = ['voice', 'voice.chat', 'voice.interview']
 const NAME = /^[a-z0-9][a-z0-9-]{0,39}$/

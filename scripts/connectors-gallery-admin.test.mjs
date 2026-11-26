@@ -9,7 +9,7 @@ import { COLLECTIONS, createControlStore } from '../web/app/server/ai-control/st
 import { buildSnapshot } from '../web/app/server/ai-control/snapshot.mjs'
 import { PROMPT_IDS } from '../web/app/server/ai-control/prompts/index.mjs'
 import { GALLERY } from '../enterprise/common/gallery.mjs'
-import { checkCardEdit, createGalleryOps, galleryActions, liveGallery } from '../enterprise/server/gallery-admin.mjs'
+import { checkCardEdit, createGalleryOps, galleryActions, liveGallery, promptIdOf } from '../enterprise/server/gallery-admin.mjs'
 
 function memoryCollection() {
   const docs = new Map()
@@ -62,8 +62,11 @@ test('the built-in cards serve until edited; an edit changes words, recipe, on/o
   const listed = await ops.list()
   assert.equal(listed.cards.find((c) => c.id === 'exa').enabled, false)
   assert.equal(listed.cards.find((c) => c.id === 'github').promptId, 'connectors.recipe.github')
-  // A card with no planner hint yet says so instead of naming a prompt that is not there.
-  assert.equal(listed.cards.find((c) => c.id === 'notion').promptId, null)
+  // Every built-in card has its planner hint since the wide gallery (2026-11-26: Notion's was missing before);
+  // a card with none (a Community card) says so instead of naming a prompt that is not there.
+  assert.equal(listed.cards.find((c) => c.id === 'notion').promptId, 'connectors.recipe.notion')
+  assert.ok(listed.cards.filter((c) => c.origin !== 'community').every((c) => c.promptId === 'connectors.recipe.' + c.id))
+  assert.equal(promptIdOf('cabc123'), null)
   assert.ok(listed.cards.filter((c) => c.promptId).every((c) => PROMPT_IDS.includes(c.promptId)))
   assert.deepEqual(listed.retired.map((c) => c.id), ['excalidraw', 'apexcharts'])
 })

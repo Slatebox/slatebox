@@ -199,7 +199,10 @@ test("a locked install takes no integration and lists none; the drift helper com
 test("the review chat's own grammar knows an integration's categories", async () => {
   const { localRefinement } = await import("../web/app/server/library/refine.mjs");
   assert.deepEqual(localRefinement("put it in Web and facts", { kind: "integration" }).meta, { category: "web" });
-  assert.match(localRefinement("put it in Plan", { kind: "integration" }).reply, /Work, Business, Research, Web and facts/);
+  // the gallery's seven chips (2026-11-26), the comma in "Docs, chat and meetings" set apart with semicolons
+  assert.match(localRefinement("put it in Plan", { kind: "integration" }).reply, /Work; Docs, chat and meetings; Developer tools; Design; Business; Research; Web and facts\./);
+  assert.deepEqual(localRefinement("put it in Developer tools", { kind: "integration" }).meta, { category: "dev" });
+  assert.deepEqual(localRefinement("put it in Docs, chat and meetings", { kind: "integration" }).meta, { category: "workspace" });
   assert.deepEqual(localRefinement("put it in Plan").meta, { category: "plan" });
 });
 

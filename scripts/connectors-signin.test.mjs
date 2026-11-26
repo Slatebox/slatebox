@@ -202,7 +202,7 @@ test('hostile: a server that names a pre-registered provider (GitHub) as its sig
 
 test('the consent screen says what a sign-in reaches, in plain words', async () => {
   const { reachOf } = await import('../enterprise/server/oauth.mjs')
-  assert.equal(reachOf(['public_repo', 'read:org']), 'It lets Slatebox read and change your public repositories (code, issues and pull requests) and see which organisations you belong to.')
+  assert.equal(reachOf(['public_repo', 'read:org']), 'It lets Slatebox read and change your public repositories (code, issues and pull requests) and see which organizations you belong to.')
   assert.match(reachOf(['repo']), /private ones too/)
   assert.equal(reachOf(['read', 'offline_access']), 'It asks for: read.')
   assert.equal(reachOf([]), '')
@@ -227,9 +227,11 @@ test('token answers are checked: bearer only, no whitespace, lifetimes capped, i
 test('settings: oauthApps per provider, known providers bring their issuer, others need an https issuer', () => {
   const parsed = connectorSettings({
     public: { env: 'prod' },
-    connectors: { oauthApps: { github: { clientId: 'Iv1.abc', clientSecret: 's3cret' }, slack: { clientId: 'x' }, custom: { clientId: 'y', issuer: 'https://auth.example.com' }, local: { clientId: 'z', issuer: 'http://127.0.0.1:9' }, 'Bad Name': { clientId: 'q' } } },
+    connectors: { oauthApps: { github: { clientId: 'Iv1.abc', clientSecret: 's3cret' }, slack: { clientId: 'x' }, acme: { clientId: 'w' }, custom: { clientId: 'y', issuer: 'https://auth.example.com' }, local: { clientId: 'z', issuer: 'http://127.0.0.1:9' }, 'Bad Name': { clientId: 'q' } } },
   })
-  assert.deepEqual(parsed.oauthApps, { github: { clientId: 'Iv1.abc', clientSecret: 's3cret' }, custom: { clientId: 'y', issuer: 'https://auth.example.com' } })
+  // Slack became a known provider (2026-11-26: its issuer and server are fixed in oauth.mjs), so its client id alone is
+  // kept; a provider Slatebox does not know (acme) still needs an https issuer.
+  assert.deepEqual(parsed.oauthApps, { github: { clientId: 'Iv1.abc', clientSecret: 's3cret' }, slack: { clientId: 'x' }, custom: { clientId: 'y', issuer: 'https://auth.example.com' } })
 })
 
 // ---------- discovery against the fake servers, and the hostile cases ----------

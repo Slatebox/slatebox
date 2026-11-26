@@ -42,10 +42,11 @@ const ESTIMATES_BEFORE = {
 // one forced call with at most one retry over the person's facts (3,000 and 50,000 µ$); building a For you idea
 // (2026-11-26) is a board draft on workshop.draft under a meter key of its own (personal.build), so it has board
 // drafting's estimate and the meter's default ceiling (5,000 and 50,000 µ$).
+// Learning from a connected tool (S3, 2026-11-26) is one call, metered as a conversation turn (2,000 and 50,000 µ$).
 // Voice (2026-11-26) is metered by the minute under each voice part's own feature: a minute is held for
 // 50,000 µ$ and may spend at most 200,000 µ$ (server/voice/meter.mjs).
-const ESTIMATES_ADDED = { interview: 2000, 'personal.suggest': 3000, 'personal.build': 5000, voice: 50_000, 'voice-chat': 50_000, 'voice-interview': 50_000 }
-const CEILINGS_ADDED = { interview: 50_000, 'personal.suggest': 50_000, 'personal.build': 50_000, voice: 200_000, 'voice-chat': 200_000, 'voice-interview': 200_000 }
+const ESTIMATES_ADDED = { interview: 2000, 'personal.suggest': 3000, 'personal.build': 5000, 'profile.sources': 2000, voice: 50_000, 'voice-chat': 50_000, 'voice-interview': 50_000 }
+const CEILINGS_ADDED = { interview: 50_000, 'personal.suggest': 50_000, 'personal.build': 50_000, 'profile.sources': 50_000, voice: 200_000, 'voice-chat': 200_000, 'voice-interview': 200_000 }
 const CEILINGS_BEFORE = { generation: 200_000, vision: 200_000, presentation: 200_000, shape: 60_000 }
 
 test('every request feature reaches the same choice as before the catalogue', () => {
@@ -105,7 +106,10 @@ test('library and connectors have landed: both are in this build; connectors run
   assert.equal(surface('connectors').edition, null)
   const inBuild = SURFACES.filter((s) => s.inBuild && s.useKey).map((s) => s.id)
   assert.deepEqual(inBuild, ['default', 'chat', 'chat.route', 'generation', 'generation.notes', 'presentation', 'vision', 'images', 'shape',
-    'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest', 'voice', 'voice.chat', 'voice.interview'])
+    'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest', 'profile.sources', 'voice', 'voice.chat', 'voice.interview'])
+  // learning from a connected tool follows the conversation until an administrator binds it, like the interview
+  assert.deepEqual(followChain('profile.sources'), ['profile.sources', 'chat', 'default'])
+  assert.equal(surfaceForRequest('profile.sources'), 'profile.sources')
 })
 
 test('the features people choose first are the catalogue rows that follow default, unchanged, then library (a row of its own that follows chat)', () => {

@@ -443,7 +443,31 @@ export function checkRecipe(raw) {
     referenceTools: (Array.isArray(raw.referenceTools) ? raw.referenceTools : []).filter((t) => typeof t === 'string').slice(0, 20),
     intents,
     ...checkWriteParts(raw),
+    ...(checkLookAround(raw?.lookAround) && { lookAround: checkLookAround(raw.lookAround) }),
   }
+}
+
+// About you › "Use <tool> to personalize" (S3, 2026-11-26): a few read-only calls, each answer
+// capped, the whole sample capped, never a planner. A step names its tool (or alternatives: the first
+// this agent may use as a lookup wins) and fixed arguments; a later step may take a short value an
+// earlier one extracted ({login}, {cloudId}), as recipe steps do.
+export const LOOK_LIMITS = Object.freeze({ steps: 3, calls: 3, charsPerCall: 1200, chars: 3600 })
+
+/** A look-around, checked: at most LOOK_LIMITS.steps steps with a tool and fixed arguments. null when there is none. */
+export function checkLookAround(raw) {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.steps)) return null
+  const toolName = (name) => typeof name === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(name)
+  const steps = []
+  for (const step of raw.steps.slice(0, LOOK_LIMITS.steps)) {
+    const tool = Array.isArray(step?.tool) ? (step.tool.length && step.tool.length <= 4 && step.tool.every(toolName) ? step.tool : null) : toolName(step?.tool) ? step.tool : null
+    // Fixed values only: a planner never fills a look-around's arguments.
+    const args = step?.args && typeof step.args === 'object' && !Array.isArray(step.args)
+      ? Object.fromEntries(Object.entries(step.args).filter(([k, v]) => /^[A-Za-z0-9_.$-]{1,40}$/.test(k) && (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && v.length <= RECIPE_LIMITS.valueChars))).slice(0, 8))
+      : step?.args === undefined ? {} : null
+    if (!tool || !args) continue
+    steps.push({ tool, args, ...(step.extract && typeof step.extract === 'object' && !Array.isArray(step.extract) && { extract: step.extract }) })
+  }
+  return steps.length ? { steps } : null
 }
 
 const TOOL_KINDS = ['lookup', 'change', 'destructive']

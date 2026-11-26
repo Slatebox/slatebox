@@ -40,6 +40,8 @@ import './methods/canvas-conversation'
 import './methods/interview'
 // voice: talking with the agent, full duplex, through the relay at /voice/ws (server/voice)
 import './voice/meteor'
+// learning from a connected tool in About you (server/profile/sources-core.mjs)
+import './methods/profile-sources'
 import './methods/excalidraw-share'
 import './agents/meteor'
 import './agents/suggestions-meteor'

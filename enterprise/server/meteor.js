@@ -32,7 +32,7 @@ import { setProfileIntegrations } from '/server/profile/integration-hooks.mjs'
 import { loadMasterKey } from '/server/metering/vault.mjs'
 import { createMcpFetch } from './mcp-fetch.mjs'
 import { callTool, discover } from './mcp-session.mjs'
-import { ConnectorRefused, createConnectorService, meterRefusal, profileIntegration } from './service.mjs'
+import { ConnectorRefused, createConnectorService, meterRefusal, profileIntegration, profileSource } from './service.mjs'
 import { connectorSettings } from './connector-settings.mjs'
 import { cardFor, retiredFor } from '../common/gallery.mjs'
 import { communityCard, liveGallery } from './gallery-admin.mjs'
@@ -355,6 +355,17 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
       const cards = await gallery()
       const rows = await integrationsStore.find({ ownerId: userId })
       return rows.map((doc) => profileIntegration(doc, cards))
+    },
+    // About you › "Use <tool> to personalize" (S3): the integrations that have a look-around, and the
+    // bounded read-only look itself (service.lookAround: quarantined, capped, lookups only).
+    sources: async (userId) => {
+      if (!isUnlocked() || !userId) return []
+      const cards = await gallery()
+      return (await integrationsStore.find({ ownerId: userId })).map((doc) => profileSource(doc, cards)).filter(Boolean)
+    },
+    lookAround: async (userId, ref) => {
+      if (!isUnlocked() || !userId) throw new ConnectorRefused(404, 'not_found', 'That tool is not connected.')
+      return service.lookAround({ kind: 'person', userId }, { ref })
     },
   })
   // Keeping an action card's note approves its change: the app's suggestions.decide asks the service

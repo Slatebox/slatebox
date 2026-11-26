@@ -1,8 +1,8 @@
 # Integrations: connect once, invite anywhere
 
 Integrations are free for everyone: on Slatebox Cloud with any account, and on every self-hosted
-install with no key. The agent work they run counts like any other agent request: on Slatebox Cloud
-against your Slatebox Pro credits, or on your own key, which spends no Slatebox credits; on a
+install with no key. No integration needs a plan. The agent work they run counts like any other agent request: on Slatebox Cloud
+against your Slatebox credits, or on your own key, which spends no Slatebox credits; on a
 self-hosted install on the models its administrator sets up, or on people's own.
 
 ## What an integration is
@@ -29,43 +29,178 @@ Connecting a server from a slate's walkthrough makes the integration too, so the
 ## The agent gallery
 
 **+ Invite agent** (and **Connect an integration**) opens with a gallery of agents that bring in what
-Slatebox can't do itself: your work data, knowledge, the web and facts. Agents that only draw
-diagrams or boards are not listed, since Slatebox draws those itself. Use the chips (**All**,
-**Work**, **Business**, **Research**, **Web and facts**) or the search box to find one. Any MCP server
-works too: paste its address.
+Slatebox can't do itself: your work data, your files and chats, your code and deploys, your own
+designs and boards, your customers and numbers, knowledge, the web and facts. Every card is the
+vendor's own remote MCP server at the vendor's own address. Unofficial third-party servers and gateways
+are not built in (paste any of them under **Custom**); **Community** cards are servers people suggested
+and Slatebox reviewed. Agents that only draw what Slatebox draws (Excalidraw,
+tldraw) are not listed; Miro, Figma and Canva are, because they bring in a person's own boards and
+designs. A card whose vendor needs an app the server's administrator registers
+(see [Apps an operator registers](#apps-an-operator-registers)) shows greyed out, *Not set up on this
+server yet*, until that app is set up. Use the chips (**All**, **Work**, **Docs, chat and meetings**, **Developer tools**, **Design**,
+**Business**, **Research**, **Web and facts**) or the search box to find one. Any MCP server works
+too: paste its address.
 
-| Agent | Address | Sign-in |
-| --- | --- | --- |
-| Hugging Face | `https://huggingface.co/mcp` | None |
-| GitHub | `https://api.githubcopilot.com/mcp/` | GitHub (or a personal access token) |
-| Linear | `https://mcp.linear.app/mcp` | Linear |
-| DeepWiki | `https://mcp.deepwiki.com/mcp` | None |
-| Context7 | `https://mcp.context7.com/mcp` | None |
-| Wolfram | `https://agenttools.wolfram.com/mcp` | None |
-| Firecrawl | `https://mcp.firecrawl.dev/v2/mcp` | None |
-| Exa | `https://mcp.exa.ai/mcp` | None |
-| Notion | `https://mcp.notion.com/mcp` | Notion |
-| Jira and Confluence | `https://mcp.atlassian.com/v2/mcp` | Atlassian |
-| Slack | `https://mcp.slack.com/mcp` | Slack (needs an app registered by the server's operator, see below) |
-| Granola | `https://mcp.granola.ai/mcp` | Granola |
-| Asana | `https://mcp.asana.com/v2/mcp` | Asana (needs an app registered by the server's operator) |
-| monday.com | `https://mcp.monday.com/mcp` | monday.com |
-| ClickUp | `https://mcp.clickup.com/mcp` | ClickUp |
-| Trello | `https://mcp.trello.com/v1` | Atlassian |
-| Airtable | `https://mcp.airtable.com/mcp` | Airtable (or a personal access token) |
-| Zapier | `https://mcp.zapier.com/api/v1/connect` | Zapier |
-| HubSpot | `https://mcp.hubspot.com` | HubSpot (needs an app registered by the server's operator) |
-| Stripe | `https://mcp.stripe.com` | Stripe (or a restricted key) |
-| PostHog | `https://mcp.posthog.com/mcp` | PostHog (or a personal API key) |
-| Sentry | `https://mcp.sentry.dev/mcp` | Sentry |
-| Jina | `https://mcp.jina.ai/v1` | None |
-| Parallel | `https://mcp.parallel.ai/mcp` | None |
+The last column says whether About you can use the tool to personalize Slatebox (see
+[Use your tools to personalize](#use-your-tools-to-personalize-about-you)).
+
+| Chip | Agent | Address | Sign-in | Personalize |
+| --- | --- | --- | --- | --- |
+| Work | Linear | `https://mcp.linear.app/mcp` | Linear | Yes |
+| Work | Jira, Confluence and Loom | `https://mcp.atlassian.com/v2/mcp` | Atlassian | Yes |
+| Work | Asana | `https://mcp.asana.com/v2/mcp` | Asana (needs the operator's asana app, see below) | Yes |
+| Work | monday.com | `https://mcp.monday.com/mcp` | monday.com | Yes |
+| Work | ClickUp | `https://mcp.clickup.com/mcp` | ClickUp | Yes |
+| Work | Trello | `https://mcp.trello.com/v1` | Atlassian | Yes |
+| Work | Airtable | `https://mcp.airtable.com/mcp` | Airtable (or a personal access token) | Yes |
+| Work | Zapier | `https://mcp.zapier.com/api/v1/connect` | Zapier |  |
+| Work | Todoist | `https://ai.todoist.net/mcp` | Todoist | Yes |
+| Work | Make | `https://mcp.make.com` | Make |  |
+| Docs, chat and meetings | Notion | `https://mcp.notion.com/mcp` | Notion | Yes |
+| Docs, chat and meetings | Slack | `https://mcp.slack.com/mcp` | Slack (needs the operator's slack app, see below) | Yes |
+| Docs, chat and meetings | Granola | `https://mcp.granola.ai/mcp` | Granola | Yes |
+| Docs, chat and meetings | Microsoft 365 | `https://workiq.svc.cloud.microsoft/mcp` | Microsoft (needs the operator's microsoft app, see below) |  |
+| Docs, chat and meetings | Microsoft Entra directory | `https://mcp.svc.cloud.microsoft/enterprise` | Microsoft (needs the operator's microsoft app, see below) | Yes |
+| Docs, chat and meetings | Gmail | `https://gmailmcp.googleapis.com/mcp/v1` | Google (needs the operator's google app, see below) |  |
+| Docs, chat and meetings | Google Calendar | `https://calendarmcp.googleapis.com/mcp/v1` | Google (needs the operator's google app, see below) |  |
+| Docs, chat and meetings | Google Docs | `https://docsmcp.googleapis.com/mcp/v1` | Google (needs the operator's google app, see below) |  |
+| Docs, chat and meetings | Google Sheets | `https://sheetsmcp.googleapis.com/mcp/v1` | Google (needs the operator's google app, see below) |  |
+| Docs, chat and meetings | Google Chat | `https://chatmcp.googleapis.com/mcp/v1` | Google (needs the operator's google app, see below) |  |
+| Docs, chat and meetings | Dropbox | `https://mcp.dropbox.com/mcp` | Dropbox |  |
+| Docs, chat and meetings | Dropbox Dash | `https://mcp.dropbox.com/dash` | Dropbox |  |
+| Docs, chat and meetings | Box | `https://mcp.box.com` | Box (needs the operator's box app, see below) |  |
+| Docs, chat and meetings | Zoom | `https://mcp.zoom.us/mcp/zoom/streamable` | Zoom (needs the operator's zoom app, see below) |  |
+| Docs, chat and meetings | Calendly | `https://mcp.calendly.com` | Calendly |  |
+| Docs, chat and meetings | Coda | `https://coda.io/apis/mcp` | Coda |  |
+| Developer tools | GitHub | `https://api.githubcopilot.com/mcp/` | GitHub (or a personal access token) | Yes |
+| Developer tools | Sentry | `https://mcp.sentry.dev/mcp` | Sentry | Yes |
+| Developer tools | GitLab | `https://gitlab.com/api/v4/mcp` | GitLab |  |
+| Developer tools | Vercel | `https://mcp.vercel.com` | Vercel | Yes |
+| Developer tools | Netlify | `https://netlify-mcp.netlify.app/mcp` | Netlify |  |
+| Developer tools | Supabase | `https://mcp.supabase.com/mcp` | Supabase | Yes |
+| Developer tools | Neon | `https://mcp.neon.tech/mcp` | Neon | Yes |
+| Developer tools | Cloudflare | `https://mcp.cloudflare.com/mcp` | Cloudflare |  |
+| Developer tools | Datadog | `https://mcp.datadoghq.com/api/unstable/mcp-server/mcp` | Datadog |  |
+| Developer tools | PagerDuty | `https://mcp.pagerduty.com/mcp` | PagerDuty | Yes |
+| Developer tools | Postman | `https://mcp.postman.com/mcp` | Postman (or an API key) | Yes |
+| Developer tools | Replit | `https://replit-mcp.com/server/mcp` | Replit | Yes |
+| Developer tools | Lovable | `https://mcp.lovable.dev` | Lovable | Yes |
+| Developer tools | v0 | `https://v0.app/api/mcp` | Vercel |  |
+| Design | Figma | `https://mcp.figma.com/mcp` | Figma |  |
+| Design | Miro | `https://mcp.miro.com/` | Miro |  |
+| Design | Canva | `https://mcp.canva.com/mcp` | Canva | Yes |
+| Design | Lucid | `https://mcp.lucid.app/mcp` | Lucid (or an API key) |  |
+| Design | Whimsical | `https://mcp.whimsical.com/mcp` | Whimsical |  |
+| Design | Webflow | `https://mcp.webflow.com/mcp` | Webflow |  |
+| Design | Framer | `https://mcp.framer.com/mcp` | Framer |  |
+| Design | Gamma | `https://mcp.gamma.app/mcp` | Gamma |  |
+| Design | Pitch | `https://mcp.pitch.com/mcp` | Pitch (needs the operator's pitch app, see below) |  |
+| Design | Wix | `https://mcp.wix.com/mcp` | Wix |  |
+| Design | Adobe Experience Manager | `https://mcp.adobeaemcloud.com/adobe/mcp/aem` | Adobe |  |
+| Design | Adobe Firefly workflows | `https://run-workflow.adobe.io/mcp` | Adobe |  |
+| Business | HubSpot | `https://mcp.hubspot.com` | HubSpot (needs the operator's hubspot app, see below) | Yes |
+| Business | Stripe | `https://mcp.stripe.com` | Stripe (or a restricted key) |  |
+| Business | PostHog | `https://mcp.posthog.com/mcp` | PostHog (or a personal API key) |  |
+| Business | Salesforce | `https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads` | Salesforce (needs the operator's salesforce app, see below) |  |
+| Business | Intercom | `https://mcp.intercom.com/mcp` | Intercom |  |
+| Business | Typeform | `https://api.typeform.com/mcp` | Typeform |  |
+| Business | Attio | `https://mcp.attio.com/mcp` | Attio |  |
+| Business | Pipedrive | `https://mcp.pipedrive.ai/mcp` | Pipedrive |  |
+| Business | Apollo.io | `https://mcp.apollo.io/mcp` | Apollo.io |  |
+| Business | Square | `https://mcp.squareup.com/mcp` | Square |  |
+| Business | PayPal | `https://mcp.paypal.com/mcp` | PayPal |  |
+| Research | Hugging Face | `https://huggingface.co/mcp` | None |  |
+| Research | DeepWiki | `https://mcp.deepwiki.com/mcp` | None |  |
+| Research | Context7 | `https://mcp.context7.com/mcp` | None |  |
+| Research | Jina | `https://mcp.jina.ai/v1` | None |  |
+| Research | Microsoft Learn | `https://learn.microsoft.com/api/mcp` | None |  |
+| Research | Cloudflare Docs | `https://docs.mcp.cloudflare.com/mcp` | None |  |
+| Web and facts | Wolfram | `https://agenttools.wolfram.com/mcp` | None |  |
+| Web and facts | Firecrawl | `https://mcp.firecrawl.dev/v2/mcp` | None |  |
+| Web and facts | Exa | `https://mcp.exa.ai/mcp` | None |  |
+| Web and facts | Parallel | `https://mcp.parallel.ai/mcp` | None |  |
+
+Notes on some of them:
+
+- **Atlassian** (Jira, Confluence, Loom, Bitbucket Cloud, Compass): one server. Its older addresses
+  (`https://mcp.atlassian.com/v1/mcp`, `/v1/sse`) are the same card; an agent invited there makes its
+  changes at `/v2/mcp`.
+- **Datadog** has one address per Datadog site (`mcp.us3.datadoghq.com`, `mcp.us5.datadoghq.com`,
+  `mcp.datadoghq.eu`, `mcp.ap1.datadoghq.com`, each at `/api/unstable/mcp-server/mcp`); paste yours if
+  it is not US1. **Intercom** (`mcp.eu.intercom.com/mcp`) and **Typeform** (`api.eu.typeform.com/mcp`)
+  have EU addresses too. Each is the same card.
+- **Supabase** and **Neon** start with SQL, migrations and new projects **off**; **Cloudflare**'s code
+  tool, **Square**'s API tool, **PayPal** and **Stripe** refunds, **Lovable** publishing, **Vercel**
+  deploys and domain purchases, and **Microsoft 365**'s changes (sending mail included) start off too.
+  **PagerDuty** asks for its `read` scope only, not the about 90 scopes its server lists.
+- **Replit**, **Dropbox**, **Coda** and **Pipedrive** are in beta at their vendors. **Vercel**, **Figma**
+  and **Lovable** may ask Slatebox's operator to register or approve Slatebox as a client before
+  automatic registration works for a hosted install; **Adobe Experience Manager** and **Adobe Firefly
+  workflows** are for those Adobe enterprise customers. **Microsoft 365** needs your Microsoft 365
+  administrator to turn it on.
+- **Not listed yet, and why**: Adobe's creative connector (`adobe-creativity.adobe.io`) answers only
+  allowlisted clients; Mural has no public address; Cursor has no remote server; Smartsheet's sign-in
+  does not offer PKCE, which Slatebox requires (paste a Smartsheet API token under Custom); Gong and
+  QuickBooks are partner-only; Bolt, Zendesk, Squarespace, Mailchimp, Adobe Acrobat and tldraw's
+  account server answer but their vendors do not document them yet; Shopify's catalog and Plaid's
+  dashboard servers are not for team workspaces. Azure DevOps has one address per organization
+  (`https://mcp.dev.azure.com/<organization>`): paste yours under Custom, and it signs in with the
+  operator's Microsoft app.
 
 Most of the sign-in agents register Slatebox with their service automatically when you first sign
-in. Slack, Asana and HubSpot don't: their sign-in works once the server's operator registers an app
-with that service and adds it under `settings.connectors.oauthApps.<provider>` (`clientId`,
-`clientSecret`, `issuer` and `resources`). Until then, signing in to them asks for a client id. Stripe refunds and every tool that deletes, closes, cancels or merges start **off**.
-Administrators turn cards on or off, reorder them and edit their words in /admin/ai › Agent gallery.
+in. The ones marked *needs the operator's app* don't: their card shows once the server's operator
+registers an app with that service (below). Stripe refunds and every tool that deletes, closes,
+cancels or merges start **off**. Administrators turn cards on or off, reorder them and edit their
+words and recipes in /admin/ai › Agent gallery; each card's hint for the planner is a prompt
+(`connectors.recipe.<card>`) in /admin/ai › Prompts.
+
+## Apps an operator registers
+
+Slack, Asana, HubSpot, Box, Zoom, Pitch, Salesforce, Microsoft and Google offer no automatic
+registration, so Slatebox signs people in through one app the server's operator registers with each.
+On **Slatebox Cloud** Slatebox LLC registers them, and each card is offered once its app is
+registered (until then it shows *Not set up on this server yet*); on a **self-hosted install** the
+administrator does, for their own install. Each one needs:
+
+- **Redirect URL** (also called callback or reply URL): `<your Slatebox address>/connectors/oauth/callback`,
+  for example `https://app.slatebox.com/connectors/oauth/callback`. It must be https.
+- **Settings**: `settings.connectors.oauthApps.<provider>` with `clientId` and `clientSecret` (the
+  secret lives only in settings or the environment that fills them, never in the database). The
+  provider's sign-in server and the only MCP servers its sign-in is sent to are built into Slatebox
+  (`enterprise/server/oauth.mjs` `KNOWN_PROVIDERS`), so nothing else is needed. `scopes` replaces the
+  scopes Slatebox asks for, on purpose (for example to allow Gmail drafts).
+- `SLATEBOX_KEY_ENCRYPTION_KEY` set, as for every sign-in.
+
+| Provider (`oauthApps.<provider>`) | Cards | Where to register | Scopes Slatebox asks for |
+| --- | --- | --- | --- |
+| `slack` | Slack | api.slack.com/apps: a Slack app with *User Token Scopes* for the MCP server (channels, search, chat, canvases), distributed or installed to the workspace; a workspace admin may need to approve it | what the server's metadata lists |
+| `asana` | Asana | Asana developer console: an app for MCP V2 (confidential client) | what the server names (`default`) |
+| `hubspot` | HubSpot | HubSpot: Development › MCP Auth Apps | what the server names |
+| `box` | Box | Box Developer Console: an OAuth 2.0 app with the *Manage AI Requests* scope (or the admin's predefined *Box MCP Server* integration) | what the server names |
+| `zoom` | Zoom | Zoom Marketplace: Develop › Build app › General app, with the read scopes below; PKCE on | read-only: `meeting:read:search meeting:read:assets cloud_recording:read:content cloud_recording:read:list_user_recordings my_notes:read:content hub:read:content agentic_search:read:search agentic_search:read:ask` (Zoom's metadata lists its write and delete scopes too; Slatebox never asks for them unless `scopes` says so) |
+| `pitch` | Pitch | ask Pitch for an OAuth client for an MCP client | `openid profile email offline_access` |
+| `salesforce` | Salesforce | in each Salesforce org: an External Client App (not a Connected App) with the `mcp_api` and `refresh_token` scopes, and the org's admin turns on the hosted MCP server | `mcp_api refresh_token` |
+| `microsoft` | Microsoft 365, Microsoft Entra directory (and a pasted Azure DevOps address) | Microsoft Entra admin center: App registrations › New, *Accounts in any organizational directory* (multi-tenant), platform *Web* with the redirect URL, a client secret; API permissions (delegated): Work IQ `WorkIQAgent.Ask` (its only permission; it reads and writes, so the card's write tools start off), the Microsoft MCP Server for Enterprise's `MCP.User.Read.All` and `MCP.Group.Read.All`, Azure DevOps if you want it, and `offline_access` | Work IQ `fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask`; directory `api://e8c77dc2-69b3-43f4-bc51-3213c9d915b4/.default`; Azure DevOps `https://mcp.dev.azure.com/.default`; each with `offline_access` |
+| `google` | Gmail, Google Calendar, Google Docs, Google Sheets, Google Chat | Google Cloud console: an OAuth client of type *Web application* with *Use this client for an AI-powered agent* checked, the redirect URL; enable each API and its MCP API (`gmailmcp`, `calendarmcp`, `docsmcp`, `sheetsmcp`, `chatmcp` `.googleapis.com`) | read-only by default: `gmail.readonly`; `calendar.calendarlist.readonly calendar.events.readonly`; `documents.readonly drive.readonly`; `spreadsheets.readonly drive.readonly`; `chat.spaces.readonly chat.messages.readonly` (Slatebox also asks Google for offline access) |
+
+Each tenant or workspace decides for itself too:
+
+- **Microsoft**: every permission above needs a tenant administrator's consent, and the tenant must
+  turn on Work IQ (Microsoft 365 admin center › Agents › Tools); the directory server needs the
+  tenant's administrator to grant Slatebox's app its `MCP.*` scopes. Personal Microsoft accounts are
+  not supported by these servers. Microsoft says to use Work IQ for Microsoft 365 rather than its older
+  per-workload Agent 365 servers, so Slatebox lists Work IQ only.
+- **Google**: Gmail and Drive scopes are restricted, so a public Google app needs Google's OAuth
+  verification and a yearly security assessment; a Google Workspace organization can instead mark the
+  app internal or trusted for its own users.
+- **Slack**, **Box**, **Zoom**: a workspace or account admin may need to approve the app.
+
+Slatebox's own sign-in steps stay as strict for these as for every server (PKCE, the issuer checked
+exactly, every address public and https), with each vendor's documented exceptions built in:
+Microsoft's issuer is its `{tenantid}` template, it does not advertise PKCE (Entra supports it) and its
+token service refuses the `resource` parameter; Google and Box spell their issuer with and without a
+trailing slash; Zoom takes its client secret only in a Basic header; Google's servers answer without a
+sign-in until a tool is called, so their cards sign in first.
 
 ## Who can do what
 
@@ -170,6 +305,30 @@ for it.
 
 Your Google sign-in is kept encrypted on the server for you alone. It never reaches your browser,
 another person, an agent's prompt or a log.
+
+## Use your tools to personalize (About you)
+
+Profile › About you › **Use your tools to personalize** lists the tools you connected that Slatebox can
+read to get to know your work (the *Personalize* column above). Each has its own switch, **Use <tool>
+to personalize**, off until you turn it on. Slatebox reads nothing from a tool whose switch is off, or
+while personalization is off.
+
+With a switch on, **Look around in <tool>** reads a small sample, such as your profile, your projects,
+your recent issues or channels: at most three lookups, each a tool you allowed that only looks things
+up (never one that changes anything, whatever you allowed), each answer capped. The agent turns the
+sample into a few facts (projects, tools, teams, work and topics) and shows them as chips: **Keep** or
+**Skip** each. Nothing is kept until you choose Keep. A kept fact says *From <tool>*; turning the
+switch off stops Slatebox using it, and you can edit, hide or remove it like any fact.
+
+- What a tool's server answered is outside data: it is quarantined, sent to the model wrapped as
+  data, and never followed as instructions. Nothing it said is stored; only the facts you keep are.
+- The look is metered like any other agent request (feature `profile.sources`). Administrators bind
+  or turn off its model in /admin/ai (part *Learning from your tools*, which follows the conversation
+  until bound) and edit its prompts there (`profile.sources.facts`, `.sample`, `.tool`, `.retry`).
+- Which lookups a card makes is its recipe's `lookAround` (fixed steps, at most three, no planner),
+  edited in /admin/ai › Agent gallery like the rest of its recipe.
+- Methods: `profile.sources.list`, `profile.sources.read`, `profile.sources.keep`, for the signed-in
+  person in the app only (no token reads your tools for personalization).
 
 ## For agents and scripts (exec, API, MCP)
 

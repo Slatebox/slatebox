@@ -11,8 +11,8 @@ export const LIBRARY_CATEGORIES = Object.freeze(['plan', 'decide', 'meetings', '
 export const CATEGORY_LABELS = Object.freeze({ plan: 'Plan', decide: 'Decide', meetings: 'Meetings', track: 'Track', map: 'Map', make: 'Make & print' })
 export const KIND_LABELS = Object.freeze({ component: 'smart component', slate: 'slate', presentation: 'presentation', integration: 'integration' })
 // An integration's categories: the agent gallery's chips (enterprise/common/gallery.mjs GROUPS, same ids and words).
-export const INTEGRATION_CATEGORIES = Object.freeze(['work', 'business', 'research', 'web'])
-export const INTEGRATION_CATEGORY_LABELS = Object.freeze({ work: 'Work', business: 'Business', research: 'Research', web: 'Web and facts' })
+export const INTEGRATION_CATEGORIES = Object.freeze(['work', 'workspace', 'dev', 'design', 'business', 'research', 'web'])
+export const INTEGRATION_CATEGORY_LABELS = Object.freeze({ work: 'Work', workspace: 'Docs, chat and meetings', dev: 'Developer tools', design: 'Design', business: 'Business', research: 'Research', web: 'Web and facts' })
 // How a suggested integration signs people in, as its author says (the reviewer's check reads the server itself).
 export const INTEGRATION_AUTH = Object.freeze(['none', 'oauth', 'key'])
 export const INTEGRATION_AUTH_LABELS = Object.freeze({ none: 'No sign-in', oauth: 'Sign in on its own page (OAuth)', key: 'API key or token' })
