@@ -22,7 +22,10 @@ export const SIGNATURE_FORMAT = 'sbrel1'
 // (node scripts/release-manifest.mjs keygen --id slatebox-rel-2026-11) and adds its public half
 // here in a release commit. Until then every signed document is refused ("no release key"), so
 // no install can be talked into an update by anyone.
-export const RELEASE_KEYS = Object.freeze({})
+export const RELEASE_KEYS = Object.freeze({
+  // The release key (2026-11). Its offline backup, slatebox-rel-2026-11-backup, is added here only to rotate or recover.
+  'slatebox-rel-2026-11': 'MCowBQYDK2VwAyEAnunrwCJrZT6LNy6nSVLw5qFGdXudqJ7gTyi8oTA3Bqk=',
+})
 
 // Test builds (and only test builds) add keys as files in this folder: one JSON object
 // { "<key id>": "<SPKI DER, base64>" } per file. A release image never has the folder; the image
