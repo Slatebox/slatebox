@@ -124,8 +124,9 @@ Meteor.methods({
     // `canvas` is what the page draws as the preview: what Keep would add, where it would add it.
     return {id,mode:draft.mode,format:draft.format || 'map',provider:(freeform ? drafted : generated && kind!=='board')?'ai':'direct',canvas:previewCanvasOf(draft),labels:draft.workshop.lanes.map(l=>l.label),
       ...(kind==='board' && {said:businessBoardSaid(draft.workshop)}),
-      // A described smart component: what was made, and how it behaves (its rulebook's lines).
-      ...(freeform && {said:builderSaid(draft.workshop,{drafted}),title:draft.workshop.title,rules:draft.workshop.behaviour ? rulebook().lines(draft.workshop) : []}),
+      // A described smart component: what was made, and how it behaves (its rulebook's lines: a drafted board's lane
+      // limits too, which it carries as capacities, not rules).
+      ...(freeform && {said:builderSaid(draft.workshop,{drafted}),title:draft.workshop.title,rules:rulebook().lines(draft.workshop)}),
       ...(draft.replace && {replace:true}), ...(draft.beside && {beside:true,title:draft.workshop.title}),
       // A library entry: which one, and how it behaves (the lines of its "How this board behaves" note).
       ...(draft.component && {component:draft.component,title:draft.workshop.title,rules:draft.workshop.behaviour ? rulebook().lines(draft.workshop) : []}),

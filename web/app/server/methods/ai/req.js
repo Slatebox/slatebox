@@ -385,7 +385,7 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
       }
     }
 
-    const normalized = normalizeProviderResponse({ provider, response: response || {} })
+    const normalized = normalizeProviderResponse({ provider, response: response || {}, tools: aiOpts.functions || [] })
     const { message, toolCall, usage } = normalized
     if (toolCall) calledTool = true
     const validationError = aiOpts.validateResponse?.({

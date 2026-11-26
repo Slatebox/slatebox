@@ -18,7 +18,7 @@ import { constraintTool, constraintInstructions } from './workshop-constraint-dr
 import { releasePlanFromDraft, releaseInstructions, releaseDraftTool } from './workshop-release-draft.mjs'
 import { conceptMapFromDraft, mapInstructions, mapDraftTool } from './workshop-map-draft.mjs'
 import { promptText } from '../ai-control/prompts/index.mjs'
-import { authorTool } from './workshop-lane-draft.mjs'
+import { authorTool, laneDraftCheck, parseLaneDraft } from './workshop-lane-draft.mjs'
 import { slateSaveCore, SlateEvents } from '../slate-save'
 import { readMoveLog, timeInLane, waitedLine } from '../workshop-move-log.mjs'
 import { MAIN_BOARD, boardIdPattern, slateAsBoard } from '../../imports/api/common/slate-boards.mjs'
@@ -155,7 +155,7 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
     'release-plan': () => ({ tool: releaseDraftTool(), parse: releasePlanFromDraft, instructions: releaseInstructions(), error: 'invalidReleasePlanDraft' }),
   }[format]?.()
   const tool = special?.tool || { ...authorTool, description: promptText('tool.draft_workshop') }
-  const parse = special?.parse || validateWorkshop
+  const parse = special?.parse || parseLaneDraft
   const plan = await req({
     feature: 'workshop',
     prompts: [{ role: 'user', content: base ? JSON.stringify({ currentWorkshop: base, requestedChange: brief.trim() }) : brief.trim() }],
@@ -163,16 +163,17 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
     functions: [tool], function_call: { name: tool.name },
     maxResponseValidationRetries: 1,
     validateResponse({ toolCall }) {
+      // a lane board: its slips repaired, and a retry that names what was wrong (workshop-lane-draft.mjs)
+      if (!special) return laneDraftCheck(toolCall, { tool, parse })
       try {
         if (toolCall?.name !== tool.name) throw new Error('Call the requested tool.')
         parse(toolCall.arguments)
         return null
       } catch (error) {
-        if (special) return {
+        return {
           code: special.error,
           retryPrompt: promptText('workshop.draft.repair', { instructions: special.instructions, problem: String(error.message) }),
         }
-        return { code: 'invalidWorkshopDraft', retryPrompt: promptText('workshop.draft.retry') }
       }
     },
   })

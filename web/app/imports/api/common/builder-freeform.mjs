@@ -23,8 +23,12 @@ export function builderDescription(board, message) {
   // A question is asked of the library ("what can I build?"), not built.
   if (/\?$/.test(text)) return false
   if (nativeRequestKind(text) !== 'draw' || noteRequest(text) || noteRequestProblem(text)) return false
-  return text.split(' ').length >= 3
+  // Three words, or, in a script written without spaces (Japanese, Chinese, Korean, Thai), six characters:
+  // "試験勉強の計画ボード：未着手、学習中、復習、完了" is a description, not a word or two.
+  return text.split(' ').length >= 3 || (UNSPACED.test(text) && [...text.replace(/\s/g, '')].length >= 6)
 }
+
+const UNSPACED = /[\u0E00-\u0E7F\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF]/
 
 /**
  * What the drafting agent is given: the person's words as the brief, framed as a component whose cards are the

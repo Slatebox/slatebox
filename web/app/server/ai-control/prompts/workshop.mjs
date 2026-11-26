@@ -91,7 +91,9 @@ export default definePrompts([
     kind: 'retry',
     slot: 'retry',
     title: 'Drafting a lane board: asking again for a complete draft',
-    body: "Return a complete draft_workshop tool call. Include version 1, a title, 2–5 lanes with unique IDs and labels, and cards with unique IDs, labels and an existing laneId. Omit optional properties entirely when unused. Each signal needs a unique ID, an existing card and lane, and two nonempty outcome messages. Each lane capacity must fit its starting cards. Each allowedLaneIds array must include its card’s starting lane.",
+    // problem: what the board's check found wrong with the last answer (validateWorkshop's sentence)
+    body: "{{#problem}}The last draft could not be used: {{problem}} {{/problem}}Return a complete draft_workshop tool call. Include version 1, a title, 2–5 lanes with unique IDs and labels, and cards with unique IDs, labels and an existing laneId. Omit optional properties entirely when unused. Each signal needs a unique ID, an existing card and lane, and two nonempty outcome messages. Each lane capacity must fit its starting cards. Each allowedLaneIds array must include its card’s starting lane.",
+    variables: { problem: server('string', false) },
   },
   {
     id: 'workshop.draft.repair',

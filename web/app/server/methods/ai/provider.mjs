@@ -5,6 +5,7 @@ import {
   toDeepInfraToolChoice,
   toDeepInfraTools,
 } from './deepinfra.mjs'
+import { textToolCall } from './text-tool-call.mjs'
 
 export const AI_PROVIDERS = Object.freeze({
   anthropic: 'anthropic',
@@ -218,12 +219,15 @@ export function normalizeProviderUsage(provider, response = {}) {
   }
 }
 
-export function normalizeProviderResponse({ provider, response = {} } = {}) {
+// tools: the tools the request offered ({ name, parameters }): a call to one of them spelled out in the message
+// text, when the answer has no tool_calls, is read as that call (text-tool-call.mjs).
+export function normalizeProviderResponse({ provider, response = {}, tools = [] } = {}) {
   const message =
     provider === AI_PROVIDERS.anthropic
       ? response
       : response?.choices?.[0]?.message
-  const toolCall = normalizeToolCall(provider, message)
+  const toolCall = normalizeToolCall(provider, message) ||
+    (provider !== AI_PROVIDERS.anthropic ? textToolCall(message?.content, tools) : null)
 
   let jsonCandidate = message?.content || message?.function_call
   if (provider === AI_PROVIDERS.anthropic) jsonCandidate = message

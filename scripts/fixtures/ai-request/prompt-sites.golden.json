@@ -741,15 +741,15 @@
     "retries": [
       {
         "code": "invalidWorkshopDraft",
-        "retryPrompt": "Return a complete draft_workshop tool call. Include version 1, a title, 2–5 lanes with unique IDs and labels, and cards with unique IDs, labels and an existing laneId. Omit optional properties entirely when unused. Each signal needs a unique ID, an existing card and lane, and two nonempty outcome messages. Each lane capacity must fit its starting cards. Each allowedLaneIds array must include its card’s starting lane."
+        "retryPrompt": "The last draft could not be used: Call the requested tool. Return a complete draft_workshop tool call. Include version 1, a title, 2–5 lanes with unique IDs and labels, and cards with unique IDs, labels and an existing laneId. Omit optional properties entirely when unused. Each signal needs a unique ID, an existing card and lane, and two nonempty outcome messages. Each lane capacity must fit its starting cards. Each allowedLaneIds array must include its card’s starting lane."
       },
       {
         "code": "invalidWorkshopDraft",
-        "retryPrompt": "Return a complete draft_workshop tool call. Include version 1, a title, 2–5 lanes with unique IDs and labels, and cards with unique IDs, labels and an existing laneId. Omit optional properties entirely when unused. Each signal needs a unique ID, an existing card and lane, and two nonempty outcome messages. Each lane capacity must fit its starting cards. Each allowedLaneIds array must include its card’s starting lane."
+        "retryPrompt": "The last draft could not be used: Call the requested tool. Return a complete draft_workshop tool call. Include version 1, a title, 2–5 lanes with unique IDs and labels, and cards with unique IDs, labels and an existing laneId. Omit optional properties entirely when unused. Each signal needs a unique ID, an existing card and lane, and two nonempty outcome messages. Each lane capacity must fit its starting cards. Each allowedLaneIds array must include its card’s starting lane."
       },
       {
         "code": "invalidWorkshopDraft",
-        "retryPrompt": "Return a complete draft_workshop tool call. Include version 1, a title, 2–5 lanes with unique IDs and labels, and cards with unique IDs, labels and an existing laneId. Omit optional properties entirely when unused. Each signal needs a unique ID, an existing card and lane, and two nonempty outcome messages. Each lane capacity must fit its starting cards. Each allowedLaneIds array must include its card’s starting lane."
+        "retryPrompt": "The last draft could not be used: The draft_workshop call came with no board: send the whole board in its arguments. Return a complete draft_workshop tool call. Include version 1, a title, 2–5 lanes with unique IDs and labels, and cards with unique IDs, labels and an existing laneId. Omit optional properties entirely when unused. Each signal needs a unique ID, an existing card and lane, and two nonempty outcome messages. Each lane capacity must fit its starting cards. Each allowedLaneIds array must include its card’s starting lane."
       }
     ]
   },
