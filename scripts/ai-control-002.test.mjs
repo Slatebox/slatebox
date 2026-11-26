@@ -10,6 +10,7 @@ import { AI_CONTROL_002, importSettingsKeys, oldRoutes, planCatalogue, runAICont
 import { resolveModel } from '../web/app/server/ai-control/resolve.mjs'
 import { seal } from '../web/app/server/metering/vault.mjs'
 import { BINDABLE_SURFACES } from '../web/app/server/ai-control/bindings.mjs'
+import { isVoiceSurface } from '../web/app/server/ai-control/catalogue.mjs'
 
 const META = 'sk-test-meta-1111111111111111111111aaaa'
 const DEEPINFRA = 'test-deepinfra-5555555555555555eeee'
@@ -90,7 +91,9 @@ test('a fresh self-hosted server with no keys gets the Meta provider, Ember and 
   const { w, out } = await migrated({ public: { env: 'selfhost' } }, {})
   assert.equal(out.done, true)
   assert.deepEqual(Object.keys(w.snapshot().bindings), ['default'])
-  for (const surface of BINDABLE_SURFACES.filter((s) => s !== 'default' && s !== 'images')) assert.equal(resolveModel(w.snapshot(), { surface }).route.model, 'muse-ember-1.0', surface)
+  for (const surface of BINDABLE_SURFACES.filter((s) => s !== 'default' && s !== 'images' && !isVoiceSurface(s))) assert.equal(resolveModel(w.snapshot(), { surface }).route.model, 'muse-ember-1.0', surface)
+  // the voice parts (2026-11-26) never fall to a text model: with nothing bound they have no server model
+  for (const surface of BINDABLE_SURFACES.filter(isVoiceSurface)) assert.deepEqual([resolveModel(w.snapshot(), { surface }).source, resolveModel(w.snapshot(), { surface }).route], ['unset', null], surface)
 })
 
 test('the self-check: when the plan would change an answer, nothing is written and the marker stays unset', () => {
@@ -142,9 +145,11 @@ test('a self-hosted server set up with one model for everything (SLATEBOX_AI_URL
   const snap = w.snapshot()
   assert.equal(snap.bindings.default.model, 'server:llama-3.3-70b')
   assert.deepEqual(Object.keys(snap.bindings), ['default'], 'no binding per part')
-  for (const surface of BINDABLE_SURFACES.filter((s) => s !== 'default' && s !== 'images')) {
+  for (const surface of BINDABLE_SURFACES.filter((s) => s !== 'default' && s !== 'images' && !isVoiceSurface(s))) {
     assert.equal(resolveModel(snap, { surface }).route.model, 'llama-3.3-70b', surface)
   }
+  // one text model for everything does not talk: the voice parts stay unset, never that model
+  for (const surface of BINDABLE_SURFACES.filter(isVoiceSurface)) assert.equal(resolveModel(snap, { surface }).source, 'unset', surface)
   // a chat model cannot draw: generated pictures keep the built-in image service (before, they failed
   // with "cannot make images"; the self-check no longer blocks the whole move on that)
   assert.equal(resolveModel(snap, { surface: 'images' }).source, 'stability')

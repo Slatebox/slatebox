@@ -38,6 +38,7 @@ const serverKeyless = (type) => {
 }
 const SERVER_KEYLESS = (label) => `${label} is one of this server's own models, so it cannot be your own connection. Leave the feature on this server's model instead.`
 const FIX_SERVER = 'An administrator chooses another model for it in Admin → AI control.'
+const NO_SERVER_MODEL = 'No model is set for this part of Slatebox. An administrator chooses one in Admin → AI control.'
 
 /**
  * deps: {
@@ -198,7 +199,9 @@ export function createAISettings({
       if (off) label = control.disabledMessage || 'Turned off by your administrator'
       else if (route?.aux) label = route.label
       else if (route && !route.error) label = serverLabel(route, admin)
-      effective[s.id] = { ref: 'builtin', scope: 'builtin', own: false, label, ...(route?.error && { gap: route.error }) }
+      // a voice part with no voice model bound has no server model (resolve.mjs source unset)
+      const unset = !off && control && !route
+      effective[s.id] = { ref: 'builtin', scope: 'builtin', own: false, label, ...(route?.error && { gap: route.error }), ...(unset && { gap: NO_SERVER_MODEL }) }
     }
     const shown = (list) => list.map((c) => publicConnection(c))
     return {
@@ -460,7 +463,7 @@ export function createAISettings({
   // The server's route (AI control) as a connection with the provider's active key.
   async function serverRoute({ control, user, feature, request, forRequest = false }) {
     const route = control?.route
-    if (!route) return { ref: 'builtin', scope: 'server', connection: null, own: false, feature, rules: null, error: 'No model is set for this part of Slatebox. An administrator chooses one in Admin → AI control.' }
+    if (!route) return { ref: 'builtin', scope: 'server', connection: null, own: false, feature, rules: null, error: NO_SERVER_MODEL }
     if (route.error) return { ref: 'builtin', scope: 'server', connection: null, own: false, feature, rules: null, error: route.error }
     // generated pictures with nothing set: the built-in image service (stabilityai.js)
     if (route.aux) return { ref: 'builtin', scope: 'builtin', connection: null, own: false, feature, rules: null, source: control.source }
@@ -474,6 +477,8 @@ export function createAISettings({
     const connection = {
       name: route.provider, type: route.provider, baseUrl: route.baseUrl, model: route.model, apiKey: key.apiKey,
       capabilities: route.capabilities || {}, toolChoice: route.toolChoice, ...(route.maxOutput && { maxTokens: route.maxOutput }),
+      // a voice part's route: its protocol, the binding's voice and the model's transcription model (server/voice)
+      ...(route.voice !== undefined && { protocol: route.protocol, voice: route.voice, ...(route.transcriptionModel && { transcriptionModel: route.transcriptionModel }), prices: route.prices ?? null }),
     }
     const rules = rulesFor('server')
     let error = null

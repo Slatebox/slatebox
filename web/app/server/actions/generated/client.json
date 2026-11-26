@@ -634,7 +634,7 @@
       "index": "ai.bindings.set({changes,note?}): Set AI bindings",
       "toolset": "admin",
       "types": [],
-      "dts": "declare namespace slatebox.ai.bindings {\n  /** Set AI bindings. Sets which model each named part of Slatebox uses: use model (a model id from the Models list, <provider>:<model>), default (the default model), or off (that part answers \"turned off by your administrator\"). A model that cannot do what the part needs is refused. Only the rows that change are written, each with its own line in the change history; note is optional. Every server picks it up within seconds. Administrators only. @scope ai:admin @confirm @idempotent */\n  function set(input: {\n    /** (1–17 items) */\n    changes: Array<{\n      /** The part of Slatebox, for example shape or agent.slatebox; default is everything not set. */\n      surface: \"default\" | \"chat\" | \"chat.route\" | \"generation\" | \"presentation\" | \"vision\" | \"images\" | \"shape\" | \"workshop\" | \"workshop.draft\" | \"canvas\" | \"agent.slatebox\" | \"library\" | \"connectors\" | \"interview\" | \"personal.suggest\" | \"eval\";\n      use: \"default\" | \"model\" | \"off\";\n      /** With use model: <provider>:<model>. (at most 260 characters) */\n      model?: string;\n    }>;\n    /** Optional, kept in the change history. (at most 500 characters) */\n    note?: string;\n  }): Promise<({\n    changed?: string[];\n    generation?: number | null;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.ai.bindings {\n  /** Set AI bindings. Sets which model each named part of Slatebox uses: use model (a model id from the Models list, <provider>:<model>), default (the default model), or off (that part answers \"turned off by your administrator\"). A model that cannot do what the part needs is refused. Only the rows that change are written, each with its own line in the change history; note is optional. Every server picks it up within seconds. Administrators only. @scope ai:admin @confirm @idempotent */\n  function set(input: {\n    /** (1–20 items) */\n    changes: Array<{\n      /** The part of Slatebox, for example shape or agent.slatebox; default is everything not set. */\n      surface: \"default\" | \"chat\" | \"chat.route\" | \"generation\" | \"presentation\" | \"vision\" | \"images\" | \"shape\" | \"workshop\" | \"workshop.draft\" | \"canvas\" | \"agent.slatebox\" | \"library\" | \"connectors\" | \"interview\" | \"personal.suggest\" | \"voice\" | \"voice.chat\" | \"voice.interview\" | \"eval\";\n      use: \"default\" | \"model\" | \"off\";\n      /** With use model: <provider>:<model>. (at most 260 characters) */\n      model?: string;\n      /** A voice part with use model: one of the model's voices. Left out: the provider's own default voice. */\n      voice?: string;\n    }>;\n    /** Optional, kept in the change history. (at most 500 characters) */\n    note?: string;\n  }): Promise<({\n    changed?: string[];\n    generation?: number | null;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "set_ai_bindings",
         "title": "Set AI bindings",
@@ -645,7 +645,7 @@
             "changes": {
               "type": "array",
               "minItems": 1,
-              "maxItems": 17,
+              "maxItems": 20,
               "items": {
                 "type": "object",
                 "properties": {
@@ -668,6 +668,9 @@
                       "connectors",
                       "interview",
                       "personal.suggest",
+                      "voice",
+                      "voice.chat",
+                      "voice.interview",
                       "eval"
                     ],
                     "description": "The part of Slatebox, for example shape or agent.slatebox; default is everything not set."
@@ -684,6 +687,11 @@
                     "type": "string",
                     "maxLength": 260,
                     "description": "With use model: <provider>:<model>."
+                  },
+                  "voice": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+                    "description": "A voice part with use model: one of the model's voices. Left out: the provider's own default voice."
                   }
                 },
                 "required": [
@@ -751,7 +759,7 @@
       },
       "index": "ai.check({level?,name?,connection?}): Test AI",
       "types": [],
-      "dts": "declare namespace slatebox.ai {\n  /** Test AI. Tests your own or your team's saved connection (name) or one not yet saved (connection): whether Slatebox can reach it, whether it accepts the key, which models it lists, whether the model answers and whether it calls tools (which conversation, drafts and presentations need). Saves nothing. A saved key is only sent to the address it was saved for. A token needs ai:admin as well for level team. The server's keys are tested with ai.keys.test. On Slatebox Cloud an address must be public https; on a self-hosted Slatebox a model on the host is at host.docker.internal, not localhost. @scope ai:settings @openWorld @idempotent */\n  function check(input: {\n    /** me (yours) or team (team admins). */\n    level?: \"me\" | \"team\";\n    name?: string;\n    connection?: {\n      /** Your name for it, for example desk-model. */\n      name: string;\n      /** The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added. */\n      type: string;\n      /** For openai-compatible: the address up to /v1, for example http://host.docker.internal:11434/v1. (at most 500 characters) */\n      baseUrl?: string;\n      /** The model name the endpoint serves. (at most 200 characters) */\n      model?: string;\n      /** Stored encrypted and never shown again. Leave it out to keep the saved key; send an empty string to remove it. (at most 400 characters) */\n      apiKey?: string;\n      /** What the model can do, where you know it. Unset means try it; making images needs images: true. */\n      capabilities?: {\n        tools?: boolean;\n        vision?: boolean;\n        images?: boolean;\n      };\n      /** (256 to 200000) */\n      maxTokens?: number;\n      /** How the endpoint takes a forced tool call: named (the function by name), required (any tool, for an endpoint with no named form) or auto (the model decides, for an endpoint that refuses the others). */\n      toolChoice?: \"auto\" | \"named\" | \"required\";\n    };\n  }): Promise<({\n    ok: boolean;\n    reachable: boolean;\n    models?: string[] | null;\n    modelListed?: boolean | null;\n    chat?: \"ok\" | \"failed\";\n    tools: \"yes\" | \"no\" | \"unknown\";\n    message: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.ai {\n  /** Test AI. Tests your own or your team's saved connection (name) or one not yet saved (connection): whether Slatebox can reach it, whether it accepts the key, which models it lists, whether the model answers and whether it calls tools (which conversation, drafts and presentations need). Saves nothing. A saved key is only sent to the address it was saved for. A token needs ai:admin as well for level team. The server's keys are tested with ai.keys.test. On Slatebox Cloud an address must be public https; on a self-hosted Slatebox a model on the host is at host.docker.internal, not localhost. @scope ai:settings @openWorld @idempotent */\n  function check(input: {\n    /** me (yours) or team (team admins). */\n    level?: \"me\" | \"team\";\n    name?: string;\n    connection?: {\n      /** Your name for it, for example desk-model. */\n      name: string;\n      /** The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, and the voice providers openai-realtime and gemini-live), or one an administrator added. */\n      type: string;\n      /** For openai-compatible: the address up to /v1, for example http://host.docker.internal:11434/v1. (at most 500 characters) */\n      baseUrl?: string;\n      /** The model name the endpoint serves. (at most 200 characters) */\n      model?: string;\n      /** Stored encrypted and never shown again. Leave it out to keep the saved key; send an empty string to remove it. (at most 400 characters) */\n      apiKey?: string;\n      /** What the model can do, where you know it. Unset means try it; making images needs images: true. */\n      capabilities?: {\n        tools?: boolean;\n        vision?: boolean;\n        images?: boolean;\n      };\n      /** (256 to 200000) */\n      maxTokens?: number;\n      /** How the endpoint takes a forced tool call: named (the function by name), required (any tool, for an endpoint with no named form) or auto (the model decides, for an endpoint that refuses the others). */\n      toolChoice?: \"auto\" | \"named\" | \"required\";\n    };\n  }): Promise<({\n    ok: boolean;\n    reachable: boolean;\n    models?: string[] | null;\n    modelListed?: boolean | null;\n    chat?: \"ok\" | \"failed\";\n    tools: \"yes\" | \"no\" | \"unknown\";\n    message: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "check_ai_connection",
         "title": "Test a model connection",
@@ -782,7 +790,7 @@
                 "type": {
                   "type": "string",
                   "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
-                  "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added."
+                  "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, and the voice providers openai-realtime and gemini-live), or one an administrator added."
                 },
                 "baseUrl": {
                   "type": "string",
@@ -1031,7 +1039,7 @@
       "index": "ai.control.reset({target,surface?,promptId?,reason}): Reset AI control",
       "toolset": "admin",
       "types": [],
-      "dts": "declare namespace slatebox.ai.control {\n  /** Reset AI control. Returns AI configuration to its defaults. target binding removes one part's choice (surface), so it uses the default model again; bindings removes every part's choice and the default's, so the built-in default (Meta Muse Ember) answers everything; prompt returns one prompt (promptId) to its built-in text, prompts every prompt (their versions stay); all does every one. Providers, models and keys stay. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only. @scope ai:admin @destructive @confirm @idempotent */\n  function reset(input: {\n    target: \"binding\" | \"bindings\" | \"prompt\" | \"prompts\" | \"all\";\n    /** For target binding: the part of Slatebox. */\n    surface?: \"default\" | \"chat\" | \"chat.route\" | \"generation\" | \"presentation\" | \"vision\" | \"images\" | \"shape\" | \"workshop\" | \"workshop.draft\" | \"canvas\" | \"agent.slatebox\" | \"library\" | \"connectors\" | \"interview\" | \"personal.suggest\" | \"eval\";\n    /** For target prompt: the prompt. */\n    promptId?: \"shape.system\" | \"shape.user\" | \"shape.retry\" | \"tool.propose_shapes\" | \"workshop.map.system\" | \"workshop.lane.system\" | \"workshop.chat.retry\" | \"tool.propose_map_edits\" | \"tool.propose_workshop_edits\" | \"workshop.draft.system\" | \"workshop.draft.component\" | \"workshop.draft.grid\" | \"workshop.draft.map\" | \"workshop.draft.release\" | \"workshop.draft.rules\" | \"workshop.draft.retry\" | \"workshop.draft.repair\" | \"tool.draft_workshop\" | \"tool.draft_component\" | \"tool.draft_grid\" | \"tool.draft_concept_map\" | \"tool.draft_release_plan\" | \"tool.revise_workshop_rules\" | \"exec.chat.system\" | \"exec.chat.fix\" | \"exec.chat.retry\" | \"agent.request.notes\" | \"presentation.segments\" | \"presentation.art\" | \"presentation.system\" | \"presentation.system.dynamic\" | \"presentation.system.slides\" | \"presentation.system.template\" | \"presentation.slate\" | \"presentation.user\" | \"presentation.brief\" | \"presentation.refine\" | \"tool.create-presentation\" | \"tool.create-presentation.image-query\" | \"tool.create-presentation.image-prompt\" | \"tool.create-presentation.image-why\" | \"library.refine.system\" | \"library.refine.request\" | \"library.refine.retry\" | \"tool.propose_library_refinement\" | \"connectors.plan.system\" | \"connectors.plan.writes\" | \"connectors.plan.next\" | \"connectors.plan.tool\" | \"connectors.layout.system\" | \"connectors.layout.budget\" | \"connectors.layout.tool\" | \"connectors.recipe.github\" | \"connectors.recipe.linear\" | \"connectors.recipe.huggingface\" | \"connectors.recipe.deepwiki\" | \"connectors.recipe.context7\" | \"connectors.recipe.wolfram\" | \"connectors.recipe.firecrawl\" | \"connectors.recipe.exa\" | \"interview.system\" | \"interview.opening\" | \"interview.retry\" | \"tool.remember\" | \"personal.suggest.system\" | \"personal.suggest.ask\" | \"personal.suggest.retry\" | \"tool.suggest_ideas\" | \"workshop.draft.personal\";\n    /** (1–500 characters) */\n    reason: string;\n  }): Promise<({\n    target?: string;\n    removed?: string[];\n    prompts?: string[];\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.ai.control {\n  /** Reset AI control. Returns AI configuration to its defaults. target binding removes one part's choice (surface), so it uses the default model again; bindings removes every part's choice and the default's, so the built-in default (Meta Muse Ember) answers everything; prompt returns one prompt (promptId) to its built-in text, prompts every prompt (their versions stay); all does every one. Providers, models and keys stay. AI turned off for everyone stays off. From a token, a reset that would switch back on a part an administrator turned off is refused. Needs a reason, which the audit trail keeps. Administrators only. @scope ai:admin @destructive @confirm @idempotent */\n  function reset(input: {\n    target: \"binding\" | \"bindings\" | \"prompt\" | \"prompts\" | \"all\";\n    /** For target binding: the part of Slatebox. */\n    surface?: \"default\" | \"chat\" | \"chat.route\" | \"generation\" | \"presentation\" | \"vision\" | \"images\" | \"shape\" | \"workshop\" | \"workshop.draft\" | \"canvas\" | \"agent.slatebox\" | \"library\" | \"connectors\" | \"interview\" | \"personal.suggest\" | \"voice\" | \"voice.chat\" | \"voice.interview\" | \"eval\";\n    /** For target prompt: the prompt. */\n    promptId?: \"shape.system\" | \"shape.user\" | \"shape.retry\" | \"tool.propose_shapes\" | \"workshop.map.system\" | \"workshop.lane.system\" | \"workshop.chat.retry\" | \"tool.propose_map_edits\" | \"tool.propose_workshop_edits\" | \"workshop.draft.system\" | \"workshop.draft.component\" | \"workshop.draft.grid\" | \"workshop.draft.map\" | \"workshop.draft.release\" | \"workshop.draft.rules\" | \"workshop.draft.retry\" | \"workshop.draft.repair\" | \"tool.draft_workshop\" | \"tool.draft_component\" | \"tool.draft_grid\" | \"tool.draft_concept_map\" | \"tool.draft_release_plan\" | \"tool.revise_workshop_rules\" | \"exec.chat.system\" | \"exec.chat.fix\" | \"exec.chat.retry\" | \"agent.request.notes\" | \"presentation.segments\" | \"presentation.art\" | \"presentation.system\" | \"presentation.system.dynamic\" | \"presentation.system.slides\" | \"presentation.system.template\" | \"presentation.slate\" | \"presentation.user\" | \"presentation.brief\" | \"presentation.refine\" | \"tool.create-presentation\" | \"tool.create-presentation.image-query\" | \"tool.create-presentation.image-prompt\" | \"tool.create-presentation.image-why\" | \"library.refine.system\" | \"library.refine.request\" | \"library.refine.retry\" | \"tool.propose_library_refinement\" | \"connectors.plan.system\" | \"connectors.plan.writes\" | \"connectors.plan.next\" | \"connectors.plan.tool\" | \"connectors.layout.system\" | \"connectors.layout.budget\" | \"connectors.layout.tool\" | \"connectors.recipe.github\" | \"connectors.recipe.linear\" | \"connectors.recipe.huggingface\" | \"connectors.recipe.deepwiki\" | \"connectors.recipe.context7\" | \"connectors.recipe.wolfram\" | \"connectors.recipe.firecrawl\" | \"connectors.recipe.exa\" | \"interview.system\" | \"interview.opening\" | \"interview.retry\" | \"tool.remember\" | \"personal.suggest.system\" | \"personal.suggest.ask\" | \"personal.suggest.retry\" | \"tool.suggest_ideas\" | \"workshop.draft.personal\" | \"voice.chat.system\" | \"voice.chat.opening\" | \"voice.interview.system\" | \"voice.interview.opening\" | \"tool.send_to_slatebox\" | \"voice.tool-failed\" | \"voice.answer\" | \"voice.answer.none\" | \"voice.answer.discarded\" | \"voice.answer.unconfirmed\" | \"voice.answer.empty\" | \"voice.answer.busy\" | \"voice.late-answer\" | \"voice.resume\";\n    /** (1–500 characters) */\n    reason: string;\n  }): Promise<({\n    target?: string;\n    removed?: string[];\n    prompts?: string[];\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "reset_ai_control",
         "title": "Reset AI control",
@@ -1068,6 +1076,9 @@
                 "connectors",
                 "interview",
                 "personal.suggest",
+                "voice",
+                "voice.chat",
+                "voice.interview",
                 "eval"
               ],
               "description": "For target binding: the part of Slatebox."
@@ -1143,7 +1154,21 @@
                 "personal.suggest.ask",
                 "personal.suggest.retry",
                 "tool.suggest_ideas",
-                "workshop.draft.personal"
+                "workshop.draft.personal",
+                "voice.chat.system",
+                "voice.chat.opening",
+                "voice.interview.system",
+                "voice.interview.opening",
+                "tool.send_to_slatebox",
+                "voice.tool-failed",
+                "voice.answer",
+                "voice.answer.none",
+                "voice.answer.discarded",
+                "voice.answer.unconfirmed",
+                "voice.answer.empty",
+                "voice.answer.busy",
+                "voice.late-answer",
+                "voice.resume"
               ],
               "description": "For target prompt: the prompt."
             },
@@ -1431,7 +1456,7 @@
       "index": "ai.models.save({models,reason?}): Save AI models",
       "toolset": "admin",
       "types": [],
-      "dts": "declare namespace slatebox.ai.models {\n  /** Save AI models. Adds or changes models: the provider that serves each, its id and name, what it can do (tools, vision, json, images, reasoning), its longest answer, and its prices in dollars per million input and output tokens (or per image). Metering charges these prices from the next call; a model with no price is charged at the dearest known rate and shown as unpriced. status disabled keeps a model out of the parts of Slatebox. Administrators only. @scope ai:admin @confirm @idempotent */\n  function save(input: {\n    /** (1–50 items) */\n    models: Array<{\n      /** The provider that serves it (ai.control.get lists them). */\n      provider: string;\n      /** The id the provider serves, for example muse-ember-1.0. (1–200 characters) */\n      model: string;\n      /** The name shown, for example Muse Ember. (at most 80 characters) */\n      label?: string | null;\n      /** What the model can do. A part of Slatebox refuses a model whose flags miss what it needs. */\n      capabilities?: {\n        tools?: boolean;\n        vision?: boolean;\n        json?: boolean;\n        images?: boolean;\n        reasoning?: boolean;\n      };\n      /** (at least 1) */\n      maxOutput?: number | null;\n      prices?: {\n        /** Dollars per million input tokens. (at least 0) */\n        inputPerM?: number | null;\n        /** Dollars per million output tokens. (at least 0) */\n        outputPerM?: number | null;\n        /** Dollars per generated image. (at least 0) */\n        imageEach?: number | null;\n        currency?: \"USD\";\n      } | null;\n      status?: \"enabled\" | \"disabled\";\n    }>;\n    /** Why, for the change history. (1–500 characters) */\n    reason?: string;\n  }): Promise<({\n    models?: Array<Record<string, unknown>>;\n    generation?: number | null;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.ai.models {\n  /** Save AI models. Adds or changes models: the provider that serves each, its id and name, what it can do (tools, vision, json, images, reasoning), its longest answer, and its prices in dollars per million input and output tokens (or per image). Metering charges these prices from the next call; a model with no price is charged at the dearest known rate and shown as unpriced. status disabled keeps a model out of the parts of Slatebox. Administrators only. @scope ai:admin @confirm @idempotent */\n  function save(input: {\n    /** (1–50 items) */\n    models: Array<{\n      /** The provider that serves it (ai.control.get lists them). */\n      provider: string;\n      /** The id the provider serves, for example muse-ember-1.0. (1–200 characters) */\n      model: string;\n      /** The name shown, for example Muse Ember. (at most 80 characters) */\n      label?: string | null;\n      /** What the model can do. A part of Slatebox refuses a model whose flags miss what it needs. */\n      capabilities?: {\n        tools?: boolean;\n        vision?: boolean;\n        json?: boolean;\n        images?: boolean;\n        reasoning?: boolean;\n        voice?: boolean;\n      };\n      /** (at least 1) */\n      maxOutput?: number | null;\n      prices?: {\n        /** Dollars per million input tokens. (at least 0) */\n        inputPerM?: number | null;\n        /** Dollars per million output tokens. (at least 0) */\n        outputPerM?: number | null;\n        /** Dollars per generated image. (at least 0) */\n        imageEach?: number | null;\n        /** Voice models: dollars per million tokens of what the person says. (at least 0) */\n        audioInputPerM?: number | null;\n        /** Voice models: dollars per million tokens of what the agent says. (at least 0) */\n        audioOutputPerM?: number | null;\n        /** Voice models: dollars per million cached audio input tokens, where the provider prices them apart. (at least 0) */\n        cachedAudioInputPerM?: number | null;\n        currency?: \"USD\";\n      } | null;\n      /** Voice models: the voices it offers, for a voice part's binding to choose from. (at most 64 items) */\n      voices?: string[];\n      /** Voice models that need one (OpenAI Realtime): the model that writes what the person said. (at most 200 characters) */\n      transcriptionModel?: string | null;\n      status?: \"enabled\" | \"disabled\";\n    }>;\n    /** Why, for the change history. (1–500 characters) */\n    reason?: string;\n  }): Promise<({\n    models?: Array<Record<string, unknown>>;\n    generation?: number | null;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "save_ai_models",
         "title": "Save AI models",
@@ -1482,6 +1507,9 @@
                       },
                       "reasoning": {
                         "type": "boolean"
+                      },
+                      "voice": {
+                        "type": "boolean"
                       }
                     },
                     "additionalProperties": false,
@@ -1524,6 +1552,30 @@
                         "minimum": 0,
                         "description": "Dollars per generated image."
                       },
+                      "audioInputPerM": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "minimum": 0,
+                        "description": "Voice models: dollars per million tokens of what the person says."
+                      },
+                      "audioOutputPerM": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "minimum": 0,
+                        "description": "Voice models: dollars per million tokens of what the agent says."
+                      },
+                      "cachedAudioInputPerM": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "minimum": 0,
+                        "description": "Voice models: dollars per million cached audio input tokens, where the provider prices them apart."
+                      },
                       "currency": {
                         "type": "string",
                         "enum": [
@@ -1532,6 +1584,23 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "voices": {
+                    "type": "array",
+                    "maxItems": 64,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+                    },
+                    "description": "Voice models: the voices it offers, for a voice part's binding to choose from."
+                  },
+                  "transcriptionModel": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200,
+                    "description": "Voice models that need one (OpenAI Realtime): the model that writes what the person said."
                   },
                   "status": {
                     "type": "string",
@@ -1670,7 +1739,7 @@
       "index": "ai.prompts.get({id}): AI prompt",
       "toolset": "admin",
       "types": [],
-      "dts": "declare namespace slatebox.ai.prompts {\n  /** AI prompt. Returns one prompt: the built-in text (version 0), the text served now and where it comes from, every saved version newest first with its author, note and eval results, the values it may use, and the samples a test run can send. Administrators only. @scope ai:admin:read */\n  function get(input: {\n    /** The prompt, for example shape.system. */\n    id: \"shape.system\" | \"shape.user\" | \"shape.retry\" | \"tool.propose_shapes\" | \"workshop.map.system\" | \"workshop.lane.system\" | \"workshop.chat.retry\" | \"tool.propose_map_edits\" | \"tool.propose_workshop_edits\" | \"workshop.draft.system\" | \"workshop.draft.component\" | \"workshop.draft.grid\" | \"workshop.draft.map\" | \"workshop.draft.release\" | \"workshop.draft.rules\" | \"workshop.draft.retry\" | \"workshop.draft.repair\" | \"tool.draft_workshop\" | \"tool.draft_component\" | \"tool.draft_grid\" | \"tool.draft_concept_map\" | \"tool.draft_release_plan\" | \"tool.revise_workshop_rules\" | \"exec.chat.system\" | \"exec.chat.fix\" | \"exec.chat.retry\" | \"agent.request.notes\" | \"presentation.segments\" | \"presentation.art\" | \"presentation.system\" | \"presentation.system.dynamic\" | \"presentation.system.slides\" | \"presentation.system.template\" | \"presentation.slate\" | \"presentation.user\" | \"presentation.brief\" | \"presentation.refine\" | \"tool.create-presentation\" | \"tool.create-presentation.image-query\" | \"tool.create-presentation.image-prompt\" | \"tool.create-presentation.image-why\" | \"library.refine.system\" | \"library.refine.request\" | \"library.refine.retry\" | \"tool.propose_library_refinement\" | \"connectors.plan.system\" | \"connectors.plan.writes\" | \"connectors.plan.next\" | \"connectors.plan.tool\" | \"connectors.layout.system\" | \"connectors.layout.budget\" | \"connectors.layout.tool\" | \"connectors.recipe.github\" | \"connectors.recipe.linear\" | \"connectors.recipe.huggingface\" | \"connectors.recipe.deepwiki\" | \"connectors.recipe.context7\" | \"connectors.recipe.wolfram\" | \"connectors.recipe.firecrawl\" | \"connectors.recipe.exa\" | \"interview.system\" | \"interview.opening\" | \"interview.retry\" | \"tool.remember\" | \"personal.suggest.system\" | \"personal.suggest.ask\" | \"personal.suggest.retry\" | \"tool.suggest_ideas\" | \"workshop.draft.personal\";\n  }): Promise<{\n    id?: string;\n    code?: Record<string, unknown>;\n    live?: Record<string, unknown>;\n    versions?: Array<Record<string, unknown>>;\n    [key: string]: unknown;\n  }>;\n}",
+      "dts": "declare namespace slatebox.ai.prompts {\n  /** AI prompt. Returns one prompt: the built-in text (version 0), the text served now and where it comes from, every saved version newest first with its author, note and eval results, the values it may use, and the samples a test run can send. Administrators only. @scope ai:admin:read */\n  function get(input: {\n    /** The prompt, for example shape.system. */\n    id: \"shape.system\" | \"shape.user\" | \"shape.retry\" | \"tool.propose_shapes\" | \"workshop.map.system\" | \"workshop.lane.system\" | \"workshop.chat.retry\" | \"tool.propose_map_edits\" | \"tool.propose_workshop_edits\" | \"workshop.draft.system\" | \"workshop.draft.component\" | \"workshop.draft.grid\" | \"workshop.draft.map\" | \"workshop.draft.release\" | \"workshop.draft.rules\" | \"workshop.draft.retry\" | \"workshop.draft.repair\" | \"tool.draft_workshop\" | \"tool.draft_component\" | \"tool.draft_grid\" | \"tool.draft_concept_map\" | \"tool.draft_release_plan\" | \"tool.revise_workshop_rules\" | \"exec.chat.system\" | \"exec.chat.fix\" | \"exec.chat.retry\" | \"agent.request.notes\" | \"presentation.segments\" | \"presentation.art\" | \"presentation.system\" | \"presentation.system.dynamic\" | \"presentation.system.slides\" | \"presentation.system.template\" | \"presentation.slate\" | \"presentation.user\" | \"presentation.brief\" | \"presentation.refine\" | \"tool.create-presentation\" | \"tool.create-presentation.image-query\" | \"tool.create-presentation.image-prompt\" | \"tool.create-presentation.image-why\" | \"library.refine.system\" | \"library.refine.request\" | \"library.refine.retry\" | \"tool.propose_library_refinement\" | \"connectors.plan.system\" | \"connectors.plan.writes\" | \"connectors.plan.next\" | \"connectors.plan.tool\" | \"connectors.layout.system\" | \"connectors.layout.budget\" | \"connectors.layout.tool\" | \"connectors.recipe.github\" | \"connectors.recipe.linear\" | \"connectors.recipe.huggingface\" | \"connectors.recipe.deepwiki\" | \"connectors.recipe.context7\" | \"connectors.recipe.wolfram\" | \"connectors.recipe.firecrawl\" | \"connectors.recipe.exa\" | \"interview.system\" | \"interview.opening\" | \"interview.retry\" | \"tool.remember\" | \"personal.suggest.system\" | \"personal.suggest.ask\" | \"personal.suggest.retry\" | \"tool.suggest_ideas\" | \"workshop.draft.personal\" | \"voice.chat.system\" | \"voice.chat.opening\" | \"voice.interview.system\" | \"voice.interview.opening\" | \"tool.send_to_slatebox\" | \"voice.tool-failed\" | \"voice.answer\" | \"voice.answer.none\" | \"voice.answer.discarded\" | \"voice.answer.unconfirmed\" | \"voice.answer.empty\" | \"voice.answer.busy\" | \"voice.late-answer\" | \"voice.resume\";\n  }): Promise<{\n    id?: string;\n    code?: Record<string, unknown>;\n    live?: Record<string, unknown>;\n    versions?: Array<Record<string, unknown>>;\n    [key: string]: unknown;\n  }>;\n}",
       "tool": {
         "name": "get_ai_prompt",
         "title": "Read an AI prompt",
@@ -1749,7 +1818,21 @@
                 "personal.suggest.ask",
                 "personal.suggest.retry",
                 "tool.suggest_ideas",
-                "workshop.draft.personal"
+                "workshop.draft.personal",
+                "voice.chat.system",
+                "voice.chat.opening",
+                "voice.interview.system",
+                "voice.interview.opening",
+                "tool.send_to_slatebox",
+                "voice.tool-failed",
+                "voice.answer",
+                "voice.answer.none",
+                "voice.answer.discarded",
+                "voice.answer.unconfirmed",
+                "voice.answer.empty",
+                "voice.answer.busy",
+                "voice.late-answer",
+                "voice.resume"
               ],
               "description": "The prompt, for example shape.system."
             }
@@ -1842,7 +1925,7 @@
       "index": "ai.prompts.render({id,version?,body?,wrap?,sample?}): Render AI prompt",
       "toolset": "admin",
       "types": [],
-      "dts": "declare namespace slatebox.ai.prompts {\n  /** Render AI prompt. Renders a prompt version (or text sent with the call) into the request a built-in sample sends, and reports its lint findings. No model is called and nothing is saved. Administrators only. @scope ai:admin:read @idempotent */\n  function render(input: {\n    /** The prompt, for example shape.system. */\n    id: \"shape.system\" | \"shape.user\" | \"shape.retry\" | \"tool.propose_shapes\" | \"workshop.map.system\" | \"workshop.lane.system\" | \"workshop.chat.retry\" | \"tool.propose_map_edits\" | \"tool.propose_workshop_edits\" | \"workshop.draft.system\" | \"workshop.draft.component\" | \"workshop.draft.grid\" | \"workshop.draft.map\" | \"workshop.draft.release\" | \"workshop.draft.rules\" | \"workshop.draft.retry\" | \"workshop.draft.repair\" | \"tool.draft_workshop\" | \"tool.draft_component\" | \"tool.draft_grid\" | \"tool.draft_concept_map\" | \"tool.draft_release_plan\" | \"tool.revise_workshop_rules\" | \"exec.chat.system\" | \"exec.chat.fix\" | \"exec.chat.retry\" | \"agent.request.notes\" | \"presentation.segments\" | \"presentation.art\" | \"presentation.system\" | \"presentation.system.dynamic\" | \"presentation.system.slides\" | \"presentation.system.template\" | \"presentation.slate\" | \"presentation.user\" | \"presentation.brief\" | \"presentation.refine\" | \"tool.create-presentation\" | \"tool.create-presentation.image-query\" | \"tool.create-presentation.image-prompt\" | \"tool.create-presentation.image-why\" | \"library.refine.system\" | \"library.refine.request\" | \"library.refine.retry\" | \"tool.propose_library_refinement\" | \"connectors.plan.system\" | \"connectors.plan.writes\" | \"connectors.plan.next\" | \"connectors.plan.tool\" | \"connectors.layout.system\" | \"connectors.layout.budget\" | \"connectors.layout.tool\" | \"connectors.recipe.github\" | \"connectors.recipe.linear\" | \"connectors.recipe.huggingface\" | \"connectors.recipe.deepwiki\" | \"connectors.recipe.context7\" | \"connectors.recipe.wolfram\" | \"connectors.recipe.firecrawl\" | \"connectors.recipe.exa\" | \"interview.system\" | \"interview.opening\" | \"interview.retry\" | \"tool.remember\" | \"personal.suggest.system\" | \"personal.suggest.ask\" | \"personal.suggest.retry\" | \"tool.suggest_ideas\" | \"workshop.draft.personal\";\n    /** A saved version; 0 is the built-in text. (at least 0) */\n    version?: number;\n    /** The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not. (1–32768 characters) */\n    body?: string;\n    /** Per value: data encloses it in a <data> block so it reads as data, not instructions. */\n    wrap?: Record<string, \"none\" | \"data\">;\n    /** A built-in sample (ai.prompts.get lists them). Default: the first. (at most 40 characters) */\n    sample?: string;\n  }): Promise<({\n    sample?: string | null;\n    rendered?: Record<string, unknown> | null;\n    lint?: Record<string, unknown>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.ai.prompts {\n  /** Render AI prompt. Renders a prompt version (or text sent with the call) into the request a built-in sample sends, and reports its lint findings. No model is called and nothing is saved. Administrators only. @scope ai:admin:read @idempotent */\n  function render(input: {\n    /** The prompt, for example shape.system. */\n    id: \"shape.system\" | \"shape.user\" | \"shape.retry\" | \"tool.propose_shapes\" | \"workshop.map.system\" | \"workshop.lane.system\" | \"workshop.chat.retry\" | \"tool.propose_map_edits\" | \"tool.propose_workshop_edits\" | \"workshop.draft.system\" | \"workshop.draft.component\" | \"workshop.draft.grid\" | \"workshop.draft.map\" | \"workshop.draft.release\" | \"workshop.draft.rules\" | \"workshop.draft.retry\" | \"workshop.draft.repair\" | \"tool.draft_workshop\" | \"tool.draft_component\" | \"tool.draft_grid\" | \"tool.draft_concept_map\" | \"tool.draft_release_plan\" | \"tool.revise_workshop_rules\" | \"exec.chat.system\" | \"exec.chat.fix\" | \"exec.chat.retry\" | \"agent.request.notes\" | \"presentation.segments\" | \"presentation.art\" | \"presentation.system\" | \"presentation.system.dynamic\" | \"presentation.system.slides\" | \"presentation.system.template\" | \"presentation.slate\" | \"presentation.user\" | \"presentation.brief\" | \"presentation.refine\" | \"tool.create-presentation\" | \"tool.create-presentation.image-query\" | \"tool.create-presentation.image-prompt\" | \"tool.create-presentation.image-why\" | \"library.refine.system\" | \"library.refine.request\" | \"library.refine.retry\" | \"tool.propose_library_refinement\" | \"connectors.plan.system\" | \"connectors.plan.writes\" | \"connectors.plan.next\" | \"connectors.plan.tool\" | \"connectors.layout.system\" | \"connectors.layout.budget\" | \"connectors.layout.tool\" | \"connectors.recipe.github\" | \"connectors.recipe.linear\" | \"connectors.recipe.huggingface\" | \"connectors.recipe.deepwiki\" | \"connectors.recipe.context7\" | \"connectors.recipe.wolfram\" | \"connectors.recipe.firecrawl\" | \"connectors.recipe.exa\" | \"interview.system\" | \"interview.opening\" | \"interview.retry\" | \"tool.remember\" | \"personal.suggest.system\" | \"personal.suggest.ask\" | \"personal.suggest.retry\" | \"tool.suggest_ideas\" | \"workshop.draft.personal\" | \"voice.chat.system\" | \"voice.chat.opening\" | \"voice.interview.system\" | \"voice.interview.opening\" | \"tool.send_to_slatebox\" | \"voice.tool-failed\" | \"voice.answer\" | \"voice.answer.none\" | \"voice.answer.discarded\" | \"voice.answer.unconfirmed\" | \"voice.answer.empty\" | \"voice.answer.busy\" | \"voice.late-answer\" | \"voice.resume\";\n    /** A saved version; 0 is the built-in text. (at least 0) */\n    version?: number;\n    /** The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not. (1–32768 characters) */\n    body?: string;\n    /** Per value: data encloses it in a <data> block so it reads as data, not instructions. */\n    wrap?: Record<string, \"none\" | \"data\">;\n    /** A built-in sample (ai.prompts.get lists them). Default: the first. (at most 40 characters) */\n    sample?: string;\n  }): Promise<({\n    sample?: string | null;\n    rendered?: Record<string, unknown> | null;\n    lint?: Record<string, unknown>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "render_ai_prompt",
         "title": "Render an AI prompt",
@@ -1921,7 +2004,21 @@
                 "personal.suggest.ask",
                 "personal.suggest.retry",
                 "tool.suggest_ideas",
-                "workshop.draft.personal"
+                "workshop.draft.personal",
+                "voice.chat.system",
+                "voice.chat.opening",
+                "voice.interview.system",
+                "voice.interview.opening",
+                "tool.send_to_slatebox",
+                "voice.tool-failed",
+                "voice.answer",
+                "voice.answer.none",
+                "voice.answer.discarded",
+                "voice.answer.unconfirmed",
+                "voice.answer.empty",
+                "voice.answer.busy",
+                "voice.late-answer",
+                "voice.resume"
               ],
               "description": "The prompt, for example shape.system."
             },
@@ -2008,7 +2105,7 @@
       "index": "ai.prompts.saveDraft({id,body,wrap?,note?,basedOn?}): Save AI prompt draft",
       "toolset": "admin",
       "types": [],
-      "dts": "declare namespace slatebox.ai.prompts {\n  /** Save AI prompt draft. Saves a new draft version of a prompt. Changes nothing live: a person publishes it after its checks pass. An agent's draft is marked as a suggestion. Returns the version and its lint findings. Administrators only. @scope ai:admin */\n  function saveDraft(input: {\n    /** The prompt, for example shape.system. */\n    id: \"shape.system\" | \"shape.user\" | \"shape.retry\" | \"tool.propose_shapes\" | \"workshop.map.system\" | \"workshop.lane.system\" | \"workshop.chat.retry\" | \"tool.propose_map_edits\" | \"tool.propose_workshop_edits\" | \"workshop.draft.system\" | \"workshop.draft.component\" | \"workshop.draft.grid\" | \"workshop.draft.map\" | \"workshop.draft.release\" | \"workshop.draft.rules\" | \"workshop.draft.retry\" | \"workshop.draft.repair\" | \"tool.draft_workshop\" | \"tool.draft_component\" | \"tool.draft_grid\" | \"tool.draft_concept_map\" | \"tool.draft_release_plan\" | \"tool.revise_workshop_rules\" | \"exec.chat.system\" | \"exec.chat.fix\" | \"exec.chat.retry\" | \"agent.request.notes\" | \"presentation.segments\" | \"presentation.art\" | \"presentation.system\" | \"presentation.system.dynamic\" | \"presentation.system.slides\" | \"presentation.system.template\" | \"presentation.slate\" | \"presentation.user\" | \"presentation.brief\" | \"presentation.refine\" | \"tool.create-presentation\" | \"tool.create-presentation.image-query\" | \"tool.create-presentation.image-prompt\" | \"tool.create-presentation.image-why\" | \"library.refine.system\" | \"library.refine.request\" | \"library.refine.retry\" | \"tool.propose_library_refinement\" | \"connectors.plan.system\" | \"connectors.plan.writes\" | \"connectors.plan.next\" | \"connectors.plan.tool\" | \"connectors.layout.system\" | \"connectors.layout.budget\" | \"connectors.layout.tool\" | \"connectors.recipe.github\" | \"connectors.recipe.linear\" | \"connectors.recipe.huggingface\" | \"connectors.recipe.deepwiki\" | \"connectors.recipe.context7\" | \"connectors.recipe.wolfram\" | \"connectors.recipe.firecrawl\" | \"connectors.recipe.exa\" | \"interview.system\" | \"interview.opening\" | \"interview.retry\" | \"tool.remember\" | \"personal.suggest.system\" | \"personal.suggest.ask\" | \"personal.suggest.retry\" | \"tool.suggest_ideas\" | \"workshop.draft.personal\";\n    /** The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not. (1–32768 characters) */\n    body: string;\n    /** Per value: data encloses it in a <data> block so it reads as data, not instructions. */\n    wrap?: Record<string, \"none\" | \"data\">;\n    /** A short note kept with the version. (at most 200 characters) */\n    note?: string;\n    /** The version the text was edited from (0: the built-in text). A draft edited from a suggestion stays marked as one when it is published. (at least 0) */\n    basedOn?: number;\n  }): Promise<({\n    id?: string;\n    version?: number;\n    status?: string;\n    origin?: string;\n    lint?: Record<string, unknown>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.ai.prompts {\n  /** Save AI prompt draft. Saves a new draft version of a prompt. Changes nothing live: a person publishes it after its checks pass. An agent's draft is marked as a suggestion. Returns the version and its lint findings. Administrators only. @scope ai:admin */\n  function saveDraft(input: {\n    /** The prompt, for example shape.system. */\n    id: \"shape.system\" | \"shape.user\" | \"shape.retry\" | \"tool.propose_shapes\" | \"workshop.map.system\" | \"workshop.lane.system\" | \"workshop.chat.retry\" | \"tool.propose_map_edits\" | \"tool.propose_workshop_edits\" | \"workshop.draft.system\" | \"workshop.draft.component\" | \"workshop.draft.grid\" | \"workshop.draft.map\" | \"workshop.draft.release\" | \"workshop.draft.rules\" | \"workshop.draft.retry\" | \"workshop.draft.repair\" | \"tool.draft_workshop\" | \"tool.draft_component\" | \"tool.draft_grid\" | \"tool.draft_concept_map\" | \"tool.draft_release_plan\" | \"tool.revise_workshop_rules\" | \"exec.chat.system\" | \"exec.chat.fix\" | \"exec.chat.retry\" | \"agent.request.notes\" | \"presentation.segments\" | \"presentation.art\" | \"presentation.system\" | \"presentation.system.dynamic\" | \"presentation.system.slides\" | \"presentation.system.template\" | \"presentation.slate\" | \"presentation.user\" | \"presentation.brief\" | \"presentation.refine\" | \"tool.create-presentation\" | \"tool.create-presentation.image-query\" | \"tool.create-presentation.image-prompt\" | \"tool.create-presentation.image-why\" | \"library.refine.system\" | \"library.refine.request\" | \"library.refine.retry\" | \"tool.propose_library_refinement\" | \"connectors.plan.system\" | \"connectors.plan.writes\" | \"connectors.plan.next\" | \"connectors.plan.tool\" | \"connectors.layout.system\" | \"connectors.layout.budget\" | \"connectors.layout.tool\" | \"connectors.recipe.github\" | \"connectors.recipe.linear\" | \"connectors.recipe.huggingface\" | \"connectors.recipe.deepwiki\" | \"connectors.recipe.context7\" | \"connectors.recipe.wolfram\" | \"connectors.recipe.firecrawl\" | \"connectors.recipe.exa\" | \"interview.system\" | \"interview.opening\" | \"interview.retry\" | \"tool.remember\" | \"personal.suggest.system\" | \"personal.suggest.ask\" | \"personal.suggest.retry\" | \"tool.suggest_ideas\" | \"workshop.draft.personal\" | \"voice.chat.system\" | \"voice.chat.opening\" | \"voice.interview.system\" | \"voice.interview.opening\" | \"tool.send_to_slatebox\" | \"voice.tool-failed\" | \"voice.answer\" | \"voice.answer.none\" | \"voice.answer.discarded\" | \"voice.answer.unconfirmed\" | \"voice.answer.empty\" | \"voice.answer.busy\" | \"voice.late-answer\" | \"voice.resume\";\n    /** The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not. (1–32768 characters) */\n    body: string;\n    /** Per value: data encloses it in a <data> block so it reads as data, not instructions. */\n    wrap?: Record<string, \"none\" | \"data\">;\n    /** A short note kept with the version. (at most 200 characters) */\n    note?: string;\n    /** The version the text was edited from (0: the built-in text). A draft edited from a suggestion stays marked as one when it is published. (at least 0) */\n    basedOn?: number;\n  }): Promise<({\n    id?: string;\n    version?: number;\n    status?: string;\n    origin?: string;\n    lint?: Record<string, unknown>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "save_ai_prompt_draft",
         "title": "Save an AI prompt draft",
@@ -2087,7 +2184,21 @@
                 "personal.suggest.ask",
                 "personal.suggest.retry",
                 "tool.suggest_ideas",
-                "workshop.draft.personal"
+                "workshop.draft.personal",
+                "voice.chat.system",
+                "voice.chat.opening",
+                "voice.interview.system",
+                "voice.interview.opening",
+                "tool.send_to_slatebox",
+                "voice.tool-failed",
+                "voice.answer",
+                "voice.answer.none",
+                "voice.answer.discarded",
+                "voice.answer.unconfirmed",
+                "voice.answer.empty",
+                "voice.answer.busy",
+                "voice.late-answer",
+                "voice.resume"
               ],
               "description": "The prompt, for example shape.system."
             },
@@ -2176,7 +2287,7 @@
       "index": "ai.prompts.test({id,version?,body?,wrap?,…}): Test AI prompt",
       "toolset": "admin",
       "types": [],
-      "dts": "declare namespace slatebox.ai.prompts {\n  /** Test AI prompt. Sends a prompt version (or text sent with the call) with a built-in sample through a part of Slatebox's binding (default: the prompt's own). Returns the request sent, the raw answer, whether that part could use it, the model, latency and cost. The answer is shown, never applied. Metered to the caller; 30 an hour per administrator. Administrators only. @scope ai:admin */\n  function test(input: {\n    /** The prompt, for example shape.system. */\n    id: \"shape.system\" | \"shape.user\" | \"shape.retry\" | \"tool.propose_shapes\" | \"workshop.map.system\" | \"workshop.lane.system\" | \"workshop.chat.retry\" | \"tool.propose_map_edits\" | \"tool.propose_workshop_edits\" | \"workshop.draft.system\" | \"workshop.draft.component\" | \"workshop.draft.grid\" | \"workshop.draft.map\" | \"workshop.draft.release\" | \"workshop.draft.rules\" | \"workshop.draft.retry\" | \"workshop.draft.repair\" | \"tool.draft_workshop\" | \"tool.draft_component\" | \"tool.draft_grid\" | \"tool.draft_concept_map\" | \"tool.draft_release_plan\" | \"tool.revise_workshop_rules\" | \"exec.chat.system\" | \"exec.chat.fix\" | \"exec.chat.retry\" | \"agent.request.notes\" | \"presentation.segments\" | \"presentation.art\" | \"presentation.system\" | \"presentation.system.dynamic\" | \"presentation.system.slides\" | \"presentation.system.template\" | \"presentation.slate\" | \"presentation.user\" | \"presentation.brief\" | \"presentation.refine\" | \"tool.create-presentation\" | \"tool.create-presentation.image-query\" | \"tool.create-presentation.image-prompt\" | \"tool.create-presentation.image-why\" | \"library.refine.system\" | \"library.refine.request\" | \"library.refine.retry\" | \"tool.propose_library_refinement\" | \"connectors.plan.system\" | \"connectors.plan.writes\" | \"connectors.plan.next\" | \"connectors.plan.tool\" | \"connectors.layout.system\" | \"connectors.layout.budget\" | \"connectors.layout.tool\" | \"connectors.recipe.github\" | \"connectors.recipe.linear\" | \"connectors.recipe.huggingface\" | \"connectors.recipe.deepwiki\" | \"connectors.recipe.context7\" | \"connectors.recipe.wolfram\" | \"connectors.recipe.firecrawl\" | \"connectors.recipe.exa\" | \"interview.system\" | \"interview.opening\" | \"interview.retry\" | \"tool.remember\" | \"personal.suggest.system\" | \"personal.suggest.ask\" | \"personal.suggest.retry\" | \"tool.suggest_ideas\" | \"workshop.draft.personal\";\n    /** A saved version; 0 is the built-in text. (at least 0) */\n    version?: number;\n    /** The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not. (1–32768 characters) */\n    body?: string;\n    /** Per value: data encloses it in a <data> block so it reads as data, not instructions. */\n    wrap?: Record<string, \"none\" | \"data\">;\n    /** A built-in sample (ai.prompts.get lists them). Default: the first. (at most 40 characters) */\n    sample?: string;\n    /** Whose binding (model chain) to test against. */\n    surface?: \"default\" | \"chat\" | \"chat.route\" | \"generation\" | \"presentation\" | \"vision\" | \"images\" | \"shape\" | \"workshop\" | \"workshop.draft\" | \"canvas\" | \"agent.slatebox\" | \"library\" | \"connectors\" | \"interview\" | \"personal.suggest\" | \"eval\";\n  }): Promise<({\n    rendered?: Record<string, unknown>;\n    answer?: Record<string, unknown>;\n    parses?: Record<string, unknown>;\n    latencyMs?: number;\n    model?: string | null;\n    costMicros?: number;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.ai.prompts {\n  /** Test AI prompt. Sends a prompt version (or text sent with the call) with a built-in sample through a part of Slatebox's binding (default: the prompt's own). Returns the request sent, the raw answer, whether that part could use it, the model, latency and cost. The answer is shown, never applied. Metered to the caller; 30 an hour per administrator. Administrators only. @scope ai:admin */\n  function test(input: {\n    /** The prompt, for example shape.system. */\n    id: \"shape.system\" | \"shape.user\" | \"shape.retry\" | \"tool.propose_shapes\" | \"workshop.map.system\" | \"workshop.lane.system\" | \"workshop.chat.retry\" | \"tool.propose_map_edits\" | \"tool.propose_workshop_edits\" | \"workshop.draft.system\" | \"workshop.draft.component\" | \"workshop.draft.grid\" | \"workshop.draft.map\" | \"workshop.draft.release\" | \"workshop.draft.rules\" | \"workshop.draft.retry\" | \"workshop.draft.repair\" | \"tool.draft_workshop\" | \"tool.draft_component\" | \"tool.draft_grid\" | \"tool.draft_concept_map\" | \"tool.draft_release_plan\" | \"tool.revise_workshop_rules\" | \"exec.chat.system\" | \"exec.chat.fix\" | \"exec.chat.retry\" | \"agent.request.notes\" | \"presentation.segments\" | \"presentation.art\" | \"presentation.system\" | \"presentation.system.dynamic\" | \"presentation.system.slides\" | \"presentation.system.template\" | \"presentation.slate\" | \"presentation.user\" | \"presentation.brief\" | \"presentation.refine\" | \"tool.create-presentation\" | \"tool.create-presentation.image-query\" | \"tool.create-presentation.image-prompt\" | \"tool.create-presentation.image-why\" | \"library.refine.system\" | \"library.refine.request\" | \"library.refine.retry\" | \"tool.propose_library_refinement\" | \"connectors.plan.system\" | \"connectors.plan.writes\" | \"connectors.plan.next\" | \"connectors.plan.tool\" | \"connectors.layout.system\" | \"connectors.layout.budget\" | \"connectors.layout.tool\" | \"connectors.recipe.github\" | \"connectors.recipe.linear\" | \"connectors.recipe.huggingface\" | \"connectors.recipe.deepwiki\" | \"connectors.recipe.context7\" | \"connectors.recipe.wolfram\" | \"connectors.recipe.firecrawl\" | \"connectors.recipe.exa\" | \"interview.system\" | \"interview.opening\" | \"interview.retry\" | \"tool.remember\" | \"personal.suggest.system\" | \"personal.suggest.ask\" | \"personal.suggest.retry\" | \"tool.suggest_ideas\" | \"workshop.draft.personal\" | \"voice.chat.system\" | \"voice.chat.opening\" | \"voice.interview.system\" | \"voice.interview.opening\" | \"tool.send_to_slatebox\" | \"voice.tool-failed\" | \"voice.answer\" | \"voice.answer.none\" | \"voice.answer.discarded\" | \"voice.answer.unconfirmed\" | \"voice.answer.empty\" | \"voice.answer.busy\" | \"voice.late-answer\" | \"voice.resume\";\n    /** A saved version; 0 is the built-in text. (at least 0) */\n    version?: number;\n    /** The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not. (1–32768 characters) */\n    body?: string;\n    /** Per value: data encloses it in a <data> block so it reads as data, not instructions. */\n    wrap?: Record<string, \"none\" | \"data\">;\n    /** A built-in sample (ai.prompts.get lists them). Default: the first. (at most 40 characters) */\n    sample?: string;\n    /** Whose binding (model chain) to test against. */\n    surface?: \"default\" | \"chat\" | \"chat.route\" | \"generation\" | \"presentation\" | \"vision\" | \"images\" | \"shape\" | \"workshop\" | \"workshop.draft\" | \"canvas\" | \"agent.slatebox\" | \"library\" | \"connectors\" | \"interview\" | \"personal.suggest\" | \"voice\" | \"voice.chat\" | \"voice.interview\" | \"eval\";\n  }): Promise<({\n    rendered?: Record<string, unknown>;\n    answer?: Record<string, unknown>;\n    parses?: Record<string, unknown>;\n    latencyMs?: number;\n    model?: string | null;\n    costMicros?: number;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "test_ai_prompt",
         "title": "Test an AI prompt",
@@ -2255,7 +2366,21 @@
                 "personal.suggest.ask",
                 "personal.suggest.retry",
                 "tool.suggest_ideas",
-                "workshop.draft.personal"
+                "workshop.draft.personal",
+                "voice.chat.system",
+                "voice.chat.opening",
+                "voice.interview.system",
+                "voice.interview.opening",
+                "tool.send_to_slatebox",
+                "voice.tool-failed",
+                "voice.answer",
+                "voice.answer.none",
+                "voice.answer.discarded",
+                "voice.answer.unconfirmed",
+                "voice.answer.empty",
+                "voice.answer.busy",
+                "voice.late-answer",
+                "voice.resume"
               ],
               "description": "The prompt, for example shape.system."
             },
@@ -2305,6 +2430,9 @@
                 "connectors",
                 "interview",
                 "personal.suggest",
+                "voice",
+                "voice.chat",
+                "voice.interview",
                 "eval"
               ],
               "description": "Whose binding (model chain) to test against."
@@ -2363,7 +2491,7 @@
       "index": "ai.providers.add({provider,models?,reason?}): Add AI provider",
       "toolset": "admin",
       "types": [],
-      "dts": "declare namespace slatebox.ai.providers {\n  /** Add AI provider. Adds a model provider from a preset: meta (Meta Muse, https://api.meta.ai/v1), openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, or other with its own OpenAI-compatible address. A named preset keeps its own address and key style. models: the preset's suggested model ids to add with their prices. Add its key with ai.keys.add. Only a person adds an Other provider (it chooses where keys go). Administrators only. @scope ai:admin @confirm */\n  function add(input: {\n    provider: {\n      /** What the provider is: meta (Muse), openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, or other (any OpenAI-compatible address). */\n      preset: \"meta\" | \"openai\" | \"anthropic\" | \"deepinfra\" | \"together\" | \"groq\" | \"fireworks\" | \"openrouter\" | \"mistral\" | \"xai\" | \"gemini\" | \"other\";\n      /** Its id here; the preset's by default (meta, deepinfra, ...). */\n      id?: string;\n      /** The name shown; the preset's by default. (1–80 characters) */\n      label?: string;\n      /** For other only: the address up to /v1. Named presets keep their own address. (at most 500 characters) */\n      baseUrl?: string;\n      /** For other only: bearer (Authorization: Bearer), header { name } or none. */\n      auth?: {\n        style: \"bearer\" | \"header\" | \"none\";\n        /** (at most 64 characters) */\n        name?: string;\n      };\n      /** For other only: how it takes a forced tool call. */\n      toolChoice?: \"auto\" | \"named\" | \"required\";\n      /** For other only: headers sent with every request. Nothing secret. */\n      extraHeaders?: Record<string, string>;\n    };\n    /** Suggested model ids of the preset to add too. (at most 20 items) */\n    models?: string[];\n    /** Why, for the change history. (1–500 characters) */\n    reason?: string;\n  }): Promise<({\n    provider?: Record<string, unknown>;\n    models?: Array<Record<string, unknown>>;\n    generation?: number | null;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.ai.providers {\n  /** Add AI provider. Adds a model provider from a preset: meta (Meta Muse, https://api.meta.ai/v1), openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, or other with its own OpenAI-compatible address. A named preset keeps its own address and key style. models: the preset's suggested model ids to add with their prices. Add its key with ai.keys.add. Only a person adds an Other provider (it chooses where keys go). Administrators only. @scope ai:admin @confirm */\n  function add(input: {\n    provider: {\n      /** What the provider is: meta (Muse), openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, the voice providers openai-realtime and gemini-live (talking with the agent), or other (any OpenAI-compatible address). */\n      preset: \"meta\" | \"openai\" | \"anthropic\" | \"deepinfra\" | \"together\" | \"groq\" | \"fireworks\" | \"openrouter\" | \"mistral\" | \"xai\" | \"gemini\" | \"openai-realtime\" | \"gemini-live\" | \"other\";\n      /** Its id here; the preset's by default (meta, deepinfra, ...). */\n      id?: string;\n      /** The name shown; the preset's by default. (1–80 characters) */\n      label?: string;\n      /** For other only: the address up to /v1. Named presets keep their own address. (at most 500 characters) */\n      baseUrl?: string;\n      /** For other only: bearer (Authorization: Bearer), header { name } or none. */\n      auth?: {\n        style: \"bearer\" | \"header\" | \"none\";\n        /** (at most 64 characters) */\n        name?: string;\n      };\n      /** For other only: how it takes a forced tool call. */\n      toolChoice?: \"auto\" | \"named\" | \"required\";\n      /** For other only: headers sent with every request. Nothing secret. */\n      extraHeaders?: Record<string, string>;\n    };\n    /** Suggested model ids of the preset to add too. (at most 20 items) */\n    models?: string[];\n    /** Why, for the change history. (1–500 characters) */\n    reason?: string;\n  }): Promise<({\n    provider?: Record<string, unknown>;\n    models?: Array<Record<string, unknown>>;\n    generation?: number | null;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "add_ai_provider",
         "title": "Add an AI provider",
@@ -2388,9 +2516,11 @@
                     "mistral",
                     "xai",
                     "gemini",
+                    "openai-realtime",
+                    "gemini-live",
                     "other"
                   ],
-                  "description": "What the provider is: meta (Muse), openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, or other (any OpenAI-compatible address)."
+                  "description": "What the provider is: meta (Muse), openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, the voice providers openai-realtime and gemini-live (talking with the agent), or other (any OpenAI-compatible address)."
                 },
                 "id": {
                   "type": "string",
@@ -2659,7 +2789,7 @@
       },
       "index": "ai.update({level,connections?,remove?,use?,ownProviders?}): Set AI",
       "types": [],
-      "dts": "declare namespace slatebox.ai {\n  /** Set AI. Your own or your team's AI: adds or changes connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins); level server only turns own AI on or off for everyone (ownProviders, administrators). A choice names me:<name>, team:<name>, or builtin for this server's model (set in Admin → AI control). Keys are stored encrypted and never returned. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI is optional, on Slatebox Cloud and self-hosted alike. On Slatebox Cloud requests it serves spend no Slatebox credits, and an address must be public https. @scope ai:settings @destructive @confirm @idempotent */\n  function update(input: {\n    /** me (yours), team (team admins) or server (administrators). */\n    level: \"me\" | \"team\" | \"server\";\n    /** (at most 20 items) */\n    connections?: Array<{\n      /** Your name for it, for example desk-model. */\n      name: string;\n      /** The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added. */\n      type: string;\n      /** For openai-compatible: the address up to /v1, for example http://host.docker.internal:11434/v1. (at most 500 characters) */\n      baseUrl?: string;\n      /** The model name the endpoint serves. (at most 200 characters) */\n      model?: string;\n      /** Stored encrypted and never shown again. Leave it out to keep the saved key; send an empty string to remove it. (at most 400 characters) */\n      apiKey?: string;\n      /** What the model can do, where you know it. Unset means try it; making images needs images: true. */\n      capabilities?: {\n        tools?: boolean;\n        vision?: boolean;\n        images?: boolean;\n      };\n      /** (256 to 200000) */\n      maxTokens?: number;\n      /** How the endpoint takes a forced tool call: named (the function by name), required (any tool, for an endpoint with no named form) or auto (the model decides, for an endpoint that refuses the others). */\n      toolChoice?: \"auto\" | \"named\" | \"required\";\n    }>;\n    /** (at most 20 items) */\n    remove?: string[];\n    /** Which connection each feature uses. An unset feature follows the one it belongs to (workshop follows chat), and default serves every feature not named. */\n    use?: {\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      default?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      chat?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      \"chat.route\"?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      generation?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      \"generation.notes\"?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      presentation?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      vision?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      images?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      shape?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      workshop?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      \"workshop.draft\"?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      canvas?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      \"agent.slatebox\"?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      library?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      connectors?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      interview?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      \"personal.suggest\"?: string | null;\n    };\n    ownProviders?: \"on\" | \"off\";\n  }): Promise<({\n    features: Array<Record<string, unknown>>;\n    /** Every feature and part a choice may name, with the one it follows while unset. */\n    surfaces?: Array<Record<string, unknown>>;\n    useKeys?: string[];\n    ownProviders: boolean;\n    keysAvailable?: boolean;\n    hosted?: boolean;\n    mine?: Record<string, unknown> | null;\n    team?: Record<string, unknown> | null;\n    server: Record<string, unknown>;\n    effective: Record<string, unknown>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.ai {\n  /** Set AI. Your own or your team's AI: adds or changes connections (a cloud provider with its key, or any OpenAI-compatible endpoint with its address, optional key and model), removes some, and chooses which connection each feature uses. level me changes yours, team your team's (team admins); level server only turns own AI on or off for everyone (ownProviders, administrators). A choice names me:<name>, team:<name>, or builtin for this server's model (set in Admin → AI control). Keys are stored encrypted and never returned. Returns the settings as ai.get does. A token needs ai:admin as well for level team or server. Own AI is optional, on Slatebox Cloud and self-hosted alike. On Slatebox Cloud requests it serves spend no Slatebox credits, and an address must be public https. @scope ai:settings @destructive @confirm @idempotent */\n  function update(input: {\n    /** me (yours), team (team admins) or server (administrators). */\n    level: \"me\" | \"team\" | \"server\";\n    /** (at most 20 items) */\n    connections?: Array<{\n      /** Your name for it, for example desk-model. */\n      name: string;\n      /** The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, and the voice providers openai-realtime and gemini-live), or one an administrator added. */\n      type: string;\n      /** For openai-compatible: the address up to /v1, for example http://host.docker.internal:11434/v1. (at most 500 characters) */\n      baseUrl?: string;\n      /** The model name the endpoint serves. (at most 200 characters) */\n      model?: string;\n      /** Stored encrypted and never shown again. Leave it out to keep the saved key; send an empty string to remove it. (at most 400 characters) */\n      apiKey?: string;\n      /** What the model can do, where you know it. Unset means try it; making images needs images: true. */\n      capabilities?: {\n        tools?: boolean;\n        vision?: boolean;\n        images?: boolean;\n      };\n      /** (256 to 200000) */\n      maxTokens?: number;\n      /** How the endpoint takes a forced tool call: named (the function by name), required (any tool, for an endpoint with no named form) or auto (the model decides, for an endpoint that refuses the others). */\n      toolChoice?: \"auto\" | \"named\" | \"required\";\n    }>;\n    /** (at most 20 items) */\n    remove?: string[];\n    /** Which connection each feature uses. An unset feature follows the one it belongs to (workshop follows chat), and default serves every feature not named. */\n    use?: {\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      default?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      chat?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      \"chat.route\"?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      generation?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      \"generation.notes\"?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      presentation?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      vision?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      images?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      shape?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      workshop?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      \"workshop.draft\"?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      canvas?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      \"agent.slatebox\"?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      library?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      connectors?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      interview?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      \"personal.suggest\"?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      voice?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      \"voice.chat\"?: string | null;\n      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */\n      \"voice.interview\"?: string | null;\n    };\n    ownProviders?: \"on\" | \"off\";\n  }): Promise<({\n    features: Array<Record<string, unknown>>;\n    /** Every feature and part a choice may name, with the one it follows while unset. */\n    surfaces?: Array<Record<string, unknown>>;\n    useKeys?: string[];\n    ownProviders: boolean;\n    keysAvailable?: boolean;\n    hosted?: boolean;\n    mine?: Record<string, unknown> | null;\n    team?: Record<string, unknown> | null;\n    server: Record<string, unknown>;\n    effective: Record<string, unknown>;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "update_ai_settings",
         "title": "Change model connections and choices",
@@ -2690,7 +2820,7 @@
                   "type": {
                     "type": "string",
                     "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
-                    "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added."
+                    "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, and the voice providers openai-realtime and gemini-live), or one an administrator added."
                   },
                   "baseUrl": {
                     "type": "string",
@@ -2756,146 +2886,7 @@
             },
             "use": {
               "type": "object",
-              "properties": {
-                "default": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "chat": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "chat.route": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "generation": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "generation.notes": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "presentation": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "vision": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "images": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "shape": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "workshop": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "workshop.draft": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "canvas": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "agent.slatebox": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "library": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "connectors": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "interview": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                },
-                "personal.suggest": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "maxLength": 48,
-                  "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-                }
-              },
-              "additionalProperties": false,
-              "description": "Which connection each feature uses. An unset feature follows the one it belongs to (workshop follows chat), and default serves every feature not named."
+              "description": "Which connection each feature uses. An unset feature follows the one it belongs to (workshop follows chat), and default serves every feature not named. Its full type is long and is in describe, methods [\"ai.update\"]."
             },
             "ownProviders": {
               "type": "string",

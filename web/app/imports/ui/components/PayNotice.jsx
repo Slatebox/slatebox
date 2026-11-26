@@ -19,7 +19,7 @@ export const isCreditRefusal = (code) => Meteor.settings.public.metered === true
  * { label, action, run } | null. run() opens the pay sheet on the refusal's pane (Get Pro, top up,
  * the card, confirm the email…); the surface's retry runs once the server has the payment. When
  * Pro came on since, run() is the retry itself.
- *   from: what the person was doing ('draft' | 'call' | 'pictures' | 'image' | 'plan'), for the
+ *   from: what the person was doing ('draft' | 'call' | 'pictures' | 'image' | 'plan' | 'voice'), for the
  *   sheet's heading and the Welcome's button.
  */
 export function usePayAction() {
@@ -90,7 +90,7 @@ function PayButton({ refusal, from, retry, plain }) {
 
 PayNotice.propTypes = {
   refusal: PropTypes.shape({ error: PropTypes.string, code: PropTypes.string, reason: PropTypes.string, details: PropTypes.shape({}) }),
-  from: PropTypes.oneOf(['draft', 'call', 'pictures', 'image', 'plan']),
+  from: PropTypes.oneOf(['draft', 'call', 'pictures', 'image', 'plan', 'voice']),
   retry: PropTypes.func,
   plain: PropTypes.bool,
   inline: PropTypes.bool,

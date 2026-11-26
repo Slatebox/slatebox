@@ -25,6 +25,7 @@
     "test:huddles": "node --test scripts/huddle-client.test.mjs scripts/huddle-permissions.test.mjs",
     "test:style-bar": "node --test scripts/style-bar.test.mjs scripts/style-bar-layout.test.mjs scripts/note-image-search.test.mjs scripts/style-bar-offline.test.mjs",
     "test:ai-control": "node --test scripts/ai-catalogue.test.mjs scripts/ai-request-golden.test.mjs scripts/ai-prompts-golden.test.mjs scripts/ai-prompt-lint.test.mjs scripts/ai-prompt-publish.test.mjs scripts/ai-resolve.test.mjs scripts/ai-render.test.mjs scripts/ai-control-store.test.mjs scripts/ai-control-auth.test.mjs scripts/ai-config.test.mjs scripts/any-ai.test.mjs scripts/ai-shapes.test.mjs scripts/meter-prices.test.mjs scripts/ai-providers.test.mjs scripts/key-vault.test.mjs scripts/ai-bindings.test.mjs scripts/ai-keys.test.mjs scripts/ai-keys-import.test.mjs scripts/ai-control-002.test.mjs",
+    "test:voice": "node --test --test-concurrency=1 scripts/voice-protocol.test.mjs scripts/voice-adapters.test.mjs scripts/voice-control.test.mjs scripts/voice-tickets.test.mjs scripts/voice-meter.test.mjs scripts/voice-relay.integration.test.mjs scripts/voice-client.test.mjs scripts/voice-worklet.test.mjs scripts/voice-composer.test.mjs",
     "test:ai-chat-contract": "node --test scripts/ai-chat-component-contract.test.mjs scripts/ai-template-policy.test.mjs",
     "test:agent-reach": "node --test scripts/agent-pick-eval.test.mjs scripts/agent-reach.test.mjs",
     "test:mcp": "npm test --workspace slatebox-mcp",

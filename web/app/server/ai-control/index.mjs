@@ -13,9 +13,11 @@ import { aiCostMicros, isPriced, setDbPriceSource } from '../metering/prices.mjs
 import { loadMasterKey } from '../metering/vault.mjs'
 import { M5_MARKER, runM5 } from '../metering/migrations.mjs'
 import { operatorConfig, setProviderSource } from '../methods/ai/connections.mjs'
-import { MAX_CHECK_RESPONSE_BYTES, assertEndpointHost, checkEndpointUrl, endpointRules } from '../methods/ai/endpoint-policy.mjs'
+import { MAX_CHECK_RESPONSE_BYTES, assertEndpointHost, checkEndpointUrl, endpointRules, guardedLookup } from '../methods/ai/endpoint-policy.mjs'
 import { checkConnection, listModels } from '../methods/ai/connection-check.mjs'
 import { checkAuxConnection } from './aux-check.mjs'
+import WebSocket from 'ws'
+import { checkRealtime } from '../voice/check.mjs'
 import { createCatalogOps, createWriteLimit, dbPriceFor } from './models.mjs'
 import { SURFACES, surface as surfaceById } from './catalogue.mjs'
 import { createAdminOps, createStatusHub, surfacesStatus } from './admin.mjs'
@@ -81,6 +83,12 @@ export const aiControlStore = createControlStore({
   onWrite: () => snapshotHolder.refresh({ force: true }),
 })
 
+// A voice provider's key or model, tested by its socket's setup (server/voice/check.mjs), the
+// address looked up with the server's own rules.
+const voiceCheck = (connection) => checkRealtime(connection, {
+  connect: (url, headers) => new WebSocket(url, { headers, perMessageDeflate: false, handshakeTimeout: 10000, lookup: guardedLookup(serverRules()) }),
+})
+
 // A provider a key belongs to: a stored model provider, or a service beside the models. One the
 // import has just made counts at once (the snapshot may still be loading).
 const justMade = new Map()
@@ -92,6 +100,8 @@ keyStore = createKeyStore({
   providerOf,
   check: (connection) => checkConnection(connection, { fetch: guardedFetch(serverRules(), { maxBytes: MAX_CHECK_RESPONSE_BYTES }) }),
   checkAux: (connection) => checkAuxConnection(connection, { fetch: guardedFetch(serverRules(), { maxBytes: MAX_CHECK_RESPONSE_BYTES }) }),
+  // a voice provider's key: its socket's setup (server/voice/check.mjs), looked up with the server's rules
+  checkRealtime: (connection) => voiceCheck(connection),
   // a key test asks the provider's first enabled model (the default's when it is that provider's)
   modelFor: (provider) => {
     const snap = snapshotHolder.current()
@@ -169,6 +179,7 @@ export const aiCatalog = createCatalogOps({
   readProvider: (id) => raw.providers.findOne({ _id: id }),
   listModels: (connection) => listModels(connection, { fetch: guardedFetch(serverRules()) }),
   check: (connection) => checkConnection(connection, { fetch: guardedFetch(serverRules(), { maxBytes: MAX_CHECK_RESPONSE_BYTES }) }),
+  checkRealtime: (connection) => voiceCheck(connection),
 })
 
 /**

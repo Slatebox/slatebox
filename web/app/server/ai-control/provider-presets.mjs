@@ -4,11 +4,17 @@
 // "Other (OpenAI-compatible)" takes an address of its own. The wire protocol is an internal detail
 // (most vendors speak the OpenAI API), shown small on the page.
 //
-// Suggested models carry their price from the meter's table (metering/prices.mjs AI_PRICES) when it
-// has one; the administrator can change or add prices on the Models tab.
+// Suggested models carry their price from the meter's table (metering/prices.mjs AI_PRICES, and
+// VOICE_PRICES for the realtime voice models) when it has one; the administrator can change or add
+// prices on the Models tab.
+//
+// The two realtime presets (OpenAI Realtime, Google Gemini Live) are voice providers: their models
+// talk with people in real time through the relay (server/voice), never answer a text request. Their
+// suggested models list the voices they offer; which voice a part uses is the administrator's choice
+// on its binding (a person's own connection uses the provider's own default voice).
 //
 // Pure data and functions: no Meteor, no database.
-import { AI_PRICES } from '../metering/prices.mjs'
+import { AI_PRICES, VOICE_PRICES } from '../metering/prices.mjs'
 
 const BEARER = Object.freeze({ style: 'bearer' })
 
@@ -19,6 +25,26 @@ const suggested = (model, label, capabilities = { tools: true }) => {
     prices: row ? Object.freeze({ inputPerM: row.inPerMillion, outputPerM: row.outPerMillion, imageEach: null, currency: 'USD' }) : null,
   })
 }
+
+// A realtime voice model: its voices (the names its provider documents), and for OpenAI the
+// model that writes what the person said (input transcription) as the provider suggests it.
+const suggestedVoice = (model, label, { voices, transcriptionModel = null }) => {
+  const row = VOICE_PRICES.find((p) => p.model === model)
+  return Object.freeze({
+    model, label, capabilities: Object.freeze({ voice: true, tools: true }), voices: Object.freeze([...voices]),
+    ...(transcriptionModel && { transcriptionModel }),
+    prices: row ? Object.freeze({
+      inputPerM: row.textInPerMillion, outputPerM: row.textOutPerMillion, audioInputPerM: row.audioInPerMillion, audioOutputPerM: row.audioOutPerMillion,
+      ...(row.cachedAudioInPerMillion !== undefined && { cachedAudioInputPerM: row.cachedAudioInPerMillion }), imageEach: null, currency: 'USD',
+    }) : null,
+  })
+}
+// https://developers.openai.com/api/docs/models (marin and cedar are the ones OpenAI recommends)
+const OPENAI_VOICES = ['marin', 'cedar', 'alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse']
+// https://aistudio.google.com/docs/live-api/capabilities (the prebuilt text-to-speech voices)
+const GEMINI_VOICES = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Aoede', 'Leda', 'Orus', 'Zephyr', 'Autonoe', 'Callirrhoe', 'Enceladus', 'Iapetus',
+  'Umbriel', 'Algieba', 'Despina', 'Erinome', 'Algenib', 'Rasalgethi', 'Laomedeia', 'Achernar', 'Alnilam', 'Schedar', 'Gacrux',
+  'Pulcherrima', 'Achird', 'Zubenelgenubi', 'Vindemiatrix', 'Sadachbia', 'Sadaltager', 'Sulafat']
 
 const preset = (id, fields) => Object.freeze({
   id, protocol: 'openai-chat', auth: BEARER, toolChoice: 'auto', baseUrlLocked: true, models: Object.freeze([]), ...fields,
@@ -59,6 +85,22 @@ export const PROVIDER_PRESETS = Object.freeze({
     label: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     models: Object.freeze([suggested('gemini-3.8-flash', 'Gemini 3.8 Flash', { tools: true, vision: true }), suggested('gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite')]),
   }),
+  // Voice providers (server/voice): the relay holds their WebSocket; the browser never sees it.
+  'openai-realtime': preset('openai-realtime', {
+    label: 'OpenAI Realtime (voice)', baseUrl: 'wss://api.openai.com/v1/realtime', protocol: 'openai-realtime', toolChoice: 'auto',
+    models: Object.freeze([
+      suggestedVoice('gpt-realtime-2.1', 'GPT Realtime 2.1', { voices: OPENAI_VOICES, transcriptionModel: 'gpt-realtime-whisper' }),
+      suggestedVoice('gpt-realtime-2.1-mini', 'GPT Realtime 2.1 mini', { voices: OPENAI_VOICES, transcriptionModel: 'gpt-realtime-whisper' }),
+    ]),
+  }),
+  'gemini-live': preset('gemini-live', {
+    label: 'Google Gemini Live (voice)', baseUrl: 'wss://generativelanguage.googleapis.com', protocol: 'gemini-live', toolChoice: 'auto',
+    auth: Object.freeze({ style: 'header', name: 'x-goog-api-key' }),
+    models: Object.freeze([
+      suggestedVoice('gemini-3.8-live', 'Gemini 3.8 Live', { voices: GEMINI_VOICES }),
+      suggestedVoice('gemini-3.1-flash-live-preview', 'Gemini 3.1 Flash Live (preview)', { voices: GEMINI_VOICES }),
+    ]),
+  }),
   other: preset('other', { label: 'Other (OpenAI-compatible)', baseUrl: null, baseUrlLocked: false }),
 })
 export const PRESET_IDS = Object.freeze(Object.keys(PROVIDER_PRESETS))
@@ -71,6 +113,8 @@ export const PROTOCOL_TEXT = Object.freeze({
   'openai-chat': 'speaks the OpenAI API',
   'anthropic-messages': 'speaks the Anthropic API',
   'openai-images': 'speaks the OpenAI images API',
+  'openai-realtime': 'talks through the OpenAI Realtime API',
+  'gemini-live': 'talks through the Gemini Live API',
 })
 
 const hostOf = (url) => {

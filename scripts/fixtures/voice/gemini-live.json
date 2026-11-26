@@ -1,0 +1,22 @@
+{
+  "_source": "Shapes of the Gemini Live API server messages (BidiGenerateContentServerMessage), from https://aistudio.google.com/api-reference/live and the tools and session-management guides, read 2026-11-26. Audio is 4 PCM16 samples, base64.",
+  "setupComplete": { "setupComplete": {} },
+  "audio": { "serverContent": { "modelTurn": { "parts": [{ "inlineData": { "mimeType": "audio/pcm;rate=24000", "data": "AAABAAIAAwA=" } }] } } },
+  "inputTranscription": { "serverContent": { "inputTranscription": { "text": "Group these notes" } } },
+  "outputTranscription": { "serverContent": { "outputTranscription": { "text": "Sure, one moment." } } },
+  "interrupted": { "serverContent": { "interrupted": true } },
+  "turnComplete": { "serverContent": { "turnComplete": true } },
+  "generationComplete": { "serverContent": { "generationComplete": true } },
+  "toolCall": { "toolCall": { "functionCalls": [{ "id": "function-call-1", "name": "send_to_slatebox", "args": { "text": "group these notes by theme" } }] } },
+  "toolCallCancellation": { "toolCallCancellation": { "ids": ["function-call-1"] } },
+  "goAway": { "goAway": { "timeLeft": "10s" } },
+  "sessionResumptionUpdate": { "sessionResumptionUpdate": { "newHandle": "handle-abc", "resumable": true } },
+  "sessionResumptionNotResumable": { "sessionResumptionUpdate": { "newHandle": "", "resumable": false } },
+  "usageMetadata": {
+    "usageMetadata": {
+      "promptTokenCount": 1200, "responseTokenCount": 400, "toolUsePromptTokenCount": 30, "thoughtsTokenCount": 20, "totalTokenCount": 1650,
+      "promptTokensDetails": [{ "modality": "TEXT", "tokenCount": 700 }, { "modality": "AUDIO", "tokenCount": 500 }],
+      "responseTokensDetails": [{ "modality": "AUDIO", "tokenCount": 380 }, { "modality": "TEXT", "tokenCount": 20 }]
+    }
+  }
+}

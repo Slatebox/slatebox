@@ -42,8 +42,10 @@ const ESTIMATES_BEFORE = {
 // one forced call with at most one retry over the person's facts (3,000 and 50,000 µ$); building a For you idea
 // (2026-11-26) is a board draft on workshop.draft under a meter key of its own (personal.build), so it has board
 // drafting's estimate and the meter's default ceiling (5,000 and 50,000 µ$).
-const ESTIMATES_ADDED = { interview: 2000, 'personal.suggest': 3000, 'personal.build': 5000 }
-const CEILINGS_ADDED = { interview: 50_000, 'personal.suggest': 50_000, 'personal.build': 50_000 }
+// Voice (2026-11-26) is metered by the minute under each voice part's own feature: a minute is held for
+// 50,000 µ$ and may spend at most 200,000 µ$ (server/voice/meter.mjs).
+const ESTIMATES_ADDED = { interview: 2000, 'personal.suggest': 3000, 'personal.build': 5000, voice: 50_000, 'voice-chat': 50_000, 'voice-interview': 50_000 }
+const CEILINGS_ADDED = { interview: 50_000, 'personal.suggest': 50_000, 'personal.build': 50_000, voice: 200_000, 'voice-chat': 200_000, 'voice-interview': 200_000 }
 const CEILINGS_BEFORE = { generation: 200_000, vision: 200_000, presentation: 200_000, shape: 60_000 }
 
 test('every request feature reaches the same choice as before the catalogue', () => {
@@ -103,7 +105,7 @@ test('library and connectors have landed: both are in this build; connectors run
   assert.equal(surface('connectors').edition, null)
   const inBuild = SURFACES.filter((s) => s.inBuild && s.useKey).map((s) => s.id)
   assert.deepEqual(inBuild, ['default', 'chat', 'chat.route', 'generation', 'generation.notes', 'presentation', 'vision', 'images', 'shape',
-    'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest'])
+    'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest', 'voice', 'voice.chat', 'voice.interview'])
 })
 
 test('the features people choose first are the catalogue rows that follow default, unchanged, then library (a row of its own that follows chat)', () => {
@@ -115,6 +117,8 @@ test('the features people choose first are the catalogue rows that follow defaul
     ['images', 'Generating images', 'make images', ['images']],
     ['shape', 'Drawing custom shapes', 'call tools', ['tools']],
     ['library', 'Library review and refinement', 'call tools', ['tools']],
+    // voice (2026-11-26): a row of its own, which takes only a model that talks
+    ['voice', 'Talking with the agent (voice)', 'talk', ['voice']],
   ])
   assert.deepEqual({ ...USE_FALLBACK }, { library: 'chat' })
   assert.deepEqual(USE_KEYS, USE_SURFACES.map((s) => s.id))
@@ -233,8 +237,11 @@ test('ai.get lists every surface with what it follows; a person\'s own choice fo
   const { ai } = service()
   await ai.update('ana', { level: 'me', connections: [{ name: 'muse', type: 'openai-compatible', baseUrl: 'https://muse.example.com/v1', model: 'muse-ember-1.0' }], use: { chat: 'me:muse' } })
   const view = await ai.view('ana')
-  assert.deepEqual(view.features.map((f) => f.id), ['chat', 'generation', 'presentation', 'vision', 'images', 'shape', 'library'])
+  assert.deepEqual(view.features.map((f) => f.id), ['chat', 'generation', 'presentation', 'vision', 'images', 'shape', 'library', 'voice'])
   const byId = Object.fromEntries(view.surfaces.map((s) => [s.id, s]))
+  // a text choice for chat never reaches the voice parts: they follow voice, and voice stops before default
+  assert.equal(byId['voice.chat'].follows, 'voice')
+  assert.equal(view.effective['voice.chat'].ref, 'builtin')
   assert.equal(byId['agent.slatebox'].follows, 'canvas')
   assert.equal(byId['agent.slatebox'].followsTitle, 'Canvas conversation (drawing chat)')
   assert.equal(byId.workshop.followsTitle, 'Conversation and edits')

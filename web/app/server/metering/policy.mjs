@@ -129,6 +129,8 @@ export const COPY = Object.freeze({
   getPro: `Slatebox's agent comes with Slatebox Pro, ${PRO_MONTH}, or a balance. Get Pro or top up in your profile.`,
   getProCalls: `Starting a call comes with Slatebox Pro, ${PRO_MONTH}, or a balance. Anyone can join a call that's already running.`,
   getProImages: 'Image search and image generation come with Slatebox Pro or a balance. Get Pro or top up in your profile.',
+  // talking with the agent by voice (server/voice) is never in a free amount: Pro credits or a balance
+  getProVoice: `Talking with the agent comes with Slatebox Pro, ${PRO_MONTH}, or a balance. Get Pro or top up in your profile.`,
   proPastDue: "Your Pro payment didn't go through, so your credits are paused. Update your card in your profile. Your balance still works.",
   proAiToday: "You have used today's Pro credits for the agent. Top up in your profile.",
   proAiMonth: "You have used this month's Pro credits for the agent. Top up in your profile.",
@@ -157,6 +159,7 @@ export const OWN_KEY_COPY = Object.freeze({
   stagePaused: 'Free AI and free calls are paused until the 1st. Your own keys and your balance still work.',
   getPro: `Slatebox's agent on its own models comes with Slatebox Pro, ${PRO_MONTH}, or a balance. Get Pro or top up in your profile, or use your own key: it spends no Slatebox credits.`,
   getProCalls: `Starting a call comes with Slatebox Pro, ${PRO_MONTH}, or a balance, or use your own call key: it spends no Slatebox credits. Anyone can join a call that's already running.`,
+  getProVoice: `Talking with the agent comes with Slatebox Pro, ${PRO_MONTH}, or a balance, or use your own voice key: it spends no Slatebox credits.`,
   proPastDue: "Your Pro payment didn't go through, so your credits are paused. Update your card in your profile. Your own keys and your balance still work.",
   proAiToday: "You have used today's Pro credits for the agent. Add your own key or top up in your profile.",
   proAiMonth: "You have used this month's Pro credits for the agent. Add your own key or top up in your profile.",
@@ -347,7 +350,7 @@ const messagesOf = copy => Object.freeze({
   unverified: copy.unverified, 'ai-today': copy.aiToday, 'ai-month': copy.aiMonth, 'ai-paused': copy.aiPaused,
   'calls-today': copy.callsToday, 'calls-month': copy.callsMonth, 'calls-paused': copy.callsPaused, 'video-stage': copy.callsMonth,
   'presentations-today': copy.presentationsToday, frozen: copy.frozen, 'free-stopped': copy.freeStopped, balance: copy.balanceLow,
-  pro: copy.getPro, 'pro-calls': copy.getProCalls, 'pro-images': copy.getProImages, 'pro-past-due': copy.proPastDue,
+  pro: copy.getPro, 'pro-calls': copy.getProCalls, 'pro-images': copy.getProImages, 'pro-voice': copy.getProVoice, 'pro-past-due': copy.proPastDue,
 })
 // The same refusals in Pro's words, for a person whose included amount is Slatebox Pro.
 const proMessagesOf = copy => Object.freeze({
@@ -369,8 +372,13 @@ export const messageFor = (code, who = null, settings = null) => {
 
 // What Slatebox Pro is needed for when a person without it asks: which code, by kind.
 const IMAGE_KINDS = new Set(['imageSearch', 'imageGeneration'])
-function proCode(kind, person) {
+// The meter features of talking with the agent (ai-control/catalogue.mjs, the voice parts): AI
+// spend, but never from a free amount, only Pro credits, a balance or an own key.
+export const VOICE_METER_FEATURES = Object.freeze(['voice', 'voice-chat', 'voice-interview'])
+const isVoice = input => input.kind === 'ai' && VOICE_METER_FEATURES.includes(input.feature)
+function proCode(kind, person, voice = false) {
   if (person.proPastDue) return 'pro-past-due'
+  if (voice) return 'pro-voice'
   if (isCall(kind)) return 'pro-calls'
   if (IMAGE_KINDS.has(kind)) return 'pro-images'
   return 'pro'
@@ -471,8 +479,9 @@ function meterRoute(input) {
   const args = { ...input, usage, minutes, estimateMicros, level, settings, now }
 
   // Without the included amount (no Pro once Pro is needed): the free presentation plan, then a
-  // balance, else what Pro or a balance (or an own key) would give.
-  if (person.included === false) {
+  // balance, else what Pro or a balance (or an own key) would give. Talking with the agent takes
+  // Pro credits or a balance the same way, wherever Pro is needed or not.
+  if (person.included === false || (isVoice(input) && !pro)) {
     if (guestUse(input)) {
       const plan = guestRoute(input, person)
       if (plan.ok) return plan
@@ -484,7 +493,7 @@ function meterRoute(input) {
       return voice.ok ? { ...voice, fellBackToVoice: true, notice: copy.balanceVoiceOnly } : voice
     }
     if (paid === 'frozen') return refuse('frozen', copy.frozen)
-    const code = proCode(kind, person)
+    const code = proCode(kind, person, isVoice(input))
     const hasSome = [wallets.personal, wallets.team].some(w => (w?.balanceMicros || 0) > 0)
     return refuse(code, hasSome ? `${messages[code]} ${copy.balanceTooLow}` : messages[code])
   }

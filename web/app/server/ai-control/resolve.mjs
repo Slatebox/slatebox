@@ -8,13 +8,16 @@
 //   4. Generating images with nothing set: the built-in Stability image service (Ember cannot draw);
 //   5. the default binding ("Everything not set");
 //   6. the built-in default: Meta Muse Ember (provider-presets.mjs BUILTIN_DEFAULT).
+// A voice part (catalogue needs voice) stops after 3: it never falls to the default or the built-in
+// default, which answer in text. Unset all the way up, it has no server model (source 'unset',
+// route null), and only a person's or team's own voice connection can serve it.
 // A person's or team's own AI (Cloud and self-hosted alike, ai-settings-core.mjs) comes before 2 to
 // 6 for them, and never before 1 or a part an administrator turned off.
 //
 // The request path keeps its own sensible values (no administrator knobs): a 90 second time limit,
 // 2 retries for a failing service, 3 tries for an answer of the right shape, the provider's tool
 // choice, and the call site's temperature and answer size.
-import { followChain, surface as surfaceById, surfaceForRequest } from './catalogue.mjs'
+import { followChain, isVoiceSurface, surface as surfaceById, surfaceForRequest } from './catalogue.mjs'
 import { EMPTY_SNAPSHOT, modelId, parsePromptRef } from './snapshot.mjs'
 import { BUILTIN_DEFAULT, PROVIDER_PRESETS, providerFromPreset } from './provider-presets.mjs'
 
@@ -49,6 +52,7 @@ function routeOf(snapshot, model, provider) {
     protocol: provider.protocol, baseUrl: provider.baseUrl, toolChoice: provider.toolChoice || preset?.toolChoice || 'auto',
     capabilities: { ...(model.capabilities || {}) }, prices: model.prices ?? null, maxOutput: model.maxOutput ?? null,
     keyFingerprint: snapshot?.keys?.[provider._id]?.keyFingerprint ?? null,
+    ...(model.voices && { voices: [...model.voices] }), ...(model.transcriptionModel && { transcriptionModel: model.transcriptionModel }),
   }
 }
 
@@ -71,9 +75,10 @@ function builtinRoute(snapshot) {
 /**
  * The route of one part of Slatebox.
  * → { surface, builtinOnly, enabled, disabledMessage, disabledBy, source, followed, route }
- *   source: 'off-global' | 'off' | 'part' | 'followed' | 'stability' | 'default' | 'builtin'
+ *   source: 'off-global' | 'off' | 'part' | 'followed' | 'stability' | 'default' | 'builtin' | 'unset' (a voice part with nothing bound)
  *   route: { provider, providerLabel, preset, model, modelId, label, protocol, baseUrl, toolChoice,
- *            capabilities, prices, maxOutput, keyFingerprint } | { error } | STABILITY_ROUTE | null
+ *            capabilities, prices, maxOutput, keyFingerprint, voice (a voice part's binding: its voice, or null),
+ *            voices?, transcriptionModel? } | { error } | STABILITY_ROUTE | null
  */
 export function resolveModel(snapshot, { surface } = {}) {
   const snap = snapshot || EMPTY_SNAPSHOT
@@ -94,8 +99,11 @@ export function resolveModel(snapshot, { surface } = {}) {
     if (doc.use === 'off') {
       return { ...base, enabled: false, disabledMessage: `${surfaceById(sid)?.title || sid} is turned off by your administrator.`, disabledBy: followed, source: 'off', followed, route: null }
     }
-    return { ...base, enabled: true, disabledMessage: null, source: followed ? 'followed' : 'part', followed, route: fromModelId(snap, doc.model) }
+    const route = fromModelId(snap, doc.model)
+    const voiced = isVoiceSurface(id) && !route.error ? { ...route, voice: doc.voice ?? null } : route
+    return { ...base, enabled: true, disabledMessage: null, source: followed ? 'followed' : 'part', followed, route: voiced }
   }
+  if (isVoiceSurface(id)) return { ...base, enabled: true, disabledMessage: null, source: 'unset', route: null }
   if (followChain(id).includes('images')) return { ...base, enabled: true, disabledMessage: null, source: 'stability', route: STABILITY_ROUTE }
   const fallback = snap.bindings.default
   if (fallback?.use === 'model') return { ...base, enabled: true, disabledMessage: null, source: 'default', route: fromModelId(snap, fallback.model) }

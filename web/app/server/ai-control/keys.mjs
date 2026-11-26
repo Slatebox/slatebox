@@ -15,6 +15,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { open as openKey, seal } from '../metering/vault.mjs'
 import { redactText } from '../exec/redact.mjs'
 import { PROVIDER_PRESETS } from './provider-presets.mjs'
+import { isRealtimeProtocol } from './providers.mjs'
 
 export const SERVER_OWNER = Object.freeze({ ownerType: 'server', ownerId: 'server' })
 export const KEY_STATUSES = Object.freeze(['active', 'standby', 'revoked'])
@@ -60,6 +61,7 @@ const KEY_FILTER = { ...SERVER_OWNER, kind: 'key' }
  *              or null (stored model providers and the services beside the models)
  *   check(connection) → a test result ({ ok, message, ... }) for a model provider's key
  *   checkAux(connection) → the same for a service beside the models
+ *   checkRealtime?(connection) → the same for a voice provider (server/voice/check.mjs: its socket's setup)
  *   modelFor?(provider) → the model a key test asks (the provider's first model), or null
  *   audit?(entry) → records { action, actor, target, before, after, reason } (store.record)
  *   bump?(actor) → moves the AI control generation, so every pod's snapshot sees the change
@@ -67,7 +69,7 @@ const KEY_FILTER = { ...SERVER_OWNER, kind: 'key' }
  * }
  */
 export function createKeyStore({
-  keys, master, providerOf, check = async () => ({ ok: false, message: 'Testing is not available.' }), checkAux = null,
+  keys, master, providerOf, check = async () => ({ ok: false, message: 'Testing is not available.' }), checkAux = null, checkRealtime = null,
   modelFor = () => null, audit = null, bump = null, now = () => new Date(), newId = () => randomUUID().replaceAll('-', '').slice(0, 17),
   touchEveryMs = TOUCH_EVERY_MS, log = console,
 }) {
@@ -199,6 +201,8 @@ export function createKeyStore({
     let result
     if (p.aux) {
       result = checkAux ? await checkAux(connection) : { ok: false, message: 'Testing this kind of key is not available on this server.' }
+    } else if (isRealtimeProtocol(p.protocol)) {
+      result = checkRealtime ? await checkRealtime({ ...connection, protocol: p.protocol }) : { ok: false, message: 'Testing this kind of key is not available on this server.' }
     } else {
       result = await check(connection)
     }

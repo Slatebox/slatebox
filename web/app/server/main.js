@@ -38,6 +38,8 @@ import './methods/native-conversation'
 import './methods/canvas-conversation'
 // the interview in About you: the agent gets to know the person's work (server/interview/core.mjs)
 import './methods/interview'
+// voice: talking with the agent, full duplex, through the relay at /voice/ws (server/voice)
+import './voice/meteor'
 import './methods/excalidraw-share'
 import './agents/meteor'
 import './agents/suggestions-meteor'

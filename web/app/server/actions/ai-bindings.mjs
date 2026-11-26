@@ -58,6 +58,7 @@ export const aiBindingsSet = defineAction({
             surface: SURFACE,
             use: { type: 'string', enum: [...BINDING_CHOICES] },
             model: { type: 'string', maxLength: 260, description: 'With use model: <provider>:<model>.' },
+            voice: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$', description: 'A voice part with use model: one of the model\'s voices. Left out: the provider\'s own default voice.' },
           },
           required: ['surface', 'use'],
           additionalProperties: false,

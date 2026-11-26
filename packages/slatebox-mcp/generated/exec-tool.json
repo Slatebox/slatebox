@@ -641,7 +641,7 @@
               "type": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
-                "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added."
+                "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, and the voice providers openai-realtime and gemini-live), or one an administrator added."
               },
               "baseUrl": {
                 "type": "string",
@@ -768,7 +768,7 @@
                 "type": {
                   "type": "string",
                   "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
-                  "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added."
+                  "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, and the voice providers openai-realtime and gemini-live), or one an administrator added."
                 },
                 "baseUrl": {
                   "type": "string",
@@ -834,146 +834,7 @@
           },
           "use": {
             "type": "object",
-            "properties": {
-              "default": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "chat": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "chat.route": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "generation": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "generation.notes": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "presentation": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "vision": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "images": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "shape": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "workshop": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "workshop.draft": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "canvas": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "agent.slatebox": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "library": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "connectors": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "interview": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              },
-              "personal.suggest": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 48,
-                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
-              }
-            },
-            "additionalProperties": false,
-            "description": "Which connection each feature uses. An unset feature follows the one it belongs to (workshop follows chat), and default serves every feature not named."
+            "description": "Which connection each feature uses. An unset feature follows the one it belongs to (workshop follows chat), and default serves every feature not named. Its full type is long and is in describe, methods [\"ai.update\"]."
           },
           "ownProviders": {
             "type": "string",

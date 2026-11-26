@@ -9998,7 +9998,7 @@
                 "type": {
                   "type": "string",
                   "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
-                  "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added."
+                  "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, and the voice providers openai-realtime and gemini-live), or one an administrator added."
                 },
                 "baseUrl": {
                   "type": "string",
@@ -10200,6 +10200,30 @@
                 ],
                 "maxLength": 48,
                 "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
+              },
+              "voice": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 48,
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
+              },
+              "voice.chat": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 48,
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
+              },
+              "voice.interview": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 48,
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               }
             },
             "additionalProperties": false,
@@ -10345,7 +10369,7 @@
               "type": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
-                "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added."
+                "description": "The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, and the voice providers openai-realtime and gemini-live), or one an administrator added."
               },
               "baseUrl": {
                 "type": "string",
@@ -10821,6 +10845,9 @@
               "connectors",
               "interview",
               "personal.suggest",
+              "voice",
+              "voice.chat",
+              "voice.interview",
               "eval"
             ],
             "description": "For target binding: the part of Slatebox."
@@ -10896,7 +10923,21 @@
               "personal.suggest.ask",
               "personal.suggest.retry",
               "tool.suggest_ideas",
-              "workshop.draft.personal"
+              "workshop.draft.personal",
+              "voice.chat.system",
+              "voice.chat.opening",
+              "voice.interview.system",
+              "voice.interview.opening",
+              "tool.send_to_slatebox",
+              "voice.tool-failed",
+              "voice.answer",
+              "voice.answer.none",
+              "voice.answer.discarded",
+              "voice.answer.unconfirmed",
+              "voice.answer.empty",
+              "voice.answer.busy",
+              "voice.late-answer",
+              "voice.resume"
             ],
             "description": "For target prompt: the prompt."
           },
@@ -10996,9 +11037,11 @@
                   "mistral",
                   "xai",
                   "gemini",
+                  "openai-realtime",
+                  "gemini-live",
                   "other"
                 ],
-                "description": "What the provider is: meta (Muse), openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, or other (any OpenAI-compatible address)."
+                "description": "What the provider is: meta (Muse), openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, the voice providers openai-realtime and gemini-live (talking with the agent), or other (any OpenAI-compatible address)."
               },
               "id": {
                 "type": "string",
@@ -11505,6 +11548,9 @@
                     },
                     "reasoning": {
                       "type": "boolean"
+                    },
+                    "voice": {
+                      "type": "boolean"
                     }
                   },
                   "additionalProperties": false,
@@ -11547,6 +11593,30 @@
                       "minimum": 0,
                       "description": "Dollars per generated image."
                     },
+                    "audioInputPerM": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": 0,
+                      "description": "Voice models: dollars per million tokens of what the person says."
+                    },
+                    "audioOutputPerM": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": 0,
+                      "description": "Voice models: dollars per million tokens of what the agent says."
+                    },
+                    "cachedAudioInputPerM": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": 0,
+                      "description": "Voice models: dollars per million cached audio input tokens, where the provider prices them apart."
+                    },
                     "currency": {
                       "type": "string",
                       "enum": [
@@ -11555,6 +11625,23 @@
                     }
                   },
                   "additionalProperties": false
+                },
+                "voices": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+                  },
+                  "description": "Voice models: the voices it offers, for a voice part's binding to choose from."
+                },
+                "transcriptionModel": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200,
+                  "description": "Voice models that need one (OpenAI Realtime): the model that writes what the person said."
                 },
                 "status": {
                   "type": "string",
@@ -11855,7 +11942,7 @@
           "changes": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 17,
+            "maxItems": 20,
             "items": {
               "type": "object",
               "properties": {
@@ -11878,6 +11965,9 @@
                     "connectors",
                     "interview",
                     "personal.suggest",
+                    "voice",
+                    "voice.chat",
+                    "voice.interview",
                     "eval"
                   ],
                   "description": "The part of Slatebox, for example shape or agent.slatebox; default is everything not set."
@@ -11894,6 +11984,11 @@
                   "type": "string",
                   "maxLength": 260,
                   "description": "With use model: <provider>:<model>."
+                },
+                "voice": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+                  "description": "A voice part with use model: one of the model's voices. Left out: the provider's own default voice."
                 }
               },
               "required": [
@@ -12095,7 +12190,21 @@
               "personal.suggest.ask",
               "personal.suggest.retry",
               "tool.suggest_ideas",
-              "workshop.draft.personal"
+              "workshop.draft.personal",
+              "voice.chat.system",
+              "voice.chat.opening",
+              "voice.interview.system",
+              "voice.interview.opening",
+              "tool.send_to_slatebox",
+              "voice.tool-failed",
+              "voice.answer",
+              "voice.answer.none",
+              "voice.answer.discarded",
+              "voice.answer.unconfirmed",
+              "voice.answer.empty",
+              "voice.answer.busy",
+              "voice.late-answer",
+              "voice.resume"
             ],
             "description": "The prompt, for example shape.system."
           }
@@ -12245,7 +12354,21 @@
               "personal.suggest.ask",
               "personal.suggest.retry",
               "tool.suggest_ideas",
-              "workshop.draft.personal"
+              "workshop.draft.personal",
+              "voice.chat.system",
+              "voice.chat.opening",
+              "voice.interview.system",
+              "voice.interview.opening",
+              "tool.send_to_slatebox",
+              "voice.tool-failed",
+              "voice.answer",
+              "voice.answer.none",
+              "voice.answer.discarded",
+              "voice.answer.unconfirmed",
+              "voice.answer.empty",
+              "voice.answer.busy",
+              "voice.late-answer",
+              "voice.resume"
             ],
             "description": "The prompt, for example shape.system."
           },
@@ -12424,7 +12547,21 @@
               "personal.suggest.ask",
               "personal.suggest.retry",
               "tool.suggest_ideas",
-              "workshop.draft.personal"
+              "workshop.draft.personal",
+              "voice.chat.system",
+              "voice.chat.opening",
+              "voice.interview.system",
+              "voice.interview.opening",
+              "tool.send_to_slatebox",
+              "voice.tool-failed",
+              "voice.answer",
+              "voice.answer.none",
+              "voice.answer.discarded",
+              "voice.answer.unconfirmed",
+              "voice.answer.empty",
+              "voice.answer.busy",
+              "voice.late-answer",
+              "voice.resume"
             ],
             "description": "The prompt, for example shape.system."
           },
@@ -12602,7 +12739,21 @@
               "personal.suggest.ask",
               "personal.suggest.retry",
               "tool.suggest_ideas",
-              "workshop.draft.personal"
+              "workshop.draft.personal",
+              "voice.chat.system",
+              "voice.chat.opening",
+              "voice.interview.system",
+              "voice.interview.opening",
+              "tool.send_to_slatebox",
+              "voice.tool-failed",
+              "voice.answer",
+              "voice.answer.none",
+              "voice.answer.discarded",
+              "voice.answer.unconfirmed",
+              "voice.answer.empty",
+              "voice.answer.busy",
+              "voice.late-answer",
+              "voice.resume"
             ],
             "description": "The prompt, for example shape.system."
           },
@@ -12652,6 +12803,9 @@
               "connectors",
               "interview",
               "personal.suggest",
+              "voice",
+              "voice.chat",
+              "voice.interview",
               "eval"
             ],
             "description": "Whose binding (model chain) to test against."

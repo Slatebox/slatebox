@@ -22,7 +22,7 @@ export const connectionInput = {
   type: 'object',
   properties: {
     name: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,39}$', description: 'Your name for it, for example desk-model.' },
-    type: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,39}$', description: 'The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini), or one an administrator added.' },
+    type: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,39}$', description: 'The provider: openai-compatible (any host or local server: Ollama, llama.cpp, vLLM, LM Studio and others), a named one (meta, openai, anthropic, deepinfra, together, groq, fireworks, openrouter, mistral, xai, gemini, and the voice providers openai-realtime and gemini-live), or one an administrator added.' },
     baseUrl: { type: 'string', maxLength: 500, description: 'For openai-compatible: the address up to /v1, for example http://host.docker.internal:11434/v1.' },
     model: { type: 'string', maxLength: 200, description: 'The model name the endpoint serves.' },
     apiKey: { type: 'string', maxLength: 400, writeOnly: true, description: 'Stored encrypted and never shown again. Leave it out to keep the saved key; send an empty string to remove it.' },

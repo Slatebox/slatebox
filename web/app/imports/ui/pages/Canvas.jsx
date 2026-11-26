@@ -119,6 +119,7 @@ import { useNoteOnDoubleClick } from '../common/newNote.mjs'
 import '../common/main.css'
 import { noteSelection } from '../../api/common/chat-selection.mjs'
 import LibrarySlot from '../components/library/LibrarySlot'
+import { reloadPage } from '../voice/voiceReload'
 
 // Viewport and presence packages can save a snapshot without changing the team's work.
 const viewEvents = new Set(['onZoom', 'onCanvasMove', 'onMouseMoved', 'onCursorMoved', 'onPresenceChanged',
@@ -1497,7 +1498,8 @@ export default function Canvas() {
                   if(window.innerWidth<600) setNativeChatOpen(false)
                   return
                 }
-                window.location.reload() }} onPreview={setDrawingPreview}
+                // (a voice session on says what was kept first, and carries on after the reload)
+                reloadPage() }} onPreview={setDrawingPreview}
               readNodes={()=>JSON.stringify(JSON.parse(slate.current.exportJSON()).nodes)}
               readSelection={() => {
                 const line = slate.current?.getSelectedLine?.()

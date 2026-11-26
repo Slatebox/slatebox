@@ -10,7 +10,9 @@
 //   id              slug, ^[a-z0-9][a-z0-9.-]{0,47}$ (a dot marks a part of a parent surface)
 //   title           plain English, sentence case
 //   follows         the surface whose choice applies while this one is unset; null for the root
-//   needs           what a model must do for it: tools | vision | images
+//   needs           what a model must do for it: tools | vision | images | voice (talks in real time:
+//                   only a realtime provider's models, server/voice; a voice part never falls back
+//                   to a text model, and a text part never to a voice model)
 //   requestFeatures the `feature` names call sites pass to req() for it
 //   meterFeatures   the `feature` names runAIAction meters it under; estimate and ceiling (µ$) apply
 //                   to each of them
@@ -25,7 +27,7 @@
 // Pure data and functions: no Meteor, so the node tests, exec and the browser can all read it.
 
 const ID = /^[a-z0-9][a-z0-9.-]{0,47}$/
-const NEEDS = ['tools', 'vision', 'images']
+const NEEDS = ['tools', 'vision', 'images', 'voice']
 
 function defineSurfaces(rows) {
   const byId = new Map()
@@ -39,6 +41,9 @@ function defineSurfaces(rows) {
     if (row.ownRow && (row.follows == null || row.follows === 'default')) throw new Error(`ai-control catalogue: ${row.id} has its own row only when it follows a surface other than default`)
     if (row.builtinOnly && row.follows != null) throw new Error(`ai-control catalogue: built-in-only ${row.id} follows nothing`)
     for (const need of row.needs || []) if (!NEEDS.includes(need)) throw new Error(`ai-control catalogue: ${row.id} needs ${need}`)
+    if ((row.needs || []).includes('voice') && row.needs.length !== 1) throw new Error(`ai-control catalogue: voice part ${row.id} needs voice only (its tool runs through the surface's own text path)`)
+    const parent = row.follows != null ? byId.get(row.follows) : null
+    if (parent && parent.id !== 'default' && parent.needs.includes('voice') !== (row.needs || []).includes('voice')) throw new Error(`ai-control catalogue: ${row.id} and ${parent.id} must both talk or both not`)
     for (const feature of row.requestFeatures || []) {
       if (requestOwner.has(feature)) throw new Error(`ai-control catalogue: request feature ${feature} belongs to ${requestOwner.get(feature)} and ${row.id}`)
       requestOwner.set(feature, row.id)
@@ -105,6 +110,16 @@ export const SURFACES = defineSurfaces([
   // one retry), metered under its own key; building one is board drafting (workshop.draft, metered under 'personal.build').
   // Both are part of the personalization allowance (metering/allowance.mjs PERSONAL_FEATURES).
   { id: 'personal.suggest', title: 'Ideas made for you (For you)', follows: 'chat', needs: ['tools'], requestFeatures: ['personal.suggest'], meterFeatures: ['personal.suggest'], estimate: 3000, ceiling: 50000 },
+  // Voice: talking with the agent in real time, full duplex (server/voice: the browser holds one
+  // socket to this server, the server holds the provider's). One binding (voice) covers every voice
+  // part, and each part can be bound on its own. The realtime model has one tool, send_to_slatebox,
+  // which the browser runs through the part's own text path (Preview and Keep, the meter and the
+  // audit trail stay that path's), so a voice part needs only voice. Metered per minute under its
+  // own feature (server/voice/meter.mjs): the estimate is what one minute is held for, the ceiling
+  // the most one minute may spend.
+  { id: 'voice', title: 'Talking with the agent (voice)', follows: 'default', needs: ['voice'], requestFeatures: ['voice'], meterFeatures: ['voice'], estimate: 50000, ceiling: 200000 },
+  { id: 'voice.chat', title: 'Voice: Ask Slatebox on slates and boards', follows: 'voice', needs: ['voice'], requestFeatures: ['voice-chat'], meterFeatures: ['voice-chat'], estimate: 50000, ceiling: 200000 },
+  { id: 'voice.interview', title: 'Voice: getting to know you (the interview)', follows: 'voice', needs: ['voice'], requestFeatures: ['voice-interview'], meterFeatures: ['voice-interview'], estimate: 50000, ceiling: 200000 },
   // Prompt test runs and eval gates name their model per call; the row keeps them out of `chat`.
   { id: 'admin.test', title: 'Admin test runs', follows: null, useKey: false, estimate: 30000, ceiling: 200000 },
   // The judge of the live evals (scripts/evals): an administrator's choice only, never a person's, so a model other
@@ -115,6 +130,10 @@ export const SURFACES = defineSurfaces([
 const BY_ID = new Map(SURFACES.map((s) => [s.id, s]))
 export const SURFACE_IDS = Object.freeze(SURFACES.map((s) => s.id))
 export const surface = (id) => BY_ID.get(id) || null
+/** Whether a surface talks (needs a realtime voice model). */
+export const isVoiceSurface = (id) => Boolean(BY_ID.get(id)?.needs.includes('voice'))
+/** The voice parts people open a voice session for (voice.open): every voice surface but the root. */
+export const VOICE_SURFACES = Object.freeze(SURFACES.filter((s) => s.needs.includes('voice') && s.follows !== 'default').map((s) => s.id))
 
 // Paths that are not a model at all: video calls are metered under `call` but never reach req().
 const NOT_AI_FEATURES = Object.freeze(['call'])

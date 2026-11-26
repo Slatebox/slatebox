@@ -15,6 +15,7 @@ import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import CONSTANTS from '../../../api/common/constants'
+import { AI_SETTINGS_EVENT } from '../../../api/common/voice-client.mjs'
 import { AccountActions, AccountPanel, AccountSection, FinePrint, SPACE } from '../../common/AccountLayout'
 
 // The model each feature uses: the person's own connections (a provider with their key, or any
@@ -175,6 +176,8 @@ export function Level({ settings, level, title, holder, editable, onChange, chil
     setError('')
     try {
       onChange(await Meteor.callAsync(CONSTANTS.methods.ai.update, { level, ...input }))
+      // an open conversation asks again whether voice is set up (useVoiceAvailable)
+      window.dispatchEvent(new Event(AI_SETTINGS_EVENT))
     } catch (err) {
       setError(reason(err, 'The change was not saved.'))
       throw err
@@ -273,6 +276,7 @@ export default function AISettings() {
   const switchOwn = async (on) => {
     try {
       setSettings(await Meteor.callAsync(CONSTANTS.methods.ai.update, { level: 'server', ownProviders: on ? 'on' : 'off' }))
+      window.dispatchEvent(new Event(AI_SETTINGS_EVENT))
     } catch (err) {
       setError(reason(err, 'The change was not saved.'))
     }

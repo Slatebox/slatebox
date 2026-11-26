@@ -109,6 +109,8 @@ function refuseKind(kind, rules) {
 // The base address of an AI connection, as stored: no trailing slash. Throws EndpointRefused.
 export function checkEndpointUrl(raw, rules) {
   if (typeof raw !== 'string' || !raw.trim() || raw.length > 500) throw new EndpointRefused('Enter the address of your model, for example http://host.docker.internal:11434/v1')
+  // a realtime voice provider's secure WebSocket (wss://) is held to the rules of its https address
+  if (/^wss:\/\//i.test(raw.trim())) return checkEndpointUrl(raw.trim().replace(/^wss:/i, 'https:'), rules).replace(/^https:/, 'wss:')
   if (rules.publicOnly) {
     // the hosted rule, kept in one place with the own-key endpoint check
     let checked

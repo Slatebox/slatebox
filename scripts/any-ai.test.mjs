@@ -106,7 +106,9 @@ test('the connection lookup applies the same rules to every address a name resol
 
 test('the features are listed with what each needs, and every request feature maps to one', () => {
   // Restated (library): library review and refinement is a feature of its own, which follows chat unless chosen.
-  assert.deepEqual(AI_FEATURES.map((f) => f.id), ['chat', 'generation', 'presentation', 'vision', 'images', 'shape', 'library'])
+  // voice (2026-11-26): talking with the agent is a feature of its own, which takes only a model that talks
+  assert.deepEqual(AI_FEATURES.map((f) => f.id), ['chat', 'generation', 'presentation', 'vision', 'images', 'shape', 'library', 'voice'])
+  assert.deepEqual(AI_FEATURES.find((f) => f.id === 'voice').needs, ['voice'])
   assert.deepEqual(AI_FEATURES.find((f) => f.id === 'images').needs, ['images'])
   assert.deepEqual(AI_FEATURES.find((f) => f.id === 'vision').needs, ['vision'])
   for (const [request, choice] of Object.entries({ welcome: 'chat', workshop: 'chat', 'lane-chat': 'chat', 'map-chat': 'chat', generation: 'generation',

@@ -28,6 +28,9 @@ const PRESETS = {
   mistral: ['Mistral', 'https://api.mistral.ai/v1', 'openai-chat', 'auto'],
   xai: ['xAI (Grok)', 'https://api.x.ai/v1', 'openai-chat', 'auto'],
   gemini: ['Google Gemini', 'https://generativelanguage.googleapis.com/v1beta/openai', 'openai-chat', 'auto'],
+  // voice (2026-11-26): the realtime providers the relay holds the socket to
+  'openai-realtime': ['OpenAI Realtime (voice)', 'wss://api.openai.com/v1/realtime', 'openai-realtime', 'auto'],
+  'gemini-live': ['Google Gemini Live (voice)', 'wss://generativelanguage.googleapis.com', 'gemini-live', 'auto'],
   other: ['Other (OpenAI-compatible)', null, 'openai-chat', 'auto'],
 }
 

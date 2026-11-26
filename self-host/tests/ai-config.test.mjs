@@ -202,9 +202,18 @@ test('the image lists what it accepts for an installer: SLATEBOX_AI_PROVIDERS am
 })
 
 test('the features SLATEBOX_AI_CONFIG may choose are the app\'s own', async () => {
-  const { USE_SURFACES } = await import('../../web/app/server/ai-control/catalogue.mjs')
+  const { USE_SURFACES, isVoiceSurface } = await import('../../web/app/server/ai-control/catalogue.mjs')
+  // the parts that talk (voice, 2026-11-26) take a voice connection; every other part a text one
+  const connections = { a: { type: 'openai-compatible', url: 'https://ai.example.com/v1', model: 'm' }, v: { type: 'openai-realtime', key: 'k-voice', model: 'voice-model' } }
   for (const { id } of USE_SURFACES) {
-    const ai = operatorAI(env({ SLATEBOX_AI_CONFIG: JSON.stringify({ connections: { a: { type: 'openai-compatible', url: 'https://ai.example.com/v1', model: 'm' } }, use: { [id]: 'a' } }) }))
-    assert.equal(ai.settings.use[id], 'a', id)
+    const choice = isVoiceSurface(id) ? 'v' : 'a'
+    const ai = operatorAI(env({ SLATEBOX_AI_CONFIG: JSON.stringify({ connections, use: { [id]: choice } }) }))
+    assert.equal(ai.settings.use[id], choice, id)
   }
+  assert.throws(() => operatorAI(env({ SLATEBOX_AI_CONFIG: JSON.stringify({ connections, use: { voice: 'a' } }) })), /cannot talk/)
+  assert.throws(() => operatorAI(env({ SLATEBOX_AI_CONFIG: JSON.stringify({ connections, use: { default: 'v' } }) })), /voice connection/)
+  // a voice connection keeps its provider's own address and needs a key
+  const ai = operatorAI(env({ SLATEBOX_AI_CONFIG: JSON.stringify({ connections: { g: { type: 'gemini-live', key: 'k-g', model: 'voice-model' } }, use: { 'voice.chat': 'g' } }) }))
+  assert.deepEqual(ai.settings.connections.g, { type: 'gemini-live', model: 'voice-model', apiKey: 'k-g' })
+  assert.throws(() => operatorAI(env({ SLATEBOX_AI_CONFIG: JSON.stringify({ connections: { g: { type: 'gemini-live', model: 'voice-model' } } }) })), /needs a key/)
 })

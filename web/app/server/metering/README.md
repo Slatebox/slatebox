@@ -32,6 +32,7 @@ On Slatebox Cloud each signed-in person (never a guest) gets a daily allowance, 
 | `record.mjs` | One metered use: event (unique `ref`), counters, wallet debit. |
 | `ledger.mjs` | Wallet arithmetic: balance never below zero, what can go back to a card, top-up limits, card fee, refund plan. |
 | `calls.mjs` | Room per call, tokens, the 60-second tick (charge, extend, move to voice, end). Transcription (Slatebox's Deepgram key) only on unmetered operator calls: never on an own Daily key, and not on metered calls until it is priced. |
+| `../voice/meter.mjs` | Talking with the agent (voice, `server/voice`): each minute of a session is one meter action, held before it starts and released at its end; every usage report from the provider is recorded at the voice model's audio and text prices (`prices.mjs` `VOICE_PRICES`, or the model row's own). Voice is never paid from a free amount: Pro credits, a balance or the person's own key (`policy.mjs` `VOICE_METER_FEATURES`, refusal `pro-voice`). A minute that cannot be held, or spends past its ceiling, ends the session (`closing { reason: 'cap' }`). |
 | `vault.mjs` | AES-256-GCM for own keys, bound to owner and provider. Master key from `SLATEBOX_KEY_ENCRYPTION_KEY` (32 bytes, base64). |
 | `migrations.mjs` | M1 (indexes and the settings document, at startup), M3 (field cleanup, owner-run) and M4 (Slatebox Pro indexes, at startup; no data change). |
 | `meteor.js` | Meteor glue: settings, methods (`meter.*`, `keys.*`), the tick runner lease, alerts. |

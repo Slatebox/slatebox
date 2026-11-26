@@ -52,9 +52,12 @@ test('no user-facing string asks anyone to upgrade or unlock a feature', () => {
   const hits = []
   const strings = /(['"`])((?:\\.|(?!\1).)*)\1|>([^<>{}]+)</g
   for (const file of files) {
-    for (const m of read(file).matchAll(strings)) {
+    const source = read(file)
+    for (const m of source.matchAll(strings)) {
       const text = m[2] ?? m[3] ?? ''
       if ((ownerAllowed[file] || []).includes(text.trim())) continue
+      // Node's HTTP 'upgrade' event (a WebSocket handshake, server/voice/relay.mjs) is a protocol name nobody reads, not an upsell.
+      if (text === 'upgrade' && source.slice(Math.max(0, m.index - 12), m.index).match(/\.(on|off|once)\(\s*$/)) continue
       // The command that moves a self-hosted install to a new version (`slatebox upgrade`) is its name, not an upsell.
       if (/\bslatebox upgrade\b/.test(text) && !/\bupgrade\b/i.test(text.replace(/\bslatebox upgrade\b/g, ''))) continue
       if (/\bupgrade\b|upgrade today|upgrade now|unlock (themes|more|pro|features|video|ai)\b/i.test(text)) hits.push(`${file}: ${text.slice(0, 80)}`)

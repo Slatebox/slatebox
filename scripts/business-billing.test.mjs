@@ -501,7 +501,8 @@ test('no Pro or Business amount is typed into app copy or the READMEs: said from
   // the meter's refusals say Pro's price from the same place
   const policy = readFileSync(root + 'web/app/server/metering/policy.mjs', 'utf8')
   assert.doesNotMatch(policy, /Slatebox Pro,? \$\d/)
-  assert.equal(policy.match(/Slatebox Pro, \$\{PRO_MONTH\}/g).length, 4)
+  // AI and calls, with and without own keys, and talking with the agent (voice, 2026-11-26) the same two ways
+  assert.equal(policy.match(/Slatebox Pro, \$\{PRO_MONTH\}/g).length, 6)
   // the README does not say Business is bought in the app before its prices exist
   assert.doesNotMatch(readFileSync(root + 'README.md', 'utf8'), /gets Slatebox Business[^.]*on the team page/)
 })

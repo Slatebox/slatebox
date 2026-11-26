@@ -4,13 +4,30 @@
 //
 // Pure apart from the injected store, key store, address checks and probes.
 import { MAX_PRICE_PER_MILLION } from '../metering/prices.mjs'
-import { BUILTIN_PROVIDERS, PROVIDER_CAPS, ProviderError, mergeProviders, normalizeProvider, publicProvider } from './providers.mjs'
+import { BUILTIN_PROVIDERS, PROVIDER_CAPS, ProviderError, isRealtimeProtocol, mergeProviders, normalizeProvider, publicProvider } from './providers.mjs'
 import { PROVIDER_PRESETS, providerFromPreset } from './provider-presets.mjs'
 import { modelId } from './snapshot.mjs'
 
 export { modelId }
 const MODEL_NAME = /^[^\r\n]{1,200}$/
 const MAX_IMAGE_PRICE = 10
+// A voice name as providers spell them (Kore, marin, en-US-Chirp3-HD-Kore): letters, digits and . _ -
+export const VOICE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
+export const MAX_VOICES = 64
+const PRICE_FIELDS = ['inputPerM', 'outputPerM', 'imageEach', 'audioInputPerM', 'audioOutputPerM', 'cachedAudioInputPerM', 'currency']
+
+/** Checks a voice model's voices list: distinct names, at most 64. → the list, or throws ModelError. */
+export function normalizeVoices(voices) {
+  if (voices === undefined || voices === null) return []
+  if (!Array.isArray(voices) || voices.length > MAX_VOICES) throw new ModelError(`voices is a list of at most ${MAX_VOICES} voice names.`)
+  const out = []
+  for (const name of voices) {
+    if (typeof name !== 'string' || !VOICE_NAME.test(name)) throw new ModelError(`${String(name).slice(0, 64)} is not a voice name (letters, digits, dots, dashes and underscores, at most 64).`)
+    if (out.includes(name)) throw new ModelError(`${name} is listed twice in voices.`)
+    out.push(name)
+  }
+  return out
+}
 
 export class ModelError extends Error {
   constructor(message, status = 400, details = undefined) {
@@ -44,6 +61,19 @@ export function normalizeModel(input, { providers = {} } = {}) {
     }
   }
   if (provider.protocol === 'openai-images') capabilities.images = true
+  // a realtime provider's models talk (the voice parts) and answer nothing else; no other model talks
+  const realtime = isRealtimeProtocol(provider.protocol)
+  if (realtime) capabilities.voice = true
+  else if (capabilities.voice === true) throw new ModelError('Only a voice provider\'s models talk (a realtime voice provider).')
+  else delete capabilities.voice
+  const voices = normalizeVoices(input.voices)
+  if (voices.length && !realtime) throw new ModelError('Only a voice provider\'s models have voices.')
+  let transcriptionModel = null
+  if (input.transcriptionModel !== undefined && input.transcriptionModel !== null && input.transcriptionModel !== '') {
+    if (!realtime) throw new ModelError('Only a voice provider\'s models take a transcription model.')
+    if (typeof input.transcriptionModel !== 'string' || !MODEL_NAME.test(input.transcriptionModel.trim())) throw new ModelError('transcriptionModel is the id of the model that writes what the person said, one line of at most 200 characters.')
+    transcriptionModel = input.transcriptionModel.trim()
+  }
   let maxOutput = null
   if (input.maxOutput !== undefined && input.maxOutput !== null) {
     if (!Number.isInteger(input.maxOutput) || input.maxOutput < 1 || input.maxOutput > 1_000_000) throw new ModelError('maxOutput is a whole number from 1 to 1000000.')
@@ -58,15 +88,25 @@ export function normalizeModel(input, { providers = {} } = {}) {
       if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > max) throw new ModelError(`prices.${key} is dollars, a number from 0 to ${max}.`)
       return value
     }
-    const extra = Object.keys(input.prices).find((key) => !['inputPerM', 'outputPerM', 'imageEach', 'currency'].includes(key))
-    if (extra) throw new ModelError(`${extra} is not a price field (inputPerM, outputPerM, imageEach).`)
+    const extra = Object.keys(input.prices).find((key) => !PRICE_FIELDS.includes(key))
+    if (extra) throw new ModelError(`${extra} is not a price field (inputPerM, outputPerM, imageEach${realtime ? ', audioInputPerM, audioOutputPerM, cachedAudioInputPerM' : ''}).`)
     if (input.prices.currency !== undefined && input.prices.currency !== 'USD') throw new ModelError('Prices are in US dollars (currency USD).')
     prices = { inputPerM: price('inputPerM', MAX_PRICE_PER_MILLION), outputPerM: price('outputPerM', MAX_PRICE_PER_MILLION), imageEach: price('imageEach', MAX_IMAGE_PRICE), currency: 'USD' }
     if ((prices.inputPerM === null) !== (prices.outputPerM === null)) throw new ModelError('Give both the input and output price, or neither.')
+    // what a voice model's audio costs: what the person says (in) and what the agent says (out)
+    const audio = ['audioInputPerM', 'audioOutputPerM', 'cachedAudioInputPerM'].filter((key) => input.prices[key] !== undefined && input.prices[key] !== null)
+    if (audio.length && !realtime) throw new ModelError('Only a voice provider\'s models have audio prices.')
+    if (realtime) {
+      prices.audioInputPerM = price('audioInputPerM', MAX_PRICE_PER_MILLION)
+      prices.audioOutputPerM = price('audioOutputPerM', MAX_PRICE_PER_MILLION)
+      const cached = price('cachedAudioInputPerM', MAX_PRICE_PER_MILLION)
+      if (cached !== null) prices.cachedAudioInputPerM = cached
+      if ((prices.audioInputPerM === null) !== (prices.audioOutputPerM === null)) throw new ModelError('Give both the audio input and audio output price, or neither.')
+    }
   }
   const status = input.status === undefined ? 'enabled' : input.status
   if (!['enabled', 'disabled'].includes(status)) throw new ModelError('status is enabled or disabled.')
-  return { provider: provider._id, model, label, capabilities, maxOutput, prices, status }
+  return { provider: provider._id, model, label, capabilities, maxOutput, prices, status, ...(realtime && { voices, transcriptionModel }) }
 }
 
 /**
@@ -106,7 +146,10 @@ export function providersView(snapshot, archived = []) {
 /** The presets an administrator picks from (Add a provider), with their suggested models. */
 export const presetsView = () => Object.values(PROVIDER_PRESETS).map((p) => ({
   id: p.id, label: p.label, baseUrl: p.baseUrl, baseUrlLocked: p.baseUrlLocked, protocol: p.protocol,
-  models: p.models.map((m) => ({ model: m.model, label: m.label, capabilities: { ...m.capabilities }, prices: m.prices ? { ...m.prices } : null })),
+  models: p.models.map((m) => ({
+    model: m.model, label: m.label, capabilities: { ...m.capabilities }, prices: m.prices ? { ...m.prices } : null,
+    ...(m.voices && { voices: [...m.voices] }), ...(m.transcriptionModel && { transcriptionModel: m.transcriptionModel }),
+  })),
 }))
 
 /**
@@ -119,11 +162,12 @@ export const presetsView = () => Object.values(PROVIDER_PRESETS).map((p) => ({
  *   readProvider?(id) → the stored provider document, archived ones included
  *   listModels?(connection) → { ok, models, message } (connection-check.mjs listModels)
  *   check?(connection) → a test result (connection-check.mjs checkConnection)
+ *   checkRealtime?(connection) → the same for a voice provider's model (server/voice/check.mjs)
  * }
  */
 export function createCatalogOps({
   store, snapshot, keys = null, checkUrl, assertHost = async () => {}, readProvider = async (id) => snapshot()?.providers?.[id] ?? null,
-  listModels = null, check = null,
+  listModels = null, check = null, checkRealtime = null,
 }) {
   const checked = async (input, { trusted = false } = {}) => {
     try {
@@ -175,7 +219,13 @@ export function createCatalogOps({
     const result = await store.write({ kind: 'providers', id, doc: { ...doc, version }, action: 'ai.providers.add', actor, reason })
     const wanted = p.models.filter((m) => models.includes(m.model))
     const added = wanted.length
-      ? await writeModels({ actor, reason, models: wanted.map((m) => ({ provider: id, model: m.model, label: m.label, capabilities: m.capabilities, prices: m.prices })), providers: { ...snapshot().providers, [id]: { ...doc, version } } })
+      ? await writeModels({
+        actor, reason, providers: { ...snapshot().providers, [id]: { ...doc, version } },
+        models: wanted.map((m) => ({
+          provider: id, model: m.model, label: m.label, capabilities: m.capabilities, prices: m.prices,
+          ...(m.voices && { voices: m.voices }), ...(m.transcriptionModel && { transcriptionModel: m.transcriptionModel }),
+        })),
+      })
       : { models: [], generation: result.generation }
     return { provider: publicProvider({ ...doc, version }), models: added.models, generation: added.generation ?? result.generation }
   }
@@ -240,8 +290,18 @@ export function createCatalogOps({
   }
 
   /** The models a provider lists, with its active key. Writes nothing. */
+  const realtimeOf = (providerId) => {
+    const protocol = snapshot()?.providers?.[providerId]?.protocol
+    return isRealtimeProtocol(protocol) ? protocol : null
+  }
+  // a voice provider lists no models the way a chat provider does: its suggestions are on Add a provider
+  const notForVoice = (providerId) => {
+    if (realtimeOf(providerId)) throw new ModelError('A voice provider\'s models are not listed here: add them from its suggestions, or by their id.', 409)
+  }
+
   async function discoverModels({ provider }) {
     if (!listModels) throw new ModelError('Listing models is not available on this server.', 503)
+    notForVoice(provider)
     const connection = await connectionOf(provider)
     const out = await listModels(connection)
     return { provider, ...out }
@@ -252,7 +312,10 @@ export function createCatalogOps({
     if (!check) throw new ModelError('Testing is not available on this server.', 503)
     const model = snapshot()?.models?.[id]
     if (!model) throw new ModelError(`There is no model ${id}.`, 404)
+    const protocol = realtimeOf(model.provider)
+    if (protocol && !checkRealtime) throw new ModelError('Testing voice models is not available on this server.', 503)
     const connection = await connectionOf(model.provider, model.model)
+    if (protocol) return { id, ...(await checkRealtime({ ...connection, protocol })) }
     return { id, ...(await check(connection)) }
   }
 

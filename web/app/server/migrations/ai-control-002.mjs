@@ -3,7 +3,8 @@
 // (ai-control/index.mjs aiReady):
 //
 // 1. Key import (every boot, idempotent, no marker): each model key still found in the settings
-//    file (or the environment variable a settings entry names, or API_KEY_DEEP_INFRA) is sealed into
+//    file (or the environment variable a settings entry names, or API_KEY_DEEP_INFRA, or the voice
+//    providers' API_KEY_OPENAI_REALTIME and API_KEY_GEMINI_LIVE) is sealed into
 //    providerKeys under SLATEBOX_KEY_ENCRYPTION_KEY, as its provider's active key, unless the
 //    backend already holds that key (in any status: a revoked key is never brought back) or holds
 //    another active key for the provider (the backend wins). Each move is logged once with the
@@ -87,6 +88,10 @@ export function settingsKeySources(settings = {}, env = {}) {
   ]
   for (const [path, value, preset] of top) if (text(value)) found.push({ path, provider: preset, preset, value: text(value), source: 'settings-import' })
   if (text(env.API_KEY_DEEP_INFRA)) found.push({ path: 'the environment variable API_KEY_DEEP_INFRA', provider: 'deepinfra', preset: 'deepinfra', value: text(env.API_KEY_DEEP_INFRA), source: 'env-import' })
+  // the voice providers' keys (server/voice): their realtime presets, by variable
+  for (const [variable, preset] of [['API_KEY_OPENAI_REALTIME', 'openai-realtime'], ['API_KEY_GEMINI_LIVE', 'gemini-live']]) {
+    if (text(env[variable])) found.push({ path: `the environment variable ${variable}`, provider: preset, preset, value: text(env[variable]), source: 'env-import' })
+  }
   if (text(settings?.stabilityai?.apiKey)) found.push({ path: 'stabilityai.apiKey', provider: 'stability', value: text(settings.stabilityai.apiKey), source: 'settings-import', aux: true })
   if (text(settings?.llama?.apiKey)) skipped.push({ path: 'llama.apiKey', why: 'it is a Llama API key, which Slatebox does not use' })
   return { found, skipped }

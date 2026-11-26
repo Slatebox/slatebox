@@ -21,7 +21,8 @@ export const POLL_MS = 5000
 const MAX_BACKOFF_MS = 60000
 const PROMPT_ID = /^[a-z0-9][a-z0-9_.-]{0,95}$/
 const ID_CHARS = /^[A-Za-z0-9_.:/@|-]{1,260}$/
-const CAPS = ['tools', 'vision', 'images', 'json', 'reasoning']
+const CAPS = ['tools', 'vision', 'images', 'json', 'reasoning', 'voice']
+const VOICE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 
 const DEFAULT_STATE = Object.freeze({ generation: 0, aiEnabled: true, aiDisabledMessage: null })
 
@@ -75,9 +76,10 @@ function modelProblem(doc, providers) {
   if (doc.status !== undefined && !['enabled', 'disabled'].includes(doc.status)) return 'status is enabled or disabled'
   const caps = capabilitiesProblem(doc.capabilities)
   if (caps) return caps
+  if (doc.voices != null && (!Array.isArray(doc.voices) || doc.voices.length > 64 || doc.voices.some((v) => typeof v !== 'string' || !VOICE_NAME.test(v)))) return 'voices is a list of voice names'
   if (doc.prices != null) {
     if (!isObject(doc.prices)) return 'prices is an object'
-    for (const key of ['inputPerM', 'outputPerM', 'imageEach']) {
+    for (const key of ['inputPerM', 'outputPerM', 'imageEach', 'audioInputPerM', 'audioOutputPerM', 'cachedAudioInputPerM']) {
       const value = doc.prices[key]
       if (value !== undefined && value !== null && !(Number.isFinite(value) && value >= 0)) return `prices.${key} is a price of 0 or more`
     }
@@ -85,11 +87,27 @@ function modelProblem(doc, providers) {
   return null
 }
 
-/** What a part of Slatebox needs that a model cannot do, or null. */
+/**
+ * What a part of Slatebox needs that a model cannot do, or null. A voice part takes only a model
+ * that talks (voice: a realtime provider's model, marked so when it is saved); every other part
+ * only a model that does not ('text').
+ */
 export function capabilityGap(surfaceId, model) {
   const at = surfaceById(surfaceId)
   const caps = model?.capabilities || {}
-  return (at?.needs || []).find((need) => (need === 'images' ? caps.images !== true : caps[need] === false)) || null
+  const needs = at?.needs || []
+  if (needs.includes('voice')) return caps.voice === true ? null : 'voice'
+  if (caps.voice === true) return 'text'
+  return needs.find((need) => (need === 'images' ? caps.images !== true : caps[need] === false)) || null
+}
+
+/** Why a binding's voice cannot be used with its model, or null (no voice: the provider's own default). */
+export function voiceProblem(surfaceId, model, voice) {
+  if (voice === undefined || voice === null) return null
+  if (!surfaceById(surfaceId)?.needs.includes('voice')) return 'only a voice part has a voice'
+  if (typeof voice !== 'string' || !VOICE_NAME.test(voice)) return 'a voice is a voice name'
+  if (!(model?.voices || []).includes(voice)) return `${model?.label || model?.model || 'the model'} has no voice ${voice}; add it to the model's voices first`
+  return null
 }
 
 function bindingProblem(doc, { models }) {
@@ -103,7 +121,7 @@ function bindingProblem(doc, { models }) {
   if (model.status === 'disabled') return `model ${doc.model} is disabled`
   const gap = capabilityGap(doc.surface, model)
   if (gap) return `${doc.model} cannot do ${gap}, which ${at.title.toLowerCase()} needs`
-  return null
+  return voiceProblem(doc.surface, model, doc.voice)
 }
 
 function promptProblem(head, version) {

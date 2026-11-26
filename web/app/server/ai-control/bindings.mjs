@@ -6,7 +6,7 @@
 //
 // Pure apart from the injected store (store.mjs) and snapshot.
 import { surface as surfaceById, SURFACES } from './catalogue.mjs'
-import { capabilityGap } from './snapshot.mjs'
+import { capabilityGap, voiceProblem } from './snapshot.mjs'
 import { ModelError } from './models.mjs'
 import { resolveModel } from './resolve.mjs'
 
@@ -25,8 +25,11 @@ const fail = (message, status = 400, details) => {
  */
 export const BINDABLE_SURFACES = Object.freeze(SURFACES.filter((s) => s.bindable && s.inBuild && s.id !== 'admin.test' && (s.id === 'default' || s.requestFeatures.length)).map((s) => s.id))
 
+const CANNOT = Object.freeze({ tools: 'call tools', vision: 'read images', images: 'make images', voice: 'talk in real time', text: 'answer in text' })
+
 /**
- * Checks one change: { surface, use: 'default' | 'model' | 'off', model? }. → the document to store,
+ * Checks one change: { surface, use: 'default' | 'model' | 'off', model?, voice? }. voice: for a
+ * voice part, one of the model's voices (none: the provider's own default voice). → the document to store,
  * or null (use the default: the document goes). Throws ModelError.
  */
 export function normalizeBindingChange(change, snapshot) {
@@ -34,6 +37,7 @@ export function normalizeBindingChange(change, snapshot) {
   if (!BINDABLE_SURFACES.includes(surface)) fail(`${surface} is not a part of Slatebox that can be bound.`)
   const use = change.use
   if (!BINDING_CHOICES.includes(use)) fail('use is default, model or off.')
+  if (use !== 'model' && change.voice) fail('Only a part that uses a model takes a voice.')
   if (use === 'default') {
     if (change.model) fail('Use the default takes no model.')
     return null
@@ -50,12 +54,17 @@ export function normalizeBindingChange(change, snapshot) {
   if (!provider || provider.status === 'archived') fail(`The provider of ${model.label || model.model} is archived.`, 409)
   const gap = capabilityGap(surface, model)
   const title = surfaceById(surface)?.title || surface
-  if (gap) fail(`${model.label || model.model} cannot ${({ tools: 'call tools', vision: 'read images', images: 'make images' })[gap]}, which ${title.toLowerCase()} needs.`, 409, { need: gap })
-  return { surface, use: 'model', model: model._id }
+  if (gap) fail(`${model.label || model.model} cannot ${CANNOT[gap]}, which ${title.toLowerCase()} needs.`, 409, { need: gap })
+  const voice = change.voice === undefined || change.voice === '' ? null : change.voice
+  const wrongVoice = voiceProblem(surface, model, voice)
+  if (wrongVoice) fail(`${wrongVoice[0].toUpperCase()}${wrongVoice.slice(1)}.`, 409, { voice: true })
+  return { surface, use: 'model', model: model._id, ...(voice && { voice }) }
 }
 
 /** A binding as the page and the actions read it. */
-const shown = (doc) => (doc ? { use: doc.use, model: doc.model ?? null, version: doc.version ?? 1, updatedAt: doc.updatedAt ?? null, updatedBy: doc.updatedBy ?? null } : { use: 'default', model: null })
+const shown = (doc) => (doc
+  ? { use: doc.use, model: doc.model ?? null, ...(doc.voice && { voice: doc.voice }), version: doc.version ?? 1, updatedAt: doc.updatedAt ?? null, updatedBy: doc.updatedBy ?? null }
+  : { use: 'default', model: null })
 
 /**
  * deps: { store (store.mjs: write), snapshot() → the current snapshot }
@@ -79,7 +88,7 @@ export function createBindingOps({ store, snapshot }) {
 
   /**
    * Saves the changed rows: each change is checked first (nothing is written unless all pass), then
-   * written with its own audit row. changes: [{ surface, use, model? }]. note: optional, kept in the
+   * written with its own audit row. changes: [{ surface, use, model?, voice? }]. note: optional, kept in the
    * audit trail. → { changed: [surface ids], generation }
    */
   async function set({ actor, changes, note = null }) {
@@ -96,7 +105,7 @@ export function createBindingOps({ store, snapshot }) {
     let generation = snap.generation
     for (const { surface, doc } of prepared) {
       const before = snap.bindings[surface] ?? null
-      const same = (before?.use ?? 'default') === (doc?.use ?? 'default') && (before?.model ?? null) === (doc?.model ?? null)
+      const same = (before?.use ?? 'default') === (doc?.use ?? 'default') && (before?.model ?? null) === (doc?.model ?? null) && (before?.voice ?? null) === (doc?.voice ?? null)
       if (same) continue
       const result = await store.write({
         kind: 'bindings', id: surface, doc: doc && { ...doc, version: (before?.version ?? 0) + 1 },

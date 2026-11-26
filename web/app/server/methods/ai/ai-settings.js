@@ -9,10 +9,14 @@ import { AIChoices, Permissions, ProviderKeys } from '../../../imports/api/commo
 import { loadMasterKey } from '../../metering/vault.mjs'
 import { currentAIAction } from '../../metering/context.mjs'
 import { createAISettings } from './ai-settings-core.mjs'
-import { MAX_CHECK_RESPONSE_BYTES, assertEndpointHost, connectionFetch } from './endpoint-policy.mjs'
+import WebSocket from 'ws'
+import { MAX_CHECK_RESPONSE_BYTES, assertEndpointHost, connectionFetch, guardedLookup } from './endpoint-policy.mjs'
 import { createConnectionStore } from './connection-store.mjs'
 import { checkConnection } from './connection-check.mjs'
 import { operatorConfig } from './connections.mjs'
+import { protocolOf } from './connection-request.mjs'
+import { isRealtimeProtocol } from '../../ai-control/providers.mjs'
+import { checkRealtime } from '../../voice/check.mjs'
 import { selfHosted } from '../../../imports/api/common/own-keys.mjs'
 import { isInstanceAdmin } from '../../permissions'
 
@@ -52,7 +56,10 @@ export const aiSettings = createAISettings({
   loadUser: (id) => Meteor.users.findOneAsync(id, { fields: { orgId: 1, isAnonymous: 1 } }),
   isAdmin: isServerAdmin,
   isTeamAdmin: async (user) => Boolean(user?.orgId && await Permissions.findOneAsync({ userId: user._id, orgId: user.orgId, claimId: CONSTANTS.claims.admin._id }, { fields: { _id: 1 } })),
-  check: (connection, rules) => checkConnection(connection, { fetch: guardedFetch(rules, { maxBytes: MAX_CHECK_RESPONSE_BYTES }) }),
+  // a voice connection is tested by its socket's setup (server/voice/check.mjs), looked up with its level's rules
+  check: (connection, rules) => (isRealtimeProtocol(protocolOf(connection))
+    ? checkRealtime({ ...connection, protocol: protocolOf(connection) }, { connect: (url, headers) => new WebSocket(url, { headers, perMessageDeflate: false, handshakeTimeout: 10000, lookup: guardedLookup(rules) }) })
+    : checkConnection(connection, { fetch: guardedFetch(rules, { maxBytes: MAX_CHECK_RESPONSE_BYTES }) })),
   assertHost: (baseUrl, rules) => assertEndpointHost(baseUrl, rules),
   audit: (entry) => (auditSink ? auditSink(entry) : undefined),
 })

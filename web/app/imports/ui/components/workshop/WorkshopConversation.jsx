@@ -20,6 +20,8 @@ import { pickBoard, whichBoard } from '../../../api/common/board-pick.mjs'
 import { MAX_BOARDS } from '../../../api/common/slate-boards.mjs'
 import BoardRules from './BoardRules'
 import { drawingHeading, previewKeepSentence } from '../../../api/common/conversation-preview.mjs'
+import { ANSWER, previewAnswer, replyAnswer } from '../../../api/common/voice-answers.mjs'
+import { reloadPage } from '../../voice/voiceReload'
 
 const LibraryView = lazy(loadLibrary)
 const LibraryCards = lazy(() => loadLibrary().then(m => ({ default: m.LibraryCards })))
@@ -269,11 +271,11 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
   // `chosenId`: the board a person picked for this message from "Which board?".
   async function submit(again = null, chosenId = null) {
     const said = (typeof again === 'string' ? again : request).trim()
-    if (!said || locked || running.current || boards.some(item => item.preview) || drawing || access === null) return
+    if (!said || locked || running.current || boards.some(item => item.preview) || drawing || access === null) return undefined
     // "Add a retro": a library entry, added beside the boards (no board to choose).
     const lib = await libraryModule().catch(() => null)
     const add = lib?.catalogAddRequest(said)
-    if (add && full) { setRequest(''); const turn = newSlateTurnOf(lib, add.id, said); append({ role: 'user', content: said }, { role: 'assistant', content: turn.content, opens: turn.opens }); return }
+    if (add && full) { setRequest(''); const turn = newSlateTurnOf(lib, add.id, said); append({ role: 'user', content: said }, { role: 'assistant', content: turn.content, opens: turn.opens }); return replyAnswer(turn.content) }
     // Which board the message is about (focus, selection, named, the only one), or the chat asks.
     const chosen = chosenId ? boards.find(item => item.boardId === chosenId) : null
     // Notes, a drawing or a question for the slate itself goes to the slate: only a board change asks "Which board?".
@@ -281,7 +283,7 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
     if (picking.ask) {
       setRequest('')
       append({ role: 'user', content: said }, { role: 'assistant', content: whichBoard(picking.ask), boards: picking.ask.map(item => ({ id: item.boardId, title: item.model.title })), again: said })
-      return
+      return replyAnswer(whichBoard(picking.ask))
     }
     const target = picking.board ?? board
     const message = picking.message
@@ -289,7 +291,7 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
     // of an untouched first-run board), never sent to the board's own sentences or an agent.
     const onSlate = Boolean(add || picking.slate || nativeRequestKind(said) === 'board')
     if (chosen) setPicked(chosen.boardId)
-    if (!onSlate && target.focus && asksWhatElse(message)) { setRequest(''); whatCanItDo(message); return }
+    if (!onSlate && target.focus && asksWhatElse(message)) { setRequest(''); whatCanItDo(message); return replyAnswer('Here is what this board can do. Tap a phrase to use it.') }
     running.current = true
     const turn = ++asked.current
     setBusy(true)
@@ -297,14 +299,14 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
     setPayRefusal(null)
     try {
       const proposal = onSlate ? await drawOnSlate(said) : await propose(message, target)
-      if (!mounted.current || turn !== asked.current) return
+      if (!mounted.current || turn !== asked.current) return undefined
       setRequest('')
-      if (proposal.drawing) { setDrawing(proposal.drawing); return }
+      if (proposal.drawing) { setDrawing(proposal.drawing); return spokenDrawing(proposal.drawing) }
       if (proposal.moves || proposal.catalog || proposal.opens || proposal.adds) {
         append({ role: 'user', content: said }, { role: 'assistant', content: proposal.reply, ...(proposal.catalog && { catalog: proposal.catalog }), ...(proposal.opens && { opens: proposal.opens }),
           ...(proposal.adds && { adds: proposal.adds }) })
         if (proposal.moves) setMoves(proposal.moves)
-        return
+        return replyAnswer(proposal.reply)
       }
       const answered = !proposal.workshop || proposal.reply !== message
       append({ role: 'user', content: said }, ...(answered ? [{ role: 'assistant', content: proposal.reply }] : []))
@@ -316,13 +318,16 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
         ...(proposal.toCanvas ? { toCanvas: proposal.toCanvas } : {}), ...(proposal.diff ? { diff: proposal.diff } : {}),
         // A move the rules refuse, made only if the person says so: "Move anyway" or "Cancel", with the rule (move-anyway.mjs).
         ...(proposal.override ? { override: proposal.override } : {}) })
+      // What the agent of a voice session hears: the reply, and the proposal waiting for Keep when there is one.
+      if (proposal.workshop) return previewAnswer({ heading: proposal.override ? 'Move anyway?' : 'Proposed change, shown on the canvas', extra: [proposal.override?.sentence, proposal.reply !== message ? proposal.reply : null].filter(Boolean) })
+      return replyAnswer(answered ? proposal.reply : '')
     } catch (err) {
-      if (!mounted.current || turn !== asked.current) return
+      if (!mounted.current || turn !== asked.current) return undefined
       // A look that could mean more than one ("make it pop"): two or three to choose from, as a turn, never a refusal.
       if (err.code === 'appearance-choices') {
         setRequest('')
         append({ role: 'user', content: said }, { role: 'assistant', content: err.message, choices: err.choices })
-        return
+        return replyAnswer([err.message, ...(err.choices || []).map(item => item.label)].join(' '))
       }
       // Drafting this is not available to this person now (signed out, no Pro or own AI, the included amount used up, or
       // no AI on this install): said as a turn of the conversation, with the way on.
@@ -333,6 +338,7 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
         append({ role: 'user', content: message }, { role: 'assistant', content: err.reason, ...(pays && { pay: true }) })
         setPayRefusal(pays ? { error: err.error, reason: err.reason, details: err.details, message } : null)
       } else setError(err.reason || err.message || 'Could not prepare this change. Try again.')
+      return { text: err.reason || err.message || 'Could not prepare this change. Try again.', ok: false }
     } finally { if (turn === asked.current) { running.current = false; if (mounted.current) setBusy(false) } }
   }
 
@@ -344,7 +350,7 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
   }
 
   async function keepChanges() {
-    if (running.current || !preview || locked || stale) return
+    if (running.current || !preview || locked || stale) return undefined
     running.current = true
     setBusy(true)
     setError('')
@@ -353,23 +359,29 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
       // note and the board are saved together and Ctrl+Z puts the card back.
       if (preview.toCanvas) {
         const refusal = toCanvas(preview.toCanvas)
-        if (refusal) { setError(refusal); return }
+        if (refusal) { setError(refusal); return { text: refusal, ok: false } }
         append({ role: 'assistant', content: 'It is a note on the canvas now.' })
         setPreview(null)
-        return
+        return replyAnswer('It is a note on the canvas now.')
       }
       const saved = await save(preview.workshop, preview.revision)
-      if (!mounted.current) return
-      if (!saved) { setError(map ? 'Could not save. Check the latest map and try again.' : 'Could not save. Check the latest workshop and try again.'); return }
-      append({ role: 'assistant', content: preview.override ? 'Moved ' + preview.override.card + ' to ' + preview.override.lane + ' anyway. The card shows who moved it and when; ' + undoWordsHere() + ' puts it back.'
-        : map ? 'Saved to the map.' : 'Saved to the board.' })
+      if (!mounted.current) return undefined
+      if (!saved) {
+        const why = map ? 'Could not save. Check the latest map and try again.' : 'Could not save. Check the latest workshop and try again.'
+        setError(why)
+        return { text: why, ok: false }
+      }
+      const said = preview.override ? 'Moved ' + preview.override.card + ' to ' + preview.override.lane + ' anyway. The card shows who moved it and when; ' + undoWordsHere() + ' puts it back.'
+        : map ? 'Saved to the map.' : 'Saved to the board.'
+      append({ role: 'assistant', content: said })
       setPreview(null)
+      return replyAnswer(said)
     } finally { running.current = false; if (mounted.current) setBusy(false) }
   }
 
   // Keeping notes or steps for the slate saves them with its drawing; the page then opens it again with them.
   async function keepDrawing() {
-    if (running.current || !drawing || drawingStale) return
+    if (running.current || !drawing || drawingStale) return undefined
     running.current = true
     setBusy(true)
     setError('')
@@ -379,22 +391,26 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
       // their words in place: the page takes it live, with no reload (the board's record brings the new model;
       // `note` is its "How this board works" note, written again for the new board).
       if (drawing.component || drawing.beside || kept?.replaced) {
-        append({ role: 'user', content: drawing.message }, { role: 'assistant', content: kept?.replaced ? 'Rebuilt the board from your words' + (drawing.said ? ' · ' + drawing.said.replace(/^Added an? [^·]+· /, '') : '')
-          : drawing.beside ? drawing.said : 'Added ' + drawing.title + ' beside the board' + (drawing.rules?.length ? ' · ' + drawing.rules.join(' ') : '') })
+        const said = kept?.replaced ? 'Rebuilt the board from your words' + (drawing.said ? ' · ' + drawing.said.replace(/^Added an? [^·]+· /, '') : '')
+          : drawing.beside ? drawing.said : 'Added ' + drawing.title + ' beside the board' + (drawing.rules?.length ? ' · ' + drawing.rules.join(' ') : '')
+        append({ role: 'user', content: drawing.message }, { role: 'assistant', content: said })
         onKept?.({ board: true, boardId: kept?.boardId, origin: kept?.origin, nativeConversationRevision: kept?.nativeConversationRevision, ...(kept?.name && { name: kept.name }), ...(kept?.note && { note: kept.note }) })
         setDrawing(null)
         running.current = false
         setBusy(false)
-        return
+        return replyAnswer(said.replace(/ · /g, ': '))
       }
       const count = drawing.labels.length
-      append({ role: 'user', content: drawing.message }, { role: 'assistant', content: (drawing.mode === 'play' ? 'Added a playable route' : count === 1 ? 'Added a note' : 'Added ' + count + ' notes') + ' · ' + drawing.labels.join(', ') })
-      // The turn is in local storage before the page reloads.
-      setTimeout(() => window.location.reload(), 50)
+      const said = (drawing.mode === 'play' ? 'Added a playable route' : count === 1 ? 'Added a note' : 'Added ' + count + ' notes') + ' · ' + drawing.labels.join(', ')
+      append({ role: 'user', content: drawing.message }, { role: 'assistant', content: said })
+      // The turn is in local storage before the page reloads (after voice, if on, has said so).
+      setTimeout(reloadPage, 50)
+      return replyAnswer(said.replace(/ · /g, ': '))
     } catch (err) {
       if (mounted.current) setError(err.reason || err.message || 'Could not add this to the slate. Try again.')
       running.current = false
       if (mounted.current) setBusy(false)
+      return { text: err.reason || err.message || 'Could not add this to the slate. Try again.', ok: false }
     }
   }
 
@@ -402,13 +418,47 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
     append({ role: 'user', content: drawing.message }, { role: 'assistant', content: 'Discarded the preview.' })
     setDrawing(null)
     setError('')
+    return ANSWER.discarded
   }
 
   function discard() {
     const moving = preview?.override
     setPreview(null)
     setError('')
-    append({ role: 'assistant', content: moving ? moving.card + ' stays where it was.' : 'Discarded the preview.' })
+    const said = moving ? moving.card + ' stays where it was.' : 'Discarded the preview.'
+    append({ role: 'assistant', content: said })
+    return replyAnswer(said)
+  }
+  // A drawing proposal as a voice session's agent hears it: what "Review proposed drawing" shows.
+  const spokenDrawing = d => previewAnswer({ heading: (d.provider === 'ai' ? 'Agent preview' : 'Preview') + ' · ' + drawingHeading(d),
+    labels: d.component || d.beside || d.replace ? [] : d.labels || [],
+    extra: [(d.component || d.mode === 'play') ? previewKeepSentence(d) : null].filter(Boolean) })
+
+  // Talking with the agent: what it asks Slatebox goes through this conversation's own submit, and
+  // "yes, keep it" presses Keep (Move anyway on a move the rules refuse), as the buttons above the box do.
+  async function voiceRun({ text: said = '', confirm } = {}) {
+    if (confirm === 'keep') {
+      if (drawing) return drawingStale ? { text: 'Your drawing changed after this preview. Discard it and ask again.', ok: false } : (await keepDrawing()) ?? ANSWER.busy
+      if (preview) return stale ? (hold?.reason ? { text: hold.reason, ok: false } : ANSWER.busy) : (await keepChanges()) ?? ANSWER.busy
+      return ANSWER.none
+    }
+    if (confirm === 'discard') {
+      if (drawing) return discardDrawing()
+      if (preview) return discard()
+      return ANSWER.none
+    }
+    if (!said.trim()) return ANSWER.empty
+    // A preview waiting (or being made) holds the box: the agent hears why, as the person reads it.
+    if (hold || running.current) return hold?.reason || 'Preparing the preview…'
+    if (locked) return 'Saving the preview…'
+    if (access === null) return ANSWER.busy
+    setView(null)
+    // What the person was typing stays in the box (submit empties it for its own message).
+    const typed = request
+    const out = await submit(said)
+    if (typed.trim()) setRequest(typed)
+    // a request the board could not take just then (another board's preview waits): never nothing
+    return out ?? ANSWER.busy
   }
 
   const scenes = workshopPresentationLanes(model)
@@ -471,6 +521,7 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
     else browse(library.start ?? {})
   }, [library?.nonce])
   const composer = <ConversationComposer inputRef={input} value={request} onChange={setRequest} onSubmit={submit} hold={hold}
+    voice={{ surface: 'voice.chat', shareId, run: voiceRun }}
     canSubmit={Boolean(request.trim()) && !busy && !locked && access !== null} maxLength={1000} error={error}
     placeholder={focus ? focusPlaceholder(model, actor) : starters[0]?.text ?? (map ? 'First step → Next step' : 'Add a card called New idea')}
     helperText={access === null ? 'Checking editing access. You can type while you wait.' : undefined}

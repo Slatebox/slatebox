@@ -1,10 +1,14 @@
-import React, { useEffect, useId, useLayoutEffect, useRef } from 'react'
+import React, { Suspense, lazy, useEffect, useId, useLayoutEffect, useRef } from 'react'
 import { Box, Button, IconButton, Paper, TextField, Tooltip, Typography, useMediaQuery } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import { newestTop } from '../common/newestTurn.mjs'
 import { useSetAtom } from 'jotai'
 import { conversationArrival, conversationIntroSlot } from '../jotai/atoms'
 import { arrivalShown } from '../../api/common/conversation-toggle.mjs'
+import useVoiceAvailable from '../voice/useVoiceAvailable'
+
+// Talking with the agent (the mic): its own chunk, loaded only where voice is offered.
+const VoiceControl = lazy(() => import('../voice/VoiceControl'))
 
 // A short screen: a phone held sideways.
 const short = '@media (max-height:500px)'
@@ -102,10 +106,18 @@ export default function ConversationPanel({ onClose, children, composer, anchor 
  * preview waits for Keep or Discard, a preview is being prepared, a change is being saved) the
  * box stays where it is, disabled, with the reason beside it and the way out (`hold.actions`).
  * When that ends the box is enabled and takes focus again.
+ *
+ * `voice` { surface, shareId?, run }: the mic, so the person can talk with the agent instead of
+ * typing (voice.chat on a slate or board, voice.interview in About you). Shown only to people with
+ * an account where voice is on and set up (useVoiceAvailable). What the agent asks Slatebox to do
+ * goes through `run({ text, confirm })`, the surface's own submit (Preview and Keep as when typed),
+ * and what it answers is what the agent says. It stays while the box is held, so a preview can be
+ * kept by saying yes.
  */
 export function ConversationComposer({ shareId, inputRef, value, onChange, onSubmit, hold, canSubmit, submitLabel = 'Preview changes',
-  placeholder, helperText, maxLength, prompt, starters, error, extra }) {
+  placeholder, helperText, maxLength, prompt, starters, error, extra, voice = null }) {
   const reasonId = useId()
+  const { available: voiceOn, status: voiceStatus } = useVoiceAvailable(voice?.surface ?? null)
   const isShort = useMediaQuery(short.slice('@media '.length))
   const actions = useRef(null)
   const reasonRef = useRef(null)
@@ -180,8 +192,11 @@ export function ConversationComposer({ shareId, inputRef, value, onChange, onSub
       onChange={event => { waiting.current = false; onChange(event.target.value) }}
       onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.target.form?.requestSubmit() } }} />
     {error && <Typography role="alert" color="error" variant="body2" sx={{mt:.5}}>{error}</Typography>}
-    {!held && <Box sx={{display:'flex',justifyContent:'flex-end',mt:.5}}>
-      <Button type="submit" variant="contained" size="small" disabled={!canSubmit}>{submitLabel}</Button>
+    {(!held || voiceOn) && <Box sx={{display:'flex',alignItems:'flex-start',justifyContent:'flex-end',gap:1,mt:.5}}>
+      {voiceOn && <Box data-composer-voice="" sx={{flex:'1 1 auto',minWidth:0}}>
+        <Suspense fallback={null}><VoiceControl surface={voice.surface} shareId={voice.shareId ?? null} run={voice.run} status={voiceStatus} /></Suspense>
+      </Box>}
+      {!held && <Button type="submit" variant="contained" size="small" disabled={!canSubmit} sx={{flex:'none'}}>{submitLabel}</Button>}
     </Box>}
   </Box>
 }

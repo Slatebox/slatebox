@@ -58,6 +58,16 @@ export async function runPromptTest({ prompt, candidate, fixture, sampleId = nul
   const { request: opts, used } = await buildTestRequest({ prompt, candidate, fixture, sample, live })
   if (!used.has(prompt.id)) throw new PromptTestError(`The sample "${sample.title}" does not use this prompt. Choose another sample.`)
   const rendered = { system: opts.system ?? null, prompts: opts.prompts, tools: (opts.functions || []).map((f) => ({ name: f.name, description: f.description })) }
+  const lint = lintPrompt({ ...prompt, body: candidate.body, variables: candidate.variables ?? prompt.variables }, { codeVariables: prompt.variables })
+  // A voice part's session (fixtures/voice.mjs): no realtime model is asked here; the rendered
+  // session is shown, and the surface's check reads it instead of an answer.
+  if (fixture.sessionOnly) {
+    return {
+      sample: sample.id, sampleTitle: sample.title, surface: surface || prompt.surface,
+      rendered: { ...rendered, session: opts.session ?? null }, answer: { text: '', toolCall: null, sessionOnly: true },
+      parses: await fixture.parses(opts, sample), latencyMs: 0, model: null, costMicros: 0, lint,
+    }
+  }
   const started = now()
   const response = await request(opts, { surface: surface || prompt.surface })
   const latencyMs = Math.max(0, now() - started)
@@ -70,8 +80,7 @@ export async function runPromptTest({ prompt, candidate, fixture, sampleId = nul
   const costMicros = costOf && response?.usage ? (costOf({ model, usage: response.usage })?.costMicros ?? 0) : 0
   return {
     sample: sample.id, sampleTitle: sample.title, surface: surface || prompt.surface,
-    rendered, answer, parses, latencyMs, model, costMicros,
-    lint: lintPrompt({ ...prompt, body: candidate.body, variables: candidate.variables ?? prompt.variables }, { codeVariables: prompt.variables }),
+    rendered, answer, parses, latencyMs, model, costMicros, lint,
   }
 }
 

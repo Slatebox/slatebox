@@ -8,7 +8,9 @@ const AI = ['openai.chat', 'openai.welcome', 'openai.routeSlateMessage', 'worksh
   // the interview in About you: each turn asks the agent
   'interview.start', 'interview.turn',
   // For you: new ideas ask the agent, and building one drafts it
-  'personal.ideas.refresh', 'personal.ideas.build']
+  'personal.ideas.refresh', 'personal.ideas.build',
+  // voice: each ticket opens a session the meter holds a minute at a time for (server/voice)
+  'voice.open']
 const CALLS = ['daily.join', 'daily.useVideo']
 const MONEY = ['wallet.refund', 'pro.portal',
   // the pay sheet's Manage pane (server/pro-manage.mjs): changes to Pro itself

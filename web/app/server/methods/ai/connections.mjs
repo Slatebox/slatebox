@@ -5,17 +5,17 @@
 // control (ai-control/resolve.mjs). Slatebox never routes a request somewhere the person did not
 // choose. Nothing here names a model, and nothing reads a key from the settings file.
 import { EndpointRefused, checkEndpointUrl, endpointRules } from './endpoint-policy.mjs'
-import { chatConnectionTypes } from '../../ai-control/providers.mjs'
+import { chatConnectionTypes, isRealtimeProtocol } from '../../ai-control/providers.mjs'
 
 import {
-  BUILTIN_ONLY_FEATURES, SURFACES, USE_SURFACES, followChain, rootSurface, surface as surfaceById, surfaceForRequest,
+  BUILTIN_ONLY_FEATURES, SURFACES, USE_SURFACES, followChain, isVoiceSurface, rootSurface, surface as surfaceById, surfaceForRequest,
 } from '../../ai-control/catalogue.mjs'
 
 // What the person chooses per feature, and what each needs from a model: the catalogue's rows
 // that follow the default directly (ai-control/catalogue.mjs). Their parts (workshop follows
 // chat, the Slatebox agent follows the canvas conversation, ...) can be chosen on their own too;
 // unset, they follow.
-const VERB = { tools: 'call tools', vision: 'read images', images: 'make images' }
+const VERB = { tools: 'call tools', vision: 'read images', images: 'make images', voice: 'talk' }
 export const AI_FEATURES = Object.freeze(SURFACES.filter((s) => s.follows === 'default' || s.ownRow).map((s) => Object.freeze({
   id: s.id, title: s.title, verb: VERB[s.needs[0]] || 'answer', needs: s.needs,
 })))
@@ -190,7 +190,11 @@ export function checkUse(use, level, visible) {
     if (!parsed) throw new ConnectionError(`${ref} is not a choice. Name a connection as me:<name> or team:<name>, or use builtin for this server's AI.`)
     if (parsed.scope !== 'builtin') {
       if (!SCOPES_FOR[level].includes(parsed.scope)) throw new ConnectionError(`${ref} cannot be chosen here.`)
-      if (!visible[parsed.scope]?.some((c) => c.name === parsed.name)) throw new ConnectionError(`There is no connection ${ref}.`)
+      const connection = visible[parsed.scope]?.find((c) => c.name === parsed.name)
+      if (!connection) throw new ConnectionError(`There is no connection ${ref}.`)
+      // a voice connection talks and answers nothing else; a text one never talks
+      if (talks(connection) && !isVoiceSurface(key)) throw new ConnectionError(`${ref} is a voice model. Choose it for ${surfaceById('voice').title.toLowerCase()} only.`)
+      if (!talks(connection) && isVoiceSurface(key)) throw new ConnectionError(`${ref} cannot talk. Choose a voice model for ${featureTitle(key).toLowerCase()}.`)
     }
     out[key] = ref
   }
@@ -217,10 +221,15 @@ const find = (holder, name) => holder?.connections?.find((c) => c.name === name)
 
 // The keys a holder's use is read by for a surface: the surface, what it follows, up to default
 // (agent.slatebox -> canvas -> chat -> default). A surface outside the tree reads itself, then default.
+// A voice part stops before default (voice.chat -> voice): a default text connection never talks.
 function useChain(feature) {
   const chain = followChain(feature)
+  if (isVoiceSurface(feature)) return chain.filter((key) => key !== 'default')
   return chain.includes('default') ? chain : [...chain, 'default']
 }
+
+/** Whether a connection talks (its type speaks a realtime voice protocol). */
+export const talks = (connection) => isRealtimeProtocol(connection?.protocol || connectionType(connection?.type)?.protocol)
 
 // The feature a found choice is reported under (the one its messages name): the surface whose own
 // key was set, or, for a choice found under default, the feature on the first row.
@@ -243,7 +252,7 @@ function fromUse(holder, feature, scopes, people) {
 // conversation features, as they did. Neither makes images.
 function fromLegacy(holder, surfaceId, scope) {
   const feature = rootSurface(surfaceId)
-  if (feature === 'images') return null
+  if (feature === 'images' || isVoiceSurface(surfaceId)) return null
   const connection = holder?.connections?.find((c) => c.legacy === 'all' || (c.legacy === 'chat' && feature === 'chat'))
   return connection ? { ref: `${scope}:${connection.name}`, scope, connection, own: true, feature } : null
 }
@@ -291,13 +300,23 @@ export function capabilityGap({ feature, connection, request = {}, label = conne
   if (!connection) return null
   const caps = connection.capabilities || {}
   const needs = surfaceById(feature)?.needs || []
+  const title = featureTitle(feature).toLowerCase()
+  // a voice part takes only a connection that talks, every other part only one that does not
+  if (needs.includes('voice') !== talks(connection)) {
+    const voice = needs.includes('voice')
+    return {
+      need: voice ? 'voice' : 'text',
+      message: voice
+        ? `${label} cannot talk. ${fix || `Choose a voice model for ${title} in your AI settings.`}`
+        : `${label} is a voice model and answers nothing else. ${fix || `Choose another model for ${title} in your AI settings.`}`,
+    }
+  }
   let need = null
   if (needs.includes('images') && caps.images !== true) need = 'images'
   else if ((needs.includes('vision') || request.images) && caps.vision === false) need = 'vision'
   else if (request.tools && caps.tools === false) need = 'tools'
   if (!need) return null
   const verbs = { images: 'make images', vision: 'read images', tools: 'call tools, which this feature needs' }
-  const title = featureTitle(feature).toLowerCase()
   return {
     need,
     message: `${label} cannot ${verbs[need]}. ${fix || `Choose another model for ${title} in your AI settings.`}`,

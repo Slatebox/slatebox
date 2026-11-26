@@ -17,7 +17,7 @@
 
 export const PAY_ACTIONS = Object.freeze(['pro', 'topup', 'card', 'manage', 'verify', 'sign-in', 'own-key', 'help', 'none'])
 
-const PRO_CODES = new Set(['pro', 'pro-images', 'pro-calls'])
+const PRO_CODES = new Set(['pro', 'pro-images', 'pro-calls', 'pro-voice'])
 // the included amount or a balance ran out, or the shared budget paused it: a top-up pays for more
 const TOP_UP_CODES = new Set(['ai-today', 'ai-month', 'ai-paused', 'calls-today', 'calls-month', 'calls-paused', 'video-stage', 'balance'])
 const HELP_CODES = new Set(['frozen', 'free-stopped'])

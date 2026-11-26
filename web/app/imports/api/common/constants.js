@@ -302,6 +302,11 @@ const CONSTANTS = {
       turn: 'interview.turn',
       keep: 'interview.keep',
     },
+    // Talking with the agent (server/voice/meteor.js): a ticket for the voice socket, and whether a page offers voice
+    voice: {
+      open: 'voice.open',
+      status: 'voice.status',
+    },
     users: {
       createAnonymous: 'users.createAnonymous',
       identify: 'users.identify',

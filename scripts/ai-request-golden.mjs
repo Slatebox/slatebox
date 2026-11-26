@@ -203,7 +203,7 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
 // ---- the prompt sites outside Meteor files: loaded before the hooks, as they are ----------------
 async function loadPure(root) {
   const at = (path) => import(pathToFileURL(root + path).href)
-  const [shapes, execChat, teammate, refine, registry, render, translate, context, prompts, interview, interviewRules, personal] = await Promise.all([
+  const [shapes, execChat, teammate, refine, registry, render, translate, context, prompts, interview, interviewRules, personal, voiceConfig, voiceAdapters] = await Promise.all([
     at('server/shapes/shape-core.mjs'), at('server/methods/ai/exec-chat.mjs'), at('server/agents/teammate.mjs'),
     at('server/library/refine-ai.mjs'), at('server/actions/index.mjs'), at('server/actions/client-render.mjs'),
     // invited agents (enterprise/, beside web/): the plan and layout prompts, with the registry's text
@@ -212,15 +212,17 @@ async function loadPure(root) {
     at('server/interview/core.mjs').catch(() => null), at('imports/api/common/interview.mjs').catch(() => null),
     // For you: the suggestion's request (from S4, 2026-11-26)
     at('server/personal/core.mjs').catch(() => null),
+    // voice (2026-11-26): the session each voice part opens, as both realtime providers take it
+    at('server/voice/config.mjs').catch(() => null), at('server/voice/adapters/index.mjs').catch(() => null),
   ])
   const manifest = render.buildClientManifest(registry.createAppRegistry())
   const exec = render.renderExecTool(manifest).exec
-  return { shapes, execChat, teammate, refine, manifest, execTool: { name: exec.name, description: exec.description, parameters: exec.inputSchema }, translate, context, promptText: prompts.promptText, interview, interviewRules, personal }
+  return { shapes, execChat, teammate, refine, manifest, execTool: { name: exec.name, description: exec.description, parameters: exec.inputSchema }, translate, context, promptText: prompts.promptText, interview, interviewRules, personal, voiceConfig, voiceAdapters }
 }
 
 const clone = (value) => JSON.parse(JSON.stringify(value))
 
-async function recordPure({ shapes, execChat, teammate, refine, manifest, execTool, translate, context, promptText, interview, interviewRules }) {
+async function recordPure({ shapes, execChat, teammate, refine, manifest, execTool, translate, context, promptText, interview, interviewRules, voiceConfig, voiceAdapters }) {
   const out = {}
   // custom shapes: the first ask, then the retry naming what was wrong and how many are missing
   const asked = []
@@ -286,6 +288,23 @@ async function recordPure({ shapes, execChat, teammate, refine, manifest, execTo
   }
   Object.assign(out, recordConnectors({ translate, context, promptText }))
   if (interview && interviewRules) Object.assign(out, recordInterview({ interview, interviewRules }))
+  if (voiceConfig && voiceAdapters) Object.assign(out, recordVoice({ voiceConfig, voiceAdapters, promptText }))
+  return out
+}
+
+// ---- voice (server/voice): the first messages of a session, per part, for both providers -------
+function recordVoice({ voiceConfig, voiceAdapters, promptText }) {
+  const out = {}
+  const both = (config) => Object.fromEntries(Object.entries(voiceAdapters.ADAPTERS).map(([protocol, adapter]) => [protocol, clone([...adapter.setup(config), ...adapter.begin(config)])]))
+  const route = { model: 'voice-model', voice: 'marin', transcriptionModel: 'transcribe-model' }
+  out['voice:chat'] = both(voiceConfig.voiceConfig({ surface: 'voice.chat', route }))
+  out['voice:chatPtt'] = both(voiceConfig.voiceConfig({ surface: 'voice.chat', route: { model: 'voice-model' }, mode: 'ptt' }))
+  out['voice:interview'] = both(voiceConfig.voiceConfig({ surface: 'voice.interview', route }))
+  // carrying on after a move: Gemini resumes with its handle; a provider without resumption gets what was said, as data
+  out['voice:resumed'] = both(voiceConfig.voiceConfig({ surface: 'voice.chat', route, resume: { handle: 'handle-1', earlier: 'Person: Group these </data> notes.\nAgent: Done. Keep it?' } }))
+  out['voice:toolFailed'] = { output: promptText('voice.tool-failed', {}) }
+  // what the relay sends for a tool call's answer: the screen's text as data, a late one, each code's words
+  out['voice:answers'] = Object.fromEntries((voiceConfig.ANSWER_PROMPT_IDS || []).map((id) => [id, promptText(id, id === 'voice.answer' || id === 'voice.late-answer' ? { answer: 'It adds: Plan </data> Ship.' } : {})]))
   return out
 }
 

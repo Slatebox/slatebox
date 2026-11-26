@@ -1,0 +1,26 @@
+{
+  "_source": "Shapes of the OpenAI Realtime server events, from https://developers.openai.com/api/reference/resources/realtime/server-events and the realtime-conversations, realtime-vad and realtime-transcription guides, read 2026-11-26. Audio is 4 PCM16 samples, base64.",
+  "session.created": { "type": "session.created", "event_id": "event_1", "session": { "type": "realtime", "id": "sess_1" } },
+  "session.updated": { "type": "session.updated", "event_id": "event_2", "session": { "type": "realtime", "id": "sess_1" } },
+  "response.created": { "type": "response.created", "event_id": "event_3", "response": { "id": "resp_1", "status": "in_progress", "output": [] } },
+  "response.output_audio.delta": { "type": "response.output_audio.delta", "event_id": "event_4", "response_id": "resp_1", "item_id": "item_1", "output_index": 0, "content_index": 0, "delta": "AAABAAIAAwA=" },
+  "response.output_audio_transcript.delta": { "type": "response.output_audio_transcript.delta", "event_id": "event_5", "response_id": "resp_1", "item_id": "item_1", "output_index": 0, "content_index": 0, "delta": "Sure, one" },
+  "response.output_audio_transcript.done": { "type": "response.output_audio_transcript.done", "event_id": "event_6", "response_id": "resp_1", "item_id": "item_1", "output_index": 0, "content_index": 0, "transcript": "Sure, one moment." },
+  "conversation.item.input_audio_transcription.delta": { "type": "conversation.item.input_audio_transcription.delta", "event_id": "event_7", "item_id": "item_0", "content_index": 0, "delta": "Group these" },
+  "conversation.item.input_audio_transcription.completed": { "type": "conversation.item.input_audio_transcription.completed", "event_id": "event_8", "item_id": "item_0", "content_index": 0, "transcript": "Group these notes by theme." },
+  "input_audio_buffer.speech_started": { "type": "input_audio_buffer.speech_started", "event_id": "event_9", "audio_start_ms": 1000, "item_id": "item_2" },
+  "response.done.tool": {
+    "type": "response.done", "event_id": "event_10",
+    "response": {
+      "id": "resp_2", "status": "completed",
+      "output": [{ "id": "item_3", "type": "function_call", "status": "completed", "name": "send_to_slatebox", "call_id": "call_1", "arguments": "{\"text\":\"group these notes by theme\"}" }],
+      "usage": {
+        "total_tokens": 2100, "input_tokens": 1800, "output_tokens": 300,
+        "input_token_details": { "text_tokens": 900, "audio_tokens": 900, "cached_tokens": 600, "cached_tokens_details": { "text_tokens": 200, "audio_tokens": 400 } },
+        "output_token_details": { "text_tokens": 60, "audio_tokens": 240 }
+      }
+    }
+  },
+  "response.done.audio": { "type": "response.done", "event_id": "event_11", "response": { "id": "resp_1", "status": "completed", "output": [{ "id": "item_1", "type": "message", "role": "assistant" }], "usage": { "total_tokens": 10, "input_tokens": 5, "output_tokens": 5, "input_token_details": { "text_tokens": 5, "audio_tokens": 0 }, "output_token_details": { "text_tokens": 0, "audio_tokens": 5 } } } },
+  "error": { "type": "error", "event_id": "event_12", "error": { "type": "invalid_request_error", "code": "response_cancel_not_active", "message": "Cancellation failed: no active response found", "event_id": null } }
+}

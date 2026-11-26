@@ -41,6 +41,58 @@ export const AI_PRICES = Object.freeze([
   { model: 'muse-ember-1.0', inPerMillion: 0.3, outPerMillion: 1.5, source: META, read: READ_2 },
 ])
 
+// Realtime voice models (server/voice), dollars per million tokens by modality: what the person
+// says (audio in), what the agent says (audio out), and the text around it (instructions, the
+// tool's replies, transcripts). Kept apart from AI_PRICES: a voice model never prices a text call,
+// and these rows are dearer than any text row (the text table's "dearest row" stays a text price).
+// An unknown voice model is priced at the dearest voice row.
+const READ_3 = '2026-11-26'
+export const VOICE_PRICES = Object.freeze([
+  { model: 'gemini-3.8-live', audioInPerMillion: 3, audioOutPerMillion: 12, textInPerMillion: 0.75, textOutPerMillion: 4.5, source: GEMINI, read: READ_3 },
+  { model: 'gemini-3.1-flash-live-preview', audioInPerMillion: 3, audioOutPerMillion: 12, textInPerMillion: 0.75, textOutPerMillion: 4.5, source: GEMINI, read: READ_3 },
+  { model: 'gpt-realtime-2.1', audioInPerMillion: 32, audioOutPerMillion: 64, textInPerMillion: 4, textOutPerMillion: 24, cachedAudioInPerMillion: 0.4, source: OPENAI, read: READ_3 },
+  { model: 'gpt-realtime-2.1-mini', audioInPerMillion: 10, audioOutPerMillion: 20, textInPerMillion: 0.6, textOutPerMillion: 2.4, source: OPENAI, read: READ_3 },
+].map(Object.freeze))
+const voiceWeight = (row) => row.audioInPerMillion + row.audioOutPerMillion + row.textInPerMillion + row.textOutPerMillion
+const DEAREST_VOICE = VOICE_PRICES.reduce((a, b) => (voiceWeight(b) > voiceWeight(a) ? b : a))
+
+/**
+ * The price of a voice model: the model row's own prices an administrator set in AI control
+ * (prices: { inputPerM, outputPerM, audioInputPerM, audioOutputPerM, cachedAudioInputPerM }), when
+ * it has both audio prices, else the table's row, else the dearest voice row.
+ * → { model, audioInPerMillion, audioOutPerMillion, textInPerMillion, textOutPerMillion, cachedAudioInPerMillion?, source }
+ */
+export function voicePrice(model, rowPrices = null) {
+  const p = rowPrices
+  if (p && Number.isFinite(p.audioInputPerM) && Number.isFinite(p.audioOutputPerM)) {
+    const table = VOICE_PRICES.find((row) => row.model === model) || DEAREST_VOICE
+    return Object.freeze({
+      model, audioInPerMillion: p.audioInputPerM, audioOutPerMillion: p.audioOutputPerM,
+      textInPerMillion: Number.isFinite(p.inputPerM) ? p.inputPerM : table.textInPerMillion,
+      textOutPerMillion: Number.isFinite(p.outputPerM) ? p.outputPerM : table.textOutPerMillion,
+      ...(Number.isFinite(p.cachedAudioInputPerM) && { cachedAudioInPerMillion: p.cachedAudioInputPerM }),
+      source: 'db',
+    })
+  }
+  return VOICE_PRICES.find((row) => row.model === model) || DEAREST_VOICE
+}
+
+/**
+ * What one stretch of a voice session cost, in whole micro-dollars (rounded up). usage: the
+ * provider-neutral counts the relay reads from Gemini's usageMetadata or OpenAI's response.done
+ * ({ audioIn, audioOut, textIn, textOut, cachedAudioIn }, tokens). Cached audio is priced at the
+ * cached rate where the row has one, else as audio in.
+ */
+export function voiceCostMicros(usage = {}, price) {
+  const n = (value) => (Number.isFinite(value) && value > 0 ? Math.floor(value) : 0)
+  const rate = (perMillion) => Math.round((perMillion || 0) * 1e6)
+  const cachedRate = Number.isFinite(price.cachedAudioInPerMillion) ? price.cachedAudioInPerMillion : price.audioInPerMillion
+  const perToken = n(usage.audioIn) * rate(price.audioInPerMillion) + n(usage.audioOut) * rate(price.audioOutPerMillion)
+    + n(usage.textIn) * rate(price.textInPerMillion) + n(usage.textOut) * rate(price.textOutPerMillion)
+    + n(usage.cachedAudioIn) * rate(cachedRate)
+  return Math.ceil(perToken / 1e6)
+}
+
 // The most a settings row may say a million tokens cost, in dollars: a sane bound that catches a
 // price typed in cents or per thousand tokens.
 export const MAX_PRICE_PER_MILLION = 1000

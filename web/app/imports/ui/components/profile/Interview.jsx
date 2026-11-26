@@ -15,12 +15,14 @@ import ConversationPanel, { ConversationComposer } from '../ConversationPanel'
 import ChatTurn, { ChatThinking } from '../ChatTurn'
 import PayNotice, { isCreditRefusal } from '../PayNotice'
 import { FinePrint, SPACE } from '../../common/AccountLayout'
+import { ANSWER, interviewAnswer, keptFactsAnswer, replyAnswer } from '../../../api/common/voice-answers.mjs'
 
 // Profile › About you › Talk with Slatebox: the agent asks about the person's work, one question a
 // turn, and proposes what it heard as small chips under its turn (Keep, Edit, Skip). Nothing is
 // saved until they keep it. "Done for now" ends with what was kept. One turn is one method call
-// (interview.start, interview.turn: server/methods/interview.js) and the transcript is text, so a
-// voice mode can later sit on the same message box (ConversationComposer) and the same turns.
+// (interview.start, interview.turn: server/methods/interview.js) and the transcript is text. Voice
+// sits on the same message box (ConversationComposer's mic, voice.interview) and the same turns:
+// what the person says goes through send, and "yes, keep them" keeps the open chips.
 // When the meter refuses a turn (today's free talk used up, no Pro or balance), the refusal is the
 // agent's turn with its ways on in it (PayNotice: Get Pro, top up, use your own key), in the meter's
 // own words, and the turn runs again once paid.
@@ -135,6 +137,8 @@ export default function Interview({ onKept, onDone }) {
   const summaryRef = useRef(null)
   const statusTimer = useRef(null)
   const keeping = useRef(false)
+  // why the last Keep did not keep (beside its chip, and in what a voice session's agent hears)
+  const keepError = useRef('')
   // One Keep saves at a time: the other Keep buttons wait (and say so) until it is done.
   const [saving, setSaving] = useState(false)
 
@@ -159,12 +163,15 @@ export default function Interview({ onKept, onDone }) {
       const out = await Meteor.callAsync(M.start)
       setTurns([{ id: newId(), role: 'assistant', content: out.reply, proposed: [] }])
       requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }))
+      return replyAnswer(out.reply)
     } catch (requestError) {
       if (isCreditRefusal(requestError?.error)) setRefusal({ error: requestError.error, reason: requestError.reason, details: requestError.details, message: null })
       else {
         setError(reason(requestError, 'The talk could not start. Try again.'))
         setStartFailed(true)
       }
+      // a voice session's agent hears why, in the meter's own words when it refused
+      return { text: reason(requestError, 'The talk could not start. Try again.'), ok: false }
     } finally {
       setWaiting(false)
     }
@@ -174,7 +181,7 @@ export default function Interview({ onKept, onDone }) {
   const send = async (said = message) => {
     const words = String(said).trim()
     const typed = said === message
-    if (!words || waiting || !turns.length) return
+    if (!words || waiting || !turns.length) return undefined
     const history = historyFor(turns)
     const mine = { id: newId(), role: 'user', content: words }
     setTurns((all) => [...all, mine])
@@ -188,12 +195,15 @@ export default function Interview({ onKept, onDone }) {
       const proposed = freshProposals(out.proposed, turns).map((fact) => ({ ...fact, id: newId(), state: 'open' }))
       setTurns((all) => [...all, { id: newId(), role: 'assistant', content: out.reply, proposed }])
       if (proposed.length) announce(`The agent heard ${proposed.length === 1 ? 'one thing' : `${proposed.length} things`} to keep. Keep, edit or skip each.`)
+      return interviewAnswer(out.reply, proposed, (kind) => KIND_LABELS[kind] || kind)
     } catch (requestError) {
       // Their words come back to the box, and the turn that did not go is taken away.
       setTurns((all) => all.filter((turn) => turn.id !== mine.id))
       if (typed) setMessage(words)
       if (isCreditRefusal(requestError?.error)) setRefusal({ error: requestError.error, reason: requestError.reason, details: requestError.details, message: words })
       else setError(reason(requestError, 'That did not go through. Try again.'))
+      // a voice session's agent hears why, in the meter's own words when it refused
+      return { text: reason(requestError, 'That did not go through. Try again.'), ok: false }
     } finally {
       setWaiting(false)
     }
@@ -226,6 +236,7 @@ export default function Interview({ onKept, onDone }) {
       const outcome = keepOutcome(out)
       if (outcome.error) {
         change(fact.id, { error: outcome.error })
+        keepError.current = outcome.error
         announce(outcome.error)
         return false
       }
@@ -236,7 +247,8 @@ export default function Interview({ onKept, onDone }) {
       focusNext(fact)
       return true
     } catch (requestError) {
-      change(fact.id, { error: reason(requestError, 'That could not be kept. Try again.') })
+      keepError.current = reason(requestError, 'That could not be kept. Try again.')
+      change(fact.id, { error: keepError.current })
       return false
     } finally {
       keeping.current = false
@@ -259,10 +271,43 @@ export default function Interview({ onKept, onDone }) {
   // While the agent answers, the box waits with the reason beside it (and takes focus again after).
   const hold = waiting ? { reason: turns.length ? 'The agent is reading your answer…' : 'The agent is thinking of a first question…' } : null
 
+  // Talking with the agent: empty words begin (the first question, already asked when the talk
+  // opened), words are an answer (send), and "yes, keep them" keeps the open chips of the newest turn
+  // (one Keep at a time, as the buttons do); "no" skips them.
+  const turnsNow = useRef(turns)
+  turnsNow.current = turns
+  const voiceRun = async ({ text: said = '', confirm } = {}) => {
+    const latest = [...turnsNow.current].reverse().find((turn) => turn.role === 'assistant')
+    const openFacts = (latest?.proposed || []).filter((fact) => fact.state === 'open')
+    if (confirm === 'keep' || confirm === 'discard') {
+      if (!openFacts.length) return ANSWER.none
+      if (confirm === 'discard') {
+        openFacts.forEach(skip)
+        return ANSWER.discarded
+      }
+      const results = []
+      for (const fact of openFacts) {
+        // keep() marks the chip and says why one could not be kept beside it
+        keepError.current = ''
+        const ok = await keep(fact)
+        results.push(ok ? { text: fact.text, state: 'kept' } : { text: fact.text, error: keepError.current || 'That could not be kept. Try again.' })
+      }
+      return keptFactsAnswer(results)
+    }
+    if (!said.trim()) {
+      if (latest) return replyAnswer(latest.content)
+      return (await start()) ?? ANSWER.busy
+    }
+    if (waiting) return hold?.reason || ANSWER.busy
+    if (finished) return keptSummary(kept, { open })
+    return (await send(said)) ?? ANSWER.busy
+  }
+
   const composer = (
     <>
       {!finished && (
         <ConversationComposer
+          voice={{ surface: 'voice.interview', run: voiceRun }}
           inputRef={inputRef}
           value={message}
           onChange={setMessage}

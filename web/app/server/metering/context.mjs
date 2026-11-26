@@ -20,6 +20,9 @@ export function meterOn() {
   return Boolean(meter?.enabled())
 }
 
+/** The installed meter (begin, record, finish), for a use metered by the minute outside runAIAction (server/voice). */
+export const installedMeter = () => meter
+
 export function currentAIAction() {
   return storage.getStore() ?? null
 }

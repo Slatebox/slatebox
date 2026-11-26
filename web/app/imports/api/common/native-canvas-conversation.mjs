@@ -56,7 +56,7 @@ export function drawsRequestAsNote(message) {
 // imports/api/billing/pay-route.mjs says which pane).
 export const CREDIT_REFUSALS = Object.freeze([
   'ai-today', 'ai-month', 'ai-paused', 'calls-today', 'calls-month', 'calls-paused', 'video-stage', 'balance',
-  'unverified', 'frozen', 'free-stopped', 'pro', 'pro-images', 'pro-calls', 'pro-past-due',
+  'unverified', 'frozen', 'free-stopped', 'pro', 'pro-images', 'pro-calls', 'pro-voice', 'pro-past-due',
 ])
 export function draftingRefusal({selfHosted,aiOn=false,guest=false,meter=null}) {
   if(!selfHosted) {

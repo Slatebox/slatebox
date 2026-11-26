@@ -12,10 +12,12 @@
 //                                                             addresses (default on; the operator's are not affected)
 //
 // SLATEBOX_AI_CONFIG = { "connections": { "<name>": { "type": "openai-compatible" | "openai" |
-//   "anthropic" | "deepinfra", "url": "...", "key": "...", "model": "...", "tools": bool,
-//   "vision": bool, "images": bool, "maxTokens": n } }, "use": { "default" | "chat" |
-//   "generation" | "presentation" | "vision" | "images": "<name>" | "builtin" },
-//   "ownProviders": "on" | "off", "privateEndpoints": "on" | "off" }
+//   "anthropic" | "deepinfra" | "openai-realtime" | "gemini-live", "url": "...", "key": "...",
+//   "model": "...", "tools": bool, "vision": bool, "images": bool, "maxTokens": n } }, "use": {
+//   "default" | "chat" | "generation" | "presentation" | "vision" | "images" | "voice" | ...:
+//   "<name>" | "builtin" }, "ownProviders": "on" | "off", "privateEndpoints": "on" | "off" }
+// A voice connection (openai-realtime, gemini-live: talking with the agent) is chosen for voice,
+// voice.chat or voice.interview only, and those take only a voice connection.
 //
 // SLATEBOX_AI_PROVIDERS = [{ "id": "<name>", "kind": "openai-compatible" | "deepinfra", "baseUrl": "...",
 //   "model": "...", "toolChoice": "auto" | "named", "keyEnv": "SLATEBOX_AI_KEY_<NAME>" }, ...]
@@ -32,10 +34,15 @@ const TYPES = {
   openai: { baseUrl: 'https://api.openai.com/v1', key: true },
   anthropic: { baseUrl: 'https://api.anthropic.com/v1', key: true },
   deepinfra: { baseUrl: 'https://api.deepinfra.com/v1/openai', key: true, modelOptional: true },
+  // voice (talking with the agent): realtime providers the app's relay holds the socket to
+  'openai-realtime': { baseUrl: 'wss://api.openai.com/v1/realtime', key: true, voice: true },
+  'gemini-live': { baseUrl: 'wss://generativelanguage.googleapis.com', key: true, voice: true },
 }
 // The app's features (web/app/server/ai-control/catalogue.mjs USE_SURFACES); the app checks them again at start.
 const USE = ['default', 'chat', 'chat.route', 'generation', 'generation.notes', 'presentation', 'vision', 'images', 'shape',
-  'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest']
+  'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest', 'voice', 'voice.chat', 'voice.interview']
+// The parts that talk: they take only a voice connection, and a voice connection serves only them.
+const VOICE_USE = ['voice', 'voice.chat', 'voice.interview']
 const NAME = /^[a-z0-9][a-z0-9-]{0,39}$/
 const CONNECTION_FIELDS = ['type', 'url', 'key', 'model', 'tools', 'vision', 'images', 'maxTokens', 'toolChoice']
 // Instance metadata services hand out the machine's cloud credentials: no AI request goes there.
@@ -208,6 +215,11 @@ export function operatorAI(setting) {
     for (const [feature, choice] of Object.entries(use)) {
       if (!USE.includes(feature)) throw new Plain(`SLATEBOX_AI_CONFIG use: ${feature.slice(0, 40)} is not a feature (${USE.join(', ')})`)
       if (choice !== 'builtin' && !ai.connections[choice]) throw new Plain(`SLATEBOX_AI_CONFIG use.${feature}: ${String(choice).slice(0, 40)} is not one of the connections (or builtin)`)
+      if (choice !== 'builtin') {
+        const talks = Boolean(TYPES[ai.connections[choice].type]?.voice)
+        if (talks && !VOICE_USE.includes(feature)) throw new Plain(`SLATEBOX_AI_CONFIG use.${feature}: ${choice} is a voice connection; choose it for ${VOICE_USE.join(', ')} only`)
+        if (!talks && VOICE_USE.includes(feature)) throw new Plain(`SLATEBOX_AI_CONFIG use.${feature}: ${choice} cannot talk; choose an openai-realtime or gemini-live connection for it`)
+      }
       ai.use[feature] = choice
     }
     const fromConfig = switchValue(config.ownProviders, 'SLATEBOX_AI_CONFIG ownProviders')
@@ -277,6 +289,11 @@ async function call(url, init, timeoutMs) {
 export async function checkConnections(ai, { timeoutMs = 20000 } = {}) {
   const lines = []
   for (const [name, connection] of Object.entries(ai?.connections || {})) {
+    // a voice connection speaks a realtime socket, not this check's requests: it is tried by talking
+    if (TYPES[connection.type]?.voice) {
+      lines.push(`${name}: a voice connection (${connection.model || 'no model'}); try it by talking with the agent`)
+      continue
+    }
     const base = (connection.baseUrl || TYPES[connection.type]?.baseUrl || '').replace(/\/+$/, '')
     const anthropic = connection.type === 'anthropic'
     const headers = { 'Content-Type': 'application/json', Accept: 'application/json',

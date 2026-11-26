@@ -16,6 +16,7 @@ import {useAtom,useAtomValue,useSetAtom} from 'jotai'
 import {askableAgentsAtom,openChatWithAtom} from '../jotai/atoms'
 import {agentChatReply,agentErrorReply,agentOfTurn,routeMessage,sameAgentName} from '../../api/common/agent-mention.mjs'
 import {openAgentAtom} from './AgentPresenceListener'
+import {ANSWER,previewAnswer,replyAnswer} from '../../api/common/voice-answers.mjs'
 
 // The library (a view inside this conversation) and its cards: the library chunk, loaded on demand.
 const LibraryView=lazy(loadLibrary)
@@ -160,7 +161,8 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
   // Only its inviter can ask it. A failure is its reply, with what to do next.
   async function askAgent({agent,request},message,turn,id) {
     const who=agentOfTurn(agent)
-    const answer=(reply,extra={})=>remember({id,message,reply,agent:who,...extra})
+    // What it answered is also what a voice session's agent says (voiceRun).
+    const answer=(reply,extra={})=>{remember({id,message,reply,agent:who,...extra});return replyAnswer(reply)}
     if(!agent.canAsk) return answer(agent.why || `Only ${agent.inviterName || 'the person who invited it'} can ask ${agent.name}.`)
     if(request.length<2) return answer(`What should ${agent.name} do? Write it after @${agent.name}.`)
     remember({id,message,reply:'',agent:who,pending:true})
@@ -191,8 +193,9 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
       if(route.kind==='agent') return await askAgent(route,message,turn,id)
       // A question only an invited agent can answer (Slatebox can't read GitHub): say so, and offer both.
       if(route.kind==='hint') {
-        remember({id,message,reply:`Slatebox can't read ${route.agent.name}. ${route.agent.name} can answer that: ask @${route.agent.name}.`,hint:{agentId:route.agent.agentId,name:route.agent.name}})
-        return
+        const reply=`Slatebox can't read ${route.agent.name}. ${route.agent.name} can answer that: ask @${route.agent.name}.`
+        remember({id,message,reply,hint:{agentId:route.agent.agentId,name:route.agent.name}})
+        return replyAnswer(reply)
       }
       remember({id,message,reply:'',pending:true})
       pendingTurn.current=id
@@ -201,8 +204,9 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
       if(turn!==asked.current) return
       const local=lib?.libraryTurn(message)
       if(local) {
-        remember({id,message,reply:local.all?'Here is everything you can add to this slate.':'These fit what you described.',attach:{type:'catalog',entries:local.entries}})
-        return
+        const reply=local.all?'Here is everything you can add to this slate.':'These fit what you described.'
+        remember({id,message,reply,attach:{type:'catalog',entries:local.entries}})
+        return replyAnswer([reply,...local.entries.map(entry=>lib.catalogEntry(entry)?.title).filter(Boolean).slice(0,8)].join(' '))
       }
       const via=methodsFor(message,board)
       // The line selected on the canvas is what “this line” means.
@@ -212,6 +216,7 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
       if(res.reply) {
         // A question answered in words: nothing to keep, so it joins the conversation.
         remember({id,message,reply:res.reply})
+        return replyAnswer(res.reply)
       } else {
         // A launch plan, pipeline or budget is previewed by its own rules, loaded only now.
         if(BOARD_FORMATS.includes(res.format)) await import('slateboxjs/workshops/rules')
@@ -219,6 +224,7 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
         // The preview carries the message itself (Review the preview), so the waiting turn goes.
         forget(id)
         setDraft({...res,message,via})
+        return spokenPreview(res)
       }
     } catch(e) {
       if(turn===asked.current) {
@@ -229,6 +235,7 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
         // The refused request is said once, in the refusal's own block: its waiting turn goes.
         if(paying) {forget(id);setText('')}
         else remember({id,message,reply:e.reason || e.message || 'That did not work.',failed:true,next:{kind:'retry'}})
+        return {text:e.reason || e.message || 'That did not work.',ok:false}
       }
     }
     finally {if(turn===asked.current) {inFlight.current=false;setBusy(null)}}
@@ -243,8 +250,8 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     pendingTurn.current=null
   }
   async function keep() {
-    if(inFlight.current) return
-    if(readNodes()!==before.current) {setError('Your drawing changed. Discard this preview and ask again.');return}
+    if(inFlight.current) return undefined
+    if(readNodes()!==before.current) {setError('Your drawing changed. Discard this preview and ask again.');return {text:'Your drawing changed. Discard this preview and ask again.',ok:false}}
     inFlight.current=true;setBusy('keeping');setError('')
     try {
       const keeping=Meteor.callAsync(draft.via+'.keep',shareId,draft.id)
@@ -261,21 +268,26 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
       if(draft.mode==='play' && kept?.kept) {
         setDraft(null);inFlight.current=false;setBusy(null)
         onKeep({board:true,origin:kept.origin,nativeConversationRevision:kept.nativeConversationRevision,...(kept.name && {name:kept.name})})
-        return
+        return replyAnswer(reply)
       }
       // A drawing kept here is drawn on this page as the server saved it (no reload), as one step its person can undo.
       if(Array.isArray(kept?.revisions)) {
         setDraft(null);inFlight.current=false;setBusy(null)
         onKeep({revisions:kept.revisions,nativeConversationRevision:kept.nativeConversationRevision})
         requestAnimationFrame(()=>input.current?.focus())
-        return
+        return replyAnswer(reply)
       }
       focusMessageAfterReload(shareId)
       onKeep(null)
+      return replyAnswer(reply)
     }
-    catch(e){setError(e.reason || e.message);inFlight.current=false;setBusy(null)}
+    catch(e){setError(e.reason || e.message);inFlight.current=false;setBusy(null);return {text:e.reason || e.message || 'That could not be kept.',ok:false}}
   }
   function discard() {setDraft(null);setError('')}
+  // A preview as a voice session's agent hears it: what the screen shows under "Review the preview".
+  const spokenPreview = d => previewAnswer({heading:previewHeading(d),labels:d.labels||[],changes:d.changes||[],removed:d.removed||[],
+    warnings:(d.warnings||[]).map(w=>WARNINGS[w.rule]?.(w.count,w)).filter(Boolean),
+    extra:[previewSaidLine(d),!d.said && (d.component || d.mode==='play') ? previewKeepSentence(d) : null,previewAsksForCards(d) ? 'Add your cards in the workshop after Keep.' : null].filter(Boolean)})
   // A starter fills the message with something that can be previewed as it stands. The part
   // a person is most likely to replace is selected, so typing over it is one gesture. The list
   // is the one every read of this slate returns, worked out from the drawing as it is now.
@@ -325,7 +337,32 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     else if(library.add) addEntry(library.add)
     else browse(library.start ?? {})
   }, [library?.nonce])
+  // Talking with the agent: what it asks Slatebox goes through this conversation's own submit, and
+  // "yes, keep it" presses Keep (or No on a removal), as the buttons above the box do.
+  async function voiceRun({text:said='',confirm}={}) {
+    if(confirm==='keep') {
+      if(!draft) return ANSWER.none
+      if(stale) return {text:'Your drawing changed after this preview. Discard it and ask again.',ok:false}
+      return (await keep()) ?? hold?.reason ?? ANSWER.busy
+    }
+    if(confirm==='discard') {
+      if(!draft) return ANSWER.none
+      discard()
+      return ANSWER.discarded
+    }
+    if(!said.trim()) return ANSWER.empty
+    // A preview waiting (or being made) holds the box: the agent hears why, as the person reads it.
+    if(hold || inFlight.current) return hold?.reason || 'Preparing the preview…'
+    setView(null)
+    // What the person was typing stays in the box (ask empties it for its own message).
+    const typed=text
+    const out=await ask(said)
+    if(typed.trim()) setText(typed)
+    // a turn that came to nothing (a newer one took its place): the agent hears why, never nothing
+    return out ?? ANSWER.busy
+  }
   const composer = <ConversationComposer shareId={shareId} inputRef={input} value={text} onChange={setText} onSubmit={()=>ask(text)}
+    voice={{surface:'voice.chat',shareId,run:voiceRun}}
     hold={hold} canSubmit={Boolean(text.trim())} placeholder={replying ? `Reply to ${replying.name}, or @Slatebox` : empty ? (board.library?.mode==='build' ? 'Describe the board, or pick a shape' : 'What are you working on?') : agents.some(a=>a.canAsk) ? `Ask anything, or @${agents.find(a=>a.canAsk).name}` : 'Ask anything'} maxLength={1200} error={error}
     extra={!hold && <>
       {/* Who the next message goes to, after "@name": × hands the conversation back to Slatebox. */}

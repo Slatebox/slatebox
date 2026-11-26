@@ -11,11 +11,17 @@
 import { PRESET_IDS, PROVIDER_PRESETS } from './provider-presets.mjs'
 
 export const CHAT_PROTOCOLS = Object.freeze(['openai-chat', 'anthropic-messages', 'openai-images'])
+// The realtime voice protocols the relay speaks (server/voice/adapters): a provider of one serves
+// only the voice parts, and people's and teams' own connections may name them too.
+export const REALTIME_PROTOCOLS = Object.freeze(['openai-realtime', 'gemini-live'])
+export const isRealtimeProtocol = (protocol) => REALTIME_PROTOCOLS.includes(protocol)
+// Every protocol a model provider (and so a connection) may speak.
+export const MODEL_PROTOCOLS = Object.freeze([...CHAT_PROTOCOLS, ...REALTIME_PROTOCOLS])
 export const AUX_PROTOCOLS = Object.freeze(['stability-images', 'google-cse', 'nounproject', 'deepgram'])
-export const PROTOCOLS = Object.freeze([...CHAT_PROTOCOLS, ...AUX_PROTOCOLS])
+export const PROTOCOLS = Object.freeze([...MODEL_PROTOCOLS, ...AUX_PROTOCOLS])
 // How an "Other" provider takes its key (named presets fix theirs).
 export const AUTH_STYLES = Object.freeze(['bearer', 'header', 'none'])
-export const PROVIDER_CAPS = Object.freeze(['tools', 'vision', 'json', 'images', 'reasoning'])
+export const PROVIDER_CAPS = Object.freeze(['tools', 'vision', 'json', 'images', 'reasoning', 'voice'])
 export const TOOL_CHOICES = Object.freeze(['auto', 'named', 'required'])
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/
@@ -168,7 +174,7 @@ export function chatConnectionTypes(stored = {}) {
   const other = PROVIDER_PRESETS.other
   out['openai-compatible'] = typeOf({ ...other, preset: 'other', baseUrl: null }, true)
   for (const [id, provider] of Object.entries(mergeProviders(stored))) {
-    if (!CHAT_PROTOCOLS.includes(provider.protocol)) continue
+    if (!MODEL_PROTOCOLS.includes(provider.protocol)) continue
     out[id] = typeOf({ ...provider, keyRequired: provider.auth?.style !== 'none' }, false)
   }
   return out
