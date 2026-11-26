@@ -116,7 +116,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          repository: Slatebox/slateboxjs-v2
+          repository: Slatebox/slateboxjs
           ref: ${{ needs.resolve.outputs.engine }}
           path: engine
           persist-credentials: false
@@ -133,7 +133,7 @@ jobs:
         run: |
           set -euo pipefail
           for repo in engine relay; do git -C "$repo" fetch --quiet --depth=1 origin main; done
-          git -C engine merge-base --is-ancestor HEAD FETCH_HEAD 2>/dev/null || echo "::warning::the engine commit is not on slateboxjs-v2 main"
+          git -C engine merge-base --is-ancestor HEAD FETCH_HEAD 2>/dev/null || echo "::warning::the engine commit is not on slateboxjs main"
           mkdir "$RUNNER_TEMP/stage"
           app/self-host/stage-image.sh "$RUNNER_TEMP/stage" app HEAD engine HEAD relay HEAD
           test ! -e "$RUNNER_TEMP/stage/self-host/rootfs/opt/slatebox/release-keys.d"

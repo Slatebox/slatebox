@@ -34,7 +34,7 @@ import path from 'node:path'
 
 const REPO_URL = 'https://github.com/Slatebox/slatebox'
 export const SOURCES_FILE = 'self-host/sources.json'
-export const SOURCE_REPOS = Object.freeze({ engine: 'https://github.com/Slatebox/slateboxjs-v2', relay: 'https://github.com/Slatebox/y-websocket' })
+export const SOURCE_REPOS = Object.freeze({ engine: 'https://github.com/Slatebox/slateboxjs', relay: 'https://github.com/Slatebox/y-websocket' })
 const FULL_SHA = /^[0-9a-f]{40}$/
 const GIT_CLIFF_VERSION = '2.14.2'
 
