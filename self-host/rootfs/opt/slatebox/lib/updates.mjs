@@ -4,6 +4,7 @@
 // already controls Docker can ask. Admin › Updates in the app writes the same record.
 //
 //   slatebox updates policy --json        what to do now: {"action":"none"|"apply"|"rollback", ...}
+//                                         (the host updater's own call: an "apply" starts that attempt; to look, use status)
 //   slatebox updates report --attempt ID --phase PHASE [--detail TEXT] [--version X.Y.Z] [--downgrade-safe] [--pre-upgrade-backup yes|no]
 //   slatebox updates report --pending     the same, as JSON on standard input (a report kept while the app was down)
 //   slatebox updates heartbeat --updater N --scheduler KIND

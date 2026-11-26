@@ -14,10 +14,11 @@
 //      backup, set the old container aside, start, health check, roll back with the backup);
 //   4. it reports each phase with `docker exec <name> slatebox updates report`; an outcome that
 //      cannot be delivered (Slatebox is down) waits in updates/pending-report.json.
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { execFileSync } from 'node:child_process'
 import { collect, resolveAnswers } from '../answers.mjs'
 import { EXIT, InstallError } from '../errors.mjs'
 import { makeRunner } from '../runner.mjs'
@@ -27,7 +28,7 @@ import { applyOnHost, backupsDir } from '../targets/docker.mjs'
 import { parse as parseYaml } from '../yaml.mjs'
 import { DEFAULT_FEED_URL, FeedError, checkManifest, fetchSigned, imageRefFor, manifestUrl, readCapped, readFeed, resolveTarget } from './feed.mjs'
 import { compareVersions } from './policy.mjs'
-import { IN_FLIGHT, PENDING_REPORT, SLATEBOX_BIN } from './host-script.mjs'
+import { HOST_SCRIPT_OPTIONS, IN_FLIGHT, PENDING_REPORT, SLATEBOX_BIN, STARTED, UPDATER_SCRIPT, updaterScript } from './host-script.mjs'
 
 export const PRE_UPGRADE_KEEP = 3
 export const FEED_STATE = 'updates/feed-state.json'
@@ -161,6 +162,9 @@ export async function runUpdater({ name, dir, backups = null, outsideUrl = null,
 
   if (!attemptId || !['apply', 'rollback'].includes(decision?.action)) return { outcome: 'none', exitCode: 0, detail: 'nothing to do' }
   if (!/^[A-Za-z0-9-]{1,64}$/.test(String(attemptId))) return { outcome: 'none', exitCode: 2, detail: 'the attempt id is not one Slatebox makes' }
+  // First: this attempt's updater has run (updater.sh tells it from Docker failing to start one).
+  mkdirSync(join(dir, 'updates'), { recursive: true, mode: 0o700 })
+  writeFileSync(join(dir, STARTED), `${attemptId}\n`, { mode: 0o600 })
   const recordText = existsSync(join(dir, 'install.yaml')) ? readFileSync(join(dir, 'install.yaml'), 'utf8') : null
   if (!recordText) return finish('failed', EXIT.PRECONDITION, `There is no install record in ${dir}.`)
   const record = parseYaml(recordText)
@@ -260,8 +264,42 @@ function newestPreUpgrade(dir, record) {
   return files.length ? join(dir, files.at(-1)) : null
 }
 
+/**
+ * updater.sh written again by this version, from the options the installer kept beside it
+ * (updates/host-script.json): updater.sh runs this from the image an update just started, so a
+ * fix to the host side arrives like the rest of Slatebox. Renamed into place: the run that called
+ * this keeps reading the copy it opened. → the path written
+ */
+export function writeHostScript(dir) {
+  const options = JSON.parse(readFileSync(join(dir, HOST_SCRIPT_OPTIONS), 'utf8'))
+  if (options.dir !== dir) throw new Error(`${HOST_SCRIPT_OPTIONS} is for ${options.dir}, not ${dir}`)
+  // Every choice that differs between a Mac and Linux is named: a missing one is refused, never
+  // filled with the Linux default.
+  const strings = ['name', 'docker', 'scheduler', 'socket']
+  const flags = ['hostNetwork', 'asOwner']
+  const missing = [...strings.filter(key => typeof options[key] !== 'string' || !options[key]), ...flags.filter(key => typeof options[key] !== 'boolean')]
+  if (missing.length) throw new Error(`${HOST_SCRIPT_OPTIONS} does not say ${missing.join(', ')}`)
+  const path = join(dir, UPDATER_SCRIPT)
+  const next = `${path}.tmp`
+  rmSync(next, { force: true })
+  writeFileSync(next, updaterScript(options), { mode: 0o700 })
+  chmodSync(next, 0o700)
+  // A script sh cannot read would stop updates for good: refused here, and the one there is stays.
+  try { execFileSync('sh', ['-n', next], { stdio: 'pipe' }) } catch (error) {
+    rmSync(next, { force: true })
+    throw new Error(`the new updater.sh is not valid sh: ${String(error.stderr || error.message).trim()}`)
+  }
+  if (existsSync(path)) copyFileSync(path, `${path}.prev`)
+  renameSync(next, path)
+  return path
+}
+
 async function main(argv) {
-  const { values } = parseArgs({ args: argv, strict: true, options: { name: { type: 'string' }, dir: { type: 'string' }, backups: { type: 'string' }, 'outside-url': { type: 'string' }, 'feed-url': { type: 'string' } } })
+  const { values } = parseArgs({ args: argv, strict: true, options: { name: { type: 'string' }, dir: { type: 'string' }, backups: { type: 'string' }, 'outside-url': { type: 'string' }, 'feed-url': { type: 'string' }, 'write-host-script': { type: 'boolean' } } })
+  if (values['write-host-script'] && values.dir) {
+    process.stdout.write(`${new Date().toISOString()} wrote ${writeHostScript(values.dir)} (Slatebox ${imageVersion() || PKG.version})\n`)
+    return 0
+  }
   if (!values.name || !values.dir) {
     process.stderr.write('Usage: slatebox-updater --name <install> --dir <its folder> [--backups <dir>] [--outside-url <url>] [--feed-url <url>]\n(run by updater.sh, with SLATEBOX_UPDATE_DECISION set)\n')
     return 2

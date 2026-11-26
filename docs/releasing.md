@@ -156,7 +156,13 @@ Self-hosted servers update from GitHub, never from anywhere else:
 The app (Admin › Updates) checks the feed every 6 hours and records what the admin wants. The host
 updater (`updater.sh`, set up by the installer, every five minutes) asks the container over `docker
 exec`, then fetches and verifies the feed and the manifest itself, refuses anything they do not
-name, pulls by digest and runs the installer's upgrade (backup, health check, rollback).
+name, pulls by digest and runs the installer's upgrade (backup, health check, rollback). After an
+update or a rollback, the version now running (2.1.2 on) writes `updater.sh` again from the options
+the installer kept in `updates/host-script.json`, so a fix to the host side reaches servers the same
+way. A host updater set up before that file existed (installer 0.3.0) has neither, until
+`npx slatebox updates enable` is run there once. Auto-apply
+waits `holdBackDays` (2) after a release and then for the maintenance window; **Update now** (or
+`slatebox updates apply`) skips both, never a withdrawal or a major release's approval.
 `update-feed-refresh.yml` re-signs the feed every day so it never expires; run it by hand with
 `yank: X.Y.Z=why` to withdraw a release (servers on it are told to update; nobody else installs it).
 

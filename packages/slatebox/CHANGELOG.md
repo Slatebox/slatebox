@@ -13,6 +13,19 @@ release's highlights.
 
 ## [Unreleased]
 
+- Automatic updates work on a Mac whose Docker is Colima: the host updater no longer looks for
+  the Docker VM's socket on the Mac itself (only Docker Desktop and OrbStack put one there). On
+  Linux the socket is mounted with `--mount`, which stops instead of making a folder when it is
+  missing.
+- The host's checks run before an attempt is started, and an updater Docker could not start at
+  all is reported as failed at once, instead of showing as running in Admin › Updates for two
+  hours. An updater still running from an earlier run is left to finish.
+- After an update or a rollback, `updater.sh` is written again by the version now running (from
+  `updates/host-script.json`, checked with `sh -n` first, the one before kept as
+  `updater.sh.prev`), so fixes to the host updater arrive with each release (2.1.2 on). A server
+  whose host updater was set up before this (installer 0.3.0, never on npm) gets it by running
+  `npx slatebox updates enable` once.
+
 ## [0.3.0] - 2026-11-25
 
 ### Added

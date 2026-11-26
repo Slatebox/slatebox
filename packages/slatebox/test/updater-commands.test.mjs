@@ -2,10 +2,11 @@
 // image that has it; enable / disable; uninstall takes it away; help lists it; Kubernetes is
 // notify-only for now.
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { parse } from '../src/yaml.mjs'
+import { HOST_SCRIPT_OPTIONS, updaterScript } from '../src/updater/host-script.mjs'
 import { cli, FakeDocker, sandbox } from './fakes.mjs'
 
 const IMAGE = 'slatebox-test:1'
@@ -75,6 +76,10 @@ test('on a Mac: a launchd agent every five minutes, and the updater reaches the 
   assert.match(readFileSync(plist, 'utf8'), /<key>StartInterval<\/key><integer>300<\/integer>/)
   assert.ok(w.docker.agents.has('com.slatebox.slatebox.updater'))
   assert.match(readFileSync(join(w.home, 'installs', 'slatebox', 'updater.sh'), 'utf8'), /--outside-url '?http:\/\/host\.docker\.internal:17431/)
+  // The options are kept beside it, and they make the same script: the version an update brings writes it again from them.
+  const options = join(w.home, 'installs', 'slatebox', HOST_SCRIPT_OPTIONS)
+  assert.equal(statSync(options).mode & 0o777, 0o600)
+  assert.equal(updaterScript(JSON.parse(readFileSync(options, 'utf8'))), readFileSync(join(w.home, 'installs', 'slatebox', 'updater.sh'), 'utf8'))
 })
 
 test('disable takes the schedule and script away and remembers it; enable puts them back', async () => {
@@ -85,6 +90,7 @@ test('disable takes the schedule and script away and remembers it; enable puts t
   assert.doesNotMatch(w.docker.crontab || '', /slatebox-installer-updater/)
   const dir = join(w.home, 'installs', 'slatebox')
   assert.ok(!existsSync(join(dir, 'updater.sh')))
+  assert.ok(!existsSync(join(dir, HOST_SCRIPT_OPTIONS)))
   assert.equal(parse(readFileSync(join(dir, 'install.yaml'), 'utf8')).updates.enabled, false)
   // An upgrade does not turn it back on by itself.
   const on = await cli(['updates', 'enable'], { run: w.run, home: w.home, platform: 'linux' })
@@ -122,6 +128,7 @@ test('rootless Docker: the updater gets its socket; Podman: refused with what to
   const script = readFileSync(join(rootless.home, 'installs', 'slatebox', 'updater.sh'), 'utf8')
   assert.match(script, /^socket=\/run\/user\/1000\/docker\.sock$/m)
   assert.match(script, /^user=0:0$/m)
+  assert.equal(updaterScript(JSON.parse(readFileSync(join(rootless.home, 'installs', 'slatebox', HOST_SCRIPT_OPTIONS), 'utf8'))), script)
   const podman = world({ platformName: 'Podman Engine' })
   await cli(['install', ...BASE, '--yes', '--no-auto-updates'], { run: podman.run, home: podman.home, platform: 'linux' })
   const enable = await cli(['updates', 'enable', '--json'], { run: podman.run, home: podman.home, platform: 'linux' })

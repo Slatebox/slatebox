@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { shq } from '../runner.mjs'
-import { UPDATER_SCRIPT, UPDATES_DIR } from './host-script.mjs'
+import { HOST_SCRIPT_OPTIONS, UPDATER_SCRIPT, UPDATES_DIR } from './host-script.mjs'
 
 export const INTERVAL_SECONDS = 300
 export const updaterLabel = name => `com.slatebox.${name}.updater`
@@ -113,10 +113,12 @@ export async function removeUpdater(ctx, host, record) {
     }
     const script = join(host.dir, UPDATER_SCRIPT)
     if (existsSync(script)) { rmSync(script, { force: true }); removed.push(UPDATER_SCRIPT) }
+    rmSync(`${script}.prev`, { force: true })
+    rmSync(join(host.dir, HOST_SCRIPT_OPTIONS), { force: true })
     return removed
   }
   const unit = updaterUnit(record.name)
-  await host.sh(`systemctl disable --now ${unit}.timer 2>/dev/null; rm -f /etc/systemd/system/${unit}.service /etc/systemd/system/${unit}.timer /etc/cron.d/${unit} ${shq(join(host.dir, UPDATER_SCRIPT))}; systemctl daemon-reload 2>/dev/null; true`)
+  await host.sh(`systemctl disable --now ${unit}.timer 2>/dev/null; rm -f /etc/systemd/system/${unit}.service /etc/systemd/system/${unit}.timer /etc/cron.d/${unit} ${shq(join(host.dir, UPDATER_SCRIPT))} ${shq(join(host.dir, `${UPDATER_SCRIPT}.prev`))} ${shq(join(host.dir, HOST_SCRIPT_OPTIONS))}; systemctl daemon-reload 2>/dev/null; true`)
   return ['systemd timer or cron file', UPDATER_SCRIPT]
 }
 

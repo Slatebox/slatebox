@@ -16,7 +16,7 @@ import { writeRecord } from '../record.mjs'
 import { shq } from '../runner.mjs'
 import { backupsDir, hostFor } from '../targets/docker.mjs'
 import { which } from '../targets/hosts.mjs'
-import { DOCKER_SOCKET, LOCK_DIR, SLATEBOX_BIN, UPDATER_SCRIPT, updaterScript } from './host-script.mjs'
+import { DOCKER_SOCKET, HOST_SCRIPT_OPTIONS, LOCK_DIR, SLATEBOX_BIN, UPDATER_SCRIPT, updaterScript } from './host-script.mjs'
 import { withUpdateLock } from './lock.mjs'
 import { hostFeedUrl } from './run.mjs'
 import { removeUpdater, scheduleUpdater, schedulerFor } from './schedule.mjs'
@@ -114,6 +114,8 @@ export async function enableUpdater(ctx, record, { feedUrl = null, quiet = false
     }
     const { facts, options } = await scriptOptions(ctx, host, record, { feedUrl })
     const scheduled = await scheduleUpdater(ctx, host, record, updaterScript(options), { facts })
+    // Kept beside it, so the version an update brings writes updater.sh again (fixes to it arrive the same way).
+    await host.writeFile(join(host.dir, HOST_SCRIPT_OPTIONS), `${JSON.stringify(options, null, 2)}\n`, 0o600)
     // Check in now, so Admin › Updates shows the updater at once (and reads the feed).
     await host.docker(['exec', record.name, SLATEBOX_BIN, 'updates', 'heartbeat', '--updater', '1', '--scheduler', scheduled.scheduler, ...(options.feedUrl ? ['--feed-url', options.feedUrl] : [])])
     writeRecord(ctx.home, { ...record, updates: { enabled: true, scheduler: scheduled.scheduler, ...(options.feedUrl ? { feedUrl: options.feedUrl } : {}) } })

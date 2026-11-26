@@ -76,12 +76,8 @@ if [ -f "$dir/updates/pending-report.json" ]; then
   fi
 fi
 
-decision=$("$docker" exec "$name" /opt/slatebox/bin/slatebox updates policy --json 2>>"$log") || exit 0
-case "$decision" in
-  *'"action":"apply"'*|*'"action":"rollback"'*) ;;
-  *) exit 0 ;;
-esac
-# Never a folder where the socket should be (docker run -v would make one): say so and stop.
+# What the updater needs is checked before Slatebox is asked what to do: asking starts an attempt.
+# This computer runs Docker itself, so its socket is here: never a folder where it should be.
 if [ ! -S "$socket" ]; then
   echo "$(now) no Docker socket at $socket: run npx slatebox updates enable --name team again" >> "$log"
   exit 1
@@ -91,9 +87,21 @@ image=$("$docker" inspect --format '{{.Image}}' "$name") || exit 1
 # backups) stays readable by whoever runs npx slatebox here.
 user="$(stat -c %u "$dir"):$(stat -c %g "$dir")"
 group=$(stat -c %g "$socket")
+# An updater from an earlier run still works (this run's docker lost it, or the lock was taken over): leave it be.
+if exists "$name-updater"; then exit 0; fi
+
+decision=$("$docker" exec "$name" /opt/slatebox/bin/slatebox updates policy --json 2>>"$log") || exit 0
+case "$decision" in
+  *'"action":"apply"'*) kind=apply ;;
+  *'"action":"rollback"'*) kind=rollback ;;
+  *) exit 0 ;;
+esac
+attempt=$(printf '%s' "$decision" | sed -n 's/.*"attemptId":"\([A-Za-z0-9-]*\)".*/\1/p')
+started="$dir/updates/started"
+rm -f "$started"
 echo "$(now) starting: $decision" >> "$log"
 "$docker" run --rm --user "$user" --group-add "$group" --name "$name-updater" --network host \
-  -v "$socket:/var/run/docker.sock" \
+  --mount type=bind,source="$socket",target=/var/run/docker.sock \
   -v "$dir:$dir" \
   -v /srv/backups:/srv/backups \
   -e SLATEBOX_UPDATE_DECISION="$decision" -e HOME=/tmp \
@@ -101,6 +109,26 @@ echo "$(now) starting: $decision" >> "$log"
   --name "$name" --dir "$dir" --backups /srv/backups --feed-url https://mirror.example/update-feed/channels.json >> "$log" 2>&1
 code=$?
 echo "$(now) finished with exit code $code" >> "$log"
+# 125 with no sign the updater ran (it writes $started first; nothing in flight, no report kept, no
+# updater container left): Docker could not start it (the socket, the image), so it reported
+# nothing. Say so now, or Admin › Updates would show the attempt running until its lease ran out.
+# Any other 125 is the updater's own run, which reports for itself.
+if [ "$code" -eq 125 ] && [ -n "$attempt" ] && [ ! -f "$started" ] && [ ! -f "$inflight" ] && [ ! -f "$dir/updates/pending-report.json" ] && ! exists "$name-updater"; then
+  detail='Docker could not start the updater on this host; nothing was changed. The reason is in updates/updates.log in the install folder.'
+  "$docker" exec "$name" /opt/slatebox/bin/slatebox updates report --attempt "$attempt" --phase failed --kind "$kind" --detail "$detail" >/dev/null 2>>"$log" \
+    || printf '{"attemptId":"%s","phase":"failed","detail":"%s","kind":"%s"}\n' "$attempt" "$detail" "$kind" > "$dir/updates/pending-report.json"
+fi
+rm -f "$started"
+# After an update or a rollback, the version now running writes this script again from the options
+# it was made with, so a fix to it arrives the way the rest of Slatebox does, and the script always
+# matches the version it talks to. The new one takes effect next run.
+if [ "$code" -eq 0 ] && [ -f "$dir/updates/host-script.json" ]; then
+  running=$("$docker" inspect --format '{{.Image}}' "$name" 2>/dev/null)
+  if [ -n "$running" ] && [ "$running" != "$image" ]; then
+    "$docker" run --rm --user "$user" --network none -v "$dir:$dir" --entrypoint /opt/slatebox/bin/slatebox-updater "$running" --write-host-script --dir "$dir" >> "$log" 2>&1 \
+      || echo "$(now) updater.sh was kept as it is: the version now running could not write it again" >> "$log"
+  fi
+fi
 # Keep the log short: the last 2000 lines.
 tail -n 2000 "$log" > "$log.tmp" 2>/dev/null && mv "$log.tmp" "$log"
 exit $code

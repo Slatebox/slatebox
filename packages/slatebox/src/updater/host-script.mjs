@@ -14,7 +14,13 @@ export const LOCK_DIR = 'updates/lock'
 export const PENDING_REPORT = 'updates/pending-report.json'
 // Written by the updater just before it sets the running container aside; gone when it finishes.
 export const IN_FLIGHT = 'updates/in-flight'
+// Written by the updater as it starts (the attempt's id): a docker run that ends 125 after this was
+// the updater's own run (Docker lost the connection, or --rm could not remove it), not "never started".
+export const STARTED = 'updates/started'
 export const UPDATES_LOG = 'updates/updates.log'
+// The options this script was written with (no secrets): after an update, the version now running
+// rewrites updater.sh from them (slatebox-updater --write-host-script), so fixes to it arrive the same way.
+export const HOST_SCRIPT_OPTIONS = 'updates/host-script.json'
 export const SLATEBOX_BIN = '/opt/slatebox/bin/slatebox'
 export const UPDATER_BIN = '/opt/slatebox/bin/slatebox-updater'
 // A lock older than this belongs to a run that died (a lease in the app ends after 2 hours too).
@@ -41,7 +47,11 @@ const STAGE_RESTORE = 'umask 077; cat > /data/restore-on-start.gz.part && mv /da
  */
 export function updaterScript({ name, dir, docker = 'docker', backups = null, hostNetwork = true, outsideUrl = null, feedUrl = null, scheduler = 'cron', protocol = 1, socket = DOCKER_SOCKET, asOwner = hostNetwork }) {
   const d = shq(docker)
-  const mounts = [`-v "$socket:/var/run/docker.sock"`, `-v "$dir:$dir"`, ...(backups ? [`-v ${shq(backups)}:${shq(backups)}`] : [])]
+  // Linux: --mount, so a socket that is not there stops docker run (-v would make a folder in its
+  // place). A Mac's socket is always there inside the Docker VM, and -v is the one form Docker
+  // Desktop, OrbStack and Colima all document for it.
+  const socketMount = hostNetwork ? `--mount type=bind,source="$socket",target=/var/run/docker.sock` : `-v "$socket:/var/run/docker.sock"`
+  const mounts = [socketMount, `-v "$dir:$dir"`, ...(backups ? [`-v ${shq(backups)}:${shq(backups)}`] : [])]
   const network = hostNetwork ? '--network host' : '--add-host host.docker.internal:host-gateway'
   const extra = [...(backups ? [`--backups ${shq(backups)}`] : []), ...(outsideUrl ? [`--outside-url ${shq(outsideUrl)}`] : []), ...(feedUrl ? [`--feed-url ${shq(feedUrl)}`] : [])]
   const pending = `$dir/${PENDING_REPORT}`
@@ -123,16 +133,14 @@ if [ -f "${pending}" ]; then
   fi
 fi
 
-decision=$("$docker" exec "$name" ${SLATEBOX_BIN} updates policy --json 2>>"$log") || exit 0
-case "$decision" in
-  *'"action":"apply"'*|*'"action":"rollback"'*) ;;
-  *) exit 0 ;;
-esac
-# Never a folder where the socket should be (docker run -v would make one): say so and stop.
+# What the updater needs is checked before Slatebox is asked what to do: asking starts an attempt.
+${hostNetwork
+    ? `# This computer runs Docker itself, so its socket is here: never a folder where it should be.
 if [ ! -S "$socket" ]; then
   echo "$(now) no Docker socket at $socket: run npx slatebox updates enable${name === 'slatebox' ? '' : ` --name ${name}`} again" >> "$log"
   exit 1
-fi
+fi`
+    : '# The socket is the Docker VM\'s own (Docker Desktop, OrbStack, Colima): only Docker sees it, so docker run checks it.'}
 image=$("$docker" inspect --format '{{.Image}}' "$name") || exit 1
 ${asOwner
     ? `# As the folder's owner, in the socket's group: what it rewrites (install.yaml, the settings, the
@@ -140,6 +148,18 @@ ${asOwner
 user="$(stat -c %u "$dir"):$(stat -c %g "$dir")"
 group=$(stat -c %g "$socket")`
     : 'user=0:0\ngroup=0'}
+# An updater from an earlier run still works (this run's docker lost it, or the lock was taken over): leave it be.
+if exists "$name-updater"; then exit 0; fi
+
+decision=$("$docker" exec "$name" ${SLATEBOX_BIN} updates policy --json 2>>"$log") || exit 0
+case "$decision" in
+  *'"action":"apply"'*) kind=apply ;;
+  *'"action":"rollback"'*) kind=rollback ;;
+  *) exit 0 ;;
+esac
+attempt=$(printf '%s' "$decision" | sed -n 's/.*"attemptId":"\\([A-Za-z0-9-]*\\)".*/\\1/p')
+started="$dir/${STARTED}"
+rm -f "$started"
 echo "$(now) starting: $decision" >> "$log"
 "$docker" run --rm --user "$user" --group-add "$group" --name "$name-updater" ${network} \\
   ${mounts.join(' \\\n  ')} \\
@@ -148,6 +168,26 @@ echo "$(now) starting: $decision" >> "$log"
   --name "$name" --dir "$dir"${extra.length ? ` ${extra.join(' ')}` : ''} >> "$log" 2>&1
 code=$?
 echo "$(now) finished with exit code $code" >> "$log"
+# 125 with no sign the updater ran (it writes $started first; nothing in flight, no report kept, no
+# updater container left): Docker could not start it (the socket, the image), so it reported
+# nothing. Say so now, or Admin › Updates would show the attempt running until its lease ran out.
+# Any other 125 is the updater's own run, which reports for itself.
+if [ "$code" -eq 125 ] && [ -n "$attempt" ] && [ ! -f "$started" ] && [ ! -f "$inflight" ] && [ ! -f "${pending}" ] && ! exists "$name-updater"; then
+  detail='Docker could not start the updater on this host; nothing was changed. The reason is in updates/updates.log in the install folder.'
+  "$docker" exec "$name" ${SLATEBOX_BIN} updates report --attempt "$attempt" --phase failed --kind "$kind" --detail "$detail" >/dev/null 2>>"$log" \\
+    || printf '{"attemptId":"%s","phase":"failed","detail":"%s","kind":"%s"}\\n' "$attempt" "$detail" "$kind" > "${pending}"
+fi
+rm -f "$started"
+# After an update or a rollback, the version now running writes this script again from the options
+# it was made with, so a fix to it arrives the way the rest of Slatebox does, and the script always
+# matches the version it talks to. The new one takes effect next run.
+if [ "$code" -eq 0 ] && [ -f "$dir/${HOST_SCRIPT_OPTIONS}" ]; then
+  running=$("$docker" inspect --format '{{.Image}}' "$name" 2>/dev/null)
+  if [ -n "$running" ] && [ "$running" != "$image" ]; then
+    "$docker" run --rm --user "$user" --network none -v "$dir:$dir" --entrypoint ${UPDATER_BIN} "$running" --write-host-script --dir "$dir" >> "$log" 2>&1 \\
+      || echo "$(now) updater.sh was kept as it is: the version now running could not write it again" >> "$log"
+  fi
+fi
 # Keep the log short: the last 2000 lines.
 tail -n 2000 "$log" > "$log.tmp" 2>/dev/null && mv "$log.tmp" "$log"
 exit $code
