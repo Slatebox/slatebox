@@ -12,7 +12,8 @@ import { createHash, randomBytes } from 'node:crypto'
 // team:import: import a team export as a new team, and confirm or discard it (administrators).
 // team:move: move a team here from another Slatebox server (the person owns their team or is in none).
 // library:review: review, refine, publish and unpublish library submissions (administrators).
-export const API_TOKEN_SCOPES = ['slates:read', 'slates:write', 'slates:share', 'slates:delete', 'ai:settings', 'ai:admin', 'ai:admin:read', 'team:export', 'team:import', 'team:move', 'library:review']
+// profile:read, profile:write: read, or change, what About you holds about the person (their own facts).
+export const API_TOKEN_SCOPES = ['slates:read', 'slates:write', 'slates:share', 'slates:delete', 'ai:settings', 'ai:admin', 'ai:admin:read', 'team:export', 'team:import', 'team:move', 'library:review', 'profile:read', 'profile:write']
 export const ACTIVE_TOKEN_LIMIT = 10
 
 export function hashApiToken(token) {

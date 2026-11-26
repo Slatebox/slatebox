@@ -28,6 +28,13 @@ export function firstSentence(text) {
   return (first.length < 60 ? first + second : first).trim();
 }
 
+// What the describe index gives as a method's index: its inputs, "({kind,text})". The index line
+// ("name({inputs}): title") would say the name and the title again, which the entry already gives.
+const inputsOf = (method) => {
+  const call = method.index.endsWith(`: ${method.title}`) ? method.index.slice(0, -(method.title.length + 2)) : method.index;
+  return call.startsWith(method.name + "(") ? call.slice(method.name.length) : call;
+};
+
 export function describeClient(manifest, input = {}, { instance } = {}) {
   const { query, methods: names } = input || {};
   let chosen = manifest.methods;
@@ -63,8 +70,10 @@ export function describeClient(manifest, input = {}, { instance } = {}) {
         method.confirm && "confirm",
       ].filter(Boolean),
       scope: method.scope,
-      modes: method.modes,
-      ...(detailed ? { dts: method.dts } : { index: method.index }),
+      // The index names modes only where a write does more than save (preview); a query or methods always do.
+      ...((detailed || method.modes.some((mode) => mode !== "save")) && { modes: method.modes }),
+      // The index gives each method's inputs; a query or methods give its declaration.
+      ...(detailed ? { dts: method.dts } : { index: inputsOf(method) }),
     })),
     types: [manifest.errorDeclaration, ...[...typeNames].sort().map((name) => manifest.types[name])].join("\n\n"),
     errors: manifest.errors,

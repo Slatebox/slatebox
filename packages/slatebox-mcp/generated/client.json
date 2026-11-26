@@ -5544,6 +5544,481 @@
       }
     },
     {
+      "name": "profile.facts.add",
+      "id": "profile.facts.add",
+      "title": "Add something about you",
+      "summary": "Adds a fact to About you in your words: a kind (role, team, work, goal, project, tool, topic, style, routine, other) and a few words. The same fact again answers the one you have (added false). About you keeps up to 200 facts. An agent cannot add while personalization is off.",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "profile:write",
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/profile/facts",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "kind",
+          "text"
+        ]
+      },
+      "index": "profile.facts.add({kind,text}): Add something about you",
+      "types": [],
+      "dts": "declare namespace slatebox.profile.facts {\n  /** Add something about you. Adds a fact to About you in your words: a kind (role, team, work, goal, project, tool, topic, style, routine, other) and a few words. The same fact again answers the one you have (added false). About you keeps up to 200 facts. An agent cannot add while personalization is off. @scope profile:write */\n  function add(input: {\n    /** What the fact is about: role, team, work, goal, project, tool, topic, style, routine, other. */\n    kind: \"role\" | \"team\" | \"work\" | \"goal\" | \"project\" | \"tool\" | \"topic\" | \"style\" | \"routine\" | \"other\";\n    /** The fact in a few plain words, up to 280 characters (\"Product manager\", \"Uses Linear\"). (1–280 characters) */\n    text: string;\n  }): Promise<({\n    fact: {\n      id: string;\n      kind: \"role\" | \"team\" | \"work\" | \"goal\" | \"project\" | \"tool\" | \"topic\" | \"style\" | \"routine\" | \"other\";\n      text: string;\n      source: {\n        type: \"typed\" | \"interview\" | \"integration\" | \"upload\" | \"first-slate\";\n        /** Which tool, upload or answer. */\n        ref?: string;\n        /** Its name, as shown. */\n        label?: string;\n        [key: string]: unknown;\n      };\n      /** (0 to 1) */\n      confidence: number;\n      /** Kept and shown to the person, never used. */\n      hidden: boolean;\n      /** Read from their first slate when listed, not stored. */\n      derived?: boolean;\n      createdAt?: string | null;\n      updatedAt?: string | null;\n      [key: string]: unknown;\n    };\n    /** false: you already had this fact. */\n    added: boolean;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "tool": {
+        "name": "add_profile_fact",
+        "title": "Remember something about the person",
+        "description": "Add one fact to the person's About you, in their words, when they tell you something about their work they want Slatebox to remember.\n\nAdd something about you. Adds a fact to About you in your words: a kind (role, team, work, goal, project, tool, topic, style, routine, other) and a few words. The same fact again answers the one you have (added false). About you keeps up to 200 facts. An agent cannot add while personalization is off.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "role",
+                "team",
+                "work",
+                "goal",
+                "project",
+                "tool",
+                "topic",
+                "style",
+                "routine",
+                "other"
+              ],
+              "description": "What the fact is about: role, team, work, goal, project, tool, topic, style, routine, other."
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 280,
+              "description": "The fact in a few plain words, up to 280 characters (\"Product manager\", \"Uses Linear\")."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Remember something about the person",
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "profile.facts.clear",
+      "id": "profile.facts.clear",
+      "title": "Delete all facts about you",
+      "summary": "Removes every fact in About you, or only those from one kind of source (source). Your switches stay as they are.",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": true,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "profile:write",
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/profile/facts/clear",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "source"
+        ]
+      },
+      "index": "profile.facts.clear({source?}): Delete all facts about you",
+      "types": [],
+      "dts": "declare namespace slatebox.profile.facts {\n  /** Delete all facts about you. Removes every fact in About you, or only those from one kind of source (source). Your switches stay as they are. @scope profile:write @destructive */\n  function clear(input: {\n    /** Only facts from this kind of source. */\n    source?: \"typed\" | \"interview\" | \"integration\" | \"upload\" | \"first-slate\";\n  }): Promise<({\n    removed: number;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "tool": {
+        "name": "clear_profile_facts",
+        "title": "Delete what Slatebox knows about the person",
+        "description": "Remove every About you fact, or those from one kind of source.\n\nDelete all facts about you. Removes every fact in About you, or only those from one kind of source (source). Your switches stay as they are.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "enum": [
+                "typed",
+                "interview",
+                "integration",
+                "upload",
+                "first-slate"
+              ],
+              "description": "Only facts from this kind of source."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Delete what Slatebox knows about the person",
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "profile.facts.hide",
+      "id": "profile.facts.hide",
+      "title": "Hide a fact about you",
+      "summary": "Hides one fact: it stays in About you, where you see it, and is never used. hidden false shows it again.",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "profile:write",
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/profile/facts/{factId}/hide",
+        "pathParams": [
+          "factId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "hidden"
+        ]
+      },
+      "index": "profile.facts.hide({factId,hidden?}): Hide a fact about you",
+      "types": [],
+      "dts": "declare namespace slatebox.profile.facts {\n  /** Hide a fact about you. Hides one fact: it stays in About you, where you see it, and is never used. hidden false shows it again. @scope profile:write @idempotent */\n  function hide(input: {\n    /** The fact, as profile.facts.list gives it (facts[].id). The fact read from the first slate is \"first-slate\". */\n    factId: string;\n    /** false shows the fact again. (default true) */\n    hidden?: boolean;\n  }): Promise<({\n    fact: {\n      id: string;\n      kind: \"role\" | \"team\" | \"work\" | \"goal\" | \"project\" | \"tool\" | \"topic\" | \"style\" | \"routine\" | \"other\";\n      text: string;\n      source: {\n        type: \"typed\" | \"interview\" | \"integration\" | \"upload\" | \"first-slate\";\n        /** Which tool, upload or answer. */\n        ref?: string;\n        /** Its name, as shown. */\n        label?: string;\n        [key: string]: unknown;\n      };\n      /** (0 to 1) */\n      confidence: number;\n      /** Kept and shown to the person, never used. */\n      hidden: boolean;\n      /** Read from their first slate when listed, not stored. */\n      derived?: boolean;\n      createdAt?: string | null;\n      updatedAt?: string | null;\n      [key: string]: unknown;\n    };\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "tool": {
+        "name": "hide_profile_fact",
+        "title": "Hide or show a fact about the person",
+        "description": "Hide one About you fact so it is never used (hidden false shows it again).\n\nHide a fact about you. Hides one fact: it stays in About you, where you see it, and is never used. hidden false shows it again.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "factId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "description": "The fact, as profile.facts.list gives it (facts[].id). The fact read from the first slate is \"first-slate\"."
+            },
+            "hidden": {
+              "type": "boolean",
+              "default": true,
+              "description": "false shows the fact again."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "required": [
+            "factId"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Hide or show a fact about the person",
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "profile.facts.list",
+      "id": "profile.facts.list",
+      "title": "About you",
+      "summary": "What Slatebox knows about you, so it can make boards and slates for your work: every fact, each with its kind and where it came from (you, your first slate, and later an interview with the agent), hidden ones included, and whether personalization is on. Only you see this.",
+      "kind": "read",
+      "readOnly": true,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "profile:read",
+      "modes": [],
+      "idempotency": "none",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/profile/facts",
+        "pathParams": [],
+        "queryParams": [
+          "kind"
+        ],
+        "bodyParams": []
+      },
+      "index": "profile.facts.list({kind?}): About you",
+      "types": [],
+      "dts": "declare namespace slatebox.profile.facts {\n  /** About you. What Slatebox knows about you, so it can make boards and slates for your work: every fact, each with its kind and where it came from (you, your first slate, and later an interview with the agent), hidden ones included, and whether personalization is on. Only you see this. @scope profile:read */\n  function list(input: {\n    /** Only facts of this kind. */\n    kind?: \"role\" | \"team\" | \"work\" | \"goal\" | \"project\" | \"tool\" | \"topic\" | \"style\" | \"routine\" | \"other\";\n  }): Promise<{\n    on: boolean;\n    facts: Array<{\n      id: string;\n      kind: \"role\" | \"team\" | \"work\" | \"goal\" | \"project\" | \"tool\" | \"topic\" | \"style\" | \"routine\" | \"other\";\n      text: string;\n      source: {\n        type: \"typed\" | \"interview\" | \"integration\" | \"upload\" | \"first-slate\";\n        /** Which tool, upload or answer. */\n        ref?: string;\n        /** Its name, as shown. */\n        label?: string;\n        [key: string]: unknown;\n      };\n      /** (0 to 1) */\n      confidence: number;\n      /** Kept and shown to the person, never used. */\n      hidden: boolean;\n      /** Read from their first slate when listed, not stored. */\n      derived?: boolean;\n      createdAt?: string | null;\n      updatedAt?: string | null;\n      [key: string]: unknown;\n    }>;\n    /** How many facts About you keeps at most. */\n    limit: number;\n    [key: string]: unknown;\n  }>;\n}",
+      "tool": {
+        "name": "list_profile_facts",
+        "title": "Read what Slatebox knows about you",
+        "description": "Read the person's About you facts (role, team, work, goals, projects, tools, topics, style, routines), each with where it came from, and whether personalization is on.\n\nAbout you. What Slatebox knows about you, so it can make boards and slates for your work: every fact, each with its kind and where it came from (you, your first slate, and later an interview with the agent), hidden ones included, and whether personalization is on. Only you see this.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "role",
+                "team",
+                "work",
+                "goal",
+                "project",
+                "tool",
+                "topic",
+                "style",
+                "routine",
+                "other"
+              ],
+              "description": "Only facts of this kind."
+            }
+          },
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Read what Slatebox knows about you",
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "profile.facts.remove",
+      "id": "profile.facts.remove",
+      "title": "Remove a fact about you",
+      "summary": "Removes one fact from About you.",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": true,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "profile:write",
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "DELETE",
+        "path": "/api/v1/profile/facts/{factId}",
+        "pathParams": [
+          "factId"
+        ],
+        "queryParams": [],
+        "bodyParams": []
+      },
+      "index": "profile.facts.remove({factId}): Remove a fact about you",
+      "types": [],
+      "dts": "declare namespace slatebox.profile.facts {\n  /** Remove a fact about you. Removes one fact from About you. @scope profile:write @destructive */\n  function remove(input: {\n    /** The fact, as profile.facts.list gives it (facts[].id). The fact read from the first slate is \"first-slate\". */\n    factId: string;\n  }): Promise<({\n    factId: string;\n    removed: true;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "tool": {
+        "name": "remove_profile_fact",
+        "title": "Remove a fact about the person",
+        "description": "Remove one About you fact.\n\nRemove a fact about you. Removes one fact from About you.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "factId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "description": "The fact, as profile.facts.list gives it (facts[].id). The fact read from the first slate is \"first-slate\"."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "required": [
+            "factId"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Remove a fact about the person",
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "profile.facts.update",
+      "id": "profile.facts.update",
+      "title": "Change a fact about you",
+      "summary": "New words or a new kind for one fact. Changing the fact from your first slate makes it one of your own.",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "profile:write",
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "PATCH",
+        "path": "/api/v1/profile/facts/{factId}",
+        "pathParams": [
+          "factId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "kind",
+          "text"
+        ]
+      },
+      "index": "profile.facts.update({factId,kind?,text?}): Change a fact about you",
+      "types": [],
+      "dts": "declare namespace slatebox.profile.facts {\n  /** Change a fact about you. New words or a new kind for one fact. Changing the fact from your first slate makes it one of your own. @scope profile:write */\n  function update(input: {\n    /** The fact, as profile.facts.list gives it (facts[].id). The fact read from the first slate is \"first-slate\". */\n    factId: string;\n    /** What the fact is about: role, team, work, goal, project, tool, topic, style, routine, other. */\n    kind?: \"role\" | \"team\" | \"work\" | \"goal\" | \"project\" | \"tool\" | \"topic\" | \"style\" | \"routine\" | \"other\";\n    /** The fact in a few plain words, up to 280 characters (\"Product manager\", \"Uses Linear\"). (1–280 characters) */\n    text?: string;\n  }): Promise<({\n    fact: {\n      id: string;\n      kind: \"role\" | \"team\" | \"work\" | \"goal\" | \"project\" | \"tool\" | \"topic\" | \"style\" | \"routine\" | \"other\";\n      text: string;\n      source: {\n        type: \"typed\" | \"interview\" | \"integration\" | \"upload\" | \"first-slate\";\n        /** Which tool, upload or answer. */\n        ref?: string;\n        /** Its name, as shown. */\n        label?: string;\n        [key: string]: unknown;\n      };\n      /** (0 to 1) */\n      confidence: number;\n      /** Kept and shown to the person, never used. */\n      hidden: boolean;\n      /** Read from their first slate when listed, not stored. */\n      derived?: boolean;\n      createdAt?: string | null;\n      updatedAt?: string | null;\n      [key: string]: unknown;\n    };\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "tool": {
+        "name": "update_profile_fact",
+        "title": "Change a fact about the person",
+        "description": "Change the words or the kind of one About you fact.\n\nChange a fact about you. New words or a new kind for one fact. Changing the fact from your first slate makes it one of your own.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "factId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "description": "The fact, as profile.facts.list gives it (facts[].id). The fact read from the first slate is \"first-slate\"."
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "role",
+                "team",
+                "work",
+                "goal",
+                "project",
+                "tool",
+                "topic",
+                "style",
+                "routine",
+                "other"
+              ],
+              "description": "What the fact is about: role, team, work, goal, project, tool, topic, style, routine, other."
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 280,
+              "description": "The fact in a few plain words, up to 280 characters (\"Product manager\", \"Uses Linear\")."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "required": [
+            "factId"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Change a fact about the person",
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "profile.settings.get",
+      "id": "profile.settings.get",
+      "title": "Personalization settings",
+      "summary": "Whether personalization is on, and each source's switch. A connected tool or an upload is off until you switch it on.",
+      "kind": "read",
+      "readOnly": true,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "profile:read",
+      "modes": [],
+      "idempotency": "none",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/profile/settings",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": []
+      },
+      "index": "profile.settings.get({}): Personalization settings",
+      "types": [],
+      "dts": "declare namespace slatebox.profile.settings {\n  /** Personalization settings. Whether personalization is on, and each source's switch. A connected tool or an upload is off until you switch it on. @scope profile:read */\n  function get(input: Record<string, unknown>): Promise<{\n    /** Personalization: when off, nothing About you holds is used, and no source adds to it. */\n    on: boolean;\n    /** Each source's switch by its key (interview, integration:<id>, upload:<id>). A connected tool or an upload is off until switched on. */\n    sources: Record<string, unknown>;\n    updatedAt?: string | null;\n    [key: string]: unknown;\n  }>;\n}",
+      "tool": {
+        "name": "get_profile_settings",
+        "title": "Read personalization settings",
+        "description": "Read whether personalization is on for the person, and which sources may add to About you.\n\nPersonalization settings. Whether personalization is on, and each source's switch. A connected tool or an upload is off until you switch it on.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Read personalization settings",
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
       "name": "shapes.apply",
       "id": "shapes.apply",
       "title": "Shape notes",

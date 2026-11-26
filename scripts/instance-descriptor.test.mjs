@@ -398,7 +398,7 @@ test("the self-hosted first start writes an instance id with the other secrets",
 // review-P08 finding 2: the developer link lands on the Developer tab, not on Profile.
 test("the developer link opens the profile page on its Developer tab", async () => {
   const page = await readFile(new URL("../web/app/imports/ui/pages/Profile.jsx", import.meta.url), "utf8");
-  const developerTab = page.match(/<Tab label="Developer" value=\{(\d+)\} \/>/)?.[1];
+  const developerTab = page.match(/<Tab label="Developer" value=\{(\d+)\}[\s/]/)?.[1];
   assert.ok(developerTab, "the Developer tab");
   assert.match(page, new RegExp(`TABS = \\{[^}]*developer: ${developerTab}[^}]*\\}`));
   assert.match(page, /useState\(TABS\[searchParams\.get\('tab'\)\] \?\? TABS\.profile\)/);

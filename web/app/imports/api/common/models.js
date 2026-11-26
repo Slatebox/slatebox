@@ -123,6 +123,13 @@ const LibraryEvents = new Mongo.Collection('libraryEvents')
 
 export { LibraryItems, LibraryVersions, LibraryEvents }
 
+// About you (server/profile): the facts a person keeps about themselves and their personalization
+// switches. Each person's own; written and read through the profile.* actions only, never published.
+const PersonalFacts = new Mongo.Collection('personalFacts')
+const PersonalSettings = new Mongo.Collection('personalSettings')
+
+export { PersonalFacts, PersonalSettings }
+
 // AI control (server/ai-control): providers, models, the one choice per part of Slatebox, agents
 // and prompts an administrator manages at runtime, the global switch, and the append-only audit
 // trail of every change. The providers' keys are in providerKeys (kind 'key'). Never published to

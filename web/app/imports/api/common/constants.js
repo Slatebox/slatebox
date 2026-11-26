@@ -272,6 +272,21 @@ const CONSTANTS = {
     account: {
       get: 'account.get',
     },
+    // About you (server/actions/profile.mjs): the person's own facts and personalization switches
+    profile: {
+      facts: {
+        list: 'profile.facts.list',
+        add: 'profile.facts.add',
+        update: 'profile.facts.update',
+        hide: 'profile.facts.hide',
+        remove: 'profile.facts.remove',
+        clear: 'profile.facts.clear',
+      },
+      settings: {
+        get: 'profile.settings.get',
+        set: 'profile.settings.set',
+      },
+    },
     users: {
       createAnonymous: 'users.createAnonymous',
       identify: 'users.identify',

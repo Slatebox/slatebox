@@ -12,7 +12,9 @@
     "team:export",
     "team:import",
     "team:move",
-    "library:review"
+    "library:review",
+    "profile:read",
+    "profile:write"
   ],
   "errors": {
     "shape": "{\"error\":{\"code\",\"message\",\"details\"?,\"retryAfter\"?}} with the HTTP status",
@@ -20391,6 +20393,879 @@
         "name": "get_library_item",
         "title": "Read a library item",
         "description": "Read one item of the shared library in full: a smart component's board and rules, or a slate or presentation.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "profile.facts.list",
+      "title": "About you",
+      "description": "What Slatebox knows about you, so it can make boards and slates for your work: every fact, each with its kind and where it came from (you, your first slate, and later an interview with the agent), hidden ones included, and whether personalization is on. Only you see this.",
+      "action": "profile.facts.list",
+      "toolset": "account",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "profile:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/profile/facts",
+        "pathParams": [],
+        "queryParams": [
+          "kind"
+        ],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "role",
+              "team",
+              "work",
+              "goal",
+              "project",
+              "tool",
+              "topic",
+              "style",
+              "routine",
+              "other"
+            ],
+            "description": "Only facts of this kind."
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "on": {
+            "type": "boolean"
+          },
+          "facts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "role",
+                    "team",
+                    "work",
+                    "goal",
+                    "project",
+                    "tool",
+                    "topic",
+                    "style",
+                    "routine",
+                    "other"
+                  ]
+                },
+                "text": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "typed",
+                        "interview",
+                        "integration",
+                        "upload",
+                        "first-slate"
+                      ]
+                    },
+                    "ref": {
+                      "type": "string",
+                      "description": "Which tool, upload or answer."
+                    },
+                    "label": {
+                      "type": "string",
+                      "description": "Its name, as shown."
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ]
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "hidden": {
+                  "type": "boolean",
+                  "description": "Kept and shown to the person, never used."
+                },
+                "derived": {
+                  "type": "boolean",
+                  "description": "Read from their first slate when listed, not stored."
+                },
+                "createdAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "updatedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "text",
+                "source",
+                "confidence",
+                "hidden"
+              ]
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "description": "How many facts About you keeps at most."
+          }
+        },
+        "required": [
+          "on",
+          "facts",
+          "limit"
+        ]
+      },
+      "tool": {
+        "name": "list_profile_facts",
+        "title": "Read what Slatebox knows about you",
+        "description": "Read the person's About you facts (role, team, work, goals, projects, tools, topics, style, routines), each with where it came from, and whether personalization is on.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "profile.facts.add",
+      "title": "Add something about you",
+      "description": "Adds a fact to About you in your words: a kind (role, team, work, goal, project, tool, topic, style, routine, other) and a few words. The same fact again answers the one you have (added false). About you keeps up to 200 facts. An agent cannot add while personalization is off.",
+      "action": "profile.facts.add",
+      "toolset": "account",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "profile:write",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/profile/facts",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "kind",
+          "text"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "role",
+              "team",
+              "work",
+              "goal",
+              "project",
+              "tool",
+              "topic",
+              "style",
+              "routine",
+              "other"
+            ],
+            "description": "What the fact is about: role, team, work, goal, project, tool, topic, style, routine, other."
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 280,
+            "description": "The fact in a few plain words, up to 280 characters (\"Product manager\", \"Uses Linear\")."
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "fact": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "role",
+                  "team",
+                  "work",
+                  "goal",
+                  "project",
+                  "tool",
+                  "topic",
+                  "style",
+                  "routine",
+                  "other"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "source": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "typed",
+                      "interview",
+                      "integration",
+                      "upload",
+                      "first-slate"
+                    ]
+                  },
+                  "ref": {
+                    "type": "string",
+                    "description": "Which tool, upload or answer."
+                  },
+                  "label": {
+                    "type": "string",
+                    "description": "Its name, as shown."
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "hidden": {
+                "type": "boolean",
+                "description": "Kept and shown to the person, never used."
+              },
+              "derived": {
+                "type": "boolean",
+                "description": "Read from their first slate when listed, not stored."
+              },
+              "createdAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "updatedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "text",
+              "source",
+              "confidence",
+              "hidden"
+            ]
+          },
+          "added": {
+            "type": "boolean",
+            "description": "false: you already had this fact."
+          }
+        },
+        "required": [
+          "fact",
+          "added"
+        ]
+      },
+      "tool": {
+        "name": "add_profile_fact",
+        "title": "Remember something about the person",
+        "description": "Add one fact to the person's About you, in their words, when they tell you something about their work they want Slatebox to remember.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "profile.facts.update",
+      "title": "Change a fact about you",
+      "description": "New words or a new kind for one fact. Changing the fact from your first slate makes it one of your own.",
+      "action": "profile.facts.update",
+      "toolset": "account",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "profile:write",
+      "http": {
+        "method": "PATCH",
+        "path": "/api/v1/profile/facts/{factId}",
+        "pathParams": [
+          "factId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "kind",
+          "text"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "factId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "The fact, as profile.facts.list gives it (facts[].id). The fact read from the first slate is \"first-slate\"."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "role",
+              "team",
+              "work",
+              "goal",
+              "project",
+              "tool",
+              "topic",
+              "style",
+              "routine",
+              "other"
+            ],
+            "description": "What the fact is about: role, team, work, goal, project, tool, topic, style, routine, other."
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 280,
+            "description": "The fact in a few plain words, up to 280 characters (\"Product manager\", \"Uses Linear\")."
+          }
+        },
+        "required": [
+          "factId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "fact": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "role",
+                  "team",
+                  "work",
+                  "goal",
+                  "project",
+                  "tool",
+                  "topic",
+                  "style",
+                  "routine",
+                  "other"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "source": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "typed",
+                      "interview",
+                      "integration",
+                      "upload",
+                      "first-slate"
+                    ]
+                  },
+                  "ref": {
+                    "type": "string",
+                    "description": "Which tool, upload or answer."
+                  },
+                  "label": {
+                    "type": "string",
+                    "description": "Its name, as shown."
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "hidden": {
+                "type": "boolean",
+                "description": "Kept and shown to the person, never used."
+              },
+              "derived": {
+                "type": "boolean",
+                "description": "Read from their first slate when listed, not stored."
+              },
+              "createdAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "updatedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "text",
+              "source",
+              "confidence",
+              "hidden"
+            ]
+          }
+        },
+        "required": [
+          "fact"
+        ]
+      },
+      "tool": {
+        "name": "update_profile_fact",
+        "title": "Change a fact about the person",
+        "description": "Change the words or the kind of one About you fact.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "profile.facts.hide",
+      "title": "Hide a fact about you",
+      "description": "Hides one fact: it stays in About you, where you see it, and is never used. hidden false shows it again.",
+      "action": "profile.facts.hide",
+      "toolset": "account",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "profile:write",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/profile/facts/{factId}/hide",
+        "pathParams": [
+          "factId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "hidden"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "factId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "The fact, as profile.facts.list gives it (facts[].id). The fact read from the first slate is \"first-slate\"."
+          },
+          "hidden": {
+            "type": "boolean",
+            "default": true,
+            "description": "false shows the fact again."
+          }
+        },
+        "required": [
+          "factId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "fact": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "role",
+                  "team",
+                  "work",
+                  "goal",
+                  "project",
+                  "tool",
+                  "topic",
+                  "style",
+                  "routine",
+                  "other"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "source": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "typed",
+                      "interview",
+                      "integration",
+                      "upload",
+                      "first-slate"
+                    ]
+                  },
+                  "ref": {
+                    "type": "string",
+                    "description": "Which tool, upload or answer."
+                  },
+                  "label": {
+                    "type": "string",
+                    "description": "Its name, as shown."
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "hidden": {
+                "type": "boolean",
+                "description": "Kept and shown to the person, never used."
+              },
+              "derived": {
+                "type": "boolean",
+                "description": "Read from their first slate when listed, not stored."
+              },
+              "createdAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "updatedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "text",
+              "source",
+              "confidence",
+              "hidden"
+            ]
+          }
+        },
+        "required": [
+          "fact"
+        ]
+      },
+      "tool": {
+        "name": "hide_profile_fact",
+        "title": "Hide or show a fact about the person",
+        "description": "Hide one About you fact so it is never used (hidden false shows it again).",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "profile.facts.remove",
+      "title": "Remove a fact about you",
+      "description": "Removes one fact from About you.",
+      "action": "profile.facts.remove",
+      "toolset": "account",
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "profile:write",
+      "http": {
+        "method": "DELETE",
+        "path": "/api/v1/profile/facts/{factId}",
+        "pathParams": [
+          "factId"
+        ],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "factId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "The fact, as profile.facts.list gives it (facts[].id). The fact read from the first slate is \"first-slate\"."
+          }
+        },
+        "required": [
+          "factId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "factId": {
+            "type": "string"
+          },
+          "removed": {
+            "const": true
+          }
+        },
+        "required": [
+          "factId",
+          "removed"
+        ]
+      },
+      "tool": {
+        "name": "remove_profile_fact",
+        "title": "Remove a fact about the person",
+        "description": "Remove one About you fact.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "profile.facts.clear",
+      "title": "Delete all facts about you",
+      "description": "Removes every fact in About you, or only those from one kind of source (source). Your switches stay as they are.",
+      "action": "profile.facts.clear",
+      "toolset": "account",
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "profile:write",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/profile/facts/clear",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "source"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "typed",
+              "interview",
+              "integration",
+              "upload",
+              "first-slate"
+            ],
+            "description": "Only facts from this kind of source."
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "removed": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "removed"
+        ]
+      },
+      "tool": {
+        "name": "clear_profile_facts",
+        "title": "Delete what Slatebox knows about the person",
+        "description": "Remove every About you fact, or those from one kind of source.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "profile.settings.get",
+      "title": "Personalization settings",
+      "description": "Whether personalization is on, and each source's switch. A connected tool or an upload is off until you switch it on.",
+      "action": "profile.settings.get",
+      "toolset": "account",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "profile:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/profile/settings",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "on": {
+            "type": "boolean",
+            "description": "Personalization: when off, nothing About you holds is used, and no source adds to it."
+          },
+          "sources": {
+            "type": "object",
+            "description": "Each source's switch by its key (interview, integration:<id>, upload:<id>). A connected tool or an upload is off until switched on."
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "on",
+          "sources"
+        ]
+      },
+      "tool": {
+        "name": "get_profile_settings",
+        "title": "Read personalization settings",
+        "description": "Read whether personalization is on for the person, and which sources may add to About you.",
         "annotations": {
           "readOnlyHint": true,
           "destructiveHint": false,

@@ -8173,6 +8173,1135 @@
         }
       }
     },
+    "/profile/facts": {
+      "get": {
+        "operationId": "listProfileFacts",
+        "summary": "About you",
+        "description": "What Slatebox knows about you, so it can make boards and slates for your work: every fact, each with its kind and where it came from (you, your first slate, and later an interview with the agent), hidden ones included, and whether personalization is on. Only you see this.",
+        "x-required-scope": "profile:read",
+        "x-slatebox": {
+          "action": "profile.facts.list",
+          "toolset": "account",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ]
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "role",
+                "team",
+                "work",
+                "goal",
+                "project",
+                "tool",
+                "topic",
+                "style",
+                "routine",
+                "other"
+              ],
+              "description": "Only facts of this kind."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "on": {
+                      "type": "boolean"
+                    },
+                    "facts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "role",
+                              "team",
+                              "work",
+                              "goal",
+                              "project",
+                              "tool",
+                              "topic",
+                              "style",
+                              "routine",
+                              "other"
+                            ]
+                          },
+                          "text": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "typed",
+                                  "interview",
+                                  "integration",
+                                  "upload",
+                                  "first-slate"
+                                ]
+                              },
+                              "ref": {
+                                "type": "string",
+                                "description": "Which tool, upload or answer."
+                              },
+                              "label": {
+                                "type": "string",
+                                "description": "Its name, as shown."
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ]
+                          },
+                          "confidence": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "hidden": {
+                            "type": "boolean",
+                            "description": "Kept and shown to the person, never used."
+                          },
+                          "derived": {
+                            "type": "boolean",
+                            "description": "Read from their first slate when listed, not stored."
+                          },
+                          "createdAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "updatedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "text",
+                          "source",
+                          "confidence",
+                          "hidden"
+                        ]
+                      }
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "description": "How many facts About you keeps at most."
+                    }
+                  },
+                  "required": [
+                    "on",
+                    "facts",
+                    "limit"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "addProfileFact",
+        "summary": "Add something about you",
+        "description": "Adds a fact to About you in your words: a kind (role, team, work, goal, project, tool, topic, style, routine, other) and a few words. The same fact again answers the one you have (added false). About you keeps up to 200 facts. An agent cannot add while personalization is off.",
+        "x-required-scope": "profile:write",
+        "x-slatebox": {
+          "action": "profile.facts.add",
+          "toolset": "account",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "role",
+                      "team",
+                      "work",
+                      "goal",
+                      "project",
+                      "tool",
+                      "topic",
+                      "style",
+                      "routine",
+                      "other"
+                    ],
+                    "description": "What the fact is about: role, team, work, goal, project, tool, topic, style, routine, other."
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 280,
+                    "description": "The fact in a few plain words, up to 280 characters (\"Product manager\", \"Uses Linear\")."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "fact": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "role",
+                            "team",
+                            "work",
+                            "goal",
+                            "project",
+                            "tool",
+                            "topic",
+                            "style",
+                            "routine",
+                            "other"
+                          ]
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "typed",
+                                "interview",
+                                "integration",
+                                "upload",
+                                "first-slate"
+                              ]
+                            },
+                            "ref": {
+                              "type": "string",
+                              "description": "Which tool, upload or answer."
+                            },
+                            "label": {
+                              "type": "string",
+                              "description": "Its name, as shown."
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ]
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "hidden": {
+                          "type": "boolean",
+                          "description": "Kept and shown to the person, never used."
+                        },
+                        "derived": {
+                          "type": "boolean",
+                          "description": "Read from their first slate when listed, not stored."
+                        },
+                        "createdAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "updatedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "kind",
+                        "text",
+                        "source",
+                        "confidence",
+                        "hidden"
+                      ]
+                    },
+                    "added": {
+                      "type": "boolean",
+                      "description": "false: you already had this fact."
+                    }
+                  },
+                  "required": [
+                    "fact",
+                    "added"
+                  ]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "fact": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "role",
+                            "team",
+                            "work",
+                            "goal",
+                            "project",
+                            "tool",
+                            "topic",
+                            "style",
+                            "routine",
+                            "other"
+                          ]
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "typed",
+                                "interview",
+                                "integration",
+                                "upload",
+                                "first-slate"
+                              ]
+                            },
+                            "ref": {
+                              "type": "string",
+                              "description": "Which tool, upload or answer."
+                            },
+                            "label": {
+                              "type": "string",
+                              "description": "Its name, as shown."
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ]
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "hidden": {
+                          "type": "boolean",
+                          "description": "Kept and shown to the person, never used."
+                        },
+                        "derived": {
+                          "type": "boolean",
+                          "description": "Read from their first slate when listed, not stored."
+                        },
+                        "createdAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "updatedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "kind",
+                        "text",
+                        "source",
+                        "confidence",
+                        "hidden"
+                      ]
+                    },
+                    "added": {
+                      "type": "boolean",
+                      "description": "false: you already had this fact."
+                    }
+                  },
+                  "required": [
+                    "fact",
+                    "added"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profile/facts/clear": {
+      "post": {
+        "operationId": "clearProfileFacts",
+        "summary": "Delete all facts about you",
+        "description": "Removes every fact in About you, or only those from one kind of source (source). Your switches stay as they are.",
+        "x-required-scope": "profile:write",
+        "x-slatebox": {
+          "action": "profile.facts.clear",
+          "toolset": "account",
+          "readOnly": false,
+          "destructive": true,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "typed",
+                      "interview",
+                      "integration",
+                      "upload",
+                      "first-slate"
+                    ],
+                    "description": "Only facts from this kind of source."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "removed": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "removed"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profile/facts/{factId}": {
+      "patch": {
+        "operationId": "updateProfileFact",
+        "summary": "Change a fact about you",
+        "description": "New words or a new kind for one fact. Changing the fact from your first slate makes it one of your own.",
+        "x-required-scope": "profile:write",
+        "x-slatebox": {
+          "action": "profile.facts.update",
+          "toolset": "account",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "factId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "description": "The fact, as profile.facts.list gives it (facts[].id). The fact read from the first slate is \"first-slate\"."
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "role",
+                      "team",
+                      "work",
+                      "goal",
+                      "project",
+                      "tool",
+                      "topic",
+                      "style",
+                      "routine",
+                      "other"
+                    ],
+                    "description": "What the fact is about: role, team, work, goal, project, tool, topic, style, routine, other."
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 280,
+                    "description": "The fact in a few plain words, up to 280 characters (\"Product manager\", \"Uses Linear\")."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "fact": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "role",
+                            "team",
+                            "work",
+                            "goal",
+                            "project",
+                            "tool",
+                            "topic",
+                            "style",
+                            "routine",
+                            "other"
+                          ]
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "typed",
+                                "interview",
+                                "integration",
+                                "upload",
+                                "first-slate"
+                              ]
+                            },
+                            "ref": {
+                              "type": "string",
+                              "description": "Which tool, upload or answer."
+                            },
+                            "label": {
+                              "type": "string",
+                              "description": "Its name, as shown."
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ]
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "hidden": {
+                          "type": "boolean",
+                          "description": "Kept and shown to the person, never used."
+                        },
+                        "derived": {
+                          "type": "boolean",
+                          "description": "Read from their first slate when listed, not stored."
+                        },
+                        "createdAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "updatedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "kind",
+                        "text",
+                        "source",
+                        "confidence",
+                        "hidden"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "fact"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "removeProfileFact",
+        "summary": "Remove a fact about you",
+        "description": "Removes one fact from About you.",
+        "x-required-scope": "profile:write",
+        "x-slatebox": {
+          "action": "profile.facts.remove",
+          "toolset": "account",
+          "readOnly": false,
+          "destructive": true,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "factId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "description": "The fact, as profile.facts.list gives it (facts[].id). The fact read from the first slate is \"first-slate\"."
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "factId": {
+                      "type": "string"
+                    },
+                    "removed": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "factId",
+                    "removed"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profile/facts/{factId}/hide": {
+      "post": {
+        "operationId": "hideProfileFact",
+        "summary": "Hide a fact about you",
+        "description": "Hides one fact: it stays in About you, where you see it, and is never used. hidden false shows it again.",
+        "x-required-scope": "profile:write",
+        "x-slatebox": {
+          "action": "profile.facts.hide",
+          "toolset": "account",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "factId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "description": "The fact, as profile.facts.list gives it (facts[].id). The fact read from the first slate is \"first-slate\"."
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "hidden": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "false shows the fact again."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "fact": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "role",
+                            "team",
+                            "work",
+                            "goal",
+                            "project",
+                            "tool",
+                            "topic",
+                            "style",
+                            "routine",
+                            "other"
+                          ]
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "typed",
+                                "interview",
+                                "integration",
+                                "upload",
+                                "first-slate"
+                              ]
+                            },
+                            "ref": {
+                              "type": "string",
+                              "description": "Which tool, upload or answer."
+                            },
+                            "label": {
+                              "type": "string",
+                              "description": "Its name, as shown."
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ]
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "hidden": {
+                          "type": "boolean",
+                          "description": "Kept and shown to the person, never used."
+                        },
+                        "derived": {
+                          "type": "boolean",
+                          "description": "Read from their first slate when listed, not stored."
+                        },
+                        "createdAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "updatedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "kind",
+                        "text",
+                        "source",
+                        "confidence",
+                        "hidden"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "fact"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profile/settings": {
+      "get": {
+        "operationId": "getProfileSettings",
+        "summary": "Personalization settings",
+        "description": "Whether personalization is on, and each source's switch. A connected tool or an upload is off until you switch it on.",
+        "x-required-scope": "profile:read",
+        "x-slatebox": {
+          "action": "profile.settings.get",
+          "toolset": "account",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ]
+        },
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "on": {
+                      "type": "boolean",
+                      "description": "Personalization: when off, nothing About you holds is used, and no source adds to it."
+                    },
+                    "sources": {
+                      "type": "object",
+                      "description": "Each source's switch by its key (interview, integration:<id>, upload:<id>). A connected tool or an upload is off until switched on."
+                    },
+                    "updatedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "on",
+                    "sources"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/shapes": {
       "get": {
         "operationId": "listShapes",

@@ -47,6 +47,7 @@ import mediaActions from './media.mjs'
 import libraryRead from './library-read.mjs'
 import libraryAuthor from './library-author.mjs'
 import libraryReview from './library-review.mjs'
+import profileActions from './profile.mjs'
 
 export const actions = [
   slatesGet,
@@ -97,6 +98,7 @@ export const actions = [
   ...libraryReview,
   ...libraryAuthor,
   ...libraryRead,
+  ...profileActions,
 ]
 
 export const components = { ...slateComponents }

@@ -187,6 +187,17 @@ test("describe's index gives each method the start of its summary; a query or me
   // A first sentence under 60 characters takes the next one with it.
   assert.equal(firstSentence("Short one. And the next one says more. A third."), "Short one. And the next one says more.");
   assert.equal(firstSentence("No full stop at all"), "No full stop at all");
+  // Said once: the index gives each method's inputs (its name and title are the entry's own fields), and its
+  // modes only where a write does more than save. A query or methods give the declaration and every mode.
+  for (const method of index) {
+    const whole = manifest.methods.find((m) => m.name === method.name);
+    assert.equal(whole.index, `${method.name}${method.index}: ${method.title}`, method.name);
+    assert.equal(method.kind, whole.kind, method.name);
+    assert.deepEqual(method.modes, whole.modes.some((mode) => mode !== "save") ? whole.modes : undefined, method.name);
+  }
+  assert.equal(index.find((m) => m.name === "slates.copy").index, "({shareId,name?})");
+  const detailed = describeClient(manifest, { methods: ["slates.copy"] }).methods[0];
+  assert.deepEqual([detailed.title, detailed.kind, detailed.modes, detailed.index], ["Copy slate", "write", ["save"], undefined]);
 });
 
 test("the guest prelude is one line, so the caller's code starts on line 2", () => {

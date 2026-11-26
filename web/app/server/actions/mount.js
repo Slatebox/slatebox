@@ -49,6 +49,7 @@ import { mediaLookup } from '../media/meteor'
 import { posterAllowedFor } from '../media/media-lookup.mjs'
 import { createAppLibrary } from '../library/meteor'
 import { countApiCall, noticingFirstAction } from '../agent-reach/usage-meteor'
+import { profileStore } from '../profile/meteor'
 
 const IdempotencyRecords = new Mongo.Collection('apiIdempotencyRecords')
 const RateWindows = new Mongo.Collection('apiRateWindows')
@@ -195,6 +196,8 @@ export const deps = {
     media: mediaLookup,
     // Video posters in a plan must be ones this app stored (slate-operations.mjs).
     posterAllowed: (url) => posterAllowedFor(Meteor.settings)(url),
+    // profile.*: About you, the person's own facts and switches (server/profile)
+    profile: profileStore,
 }
 
 // library.* (server/library): the shared library, over the same save core, slate access and decks.

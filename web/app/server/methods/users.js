@@ -27,6 +27,7 @@ import { isInstanceAdmin } from '../permissions'
 import { teamPerson } from '../common/team-person'
 import { roleChangeRefusal, clearedByAdmin } from '../team-guard.mjs'
 import { readCreditName } from '../../imports/api/common/library-model.mjs'
+import { removePersonalData } from '../profile/meteor'
 
 import {
   Permissions,
@@ -613,6 +614,8 @@ method[CONSTANTS.methods.users.delete] = async function removeOwnAccount() {
   // the person's own AI connections, keys and choices
   await ProviderKeys.removeAsync({ ownerType: 'user', ownerId: user._id })
   await AIChoices.removeAsync({ _id: 'user:' + user._id })
+  // About you: every fact they kept and their personalization switches
+  await removePersonalData(user._id)
   // Meteor Accounts normally closes every connection watching a removed login token.
   // Release only this connection's observer so it can receive the deletion result.
   const connection = this.connection

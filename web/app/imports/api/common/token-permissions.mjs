@@ -13,6 +13,8 @@ export const tokenPermissions = [
   { scope: 'team:import', label: 'Import a team export as a new team, and confirm or discard it (administrators only)', explain: 'Bring a team\'s exported copy into this server as a new team. Only for administrators.' },
   { scope: 'team:move', label: 'Move a team here from another Slatebox server, and confirm or discard the move (team owners, or people in no team yet)', explain: 'Bring your team\'s exported copy from another Slatebox server into this one, as your team. Only if you own your team here or are in no team yet.' },
   { scope: 'library:review', label: 'Review library submissions (administrators)', explain: 'Open, refine, publish and take down what people submit to the shared library. Only for administrators.' },
+  { scope: 'profile:read', label: 'Read what Slatebox knows about me (About you)', explain: 'See the facts in your About you, such as your role, your tools and your goals, so the app can make things for your work.' },
+  { scope: 'profile:write', label: 'Add to and change what Slatebox knows about me (About you)', explain: 'Add, change, hide and remove facts in your About you. It cannot turn personalization or its sources on or off.' },
 ]
 
 export const permissionLabel = (scope) => tokenPermissions.find((item) => item.scope === scope)?.label || scope

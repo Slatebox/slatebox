@@ -230,11 +230,16 @@ Meteor.publish(CONSTANTS.publications.orgUsers, async function () {
       CONSTANTS.claims.canViewUsers._id,
     ]))
   ) {
+    // Teammates' names only, never the rest of their profile (the first-slate answer is a fact in
+    // their About you, which only they see). The person's own row is already theirs in full (the
+    // default user publication and users.me); naming it here too would let these narrower fields
+    // replace their own profile on the client.
     return Meteor.users.find(
-      { orgId: user.orgId },
+      { orgId: user.orgId, _id: { $ne: user._id } },
       {
         fields: {
-          profile: 1,
+          'profile.firstName': 1,
+          'profile.lastName': 1,
           isAnonymous: 1,
           createdAt: 1,
           emails: 1,

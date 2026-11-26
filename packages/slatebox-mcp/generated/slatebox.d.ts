@@ -1504,6 +1504,182 @@ declare namespace slatebox.presentations {
   }) & { mode: "save" }>;
 }
 
+declare namespace slatebox.profile.facts {
+  /** Add something about you. Adds a fact to About you in your words: a kind (role, team, work, goal, project, tool, topic, style, routine, other) and a few words. The same fact again answers the one you have (added false). About you keeps up to 200 facts. An agent cannot add while personalization is off. @scope profile:write */
+  function add(input: {
+    /** What the fact is about: role, team, work, goal, project, tool, topic, style, routine, other. */
+    kind: "role" | "team" | "work" | "goal" | "project" | "tool" | "topic" | "style" | "routine" | "other";
+    /** The fact in a few plain words, up to 280 characters ("Product manager", "Uses Linear"). (1–280 characters) */
+    text: string;
+  }): Promise<({
+    fact: {
+      id: string;
+      kind: "role" | "team" | "work" | "goal" | "project" | "tool" | "topic" | "style" | "routine" | "other";
+      text: string;
+      source: {
+        type: "typed" | "interview" | "integration" | "upload" | "first-slate";
+        /** Which tool, upload or answer. */
+        ref?: string;
+        /** Its name, as shown. */
+        label?: string;
+        [key: string]: unknown;
+      };
+      /** (0 to 1) */
+      confidence: number;
+      /** Kept and shown to the person, never used. */
+      hidden: boolean;
+      /** Read from their first slate when listed, not stored. */
+      derived?: boolean;
+      createdAt?: string | null;
+      updatedAt?: string | null;
+      [key: string]: unknown;
+    };
+    /** false: you already had this fact. */
+    added: boolean;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.profile.facts {
+  /** Delete all facts about you. Removes every fact in About you, or only those from one kind of source (source). Your switches stay as they are. @scope profile:write @destructive */
+  function clear(input: {
+    /** Only facts from this kind of source. */
+    source?: "typed" | "interview" | "integration" | "upload" | "first-slate";
+  }): Promise<({
+    removed: number;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.profile.facts {
+  /** Hide a fact about you. Hides one fact: it stays in About you, where you see it, and is never used. hidden false shows it again. @scope profile:write @idempotent */
+  function hide(input: {
+    /** The fact, as profile.facts.list gives it (facts[].id). The fact read from the first slate is "first-slate". */
+    factId: string;
+    /** false shows the fact again. (default true) */
+    hidden?: boolean;
+  }): Promise<({
+    fact: {
+      id: string;
+      kind: "role" | "team" | "work" | "goal" | "project" | "tool" | "topic" | "style" | "routine" | "other";
+      text: string;
+      source: {
+        type: "typed" | "interview" | "integration" | "upload" | "first-slate";
+        /** Which tool, upload or answer. */
+        ref?: string;
+        /** Its name, as shown. */
+        label?: string;
+        [key: string]: unknown;
+      };
+      /** (0 to 1) */
+      confidence: number;
+      /** Kept and shown to the person, never used. */
+      hidden: boolean;
+      /** Read from their first slate when listed, not stored. */
+      derived?: boolean;
+      createdAt?: string | null;
+      updatedAt?: string | null;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.profile.facts {
+  /** About you. What Slatebox knows about you, so it can make boards and slates for your work: every fact, each with its kind and where it came from (you, your first slate, and later an interview with the agent), hidden ones included, and whether personalization is on. Only you see this. @scope profile:read */
+  function list(input: {
+    /** Only facts of this kind. */
+    kind?: "role" | "team" | "work" | "goal" | "project" | "tool" | "topic" | "style" | "routine" | "other";
+  }): Promise<{
+    on: boolean;
+    facts: Array<{
+      id: string;
+      kind: "role" | "team" | "work" | "goal" | "project" | "tool" | "topic" | "style" | "routine" | "other";
+      text: string;
+      source: {
+        type: "typed" | "interview" | "integration" | "upload" | "first-slate";
+        /** Which tool, upload or answer. */
+        ref?: string;
+        /** Its name, as shown. */
+        label?: string;
+        [key: string]: unknown;
+      };
+      /** (0 to 1) */
+      confidence: number;
+      /** Kept and shown to the person, never used. */
+      hidden: boolean;
+      /** Read from their first slate when listed, not stored. */
+      derived?: boolean;
+      createdAt?: string | null;
+      updatedAt?: string | null;
+      [key: string]: unknown;
+    }>;
+    /** How many facts About you keeps at most. */
+    limit: number;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.profile.facts {
+  /** Remove a fact about you. Removes one fact from About you. @scope profile:write @destructive */
+  function remove(input: {
+    /** The fact, as profile.facts.list gives it (facts[].id). The fact read from the first slate is "first-slate". */
+    factId: string;
+  }): Promise<({
+    factId: string;
+    removed: true;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.profile.facts {
+  /** Change a fact about you. New words or a new kind for one fact. Changing the fact from your first slate makes it one of your own. @scope profile:write */
+  function update(input: {
+    /** The fact, as profile.facts.list gives it (facts[].id). The fact read from the first slate is "first-slate". */
+    factId: string;
+    /** What the fact is about: role, team, work, goal, project, tool, topic, style, routine, other. */
+    kind?: "role" | "team" | "work" | "goal" | "project" | "tool" | "topic" | "style" | "routine" | "other";
+    /** The fact in a few plain words, up to 280 characters ("Product manager", "Uses Linear"). (1–280 characters) */
+    text?: string;
+  }): Promise<({
+    fact: {
+      id: string;
+      kind: "role" | "team" | "work" | "goal" | "project" | "tool" | "topic" | "style" | "routine" | "other";
+      text: string;
+      source: {
+        type: "typed" | "interview" | "integration" | "upload" | "first-slate";
+        /** Which tool, upload or answer. */
+        ref?: string;
+        /** Its name, as shown. */
+        label?: string;
+        [key: string]: unknown;
+      };
+      /** (0 to 1) */
+      confidence: number;
+      /** Kept and shown to the person, never used. */
+      hidden: boolean;
+      /** Read from their first slate when listed, not stored. */
+      derived?: boolean;
+      createdAt?: string | null;
+      updatedAt?: string | null;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.profile.settings {
+  /** Personalization settings. Whether personalization is on, and each source's switch. A connected tool or an upload is off until you switch it on. @scope profile:read */
+  function get(input: Record<string, unknown>): Promise<{
+    /** Personalization: when off, nothing About you holds is used, and no source adds to it. */
+    on: boolean;
+    /** Each source's switch by its key (interview, integration:<id>, upload:<id>). A connected tool or an upload is off until switched on. */
+    sources: Record<string, unknown>;
+    updatedAt?: string | null;
+    [key: string]: unknown;
+  }>;
+}
+
 declare namespace slatebox.shapes {
   /** Shape notes. Give notes a shape: a built-in name (ellipse, star), "lib:<id>" or a name from shapes.list, or a candidateId from shapes.generate (saved to your library). Each note keeps its width and takes the shape's proportions. One save; mode "preview" saves nothing. @scope slates:write @modes save|preview */
   function apply(input: {

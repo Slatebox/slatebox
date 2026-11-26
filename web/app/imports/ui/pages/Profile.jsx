@@ -24,6 +24,7 @@ import Alert from '@mui/material/Alert'
 import AlertTitle from '@mui/material/AlertTitle'
 import DeveloperAccess from '../components/profile/DeveloperAccess'
 import AISettings from '../components/profile/AISettings'
+import AboutYou from '../components/profile/AboutYou'
 import { enterpriseState } from '../../api/common/edition.mjs'
 import { adminLinksFor } from '../../api/common/server-admin.mjs'
 import useServerAdmin from '../common/useServerAdmin'
@@ -33,9 +34,9 @@ import Link from '@mui/material/Link'
 const BASE_DAILY_URL = Meteor.settings.public.dailyBaseUrl
 // /profile?tab=developer opens the Developer tab (the instance description links there);
 // /profile?tab=credits opens Credits (Slatebox Pro, balance, own keys) on a server with a meter;
-// tab=free is where links from before Pro point, so it opens Credits too.
+// tab=free is where links from before Pro point, so it opens Credits too. /profile?tab=about opens About you.
 const metered = Meteor.settings.public.metered === true
-const TABS = { profile: 1, developer: 4, ai: 'ai', ...(metered ? { credits: 'credits', free: 'credits' } : {}) }
+const TABS = { profile: 1, about: 'about', developer: 4, ai: 'ai', ...(metered ? { credits: 'credits', free: 'credits' } : {}) }
 
 export default function Profile() {
   const theme = useTheme()
@@ -257,10 +258,12 @@ export default function Profile() {
       {user && (
         <>
           <AccountTabs value={tabValue} onChange={changeTab}>
-            <Tab label="Profile" value={1} />
-            {metered && <Tab label="Credits" value="credits" />}
-            <Tab label="AI" value="ai" />
-            <Tab label="Developer" value={4} />
+            {/* each tab names its panel, and each panel (TabPanel) is labelled by its tab */}
+            <Tab label="Profile" value={1} id="scrollable-auto-tab-1" aria-controls="scrollable-auto-tabpanel-1" />
+            <Tab label="About you" value="about" id="scrollable-auto-tab-about" aria-controls="scrollable-auto-tabpanel-about" />
+            {metered && <Tab label="Credits" value="credits" id="scrollable-auto-tab-credits" aria-controls="scrollable-auto-tabpanel-credits" />}
+            <Tab label="AI" value="ai" id="scrollable-auto-tab-ai" aria-controls="scrollable-auto-tabpanel-ai" />
+            <Tab label="Developer" value={4} id="scrollable-auto-tab-4" aria-controls="scrollable-auto-tabpanel-4" />
           </AccountTabs>
           <TabPanel value={tabValue} index={1}>
             <AccountPanel>
@@ -477,6 +480,9 @@ export default function Profile() {
                 </AccountSection>
               )}
             </AccountPanel>
+          </TabPanel>
+          <TabPanel value={tabValue} index="about">
+            <AboutYou />
           </TabPanel>
           <TabPanel value={tabValue} index={4}>
             <DeveloperAccess />

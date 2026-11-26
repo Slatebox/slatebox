@@ -102,11 +102,12 @@ test("the server card follows typedTools: exec and describe only when typed tool
   assert.match(card.instructions, /Call describe to learn the typed Slatebox client, then exec/);
 });
 
-test("the app's server card comes from the action registry: 68 tools, 6 prompts, as generated", async () => {
+// Restated (About you): seven more typed tools, profile.facts.* and profile.settings.get (it was 68).
+test("the app's server card comes from the action registry: 75 tools, 6 prompts, as generated", async () => {
   const tools = renderExecTool(buildClientManifest(createAppRegistry()));
   const card = buildServerCard({ tools, version: "1.0", appOrigin: ORIGIN });
   const generated = JSON.parse(await readFile(new URL("../web/app/server/actions/generated/exec-tool.json", import.meta.url), "utf8"));
-  assert.equal(card.tools.length, 68);
+  assert.equal(card.tools.length, 75);
   assert.equal(card.prompts.length, 6);
   assert.equal(card.resources.length, 2);
   assert.equal(card.resourceTemplates.length, 2);
