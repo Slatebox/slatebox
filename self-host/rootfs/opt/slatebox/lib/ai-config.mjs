@@ -35,7 +35,7 @@ const TYPES = {
 }
 // The app's features (web/app/server/ai-control/catalogue.mjs USE_SURFACES); the app checks them again at start.
 const USE = ['default', 'chat', 'chat.route', 'generation', 'generation.notes', 'presentation', 'vision', 'images', 'shape',
-  'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors']
+  'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview']
 const NAME = /^[a-z0-9][a-z0-9-]{0,39}$/
 const CONNECTION_FIELDS = ['type', 'url', 'key', 'model', 'tools', 'vision', 'images', 'maxTokens', 'toolChoice']
 // Instance metadata services hand out the machine's cloud credentials: no AI request goes there.
