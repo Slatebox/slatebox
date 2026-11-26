@@ -26,6 +26,8 @@ const { memoryDriverCollection } = await import(new URL("../../scripts/action-te
 // The exec store's in-memory collection (it supports $push), from builder A's exec test world.
 const { memoryCollection } = await import(new URL("../../scripts/exec-test-world.mjs", app));
 const { createWorkshopOperations } = await import(new URL("server/workshop-operation-api.mjs", app));
+// Every engine catalogue entry is a built-in library component (server/library/builtins.mjs).
+const { catalog: builtinCatalog } = await import("slateboxjs/catalog");
 const { createSlateReader } = await import(new URL("server/slate-read.mjs", app));
 const { createPrivateSlateOperation } = await import(new URL("server/create-slate-api.mjs", app));
 const { createSlateSaveCore } = await import(new URL("server/slate-save-core.mjs", app));
@@ -583,10 +585,12 @@ return slatebox.agentTasks.update({ shareId: "canvas", taskId: ${JSON.stringify(
   // through scripts. The probe's owner is this server's only administrator, so it reviews its own
   // submissions by saying so (selfReview); a second administrator would review them instead. Submitting and approving widen who sees something, so they wait for the person;
   // discarding and unpublishing take something away, so they do too.
-  assert.equal((await ok(`return slatebox.library.stats({})`)).components.total, 19);
+  assert.equal((await ok(`return slatebox.library.stats({})`)).components.total, builtinCatalog.length);
   assert.deepEqual((await ok(`return slatebox.library.list({ kind: "component", category: "meetings" })`)).items.map((item) => item.slug).sort(), ["incident-review", "retro"]);
   assert.equal((await ok(`return slatebox.library.get({ itemId: "retro" })`)).version.content.kind, "component");
-  assert.equal((await ok(`return slatebox.library.export({})`)).items.length, 19);
+  // Counted inside the script: the whole export (every board with its content) is larger than a
+  // script result may be, and a longer result comes back truncated (exec/result.js).
+  assert.equal(await ok(`return (await slatebox.library.export({})).items.length`), builtinCatalog.length);
   const builder = await ok(`return slatebox.library.branch({ itemId: "retro" })`);
   const draft = await ok(`return slatebox.library.saveDraft({ shareId: ${JSON.stringify(builder.shareId)}, title: "Probe retro", summary: "Went well, change, try" })`);
   const lib = (code) => code.replaceAll("ITEM", JSON.stringify(draft.itemId));

@@ -45,16 +45,19 @@ test('chat and exec can set what is kept: templateCategory and hiddenControls ar
   const contract = await readFile(join(appDir, 'server/actions/generated/contract.json'), 'utf8')
   for (const key of ['"templateCategory"', '"hiddenControls"', '"locked"']) assert.ok(contract.includes(key), `contract should offer ${key}`)
   // Review M1: a bare "category" key invites "group these into categories" to make template buckets.
-  // Restated (library): the shared library's items have a category (one of five, fixed), so the guard
-  // holds for every action but library.*: no canvas, slate or board call takes a bare category.
+  // Restated (library): the shared library's items have a category (a fixed set: LIBRARY_CATEGORIES,
+  // and INTEGRATION_CATEGORIES for suggested integrations), so the guard holds for every action but
+  // library.*: no canvas, slate or board call takes a bare category.
   const { actions } = JSON.parse(contract)
   assert.ok(actions.some((action) => action.id === 'library.list'))
   for (const action of actions.filter((entry) => !entry.id.startsWith('library.')))
     assert.doesNotMatch(JSON.stringify(action), /"category"\s*:/, action.id)
+  const { LIBRARY_CATEGORIES, INTEGRATION_CATEGORIES } = await import('../web/app/imports/api/common/library-model.mjs')
+  const fixed = JSON.stringify([...LIBRARY_CATEGORIES, ...INTEGRATION_CATEGORIES])
   for (const action of actions.filter((entry) => entry.id.startsWith('library.')))
     for (const [where, schema] of [['input', action.input], ['output', action.output]]) {
       const category = JSON.stringify(schema).match(/"category":\{[^}]*\}/g) || []
-      for (const found of category) assert.match(found, /"enum":\["plan","decide","meetings","track","map"\]/, `${action.id} ${where}`)
+      for (const found of category) assert.ok(found.includes(`"enum":${fixed}`), `${action.id} ${where}: ${found}`)
     }
   const client = await readFile(join(appDir, 'server/actions/generated/slatebox.d.ts'), 'utf8')
   assert.match(client, /hiddenControls/)
