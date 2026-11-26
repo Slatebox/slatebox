@@ -243,3 +243,31 @@ test('Kubernetes with this release\'s image and a team address: planned with the
   const plan = result.events.find(event => event.event === 'plan')
   assert.doesNotMatch(plan.warnings.join('\n'), /could not be read from it/, 'nothing is assumed for the pinned image')
 })
+
+// The wizard on Kubernetes with a team address to claim: two reviews (the claim, then the plan).
+// "Change a section…" is offered at the first only: by the second the address is claimed, and
+// choosing it used to throw past the wizard (exit 1, "✗ Change address").
+test('wizard, Kubernetes with a team address: the second review has no "Change a section…", and cancels cleanly', async () => {
+  const { richCli, KEY } = await import('./rich-fakes.mjs')
+  const kube = new FakeKube()
+  const cloud = new FakeCloud()
+  const home = sandbox()
+  const reviews = []
+  const result = await richCli(['install', 'k8s', '--team-address', 'acme', '--ai', 'none', '--admin-email', 'ops@example.com', '--namespace', 'boards', '--no-sso', '--backups', 'off', '--size', 'small', '--mail-url-from', 'env:SMTP_URL'], {
+    run: kube.run, fetch: cloud.fetch, home, env: { SLATEBOX_CLOUD_URL: cloud.base, SMTP_URL: 'smtp://u:p@h:587' },
+    io: { sleep: async () => {}, deviceLabel: 'test-box', openBrowser: () => {} },
+    script: [
+      [/◆ {2}.*Sign in and claim.*Cancel/, () => { reviews.push('claim'); return ['1', KEY.enter] }],
+      ['Open it in your browser', 'n'],
+      [/◆ {2}.*Install.*Cancel/, () => { reviews.push('plan'); return 'q' }],
+    ],
+  })
+  assert.deepEqual(reviews, ['claim', 'plan'])
+  assert.equal(result.code, 7, result.text.slice(-2000))
+  assert.doesNotMatch(result.text, /✗ Change/)
+  const second = result.text.slice(result.text.lastIndexOf('Plan: install'))
+  assert.doesNotMatch(second, /Change a section/, 'not offered once the address is claimed')
+  assert.match(result.text.slice(0, result.text.indexOf('Sign in and claim') + 200), /Change a section…/, 'offered at the claim review')
+  assert.match(result.text, /■ Stopped\.|■ Canceled\./)
+  assert.equal(kube.applies.length, 0, 'nothing applied')
+})

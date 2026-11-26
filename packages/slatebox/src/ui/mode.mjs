@@ -30,12 +30,19 @@ export function pickUi(run, env, { stdin, stderr }) {
  * prompts, with a note under --debug.
  * @returns {Promise<{mode: string, reason: string, term?: object, rich?: object}>}
  */
-export async function resolveUi(run, env, streams, { load = loadRich, platform = process.platform, debug = () => {} } = {}) {
+export async function resolveUi(run, env, streams, { load = loadRich, platform = process.platform, debug = () => {}, askBackground = streams.stdin === process.stdin } = {}) {
   const picked = pickUi(run, env, streams)
   if (picked.mode !== 'rich') return picked
   try {
     const { rich, term } = await load()
-    return { ...picked, rich, term: term.detectTerm(env, streams.stderr, platform), termModule: term }
+    // Light or dark decides the accents. Asked of the real terminal only, and only when neither
+    // SLATEBOX_THEME nor COLORFGBG said; a terminal that does not answer leaves it unknown.
+    let background = term.backgroundFromEnv(env)
+    if (background === 'unknown' && askBackground && !(env.NO_COLOR !== undefined && env.NO_COLOR !== '')) {
+      background = await term.queryBackground(streams.stdin, streams.stderr).catch(() => 'unknown')
+    }
+    debug(`Terminal background: ${background}.`)
+    return { ...picked, rich, term: term.detectTerm(env, streams.stderr, platform, background), termModule: term }
   } catch (error) {
     debug(`The wizard could not be loaded (${error.code || error.message}); using the plain questions.`)
     return { mode: 'plain', reason: 'wizard not loaded' }

@@ -36,7 +36,9 @@ into its result and how long it took. Ctrl-C stops at any question and changes n
 For a screen reader or a simple terminal, `--plain` (or `SLATEBOX_PLAIN=1`) asks the same
 questions one line at a time, with numbered choices. The plain questions are also what you
 get with `TERM=dumb`, in CI, or in a terminal under 60 columns. `NO_COLOR` keeps the wizard
-and drops its colors. `--yes`, `--json`, agents and pipes ask nothing either way.
+and drops its colors. The wizard's text is in your terminal's own color, so it reads on light
+and dark themes; its accents follow the background it detects (`SLATEBOX_THEME=light` or
+`dark` sets it). `--yes`, `--json`, agents and pipes ask nothing either way.
 
 ### A team address
 

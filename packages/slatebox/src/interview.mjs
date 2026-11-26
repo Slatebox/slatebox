@@ -24,7 +24,8 @@ export async function askTeamAddress(ctx, p) {
 // The wizard: characters are checked as they are typed, availability once on Enter, and a name that
 // is not free offers the free ones to pick (same wording as the plain prompt).
 async function askTeamAddressRich(ctx, p) {
-  const ask = () => p.text('Team address', { label: 'Team address', suffix: '.slatebox.team', validate: v => teamAddressProblem(v.toLowerCase()) })
+  // Names are lowercase: the folded answer, the check and the plan all show the same name.
+  const ask = () => p.text('Team address', { label: 'Team address', suffix: '.slatebox.team', normalize: v => v.toLowerCase(), validate: v => teamAddressProblem(v) })
   let name = await ask()
   for (;;) {
     name = name.toLowerCase()
@@ -33,6 +34,7 @@ async function askTeamAddressRich(ctx, p) {
     try { answer = await availability(ctx, name) } catch (error) { checking.clear(); throw error }
     if (answer.available) {
       checking.ok(`${teamHost(name)} is available`)
+      ctx.addressShown = name
       return name
     }
     checking.warn(`${teamHost(name)} isn't available.${answer.suggestions.length ? ' Free right now:' : ''}`)
@@ -111,7 +113,7 @@ function whereChoices(ctx, choices, machine) {
         : { title: 'This computer', hint: needs, disabled: true },
     ssh: windows ? { title: 'A Linux server over SSH', hint: 'needs WSL 2', disabled: true } : { title: 'A Linux server over SSH', hint: 'installs Docker there if it is missing', recommended: !dockerOk },
     k8s: { title: 'Kubernetes', hint: ctx.currentContext ? `current context: ${ctx.currentContext}` : 'no context found' },
-    export: { title: 'Just write the files', hint: 'a run command, manifests or a Helm chart, for GitOps' },
+    export: { title: 'Just write the files', hint: 'a Compose file, Kubernetes manifests or a Helm chart, for GitOps' },
   }
   return choices.map(choice => ({ ...choice, ...extra[choice.value] }))
 }
@@ -169,7 +171,7 @@ export async function interview(ctx, partial) {
   a.address ||= {}
   if (!has(a.address, 'url') && !has(a.address, 'domain') && a.address.team === undefined && !has(a.address, 'port') && (a.target === 'local' || a.target === 'ssh')) {
     const where = await p.choose('Where should your team open Slatebox?', [
-      { value: 'team', label: 'A free team address, https://<name>.slatebox.team  (recommended: no DNS, ports or certificates)', title: 'A free team address', hint: 'https://<name>.slatebox.team · no DNS, ports or certificates', recommended: true },
+      { value: 'team', label: 'A free team address, https://<name>.slatebox.team  (recommended: no DNS, ports or certificates)', title: 'A free team address', hint: '<name>.slatebox.team · no DNS, ports or certificates', recommended: true },
       { value: 'domain', label: 'My own domain (I point DNS at this server, or I run a proxy)', title: 'My own domain', hint: a.target === 'local' ? 'you point DNS at this computer, or run a proxy' : 'you point DNS at this server, or run a proxy' },
       { value: 'local', label: a.target === 'local' ? `Only this computer, http://localhost:${ctx.freePort}` : `Plain http://${a.ssh?.host || '<server>'}:7070, no HTTPS`, title: a.target === 'local' ? 'Only this computer' : 'Plain HTTP', hint: a.target === 'local' ? `http://localhost:${ctx.freePort}` : `http://${a.ssh?.host || '<server>'}:7070, no HTTPS` },
     ], { default: 'team', label: 'Address' })

@@ -130,7 +130,7 @@ test('ASCII: a C locale on Linux gets ASCII glyphs', async () => {
   const result = await framesAt(100, { LANG: 'C' })
   const where = frame(result.writes, 'Where should Slatebox run')
   assert.doesNotMatch(where, /[◆│›└]/)
-  assert.match(where, /^ \* {2}Where should Slatebox run\?$/m)
+  assert.match(where, /^ \* {2}Where should Slatebox run\? {3}1 of 6$/m)
   assert.match(where, /^ \| {2}> This computer/m)
   snapshot('where-ascii.txt', where)
 })
@@ -200,7 +200,7 @@ const SECTIONS = [
   [/Install +Change a section… +Cancel/, [KEY.enter]],
 ]
 
-test('Ctrl-C at every section: exit 7, "Cancelled. Nothing was changed.", nothing pulled, started or written', async () => {
+test('Ctrl-C at every section: exit 7, "Canceled. Nothing was changed.", nothing pulled, started or written', async () => {
   for (let stop = 0; stop < SECTIONS.length; stop++) {
     const { docker, cloud, home } = machine()
     docker.registry.set(IMAGE, 'never-pulled')
@@ -210,7 +210,7 @@ test('Ctrl-C at every section: exit 7, "Cancelled. Nothing was changed.", nothin
     for (let i = 0; i <= stop; i++) script.push([SECTIONS[i][0], i === stop ? [KEY.ctrlC] : answers[i]])
     const result = await richCli(['install', '--image', IMAGE], { run: docker.run, fetch: cloud.fetch, home, env: { SLATEBOX_CLOUD_URL: cloud.base }, io, script })
     assert.equal(result.code, 7, `section ${stop}: ${result.text.slice(-800)}`)
-    assert.match(result.text, /■ Cancelled\. Nothing was changed\./)
+    assert.match(result.text, /■ Canceled\. Nothing was changed\./)
     assert.deepEqual(installed(docker, home), { started: 0, pulled: 0, files: false }, `section ${stop}`)
     assert.equal(cloud.claims.size, 0, 'nothing claimed')
     assert.equal(result.modes.at(-1), false, 'raw mode off at the end')
@@ -259,7 +259,21 @@ test('review: d shows every file and command, the same as slatebox plan', async 
   const commands = plan.events.find(event => event.event === 'plan').commands
   const result = await richCli(['install', ...flags], { run: docker.run, fetch: cloud.fetch, home, io, env, script: [['Where should Slatebox run', KEY.enter], [/Install +Change a section… +Cancel/, 'd'], [/Install +Change a section… +Cancel/, KEY.ctrlC]] })
   assert.equal(result.code, 7)
-  for (const command of commands) assert.ok(result.text.includes(command), `d lists: ${command}`)
+  // The details are wrapped to the screen: each command is there whole once the wrapping (and the
+  // gutter) is taken out, and no line is wider than the terminal.
+  const details = result.text.slice(result.text.indexOf('◇  Review  every file and command'))
+  const unwrapped = details.replace(/[│└]/g, '').replace(/\s+/g, '')
+  for (const command of commands) assert.ok(unwrapped.includes(command.replace(/\s+/g, '')), `d lists: ${command}`)
+  for (const line of details.split('\n')) assert.ok([...line].length <= 100, `wider than 100: ${line}`)
+})
+
+test('review: d again points up instead of printing every file and command a second time', async () => {
+  const { docker, cloud, home } = machine()
+  const flags = ['--image', IMAGE, '--local', '--port', '17604', '--admin-email', 'o@example.com', '--ai', 'none', '--no-sso', '--backups', 'off', '--size', 'small', '--mail-url-from', 'env:SMTP_URL']
+  const result = await richCli(['install', ...flags], { run: docker.run, fetch: cloud.fetch, home, io, env: { SMTP_URL: 'smtp://u:p@h:587' }, script: [['Where should Slatebox run', KEY.enter], [/Install +Change a section… +Cancel/, 'd'], [/Install +Change a section… +Cancel/, 'd'], ['listed above', []], [/Install +Change a section… +Cancel/, KEY.ctrlC]] })
+  assert.equal(result.code, 7)
+  assert.equal(result.text.split('Commands:').length - 1, 1, 'the commands were printed once')
+  assert.match(result.text, /Every file and command is listed above\./)
 })
 
 test('review: on a server over SSH the highlighted action is Cancel, so Enter changes nothing', async () => {
@@ -312,4 +326,180 @@ test('setup link: OSC 8 only where the terminal opens links; the redactor covers
   const lines = plainText(plain.output).split('\n')
   assert.equal(lines.filter(line => line.includes(plain.token)).length, 1)
   assert.ok(lines.some(line => line.includes('a line that names ***')))
+})
+
+// ------------------------------------------------------------------ layout at any width
+
+/** A wizard on a fake terminal, for screens drawn directly. */
+function wizardAt(columns, env = {}) {
+  const t = rawTerminal({ columns })
+  const term = detectTerm({ LANG: 'en_US.UTF-8', FORCE_COLOR: '3', ...env }, t.stderr, 'linux')
+  const prompt = createRichPrompt({ input: t.stdin, output: t.stderr, term, redactor: new Redactor(), version: '0.3.0', home: '/home/me' })
+  const lines = () => plainText(t.screen.err).split('\n').map(text => text.split('\r').at(-1))
+  return { t, prompt, lines }
+}
+const fits = (lines, columns) => { for (const line of lines) assert.ok([...line].length < columns, `wider than ${columns - 1}: "${line}"`) }
+
+test('"recommended" stays whole on the address question at 60, 72, 100 and 200 columns', async () => {
+  for (const columns of [60, 72, 100, 200]) {
+    const { docker, cloud, home } = machine()
+    const result = await richCli(['install', '--image', IMAGE], {
+      run: docker.run, fetch: cloud.fetch, home, columns, env: { SLATEBOX_CLOUD_URL: cloud.base }, io,
+      script: [['Where should Slatebox run', KEY.enter], ['Where should your team open', KEY.ctrlC]],
+    })
+    const address = frame(result.writes, 'Where should your team open')
+    assert.match(address, /recommended$/m, `${columns}`)
+    assert.doesNotMatch(address, /recommen…/, `${columns}`)
+  }
+})
+
+test('the plan box wraps long values under their key at 60 and 72 columns, never cuts them', () => {
+  for (const columns of [60, 72, 100]) {
+    const { prompt, lines } = wizardAt(columns)
+    const plan = { action: 'install', name: 'slatebox', where: 'this computer', address: 'https://acme-team.slatebox.team', image: { ref: 'ghcr.io/slatebox/slatebox@sha256:' + 'a'.repeat(64) }, secretsLocation: '/home/me/.slatebox/installs/slatebox/secrets.env on this computer (mode 0600)', warnings: [], changes: [] }
+    prompt.planBox(plan, { target: 'local', address: { team: 'acme-team', port: 7070 }, adminEmail: 'ops@example.com', ai: { mode: 'none' }, sso: {}, backups: { to: 'default' }, size: 'small' })
+    prompt.close()
+    const shown = lines().filter(Boolean)
+    fits(shown, columns)
+    const text = shown.map(line => line.replace(/^ [│╭╰]─? ?|[│╮╯] *$/g, '').trim()).join(' ').replace(/\s+/g, ' ')
+    assert.match(text, /also http:\/\/localhost:7070 on this computer/, `${columns}`)
+    assert.match(text, /docker run/, `${columns}`)
+    assert.match(text, /~\/\.slatebox\/installs\/slatebox\/secrets\.env on this computer \(mode 0600\)/, `${columns}`)
+    assert.ok(!shown.some(line => line.includes('…') && !line.includes('@sha256')), `${columns}: nothing cut: ${shown.join('\n')}`)
+    assert.match(shown.at(-1), /d shows every file and command/)
+  }
+})
+
+test('a plan only run: no "d shows" hint, every file and command wrapped once, and no "..." placeholder', async () => {
+  const { docker, cloud, home } = machine()
+  const result = await richCli(['plan', '--image', IMAGE, '--local', '--port', '17605', '--admin-email', 'o@example.com', '--ai', 'none', '--no-sso', '--backups', 'off', '--size', 'small', '--mail-url-from', 'env:SMTP_URL'], {
+    run: docker.run, fetch: cloud.fetch, home, io, env: { SMTP_URL: 'smtp://u:p@h:587' }, script: [['Where should Slatebox run', KEY.enter]],
+  })
+  assert.equal(result.code, 0, result.text)
+  assert.doesNotMatch(result.text, /d shows every file and command/)
+  assert.equal(result.text.split('Commands:').length - 1, 1, 'the plan is printed once')
+  assert.doesNotMatch(result.text, /\.\.\. \(the same answers\)/)
+  assert.match(result.text, /Nothing was changed\. To install, run slatebox install and choose Install at the review\./)
+  for (const line of result.text.split('\n').map(text => text.split('\r').at(-1))) assert.ok([...line].length <= 100, `wider than 100: ${line}`)
+})
+
+test('a confirm that does not fit puts its Yes/No on its own line, inside the gutter', async () => {
+  for (const columns of [60, 100]) {
+    const { prompt, t } = wizardAt(columns)
+    const asked = prompt.confirm('Use the usual settings for backups, size and mail?', { default: true, label: 'Usual settings', help: 'Daily backups at 03:00, keep 14 · size small · no mail' })
+    await t.waitFor('usual settings')
+    const write = t.screen.writes.find(chunk => plainText(chunk).includes('usual settings'))
+    t.stdin.write('y')
+    await asked
+    prompt.close()
+    const lines = plainText(write).split('\n').map(text => text.replace(/\s+$/, ''))
+    fits(lines, columns)
+    const toggle = lines.find(line => line.includes('● Yes'))
+    if (columns === 60) assert.match(toggle, /^ │ {2}● Yes {2}○ No$/, `own line: ${lines.join('\n')}`)
+    else assert.match(toggle, /mail\? {3}● Yes {2}○ No/)
+  }
+})
+
+test('a long validation message gets one ▲, its other lines under its text', async () => {
+  const { prompt, t } = wizardAt(60)
+  const asked = prompt.text('Team address', { label: 'Team address', suffix: '.slatebox.team', normalize: v => v.toLowerCase(), validate: v => (v.length < 3 ? '3–32 characters: a–z, 0–9 and hyphens, starting with a letter, not ending with a hyphen (no two hyphens in a row)' : null) })
+  await t.waitFor('Team address')
+  t.stdin.write('a')
+  await t.waitFor('two hyphens')
+  t.stdin.write('CME')
+  await new Promise(resolve => setTimeout(resolve, 10))
+  t.stdin.write('\r')
+  const value = await asked
+  prompt.close()
+  const write = t.screen.writes.filter(chunk => plainText(chunk).includes('two hyphens')).at(0)
+  assert.equal((plainText(write).match(/▲/g) || []).length, 1, plainText(write))
+  // The folded answer is the name that is checked and planned: lowercase.
+  assert.equal(value, 'acme')
+  assert.match(plainText(t.screen.err), /◇ {2}Team address {2}acme\.slatebox\.team/)
+  assert.doesNotMatch(plainText(t.screen.err), /◇ {2}Team address {2}aCME/)
+})
+
+test('Ctrl-C while a step runs closes its row with ■; no frozen spinner stays behind', () => {
+  let clock = 0
+  const t = rawTerminal({ columns: 100 })
+  const term = detectTerm({ LANG: 'en_US.UTF-8', FORCE_COLOR: '3' }, t.stderr, 'linux')
+  const prompt = createRichPrompt({ input: t.stdin, output: t.stderr, term, redactor: new Redactor(), now: () => clock })
+  prompt.listener.step('image', 'start', 'Downloading ghcr.io/slatebox/slatebox:v0.3.0 (about 1 GB the first time; later only what changed)')
+  clock = 3200
+  prompt.fatal({ message: 'Stopped. Run slatebox install again to finish; it is safe to run again.', exitCode: 7 })
+  prompt.close()
+  const shown = plainText(t.screen.err).split('\n').map(text => text.split('\r').at(-1)).filter(Boolean)
+  assert.match(shown.at(-2), /^ ■ Downloading ghcr\.io\/slatebox\/slatebox:v0\.3\.0 \(about 1 GB the first time\) +3\.2s$/)
+  assert.match(shown.at(-1), /^ ■ Stopped\./)
+  assert.ok(!shown.some(line => /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/.test(line)), `no spinner left: ${shown.join('\n')}`)
+})
+
+test('rows: one time each, and none under a second', () => {
+  let clock = 0
+  const t = rawTerminal({ columns: 100 })
+  const term = detectTerm({ LANG: 'en_US.UTF-8', FORCE_COLOR: '3' }, t.stderr, 'linux')
+  const prompt = createRichPrompt({ input: t.stdin, output: t.stderr, term, redactor: new Redactor(), now: () => clock })
+  prompt.listener.step('image', 'start', 'Downloading x')
+  clock = 1500
+  prompt.listener.step('image', 'ok', 'Downloaded the image in 2s')
+  prompt.listener.step('files', 'start', 'Writing')
+  clock = 1520
+  prompt.listener.step('files', 'ok', 'Wrote ~/x')
+  prompt.close()
+  const text = plainText(t.screen.err)
+  assert.match(text, /✓ Downloaded the image +1\.5s/)
+  assert.doesNotMatch(text, /in 2s/)
+  assert.match(text, /✓ Wrote ~\/x\n/)
+  assert.doesNotMatch(text, /0\.0s/)
+})
+
+test('the wizard: section headers are not repeated, the machine and address checks are not shown twice, and "canceled" is US spelling', async () => {
+  const { docker, cloud, home } = machine()
+  const result = await richCli(['install', '--image', IMAGE], {
+    run: docker.run, fetch: cloud.fetch, home, env: { SLATEBOX_CLOUD_URL: cloud.base }, io,
+    script: [
+      ['Where should Slatebox run', KEY.enter], ['Where should your team open', KEY.enter], ['Team address', ['acme', KEY.enter]],
+      ['Admin email', KEY.enter], ['Agents for drafts', KEY.enter], ['Single sign-on with', KEY.enter], ['usual settings', KEY.enter],
+      [/Install +Change a section… +Cancel/, KEY.ctrlC],
+    ],
+  })
+  assert.equal(result.code, 7, result.text)
+  const text = result.text
+  assert.doesNotMatch(text, /^ \d\/6 /m, 'no "1/6 Where" header lines')
+  assert.match(text, /Where should Slatebox run\? {3}1 of 6/)
+  assert.equal((text.match(/acme\.slatebox\.team is available/g) || []).length, 1, 'the address check once')
+  assert.doesNotMatch(text, /this computer: Docker/, 'the machine check is not repeated at the review')
+  assert.match(text, /■ Canceled\. Nothing was changed\./)
+  assert.doesNotMatch(text, /Cancelled|cancelled/)
+})
+
+test('the outro: the key warning is one sentence, set apart, in plain words', () => {
+  const { prompt, lines } = wizardAt(100)
+  prompt.outro({ headline: 'Slatebox is running at http://localhost:7070', lines: [{ warn: 'Save /home/me/.slatebox/installs/slatebox/secrets.env in your password manager now. It holds the key that unlocks saved agent keys, and backups do not include it: without it, those keys cannot be read after a restore.' }, 'Install record: x'], next: ['slatebox status'] })
+  prompt.close()
+  const shown = lines()
+  const at = shown.findIndex(line => line.includes('▲'))
+  assert.ok(at > 0)
+  assert.equal(shown[at - 1].trim(), '', 'a blank line before')
+  assert.match(shown[at], /^ ▲ Save ~\/\.slatebox\/installs\/slatebox\/secrets\.env in your password manager now\./)
+  for (const line of shown.slice(at + 1, shown.findIndex((line, i) => i > at && !line.trim()))) assert.match(line, /^ {3}\S/, 'its other lines are indented under it')
+  assert.doesNotMatch(shown.join('\n'), /key encryption key/)
+})
+
+// ------------------------------------------------------------------ @clack/core internals
+
+// rich-prompt.mjs relies on these @clack/core 1.6.0 internals (see its header). When an upgrade
+// moves them, this fails, instead of the stray footer or a broken Ctrl-U coming back silently.
+test('clack internals the wizard relies on are still there', async () => {
+  const { ConfirmPrompt, TextPrompt } = await import('@clack/core')
+  const t = rawTerminal({ columns: 100 })
+  const confirm = new ConfirmPrompt({ input: t.stdin, output: t.stderr, active: 'Yes', inactive: 'No', render: () => '' })
+  assert.ok(confirm._subscribers instanceof Map && confirm._subscribers.has('confirm'), 'ConfirmPrompt subscribes its y/n handler as "confirm"')
+  const text = new TextPrompt({ input: t.stdin, output: t.stderr, render: () => '' })
+  assert.equal(typeof text._setUserInput, 'function', 'TextPrompt._setUserInput')
+  assert.ok('_cursor' in text, 'TextPrompt._cursor')
+  const asked = text.prompt()
+  assert.ok(text.rl, 'TextPrompt.rl once open')
+  t.stdin.write('\x03')
+  await asked
 })

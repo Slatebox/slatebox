@@ -304,9 +304,10 @@ export async function main(argv, io = {}) {
     out.event({ event: 'plan', ...plan })
     if (ctx.rich) {
       // The wizard shows the plan as its review (ctx.confirm); a plan only run shows it all here.
+      // (A plan only run has no review to press d in: no hint, and every file and command follows.)
       ctx.lastPlan = plan
-      ctx.prompt.planBox(plan, ctx.answers)
-      if (ctx.planOnly) out.say(`\n${formatPlan(plan)}\n`)
+      ctx.prompt.planBox(plan, ctx.answers, { footer: !ctx.planOnly })
+      if (ctx.planOnly) ctx.prompt.details(formatPlan(plan))
       return
     }
     const text = formatPlan(plan)
@@ -317,7 +318,9 @@ export async function main(argv, io = {}) {
     if (ctx.yes) return
     if (ctx.rich) {
       const local = plan.target === 'local' || plan.target === 'export'
-      await ctx.prompt.review(plan, ctx.answers, { defaultAction: local ? 'install' : 'cancel', revisable: Boolean(ctx.interviewed), details: formatPlan(plan) })
+      // "Change a section…" only while nothing has happened: not at a second review (the k8s team
+      // address is claimed between its two reviews), where it would undo nothing.
+      await ctx.prompt.review(plan, ctx.answers, { defaultAction: local ? 'install' : 'cancel', revisable: Boolean(ctx.interviewed) && !ctx.applying, details: formatPlan(plan) })
       ctx.applying = true
       return
     }
@@ -426,7 +429,12 @@ async function prepareAnswers(ctx, flags, positionals, revise = null) {
     if (ctx.rich && !revise) ctx.machineCheck = () => machineCheck(ctx)
     if (revise) ctx.machineCheck = null
     partial = await interview(ctx, partial)
-    if (ctx.rich) { ctx.interviewed = structuredClone(partial); ctx.prompt.section('Review', 6, 6) }
+    if (ctx.rich) {
+      ctx.interviewed = structuredClone(partial)
+      ctx.prompt.section('Review', 6, 6)
+      // The machine check and the address check were just shown: not again while the plan is made.
+      ctx.prompt.quiet([...(ctx.machineShown ? ['preflight'] : []), ...(ctx.addressShown && ctx.addressShown === partial.address?.team ? ['address'] : [])])
+    }
   }
   const freePort = (partial.target ?? 'local') === 'local' && partial.address?.port === undefined && !partial.address?.url ? await defaultLocalPort() : undefined
   const { answers, missing, errors } = resolveAnswers(partial, { freePort, cwd: ctx.cwd, home: ctx.env.HOME, yes: ctx.yes })
@@ -450,7 +458,7 @@ function useRich(ctx, io, ui) {
   ctx.out.listener = prompt.listener
   ctx.ui = { probe: prompt.probe }
   prompt.onInterrupt = () => {
-    prompt.fatal(new InstallError(EXIT.CANCELLED, ctx.applying ? 'Stopped. Run slatebox install again to finish; it is safe to run again.' : 'Cancelled. Nothing was changed.'))
+    prompt.fatal(new InstallError(EXIT.CANCELLED, ctx.applying ? 'Stopped. Run slatebox install again to finish; it is safe to run again.' : 'Canceled. Nothing was changed.'))
     prompt.close()
     process.exit(EXIT.CANCELLED)
   }
@@ -465,7 +473,7 @@ function richClosing(ctx, done, extra = []) {
   const pending = ctx.setupLink?.pending ? setupLines(ctx, done.name).filter(line => typeof line === 'string' && line) : null
   const lines = []
   if (done.teamAddress) lines.push(`On this computer it also answers at ${done.localAddress}.`, `Keep a copy of ${installDir(ctx.home, done.name)}/ (keys and the team-address credential).`)
-  if (done.keyGenerated) lines.push(`Your key encryption key is in ${done.secretsFile}. Back it up with your password manager now:`, 'backups do not contain it, and without it saved agent keys cannot be read after a restore.')
+  if (done.keyGenerated) lines.push({ warn: `Save ${done.secretsFile} in your password manager now. It holds the key that unlocks saved agent keys, and backups do not include it: without it, those keys cannot be read after a restore.` })
   lines.push(`Install record: ${done.installRecord}`, ...extra)
   const headline = done.nothingToChange ? `Nothing to change: ${done.name} is running at ${done.address}` : `Slatebox is running at ${done.address}`
   p.outro({ headline, link, pending, lines, next: done.name === 'slatebox' ? next : [...next.map(item => `${item} --name ${done.name}`)] })
@@ -572,7 +580,8 @@ async function dispatch(ctx, positionals, flags) {
       }
       if (done.planned) {
         ctx.out.event({ event: 'done', planned: true, name: answers.name, target: answers.target })
-        if (!ctx.json) ctx.out.say(`Nothing was changed. To apply: slatebox install ${flags.answers ? `--answers ${flags.answers} ` : ''}... (the same answers)${ctx.interactive ? '' : ' --yes'}`)
+        if (ctx.rich) ctx.prompt.note('info', `Nothing was changed. To install, run slatebox install${flags.answers ? ` --answers ${flags.answers}` : ''} and choose Install at the review.`)
+        else if (!ctx.json) ctx.out.say(`Nothing was changed. To apply: slatebox install ${flags.answers ? `--answers ${flags.answers} ` : ''}... (the same answers)${ctx.interactive ? '' : ' --yes'}`)
         return 0
       }
       if (ctx.rich) richClosing(ctx, done, flags.from === 'cloud' ? fromCloudLines(done) : [])

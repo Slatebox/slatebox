@@ -1,9 +1,16 @@
 // The installer's wizard in the terminal: the same questions as prompt.mjs ({text, choose,
-// confirm, secret, close}), drawn in Slatebox greens, gold and cream, answered with the arrow keys,
+// confirm, secret, close}), drawn with Slatebox accents (src/ui/term.mjs), answered with the arrow keys,
 // and folded into a one-line record once answered. Key handling (raw mode, paste, wide
 // characters, redraw, cancel) is @clack/core's; everything on screen is drawn here. Loaded only
 // when src/ui/mode.mjs says the run is rich. Everything it writes goes to stderr through the
 // redactor, except the setup link (written past it, as setup-link.mjs does).
+//
+// @clack/core is pinned exactly (1.6.0) because three things here use its internals, not its
+// documented API. Recheck them on any upgrade (test/rich-prompt.test.mjs "clack internals" fails
+// when they move):
+//   - prompt._subscribers.delete('confirm'): stops ConfirmPrompt's own y/n handler, which moves the
+//     cursor before the frame is redrawn and leaves a stray footer behind (confirm()).
+//   - prompt.rl, prompt._cursor and prompt._setUserInput(''): Ctrl-U clears the whole answer (text()).
 import { ConfirmPrompt, PasswordPrompt, SelectPrompt, TextPrompt, isCancel } from '@clack/core'
 import { Writable } from 'node:stream'
 import { SIZES as SIZE_NAMES } from '../answers.mjs'
@@ -11,7 +18,7 @@ import { EXIT, InstallError } from '../errors.mjs'
 import { terminalGuard } from './keys.mjs'
 import { columns, link, makePaint, pad, strip, truncate, width, wrap } from './term.mjs'
 
-const CANCELLED = 'Cancelled. Nothing was changed.'
+const CANCELED = 'Canceled. Nothing was changed.'
 const FRAME_MS = 80
 
 /** Thrown by the review's "Change a section…": that section is asked again; nothing has changed yet. */
@@ -55,6 +62,8 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
   }
   const paint = makePaint(term)
   const g = term.glyphs
+  // Redacted before it is wrapped, so that a secret broken across two lines is still caught.
+  const wrapR = (text, n) => wrap(redactor.redact(String(text)), n)
   const W = () => Math.max(40, columns(term))
   const lineW = () => Math.min(W(), 100) - 1
   const started = now()
@@ -69,6 +78,9 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
   let frame = 0
   let pendingSection = null
   let lastSection = null
+  let sectionTag = ''
+  // Step ids whose start and ok rows are not shown (the wizard showed the same check already).
+  const quiet = new Set()
 
   const rawWrite = text => output.write(text)
   const clearDrawn = () => {
@@ -77,7 +89,7 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
   const draw = () => {
     const task = tasks.at(-1)
     if (!task || task.parked) return
-    const spin = paint('gold', g.spinner[frame % g.spinner.length])
+    const spin = paint('accent', g.spinner[frame % g.spinner.length])
     const right = task.right ? task.right(now() - task.start) : clock(now() - task.start)
     const room = lineW() - 3 - width(right) - 2
     const text = ` ${spin} ${pad(truncate(task.label, room, g.ellipsis), room)}  ${paint('dim', right)}`
@@ -135,30 +147,34 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
   const head = (state, text) => {
     if (state === 'submit') return ` ${paint('dim', g.done)}  ${text}`
     if (state === 'cancel') return ` ${paint('red', g.stop)}  ${text}`
-    return ` ${paint('gold', g.active)}  ${text}`
+    return ` ${paint('accent', g.active)}  ${text}`
   }
   const body = text => ` ${bar}  ${text}`
   const foot = ` ${paint('dim', g.end)}`
   const folded = (label, answer) => head('submit', `${paint('dim', label)}  ${answer}`)
-  const cancelled = label => head('cancel', `${label}  ${paint('dim', 'cancelled')}`)
-  const questionLines = (question, hint) => {
+  const canceled = label => head('cancel', `${label}  ${paint('dim', 'canceled')}`)
+  const questionLines = (question, hint, { tag = true } = {}) => {
     const room = lineW() - 4
-    const lines = wrap(question, room)
+    const lines = wrapR(question, room)
     const out = lines.map((text, i) => (i === 0 ? head('active', paint('title', text)) : body(paint('title', text))))
+    let last = lines.at(-1)
     if (hint) {
-      const last = lines.at(-1)
-      if (width(last) + 2 + width(hint) <= room) out[out.length - 1] += `  ${paint('dim', hint)}`
-      else for (const text of wrap(hint, room)) out.push(body(paint('dim', text)))
+      if (width(last) + 2 + width(hint) <= room) { out[out.length - 1] += `  ${paint('dim', hint)}`; last += `  ${hint}` }
+      else for (const text of wrapR(hint, room)) { out.push(body(paint('dim', text))); last = text }
     }
+    // The section's place ("2 of 6") ends the question's last line, when it fits there.
+    if (tag && sectionTag && width(last) + 3 + width(sectionTag) <= room) out[out.length - 1] += `   ${paint('dim', sectionTag)}`
     return out
   }
 
+  // A new section starts with a blank line; its place ("2 of 6") is shown on its questions, and
+  // its name is each answer's folded label, so it is not printed again as a header.
   function openSection() {
     if (!pendingSection) return
-    const { name, i, n } = pendingSection
+    const { i, n } = pendingSection
     pendingSection = null
+    sectionTag = `${i} of ${n}`
     line('')
-    line(` ${paint('gold', `${i}/${n}`)} ${paint('title', name)}`)
   }
 
   async function ask(prompt) {
@@ -167,7 +183,7 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
     guard.arm()
     try {
       const value = await prompt.prompt()
-      if (isCancel(value)) throw new InstallError(EXIT.CANCELLED, CANCELLED)
+      if (isCancel(value)) throw new InstallError(EXIT.CANCELLED, CANCELED)
       return value
     } finally {
       guard.restore()
@@ -176,10 +192,10 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
   }
 
   // ---------------------------------------------------------------- questions
-  async function text(question, { default: fallback = '', validate, optional = false, label, title, hint, suffix = '' } = {}) {
+  async function text(question, { default: fallback = '', validate, optional = false, label, title, hint, suffix = '', normalize = value => value } = {}) {
     const name = label || shortLabel(question)
     const check = raw => {
-      const answer = String(raw ?? '').trim() || fallback
+      const answer = normalize(String(raw ?? '').trim() || fallback)
       if (!answer && optional) return undefined
       if (!answer) return 'An answer is needed.'
       return validate?.(answer) || undefined
@@ -196,17 +212,21 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
       validate: check,
       render() {
         if (this.state === 'submit') {
-          const answer = String(this.value ?? '').trim() || fallback
-          return folded(name, answer ? paint('cream', `${answer}${suffix}`) : paint('dim', 'skipped'))
+          const answer = normalize(String(this.value ?? '').trim() || fallback)
+          return folded(name, answer ? paint('value', `${answer}${suffix}`) : paint('dim', 'skipped'))
         }
-        if (this.state === 'cancel') return cancelled(name)
+        if (this.state === 'cancel') return canceled(name)
         const lines = questionLines(title || question, hint ?? (optional && !fallback ? 'Enter skips' : fallback ? `Enter for ${fallback}` : ''))
         let entry = `${display(this)}${suffix ? paint('dim', suffix) : ''}`
-        const live = this.state === 'error' ? this.error : (this.userInput.trim() ? (validate?.(this.userInput.trim()) || '') : '')
+        const live = this.state === 'error' ? this.error : (this.userInput.trim() ? (validate?.(normalize(this.userInput.trim())) || '') : '')
         if (live) {
-          const note = `${paint('gold', g.warn)} ${live}`
+          const note = `${paint('warn', g.warn)} ${live}`
           if (width(entry) + 3 + width(note) <= lineW() - 4) entry += `   ${note}`
-          else { lines.push(body(entry)); entry = null; for (const piece of wrap(live, lineW() - 7)) lines.push(body(`${paint('gold', g.warn)} ${piece}`)) }
+          else {
+            // One ▲ for one message; its other lines line up under its text.
+            lines.push(body(entry)); entry = null
+            wrapR(live, lineW() - 7).forEach((piece, i) => lines.push(body(`${i ? ' '.repeat(width(g.warn)) : paint('warn', g.warn)} ${piece}`)))
+          }
         }
         if (entry !== null) lines.push(body(entry))
         lines.push(foot)
@@ -223,8 +243,7 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
       }
     })
     const value = await ask(prompt)
-    const answer = String(value ?? '').trim() || fallback
-    return answer
+    return normalize(String(value ?? '').trim() || fallback)
   }
 
   /**
@@ -245,32 +264,39 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
         const chosen = items[this.cursor]
         if (this.state === 'submit') {
           if (this.value && Object.values(keys).includes(this.value)) return folded(name, paint('dim', KEY_WORDS[this.value] || this.value))
-          return folded(name, paint('cream', chosen?.title ?? ''))
+          return folded(name, paint('value', chosen?.title ?? ''))
         }
-        if (this.state === 'cancel') return cancelled(name)
-        const lines = questionLines(title || question, help)
+        if (this.state === 'cancel') return canceled(name)
         if (horizontal) {
-          const row = items.map((item, i) => (i === this.cursor ? `${paint('gold', g.pointer)} ${paint('title', item.title)}` : `  ${paint('dim', item.title)}`)).join('   ')
-          if (title || question) lines[lines.length - 1] += `   ${row}`
-          else lines[lines.length - 1] = head('active', row)
+          const row = items.map((item, i) => (i === this.cursor ? `${paint('accent', g.pointer)} ${paint('title', item.title)}` : `  ${paint('dim', item.title)}`)).join('   ')
+          if (!(title || question)) return head('active', row)
+          const lines = questionLines(title || question, help, { tag: false })
+          lines[lines.length - 1] += `   ${row}`
           return lines.join('\n')
         }
+        const lines = questionLines(title || question, help)
         const wide = W() >= 80
         const titleW = Math.max(...items.map(item => width(item.title)))
+        // The tag stays whole: it is the cue for the choice the wizard suggests.
+        const tagged = item => item.recommended && !item.disabled
+        const hintLines = (item, room) => {
+          const words = [item.hint, tagged(item) ? 'recommended' : null].filter(Boolean).join(` ${g.dot} `)
+          return words ? wrapR(words, room).map(piece => (tagged(item) && piece.endsWith('recommended')
+            ? `${paint('dim', piece.slice(0, -'recommended'.length))}${paint('accent', 'recommended')}`
+            : paint('dim', piece))) : []
+        }
         items.forEach((item, i) => {
           const active = i === this.cursor
-          const pointer = active ? paint('gold', g.pointer) : ' '
+          const pointer = active ? paint('accent', g.pointer) : ' '
           const shown = item.disabled ? paint('dim', item.title) : active ? paint('title', item.title) : item.title
-          const parts = [item.hint, item.recommended && !item.disabled ? 'recommended' : null].filter(Boolean)
           if (wide) {
-            const room = lineW() - 6 - titleW - 2
-            let hintText = truncate(parts.join(` ${g.dot} `), room, g.ellipsis)
-            if (item.recommended && !item.disabled && hintText.endsWith('recommended')) hintText = `${paint('dim', hintText.slice(0, -'recommended'.length))}${paint('lightGold', 'recommended')}`
-            else hintText = paint('dim', hintText)
-            lines.push(body(`${pointer} ${parts.length ? pad(shown, titleW) : shown}${parts.length ? `  ${hintText}` : ''}`))
+            // The hint in a column after the titles, wrapped inside that column.
+            const hints = hintLines(item, lineW() - 6 - titleW - 2)
+            lines.push(body(`${pointer} ${hints.length ? pad(shown, titleW) : shown}${hints.length ? `  ${hints[0]}` : ''}`))
+            for (const piece of hints.slice(1)) lines.push(body(`  ${' '.repeat(titleW)}  ${piece}`))
           } else {
             lines.push(body(`${pointer} ${shown}`))
-            for (const piece of parts.length ? wrap(parts.join(` ${g.dot} `), lineW() - 8) : []) lines.push(body(`    ${item.recommended && !item.disabled && piece.endsWith('recommended') ? `${paint('dim', piece.slice(0, -'recommended'.length))}${paint('lightGold', 'recommended')}` : paint('dim', piece)}`))
+            for (const piece of hintLines(item, lineW() - 8)) lines.push(body(`    ${piece}`))
           }
         })
         lines.push(foot)
@@ -299,12 +325,16 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
     const prompt = new ConfirmPrompt({
       input, output: promptOut, active: yes, inactive: no, initialValue: fallback,
       render() {
-        if (this.state === 'submit') return folded(name, paint('cream', this.value ? yes : no))
-        if (this.state === 'cancel') return cancelled(name)
-        const lines = questionLines(title || question)
-        const row = options.map(([value, text]) => (this.value === value ? `${paint('gold', g.on)} ${paint('title', text)}` : `${paint('dim', g.off)} ${paint('dim', text)}`)).join('  ')
-        lines[lines.length - 1] += `   ${row}`
-        for (const piece of help ? wrap(help, lineW() - 4) : []) lines.push(body(paint('dim', piece)))
+        if (this.state === 'submit') return folded(name, paint('value', this.value ? yes : no))
+        if (this.state === 'cancel') return canceled(name)
+        const lines = questionLines(title || question, undefined, { tag: false })
+        const row = options.map(([value, text]) => (this.value === value ? `${paint('accent', g.on)} ${paint('title', text)}` : `${paint('dim', g.off)} ${paint('dim', text)}`)).join('  ')
+        const tag = sectionTag ? `   ${paint('dim', sectionTag)}` : ''
+        // The toggle after the question when the whole line fits, else on its own line below it.
+        if (width(lines.at(-1)) + 3 + width(row) + width(tag) <= lineW()) lines[lines.length - 1] += `   ${row}${tag}`
+        else if (width(lines.at(-1)) + 3 + width(row) <= lineW()) lines[lines.length - 1] += `   ${row}`
+        else lines.push(body(`${row}${width(row) + 3 + width(tag) + 4 <= lineW() ? tag : ''}`))
+        for (const piece of help ? wrapR(help, lineW() - 4) : []) lines.push(body(paint('dim', piece)))
         lines.push(foot)
         return lines.join('\n')
       },
@@ -325,8 +355,8 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
     const prompt = new PasswordPrompt({
       input, output: promptOut, mask: '',
       render() {
-        if (this.state === 'submit') return folded(name, this.value ? `${paint('ok', g.ok)} ${paint('cream', 'received (hidden)')}` : paint('dim', 'none'))
-        if (this.state === 'cancel') return cancelled(name)
+        if (this.state === 'submit') return folded(name, this.value ? `${paint('ok', g.ok)} ${paint('value', 'received (hidden)')}` : paint('dim', 'none'))
+        if (this.state === 'cancel') return canceled(name)
         return [...questionLines(question), body(paint('dim', 'typing is hidden; Enter when done')), foot].join('\n')
       },
     })
@@ -335,18 +365,20 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
   }
 
   // ---------------------------------------------------------------- rows and notes
-  const MARK = { ok: () => paint('ok', g.ok), warn: () => paint('gold', g.warn), fail: () => paint('red', g.fail), stop: () => paint('red', g.stop), info: () => paint('dim', g.dot), skip: () => paint('dim', '–') }
+  const MARK = { ok: () => paint('ok', g.ok), warn: () => paint('warn', g.warn), fail: () => paint('red', g.fail), stop: () => paint('red', g.stop), info: () => paint('dim', g.dot), skip: () => paint('dim', '–') }
 
   function note(kind, message) {
-    const lines = wrap(tidy(message), lineW() - 4)
+    const lines = wrapR(tidy(message), lineW() - 4)
     lines.forEach((text, i) => line(i === 0 ? ` ${MARK[kind]?.() ?? ' '} ${kind === 'info' ? paint('dim', text) : text}` : `   ${kind === 'info' ? paint('dim', text) : text}`))
   }
 
+  // Times under a second are not shown: a column of 0.0s says nothing.
+  // A row that does not fit wraps under its text (the time stays on its first line); never cut.
   const row = (kind, label, ms) => {
-    const right = ms === undefined ? '' : duration(ms)
+    const right = ms === undefined || ms < 1000 ? '' : duration(ms)
     const room = lineW() - 3 - (right ? width(right) + 2 : 0)
-    const text = truncate(tidy(label), room, g.ellipsis)
-    return ` ${MARK[kind]()} ${right ? `${pad(text, room)}  ${paint('dim', right)}` : text}`
+    const [first, ...rest] = wrapR(tidy(label), room)
+    return [` ${MARK[kind]()} ${right ? `${pad(first, room)}  ${paint('dim', right)}` : first}`, ...rest.map(text => `   ${text}`)].join('\n')
   }
 
   /** A spinner row that settles into a final row with its time. */
@@ -399,7 +431,7 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
       t.clear()
       const said = failed?.(error) || { short: error.message }
       line(row('fail', `${pad(label, 16)}${said.short}`, now() - start))
-      for (const text of said.hint ? wrap(said.hint, lineW() - 8) : []) line(`     ${paint('dim', text)}`)
+      for (const text of said.hint ? wrapR(said.hint, lineW() - 8) : []) line(`     ${paint('dim', text)}`)
       throw error
     }
   }
@@ -415,8 +447,15 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
   }
   const listener = {
     step(id, status, rawDetail) {
-      const detail = stepLabel(rawDetail)
       const current = open.get(id)
+      // A row shows one time, its own: "Downloaded the image in 2s" loses its "in 2s".
+      const detail = stepLabel(rawDetail).replace(current ? / in \d+(?:\.\d+)?s$/ : /$^/, '')
+      // A check the wizard already showed (the machine check, the address) is not shown again
+      // while the plan is made; a warning or a failure still is.
+      if (quiet.has(id) && (status === 'start' || status === 'ok')) {
+        if (status === 'ok' && current) { open.delete(id); current.clear() }
+        return
+      }
       if (status === 'start') {
         if (current) {
           // The same step again: "Still downloading …" only moves the clock on.
@@ -483,16 +522,19 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
     line(` ${paint('title', text)}`)
   }
 
-  /** A box; rows are plain or painted strings, cut to fit. Returns the lines. */
+  const boxInner = () => Math.min(W() - 6, 94)
+
+  /** A box; rows are plain or painted strings that fit (planBox wraps its own). Returns the lines. */
   function box(title, rows, footer) {
     // A row is the inner width plus 5 cells; it stays under the terminal's width so it never wraps.
-    const inner = Math.min(W() - 6, 94)
+    const inner = boxInner()
     const b = g.box
     const edge = (left, label, right) => {
       const text = label ? `${b.h} ${label} ` : ''
       return `${left}${text}${b.h.repeat(Math.max(0, inner + 2 - width(text)))}${right}`
     }
-    const out = [` ${title ? `${paint('dim', `${b.tl}${b.h} `)}${paint('title', title)}${paint('dim', ` ${b.h.repeat(Math.max(0, inner - width(title) - 1))}${b.tr}`)}` : paint('dim', edge(b.tl, '', b.tr))}`]
+    const shownTitle = title && width(title) > inner - 2 ? truncate(title, inner - 2, g.ellipsis) : title
+    const out = [` ${shownTitle ? `${paint('dim', `${b.tl}${b.h} `)}${paint('title', shownTitle)}${paint('dim', ` ${b.h.repeat(Math.max(0, inner - width(shownTitle) - 1))}${b.tr}`)}` : paint('dim', edge(b.tl, '', b.tr))}`]
     for (const raw of rows) {
       const text = tidy(raw)
       const fitted = width(text) > inner ? truncate(strip(text), inner, g.ellipsis) : text
@@ -502,23 +544,32 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
     return out
   }
 
-  /** The review: the plan in a box, built from the same plan object formatPlan prints. */
-  function planBox(plan, answers = {}) {
+  /**
+   * The review: the plan in a box, built from the same plan object formatPlan prints. Long values
+   * wrap under their key, never cut. footer: false when no review follows (a plan only run).
+   */
+  function planBox(plan, answers = {}, { footer = true } = {}) {
     const where = plan.where === 'this computer' ? 'on this computer' : `on ${plan.where}`
     const title = plan.action === 'install' ? `Plan: install "${plan.name}" ${where}` : plan.action === 'export' ? `Plan: write the files for "${plan.name}"` : `Plan: ${plan.action} "${plan.name}" ${where}`
-    const key = text => paint('dim', pad(text, 10))
+    const inner = boxInner()
+    const KEY_W = 10
+    const key = text => paint('dim', pad(text, KEY_W))
     const rows = []
+    /** key, then the value wrapped in the room after it (role paints each piece). */
+    const kv = (label, value, role) => {
+      wrapR(tidy(value), inner - KEY_W).forEach((piece, i) => rows.push(`${i ? ' '.repeat(KEY_W) : key(label)}${role ? paint(role, piece) : piece}`))
+    }
     const pair = (a, av, b, bv) => {
-      if (W() >= 90 && b) rows.push(`${key(a)}${pad(av, 30)} ${key(b)}${bv}`)
-      else { rows.push(`${key(a)}${av}`); if (b) rows.push(`${key(b)}${bv}`) }
+      if (W() >= 90 && b && width(av) <= 30 && KEY_W + 31 + KEY_W + width(bv) <= inner) rows.push(`${key(a)}${pad(av, 30)} ${key(b)}${bv}`)
+      else { kv(a, av); if (b) kv(b, bv) }
     }
     if (plan.address) {
-      const also = answers.address?.team && answers.target === 'local' && answers.address?.port ? `   ${paint('dim', `(also http://localhost:${answers.address.port})`)}` : ''
-      rows.push(`${key('Address')}${paint('cream', plan.address)}${also}`)
+      kv('Address', plan.address, 'value')
+      if (answers.address?.team && answers.target === 'local' && answers.address?.port) kv('', `also http://localhost:${answers.address.port} on this computer`, 'dim')
     }
-    if (plan.image) rows.push(`${key('Image')}${plan.image.ref}`)
+    if (plan.image) kv('Image', plan.image.ref)
     const runs = answers.target === 'k8s' ? `Kubernetes, namespace ${answers.k8s?.namespace || 'slatebox'}` : answers.target === 'export' ? `files only (${answers.export?.format || 'compose'}), nothing is applied` : `one container (app, live editing, database) ${g.dot} docker run`
-    rows.push(`${key('Runs as')}${runs}`)
+    kv('Runs as', runs)
     const ai = answers.ai?.mode === 'providers' ? (answers.ai.providers || []).map(item => item.id).join(', ') || 'none' : 'none for now'
     pair('Admin', answers.adminEmail || 'from the setup link', 'Agents', ai)
     const sso = answers.sso?.enabled
@@ -526,27 +577,55 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
     const backups = answers.backups?.to === 'off' ? 'off' : answers.backups?.to === 'default' || !answers.backups?.to ? 'daily 03:00, keep 14' : `daily to ${answers.backups.to}`
     const size = typeof answers.size === 'string' ? answers.size : answers.size ? (Object.entries(SIZE_NAMES).find(([, s]) => s.cpu === answers.size.cpu && s.storage === answers.size.storage)?.[0] || `${answers.size.memory}, ${answers.size.cpu} CPU`) : 'small'
     pair('Backups', backups, 'Size', size)
-    if (plan.secretsLocation) rows.push(`${key('Secrets')}${plan.secretsLocation}`)
-    for (const change of plan.changes || []) rows.push(`${key('Change')}${change}`)
+    if (plan.secretsLocation) kv('Secrets', plan.secretsLocation)
+    for (const change of plan.changes || []) kv('Change', change)
     line('')
-    for (const text of box(title, rows, 'd shows every file and command')) line(text)
+    for (const text of box(title, rows, footer ? 'd shows every file and command' : '')) line(text)
     for (const warning of plan.warnings || []) note('warn', warning)
   }
 
+  /**
+   * Every file and command (formatPlan's text) in the wizard's look: wrapped to the screen, each
+   * wrapped line under the start of its item, headings bold. Shown once; asked again, it points up.
+   */
+  let detailsShown = null
+  function details(text) {
+    if (detailsShown === text) { note('info', 'Every file and command is listed above.'); return }
+    detailsShown = text
+    const room = lineW() - 4
+    line('')
+    // Tidied (~/…, short digests) before it is wrapped, so lines break where the shown text does.
+    tidy(String(text || '')).split('\n').forEach((raw, i) => {
+      if (!raw.trim()) { line(` ${bar}`); return }
+      if (i === 0) { line(` ${bar}  ${paint('title', raw)}`); return }
+      const indent = raw.match(/^ */)[0].length
+      const item = /^(\s*- )/.exec(raw)
+      const lead = item ? item[1].length : indent
+      const heading = /^\s+\w[\w ]*:$/.test(raw)
+      const keyed = /^(\s+[A-Z][\w-]*:\s+)/.exec(raw)
+      const hang = keyed ? keyed[1].length : lead
+      wrapR(raw.slice(indent), room - indent - (hang - indent)).forEach((piece, j) => {
+        const textPart = j === 0 ? `${' '.repeat(indent)}${piece}` : `${' '.repeat(hang)}${piece}`
+        line(` ${bar}  ${heading ? paint('bold', textPart) : textPart}`)
+      })
+    })
+    line(` ${paint('dim', g.end)}`)
+  }
+
   /** Install, change a section, or cancel; d shows the full plan. */
-  async function review(plan, answers, { defaultAction = 'install', revisable = true, details } = {}) {
+  async function review(plan, answers, { defaultAction = 'install', revisable = true, details: full } = {}) {
     const choices = [
-      { value: 'install', label: plan.action === 'install' ? 'Install' : plan.action === 'export' ? 'Write the files' : 'Apply' },
+      { value: 'install', label: plan.action === 'install' ? 'Install' : plan.action === 'export' ? 'Write the files' : plan.action === 'claim' ? 'Sign in and claim' : 'Apply' },
       ...(revisable ? [{ value: 'change', label: 'Change a section…' }] : []),
       { value: 'cancel', label: 'Cancel' },
     ]
     for (;;) {
       const chosen = await choose('', choices, { default: defaultAction, initial: defaultAction, label: 'Review', horizontal: true, keys: { d: 'details', q: 'cancel' } })
       if (chosen === 'details') {
-        for (const text of String(details || '').split('\n')) line(` ${text}`)
+        details(full)
         continue
       }
-      if (chosen === 'cancel') throw new InstallError(EXIT.CANCELLED, CANCELLED)
+      if (chosen === 'cancel') throw new InstallError(EXIT.CANCELLED, CANCELED)
       if (chosen === 'change') {
         const section = await choose('Which section?', [
           { value: 'where', label: 'Where' }, { value: 'address', label: 'Address' }, { value: 'admin', label: 'Admin' },
@@ -556,7 +635,9 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
         if (section === 'back') { planBox(plan, answers); continue }
         throw new Revise(section)
       }
-      heading('Installing')
+      // The checks shown before the review were for the plan; what runs now is shown again.
+      quiet.clear()
+      if (plan.action !== 'claim') heading('Installing')
       return true
     }
   }
@@ -564,7 +645,7 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
   /** The device sign-in: the code, the page, and a countdown while the browser approves. */
   function signInBox({ purpose, page, code }) {
     line('')
-    for (const text of box(`Sign in to Slatebox to ${purpose}`, [`${paint('dim', pad('Code', 8))}${paint('title', code)}`, `${paint('dim', pad('Open', 8))}${paint('lightGold', link(term, page))}`])) line(text)
+    for (const text of box(`Sign in to Slatebox to ${purpose}`, [`${paint('dim', pad('Code', 8))}${paint('title', code)}`, `${paint('dim', pad('Open', 8))}${paint('link', link(term, page))}`])) line(text)
   }
   function waitForApproval(deadline) {
     return task('Waiting for approval in the browser', { right: () => `expires in ${clock(Math.max(0, deadline - now()))}` })
@@ -577,11 +658,11 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
   function outro({ headline, link: setup, pending, lines: extra = [], next }) {
     line('')
     const took = `set up in ${duration(now() - started)}`
-    if (width(headline) + 6 + took.length <= lineW()) line(` ${paint('gold', g.star)} ${headline}   ${paint('dim', took)}`)
-    else { line(` ${paint('gold', g.star)} ${headline}`); line(`   ${paint('dim', took)}`) }
+    if (width(headline) + 6 + took.length <= lineW()) line(` ${paint('accent', g.star)} ${paint('title', headline)}   ${paint('dim', took)}`)
+    else { line(` ${paint('accent', g.star)} ${paint('title', headline)}`); line(`   ${paint('dim', took)}`) }
     if (setup) {
       const url = setup.url
-      const shown = paint('lightGold', link(term, url))
+      const shown = paint('link', link(term, url))
       const b = g.box
       line('')
       // Drawn in a box only when the whole URL fits in it; it is never wrapped or cut.
@@ -595,13 +676,13 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
         clearDrawn()
         rawWrite(` ${paint('dim', b.v)} ${shown}${sameLine ? `${' '.repeat(inner - url.length - only.length)}${paint('dim', only)}` : ' '.repeat(inner - url.length)} ${paint('dim', b.v)}\n`)
         const rest = `${sameLine ? '' : 'This terminal only. '}Works once, expires in 24 hours. Lost it? slatebox setup-link`
-        for (const piece of wrap(rest, inner)) line(` ${paint('dim', b.v)} ${pad(piece, inner)} ${paint('dim', b.v)}`)
+        for (const piece of wrapR(rest, inner)) line(` ${paint('dim', b.v)} ${pad(piece, inner)} ${paint('dim', b.v)}`)
         line(` ${paint('dim', `${b.bl}${b.h.repeat(inner + 2)}${b.br}`)}`)
       } else {
         line(` ${paint('title', 'Create the first account (the server administrator):')}`)
         clearDrawn()
         rawWrite(`${shown}\n`)
-        for (const piece of wrap('This terminal only. Works once, expires in 24 hours. Lost it? slatebox setup-link', lineW() - 2)) line(` ${paint('dim', piece)}`)
+        for (const piece of wrapR('This terminal only. Works once, expires in 24 hours. Lost it? slatebox setup-link', lineW() - 2)) line(` ${paint('dim', piece)}`)
       }
     } else if (pending) {
       line('')
@@ -609,7 +690,14 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
     }
     for (const text of extra) {
       if (!text) { line(''); continue }
-      wrap(tidy(text), lineW() - 3).forEach((piece, i) => line(`${i ? '   ' : ' '}${piece}`))
+      // { warn }: the one thing to do now, set apart with a ▲ and in bold.
+      if (typeof text === 'object' && text.warn) {
+        line('')
+        wrapR(tidy(text.warn), lineW() - 4).forEach((piece, i) => line(`${i ? '   ' : ` ${paint('warn', g.warn)} `}${paint('bold', piece)}`))
+        line('')
+        continue
+      }
+      wrapR(tidy(text), lineW() - 3).forEach((piece, i) => line(`${i ? '   ' : ' '}${piece}`))
     }
     if (next) {
       // The commands, as many to a line as fit, each whole.
@@ -619,15 +707,20 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
         if (current.length && width(`${current.join('   ')}   ${item}`) > lineW() - 8) rows.push([item])
         else current.push(item)
       }
-      rows.forEach((items, i) => line(` ${paint('dim', i ? '    ' : 'Next')}   ${items.map(item => paint('cream', item)).join('   ')}`))
+      rows.forEach((items, i) => line(` ${paint('dim', i ? '    ' : 'Next')}   ${items.map(item => paint('bold', item)).join('   ')}`))
     }
   }
 
   /** The run stopped: one plain sentence, and the exit code. */
   function fatal(error) {
+    const running = tasks.at(-1)
     suspend()
+    // The step that was running is closed with a ■, so no frozen spinner row stays behind.
+    if (running) line(row('stop', running.label, now() - running.start))
     for (const t of [...tasks]) tasks.splice(tasks.indexOf(t), 1)
-    const lines = wrap(error.message, lineW() - 4)
+    for (const t of open.values()) t.clear?.()
+    open.clear()
+    const lines = wrapR(error.message, lineW() - 4)
     line(` ${paint('red', g.stop)} ${lines[0]}`)
     for (const text of lines.slice(1)) line(`   ${text}`)
     if (error.exitCode !== EXIT.CANCELLED) line(` ${paint('dim', `${g.end} exit ${error.exitCode ?? 1}`)}`)
@@ -637,8 +730,10 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
     rich: true,
     text, choose, confirm, secret,
     section(name, i, n) { if (name !== lastSection) { pendingSection = { name, i, n }; lastSection = name } },
-    note, task, during, probe, listener, intro, heading, review, planBox, signInBox, waitForApproval, outro, fatal,
+    note, task, during, probe, listener, intro, heading, review, planBox, details, signInBox, waitForApproval, outro, fatal,
     line,
+    /** Steps (by id) whose start and ok rows are not shown until the review is answered. */
+    quiet(ids) { for (const id of ids) quiet.add(id) },
     /** ctx.stderr in rich mode: other modules' lines land above any spinner. */
     stderr: {
       write: text => { foreign(text); return true },

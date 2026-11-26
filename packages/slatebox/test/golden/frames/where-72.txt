@@ -1,4 +1,4 @@
- ◆  Where should Slatebox run?
+ ◆  Where should Slatebox run?   1 of 6
  │  › This computer
  │      Docker 29.4.0 (Colima) · recommended
  │    A Linux server over SSH
@@ -6,5 +6,6 @@
  │    Kubernetes
  │      no context found
  │    Just write the files
- │      a run command, manifests or a Helm chart, for GitOps
+ │      a Compose file, Kubernetes manifests or a Helm chart, for
+ │      GitOps
  └

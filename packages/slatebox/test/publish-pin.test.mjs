@@ -57,3 +57,26 @@ test('the wizard depends on @clack/core 1.6.0 exactly, and never on @clack/promp
   assert.equal(manifest.version, '0.3.0')
   assert.equal(create.dependencies.slatebox, '0.3.0')
 })
+
+// Accepted and documented (CHANGELOG 0.3.0): the exact pins are for direct dependencies. npx does
+// not read this repository's lockfile, so @clack/core's own dependencies resolve within the caret
+// ranges it publishes (as slatebox-mcp's @modelcontextprotocol/sdk already does). What is held
+// here: that tree is these four small MIT packages with no install scripts; a new name, license
+// or install script fails this test and is looked at before it ships.
+test('@clack/core brings exactly four small MIT dependencies, none with an install script', () => {
+  const lock = JSON.parse(readFileSync(new URL('../../../package-lock.json', import.meta.url), 'utf8')).packages
+  const seen = new Set()
+  const walk = name => {
+    const entry = lock[`node_modules/${name}`]
+    assert.ok(entry, `${name} is in the lockfile`)
+    for (const dep of Object.keys(entry.dependencies || {})) if (!seen.has(dep)) { seen.add(dep); walk(dep) }
+    return entry
+  }
+  assert.equal(walk('@clack/core').version, '1.6.0')
+  assert.deepEqual([...seen].sort(), ['fast-string-truncated-width', 'fast-string-width', 'fast-wrap-ansi', 'sisteransi'])
+  for (const name of seen) {
+    const entry = lock[`node_modules/${name}`]
+    assert.equal(entry.license, 'MIT', name)
+    assert.ok(!entry.hasInstallScript, `${name} has no install script`)
+  }
+})

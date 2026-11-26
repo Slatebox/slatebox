@@ -1,7 +1,8 @@
 // The wizard on a real pseudo-terminal (test/pty/drive.py: python3's standard pty module, no
 // native npm module): rich mode is chosen, arrow keys and Enter answer, Ctrl-C exits 7 and gives
 // the terminal back (stty shows icanon and echo, and the cursor is shown again), a resize redraws,
-// and --plain is today's transcript. Skipped with a note when python3 is not installed.
+// and --plain is today's transcript. Skipped with a note when python3 (with its Unix-only pty
+// module) is not there, as on Windows.
 // SLATEBOX_UPDATE_GOLDEN=1 rewrites the plain transcript.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
@@ -11,8 +12,9 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-const PYTHON = spawnSync('python3', ['--version'], { stdio: 'ignore' }).status === 0 ? 'python3' : null
-const skip = !PYTHON && 'python3 is not installed'
+// drive.py needs python3 with the pty, termios and fcntl modules: not on Windows.
+const PYTHON = spawnSync('python3', ['-c', 'import pty, termios, fcntl'], { stdio: 'ignore' }).status === 0 ? 'python3' : null
+const skip = (process.platform === 'win32' && 'pseudo-terminals need a Unix python3') || (!PYTHON && 'python3 with the pty module is not installed')
 const DRIVE = fileURLToPath(new URL('./pty/drive.py', import.meta.url))
 const BIN = fileURLToPath(new URL('../bin/slatebox.mjs', import.meta.url))
 const HARNESS = fileURLToPath(new URL('./pty/harness.mjs', import.meta.url))
@@ -59,7 +61,7 @@ test('pty: a real terminal gets the wizard; arrows and Enter answer; the termina
 test('pty: Ctrl-C in a question exits 7, says nothing was changed, and restores the terminal', { skip }, () => {
   const run = drive(['node', BIN, 'install', '--target', 'export'], [{ wait: 'Which files' }, { sleep: 50 }, { send: '\x03' }])
   assert.equal(run.code, 7, run.text.slice(-1500))
-  assert.match(run.text, /Cancelled\. Nothing was changed\./)
+  assert.match(run.text, /Canceled\. Nothing was changed\./)
   assert.ok(!existsSync(join(run.home, 'slatebox-deploy')), 'no files were written')
   assert.ok(run.icanon && run.echo, 'stty shows icanon and echo again')
   assert.ok(run.output.lastIndexOf('\x1b[?25h') > run.output.lastIndexOf('\x1b[?25l'), 'the cursor was shown after it was hidden')

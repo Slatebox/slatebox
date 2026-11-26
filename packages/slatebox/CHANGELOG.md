@@ -17,7 +17,11 @@ release's highlights.
 
 ### Added
 
-- **installer:** a wizard in the terminal, in Slatebox greens, gold and cream. The machine
+- **installer:** a wizard in the terminal. Questions, answers, the plan and the setup link are
+  in the terminal's own text color (bold where it matters), so they read on light and dark
+  backgrounds; Slatebox gold (dark), deep green (light) or mid tones (not known) mark the
+  pointer, steps and tags. The background comes from `SLATEBOX_THEME=light|dark`, `COLORFGBG`,
+  or the terminal's answer to a background query. The machine
   check runs first and shows one row per check (Docker, processor, disk, port; `r` checks
   again). Six short sections follow (where, address, admin, agents, sign-in, review),
   answered with the arrow keys, numbers and Enter, and each answer folds into one line. A
@@ -33,6 +37,11 @@ release's highlights.
   screen readers and simple terminals. They are also used with `TERM=dumb`, in CI, without
   raw mode, or under 60 columns, and they are the same, byte for byte, as in 0.2.3.
   `NO_COLOR` and `FORCE_COLOR` are honored.
+- **installer:** dependencies: `@clack/core` is pinned to exactly 1.6.0 (as `slatebox-mcp` is
+  to its version). Its own four small dependencies (fast-string-width, fast-string-truncated-width,
+  fast-wrap-ansi, sisteransi; all MIT, no install scripts) keep the caret ranges `@clack/core`
+  publishes, so `npx slatebox` resolves the newest within those ranges, as it already does for
+  `slatebox-mcp`'s `@modelcontextprotocol/sdk`. No `npm-shrinkwrap.json` is shipped.
 
 ### Changed
 

@@ -1,5 +1,5 @@
- ◆  Where should your team open Slatebox?
- │  › A free team address  https://<name>.slatebox.team · no DNS, ports or certificates · recommen…
+ ◆  Where should your team open Slatebox?   2 of 6
+ │  › A free team address  <name>.slatebox.team · no DNS, ports or certificates · recommended
  │    My own domain        you point DNS at this computer, or run a proxy
  │    Only this computer   http://localhost:<port>
  └
