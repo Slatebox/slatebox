@@ -12,16 +12,21 @@
 //      then, separately, the quality gate (componentQuality: named cards, no repeats, at least three, behavior);
 //   4. nativeCanvas.keep, then (unless --no-render) the slate opened in a fresh headless browser signed in as that
 //      account: every card and lane of the kept board is drawn on #slateCanvas, with no page error;
-//   5. latency, and tokens and cost from the app's aiAudit rows for that account (--mongo; cost for a model with a
+//   5. usefulness, separately from the gate (judge.mjs): the board the person was shown, scored 1 to 5 against a fixed
+//      rubric (domain fit, variety, sensible rules, would a person use it today) by the app's own configured model
+//      (the `eval` part's route if AI control has one, else the drafting part's), with a short reason;
+//   6. latency, and tokens and cost from the app's aiAudit rows for that account (--mongo; cost for a model with a
 //      price in --prices or the EVAL_PRICES env, dollars per million tokens: {"<model>": [in, out]}, else in the
 //      app's own model table, aiModels).
 // The disposable accounts and their slates are removed at the end (--mongo; --keep leaves them).
 //
 //   node scripts/evals/smart-components/live.mjs --origin http://127.0.0.1:3660 --mongo mongodb://127.0.0.1:3661/meteor \
 //     [--only id,id] [--concurrency 3] [--no-render] [--out report.json] [--shots dir] [--keep]
+//     [--no-judge] [--judge-surface <part>] [--judge-key-env <ENV>] [--judge-mean 4] [--judge-low 0.10]
 // SLATEBOX_CHROMIUM names a Chromium executable for the render step (as the browser specs read it).
-// Exit code: 0 when the pass rate meets --target (default 0.95) and the quality rate --quality-target (default 0.90),
-// else 1. See README.md beside this file for what a run needs.
+// Exit code: 0 when the pass rate meets --target (default 0.95), the quality rate --quality-target (default 0.90), and
+// the judge passes (mean ≥ --judge-mean, at most --judge-low of the boards scoring 2 or less), else 1. The judge needs
+// --mongo (the route and key are the app's) and the app's SLATEBOX_KEY_ENCRYPTION_KEY in this environment. See README.md beside this file for what a run needs.
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -30,6 +35,7 @@ import '../../../web/app/imports/api/common/library.mjs'
 import { builderDescription } from '../../../web/app/imports/api/common/builder-freeform.mjs'
 import { previewProblems, qualityProblems } from './checks.mjs'
 import { DDP } from './ddp.mjs'
+import { judgeBoard, judgeRoute, judgeSummary } from './judge.mjs'
 import { PROMPTS } from './prompts.mjs'
 
 const { values: args } = parseArgs({
@@ -47,6 +53,12 @@ const { values: args } = parseArgs({
     'quality-target': { type: 'string', default: '0.90' },
     keep: { type: 'boolean', default: false },
     repeat: { type: 'string', default: '1' },
+    judge: { type: 'boolean', default: true },
+    'no-judge': { type: 'boolean', default: false },
+    'judge-surface': { type: 'string', default: '' },
+    'judge-key-env': { type: 'string', default: '' },
+    'judge-mean': { type: 'string', default: '4' },
+    'judge-low': { type: 'string', default: '0.10' },
   },
 })
 const RUN = 'e' + Date.now().toString(36)
@@ -56,7 +68,16 @@ const only = args.only ? new Set(args.only.split(',')) : null
 const cases = PROMPTS.filter((p) => !only || only.has(p.id)).flatMap((p) => Array.from({ length: Number(args.repeat) }, (_, i) => ({ ...p, n: i })))
 if (args.shots) mkdirSync(args.shots, { recursive: true })
 
-const mongo = (script) => execFileSync('mongosh', ['--quiet', args.mongo, '--eval', script], { encoding: 'utf8' })
+const mongo = (script) => execFileSync('mongosh', ['--quiet', args.mongo, '--eval', script], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+
+// The judge's route and key, once: the app's own choice for the eval part (or the drafting part).
+const judging = args.judge && !args['no-judge']
+let judge = null
+if (judging) {
+  if (!args.mongo) { console.error('The judge reads the app\'s AI control route and key: pass --mongo, or --no-judge.'); process.exit(2) }
+  judge = judgeRoute({ mongoJSON: (script) => JSON.parse(mongo(script)), surface: args['judge-surface'], keyEnv: args['judge-key-env'] })
+  console.log(`judge: ${judge.route.label} (${judge.route.providerLabel}), the route of ${judge.surface} (${judge.source})`)
+}
 
 async function renderCheck(token, userId, shareId, workshop, id) {
   const { chromium } = await import('playwright')
@@ -118,6 +139,11 @@ async function runCase(item, index) {
     row.validComponent = Boolean(workshop)
     if (workshop) row.board = { title: workshop.title, lanes: workshop.lanes.map((l) => l.label + (l.capacity ? ` (${l.capacity})` : '')), cards: workshop.cards.length, rules: preview.rules?.length ?? 0 }
     if (workshop) row.cards = workshop.cards.map((card) => card.label)
+    // Usefulness, by the judge: what the gate cannot say (does the board fit what was asked, would a person use it).
+    if (workshop && judge) {
+      try { row.judge = await judgeBoard(judge, item.prompt, workshop, preview.rules ?? []) }
+      catch (error) { row.judge = { error: String(error.message).slice(0, 200) } }
+    }
     // Quality, separately from validity: a drafted board that is a tool someone would use (the same gate the request uses).
     row.quality = qualityProblems(preview, item.prompt)
     row.qualityOk = Boolean(workshop) && preview.provider === 'ai' && !row.quality.length
@@ -149,7 +175,7 @@ const workers = Array.from({ length: Math.max(1, Number(args.concurrency)) }, as
     // The eval's own connection dropping (the app restarting under it) is no answer from the app: asked once more.
     if (row.problems.some((p) => /^eval error: DDP connection (closed|failed)/.test(p)) && row.latencyMs === undefined) row = await runCase(cases[index], index + 10000)
     rows[index] = row
-    console.log(`${row.ok ? 'PASS' : 'FAIL'}${row.qualityOk ? '' : ' (quality)'} ${row.id} ${row.latencyMs ?? '-'}ms${row.board ? ` "${row.board.title}" [${row.board.lanes.join(' | ')}] ${row.board.cards} pieces, ${row.board.rules} rules: ${(row.cards ?? []).slice(0, 4).join(', ')}` : ''}${row.ok ? '' : '\n     ' + row.problems.join('\n     ')}${row.quality?.length ? '\n     quality: ' + row.quality.join(' ') : ''}`)
+    console.log(`${row.ok ? 'PASS' : 'FAIL'}${row.qualityOk ? '' : ' (quality)'}${row.judge ? ` judge ${row.judge.score ?? 'error'}` : ''} ${row.id} ${row.latencyMs ?? '-'}ms${row.board ? ` "${row.board.title}" [${row.board.lanes.join(' | ')}] ${row.board.cards} pieces, ${row.board.rules} rules: ${(row.cards ?? []).slice(0, 4).join(', ')}` : ''}${row.ok ? '' : '\n     ' + row.problems.join('\n     ')}${row.quality?.length ? '\n     quality: ' + row.quality.join(' ') : ''}${row.judge ? '\n     judge: ' + (row.judge.reason ?? row.judge.error) : ''}`)
   }
 })
 await Promise.all(workers)
@@ -208,9 +234,11 @@ const summary = {
   models: [...new Set(rows.flatMap((r) => r.models ?? []))],
   calls: sum('calls'), inputTokens: sum('inputTokens'), outputTokens: sum('outputTokens'),
   ...(rows.some((r) => r.costUsd != null) && { costUsd: Number(sum('costUsd').toFixed(4)) }),
+  ...(judging && { judge: { model: judge.route.label, surface: judge.surface, ...judgeSummary(rows.filter((r) => r.judge).map((r) => r.judge), { mean: Number(args['judge-mean']), lowShare: Number(args['judge-low']) }) } }),
   failures: rows.filter((r) => !r.ok).map((r) => ({ id: r.id, problems: r.problems })),
+  judgeLow: rows.filter((r) => r.judge && !(r.judge.score >= 3)).map((r) => ({ id: r.id, judge: r.judge, cards: r.cards, lanes: r.board?.lanes })),
   qualityFailures: rows.filter((r) => !r.qualityOk).map((r) => ({ id: r.id, quality: r.quality ?? [], cards: r.cards })),
 }
 console.log('\n' + JSON.stringify(summary, null, 2))
 if (args.out) writeFileSync(args.out, JSON.stringify({ summary, rows }, null, 2))
-process.exit(summary.passRate >= Number(args.target) && summary.qualityRate >= Number(args['quality-target']) ? 0 : 1)
+process.exit(summary.passRate >= Number(args.target) && summary.qualityRate >= Number(args['quality-target']) && (!judging || summary.judge.pass) ? 0 : 1)

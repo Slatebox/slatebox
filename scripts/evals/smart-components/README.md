@@ -14,11 +14,19 @@ rambling ones). Both layers below read them.
   the agent drafted it (not the starter a failed draft falls back to), and it says what it made.
 - **Quality** (`checks.mjs` `qualityProblems`, which is `componentQuality` in
   `web/app/imports/api/common/builder-freeform.mjs`): at least three cards; every card named as the real thing it is,
-  never a lane, title or generic phrase plus a number or letter ("Piece 3", "Laptop B", "Snappable congruent
-  piece 1"); no card named twice; and at least one piece of behavior (a lane capacity, `allowedLaneIds` on a card,
-  or a rule). The drafting request holds every draft to this same gate. A draft that fails it is asked again, with
-  the problem named. Unambiguous slips are repaired: a repeated card, or a placeholder beside three or more named
-  cards, is left out. A draft that still fails is replaced by the starter built from the person's words.
+  never a lane, title or generic phrase counted off ("Piece 3", "Laptop B", "Piece one", "First piece", "Piece II",
+  "1 piece", "Block A1", "Alpha / Beta / Gamma"); no card named twice; no one word ending most cards ("Title square,
+  Question square, Picture square …"); no capacity on the lane finished work goes to (an archive lane, or the last
+  lane of a one-step flow named Done, Ready to print …); and at least one piece of behavior (a lane capacity,
+  `allowedLaneIds` on a card, or a rule). The drafting request holds every draft to this same gate. A draft that
+  fails it is asked again, with the problem named. Unambiguous slips are repaired: a repeated card, or a placeholder
+  beside three or more named cards, is left out, and a capped finished lane loses its cap unless the person's words
+  give that lane a number. A draft that still fails is replaced by the starter built from the person's words.
+- **Useful** (live only, `judge.mjs`): the gate passes or refuses by shape, so it cannot fail a board that is
+  well-formed but useless. Every board the person was shown is scored 1 to 5 by a model against one fixed rubric
+  (domain fit of the labels to the request, label variety, sensible lanes and rules, would a real person use it
+  today), with a short reason. The run fails when the mean is under 4 (`--judge-mean`), more than 10% score 2 or
+  less (`--judge-low`), or more than 10% could not be judged.
 
 ## The deterministic layer (CI-safe)
 
@@ -26,7 +34,9 @@ rambling ones). Both layers below read them.
 npm run test:smart-components
 ```
 
-This runs under plain node with no network, keys or model. It drives the real `nativeCanvas.preview` →
+This runs under plain node with no network, keys or model (`smart-components.test.mjs` and
+`gate-and-judge.test.mjs`: the gate's hard cases with negatives, the guest starter's domain kits, and the judge's
+rubric, parsing and pass/fail thresholds with fixtures; the judge never calls a model in CI). It drives the real `nativeCanvas.preview` →
 `workshops.draft` → `req` path (`replay.mjs`) with recorded and known-bad model answers (`recorded.mjs`): counts sent
 as text, zero capacities, missing labels, wrong tools, calls written as text, the toy board the owner was shown,
 lettered cards, no behavior, too few cards, guests, the lock and the meter. It is also part of `npm run test:library`.
@@ -39,9 +49,17 @@ node scripts/evals/smart-components/live.mjs --origin http://127.0.0.1:3660 --mo
 ```
 
 Each prompt is typed on a fresh builder slate of a running app, as a new disposable account. The app's configured
-model drafts it. The board is checked, kept, and drawn in a fresh headless browser. The script exits 1 below
-`--target` (default 0.95 valid) or `--quality-target` (default 0.90 quality). Valid and quality rates are reported
-separately in the summary, along with p50/p90 latency, calls, tokens and cost.
+model drafts it. The board is checked, judged, kept, and drawn in a fresh headless browser. The script exits 1 below
+`--target` (default 0.95 valid) or `--quality-target` (default 0.90 quality), or when the judge fails the run.
+Valid and quality rates, the judge's score distribution, mean and lowest-scored boards (`judgeLow`, with reasons) are
+reported separately in the summary, along with p50/p90 latency, calls, tokens and cost.
+
+The judge names no model. It uses the app's own AI control route for an `eval` part when the catalogue has one, else
+the route the drafting part (`workshop.draft`) resolves to: the same connection that drafted the boards, so the
+judge is the drafter grading its own work, a bias to keep in mind when reading the scores. The route and the
+provider's active key are read from the app's database (`--mongo`); the key is opened with the app's
+`SLATEBOX_KEY_ENCRYPTION_KEY`, which must be in the eval's environment (or name an environment variable holding the
+key with `--judge-key-env`). `--judge-surface <part>` judges with another part's route; `--no-judge` skips it.
 
 What a run needs:
 
@@ -56,7 +74,7 @@ What a run needs:
   `mongosh` must be on the path.
 - **Playwright** (installed with the repo's dev dependencies) for the render step. Set `SLATEBOX_CHROMIUM` to a
   Chromium executable if Playwright's own browser is not installed. Use `--no-render` to skip this step.
-- **Cost**: each prompt is one or two model calls (a second only when the first answer is refused). With Muse Ember on
+- **Cost**: each prompt is one or two drafting calls plus one judge call (two if its answer does not read) (a second only when the first answer is refused). With Muse Ember on
   test's configuration, a run of the 46 prompts made 46 to 47 calls and cost about $0.25 (p50 5.3 s, p90 11.9 s).
   Each account may draft once a minute, which is why every case gets its own account.
 

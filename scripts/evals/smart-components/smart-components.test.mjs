@@ -222,10 +222,10 @@ test('the quality gate: a card that is only a phrase the board says and a number
   const plain = validateWorkshop({ ...GOOD, lanes: GOOD.lanes.map(({ capacity, ...lane }) => lane), cards: GOOD.cards.map(({ allowedLaneIds, ...card }) => card) })
   assert.deepEqual(componentQuality(plain), ['Give the board at least one rule: a lane capacity, allowedLaneIds on a card, or a rule such as one-step.'])
   const twice = validateWorkshop({ ...GOOD, cards: [...GOOD.cards, { id: 'again', label: 'Bar 1X2', laneId: 'piece-tray' }] })
-  assert.deepEqual(componentQuality(twice), ['Give each card its own name: “Bar 1X2” appears more than once.'])
+  assert.deepEqual(componentQuality(twice), ['Give each card its own name: “Bar 1x2” appears more than once.'])
   // The owner's prompt, drafted once with one phrase on every card: named by the phrase, not the piece.
   const echo = validateWorkshop({ ...GOOD, cards: ['Title', 'Instruction', 'Question', 'Diagram', 'Picture'].map((name, i) => ({ id: 'c' + i, label: name + ' square tile 2x2', laneId: 'piece-tray' })) })
-  assert.deepEqual(componentQuality(echo), ['Name each card for what makes it different: 5 of 5 cards end in the same words, “tile 2x2”.'])
+  assert.deepEqual(componentQuality(echo), ['Name each card for what makes it different: 5 of 5 cards end in the same words, “square tile 2x2”.'])
   for (const problem of [...componentQuality(plain), ...componentQuality(twice), ...componentQuality(echo)]) plainWords(problem)
 })
 

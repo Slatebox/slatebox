@@ -25,8 +25,9 @@ export function previewProblems(preview, prompt) {
 
 /**
  * The quality gate on what a preview made (componentQuality, the check the drafting request and the preview hold a
- * draft to): [] when every card is named as a real thing (never a lane, title or generic phrase plus a number or letter),
- * no card is named twice, there are three or more, and the board has behavior (a capacity, allowed lanes, a rule).
+ * draft to): [] when every card is named as a real thing (never a lane, title or generic phrase counted off with a number,
+ * letter, number word, ordinal, numeral or code), no card is named twice, no word ends most cards, no finished lane is
+ * capped, there are three or more, and the board has behavior (a capacity, allowed lanes, a rule).
  */
 export function qualityProblems(preview, prompt) {
   let workshop
