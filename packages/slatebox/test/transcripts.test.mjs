@@ -46,7 +46,7 @@ export const SCENARIOS = {
   'plain-local': async () => {
     const { docker, home } = local()
     const input = ['1', '', '1', 'n', '4', '', '', 'y'].join('\n') + '\n'
-    const result = await cli(['install', '--image', IMAGE, '--port', '17561'], { run: docker.run, home, tty: true, input, platform: 'linux', io: { statfs: () => lots } })
+    const result = await cli(['install', '--image', IMAGE, '--port', '17561'], { run: docker.run, home, tty: true, input, platform: 'linux', io: { statfs: () => lots, localPort: async () => 7070 } })
     return { result, home }
   },
   // The free team address: "support" is taken, its suggestions are shown, then "acme".
@@ -60,7 +60,7 @@ export const SCENARIOS = {
       // A Linux desktop (DISPLAY set), so the browser question is asked; no answer is left for
       // the first-admin question (0.3.1), which leaves the printed link as it is.
       run: docker.run, home, fetch: cloud.fetch, tty: true, input: '1\nsupport\nacme\n\n\nn\n', platform: 'linux', env: { SLATEBOX_CLOUD_URL: cloud.base, DISPLAY: ':0' },
-      io: { sleep: async () => {}, deviceLabel: 'test-box', openBrowser: () => {}, teamHealthDelay: 1, teamHealthAttempts: 3, statfs: () => lots },
+      io: { sleep: async () => {}, deviceLabel: 'test-box', openBrowser: () => {}, teamHealthDelay: 1, teamHealthAttempts: 3, statfs: () => lots, localPort: async () => 7070 },
     })
     return { result, home }
   },
@@ -77,17 +77,17 @@ export const SCENARIOS = {
   },
   'yes': async () => {
     const { docker, home } = local()
-    const result = await cli(['install', '--image', IMAGE, '--port', '17562', '--ai', 'none', '--backups', 'off', '--yes'], { run: docker.run, home, platform: 'linux', io: { statfs: () => lots } })
+    const result = await cli(['install', '--image', IMAGE, '--port', '17562', '--ai', 'none', '--backups', 'off', '--yes'], { run: docker.run, home, platform: 'linux', io: { statfs: () => lots, localPort: async () => 7070 } })
     return { result, home }
   },
   'non-tty': async () => {
     const { docker, home } = local()
-    const result = await cli(['install', '--image', IMAGE], { run: docker.run, home, platform: 'linux', io: { statfs: () => lots } })
+    const result = await cli(['install', '--image', IMAGE], { run: docker.run, home, platform: 'linux', io: { statfs: () => lots, localPort: async () => 7070 } })
     return { result, home }
   },
   'json': async () => {
     const { docker, home } = local()
-    const result = await cli(['install', '--image', IMAGE, '--port', '17563', '--ai', 'none', '--backups', 'off', '--yes', '--json'], { run: docker.run, home, platform: 'linux', io: { statfs: () => lots } })
+    const result = await cli(['install', '--image', IMAGE, '--port', '17563', '--ai', 'none', '--backups', 'off', '--yes', '--json'], { run: docker.run, home, platform: 'linux', io: { statfs: () => lots, localPort: async () => 7070 } })
     return { result, home }
   },
 }

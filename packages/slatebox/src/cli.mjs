@@ -296,7 +296,7 @@ export async function main(argv, io = {}) {
     cliFlags: parsed.values, platform: io.platform, cwd: io.cwd,
     openBrowser: io.openBrowser, inContainer: io.inContainer, sleep: io.sleep, deviceLabel: io.deviceLabel, spawn: io.spawn,
     teamHealthAttempts: io.teamHealthAttempts, teamHealthDelay: io.teamHealthDelay,
-    uid: io.uid, schedulerTimeout: io.schedulerTimeout, statfs: io.statfs, healthPoll: io.healthPoll, adminPoll: io.adminPoll,
+    uid: io.uid, schedulerTimeout: io.schedulerTimeout, statfs: io.statfs, localPort: io.localPort, healthPoll: io.healthPoll, adminPoll: io.adminPoll,
   }
   // The wizard in the terminal is for the install (and its plan); every other command, and every
   // run that is not rich (src/ui/mode.mjs), keeps the plain line prompts.
@@ -430,7 +430,7 @@ async function prepareAnswers(ctx, flags, positionals, revise = null) {
       ctx.currentContext = kube?.code === 0 ? kube.stdout.trim() : null
     }
     ctx.portGiven = partial.address?.port !== undefined
-    ctx.freePort = partial.address?.port ?? await defaultLocalPort()
+    ctx.freePort = partial.address?.port ?? await (ctx.localPort ?? defaultLocalPort)()
     ctx.preflight = answers => (answers.target === 'k8s' ? preflightCluster(ctx, answers) : preflightTarget(ctx, answers))
     if (ctx.rich && !revise) ctx.machineCheck = () => machineCheck(ctx)
     if (revise) ctx.machineCheck = null
@@ -442,7 +442,7 @@ async function prepareAnswers(ctx, flags, positionals, revise = null) {
       ctx.prompt.quiet([...(ctx.machineShown ? ['preflight'] : []), ...(ctx.addressShown && ctx.addressShown === partial.address?.team ? ['address'] : [])])
     }
   }
-  const freePort = (partial.target ?? 'local') === 'local' && partial.address?.port === undefined && !partial.address?.url ? await defaultLocalPort() : undefined
+  const freePort = (partial.target ?? 'local') === 'local' && partial.address?.port === undefined && !partial.address?.url ? await (ctx.localPort ?? defaultLocalPort)() : undefined
   const { answers, missing, errors } = resolveAnswers(partial, { freePort, cwd: ctx.cwd, home: ctx.env.HOME, yes: ctx.yes })
   if (errors.length) throw new InstallError(EXIT.USAGE, `Some answers are not valid: ${errors.map(error => error.field).join(', ')}.`, { fields: errors })
   if (missing.length) throw new InstallError(EXIT.NEEDS_INPUT, `Some answers are needed: ${missing.map(item => item.field).join(', ')}.`, { missing })
