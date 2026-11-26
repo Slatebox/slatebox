@@ -43,7 +43,9 @@ export async function relayAccess(stores, { user, shareId, routeKey, visitor, re
   const { slate } = opened
   // An address and a share id that name two different slates are refused, not mixed.
   if (isKey(shareId) && isKey(routeKey) && shareId !== slate.shareId) return { code: RELAY_CODES.noAccess }
-  const room = String(slate._id)
+  // The engine joins the room named by the slate's options.id (compat-facade collab.init({ roomName: options.id })),
+  // which is not the Mongo _id; a slate saved without one falls back to its _id.
+  const room = String(slate.options?.id || slate._id)
   let role = 'read'
   if (!readOnly && opened.accessLevel === 'EDIT') {
     // The address as the canvas's save sends it (routeKey; the share id when none is named).

@@ -130,6 +130,7 @@ async function world() {
     access: grants,
     guestViews,
     users,
+    slates,
   }
 }
 
@@ -219,6 +220,17 @@ test('the room is the slate\'s id from its record; an address and a share id nam
   assert.equal(verifyRoomToken(token, { room: 'public-edit', secretFor, now: NOW }), null)
   // A read invitation for one slate does not open another slate's room.
   assert.equal((await ask(stores, 'stranger', { shareId: 'share-unlisted-edit', routeKey: 'key-ur' })).code, RELAY_CODES.noAccess)
+})
+
+test('the room is the slate\'s options.id (the engine\'s room), not its Mongo _id', async () => {
+  const stores = await world()
+  await stores.slates.insertOne({ _id: 'Mz3kQ8aL2pX9vT1cR', shareId: 'share-real', userId: 'owner', orgId: 'team-a',
+    options: { id: '3c6d47dafd', isPrivate: true }, nodes: [] })
+  assert.deepEqual(await ask(stores, 'owner', { shareId: 'share-real' }),
+    { code: 'ok', role: 'write', room: '3c6d47dafd', slateId: 'Mz3kQ8aL2pX9vT1cR' })
+  // A slate saved without options.id falls back to its _id.
+  await stores.slates.insertOne({ _id: 'old-slate', shareId: 'share-old', userId: 'owner', orgId: 'team-a', options: { isPrivate: true }, nodes: [] })
+  assert.equal((await ask(stores, 'owner', { shareId: 'share-old' })).room, 'old-slate')
 })
 
 test('the canvas read and the relay share one open rule', async () => {
