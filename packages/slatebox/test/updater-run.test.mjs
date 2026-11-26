@@ -20,6 +20,10 @@ async function installed({ broken = [] } = {}) {
   const home = sandbox()
   const result = await cli(['install', ...BASE, '--yes', '--no-auto-updates'], { run: docker.run, home })
   assert.equal(result.code, 0, result.stderr)
+  // As `slatebox updates enable` leaves it.
+  const recordPath = join(home, 'installs', 'slatebox', 'install.yaml')
+  const { recordText } = await import('../src/record.mjs')
+  writeFileSync(recordPath, recordText({ ...parse(readFileSync(recordPath, 'utf8')), updates: { enabled: true, scheduler: 'cron' } }))
   const gh = new FakeGitHub(key)
   const reports = []
   // The container's `slatebox updates report`: recorded here; `failReports` makes Slatebox unreachable.
@@ -62,6 +66,7 @@ test('apply: verified, pulled by the signed digest, backed up first, healthy, re
   assert.equal(world.reports.at(-1).version, '2.1.0')
   const record = parse(readFileSync(join(world.dir, 'install.yaml'), 'utf8'))
   assert.equal(record.updatedBy, 'auto-updater')
+  assert.deepEqual(record.updates, { enabled: true, scheduler: 'cron' }, 'the host updater setting survives the update')
   assert.equal(record.imageDigest, ref)
   assert.equal(record.previousImageDigest, ID(IMAGE))
   assert.ok(readdirSync(join(world.dir, 'backups')).some(file => file.startsWith('pre-upgrade-')), 'a backup before the upgrade')
@@ -153,4 +158,27 @@ test('old pre-upgrade backups are pruned to the newest 3', () => {
   writeFileSync(join(dir, 'slatebox-20261125-030000.gz'), 'daily')
   assert.deepEqual(prunePreUpgrade(dir).sort(), ['pre-upgrade-0.gz', 'pre-upgrade-1.gz'])
   assert.ok(existsSync(join(dir, 'slatebox-20261125-030000.gz')), 'daily backups are not touched')
+})
+
+test('the outside check through the host carries the install\'s own Host header (its proxy answers nothing else)', async () => {
+  const { createServer } = await import('node:http')
+  const { throughHost } = await import('../src/updater/run.mjs')
+  const server = createServer((req, res) => {
+    if (req.headers.host !== 'localhost:7070') { res.writeHead(421).end(); return }
+    res.writeHead(200, { 'content-type': 'application/json' }).end('{"ok":true}')
+  })
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  const outside = `http://127.0.0.1:${server.address().port}`
+  try {
+    const plain = await fetch(`${outside}/readyz`)
+    assert.equal(plain.status, 421, 'without the header the proxy refuses')
+    const response = await throughHost(fetch, outside, 'http://localhost:7070')(`${outside}/readyz`, { signal: AbortSignal.timeout(5000) })
+    assert.equal(response.ok, true)
+    assert.deepEqual(await response.json(), { ok: true })
+    let other = null
+    await throughHost(async url => { other = url; return { ok: true } }, outside, 'http://localhost:7070')('https://acme.slatebox.team/readyz')
+    assert.equal(other, 'https://acme.slatebox.team/readyz', 'any other address goes through the normal fetch')
+  } finally {
+    server.close()
+  }
 })

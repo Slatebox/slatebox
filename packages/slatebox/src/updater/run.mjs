@@ -45,6 +45,33 @@ export function prunePreUpgrade(dir, keep = PRE_UPGRADE_KEEP) {
   return old
 }
 
+/**
+ * The outside health check from inside the updater container, the way a browser asks: to the
+ * published port through the host (outsideUrl, such as http://host.docker.internal:7070 on a Mac),
+ * with the Host header of the install's own address, because Slatebox's front proxy answers only
+ * for the address it serves (any other name gets 421).
+ */
+export function throughHost(fetchImpl, outsideUrl, addressUrl) {
+  if (!outsideUrl || !addressUrl) return fetchImpl
+  const host = new URL(addressUrl).host
+  return async (url, options = {}) => {
+    if (!String(url).startsWith(outsideUrl)) return fetchImpl(url, options)
+    const { request } = await import(String(url).startsWith('https:') ? 'node:https' : 'node:http')
+    return new Promise((resolve, reject) => {
+      const req = request(url, { headers: { host }, signal: options.signal }, res => {
+        const chunks = []
+        res.on('data', chunk => chunks.push(chunk))
+        res.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8')
+          resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode, json: async () => JSON.parse(text), text: async () => text })
+        })
+      })
+      req.on('error', reject)
+      req.end()
+    })
+  }
+}
+
 /** The phase names the app shows, from the installer's own steps. */
 function phaseOf(id, status) {
   if (status !== 'start') return null
@@ -103,6 +130,7 @@ export async function runUpdater({ name, dir, backups = null, outsideUrl = null,
   const { answers, errors } = resolveAnswers(collect({ record }), {})
   if (errors.length) return finish('failed', EXIT.USAGE, `The install record is not valid (${errors.map(error => error.field).join(', ')}).`)
   const keepDir = backups || backupsDir(host, answers)
+  ctx.fetch = throughHost(fetch, outsideUrl, answers.address?.url)
 
   await report('verifying')
   let imageRef

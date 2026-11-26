@@ -909,6 +909,8 @@ async function saveRecord(ctx, host, answers, image, settings, caps, record, unc
     dockerRuntime: { runs: 'docker run', docker: facts?.docker || facts?.docker_server || null, provider: facts?.runtime || null },
     lastHealthy: now,
     installedAt: record?.installedAt || now,
+    // The host updater's setting (updater/commands.mjs) outlives every change and upgrade.
+    ...(record?.updates ? { updates: record.updates } : {}),
     state: 'installed',
   }
   if (ctx.unattended) {

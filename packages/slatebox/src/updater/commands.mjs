@@ -16,7 +16,7 @@ import { writeRecord } from '../record.mjs'
 import { shq } from '../runner.mjs'
 import { backupsDir, hostFor } from '../targets/docker.mjs'
 import { which } from '../targets/hosts.mjs'
-import { SLATEBOX_BIN, UPDATER_SCRIPT, updaterScript } from './host-script.mjs'
+import { LOCK_DIR, SLATEBOX_BIN, UPDATER_SCRIPT, updaterScript } from './host-script.mjs'
 import { withUpdateLock } from './lock.mjs'
 import { removeUpdater, scheduleUpdater, schedulerFor } from './schedule.mjs'
 
@@ -175,7 +175,14 @@ export async function updatesCommand(ctx, record, sub, rest, flags) {
       return withRecordHost(ctx, record, async host => {
         if (sub === 'apply') await inContainer(host, record, ['request', 'apply', ...(flags.to ? ['--version', flags.to] : [])])
         if (!record.updates?.enabled) {
+          ctx.out.event({ event: 'done', name: record.name, requested: sub === 'apply', ran: false, hostUpdater: 'off' })
           say(`Asked for. The host updater is not set up, so nothing runs it yet: slatebox updates enable${record.name === 'slatebox' ? '' : ` --name ${record.name}`}`)
+          return 0
+        }
+        const busy = await host.sh(`[ -d ${shq(join(host.dir, LOCK_DIR))} ] && echo busy || true`)
+        if (String(busy.stdout).includes('busy')) {
+          ctx.out.event({ event: 'done', name: record.name, ran: false, running: true })
+          say('The host updater is running already (its schedule started it). See slatebox updates in a few minutes.')
           return 0
         }
         say('Running the host updater now (Slatebox is unavailable for 1-3 minutes while it restarts, if there is an update).')
